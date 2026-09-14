@@ -715,6 +715,40 @@ class PrepDriver:
       PrepCmd.PrepSetDeckLight(white=white, red=red, green=green, blue=blue)
     )
 
+  async def request_x_speed_scale(self) -> int:
+    """Request how fast MLPrep drives X, as a percentage of its full speed."""
+    return int((await self.client.execute(PrepCmd.PrepGetXSpeedScale())).value)
+
+  async def request_z_speed_scale(self) -> int:
+    """Request how fast MLPrep drives Z, as a percentage of its full speed."""
+    return int((await self.client.execute(PrepCmd.PrepGetZSpeedScale())).value)
+
+  async def set_x_speed_scale(self, percent: int) -> None:
+    """Set how fast MLPrep drives X, as a percentage of its full speed. Stays set until changed.
+
+    Args:
+      percent: 1 to 100.
+
+    Raises:
+      ValueError: If `percent` is outside 1 to 100.
+    """
+    if not 1 <= percent <= 100:
+      raise ValueError(f"x speed scale must be between 1 and 100 percent, is {percent}")
+    await self.client.execute(PrepCmd.PrepSetXSpeedScale(value=percent))
+
+  async def set_z_speed_scale(self, percent: int) -> None:
+    """Set how fast MLPrep drives Z, as a percentage of its full speed. Stays set until changed.
+
+    Args:
+      percent: 1 to 100.
+
+    Raises:
+      ValueError: If `percent` is outside 1 to 100.
+    """
+    if not 1 <= percent <= 100:
+      raise ValueError(f"z speed scale must be between 1 and 100 percent, is {percent}")
+    await self.client.execute(PrepCmd.PrepSetZSpeedScale(value=percent))
+
   async def disco_mode(self) -> None:
     """Easter egg: cycle deck lights then restore previous state."""
     white, red, green, blue = await self.request_deck_light()

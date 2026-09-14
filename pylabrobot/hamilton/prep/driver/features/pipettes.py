@@ -69,6 +69,7 @@ from pylabrobot.resources.well import CrossSectionType, Well
 
 from .. import prep_commands as PrepCmd
 from ..client import PIPETTOR_OBJECT_PATH
+from .x_arm import XArmConfiguration
 
 if TYPE_CHECKING:
   from pylabrobot.resources.deck import Deck
@@ -905,6 +906,43 @@ class Pipettes:
     # them there; reads and moves keep them in step.
     self.resources: List[Resource] = []
 
+  # -- addressing ----------------------------------------------------------------------------------
+
+  @property
+  def num_channels(self) -> int:
+    """Number of independent dual-channel pipettor channels (1 or 2). Read from the driver's configuration."""
+    n: Optional[int] = self._configuration.num_channels
+    if n is None:
+      raise RuntimeError("Instrument config has no num_channels (finish PrepDriver.setup first).")
+    return n
+
+  @property
+  def head8_installed(self) -> bool:
+    """True if the 8-channel Multi-Pipetting Head (8MPH) is present. Read from the driver's configuration."""
+    try:
+      return bool(self._configuration.head8_installed)
+    except RuntimeError:
+      return False
+
+  @property
+  def num_arms(self) -> int:
+    """Number of resource-handling arms. 1 when deck has core_grippers and 2 channels, else 0."""
+    if self.deck is None:
+      return 0
+    try:
+      cfg = self._configuration
+    except RuntimeError:
+      return 0
+    if cfg.num_channels != 2:
+      return 0
+    try:
+      mount = self.deck.get_resource("core_grippers")
+      return 1 if isinstance(mount, HamiltonCoreGrippers) else 0
+    except Exception:
+      return 0
+
+  # -- session / discovery -------------------------------------------------------------------------
+
   @property
   def _configuration(self) -> "DeviceConfiguration":
     """The device's configuration, as the driver read it at setup.
@@ -926,7 +964,130 @@ class Pipettes:
       raise RuntimeError("no deck to measure positions from; pass one to the driver")
     return self.deck
 
-  # -- where the channels are, on the resources that model them --------------
+  async def _record_where_they_stopped(self) -> None:
+    """Read where the channels came to rest, and record it. For a move's `finally`.
+
+    Only when something models them. Its own failure is logged and swallowed: it must not replace the
+    move's exception, which is the one that says what went wrong.
+    """
+    if not self.resources:
+      return
+    try:
+      await self.request_channel_positions()
+    except Exception:
+      logger.warning("could not read where the channels stopped; their model is stale")
+
+  async def request_firmware_version(self, channel: int) -> Optional[str]:
+    """Firmware version string for pipettor channel (0=rearmost)."""
+    if channel >= len(self.channels):
+      return None
+    return await self.channels[channel].request_firmware_version()
+
+  async def discover(self):
+    """Read what each channel reports about itself.
+
+    Read-only. Fills in `configuration.channels`: each channel's firmware version, and the window it
+    reaches from the bounds `build_prep_channels` read.
+    """
+    self.configuration.resolve_channels(len(self.channels))
+    for index, channel in enumerate(self.channels):
+      bounds = channel.bounds
+      self.configuration.channels[index] = PipetteConfiguration(
+        firmware_version=await channel.request_firmware_version(),
+        x_range=None if bounds is None else (bounds["x_min"], bounds["x_max"]),
+        y_range=None if bounds is None else (bounds["y_min"], bounds["y_max"]),
+        z_range=None if bounds is None else (bounds["z_min"], bounds["z_max"]),
+      )
+    self.configuration.check_channels_agree()
+
+  async def _on_setup(self):
+    """Read config and probe pipettor capabilities.
+
+    Called after ``self.channels`` is populated by :meth:`PrepDriver.setup`. Instrument-
+    level initialization (``MLPrep.Initialize``) runs earlier in
+    :meth:`PrepDriver.setup` — the pipettor sees an already-initialized instrument.
+    """
+    cfg = self._configuration
+    logger.debug(
+      "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
+      "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, head8_installed=%s",
+      cfg.has_enclosure,
+      cfg.safe_speeds_enabled,
+      cfg.default_traverse_height,
+      cfg.deck_bounds,
+      len(cfg.deck_sites),
+      len(cfg.waste_sites),
+      cfg.num_channels,
+      cfg.head8_installed,
+    )
+
+    await self.discover()
+    if not any(c.x_range is not None for c in self.configuration.channels):
+      logger.warning("Channel bounds not available — move_to_coordinate will skip validation")
+
+    # Probe pipettor for v2 aspirate/dispense support (cmd 38-43).
+    if self.configuration.use_v1_aspirate_dispense:
+      self.configuration.supports_v2_pipetting = False
+      logger.debug("V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
+    else:
+      try:
+        supported = await self._probe_v2_support()
+      except Exception as e:
+        logger.warning("PIP V2 support probe failed: %s", e)
+        supported = False
+      if not supported:
+        raise RuntimeError(
+          "V2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
+          "Pass use_v1_aspirate_dispense=True to Pipettes to use v1 commands (cmd 1-6) instead."
+        )
+      self.configuration.supports_v2_pipetting = True
+      logger.debug("V2 aspirate/dispense support: True")
+
+    self._ensure_head()
+    self.setup_finished = True
+
+  async def _on_stop(self):
+    for tracker in self.head.values():
+      tracker.clear()
+
+  def _ensure_head(self) -> None:
+    """Ensure pipette-side TipTrackers exist for each dual-channel index."""
+    for i in range(self.num_channels):
+      if i not in self.head:
+        self.head[i] = TipTracker(thing=f"Channel {i}")
+
+  async def discover_channel_drives(self) -> ChannelDriveMap:
+    """Re-walk the firmware tree and return a fresh :class:`ChannelDriveMap`.
+
+    Diagnostic helper — channel drive addresses for normal operation are already
+    cached on each :attr:`channels` entry at build time.
+    """
+    return await discover_channel_drives(self._client, root_name="Channel Root")
+
+  async def _probe_v2_support(self) -> bool:
+    """Probe the pipettor for v2 aspirate/dispense command support.
+
+    Enumerates interface 1 method IDs on the pipettor object and checks whether
+    all v2 command IDs (38-43) are present. Returns False when the firmware only
+    exposes v1 commands (1-6).
+    """
+    dest = await self._client.resolve_path(PIPETTOR_OBJECT_PATH)
+    methods = await self._client.introspection.methods_for_interface(dest, interface_id=1)
+    iface1_ids = {m.method_id for m in methods}
+    return set(self.configuration.v2_pipetting_command_ids).issubset(iface1_ids)
+
+  def _resolve_command_version(self, override: Optional[Literal["v1", "v2"]] = None) -> bool:
+    return resolve_command_version(
+      self.configuration.supports_v2_pipetting,
+      self.configuration.use_v1_aspirate_dispense,
+      override,
+      v2_error_hint=(
+        "v2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
+        "Use command_version='v1' or pass use_v1_aspirate_dispense=True to Pipettes."
+      ),
+    )
+
+  # -- where the channels are ----------------------------------------------------------------------
 
   def _reference_anchor(self, resource: Resource) -> Coordinate:
     """Where on a channel's resource the reported positions refer to, from its left front bottom corner.
@@ -1040,18 +1201,47 @@ class Pipettes:
     for channel, position in enumerate(positions):
       self.update_location_by_reference_point(channel, y=position.y, z=position.z)
 
-  async def _record_where_they_stopped(self) -> None:
-    """Read where the channels came to rest, and record it. For a move's `finally`.
+  # -- channel initialization ----------------------------------------------------------------------
 
-    Only when something models them. Its own failure is logged and swallowed: it must not replace the
-    move's exception, which is the one that says what went wrong.
+  async def sense_tip_presence(self) -> list[bool]:
+    """Sense whether a tip is physically present on each pipettor channel via the sleeve sensor.
+
+    Resolves each channel's Squeeze.SDrive object from the firmware tree, then
+    finds GetTipPresent by name in that object's method table. The query uses
+    the interface and method IDs declared by the firmware. Method tables are
+    cached by the connection's introspection instance.
+
+    Returns:
+      List of bools, one per channel (index 0=rearmost). True if tip detected.
     """
-    if not self.resources:
-      return
-    try:
-      await self.request_channel_positions()
-    except Exception:
-      logger.warning("could not read where the channels stopped; their model is stale")
+
+    drive_map = await self.discover_channel_drives()
+    if not drive_map.sleeve_sensor_addrs:
+      raise RuntimeError("No channel sleeve sensor addresses discovered.")
+
+    results: list[bool] = []
+    for addr in drive_map.sleeve_sensor_addrs:
+      method = await self._client.introspection.get_method_by_name(addr, "GetTipPresent")
+      raw = await self._client.execute(
+        PrepCmd.PrepProbeRequest(
+          dest=addr, command_id=method.method_id, interface_id=method.interface_id
+        )
+      )
+      if raw is None or len(raw) < 8:
+        results.append(False)
+      else:
+        val = _struct.unpack_from("<I", raw, 4)[0]
+        results.append(bool(val))
+
+    return results
+
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    pres = await self.sense_tip_presence()
+    return [bool(x) for x in pres]
+
+  # ----------------------------------------
+  # Movement
+  # ----------------------------------------
 
   def set_default_traverse_height(self, value: float) -> None:
     """Set the default traverse height (mm) used when final_z is not passed to pick_up_tips/drop_tips.
@@ -1060,158 +1250,6 @@ class Pipettes:
     the probed value.
     """
     self.configuration.default_traverse_height = value
-
-  async def _probe_v2_support(self) -> bool:
-    """Probe the pipettor for v2 aspirate/dispense command support.
-
-    Enumerates interface 1 method IDs on the pipettor object and checks whether
-    all v2 command IDs (38-43) are present. Returns False when the firmware only
-    exposes v1 commands (1-6).
-    """
-    dest = await self._client.resolve_path(PIPETTOR_OBJECT_PATH)
-    methods = await self._client.introspection.methods_for_interface(dest, interface_id=1)
-    iface1_ids = {m.method_id for m in methods}
-    return set(self.configuration.v2_pipetting_command_ids).issubset(iface1_ids)
-
-  def _resolve_command_version(self, override: Optional[Literal["v1", "v2"]] = None) -> bool:
-    return resolve_command_version(
-      self.configuration.supports_v2_pipetting,
-      self.configuration.use_v1_aspirate_dispense,
-      override,
-      v2_error_hint=(
-        "v2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
-        "Use command_version='v1' or pass use_v1_aspirate_dispense=True to Pipettes."
-      ),
-    )
-
-  # ---------------------------------------------------------------------------
-  # Setup
-  # ---------------------------------------------------------------------------
-
-  async def _on_setup(self):
-    """Read config and probe pipettor capabilities.
-
-    Called after ``self.channels`` is populated by :meth:`PrepDriver.setup`. Instrument-
-    level initialization (``MLPrep.Initialize``) runs earlier in
-    :meth:`PrepDriver.setup` — the pipettor sees an already-initialized instrument.
-    """
-    cfg = self._configuration
-    logger.debug(
-      "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
-      "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, head8_installed=%s",
-      cfg.has_enclosure,
-      cfg.safe_speeds_enabled,
-      cfg.default_traverse_height,
-      cfg.deck_bounds,
-      len(cfg.deck_sites),
-      len(cfg.waste_sites),
-      cfg.num_channels,
-      cfg.head8_installed,
-    )
-
-    await self.discover()
-    if not any(c.x_range is not None for c in self.configuration.channels):
-      logger.warning("Channel bounds not available — move_to_position will skip validation")
-
-    # Probe pipettor for v2 aspirate/dispense support (cmd 38-43).
-    if self.configuration.use_v1_aspirate_dispense:
-      self.configuration.supports_v2_pipetting = False
-      logger.debug("V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
-    else:
-      try:
-        supported = await self._probe_v2_support()
-      except Exception as e:
-        logger.warning("PIP V2 support probe failed: %s", e)
-        supported = False
-      if not supported:
-        raise RuntimeError(
-          "V2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
-          "Pass use_v1_aspirate_dispense=True to Pipettes to use v1 commands (cmd 1-6) instead."
-        )
-      self.configuration.supports_v2_pipetting = True
-      logger.debug("V2 aspirate/dispense support: True")
-
-    self._ensure_head()
-    self.setup_finished = True
-
-  async def discover(self):
-    """Read what each channel reports about itself.
-
-    Read-only. Fills in `configuration.channels`: each channel's firmware version, and the window it
-    reaches from the bounds `build_prep_channels` read.
-    """
-    self.configuration.resolve_channels(len(self.channels))
-    for index, channel in enumerate(self.channels):
-      bounds = channel.bounds
-      self.configuration.channels[index] = PipetteConfiguration(
-        firmware_version=await channel.request_firmware_version(),
-        x_range=None if bounds is None else (bounds["x_min"], bounds["x_max"]),
-        y_range=None if bounds is None else (bounds["y_min"], bounds["y_max"]),
-        z_range=None if bounds is None else (bounds["z_min"], bounds["z_max"]),
-      )
-    self.configuration.check_channels_agree()
-
-  async def _on_stop(self):
-    for tracker in self.head.values():
-      tracker.clear()
-
-  def _ensure_head(self) -> None:
-    """Ensure pipette-side TipTrackers exist for each dual-channel index."""
-    for i in range(self.num_channels):
-      if i not in self.head:
-        self.head[i] = TipTracker(thing=f"Channel {i}")
-
-  def get_mounted_tips(self) -> List[Optional[Tip]]:
-    """Tips currently mounted on the dual-channel head (``None`` if empty)."""
-    self._ensure_head()
-    return [
-      self.head[i].get_tip() if self.head[i].has_tip else None for i in range(self.num_channels)
-    ]
-
-  async def discover_channel_drives(self) -> ChannelDriveMap:
-    """Re-walk the firmware tree and return a fresh :class:`ChannelDriveMap`.
-
-    Diagnostic helper — channel drive addresses for normal operation are already
-    cached on each :attr:`channels` entry at build time.
-    """
-    return await discover_channel_drives(self._client, root_name="Channel Root")
-
-  # ---------------------------------------------------------------------------
-  # Properties
-  # ---------------------------------------------------------------------------
-
-  @property
-  def num_channels(self) -> int:
-    """Number of independent dual-channel pipettor channels (1 or 2). Read from the driver's configuration."""
-    n: Optional[int] = self._configuration.num_channels
-    if n is None:
-      raise RuntimeError("Instrument config has no num_channels (finish PrepDriver.setup first).")
-    return n
-
-  @property
-  def head8_installed(self) -> bool:
-    """True if the 8-channel Multi-Pipetting Head (8MPH) is present. Read from the driver's configuration."""
-    try:
-      return bool(self._configuration.head8_installed)
-    except RuntimeError:
-      return False
-
-  @property
-  def num_arms(self) -> int:
-    """Number of resource-handling arms. 1 when deck has core_grippers and 2 channels, else 0."""
-    if self.deck is None:
-      return 0
-    try:
-      cfg = self._configuration
-    except RuntimeError:
-      return 0
-    if cfg.num_channels != 2:
-      return 0
-    try:
-      mount = self.deck.get_resource("core_grippers")
-      return 1 if isinstance(mount, HamiltonCoreGrippers) else 0
-    except Exception:
-      return 0
 
   def _resolve_traverse_height(self, final_z: Optional[float] = None) -> float:
     """Resolve final_z: explicit arg > user-set default > probed value. Raises if none available."""
@@ -1234,9 +1272,552 @@ class Pipettes:
       "If the instrument supports it, the value is also probed during setup(); ensure setup() completed successfully."
     ) from None
 
-  # ---------------------------------------------------------------------------
-  # Tip / aspirate / dispense API
-  # ---------------------------------------------------------------------------
+  async def request_channel_bounds(self) -> list[ChannelBounds]:
+    """Per-channel movement bounds (PipettorService.GetChannelBounds).
+
+    Thin delegation to :func:`request_channel_bounds`.
+    Prefer reading cached values via ``self.channels[i].bounds``; use this when a
+    fresh re-query is required.
+    """
+    return await request_channel_bounds(self._client)
+
+  async def request_channel_positions(self) -> list[Coordinate]:
+    """Request the current XYZ positions of all pipettor channels.
+
+    Queries Pipettor.GetPositions (cmd=25). Returns one Coordinate per channel,
+    ordered by channel index (0=rearmost).
+
+    Uses the typed PrepGetPositions command with ChannelXYZPositionParameters
+    response struct for reliable parsing across firmware versions.
+
+    Returns:
+      List of Coordinate, one per channel.
+    """
+    positions = await self._unchecked_fw_request_positions()
+    # The device is the authority on where the channels are, so what it answers is recorded.
+    self._record_positions(positions)
+    return positions
+
+  async def _unchecked_fw_request_positions(self) -> list[Coordinate]:
+    """Read where every channel is, without recording it.
+
+    The reading alone. `request_channel_positions`, `request_y_positions` and
+    `request_tool_bottom_z_positions` are the ones that also record it on the resources. Z is the
+    bottom of the tip on a channel carrying one, and the end of its shaft otherwise.
+
+    Returns:
+      One Coordinate per channel, ordered by channel index (0=rearmost). Empty when the device did not
+      answer with positions.
+    """
+    try:
+      resp_obj = await self._client.execute(PrepCmd.PrepGetPositions())
+    except (HoiError, ChannelizedError):
+      return []
+    if not isinstance(resp_obj, PrepCmd.PrepGetPositions.Response):
+      return []
+    resp = resp_obj
+    if not resp.positions:
+      return []
+
+    _CHANNEL_ENUM_TO_IDX = {int(v): k for k, v in _CHANNEL_INDEX.items()}
+    indexed: list[tuple[int, Coordinate]] = []
+    for p in resp.positions:
+      ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
+      if ch_idx is not None:
+        indexed.append((ch_idx, Coordinate(x=p.position_x, y=p.position_y, z=p.position_z)))
+
+    indexed.sort(key=lambda pair: pair[0])
+    return [coord for _, coord in indexed]
+
+  # -- x position ----------------------------------------------------------------------------------
+
+  async def request_x_position(self, channel_idx: int = 0) -> float:
+    """Request X position of pipettor channel n (in mm).
+
+    Analogous to STARBackend.request_x_position().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      X position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    return float(positions[channel_idx].x)
+
+  async def move_to_x_position(self, channel_idx: int, x: float) -> None:
+    """Move the gantry X axis to a position (in mm).
+
+    On the Prep, X is shared across all channels (single gantry). The channel_idx
+    parameter is accepted for STAR API compatibility but does not affect which
+    channel moves — all channels move together in X.
+
+    Analogous to STARBackend.move_to_x_position().
+
+    Args:
+      channel_idx: Channel index (0=rearmost). Used to read current Y/Z.
+      x: Target X position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    await self.move_to_coordinate(
+      Coordinate(x, positions[channel_idx].y, positions[channel_idx].z), use_channels=channel_idx
+    )
+
+  # -- y position ----------------------------------------------------------------------------------
+
+  async def request_y_positions(self) -> List[float]:
+    """Request where every channel is along Y, in one command.
+
+    `GetPositions` answers for all of them at once. Each answer is recorded on the resource modelling
+    that channel, as the STAR driver's `request_y_positions` records it.
+
+    Returns:
+      The position of each channel in mm, back to front.
+    """
+    positions = [coord.y for coord in await self._unchecked_fw_request_positions()]
+    for channel, y in enumerate(positions):
+      self.update_location_by_reference_point(channel, y=y)
+    return positions
+
+  async def request_y_position(self, channel_idx: int) -> float:
+    """Request Y position of pipettor channel n (in mm).
+
+    Analogous to STARBackend.request_y_position().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      Y position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    return float(positions[channel_idx].y)
+
+  async def move_to_y_position(self, channel_idx: int, y: float) -> None:
+    """Move a channel in the Y direction (in mm).
+
+    Analogous to STARBackend.move_to_y_position().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+      y: Target Y position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    await self.move_to_coordinate(
+      Coordinate(positions[channel_idx].x, y, positions[channel_idx].z), use_channels=channel_idx
+    )
+
+  # -- z position ----------------------------------------------------------------------------------
+
+  async def request_z_pos_channel_n(self, channel_idx: int) -> float:
+    """Request Z position of pipettor channel n (in mm).
+
+    Analogous to STARBackend.request_z_pos_channel_n().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      Z position in mm.
+    """
+    positions = await self.request_channel_positions()
+    if channel_idx >= len(positions):
+      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
+    return float(positions[channel_idx].z)
+
+  async def request_tool_bottom_z_positions(self) -> Dict[int, float]:
+    """Read where the bottom of the tip on every channel is.
+
+    Every channel has to carry one, as the STAR driver requires: a channel with no tip has no tool
+    bottom. Records each channel's shaft end on the resource modelling it.
+
+    Returns:
+      The bottom of each channel's tip in mm, keyed by channel, 0-indexed from the back.
+
+    Raises:
+      ValueError: If any channel carries no tip.
+    """
+    tips = await self.sense_tip_presence()
+    missing = [
+      channel for channel in range(self.num_channels) if channel >= len(tips) or not tips[channel]
+    ]
+    if missing:
+      raise ValueError(f"channels {missing} carry no tip, so they have no tool bottom to read")
+    bottoms = {
+      channel: coord.z for channel, coord in enumerate(await self._unchecked_fw_request_positions())
+    }
+    # What comes back is each tip's bottom, but the model references the ends of the shafts, so those
+    # are read for the model.
+    for channel in bottoms:
+      self.update_location_by_reference_point(
+        channel, z=await self.request_stop_disc_z_position(channel)
+      )
+    return bottoms
+
+  async def request_tool_bottom_z_position(self, channel_idx: int) -> float:
+    """Request the Z position of the tip bottom on the specified channel.
+
+    GetPositions returns tip-adjusted Z when a tip is mounted — the reported Z
+    is the tip bottom position, not the channel head. Verified empirically:
+    channel at traverse (167.5mm) with 50uL NTR tip (extension 42.4mm) reports
+    Z=125.1mm = 167.5 - 42.4.
+
+    Requires a tip to be mounted (verified via sleeve sensor).
+
+    Analogous to STARBackend.request_tool_bottom_z_position().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      Tip bottom Z position in mm.
+
+    Raises:
+      RuntimeError: If no tip is present on the channel.
+    """
+    tip_presence = await self.sense_tip_presence()
+    if channel_idx >= len(tip_presence) or not tip_presence[channel_idx]:
+      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
+
+    return await self.request_z_pos_channel_n(channel_idx)
+
+  async def request_stop_disc_z_position(self, channel_idx: int) -> float:
+    """Request the Z position of the channel probe/head (excluding tip).
+
+    Since GetPositions returns tip-adjusted Z when a tip is mounted, this
+    method queries the firmware's held tip definition (GetTipDefinitionHeld on the
+    Pipettor, looked up by name) to get the tip length and adds it back.
+
+    When no tip is mounted, returns the same value as request_z_pos_channel_n().
+
+    Analogous to STARBackend.request_stop_disc_z_position().
+
+    Args:
+      channel_idx: Channel index (0=rearmost).
+
+    Returns:
+      Channel head Z position in mm (excluding tip).
+    """
+    z = await self.request_z_pos_channel_n(channel_idx)
+    tip_presence = await self.sense_tip_presence()
+    if channel_idx < len(tip_presence) and tip_presence[channel_idx]:
+      # Query firmware for the held tip definition to get tip length
+      # By name: the method's ids are not the same on every firmware version.
+      raw = await self._client.request_by_name(PIPETTOR_OBJECT_PATH, "GetTipDefinitionHeld")
+      if raw is not None:
+        import struct as _struct
+
+        data = raw
+        # TipDefinition struct: default_values, id, volume(F32), length(F32), ...
+        # The second F32 is the tip extension length
+        f32_count = 0
+        i = 0
+        while i < len(data) - 7:
+          if data[i] == 0x28 and data[i + 1] == 0x00:
+            f32_count += 1
+            if f32_count == 2:  # second F32 = length
+              tip_length = _struct.unpack_from("<f", data, i + 4)[0]
+              if tip_length > 0:
+                z += tip_length
+              break
+            i += 8
+          else:
+            i += 1
+    return z
+
+  async def move_tool_bottom_to_z_position(self, channel: int, z: float) -> None:
+    """Move the bottom of the tool on one channel along Z.
+
+    The Prep positions the tool bottom: the end of the tip when one is mounted, the end of the tip
+    mounting shaft when none is. `GetPositions` reports the same point (see
+    `request_tool_bottom_z_position`).
+
+    Args:
+      channel: which channel to move, 0-indexed from the back.
+      z: where to put the bottom of its tool, in mm on the deck.
+
+    Raises:
+      ValueError: If the channel does not exist, or cannot reach `z`.
+    """
+    positions = await self.request_channel_positions()
+    if channel >= len(positions):
+      raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
+    await self.move_to_coordinate(
+      Coordinate(positions[channel].x, positions[channel].y, z), use_channels=channel
+    )
+
+  async def move_to_safe_z(self, channels: Optional[List[int]] = None) -> None:
+    """Move the given channels' Z axes up to safe (traverse) height (cmd=28).
+
+    Use after picking up a tool or before returning a tool to avoid collisions
+    during XY moves. The instrument uses its configured safe/traverse height;
+    no height parameter is sent.
+
+    Args:
+      channels: Channel indices to move (0=rearmost). None = all channels.
+    """
+    if channels is None:
+      channels = list(range(self.num_channels))
+    else:
+      channels = sorted(set(channels))
+    if not channels:
+      return
+    if max(channels) >= self.num_channels or min(channels) < 0:
+      raise ValueError(f"channels must be between 0 and {self.num_channels - 1}, are {channels}")
+    try:
+      await self._unchecked_fw_move_z_up_to_safe(channels)
+      # Nothing to record as asked: the firmware chooses the height. The read below records it.
+    finally:
+      await self._record_where_they_stopped()
+
+  async def _unchecked_fw_move_z_up_to_safe(self, channels: List[int]) -> None:
+    """Send MoveZUpToSafe for these channels. Nothing is guarded and nothing is recorded.
+
+    Args:
+      channels: channel indices, 0-indexed from the back.
+    """
+    await self._client.execute(
+      PrepCmd.PrepMoveZUpToSafe(channels=[_CHANNEL_INDEX[ch] for ch in channels])
+    )
+
+  # -- xyz position --------------------------------------------------------------------------------
+
+  async def move_to_coordinate(
+    self,
+    location: Union[Coordinate, List[Coordinate]],
+    use_channels: Optional[Union[int, List[int]]] = 0,
+    *,
+    via_lane: bool = False,
+    x_speed: Optional[float] = None,
+    x_speed_scale: Optional[int] = None,
+    z_speed_scale: Optional[int] = None,
+  ) -> None:
+    """Move channels to locations on the deck (cmd=26, or 27 via the lane).
+
+    The channels ride one gantry, so they share X: every location must name the same x.
+
+    The move command carries no speed. What the firmware offers is MLPrep's X and Z speed scales,
+    which hold for every move until changed, so a scale given here is set for this move and the one
+    that was set before is put back afterwards, whether or not the move succeeded. Y has no scale.
+
+    Args:
+      location: where to send each channel's reference point, in mm on the deck. One location for
+        every channel named, or one per channel, in the order of `use_channels`.
+      use_channels: which channels, 0-indexed from the back. One index, or a list. Defaults to 0.
+      via_lane: travel by the firmware's lane rather than directly.
+      x_speed: how fast to drive X for this move, in mm/s. Set as the nearest X speed scale, so it
+        is rounded to whole multiples of `XArmConfiguration.speed_per_scale_percent`. None keeps
+        the scale MLPrep has.
+      x_speed_scale: overrides `x_speed` with the X speed scale itself, in percent, 1 to 100. Give
+        one or the other, not both.
+      z_speed_scale: how fast to drive Z for this move, in percent of full speed, 1 to 100. None
+        keeps the scale MLPrep has.
+
+    Raises:
+      ValueError: If a channel does not exist, the locations do not match the channels, they do not
+        share one x, a location is outside a channel's reach, a speed or speed scale is out of
+        range, or both `x_speed` and `x_speed_scale` are given.
+      RuntimeError: If a speed scale is given but there is no driver to set it through.
+    """
+    if x_speed is not None and x_speed_scale is not None:
+      raise ValueError("give x_speed or x_speed_scale, not both")
+    if x_speed is not None:
+      arm = None if self._driver is None else self._driver.x_arm
+      x_speed_scale = (
+        arm.configuration if arm is not None else XArmConfiguration()
+      ).speed_to_scale_percent(x_speed)
+    for axis, scale in (("x", x_speed_scale), ("z", z_speed_scale)):
+      if scale is not None and not 1 <= scale <= 100:
+        raise ValueError(f"{axis} speed scale must be between 1 and 100 percent, is {scale}")
+    if (x_speed_scale is not None or z_speed_scale is not None) and self._driver is None:
+      raise RuntimeError("speed scales are set through the driver, and this has none")
+    if use_channels is None:
+      named = [0]
+    elif isinstance(use_channels, list):
+      named = list(use_channels)
+    else:
+      # int or int-like (e.g. numpy.int64); single channel
+      named = [int(use_channels)]
+    if named and (max(named) >= self.num_channels or min(named) < 0):
+      raise ValueError(f"use_channels must be between 0 and {self.num_channels - 1}, are {named}")
+    locations = location if isinstance(location, list) else [location] * len(named)
+    if len(locations) != len(named):
+      raise ValueError(f"{len(locations)} locations given for {len(named)} channels")
+    if len({loc.x for loc in locations}) > 1:
+      raise ValueError(
+        f"the channels share one gantry, so every location needs the same x; got "
+        f"{sorted({loc.x for loc in locations})}"
+      )
+    # Each location stays with the channel it was named for, in channel order.
+    paired = sorted(zip(named, locations), key=lambda pair: pair[0])
+    channels = [channel for channel, _ in paired]
+    x = locations[0].x if locations else 0.0
+    y_vals = [loc.y for _, loc in paired]
+    z_vals = [loc.z for _, loc in paired]
+
+    # Validate against per-channel movement bounds (cached from firmware at setup).
+    for i, (y_i, z_i) in enumerate(zip(y_vals, z_vals)):
+      ch = channels[i]
+      if ch < len(self.configuration.channels):
+        c = self.configuration.channels[ch]
+        if c.x_range is not None and not c.x_range[0] <= x <= c.x_range[1]:
+          raise ValueError(
+            f"x={x} outside channel {ch} range [{c.x_range[0]:.1f}, {c.x_range[1]:.1f}]"
+          )
+        if c.y_range is not None and not c.y_range[0] <= y_i <= c.y_range[1]:
+          raise ValueError(
+            f"y={y_i} outside channel {ch} range [{c.y_range[0]:.1f}, {c.y_range[1]:.1f}]"
+          )
+        if c.z_range is not None and z_i > c.z_range[1]:
+          raise ValueError(f"z={z_i} above channel {ch} maximum {c.z_range[1]:.1f}")
+
+    # The scales in force before this move, to put back once it is done.
+    restore_x: Optional[int] = None
+    restore_z: Optional[int] = None
+    try:
+      if self._driver is not None and x_speed_scale is not None:
+        restore_x = await self._driver.request_x_speed_scale()
+        await self._driver.set_x_speed_scale(x_speed_scale)
+      if self._driver is not None and z_speed_scale is not None:
+        restore_z = await self._driver.request_z_speed_scale()
+        await self._driver.set_z_speed_scale(z_speed_scale)
+      await self._unchecked_fw_move_to_position(x, channels, y_vals, z_vals, via_lane=via_lane)
+      # What was asked, recorded as soon as the command answers; the read below replaces it with
+      # where the channels actually stopped.
+      arm = None if self._driver is None else self._driver.x_arm
+      if arm is not None:
+        arm.update_location_by_reference_point(x)
+      for channel, y_i, z_i in zip(channels, y_vals, z_vals):
+        self.update_location_by_reference_point(channel, y=y_i, z=z_i)
+    finally:
+      try:
+        if self._driver is not None and restore_x is not None:
+          await self._driver.set_x_speed_scale(restore_x)
+        if self._driver is not None and restore_z is not None:
+          await self._driver.set_z_speed_scale(restore_z)
+      finally:
+        await self._record_where_they_stopped()
+
+  async def _unchecked_fw_move_to_position(
+    self,
+    x: float,
+    channels: List[int],
+    y: Union[float, List[float]],
+    z: Union[float, List[float]],
+    via_lane: bool = False,
+  ) -> None:
+    """Send the gantry move (cmd=26, or 27 via the lane). Nothing is guarded and nothing is recorded.
+
+    Args:
+      x: where to send the gantry, in mm.
+      channels: which channels, sorted, 0-indexed from the back.
+      y: where to send each channel along Y, in mm; one value for all, or one per channel.
+      z: where to send each channel along Z, in mm; one value for all, or one per channel.
+      via_lane: travel by the firmware's lane rather than directly.
+    """
+    move_parameters = _build_pipettor_gantry_move_parameters(x, channels, y, z)
+    if via_lane:
+      await self._client.execute(PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters))
+    else:
+      await self._client.execute(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+
+  # ----------------------------------------
+  # Probing
+  # ----------------------------------------
+
+  # -- x probing (capacitive only) -----------------------------------------------------------------
+
+  async def clld_probe_x_position_using_channel(self, *args, **kwargs):
+    """Probe X position using capacitive LLD. Not yet implemented for the Prep.
+
+    TODO: Investigate ChannelCoordinator [1:17] MoveChannelAxisAbsolute and
+    [1:18] MoveChannelAxisRelative for X-axis probing with cLLD feedback.
+    The ChannelCoordinator also has [1:19] YSeekLldPosition which may have
+    an X equivalent, though none was found in introspection.
+    """
+    raise NotImplementedError(
+      "clld_probe_x_position_using_channel is not yet implemented for Pipettes."
+    )
+
+  # -- y probing (capacitive only) -----------------------------------------------------------------
+
+  async def clld_probe_y_position_using_channel(self, *args, **kwargs):
+    """Probe Y position using capacitive LLD. Not yet implemented for the Prep.
+
+    TODO: Investigate ChannelCoordinator [1:19] YSeekLldPosition(seekParameters)
+    which takes a YLLDSeekParameters struct and returns SeekResultParameters.
+    Also Channel [1:11] LeakCheck has ySeekDistance/yPreloadDistance params
+    which suggest Y-axis seeking capability.
+    """
+    raise NotImplementedError(
+      "clld_probe_y_position_using_channel is not yet implemented for Pipettes."
+    )
+
+  # -- z probing (capacitive, force) ---------------------------------------------------------------
+
+  async def clld_probe_z_height_using_channel(self, *args, **kwargs):
+    """Probe Z-height using capacitive LLD. Not yet implemented for the Prep.
+
+    TODO: Implement using the standalone ZSeekLldPosition command:
+    - Pipettor [1:29] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
+    - ChannelCoordinator [1:20] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
+    Previously returned HC_RESULT=0x0F06 which was assumed to be "LLD not supported".
+    Now identified as "Z position out of allowed movement range" — the Z parameters
+    in LLDChannelSeekParameters were out of bounds. Retry with valid Z values
+    within deck_bounds (min_z=18.03, max_z=167.5).
+
+    Findings from testing:
+    - cLLD DOES work through the aspirate path (aspirate with
+      lld_mode=[LLDMode.CAPACITIVE] and default_values=False on both
+      LldParameters and CLldParameters).
+    - Standalone ZSeekLldPosition is rejected with 0x0F06 when Z params are out of range.
+    - The aspirate-based approach is a workaround, not a proper standalone probe.
+
+    Also investigate ZAxis-level alternatives:
+    - ZAxis.SeekCapacitiveLld [1:12] (returns 0x0207 when called directly)
+    - ZAxis.SeekCapacitiveLldTip [1:13] (returns 0x0207 when called directly)
+    - ZAxis.LiquidStatus [1:16] for reading last detection results
+    - PipettorService.MeasureLldFrequency [1:6] for sensor health checks
+    """
+    raise NotImplementedError(
+      "clld_probe_z_height_using_channel is not yet implemented for Pipettes."
+    )
+
+  async def ztouch_probe_z_height_using_channel(self, *args, **kwargs):
+    """Probe Z-height using force/motor stall detection. Not yet implemented for the Prep.
+
+    TODO: Investigate force-based Z probing commands:
+    - ZAxis.SeekObstacle [1:14] SeekObstacle(startPosition, endPosition, finalPosition, velocity)
+      Currently returns 0x0207 when called directly — needs coordinator routing.
+    - Calibration.ZTouchoff [1:8] — runs a Z touchoff calibration (force-based).
+    - The STAR implements this via a dedicated "ZH" firmware command with PWM-based
+      force detection. The Prep may have an equivalent through the ChannelCoordinator
+      but it was not found in introspection.
+    """
+    raise NotImplementedError(
+      "ztouch_probe_z_height_using_channel is not yet implemented for Pipettes."
+    )
+
+  # ----------------------------------------
+  # Tips and liquid handling
+  # ----------------------------------------
+
+  # -- tip pickup / drop ---------------------------------------------------------------------------
+
+  def get_mounted_tips(self) -> List[Optional[Tip]]:
+    """Tips currently mounted on the dual-channel head (``None`` if empty)."""
+    self._ensure_head()
+    return [
+      self.head[i].get_tip() if self.head[i].has_tip else None for i in range(self.num_channels)
+    ]
 
   def _require_mounted_tips(self, use_channels: List[int]) -> List[Tip]:
     self._ensure_head()
@@ -1352,10 +1933,8 @@ class Pipettes:
         indexed[ch][0].get_location_wrt(self._require_deck(), "c", "c", "t") + indexed[ch][2]
         for ch in use_channels
       ]
-      await self.move_to_position(
-        x=locs[0].x,
-        y=[loc.y for loc in locs],
-        z=traverse_h,
+      await self.move_to_coordinate(
+        [Coordinate(locs[0].x, loc.y, traverse_h) for loc in locs],
         use_channels=use_channels,
       )
 
@@ -1482,9 +2061,25 @@ class Pipettes:
 
     await self._finalize_channel_command(use_channels, tip_intents=tip_intents, send=_send)
 
-  # ---------------------------------------------------------------------------
-  # V1/V2 aspirate/dispense dispatch helpers
-  # ---------------------------------------------------------------------------
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    """Check if the tip can be picked up by the specified channel.
+
+    Uses the same logic as Nimbus/STAR: only Hamilton tips, no XL tips,
+    and channel index must be valid.
+    """
+    if not isinstance(tip, HamiltonTip):
+      return False
+    if tip.tip_size in {TipSize.XL}:
+      return False
+    try:
+      n = self._configuration.num_channels
+    except RuntimeError:
+      n = None
+    if n is not None and channel_idx >= n:
+      return False
+    return True
+
+  # -- v1/v2 aspirate/dispense dispatch helpers ----------------------------------------------------
 
   @staticmethod
   def _patch_common_with_cone(
@@ -1492,9 +2087,7 @@ class Pipettes:
   ) -> PrepCmd.CommonParameters:
     return patch_common_with_cone(common, segments)
 
-  # ---------------------------------------------------------------------------
-  # Shared LLD / TADM resolution helpers
-  # ---------------------------------------------------------------------------
+  # -- shared LLD / TADM resolution helpers --------------------------------------------------------
 
   def _resolve_effective_lld(
     self,
@@ -1544,9 +2137,7 @@ class Pipettes:
   ) -> PrepCmd.LldParameters:
     return lld_for_well(effective_lld, lld, top_of_well_z)
 
-  # ---------------------------------------------------------------------------
-  # Shared channel resolution
-  # ---------------------------------------------------------------------------
+  # -- shared channel resolution -------------------------------------------------------------------
 
   def _resolve_channel_context(
     self,
@@ -1631,9 +2222,7 @@ class Pipettes:
       ch_segments=ch_segments,
     )
 
-  # ---------------------------------------------------------------------------
-  # Aspirate: resolve, assemble, send
-  # ---------------------------------------------------------------------------
+  # -- aspirate: resolve, assemble, send -----------------------------------------------------------
 
   def _resolve_aspirate_channels(
     self,
@@ -1893,9 +2482,7 @@ class Pipettes:
       read_timeout=read_timeout if effective_lld else None,
     )
 
-  # ---------------------------------------------------------------------------
-  # Dispense: resolve, assemble, send
-  # ---------------------------------------------------------------------------
+  # -- dispense: resolve, assemble, send -----------------------------------------------------------
 
   def _resolve_dispense_channels(
     self,
@@ -2082,9 +2669,7 @@ class Pipettes:
       read_timeout=read_timeout if effective_lld else None,
     )
 
-  # ---------------------------------------------------------------------------
-  # Public aspirate / dispense orchestrators
-  # ---------------------------------------------------------------------------
+  # -- aspirate / dispense orchestrators -----------------------------------------------------------
 
   def _build_transfers(
     self,
@@ -2320,546 +2905,7 @@ class Pipettes:
 
     await self._finalize_channel_command(use_channels, volume_intents=volume_intents, send=_send)
 
-  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
-    """Check if the tip can be picked up by the specified channel.
-
-    Uses the same logic as Nimbus/STAR: only Hamilton tips, no XL tips,
-    and channel index must be valid.
-    """
-    if not isinstance(tip, HamiltonTip):
-      return False
-    if tip.tip_size in {TipSize.XL}:
-      return False
-    try:
-      n = self._configuration.num_channels
-    except RuntimeError:
-      n = None
-    if n is not None and channel_idx >= n:
-      return False
-    return True
-
-  # ---------------------------------------------------------------------------
-  # Firmware version queries (per-channel; box-level queries live on PrepClient)
-  # ---------------------------------------------------------------------------
-
-  async def request_firmware_version(self, channel: int) -> Optional[str]:
-    """Firmware version string for pipettor channel (0=rearmost)."""
-    if channel >= len(self.channels):
-      return None
-    return await self.channels[channel].request_firmware_version()
-
-  # ---------------------------------------------------------------------------
-  # Channel position queries
-  # ---------------------------------------------------------------------------
-
-  async def request_channel_bounds(self) -> list[ChannelBounds]:
-    """Per-channel movement bounds (PipettorService.GetChannelBounds).
-
-    Thin delegation to :func:`request_channel_bounds`.
-    Prefer reading cached values via ``self.channels[i].bounds``; use this when a
-    fresh re-query is required.
-    """
-    return await request_channel_bounds(self._client)
-
-  async def request_channel_positions(self) -> list[Coordinate]:
-    """Request the current XYZ positions of all pipettor channels.
-
-    Queries Pipettor.GetPositions (cmd=25). Returns one Coordinate per channel,
-    ordered by channel index (0=rearmost).
-
-    Uses the typed PrepGetPositions command with ChannelXYZPositionParameters
-    response struct for reliable parsing across firmware versions.
-
-    Returns:
-      List of Coordinate, one per channel.
-    """
-    positions = await self._unchecked_fw_request_positions()
-    # The device is the authority on where the channels are, so what it answers is recorded.
-    self._record_positions(positions)
-    return positions
-
-  async def _unchecked_fw_request_positions(self) -> list[Coordinate]:
-    """Read where every channel is, without recording it.
-
-    The reading alone. `request_channel_positions`, `request_y_positions` and
-    `request_tool_bottom_z_positions` are the ones that also record it on the resources. Z is the
-    bottom of the tip on a channel carrying one, and the end of its shaft otherwise.
-
-    Returns:
-      One Coordinate per channel, ordered by channel index (0=rearmost). Empty when the device did not
-      answer with positions.
-    """
-    try:
-      resp_obj = await self._client.execute(PrepCmd.PrepGetPositions())
-    except (HoiError, ChannelizedError):
-      return []
-    if not isinstance(resp_obj, PrepCmd.PrepGetPositions.Response):
-      return []
-    resp = resp_obj
-    if not resp.positions:
-      return []
-
-    _CHANNEL_ENUM_TO_IDX = {int(v): k for k, v in _CHANNEL_INDEX.items()}
-    indexed: list[tuple[int, Coordinate]] = []
-    for p in resp.positions:
-      ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
-      if ch_idx is not None:
-        indexed.append((ch_idx, Coordinate(x=p.position_x, y=p.position_y, z=p.position_z)))
-
-    indexed.sort(key=lambda pair: pair[0])
-    return [coord for _, coord in indexed]
-
-  async def request_x_position(self, channel_idx: int = 0) -> float:
-    """Request X position of pipettor channel n (in mm).
-
-    Analogous to STARBackend.request_x_position().
-
-    Args:
-      channel_idx: Channel index (0=rearmost).
-
-    Returns:
-      X position in mm.
-    """
-    positions = await self.request_channel_positions()
-    if channel_idx >= len(positions):
-      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
-    return float(positions[channel_idx].x)
-
-  async def request_y_position(self, channel_idx: int) -> float:
-    """Request Y position of pipettor channel n (in mm).
-
-    Analogous to STARBackend.request_y_position().
-
-    Args:
-      channel_idx: Channel index (0=rearmost).
-
-    Returns:
-      Y position in mm.
-    """
-    positions = await self.request_channel_positions()
-    if channel_idx >= len(positions):
-      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
-    return float(positions[channel_idx].y)
-
-  async def request_z_pos_channel_n(self, channel_idx: int) -> float:
-    """Request Z position of pipettor channel n (in mm).
-
-    Analogous to STARBackend.request_z_pos_channel_n().
-
-    Args:
-      channel_idx: Channel index (0=rearmost).
-
-    Returns:
-      Z position in mm.
-    """
-    positions = await self.request_channel_positions()
-    if channel_idx >= len(positions):
-      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
-    return float(positions[channel_idx].z)
-
-  async def request_y_positions(self) -> List[float]:
-    """Request where every channel is along Y, in one command.
-
-    `GetPositions` answers for all of them at once. Each answer is recorded on the resource modelling
-    that channel, as the STAR driver's `request_y_positions` records it.
-
-    Returns:
-      The position of each channel in mm, back to front.
-    """
-    positions = [coord.y for coord in await self._unchecked_fw_request_positions()]
-    for channel, y in enumerate(positions):
-      self.update_location_by_reference_point(channel, y=y)
-    return positions
-
-  async def request_tool_bottom_z_positions(self) -> Dict[int, float]:
-    """Read where the bottom of the tip on every channel is.
-
-    Every channel has to carry one, as the STAR driver requires: a channel with no tip has no tool
-    bottom. Records each channel's shaft end on the resource modelling it.
-
-    Returns:
-      The bottom of each channel's tip in mm, keyed by channel, 0-indexed from the back.
-
-    Raises:
-      ValueError: If any channel carries no tip.
-    """
-    tips = await self.sense_tip_presence()
-    missing = [
-      channel for channel in range(self.num_channels) if channel >= len(tips) or not tips[channel]
-    ]
-    if missing:
-      raise ValueError(f"channels {missing} carry no tip, so they have no tool bottom to read")
-    bottoms = {
-      channel: coord.z for channel, coord in enumerate(await self._unchecked_fw_request_positions())
-    }
-    # What comes back is each tip's bottom, but the model references the ends of the shafts, so those
-    # are read for the model.
-    for channel in bottoms:
-      self.update_location_by_reference_point(
-        channel, z=await self.request_stop_disc_z_position(channel)
-      )
-    return bottoms
-
-  async def request_tool_bottom_z_position(self, channel_idx: int) -> float:
-    """Request the Z position of the tip bottom on the specified channel.
-
-    GetPositions returns tip-adjusted Z when a tip is mounted — the reported Z
-    is the tip bottom position, not the channel head. Verified empirically:
-    channel at traverse (167.5mm) with 50uL NTR tip (extension 42.4mm) reports
-    Z=125.1mm = 167.5 - 42.4.
-
-    Requires a tip to be mounted (verified via sleeve sensor).
-
-    Analogous to STARBackend.request_tool_bottom_z_position().
-
-    Args:
-      channel_idx: Channel index (0=rearmost).
-
-    Returns:
-      Tip bottom Z position in mm.
-
-    Raises:
-      RuntimeError: If no tip is present on the channel.
-    """
-    tip_presence = await self.sense_tip_presence()
-    if channel_idx >= len(tip_presence) or not tip_presence[channel_idx]:
-      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
-
-    return await self.request_z_pos_channel_n(channel_idx)
-
-  async def request_stop_disc_z_position(self, channel_idx: int) -> float:
-    """Request the Z position of the channel probe/head (excluding tip).
-
-    Since GetPositions returns tip-adjusted Z when a tip is mounted, this
-    method queries the firmware's held tip definition (GetTipDefinitionHeld on the
-    Pipettor, looked up by name) to get the tip length and adds it back.
-
-    When no tip is mounted, returns the same value as request_z_pos_channel_n().
-
-    Analogous to STARBackend.request_stop_disc_z_position().
-
-    Args:
-      channel_idx: Channel index (0=rearmost).
-
-    Returns:
-      Channel head Z position in mm (excluding tip).
-    """
-    z = await self.request_z_pos_channel_n(channel_idx)
-    tip_presence = await self.sense_tip_presence()
-    if channel_idx < len(tip_presence) and tip_presence[channel_idx]:
-      # Query firmware for the held tip definition to get tip length
-      # By name: the method's ids are not the same on every firmware version.
-      raw = await self._client.request_by_name(PIPETTOR_OBJECT_PATH, "GetTipDefinitionHeld")
-      if raw is not None:
-        import struct as _struct
-
-        data = raw
-        # TipDefinition struct: default_values, id, volume(F32), length(F32), ...
-        # The second F32 is the tip extension length
-        f32_count = 0
-        i = 0
-        while i < len(data) - 7:
-          if data[i] == 0x28 and data[i + 1] == 0x00:
-            f32_count += 1
-            if f32_count == 2:  # second F32 = length
-              tip_length = _struct.unpack_from("<f", data, i + 4)[0]
-              if tip_length > 0:
-                z += tip_length
-              break
-            i += 8
-          else:
-            i += 1
-    return z
-
-  # ---------------------------------------------------------------------------
-  # Per-axis channel movement
-  # ---------------------------------------------------------------------------
-
-  async def move_to_x_position(self, channel_idx: int, x: float) -> None:
-    """Move the gantry X axis to a position (in mm).
-
-    On the Prep, X is shared across all channels (single gantry). The channel_idx
-    parameter is accepted for STAR API compatibility but does not affect which
-    channel moves — all channels move together in X.
-
-    Analogous to STARBackend.move_to_x_position().
-
-    Args:
-      channel_idx: Channel index (0=rearmost). Used to read current Y/Z.
-      x: Target X position in mm.
-    """
-    positions = await self.request_channel_positions()
-    if channel_idx >= len(positions):
-      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
-    await self.move_to_position(
-      x, positions[channel_idx].y, positions[channel_idx].z, use_channels=channel_idx
-    )
-
-  async def move_to_y_position(self, channel_idx: int, y: float) -> None:
-    """Move a channel in the Y direction (in mm).
-
-    Analogous to STARBackend.move_to_y_position().
-
-    Args:
-      channel_idx: Channel index (0=rearmost).
-      y: Target Y position in mm.
-    """
-    positions = await self.request_channel_positions()
-    if channel_idx >= len(positions):
-      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
-    await self.move_to_position(
-      positions[channel_idx].x, y, positions[channel_idx].z, use_channels=channel_idx
-    )
-
-  async def move_channel_z(self, channel_idx: int, z: float) -> None:
-    """Move a channel in the Z direction (in mm).
-
-    Analogous to STARBackend.move_channel_z().
-
-    Args:
-      channel_idx: Channel index (0=rearmost).
-      z: Target Z position in mm.
-    """
-    positions = await self.request_channel_positions()
-    if channel_idx >= len(positions):
-      raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
-    await self.move_to_position(
-      positions[channel_idx].x, positions[channel_idx].y, z, use_channels=channel_idx
-    )
-
-  # ---------------------------------------------------------------------------
-  # Tip presence sensing
-  # ---------------------------------------------------------------------------
-
-  async def sense_tip_presence(self) -> list[bool]:
-    """Sense whether a tip is physically present on each pipettor channel via the sleeve sensor.
-
-    Resolves each channel's Squeeze.SDrive object from the firmware tree, then
-    finds GetTipPresent by name in that object's method table. The query uses
-    the interface and method IDs declared by the firmware. Method tables are
-    cached by the connection's introspection instance.
-
-    Returns:
-      List of bools, one per channel (index 0=rearmost). True if tip detected.
-    """
-
-    drive_map = await self.discover_channel_drives()
-    if not drive_map.sleeve_sensor_addrs:
-      raise RuntimeError("No channel sleeve sensor addresses discovered.")
-
-    results: list[bool] = []
-    for addr in drive_map.sleeve_sensor_addrs:
-      method = await self._client.introspection.get_method_by_name(addr, "GetTipPresent")
-      raw = await self._client.execute(
-        PrepCmd.PrepProbeRequest(
-          dest=addr, command_id=method.method_id, interface_id=method.interface_id
-        )
-      )
-      if raw is None or len(raw) < 8:
-        results.append(False)
-      else:
-        val = _struct.unpack_from("<I", raw, 4)[0]
-        results.append(bool(val))
-
-    return results
-
-  async def request_tip_presence(self) -> List[Optional[bool]]:
-    pres = await self.sense_tip_presence()
-    return [bool(x) for x in pres]
-
-  # ---------------------------------------------------------------------------
-  # Capacitance-based probing (cLLD)
-  # ---------------------------------------------------------------------------
-
-  async def clld_probe_x_position_using_channel(self, *args, **kwargs):
-    """Probe X position using capacitive LLD. Not yet implemented for the Prep.
-
-    TODO: Investigate ChannelCoordinator [1:17] MoveChannelAxisAbsolute and
-    [1:18] MoveChannelAxisRelative for X-axis probing with cLLD feedback.
-    The ChannelCoordinator also has [1:19] YSeekLldPosition which may have
-    an X equivalent, though none was found in introspection.
-    """
-    raise NotImplementedError(
-      "clld_probe_x_position_using_channel is not yet implemented for Pipettes."
-    )
-
-  async def clld_probe_y_position_using_channel(self, *args, **kwargs):
-    """Probe Y position using capacitive LLD. Not yet implemented for the Prep.
-
-    TODO: Investigate ChannelCoordinator [1:19] YSeekLldPosition(seekParameters)
-    which takes a YLLDSeekParameters struct and returns SeekResultParameters.
-    Also Channel [1:11] LeakCheck has ySeekDistance/yPreloadDistance params
-    which suggest Y-axis seeking capability.
-    """
-    raise NotImplementedError(
-      "clld_probe_y_position_using_channel is not yet implemented for Pipettes."
-    )
-
-  async def clld_probe_z_height_using_channel(self, *args, **kwargs):
-    """Probe Z-height using capacitive LLD. Not yet implemented for the Prep.
-
-    TODO: Implement using the standalone ZSeekLldPosition command:
-    - Pipettor [1:29] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
-    - ChannelCoordinator [1:20] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
-    Previously returned HC_RESULT=0x0F06 which was assumed to be "LLD not supported".
-    Now identified as "Z position out of allowed movement range" — the Z parameters
-    in LLDChannelSeekParameters were out of bounds. Retry with valid Z values
-    within deck_bounds (min_z=18.03, max_z=167.5).
-
-    Findings from testing:
-    - cLLD DOES work through the aspirate path (aspirate with
-      lld_mode=[LLDMode.CAPACITIVE] and default_values=False on both
-      LldParameters and CLldParameters).
-    - Standalone ZSeekLldPosition is rejected with 0x0F06 when Z params are out of range.
-    - The aspirate-based approach is a workaround, not a proper standalone probe.
-
-    Also investigate ZAxis-level alternatives:
-    - ZAxis.SeekCapacitiveLld [1:12] (returns 0x0207 when called directly)
-    - ZAxis.SeekCapacitiveLldTip [1:13] (returns 0x0207 when called directly)
-    - ZAxis.LiquidStatus [1:16] for reading last detection results
-    - PipettorService.MeasureLldFrequency [1:6] for sensor health checks
-    """
-    raise NotImplementedError(
-      "clld_probe_z_height_using_channel is not yet implemented for Pipettes."
-    )
-
-  async def ztouch_probe_z_height_using_channel(self, *args, **kwargs):
-    """Probe Z-height using force/motor stall detection. Not yet implemented for the Prep.
-
-    TODO: Investigate force-based Z probing commands:
-    - ZAxis.SeekObstacle [1:14] SeekObstacle(startPosition, endPosition, finalPosition, velocity)
-      Currently returns 0x0207 when called directly — needs coordinator routing.
-    - Calibration.ZTouchoff [1:8] — runs a Z touchoff calibration (force-based).
-    - The STAR implements this via a dedicated "ZH" firmware command with PWM-based
-      force detection. The Prep may have an equivalent through the ChannelCoordinator
-      but it was not found in introspection.
-    """
-    raise NotImplementedError(
-      "ztouch_probe_z_height_using_channel is not yet implemented for Pipettes."
-    )
-
-  # ---------------------------------------------------------------------------
-  # Pipettor convenience methods
-  # ---------------------------------------------------------------------------
-
-  async def move_to_safe_z(self, channels: Optional[List[int]] = None) -> None:
-    """Move the given channels' Z axes up to safe (traverse) height (cmd=28).
-
-    Use after picking up a tool or before returning a tool to avoid collisions
-    during XY moves. The instrument uses its configured safe/traverse height;
-    no height parameter is sent.
-
-    Args:
-      channels: Channel indices to move (0=rearmost). None = all channels.
-    """
-    if channels is None:
-      channels = list(range(self.num_channels))
-    else:
-      channels = sorted(set(channels))
-    if not channels:
-      return
-    if max(channels) >= self.num_channels or min(channels) < 0:
-      raise ValueError(f"channels must be between 0 and {self.num_channels - 1}, are {channels}")
-    try:
-      await self._unchecked_fw_move_z_up_to_safe(channels)
-      # Nothing to record as asked: the firmware chooses the height. The read below records it.
-    finally:
-      await self._record_where_they_stopped()
-
-  async def _unchecked_fw_move_z_up_to_safe(self, channels: List[int]) -> None:
-    """Send MoveZUpToSafe for these channels. Nothing is guarded and nothing is recorded.
-
-    Args:
-      channels: channel indices, 0-indexed from the back.
-    """
-    await self._client.execute(
-      PrepCmd.PrepMoveZUpToSafe(channels=[_CHANNEL_INDEX[ch] for ch in channels])
-    )
-
-  async def move_to_position(
-    self,
-    x: float,
-    y: Union[float, List[float]],
-    z: Union[float, List[float]],
-    use_channels: Optional[Union[int, List[int]]] = 0,
-    *,
-    via_lane: bool = False,
-  ) -> None:
-    """Move pipettor to position (cmd=26 or 27). Same (x,y,z) params; via_lane selects cmd 27.
-
-    use_channels defaults to 0 (rear channel). Pass a single channel index (int) or
-    a list of indices; for all channels use list(range(self.num_channels)). For a
-    single channel, y and z may be scalars instead of lists.
-    """
-    if use_channels is None:
-      channels = [0]
-    elif isinstance(use_channels, list):
-      channels = list(use_channels)
-    else:
-      # int or int-like (e.g. numpy.int64); single channel
-      channels = [int(use_channels)]
-    channels = sorted(channels)
-    if channels and (max(channels) >= self.num_channels or min(channels) < 0):
-      raise ValueError(
-        f"use_channels must be between 0 and {self.num_channels - 1}, are {channels}"
-      )
-    if isinstance(y, list) and len(y) != len(channels):
-      raise ValueError(f"y names {len(y)} positions for {len(channels)} channels")
-    if isinstance(z, list) and len(z) != len(channels):
-      raise ValueError(f"z names {len(z)} positions for {len(channels)} channels")
-
-    # Validate against per-channel movement bounds (cached from firmware at setup).
-    y_vals = y if isinstance(y, list) else [y] * len(channels)
-    z_vals = z if isinstance(z, list) else [z] * len(channels)
-    for i, (y_i, z_i) in enumerate(zip(y_vals, z_vals)):
-      ch = channels[i]
-      if ch < len(self.configuration.channels):
-        c = self.configuration.channels[ch]
-        if c.x_range is not None and not c.x_range[0] <= x <= c.x_range[1]:
-          raise ValueError(
-            f"x={x} outside channel {ch} range [{c.x_range[0]:.1f}, {c.x_range[1]:.1f}]"
-          )
-        if c.y_range is not None and not c.y_range[0] <= y_i <= c.y_range[1]:
-          raise ValueError(
-            f"y={y_i} outside channel {ch} range [{c.y_range[0]:.1f}, {c.y_range[1]:.1f}]"
-          )
-        if c.z_range is not None and z_i > c.z_range[1]:
-          raise ValueError(f"z={z_i} above channel {ch} maximum {c.z_range[1]:.1f}")
-
-    try:
-      await self._unchecked_fw_move_to_position(x, channels, y, z, via_lane=via_lane)
-      # What was asked, recorded as soon as the command answers; the read below replaces it with
-      # where the channels actually stopped.
-      arm = None if self._driver is None else self._driver.x_arm
-      if arm is not None:
-        arm.update_location_by_reference_point(x)
-      for channel, y_i, z_i in zip(channels, y_vals, z_vals):
-        self.update_location_by_reference_point(channel, y=y_i, z=z_i)
-    finally:
-      await self._record_where_they_stopped()
-
-  async def _unchecked_fw_move_to_position(
-    self,
-    x: float,
-    channels: List[int],
-    y: Union[float, List[float]],
-    z: Union[float, List[float]],
-    via_lane: bool = False,
-  ) -> None:
-    """Send the gantry move (cmd=26, or 27 via the lane). Nothing is guarded and nothing is recorded.
-
-    Args:
-      x: where to send the gantry, in mm.
-      channels: which channels, sorted, 0-indexed from the back.
-      y: where to send each channel along Y, in mm; one value for all, or one per channel.
-      z: where to send each channel along Z, in mm; one value for all, or one per channel.
-      via_lane: travel by the firmware's lane rather than directly.
-    """
-    move_parameters = _build_pipettor_gantry_move_parameters(x, channels, y, z)
-    if via_lane:
-      await self._client.execute(PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters))
-    else:
-      await self._client.execute(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+  # -- shutdown / serialization --------------------------------------------------------------------
 
   async def stop(self) -> None:
     self.setup_finished = False

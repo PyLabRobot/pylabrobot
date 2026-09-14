@@ -8,6 +8,7 @@ import pytest
 
 from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes, PipetteChannel
+from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck, hamilton_96_tiprack_50uL_NTR
 from pylabrobot.resources.tip_tracker import set_tip_tracking
@@ -157,7 +158,7 @@ def test_configuration_holds_one_entry_per_channel_and_setup_choices():
   _run(_t())
 
 
-def test_move_to_position_refuses_what_the_channel_bounds_exclude():
+def test_move_to_coordinate_refuses_what_the_channel_bounds_exclude():
   """The reach recorded on a channel's configuration guards the move before anything is sent."""
 
   async def _t():
@@ -167,9 +168,98 @@ def test_move_to_position_refuses_what_the_channel_bounds_exclude():
     c = p.pipettes.configuration.channels[0]
     c.x_range, c.y_range, c.z_range = (0.0, 400.0), (0.0, 400.0), (0.0, 170.0)
     with pytest.raises(ValueError, match="outside channel 0"):
-      await p.pipettes.move_to_position(x=500.0, use_channels=0, y=100.0, z=100.0)
+      await p.pipettes.move_to_coordinate(Coordinate(500.0, 100.0, 100.0), use_channels=0)
     with pytest.raises(ValueError, match="above channel 0 maximum"):
-      await p.pipettes.move_to_position(x=100.0, use_channels=0, y=100.0, z=200.0)
+      await p.pipettes.move_to_coordinate(Coordinate(100.0, 100.0, 200.0), use_channels=0)
+    with pytest.raises(ValueError, match="same x"):
+      await p.pipettes.move_to_coordinate(
+        [Coordinate(100.0, 200.0, 100.0), Coordinate(101.0, 100.0, 100.0)], use_channels=[0, 1]
+      )
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_coordinate_keeps_each_location_with_its_channel():
+  """Locations named out of channel order still go to the channels they were named for."""
+
+  async def _t():
+    p = PrepDriver(deck=PrepDeck(), chatterbox=True)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_coordinate(
+      [Coordinate(150.0, 200.0, 160.0), Coordinate(150.0, 250.0, 165.0)], use_channels=[1, 0]
+    )
+    positions = await p.pipettes.request_channel_positions()
+    assert (positions[0].y, positions[0].z) == (250.0, 165.0)
+    assert (positions[1].y, positions[1].z) == (200.0, 160.0)
+    assert positions[0].x == positions[1].x == 150.0
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_coordinate_sets_speed_scales_for_the_move_and_puts_them_back():
+  """A speed scale is read, set, the move sent, and the earlier scale restored - in that order."""
+
+  async def _t():
+    p = PrepDriver(deck=PrepDeck(), chatterbox=True)
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    execute = p.client.execute
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await execute(command, *args, **kwargs)
+
+    p.client.execute = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_coordinate(
+      Coordinate(150.0, 200.0, 160.0), use_channels=0, x_speed_scale=25, z_speed_scale=50
+    )
+    names = [type(c).__name__ for c in sent]
+    move = names.index("PrepMoveToPosition")
+    assert names[:move] == [
+      "PrepGetXSpeedScale",
+      "PrepSetXSpeedScale",
+      "PrepGetZSpeedScale",
+      "PrepSetZSpeedScale",
+    ]
+    assert (sent[1].value, sent[3].value) == (25, 50)
+    assert names[move + 1 : move + 3] == ["PrepSetXSpeedScale", "PrepSetZSpeedScale"]
+    assert (sent[move + 1].value, sent[move + 2].value) == (100, 100)
+
+    with pytest.raises(ValueError, match="between 1 and 100"):
+      await p.pipettes.move_to_coordinate(Coordinate(150.0, 200.0, 160.0), x_speed_scale=0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_coordinate_x_speed_is_set_as_the_nearest_scale():
+  """x_speed in mm/s becomes the X speed scale; it and x_speed_scale cannot both be given."""
+
+  async def _t():
+    p = PrepDriver(deck=PrepDeck(), chatterbox=True)
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    execute = p.client.execute
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await execute(command, *args, **kwargs)
+
+    p.client.execute = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_coordinate(Coordinate(150.0, 200.0, 160.0), x_speed=150.0)
+    scales = [c.value for c in sent if type(c).__name__ == "PrepSetXSpeedScale"]
+    assert scales == [25, 100]
+    with pytest.raises(ValueError, match="not both"):
+      await p.pipettes.move_to_coordinate(
+        Coordinate(150.0, 200.0, 160.0), x_speed=150.0, x_speed_scale=25
+      )
+    with pytest.raises(ValueError, match="between 6.0 and 400.0 mm/s"):
+      await p.pipettes.move_to_coordinate(Coordinate(150.0, 200.0, 160.0), x_speed=500.0)
     await p.stop()
 
   _run(_t())

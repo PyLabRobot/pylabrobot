@@ -39,6 +39,26 @@ class XArmConfiguration:
     default_factory=lambda: {"color": 0xC0C4C8, "metalness": 0.6, "roughness": 0.35}
   )
   """How the viewer draws the arm: silver, and metallic."""
+  speed_per_scale_percent: float = 6.0
+  """How fast the gantry may drive X per percent of MLPrep's X speed scale, in mm/s. Measured on
+  PRPAA1087 (V1.2.2): the X axis profile velocity is this times the scale, up to `max_speed`."""
+  max_speed: float = 400.0
+  """The fastest the gantry drives X whatever the scale, in mm/s. Reached from 67 percent up."""
+
+  def speed_to_scale_percent(self, speed: float) -> int:
+    """The X speed scale that drives the gantry at `speed`, rounded to the nearest percent.
+
+    Args:
+      speed: in mm/s, from `speed_per_scale_percent` to `max_speed`.
+
+    Raises:
+      ValueError: If `speed` is outside that range.
+    """
+    if not self.speed_per_scale_percent <= speed <= self.max_speed:
+      raise ValueError(
+        f"x speed must be between {self.speed_per_scale_percent} and {self.max_speed} mm/s, is {speed}"
+      )
+    return max(1, min(100, round(speed / self.speed_per_scale_percent)))
 
 
 class XArm:

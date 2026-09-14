@@ -3744,6 +3744,84 @@ class PrepGetDeckLight(PrepStatusRequest["PrepGetDeckLight.Response"]):
 
 
 @dataclass(frozen=True)
+class PrepSetXSpeedScale(PrepCommand[None]):
+  """Set the X speed scale, in percent (cmd=5, dest=MLPrep). Declared as a u8."""
+
+  command_id = 5
+  firmware_path = "MLPrepRoot.MLPrep"
+  value: PaddedU8
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.value, PaddedU8)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepGetXSpeedScale(PrepStatusRequest["PrepGetXSpeedScale.Response"]):
+  """Get the X speed scale, in percent (cmd=6, dest=MLPrep). Answers a padded u8."""
+
+  command_id = 6
+  firmware_path = "MLPrepRoot.MLPrep"
+
+  @dataclass(frozen=True)
+  class Response:
+    value: PaddedU8
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetXSpeedScale.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepSetZSpeedScale(PrepCommand[None]):
+  """Set the Z speed scale, in percent (cmd=7, dest=MLPrep). Declared as a u8."""
+
+  command_id = 7
+  firmware_path = "MLPrepRoot.MLPrep"
+  value: PaddedU8
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.value, PaddedU8)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepGetZSpeedScale(PrepStatusRequest["PrepGetZSpeedScale.Response"]):
+  """Get the Z speed scale, in percent (cmd=8, dest=MLPrep). Answers a padded u8."""
+
+  command_id = 8
+  firmware_path = "MLPrepRoot.MLPrep"
+
+  @dataclass(frozen=True)
+  class Response:
+    value: PaddedU8
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetZSpeedScale.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
 class PrepSuspendedPark(PrepCommand[None]):
   """Suspended park / move to load position (cmd=29, dest=MLPrep).
 

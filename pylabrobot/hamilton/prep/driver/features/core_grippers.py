@@ -167,10 +167,11 @@ class CoreGrippers:
       tip_definition = PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
     if pre_position:
       traverse_h = self._channels._resolve_traverse_height()
-      await self._channels.move_to_position(
-        x=tool_position_x,
-        y=[rear_channel_position_y, front_channel_position_y],
-        z=traverse_h,
+      await self._channels.move_to_coordinate(
+        [
+          Coordinate(tool_position_x, rear_channel_position_y, traverse_h),
+          Coordinate(tool_position_x, front_channel_position_y, traverse_h),
+        ],
         use_channels=[0, 1],
       )
     await self._client.execute(

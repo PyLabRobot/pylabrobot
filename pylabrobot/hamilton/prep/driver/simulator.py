@@ -198,6 +198,8 @@ class PrepChatterboxClient(PrepClient):
 _CANNED_RESPONSES: dict[type[TCPCommand], HoiParams] = {
   PrepCmd.PrepGetPositions: HoiParams().add([], StructArray()),
   PrepCmd.PrepGetIsInitialized: HoiParams().add(False, PrepCmd.PaddedBool),
+  PrepCmd.PrepGetXSpeedScale: HoiParams().add(100, PrepCmd.PaddedU8),
+  PrepCmd.PrepGetZSpeedScale: HoiParams().add(100, PrepCmd.PaddedU8),
   PrepCmd.PrepGetDeckLight: HoiParams()
   .add(0, PrepCmd.PaddedU8)
   .add(0, PrepCmd.PaddedU8)
