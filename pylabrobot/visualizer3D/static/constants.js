@@ -55,6 +55,12 @@ export const MOVING_PARTS = new Set(["x_arm", "arm", "gripper", "head", "channel
 // somewhere anyone would read off the shape.
 export const NO_REFERENCE_MARK = new Set(["pipette_channel"]);
 
+// Parts a click selects even though they carry something. A click otherwise passes through anything with
+// children to what lies behind it, which is right for a hood or a carrier; a pipetting channel always carries its
+// tip mounting shaft, so without this a click on the channel selects whatever is on the deck under it. The arm
+// stays out: it spans the deck, and would take every click meant for the labware beneath it.
+export const PICKABLE_PARTS = new Set(["pipette_channel"]);
+
 // Structure, reference and content, in that order of prominence. With the fills gone, outlines
 // carry the information about what is on the deck, so they are the darkest thing; rails, bands and
 // grid are references and recede; only live contents are saturated.

@@ -25,6 +25,7 @@ import {
   RESOURCE_COLORS,
   CONTAINERS,
   CONTENTS,
+  PICKABLE_PARTS,
   TREE_HIDDEN,
   GLAZED_MAX_OPACITY,
   MOVING_PARTS,
@@ -2695,8 +2696,10 @@ function pick(event) {
       const index = instances[hit.instanceId];
       if (!isVisible(index)) continue;
       // Enclosures are translucent, so clicking through one to its contents is the useful
-      // behaviour; take an enclosure only when nothing solid lies behind it.
-      if (world.childrenOf[index].length === 0 || hits.length === 1) return { index };
+      // behaviour; take an enclosure only when nothing solid lies behind it. A part that always
+      // carries something - a pipetting channel and its shaft - is taken where it is clicked.
+      const takesClick = world.childrenOf[index].length === 0 || PICKABLE_PARTS.has(modelOf(index).category);
+      if (takesClick || hits.length === 1) return { index };
     }
   }
   const first = hits.find((h) => h.object.userData.instances && h.instanceId !== undefined);
