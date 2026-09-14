@@ -1190,9 +1190,11 @@ class iSWAP:
       current_limit: the motor current limit, 0 to 7.
 
     Raises:
-      ValueError: If the drive cannot reach it, if any of the drive parameters is outside what it
+      ValueError: If the drive cannot reach it, if the arm's current pose carried to it would put a
+        joint behind the X-arm or out of reach, if any of the drive parameters is outside what it
         accepts, or if the channels are in the way and may not be moved.
-      RuntimeError: If the device's configuration or the drive's Y limit was not read.
+      RuntimeError: If the device's configuration or the drive's Y limit was not read, or the arm is
+        modelled but its angles have not been read.
     """
     c = self.configuration
     if speed is None:
@@ -1217,6 +1219,16 @@ class iSWAP:
       raise ValueError(f"acceleration_level must be 1 or 2, is {acceleration_level}")
     if not 0 <= current_limit <= 7:
       raise ValueError(f"current_limit must be between 0 and 7, is {current_limit}")
+
+    # The arm rides the carriage, so a Y move carries its pose along without turning a joint: a pose
+    # that stands clear here can reach behind the X-arm at the new Y. Checked at the angles the model
+    # has, as a rotation is checked at the Y the model has. With no arm modelled - a driver given no
+    # deck - there is nothing to check, and linear moves go ahead as they always have.
+    if self.rotation_drive_get_reference_point_location() is not None and self.gripper is not None:
+      rotation, wrist = self.rotation_drive_get_angle(), self.wrist_drive_get_angle()
+      if rotation is None or wrist is None:
+        raise RuntimeError("the arm's angles have not been read; have you called `star.setup()`?")
+      self._check_pose_reachable(rotation, wrist, y=y)
 
     # Every argument is checked before this: making space moves the channels, and a move refused
     # afterwards would leave the deck rearranged for a command that never ran.
@@ -1906,7 +1918,7 @@ class iSWAP:
       await self._record_where_the_joints_stopped()
 
   def _compute_pose_at_angles(
-    self, rotation_angle: float, gripper_relative_angle: float
+    self, rotation_angle: float, gripper_relative_angle: float, y: Optional[float] = None
   ) -> iSWAPPose:
     """Where the arm would be with its joints at these angles. Nothing is read or moved.
 
@@ -1917,6 +1929,7 @@ class iSWAP:
     Args:
       rotation_angle: the rotation drive's angle, in degrees.
       gripper_relative_angle: the wrist drive's angle, in degrees.
+      y: where the drive would be, in mm. Where the model has it when None.
 
     Returns:
       The pose.
@@ -1938,7 +1951,7 @@ class iSWAP:
     return self._forward_kinematics(
       joints={
         iSWAPAxis.X: drive.x,
-        iSWAPAxis.Y: drive.y,
+        iSWAPAxis.Y: drive.y if y is None else y,
         iSWAPAxis.Z: drive.z,
         iSWAPAxis.ROTATION: rotation_angle,
         iSWAPAxis.WRIST: gripper_relative_angle,
@@ -1951,7 +1964,9 @@ class iSWAP:
       rotation_drive_z_offset_above_finger=c.rotation_drive_z_offset_above_finger,
     )
 
-  def _check_pose_reachable(self, rotation_angle: float, gripper_relative_angle: float) -> None:
+  def _check_pose_reachable(
+    self, rotation_angle: float, gripper_relative_angle: float, y: Optional[float] = None
+  ) -> None:
     """Raise if the arm cannot put its gripper where these angles would.
 
     Not what `_check_reachable` answers: that bounds one value on one axis.
@@ -1968,6 +1983,8 @@ class iSWAP:
     Args:
       rotation_angle: where the rotation drive is being sent, in degrees.
       gripper_relative_angle: where the wrist is being sent, in degrees.
+      y: where the drive is being sent, in mm. Where the model has it when None, which is what a
+        rotation leaves it at; a Y move carries the pose to a new Y without turning either joint.
 
     Raises:
       ValueError: If either joint would land behind the drive's own back stop, or further forward
@@ -1976,7 +1993,8 @@ class iSWAP:
     y_max = self.configuration.rotation_drive_y_max
     if y_max is None:
       return
-    pose = self._compute_pose_at_angles(rotation_angle, gripper_relative_angle)
+    pose = self._compute_pose_at_angles(rotation_angle, gripper_relative_angle, y=y)
+    at = "" if y is None else f" and the drive at y {y:.1f} mm"
     # Known, or `_compute_pose_at_angles` would have refused to work the pose out at all.
     link_1 = cast(float, self.configuration.link_1_length)
     tool = cast(MechanicalGripper, self.gripper).tool_center_point.x
@@ -1991,14 +2009,14 @@ class iSWAP:
     ):
       if point.y > y_max:
         raise ValueError(
-          f"rotation {rotation_angle:.2f} deg with the wrist at {gripper_relative_angle:.2f} would put the "
+          f"rotation {rotation_angle:.2f} deg with the wrist at {gripper_relative_angle:.2f}{at} would put the "
           f"{what} at y {point.y:.1f} mm, behind the {y_max:.1f} mm the rotation drive itself "
           f"reaches - the X-arm runs across the back of the deck there. Turn the arm the other "
           f"way, or move the drive forward first"
         )
       if point.y < front:
         raise ValueError(
-          f"rotation {rotation_angle:.2f} deg with the wrist at {gripper_relative_angle:.2f} would put the "
+          f"rotation {rotation_angle:.2f} deg with the wrist at {gripper_relative_angle:.2f}{at} would put the "
           f"{what} at y {point.y:.1f} mm, in front of the {front:.1f} mm the arm reaches with the "
           f"drive at its own front stop of {y_min:.1f} mm - the channels ride in front of it and "
           f"it stops behind them. Turn the arm the other way, or move the drive back first"

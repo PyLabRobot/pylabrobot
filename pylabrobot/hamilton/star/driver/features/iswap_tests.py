@@ -108,6 +108,49 @@ class TestYMoves(unittest.IsolatedAsyncioTestCase):
     self.assertEqual((await pipettes.request_y_positions())[0], before)
     self.assertEqual(moves(sent), [])
 
+  async def test_a_y_move_that_carries_the_arm_behind_the_rail_is_refused(self):
+    """The arm rides the carriage, so moving it back carries the pose with it. Turned to rotation
+    -90 deg with the wrist at -140 deg, the grip centre stands clear with the drive at 450 mm, and
+    137 mm behind the rotation drive's back stop once the drive is there."""
+    iswap, sent = await gripper()
+    c = iswap.configuration
+    assert c.rotation_drive_y_max is not None
+    iswap.update_location_by_reference_point(y=450.0)
+    iswap.rotation_drive_update_angle(-90.0)
+    iswap.wrist_drive_update_angle(-140.0)
+    iswap._check_pose_reachable(-90.0, -140.0)
+
+    with self.assertRaises(ValueError):
+      await iswap.rotation_drive_move_to_y_position(c.rotation_drive_y_max)
+    self.assertEqual(moves(sent), [])
+
+  async def test_a_y_move_that_keeps_the_arm_clear_goes_ahead(self):
+    """Pointing to the front, nothing the arm carries reaches behind the drive at any Y."""
+    iswap, sent = await gripper()
+    c = iswap.configuration
+    assert c.rotation_drive_y_max is not None
+    iswap.rotation_drive_update_angle(0.0)
+    iswap.wrist_drive_update_angle(-45.0)
+
+    await iswap.rotation_drive_move_to_y_position(c.rotation_drive_y_max)
+    self.assertEqual(len([m for m in moves(sent) if m.startswith("R0YA")]), 1)
+
+  async def test_only_park_puts_the_arm_in_its_parking_position(self):
+    """The parking pose leaves the wrist joint behind the rotation drive's back stop, which only the
+    park command may do. A parked arm moves forward along Y, and is refused a move to the back stop
+    that would leave it in that pose."""
+    iswap, sent = await gripper()
+    c = iswap.configuration
+    assert c.rotation_drive_y_max is not None
+    self.assertEqual(await iswap.rotation_drive_request_y_position(), c.rotation_drive_y_max)
+
+    with self.assertRaises(ValueError):
+      await iswap.rotation_drive_move_to_y_position(c.rotation_drive_y_max)
+    self.assertEqual(moves(sent), [])
+
+    await iswap.rotation_drive_move_to_y_position(c.rotation_drive_y_max - 5.0)
+    self.assertEqual(len([m for m in moves(sent) if m.startswith("R0YA")]), 1)
+
 
 class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
   """What the X-arm at the back of the deck lets the arm reach."""
