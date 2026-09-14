@@ -263,3 +263,28 @@ def test_move_to_coordinate_x_speed_is_set_as_the_nearest_scale():
     await p.stop()
 
   _run(_t())
+
+
+def test_move_to_coordinate_uses_default_x_speed_when_none_is_given():
+  """With no speed named, the move is sent at `default_x_speed`, and a changed default is honoured."""
+
+  async def _t():
+    p = PrepDriver(deck=PrepDeck(), chatterbox=True)
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    execute = p.client.execute
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await execute(command, *args, **kwargs)
+
+    p.client.execute = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_coordinate(Coordinate(150.0, 200.0, 160.0))
+    p.pipettes.default_x_speed = 60.0
+    await p.pipettes.move_to_coordinate(Coordinate(150.0, 200.0, 160.0))
+    scales = [c.value for c in sent if type(c).__name__ == "PrepSetXSpeedScale"]
+    assert scales == [53, 100, 10, 100]
+    await p.stop()
+
+  _run(_t())

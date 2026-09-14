@@ -405,7 +405,6 @@ class PipettesConfiguration:
   channels at."""
   channel_model: str = "hamilton_star_pipette_channel"
   """Which 3D model draws a channel."""
-
   channels: List[PipetteConfiguration] = field(default_factory=list)
   """One entry per channel, in channel order."""
 
@@ -671,6 +670,22 @@ class Pipettes:
     # The height to travel at when a command names none, in mm. None leaves it to the height the
     # device reports.
     self.default_minimum_traverse_height: Optional[float] = default_traverse_height
+    # Default speed and acceleration along each axis, in mm/s and mm/s2: PyLabRobot's defaults are 80
+    # percent of what the axis does on PRPAA1087 (V1.2.2).
+    # X: 80 % of the X axis profile (`XAxis.GetVelocity` 400 mm/s, `GetAcceleration` 2250 mm/s2) at
+    # MLPrep's X speed scale of 100 percent; the scale leaves the acceleration unchanged. Used by
+    # `move_to_coordinate` when a move names no X speed.
+    self.default_x_speed: float = 320.0
+    self.default_x_acceleration: float = 1800.0
+    # Y: 80 % of 345 mm/s and 950 mm/s2, fitted from timed `MoveToPosition` moves of 5 to 200 mm
+    # (rms 1.7 ms). The move command carries no Y speed.
+    self.default_y_speed: float = 276.0
+    self.default_y_acceleration: float = 760.0
+    # Z: 80 % of 142 mm/s, fitted from timed `MoveToPosition` moves of 2 to 30 mm (rms 4.5 ms), and of
+    # 800 mm/s2, read with `ZDrive.GetAcceleration` and matched by that fit. The move command carries
+    # no Z speed.
+    self.default_z_speed: float = 113.6
+    self.default_z_acceleration: float = 640.0
     if use_v1_aspirate_dispense:
       self.configuration.use_v1_aspirate_dispense = True
     self.setup_finished: bool = False
@@ -1420,8 +1435,8 @@ class Pipettes:
       use_channels: which channels, 0-indexed from the back. One index, or a list. Defaults to 0.
       via_lane: travel by the firmware's lane rather than directly.
       x_speed: how fast to drive X for this move, in mm/s. Set as the nearest X speed scale, so it
-        is rounded to whole multiples of `XArmConfiguration.speed_per_scale_percent`. None keeps
-        the scale MLPrep has.
+        is rounded to whole multiples of `XArmConfiguration.speed_per_scale_percent`. Defaults to
+        `default_x_speed`.
       x_speed_scale: overrides `x_speed` with the X speed scale itself, in percent, 1 to 100. Give
         one or the other, not both.
       z_speed_scale: how fast to drive Z for this move, in percent of full speed, 1 to 100. None
@@ -1435,6 +1450,8 @@ class Pipettes:
     """
     if x_speed is not None and x_speed_scale is not None:
       raise ValueError("give x_speed or x_speed_scale, not both")
+    if x_speed is None and x_speed_scale is None:
+      x_speed = self.default_x_speed
     if x_speed is not None:
       arm = None if self._driver is None else self._driver.x_arm
       x_speed_scale = (
