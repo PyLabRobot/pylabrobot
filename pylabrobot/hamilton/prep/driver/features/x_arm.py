@@ -147,8 +147,8 @@ class XArm:
     `Pipettes.move_to_location` moves through the channel coordinator, whose move overwrites the X
     axis's velocity and acceleration. This sends `XAxis.MoveAbsolute`, which on PRPAA1087 (V1.2.2) moved
     at the velocity and acceleration set just before it. Those are read before the move, set for it,
-    and put back afterwards. The coordinator takes no part, so every channel has to be at the traverse
-    height already.
+    and put back afterwards. The coordinator takes no part, so nothing raises the channels first; where
+    they are along Z is not checked.
 
     The axis counts in its own frame, which on PRPAA1087 sat 0.193 mm from the X `GetPositions`
     reports. `x` is in the `GetPositions` frame; the difference is read before the move.
@@ -161,8 +161,7 @@ class XArm:
     Raises:
       ValueError: If `x` is outside the channels' X range, `speed` is not above 0 or above
         `configuration.max_speed`, or `acceleration` is not above 0.
-      RuntimeError: If there are no pipettes to read, the channels report no position, or a channel
-        is below the traverse height.
+      RuntimeError: If there are no pipettes to read, or the channels report no position.
     """
     speed = self.default_speed if speed is None else speed
     acceleration = self.default_acceleration if acceleration is None else acceleration
@@ -183,13 +182,6 @@ class XArm:
     positions = await pipettes.request_locations()
     if not positions:
       raise RuntimeError("the channels reported no positions")
-    # The positions a traverse leaves the channels at read a few hundredths of a millimetre under it.
-    traverse = pipettes._resolve_traverse_height()
-    low = [channel for channel, position in enumerate(positions) if position.z < traverse - 0.1]
-    if low:
-      raise RuntimeError(
-        f"channels {low} are below the traverse height ({traverse} mm); an X axis move does not raise them"
-      )
 
     commanded = (await self._driver.send_command(PrepCmd.PrepXAxisGetCommandedPosition())).value
     axis_x = x - (positions[0].x - commanded)
@@ -226,8 +218,8 @@ class XArm:
     Sends `XAxis.SeekToHomeFlag` at `speed`, set as the X axis velocity for the seek and put back
     afterwards. On PRPAA1087 (V1.2.2), seeking 280 mm left from the parked position at 100 mm/s with
     SENSOR_0 tripped at 274.329 mm (axis frame), within 0.2 mm of `GetHomePosition`, and the arm came
-    to rest about 6 mm further on. The coordinator takes no part, so every channel has to be at the
-    traverse height already.
+    to rest about 6 mm further on. The coordinator takes no part, so nothing raises the channels first;
+    where they are along Z is not checked.
 
     Args:
       distance: how far to seek at most, in mm, relative to where the arm is; negative is left.
@@ -241,8 +233,7 @@ class XArm:
     Raises:
       ValueError: If `distance` is 0, the seek could end outside the channels' X range, or `speed`
         is not above 0 or above `configuration.max_speed`.
-      RuntimeError: If there are no pipettes to read, the channels report no position, or a channel
-        is below the traverse height.
+      RuntimeError: If there are no pipettes to read, or the channels report no position.
     """
     speed = self.default_probe_speed if speed is None else speed
     if distance == 0:
@@ -264,13 +255,6 @@ class XArm:
           f"the seek could end at x={end}, outside the channels' range "
           f"[{channel.x_range[0]:.1f}, {channel.x_range[1]:.1f}]"
         )
-    # The positions a traverse leaves the channels at read a few hundredths of a millimetre under it.
-    traverse = pipettes._resolve_traverse_height()
-    low = [channel for channel, position in enumerate(positions) if position.z < traverse - 0.1]
-    if low:
-      raise RuntimeError(
-        f"channels {low} are below the traverse height ({traverse} mm); an X axis seek does not raise them"
-      )
 
     commanded = (await self._driver.send_command(PrepCmd.PrepXAxisGetCommandedPosition())).value
     offset = positions[0].x - commanded

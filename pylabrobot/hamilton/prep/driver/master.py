@@ -7,7 +7,7 @@ import json
 import logging
 import random
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, TypeVar, Union
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
@@ -112,11 +112,19 @@ class ChannelDriveMap:
   the Z drive (``ZAxis.ZDrive``), and the per-node ``NodeInformation`` object
   (used for firmware-string queries). Lists are parallel and sorted by tree
   traversal order (same order the firmware returns Channel Root instances).
+  The Y axis (``YAxis``) and its drive (``YAxis.YDrive``) are listed for the
+  channels that have one; the 8-channel head's channels do not. So are the
+  channel's ``Calibration`` object (which starts and stops continuous cLLD
+  detection) and its ``CLld`` object (which reports it).
   """
 
   sleeve_sensor_addrs: List[Address]
   zdrive_addrs: List[Address]
   node_info_addrs: List[Address]
+  yaxis_addrs: List[Address] = field(default_factory=list)
+  ydrive_addrs: List[Address] = field(default_factory=list)
+  calibration_addrs: List[Address] = field(default_factory=list)
+  clld_addrs: List[Address] = field(default_factory=list)
 
   @property
   def num_channels_discovered(self) -> int:
@@ -129,6 +137,10 @@ class ChannelDriveMap:
       "sleeve_sensor_addrs": list(self.sleeve_sensor_addrs),
       "zdrive_addrs": list(self.zdrive_addrs),
       "node_info_addrs": list(self.node_info_addrs),
+      "yaxis_addrs": list(self.yaxis_addrs),
+      "ydrive_addrs": list(self.ydrive_addrs),
+      "calibration_addrs": list(self.calibration_addrs),
+      "clld_addrs": list(self.clld_addrs),
     }
 
 
@@ -600,6 +612,8 @@ class PrepDriver:
 
     - ``<root>.Channel.Squeeze.SDrive``     → sleeve sensor
     - ``<root>.Channel.ZAxis.ZDrive``       → Z drive
+    - ``<root>.Channel.YAxis`` / ``.YDrive`` → Y axis and Y drive, where the channel has one
+    - ``<root>.Channel.Calibration`` / ``.CLld`` → continuous cLLD detection and its status
     - ``<root>.NodeInformation``            → per-channel firmware strings
 
     Uses ``get_subobject_address`` / ``get_object`` along the known path shape —
@@ -629,6 +643,10 @@ class PrepDriver:
     sleeve: List[Address] = []
     zdrive: List[Address] = []
     node_info: List[Address] = []
+    yaxis: List[Address] = []
+    ydrive: List[Address] = []
+    calibration: List[Address] = []
+    clld: List[Address] = []
 
     for ch_root in channel_root_addrs:
       top = await intro.find_children_by_name(ch_root, "Channel", "NodeInformation")
@@ -640,7 +658,9 @@ class PrepDriver:
         logger.warning("%s @ %s has no 'Channel' child", root_name, ch_root)
         continue
 
-      axes = await intro.find_children_by_name(channel_addr, "Squeeze", "ZAxis")
+      axes = await intro.find_children_by_name(
+        channel_addr, "Squeeze", "ZAxis", "YAxis", "Calibration", "CLld"
+      )
       if (sq_parent := axes.get("Squeeze")) is not None:
         sq = await intro.find_children_by_name(sq_parent, "SDrive")
         if "SDrive" in sq:
@@ -649,12 +669,25 @@ class PrepDriver:
         zx = await intro.find_children_by_name(zx_parent, "ZDrive")
         if "ZDrive" in zx:
           zdrive.append(zx["ZDrive"])
+      if (yx := axes.get("YAxis")) is not None:
+        yaxis.append(yx)
+        yd = await intro.find_children_by_name(yx, "YDrive")
+        if "YDrive" in yd:
+          ydrive.append(yd["YDrive"])
+      if (cal := axes.get("Calibration")) is not None:
+        calibration.append(cal)
+      if (cl := axes.get("CLld")) is not None:
+        clld.append(cl)
 
     logger.debug("Discovered %d %s channel drive pair(s)", len(channel_root_addrs), root_name)
     return ChannelDriveMap(
       sleeve_sensor_addrs=sleeve,
       zdrive_addrs=zdrive,
       node_info_addrs=node_info,
+      yaxis_addrs=yaxis,
+      ydrive_addrs=ydrive,
+      calibration_addrs=calibration,
+      clld_addrs=clld,
     )
 
   # ----------------------------------------

@@ -22,6 +22,7 @@ from pylabrobot.hamilton.transport.tcp.protocol import HamiltonProtocol, Hoi2Act
 from pylabrobot.hamilton.transport.tcp.wire_types import (
   F32,
   F64,
+  BoolArray,
   I16,
   U16,
   U32,
@@ -3355,6 +3356,141 @@ class PrepYSeekLldPosition(PrepCommand["PrepYSeekLldPosition.Response"]):
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> PrepYSeekLldPosition.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepYAxisSeekCapacitiveLld(PrepCommand["PrepYAxisSeekCapacitiveLld.Response"]):
+  """Seek along Y until the channel's capacitive LLD triggers (cmd=9, dest=that channel's Channel.YAxis).
+
+  `position` is in the channel's Y drive frame, not the deck's: on PRPAA1087 (V1.2.2) the drive reads deck Y plus
+  102.45 mm on the front channel and about 112.36 mm on the rear one. `detect_mode` and `sensitivity` are the
+  node's own enumerations. There a finger in the way was detected with detect modes 2 and 3, and the channel stopped
+  within about 0.09 mm of `detect_position`; with modes 0 and 1 it was not. Without a detection the channel stops at
+  `position` and `detect_position` reads 0.
+  """
+
+  command_id = 9
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # Defaults only because `dest` comes first; every caller names them.
+  position: F32 = math.nan
+  velocity: F32 = math.nan
+  detect_mode: WEnum = 0
+  sensitivity: WEnum = 0
+
+  @dataclass(frozen=True)
+  class Response:
+    lld_detected: PaddedBool
+    detect_position: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.position, F32)
+      .add(self.velocity, F32)
+      .add(self.detect_mode, WEnum)
+      .add(self.sensitivity, WEnum)
+    )
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepYAxisSeekCapacitiveLld.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepYDriveGetPosition(PrepStatusRequest["PrepYDriveGetPosition.Response"]):
+  """Get one channel's Y drive position, in its drive frame, in mm (cmd=9, dest=that channel's YAxis.YDrive)."""
+
+  command_id = 9
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  @dataclass(frozen=True)
+  class Response:
+    position: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepYDriveGetPosition.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepChannelStartCLldDetection(PrepCommand[None]):
+  """Start one channel's continuous capacitive LLD detection (cmd=14, dest=that channel's Channel.Calibration).
+
+  `detect_mode` and `sensitivity` are the node's own enumerations, as for `PrepYAxisSeekCapacitiveLld`.
+  `PrepChannelStopCLldDetection` ends it; `PrepCLldGetStatus` reports whether it detected.
+  """
+
+  command_id = 14
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # Defaults only because `dest` comes first; every caller names them.
+  detect_mode: WEnum = 0
+  sensitivity: WEnum = 0
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.detect_mode, WEnum).add(self.sensitivity, WEnum)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepChannelStopCLldDetection(PrepCommand[None]):
+  """Stop one channel's continuous capacitive LLD detection (cmd=15, dest=that channel's Channel.Calibration)."""
+
+  command_id = 15
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepCLldGetStatus(PrepStatusRequest["PrepCLldGetStatus.Response"]):
+  """Get one channel's capacitive LLD status (cmd=1, dest=that channel's Channel.CLld).
+
+  On PRPAA1087 (V1.2.2), after a Y seek, `detected` and `detect_index` held one entry, `length` one entry counting the
+  samples `GetData` holds, and `sample_rate` read 1.
+  """
+
+  command_id = 1
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  @dataclass(frozen=True)
+  class Response:
+    detected: BoolArray
+    detect_index: U32Array
+    length: U32Array
+    sample_rate: U32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepCLldGetStatus.Response:
     """Decode the declared success response."""
     return parse_into_struct(HoiParamsParser(data), cls.Response)
 

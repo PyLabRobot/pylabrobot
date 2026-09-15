@@ -80,6 +80,8 @@ SIMULATED_INITIALIZED_POSITIONS = {
 
 # The X axis profile PRPAA1087 read at an X speed scale of 100 percent, in mm/s and mm/s2. A simulated
 # axis keeps no profile, so setting one changes nothing it answers.
+# Each channel's Y drive frame reads deck Y plus this, rear first, as measured on PRPAA1087 (V1.2.2).
+SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
 SIMULATED_X_VELOCITY = 400.0
 SIMULATED_X_ACCELERATION = 2250.0
 
@@ -448,6 +450,27 @@ class SimulatedPipettes(_Simulated, Pipettes):
           )
         )
       return PrepCmd.PrepGetChannelBounds.Response(bounds=bounds), "the declared channel ranges"
+
+    if isinstance(request, (PrepCmd.PrepYDriveGetPosition, PrepCmd.PrepYAxisSeekCapacitiveLld)):
+      owner = self.device.tree.channel_of(request.dest)
+      if owner is None or owner >= len(SIMULATED_Y_DRIVE_OFFSETS):
+        return None
+      offset = SIMULATED_Y_DRIVE_OFFSETS[owner]
+      if isinstance(request, PrepCmd.PrepYDriveGetPosition):
+        return PrepCmd.PrepYDriveGetPosition.Response(
+          position=self._modelled_location(owner)[1] + offset
+        ), f"channel {owner}'s modelled Y in its drive frame"
+      # Nothing to detect in simulation: the channel searches to the end of its search and finds nothing.
+      self._move(owner, None, request.position - offset, None)
+      return PrepCmd.PrepYAxisSeekCapacitiveLld.Response(
+        lld_detected=False, detect_position=0.0
+      ), "nothing to detect"
+
+    if isinstance(request, PrepCmd.PrepCLldGetStatus):
+      # Nothing to detect in simulation, and nothing recorded.
+      return PrepCmd.PrepCLldGetStatus.Response(
+        detected=[False], detect_index=[0], length=[0], sample_rate=1
+      ), "nothing to detect"
 
     if isinstance(request, PrepCmd.PrepZDriveGetAcceleration):
       return PrepCmd.PrepZDriveGetAcceleration.Response(
