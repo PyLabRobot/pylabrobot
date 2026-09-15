@@ -489,12 +489,20 @@ class PipetteChannel:
     zdrive: Optional[Address] = None,
     node_info: Optional[Address] = None,
     bounds: Optional[ChannelBounds] = None,
+    yaxis: Optional[Address] = None,
+    ydrive: Optional[Address] = None,
+    calibration: Optional[Address] = None,
+    clld: Optional[Address] = None,
   ) -> None:
     self.index = index
     self._driver = driver
     self.sleeve_sensor = sleeve_sensor
     self.zdrive = zdrive
     self.node_info = node_info
+    self.yaxis = yaxis
+    self.ydrive = ydrive
+    self.calibration = calibration
+    self.clld = clld
     self.bounds = bounds  # x_min..z_max from firmware, or None if unavailable
 
   def __repr__(self) -> str:
@@ -514,6 +522,57 @@ class PipetteChannel:
     if self.node_info is None:
       return None
     return await self._driver.request_firmware_string(self.node_info, method_id=8, interface_id=1)
+
+  async def request_y_drive_position(self) -> float:
+    """Request this channel's Y drive position.
+
+    Returns:
+      The position in the Y drive's own frame, in mm.
+
+    Raises:
+      RuntimeError: If the channel has no Y drive.
+    """
+    if self.ydrive is None:
+      raise RuntimeError(f"channel {self.index} has no Y drive in the firmware tree")
+    response = await self._driver.send_command(PrepCmd.PrepYDriveGetPosition(dest=self.ydrive))
+    return float(response.position)
+
+  @asynccontextmanager
+  async def clld_detection(self, detect_mode: int, sensitivity: int) -> AsyncIterator[None]:
+    """Run the enclosed block with this channel's continuous cLLD detection on.
+
+    Args:
+      detect_mode: cLLD detect mode.
+      sensitivity: cLLD sensitivity.
+
+    Raises:
+      RuntimeError: If the channel has no Calibration object.
+    """
+    if self.calibration is None:
+      raise RuntimeError(f"channel {self.index} has no Calibration object in the firmware tree")
+    await self._driver.send_command(
+      PrepCmd.PrepChannelStartCLldDetection(
+        dest=self.calibration, detect_mode=detect_mode, sensitivity=sensitivity
+      )
+    )
+    try:
+      yield
+    finally:
+      await self._driver.send_command(PrepCmd.PrepChannelStopCLldDetection(dest=self.calibration))
+
+  async def request_clld_detected(self) -> bool:
+    """Request whether this channel's cLLD detected since its detection was last started.
+
+    Returns:
+      True when it detected.
+
+    Raises:
+      RuntimeError: If the channel has no CLld object.
+    """
+    if self.clld is None:
+      raise RuntimeError(f"channel {self.index} has no CLld object in the firmware tree")
+    status = await self._driver.send_command(PrepCmd.PrepCLldGetStatus(dest=self.clld))
+    return any(status.detected)
 
 
 # =============================================================================
@@ -876,6 +935,10 @@ class Pipettes:
         zdrive=_drive_addr(drive_map.zdrive_addrs, i),
         node_info=_drive_addr(drive_map.node_info_addrs, i),
         bounds=bounds_by_channel.get(i),
+        yaxis=_drive_addr(drive_map.yaxis_addrs, i),
+        ydrive=_drive_addr(drive_map.ydrive_addrs, i),
+        calibration=_drive_addr(drive_map.calibration_addrs, i),
+        clld=_drive_addr(drive_map.clld_addrs, i),
       )
       for i in range(num_channels)
     ]
@@ -971,20 +1034,15 @@ class Pipettes:
     named: Optional[Collection[int]] = None,
     make_space_available: bool = False,
   ) -> None:
-    """Refuse channel Y positions that are out of order or closer than their minimum spacing.
-
-    Pairs whose Y windows have not been read are not checked, as positions are not checked against windows that
-    have not been read.
+    """Reject Y positions that are out of order or closer than the minimum spacing.
 
     Args:
-      ys: each channel's Y after a move, in mm, keyed by channel, 0-indexed from the back.
-      named: the channels the caller asked to move. A channel of a refused pair that is not among them is named
-        in the error as staying where it stands. None says nothing about it.
-      make_space_available: whether the error may point to `make_space=True` for a channel that was not named.
+      ys: each channel's y after a move, in mm, keyed by channel, 0-indexed from the back.
+      named: the channels the caller asked to move, used in the error message.
+      make_space_available: whether the error may suggest `make_space=True`.
 
     Raises:
-      ValueError: If two neighbouring channels would be closer than `_min_spacing_between`, or out of order. The
-        message says which, where each would be, and where either could go instead.
+      ValueError: If neighbouring channels would be too close or out of order.
     """
     channels = self.configuration.channels
     for i in range(len(self.channel_order) - 1):
@@ -1142,21 +1200,19 @@ class Pipettes:
   async def sense_tip_presence(self) -> list[bool]:
     """Sense whether a tip is physically present on each pipettor channel via the sleeve sensor.
 
-    Resolves each channel's Squeeze.SDrive object from the firmware tree, then
-    finds GetTipPresent by name in that object's method table. The query uses
-    the interface and method IDs declared by the firmware. Method tables are
-    cached by the connection's introspection instance.
+    Asks each channel's Squeeze.SDrive object, found at setup, for GetTipPresent by name in that
+    object's method table. The query uses the interface and method IDs declared by the firmware.
+    Method tables are cached by the connection's introspection instance.
 
     Returns:
       List of bools, one per channel (index 0=rearmost). True if tip detected.
     """
-
-    drive_map = await self._driver.request_channel_drives(root_name="Channel Root")
-    if not drive_map.sleeve_sensor_addrs:
+    sensors = [c.sleeve_sensor for c in self.channels if c.sleeve_sensor is not None]
+    if not sensors:
       raise RuntimeError("No channel sleeve sensor addresses discovered.")
 
     results: list[bool] = []
-    for addr in drive_map.sleeve_sensor_addrs:
+    for addr in sensors:
       method = await self._driver.request_method_by_name(addr, "GetTipPresent")
       raw = await self._driver.send_command(
         PrepCmd.PrepProbeRequest(
@@ -1407,11 +1463,11 @@ class Pipettes:
     return float(positions[channel].y)
 
   async def _unchecked_fw_move_y_absolute(self, ys: Dict[int, float], speed: float) -> None:
-    """Send `ChannelXYZCoordinator.MoveYAbsolute`. Nothing is guarded and nothing is recorded.
+    """Send `ChannelXYZCoordinator.MoveYAbsolute` without checks.
 
     Args:
-      ys: where to send each channel along Y, in mm, keyed by channel, 0-indexed from the back.
-      speed: how fast, in mm/s.
+      ys: target y in mm, keyed by channel, 0-indexed from the back.
+      speed: speed in mm/s.
     """
     await self._driver.send_command(
       PrepCmd.PrepMoveYAbsolute(
@@ -1428,23 +1484,16 @@ class Pipettes:
   async def move_to_y_positions(
     self, ys: Dict[int, float], make_space: bool = False, speed: Optional[float] = None
   ) -> None:
-    """Move channels along Y, in one command.
-
-    Y alone: every channel keeps its X and Z. The command carries a Y for every channel,
-    so the channels not named are sent where they stand, unless `make_space` moves them. The channels stay in
-    order back to front, each neighbouring pair at least `_min_spacing_between` apart.
+    """Move channels along Y together.
 
     Args:
-      ys: where to put each named channel, in mm on the deck, keyed by channel, 0-indexed from the back.
-      make_space: whether the channels not named may be moved along Y, so that every pair meets its minimum
-        spacing and the channels stay in order back to front. Off by default: nothing moves that the caller did
-        not ask to move, and a request that will not fit raises instead. It can raise either way, since the
-        requested positions may leave no room.
-      speed: how fast, in mm/s. Defaults to `default_y_speed`.
+      ys: target y in mm, keyed by channel, 0-indexed from the back.
+      make_space: whether channels not named may move to keep the minimum spacing.
+      speed: speed in mm/s. Defaults to `default_y_speed`.
 
     Raises:
-      ValueError: If a named channel does not exist, a channel cannot reach its Y, the channels would be out of
-        order or closer than their minimum spacing, or `speed` is not above 0.
+      ValueError: If a channel does not exist or cannot reach its y, the channels would be out of
+        order or too close, or `speed` is not above 0.
     """
     speed = self.default_y_speed if speed is None else speed
     if speed <= 0:
@@ -1497,14 +1546,15 @@ class Pipettes:
       self.update_location_by_reference_point(channel, y=y)
 
   async def move_to_y_position(self, channel: int, y: float, speed: Optional[float] = None) -> None:
-    """Move a channel in the Y direction (in mm).
-
-    Analogous to STARBackend.move_to_y_position().
+    """Move one channel along Y.
 
     Args:
-      channel: Channel index (0=rearmost).
-      y: Target Y position in mm.
-      speed: how fast, in mm/s. Defaults to `default_y_speed`.
+      channel: which channel, 0-indexed from the back.
+      y: target y in mm.
+      speed: speed in mm/s. Defaults to `default_y_speed`.
+
+    Raises:
+      ValueError: As `move_to_y_positions`.
     """
     await self.move_to_y_positions({channel: y}, speed=speed)
 
@@ -1632,22 +1682,16 @@ class Pipettes:
     speed: Optional[float] = None,
     acceleration: Optional[float] = None,
   ) -> None:
-    """Move the bottom of the tool on each named channel along Z, in one command.
-
-    The Prep positions the tool bottom: the end of the tip when one is mounted, the end of the tip
-    mounting shaft when none is. Z alone: every channel keeps its X and Y. The
-    command carries a Z for every channel, so the channels not named are sent where they stand.
+    """Move the tool bottom of channels along Z together.
 
     Args:
-      zs: where to put each named channel's tool bottom, in mm on the deck, keyed by channel, 0-indexed
-        from the back.
-      speed: how fast, in mm/s. Defaults to `default_z_speed`.
-      acceleration: how hard, in mm/s2. Every channel's Z drive is set to it for this move and put back to what
-        it held afterwards, whether or not the move succeeded. None leaves the drives as they are.
+      zs: target tool-bottom z in mm, keyed by channel, 0-indexed from the back.
+      speed: speed in mm/s. Defaults to `default_z_speed`.
+      acceleration: Z drive acceleration in mm/s2 for this move, then restored. None leaves it.
 
     Raises:
-      ValueError: If a named channel does not exist, cannot reach its `z`, or `speed` or `acceleration` is not
-        above 0.
+      ValueError: If a channel does not exist or cannot reach its z, or `speed` or `acceleration` is
+        not above 0.
     """
     speed = self.default_z_speed if speed is None else speed
     if speed <= 0:
@@ -1680,21 +1724,17 @@ class Pipettes:
 
   @asynccontextmanager
   async def _z_drive_acceleration(self, acceleration: Optional[float]) -> AsyncIterator[None]:
-    """Hold every channel's Z drive at `acceleration` for what runs inside, then put back what each held.
-
-    `MoveZAbsolute` carries no acceleration: it follows what each channel's Z drive holds. A drive that cannot be
-    put back is logged, not raised, so the error that matters is the one already on its way out. None leaves the
-    drives as they are and sends nothing.
+    """Set every channel's Z drive acceleration for the enclosed block, then restore it.
 
     Args:
-      acceleration: in mm/s2, or None.
+      acceleration: acceleration in mm/s2, or None to leave the drives unchanged.
     """
     if acceleration is None:
       yield
       return
     held: Dict[Address, float] = {}
     try:
-      for drive in (await self._driver.request_channel_drives()).zdrive_addrs:
+      for drive in [c.zdrive for c in self.channels if c.zdrive is not None]:
         response = await self._driver.send_command(PrepCmd.PrepZDriveGetAcceleration(dest=drive))
         held[drive] = float(response.value)
         await self._driver.send_command(
@@ -1716,11 +1756,11 @@ class Pipettes:
           )
 
   async def _unchecked_fw_move_z_absolute(self, zs: Dict[int, float], speed: float) -> None:
-    """Send `ChannelXYZCoordinator.MoveZAbsolute`. Nothing is guarded and nothing is recorded.
+    """Send `ChannelXYZCoordinator.MoveZAbsolute` without checks.
 
     Args:
-      zs: where to send each channel's tool bottom along Z, in mm, keyed by channel, 0-indexed from the back.
-      speed: how fast, in mm/s.
+      zs: target tool-bottom z in mm, keyed by channel, 0-indexed from the back.
+      speed: speed in mm/s.
     """
     await self._driver.send_command(
       PrepCmd.PrepMoveZAbsolute(
@@ -1741,21 +1781,16 @@ class Pipettes:
     speed: Optional[float] = None,
     acceleration: Optional[float] = None,
   ) -> None:
-    """Move the bottom of the tool on one channel along Z.
-
-    The Prep positions the tool bottom: the end of the tip when one is mounted, the end of the tip
-    mounting shaft when none is. `GetPositions` reports the same point (see
-    `request_tool_bottom_z_position`).
+    """Move the tool bottom of one channel along Z.
 
     Args:
-      channel: which channel to move, 0-indexed from the back.
-      z: where to put the bottom of its tool, in mm on the deck.
-      speed: how fast, in mm/s. Defaults to `default_z_speed`.
-      acceleration: how hard, in mm/s2. Set on every channel's Z drive for this move and put back afterwards.
-        None leaves the drives as they are.
+      channel: which channel, 0-indexed from the back.
+      z: target tool-bottom z in mm.
+      speed: speed in mm/s. Defaults to `default_z_speed`.
+      acceleration: Z drive acceleration in mm/s2 for this move, then restored. None leaves it.
 
     Raises:
-      ValueError: If the channel does not exist, cannot reach `z`, or `speed` or `acceleration` is not above 0.
+      ValueError: As `move_tool_bottom_to_z_positions`.
     """
     await self.move_tool_bottom_to_z_positions({channel: z}, speed=speed, acceleration=acceleration)
 
@@ -1960,82 +1995,242 @@ class Pipettes:
 
   # -- x probing (capacitive only) -----------------------------------------------------------------
 
-  async def clld_probe_x_position_using_channel(self, *args, **kwargs):
-    """Probe X position using capacitive LLD. Not yet implemented for the Prep.
-
-    TODO: Investigate ChannelCoordinator [1:17] MoveChannelAxisAbsolute and
-    [1:18] MoveChannelAxisRelative for X-axis probing with cLLD feedback.
-    The ChannelCoordinator also has [1:19] YSeekLldPosition which may have
-    an X equivalent, though none was found in introspection.
-    """
-    raise NotImplementedError(
-      "clld_probe_x_position_using_channel is not yet implemented for Pipettes."
-    )
-
-  # -- y probing (capacitive only) -----------------------------------------------------------------
-
-  async def clld_probe_y_position_using_channel(
+  async def probe_x_using_clld(
     self,
     channel_idx: int,
-    probing_direction: Literal["forward", "backward"],
-    end_pos_search: Optional[float] = None,
-    speed: float = 10.0,
+    direction: Literal["left", "right"],
+    search_end_position: Optional[float] = None,
+    speed: float = 5.0,
     sensitivity: Optional[int] = None,
-    detect_mode: Optional[int] = None,
+    detect_mode: int = 2,
     post_detection_dist: float = 2.0,
     tip_bottom_diameter: float = 1.2,
-  ) -> float:
-    """Probe the Y position of a conductive material with the channel's capacitive LLD.
-
-    As legacy STARBackend's `clld_probe_y_position_using_channel`. The channel searches from where it stands, along Y
-    alone at its X and Z, with `ChannelCoordinator.YSeekLldPosition`, until its cLLD triggers or it reaches the end of
-    the search.
-    The search stays inside the channel's Y window and clear of its neighbours by their minimum spacing. After a
-    detection the channel backs off by `post_detection_dist`, as far as its neighbours allow.
-
-    On PRPAA1087 (V1.2.2) a 10 mm search at 5 mm/s with nothing in the way moved at 5.0 mm/s and stopped at its end;
-    a detection has not been run yet. The seek carries no acceleration.
+    stop_disc_diameter: float = 7.0,
+    allow_without_tip: bool = False,
+  ) -> Optional[float]:
+    """Probe a conductive surface along X with the channel's cLLD, in 0.1 mm arm steps.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
-      probing_direction: "forward" searches toward the front (decreasing y), "backward" toward the back.
-      end_pos_search: where the search ends when nothing triggers, in mm. Defaults to as far as the channel may go.
-      speed: how fast to search, in mm/s.
-      sensitivity: the cLLD sensitivity sent. Defaults to `default_clld_sensitivity`.
-      detect_mode: the cLLD detect mode sent. Defaults to `default_clld_detect_mode`.
-      post_detection_dist: how far to back off after a detection, in mm.
-      tip_bottom_diameter: the diameter of what touches the material, in mm. Half of it is added in the search
-        direction, so the result is where the material's surface is. Defaults to 1.2 mm, the STAR's teaching needles.
+      channel_idx: detecting channel, 0-indexed from the back.
+      direction: "left" (decreasing x) or "right" (increasing x).
+      search_end_position: search end in mm. Defaults to the end of the channels' X range.
+      speed: arm speed in mm/s.
+      sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
+      detect_mode: cLLD detect mode.
+      post_detection_dist: back-off after a detection in mm.
+      tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
+      stop_disc_diameter: diameter of the stop disc (tip mounting shaft) in mm, when none is.
+      allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
-      The y position of the detected material's surface, in mm.
+      Surface x position in mm, rounded to 0.1 mm, or None when nothing was detected.
 
     Raises:
-      ValueError: If the channel does not exist, `probing_direction` is neither direction, `speed` is not
-        above 0, `end_pos_search` is outside the range the channel may search or not ahead of where it stands.
-      RuntimeError: If nothing was detected.
+      ValueError: If an argument is out of range or `search_end_position` is not ahead of the arm.
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False, there is no X arm,
+        the X range is unknown, or the channel has no cLLD objects.
     """
+    # Tip: required unless allow_without_tip; what touches is the tip, or the stop disc
+    tips = await self.sense_tip_presence()
+    has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
+    if not has_tip and not allow_without_tip:
+      raise RuntimeError(
+        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+      )
+    diameter = tip_bottom_diameter if has_tip else stop_disc_diameter
+
+    # Argument verification
     if not 0 <= channel_idx < self.num_channels:
       raise ValueError(
         f"channel_idx must be between 0 and {self.num_channels - 1}, is {channel_idx}"
       )
-    if probing_direction not in ("forward", "backward"):
+    if direction not in ("left", "right"):
+      raise ValueError(f"direction must be 'left' or 'right', is {direction!r}")
+    arm = self._driver.x_arm
+    if arm is None:
+      raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
+    low_speed, high_speed = arm.configuration.speed_range
+    if not low_speed < speed <= high_speed:
+      raise ValueError(f"speed must be above {low_speed} and at most {high_speed} mm/s, is {speed}")
+
+    # Search range: the channels' X range
+    left = direction == "left"
+    ranges = [c.x_range for c in self.configuration.channels if c.x_range is not None]
+    if not ranges:
+      raise RuntimeError("the channels' X range has not been read")
+    low, high = max(r[0] for r in ranges), min(r[1] for r in ranges)
+    end = (low if left else high) if search_end_position is None else search_end_position
+    if not low <= end <= high:
       raise ValueError(
-        f"probing_direction must be 'forward' or 'backward', is {probing_direction!r}"
+        f"search_end_position={end} is outside the channels' X range [{low:.2f}, {high:.2f}]"
       )
+    here = (await self.request_locations())[channel_idx].x
+    if (end >= here) if left else (end <= here):
+      raise ValueError(f"a {direction} search from x={here:.2f} cannot end at x={end:.2f} mm")
+
+    # Search until the channel detects or the search ends
+    sensitivity = self.default_clld_sensitivity if sensitivity is None else sensitivity
+    detected_x = await self._search_x_using_clld(
+      channel_idx, here, end, speed, detect_mode, sensitivity
+    )
+    if detected_x is None:
+      return None
+
+    # Back off inside the X range, and return the surface
+    post_detection_x_position = (
+      min(detected_x + post_detection_dist, high)
+      if left
+      else max(detected_x - post_detection_dist, low)
+    )
+    await arm.move_to_x_position(post_detection_x_position, speed=speed)
+    surface = detected_x - diameter / 2 if left else detected_x + diameter / 2
+    return round(surface, 1)
+
+  async def _search_x_using_clld(
+    self,
+    channel_idx: int,
+    here: float,
+    end: float,
+    speed: float,
+    detect_mode: int,
+    sensitivity: int,
+  ) -> Optional[float]:
+    """Step the arm in 0.1 mm steps with the channel's cLLD on, until it detects or reaches `end`.
+
+    Args:
+      channel_idx: detecting channel, 0-indexed from the back.
+      here: the arm's x where the search starts, in mm.
+      end: search end in mm.
+      speed: arm speed in mm/s.
+      detect_mode: cLLD detect mode.
+      sensitivity: cLLD sensitivity.
+
+    Returns:
+      The channel's x where it detected, in mm, or None.
+    """
+    arm = self._driver.x_arm
+    if arm is None:
+      raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
+    channel = self.channels[channel_idx]
+    offset = await arm.request_axis_offset()
+    step = 0.1  # mm between status reads
+    try:
+      async with (
+        arm._temporary_x_axis_profile(velocity=speed),
+        channel.clld_detection(detect_mode, sensitivity),
+      ):
+        x = here
+        while x != end:
+          x = max(x - step, end) if end < here else min(x + step, end)
+          await arm._unchecked_fw_move_absolute(x - offset)
+          if await channel.request_clld_detected():
+            return (await self.request_locations())[channel_idx].x
+    finally:
+      await arm._record_where_it_stopped()
+    return None
+
+  # -- y probing (capacitive only) -----------------------------------------------------------------
+
+  async def _unchecked_fw_y_axis_seek_capacitive_lld(
+    self,
+    yaxis: Address,
+    position: float,
+    velocity: float,
+    detect_mode: int,
+    sensitivity: int,
+    read_timeout: Optional[float] = None,
+  ) -> PrepCmd.PrepYAxisSeekCapacitiveLld.Response:
+    """Send `YAxis.SeekCapacitiveLld` without checks.
+
+    Args:
+      yaxis: the channel's Y axis.
+      position: search end in the channel's Y drive frame, in mm.
+      velocity: search speed in mm/s.
+      detect_mode: cLLD detect mode.
+      sensitivity: cLLD sensitivity.
+      read_timeout: answer timeout in seconds. Defaults to the link's.
+
+    Returns:
+      The firmware's answer, with positions in the Y drive frame.
+    """
+    return await self._driver.send_command(
+      PrepCmd.PrepYAxisSeekCapacitiveLld(
+        dest=yaxis,
+        position=position,
+        velocity=velocity,
+        detect_mode=detect_mode,
+        sensitivity=sensitivity,
+      ),
+      read_timeout=read_timeout,
+    )
+
+  async def probe_y_using_clld(
+    self,
+    channel_idx: int,
+    direction: Literal["forward", "backward"],
+    search_end_position: Optional[float] = None,
+    speed: float = 10.0,
+    sensitivity: Optional[int] = None,
+    detect_mode: int = 2,
+    post_detection_dist: float = 2.0,
+    tip_bottom_diameter: float = 1.2,
+    stop_disc_diameter: float = 7.0,
+    allow_without_tip: bool = False,
+  ) -> Optional[float]:
+    """Probe a conductive surface along Y with the channel's YAxis cLLD seek.
+
+    Args:
+      channel_idx: which channel, 0-indexed from the back.
+      direction: "forward" (decreasing y) or "backward" (increasing y).
+      search_end_position: search end in mm. Defaults to as far as the channel may go.
+      speed: search speed in mm/s.
+      sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
+      detect_mode: cLLD detect mode.
+      post_detection_dist: back-off after a detection in mm.
+      tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
+      stop_disc_diameter: diameter of the stop disc (tip mounting shaft) in mm, when none is.
+      allow_without_tip: whether to probe without a mounted tip. False requires one.
+
+    Returns:
+      Surface y position in mm, rounded to 0.1 mm, or None when nothing was detected.
+
+    Raises:
+      ValueError: If an argument is out of range, or `search_end_position` is not ahead of the
+        channel.
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False, the channel's Y
+        window is unknown, or it has no Y axis.
+    """
+    # Tip: required unless allow_without_tip; what touches is the tip, or the stop disc
+    tips = await self.sense_tip_presence()
+    has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
+    if not has_tip and not allow_without_tip:
+      raise RuntimeError(
+        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+      )
+    diameter = tip_bottom_diameter if has_tip else stop_disc_diameter
+
+    # Arguments
+    if not 0 <= channel_idx < self.num_channels:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, is {channel_idx}"
+      )
+    if direction not in ("forward", "backward"):
+      raise ValueError(f"direction must be 'forward' or 'backward', is {direction!r}")
     if speed <= 0:
       raise ValueError(f"speed must be above 0 mm/s, is {speed}")
-    forward = probing_direction == "forward"
+    forward = direction == "forward"
     positions = await self.request_locations()
     here = positions[channel_idx]
 
-    # How far the channel may go: its Y window, and its neighbours kept at their minimum spacing.
+    # Search range: the Y window, and the neighbours at their minimum spacing
     window = (
       self.configuration.channels[channel_idx].y_range
       if channel_idx < len(self.configuration.channels)
       else None
     )
-    low, high = (-math.inf, math.inf) if window is None else window
+    if window is None:
+      raise RuntimeError(f"channel {channel_idx}'s Y window has not been read")
+    low, high = window
     if channel_idx > 0:
       high = min(
         high, positions[channel_idx - 1].y - self._min_spacing_between(channel_idx - 1, channel_idx)
@@ -2044,70 +2239,64 @@ class Pipettes:
       low = max(
         low, positions[channel_idx + 1].y + self._min_spacing_between(channel_idx, channel_idx + 1)
       )
-    if end_pos_search is not None and not low <= end_pos_search <= high:
+    end = (low if forward else high) if search_end_position is None else search_end_position
+    if not low <= end <= high:
       raise ValueError(
-        f"end_pos_search={end_pos_search} is outside the range channel {channel_idx} may search, "
+        f"search_end_position={end} is outside the range channel {channel_idx} may search, "
         f"[{low:.2f}, {high:.2f}]"
       )
-    start = here.y
-    end = (low if forward else high) if end_pos_search is None else end_pos_search
-    if math.isinf(end):
-      raise ValueError(f"channel {channel_idx}'s Y window has not been read; pass end_pos_search")
-    if (end >= start) if forward else (end <= start):
-      raise ValueError(
-        f"a {probing_direction} search from y={start:.2f} cannot end at y={end:.2f} mm"
-      )
+    if (end >= here.y) if forward else (end <= here.y):
+      raise ValueError(f"a {direction} search from y={here.y:.2f} cannot end at y={end:.2f} mm")
+    channel = self.channels[channel_idx] if channel_idx < len(self.channels) else None
+    if channel is None or channel.yaxis is None or channel.ydrive is None:
+      raise RuntimeError(f"channel {channel_idx} has no Y axis in the firmware tree")
 
-    seek = PrepCmd.YLLDSeekParameters(
-      default_values=False,
-      channel=self.channel_enum(channel_idx),
-      start_position_x=here.x,
-      start_position_y=start,
-      start_position_z=here.z,
-      seek_position_y=end,
-      seek_velocity_y=speed,
-      lld_sensitivity=self.default_clld_sensitivity if sensitivity is None else sensitivity,
-      detect_mode=self.default_clld_detect_mode if detect_mode is None else detect_mode,
-    )
+    # Y drive frame offset
+    offset = await channel.request_y_drive_position() - here.y
+
+    # Seek until the channel detects or the search ends
     try:
-      result = await self._unchecked_fw_y_seek_lld_position(
-        seek, read_timeout=abs(end - start) / speed + 30
+      result = await self._unchecked_fw_y_axis_seek_capacitive_lld(
+        channel.yaxis,
+        position=end + offset,
+        velocity=speed,
+        detect_mode=detect_mode,
+        sensitivity=self.default_clld_sensitivity if sensitivity is None else sensitivity,
+        read_timeout=abs(end - here.y) / speed + 30,
       )
     finally:
       await self._record_where_they_stopped()
-    if not result.detected:
-      raise RuntimeError(
-        f"channel {channel_idx} detected nothing between y={start:.2f} and y={end:.2f} mm"
-      )
+    if not result.lld_detected:
+      return None
 
-    # Where the channel stopped is where it touched: read, as the STAR reads it.
-    detected_y = (await self.request_locations())[channel_idx].y
+    # Back off inside the search range, and return the surface
+    detected_y = float(result.detect_position) - offset
     back_off = (
       min(detected_y + post_detection_dist, high)
       if forward
       else max(detected_y - post_detection_dist, low)
     )
     await self.move_to_y_positions({channel_idx: back_off}, speed=speed)
-    return detected_y - tip_bottom_diameter / 2 if forward else detected_y + tip_bottom_diameter / 2
-
-  async def _unchecked_fw_y_seek_lld_position(
-    self, seek: PrepCmd.YLLDSeekParameters, read_timeout: Optional[float] = None
-  ) -> PrepCmd.SeekResultParameters:
-    """Send `ChannelCoordinator.YSeekLldPosition` (cmd=19). Nothing is guarded and nothing is recorded.
-
-    Args:
-      seek: the search.
-      read_timeout: how long to wait for the answer, in seconds. Defaults to the link's.
-
-    Returns:
-      The firmware's result.
-    """
-    response = await self._driver.send_command(
-      PrepCmd.PrepYSeekLldPosition(seek_parameters=seek), read_timeout=read_timeout
-    )
-    return response.result
+    surface = detected_y - diameter / 2 if forward else detected_y + diameter / 2
+    return round(surface, 1)
 
   # -- z probing (capacitive, force) ---------------------------------------------------------------
+
+  async def _unchecked_fw_z_seek_lld_position(
+    self, seek_parameters: List[PrepCmd.LLDChannelSeekParameters]
+  ) -> List[PrepCmd.SeekResultParameters]:
+    """Send `Pipettor.ZSeekLldPosition` (cmd=29). Nothing is guarded and nothing is recorded.
+
+    Args:
+      seek_parameters: one entry per channel to seek.
+
+    Returns:
+      The firmware's result for each entry.
+    """
+    response = await self._driver.send_command(
+      PrepCmd.PrepZSeekLldPosition(seek_parameters=seek_parameters)
+    )
+    return list(response.results)
 
   async def probe_z_using_clld(
     self,
@@ -2119,60 +2308,36 @@ class Pipettes:
     sensitivity: Optional[int] = None,
     detect_mode: Optional[int] = None,
     z_position_at_end_of_a_command: Optional[float] = None,
+    allow_without_tip: bool = False,
   ) -> Optional[float]:
-    """Lower one channel where it stands until its capacitive LLD triggers, and return where it did.
-
-    Sends `Pipettor.ZSeekLldPosition` with the channel's current X and Y, so it does not move sideways:
-    given another X or Y the firmware moves there before seeking. It seeks down from `start_pos_search`
-    at `speed`, stops at `lowest_immers_pos` when nothing triggers, and goes to
-    `z_position_at_end_of_a_command` either way (PRPAA1087, V1.2.2). There a front channel without a tip
-    triggered on a finger touching it at 140.451 mm. To probe elsewhere, move there first with
-    `move_to_location`. Argument names follow legacy STARBackend's `clld_probe_z_height_using_channel`
-    where the Prep has the same setting, except `speed`.
+    """Lower a channel where it stands until its cLLD triggers.
 
     Args:
       channel_idx: which channel, 0-indexed from the back.
-      start_pos_search: the height to start seeking from, in mm. Defaults to the traverse height.
-      speed: how fast to seek down, in mm/s. Defaults to `default_clld_probe_speed`.
-      lowest_immers_pos: the lowest the channel may seek to, in mm. Defaults to the bottom of the
-        channel's Z range (`configuration.channels[channel_idx].z_range`).
-      sensitivity: the cLLD sensitivity sent. Defaults to `default_clld_sensitivity`.
-      detect_mode: the cLLD detect mode sent. Defaults to `default_clld_detect_mode`.
-      z_position_at_end_of_a_command: where to leave the channel afterwards, in mm. Defaults to
-        `start_pos_search`.
+      start_pos_search: start height in mm. Defaults to the traverse height.
+      speed: seek speed in mm/s. Defaults to `default_clld_probe_speed`.
+      lowest_immers_pos: lowest height in mm. Defaults to the bottom of the channel's Z range.
+      sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
+      detect_mode: cLLD detect mode. Defaults to `default_clld_detect_mode`.
+      z_position_at_end_of_a_command: height to finish at in mm. Defaults to `start_pos_search`.
+      allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
-      The height the cLLD triggered at, in mm, or None when it did not trigger.
+      Detected height in mm, or None.
 
     Raises:
-      ValueError: If the channel does not exist, a position is outside the channel's reach,
-        `lowest_immers_pos` is above `start_pos_search`, or `speed` is not positive.
-      RuntimeError: If the channel reports no position, or its Z range has not been read to default
-        `lowest_immers_pos` from.
-
-    Note:
-      Carried over from the earlier stub, to investigate the other firmware commands that may serve:
-
-      - Pipettor [1:29] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters (used here).
-      - ChannelCoordinator [1:20] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
-      Previously returned HC_RESULT=0x0F06 which was assumed to be "LLD not supported".
-      Now identified as "Z position out of allowed movement range" — the Z parameters
-      in LLDChannelSeekParameters were out of bounds. Retry with valid Z values
-      within deck_bounds (min_z=18.03, max_z=167.5).
-
-      Findings from testing:
-      - cLLD DOES work through the aspirate path (aspirate with
-        lld_mode=[LLDMode.CAPACITIVE] and default_values=False on both
-        LldParameters and CLldParameters).
-      - Standalone ZSeekLldPosition is rejected with 0x0F06 when Z params are out of range.
-      - The aspirate-based approach is a workaround, not a proper standalone probe.
-
-      Also investigate ZAxis-level alternatives:
-      - ZAxis.SeekCapacitiveLld [1:12] (returns 0x0207 when called directly)
-      - ZAxis.SeekCapacitiveLldTip [1:13] (returns 0x0207 when called directly)
-      - ZAxis.LiquidStatus [1:16] for reading last detection results
-      - PipettorService.MeasureLldFrequency [1:6] for sensor health checks
+      ValueError: If an argument is out of range.
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False, the channel
+        reports no position, or its Z range is unknown.
     """
+    # Tip: required unless allow_without_tip
+    if not allow_without_tip:
+      tips = await self.sense_tip_presence()
+      if 0 <= channel_idx < len(tips) and not tips[channel_idx]:
+        raise RuntimeError(
+          f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+        )
+
     if not 0 <= channel_idx < self.num_channels:
       raise ValueError(
         f"channel_idx must be between 0 and {self.num_channels - 1}, is {channel_idx}"
@@ -2245,22 +2410,6 @@ class Pipettes:
     if result is None or not result.detected:
       return None
     return float(result.position)
-
-  async def _unchecked_fw_z_seek_lld_position(
-    self, seek_parameters: List[PrepCmd.LLDChannelSeekParameters]
-  ) -> List[PrepCmd.SeekResultParameters]:
-    """Send `Pipettor.ZSeekLldPosition` (cmd=29). Nothing is guarded and nothing is recorded.
-
-    Args:
-      seek_parameters: one entry per channel to seek.
-
-    Returns:
-      The firmware's result for each entry.
-    """
-    response = await self._driver.send_command(
-      PrepCmd.PrepZSeekLldPosition(seek_parameters=seek_parameters)
-    )
-    return list(response.results)
 
   async def ztouch_probe_z_height_using_channel(self, *args, **kwargs):
     """Probe Z-height using force/motor stall detection. Not yet implemented for the Prep.

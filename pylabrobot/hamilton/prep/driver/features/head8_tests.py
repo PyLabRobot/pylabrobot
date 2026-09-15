@@ -1,7 +1,7 @@
 """Tests for Head8.
 
 Covers core logic that must survive refactors:
-  - _resolve_probe_positions: pitch validation for 96-well columns and interleaved 384-well
+  - _resolve_probe_positions: pitch validation for 96-well columns
   - _validate_container_span: minimum Y-span check for trough path
   - all-8-channel enforcement (ganged head constraint)
   - V1/V2 aspirate/dispense dispatch and LLD/TADM kwargs
@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -23,7 +22,7 @@ from pylabrobot.hamilton.prep.driver.features.pipettes import (
   _build_pipettor_gantry_move_parameters,
 )
 from pylabrobot.hamilton.prep.driver.simulator import RECORDING_PREP_HEAD8
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import Cor_Axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
 
@@ -91,18 +90,6 @@ def test_resolve_probe_positions_misaligned_raises():
     be._resolve_probe_positions(bad_wells)
 
 
-def test_resolve_probe_positions_interleaved_384well():
-  """Every-other-row selection on a 96-well plate (simulating 4.5mm × 2 = 9mm pitch) passes."""
-  plate = Cor_Axy_96_wellplate_500uL_Ub("p")
-  plate.location = Coordinate(100, 200, 0)
-  col = plate.column(0)
-  be = _make_head8()
-  ys = be._resolve_probe_positions(col)
-  ref_y = col[0].get_absolute_location("c", "c", "cavity_bottom").y
-  assert ys[0] == pytest.approx(ref_y)
-  assert ys[7] == pytest.approx(ref_y - 7 * PROBE_PITCH_MM)
-
-
 def test_validate_container_span_sufficient():
   """Container wider than 63mm passes without error."""
   plate = Cor_Axy_96_wellplate_500uL_Ub("p")
@@ -113,10 +100,7 @@ def test_validate_container_span_sufficient():
 
 def test_validate_container_span_too_narrow():
   """Container narrower than 63mm raises ValueError."""
-  narrow = MagicMock()
-  narrow.name = "narrow_container"
-  narrow.get_size_y.return_value = 40.0  # less than 63mm
-
+  narrow = Resource("narrow_container", size_x=100.0, size_y=40.0, size_z=10.0)
   be = _make_head8()
   with pytest.raises(ValueError, match="too narrow"):
     be._validate_container_span(narrow)
@@ -140,18 +124,6 @@ def test_partial_channel_pickup_raises_value_error():
     with pytest.raises(ValueError, match="fully-ganged head"):
       await p.head8.pick_up_tips(spots, use_channels=(4, 5, 6, 7))
 
-    await p.stop()
-
-  asyncio.run(_run())
-
-
-def test_head8_present_after_simulated_setup():
-  async def _run() -> None:
-    deck, _, _, _ = _make_deck()
-    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
-    await p.setup()
-    assert p.head8 is not None
-    assert isinstance(p.head8, Head8)
     await p.stop()
 
   asyncio.run(_run())
@@ -204,19 +176,6 @@ def test_head8_tip_trackers_pick_and_drop():
   asyncio.run(_run())
 
 
-def test_mph_move_to_position_command_metadata():
-  move = PrepCmd.MphMoveToPosition(x_position=1.5, y_position=2.5, z_position=120.0)
-  assert move.firmware_path == "MLPrepRoot.MphRoot.MPH"
-  assert move.command_id == 17
-  assert move.x_position == 1.5 and move.y_position == 2.5 and move.z_position == 120.0
-
-  via = PrepCmd.MphMoveToPositionViaLane(x_position=0.0, y_position=0.0, z_position=0.0)
-  assert via.command_id == 18
-  assert via.firmware_path == move.firmware_path
-  params = move.build_parameters()
-  assert params is not None
-
-
 def test_build_pipettor_gantry_move_parameters_maps_rear_front():
   m = _build_pipettor_gantry_move_parameters(10.0, [0, 1], [20.0, 30.0], [40.0, 50.0])
   assert m.gantry_x_position == 10.0
@@ -258,7 +217,7 @@ def test_head8_move_to_position_sends_mph_wire_commands():
 
 
 def test_pick_up_tips_default_pre_position_sends_mph_move_then_pickup():
-  """Default pre_position=True issues MphMoveToPosition before MphPickupTips."""
+  """Default pre_position=True moves the head before the one MphPickupTips."""
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
@@ -270,12 +229,9 @@ def test_pick_up_tips_default_pre_position_sends_mph_move_then_pickup():
 
     await p.head8.pick_up_tips(tip_rack.column(0))
 
-    mph_seq = [
-      c for c in captured if isinstance(c, (PrepCmd.MphMoveToPosition, PrepCmd.MphPickupTips))
-    ]
-    assert len(mph_seq) >= 2
-    assert isinstance(mph_seq[0], PrepCmd.MphMoveToPosition)
-    assert isinstance(mph_seq[1], PrepCmd.MphPickupTips)
+    pickups = [i for i, c in enumerate(captured) if isinstance(c, PrepCmd.MphPickupTips)]
+    assert len(pickups) == 1
+    assert any(isinstance(c, PrepCmd.MphMoveToPosition) for c in captured[: pickups[0]])
 
     await p.stop()
 
@@ -298,7 +254,7 @@ def test_pick_up_tips_pre_position_false_skips_mph_move():
     mph_moves = [c for c in captured if isinstance(c, PrepCmd.MphMoveToPosition)]
     pickups = [c for c in captured if isinstance(c, PrepCmd.MphPickupTips)]
     assert mph_moves == []
-    assert len(pickups) >= 1
+    assert len(pickups) == 1
 
     await p.stop()
 

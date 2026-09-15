@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, List, Optional
+from typing import Any, List
 from unittest.mock import AsyncMock
 
 import pytest
@@ -35,30 +35,32 @@ def _make_arm(deck: PrepDeck) -> CoreGripperArm:
   return CoreGripperArm(backend=backend, reference_resource=deck, grip_axis="y")
 
 
-def test_drop_location_matches_holder_geometry_and_offset():
+def test_drop_resource_releases_over_the_destination_at_the_grip_height():
+  """Released over the new holder's centre plus the offset, at the height it was gripped."""
   deck = PrepDeck(with_core_grippers=True)
   plate = deck[4] = cor_axy_96_wellplate_500uL_Ub("plate")
   dest = deck[2]
   arm = _make_arm(deck)
-
-  pdfb = arm._resolve_pickup_distance(plate, None)
-  arm._held_resource = plate
-  arm._pickup_distance_from_bottom = pdfb
-  arm._holding_resource_width = arm._resource_width(plate)
-
-  offset = Coordinate(1.0, 2.0, 3.0)
-  got = arm._drop_location(dest, offset)
-
-  expected = (
-    dest.get_absolute_location("l", "f", "b")
-    + dest.get_default_child_location(plate)
-    + plate.center()
-    + offset
-    + Coordinate(0, 0, pdfb)
+  picked: List[Coordinate] = []
+  dropped: List[Coordinate] = []
+  arm.backend.pick_up_at_location = AsyncMock(  # type: ignore[method-assign]
+    side_effect=lambda location, *args, **kwargs: picked.append(location)
   )
-  assert got.x == pytest.approx(expected.x)
-  assert got.y == pytest.approx(expected.y)
-  assert got.z == pytest.approx(expected.z)
+  arm.backend.drop_at_location = AsyncMock(  # type: ignore[method-assign]
+    side_effect=lambda location, *args, **kwargs: dropped.append(location)
+  )
+  offset = Coordinate(0.5, -0.25, 1.0)
+
+  async def _run() -> None:
+    source = plate.get_absolute_location("c", "c", "b")
+    await arm.pick_up_resource(plate)
+    await arm.drop_resource(dest, offset=offset)
+    placed = plate.get_absolute_location("c", "c", "b")
+    assert (picked[0].x, picked[0].y) == pytest.approx((source.x, source.y))
+    assert (dropped[0].x, dropped[0].y) == pytest.approx((placed.x + offset.x, placed.y + offset.y))
+    assert dropped[0].z - placed.z == pytest.approx(picked[0].z - source.z + offset.z)
+
+  asyncio.run(_run())
 
 
 def test_drop_resource_not_holding_raises():
@@ -95,55 +97,32 @@ def test_drop_resource_reassigns_holder():
   plate = deck[4] = cor_axy_96_wellplate_500uL_Ub("plate")
   dest = deck[2]
   arm = _make_arm(deck)
-  dropped: List[Coordinate] = []
-
-  async def _capture_drop(location: Coordinate, resource_width: float, **kwargs: Any) -> None:
-    del resource_width, kwargs
-    dropped.append(location)
-
-  arm.backend.drop_at_location = _capture_drop  # type: ignore[method-assign]
 
   async def _run() -> None:
     await arm.pick_up_resource(plate)
-    assert plate.parent is deck[4]
     await arm.drop_resource(dest)
     assert plate.parent is dest
     assert dest.resource is plate
     assert deck[4].resource is None
-    assert arm._held_resource is None
-    assert arm._holding_resource_width is None
-    assert len(dropped) == 1
+    arm.backend.drop_at_location.assert_awaited_once()  # type: ignore[attr-defined]
+    with pytest.raises(RuntimeError, match="Not holding anything"):
+      await arm.drop_resource(deck[4])
 
   asyncio.run(_run())
 
 
 def test_pick_up_resource_width_override():
+  """A width given at pick up is the one gripped with and released with."""
   deck = PrepDeck(with_core_grippers=True)
   plate = deck[4] = cor_axy_96_wellplate_500uL_Ub("plate")
   arm = _make_arm(deck)
-  captured: dict[str, Any] = {}
-
-  async def _capture_pick(
-    location: Coordinate,
-    resource_width: float,
-    *,
-    resource_length: float,
-    resource_height: float,
-    plate_top_z_offset: float,
-    clearance_y: float = 2.5,
-    grip_speed_y: float = 5.0,
-    squeeze_mm: float = 2.0,
-  ) -> None:
-    del location, resource_length, resource_height, plate_top_z_offset
-    del clearance_y, grip_speed_y, squeeze_mm
-    captured["resource_width"] = resource_width
-
-  arm.backend.pick_up_at_location = _capture_pick  # type: ignore[method-assign]
 
   async def _run() -> None:
     await arm.pick_up_resource(plate, resource_width=80.5)
-    assert captured["resource_width"] == 80.5
-    assert arm._holding_resource_width == 80.5
+    await arm.drop_resource(deck[2])
+    pick = arm.backend.pick_up_at_location.await_args  # type: ignore[attr-defined]
+    drop = arm.backend.drop_at_location.await_args  # type: ignore[attr-defined]
+    assert pick.args[1] == 80.5 and drop.args[1] == 80.5
 
   asyncio.run(_run())
 
@@ -161,48 +140,17 @@ def test_pick_up_at_location_enables_drop_at_location():
       resource_height=14.0,
       plate_top_z_offset=5.0,
     )
-    assert arm._holding_resource_width == 85.0
-    assert arm._held_resource is None
     await arm.drop_at_location(place)
-    arm.backend.drop_at_location.assert_awaited_once()  # type: ignore[attr-defined]
     args = arm.backend.drop_at_location.await_args  # type: ignore[attr-defined]
-    assert args is not None
-    assert args.args[0] == place
-    assert args.args[1] == 85.0
-    assert arm._holding_resource_width is None
-
-  asyncio.run(_run())
-
-
-def test_drop_resource_applies_offset_to_firmware_location():
-  deck = PrepDeck(with_core_grippers=True)
-  plate = deck[4] = cor_axy_96_wellplate_500uL_Ub("plate")
-  dest = deck[2]
-  arm = _make_arm(deck)
-  dropped_loc: Optional[Coordinate] = None
-
-  async def _capture_drop(location: Coordinate, resource_width: float, **kwargs: Any) -> None:
-    nonlocal dropped_loc
-    del resource_width, kwargs
-    dropped_loc = location
-
-  arm.backend.drop_at_location = _capture_drop  # type: ignore[method-assign]
-  offset = Coordinate(0.5, -0.25, 1.0)
-
-  async def _run() -> None:
-    await arm.pick_up_resource(plate)
-    expected = arm._drop_location(dest, offset)
-    await arm.drop_resource(dest, offset=offset)
-    assert dropped_loc is not None
-    assert dropped_loc.x == pytest.approx(expected.x)
-    assert dropped_loc.y == pytest.approx(expected.y)
-    assert dropped_loc.z == pytest.approx(expected.z)
+    assert (args.args[0], args.args[1]) == (place, 85.0)
+    with pytest.raises(RuntimeError, match="Not holding anything"):
+      await arm.drop_at_location(place)
 
   asyncio.run(_run())
 
 
 def test_pick_up_tool_default_pre_position_moves_then_picks():
-  """Default pre_position=True issues PrepMoveToPosition before PrepPickUpTool."""
+  """Default pre_position=True moves to the tools before the one PrepPickUpTool."""
 
   async def _run() -> None:
     deck = PrepDeck(with_core_grippers=True)
@@ -213,12 +161,9 @@ def test_pick_up_tool_default_pre_position_moves_then_picks():
 
     await p.pick_up_core_grippers()
 
-    seq = [
-      c for c in captured if isinstance(c, (PrepCmd.PrepMoveToPosition, PrepCmd.PrepPickUpTool))
-    ]
-    assert len(seq) >= 2
-    assert isinstance(seq[0], PrepCmd.PrepMoveToPosition)
-    assert isinstance(seq[1], PrepCmd.PrepPickUpTool)
+    pickups = [i for i, c in enumerate(captured) if isinstance(c, PrepCmd.PrepPickUpTool)]
+    assert len(pickups) == 1
+    assert any(isinstance(c, PrepCmd.PrepMoveToPosition) for c in captured[: pickups[0]])
 
     await p.return_core_grippers()
     await p.stop()
@@ -250,7 +195,7 @@ def test_pick_up_tool_pre_position_false_skips_move():
     moves = [c for c in captured if isinstance(c, PrepCmd.PrepMoveToPosition)]
     pickups = [c for c in captured if isinstance(c, PrepCmd.PrepPickUpTool)]
     assert moves == []
-    assert len(pickups) >= 1
+    assert len(pickups) == 1
 
     await p.stop()
 

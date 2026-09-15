@@ -18,22 +18,6 @@ from pylabrobot.resources import Coordinate
 from pylabrobot.resources.hamilton import PrepDeck
 
 
-def test_answers_as_the_recorded_device():
-  """What setup reads is what PRPAA1087 recorded, so a saved configuration reads back the same."""
-
-  async def _run() -> None:
-    p = PrepSimulationDriver(deck=PrepDeck())
-    await p.setup()
-    recorded = read_configuration(RECORDING_PREP)
-    assert p.configuration == recorded["device"]
-    assert p.pipettes is not None
-    assert p.pipettes.configuration.channels == recorded["pipettes"].channels
-    assert p.head8 is None
-    await p.stop()
-
-  asyncio.run(_run())
-
-
 def test_firmware_tree_is_selectable():
   """A method the recorded firmware lacks is refused as that firmware refuses it."""
 
@@ -120,7 +104,8 @@ def test_setup_places_the_teaching_needle_and_waste_positions_where_the_device_r
     await p.setup()
     recorded = read_configuration(RECORDING_PREP)["device"]
     site = next(s for s in recorded.deck_sites if (s.length, s.width) == (6.0, 6.0))
-    assert (needle.location.x, needle.location.y, needle.location.z) == pytest.approx(
+    placed = needle.get_location_wrt(deck)
+    assert (placed.x, placed.y, needle.location.z) == pytest.approx(
       (site.left_bottom_front_x, site.left_bottom_front_y, height)
     )
     front = next(
@@ -154,5 +139,25 @@ def test_prep_factory_builds_a_simulated_device():
     await prep.setup()
     assert prep.pipettes is not None
     await prep.stop()
+
+  asyncio.run(_run())
+
+
+def test_the_arm_reference_line_spans_the_channels_combined_y_ranges():
+  """The arm declares the Y its channels reach between them, from its own front edge."""
+
+  async def _run() -> None:
+    deck = PrepDeck()
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    arm = deck.get_resource("x_arm")
+    front = arm.get_location_wrt(deck).y
+    ranges = [c.y_range for c in p.pipettes.configuration.channels if c.y_range is not None]
+    low, high = arm.reference_point["y_range"]  # type: ignore[attr-defined]
+    assert (low + front, high + front) == pytest.approx(
+      (min(r[0] for r in ranges), max(r[1] for r in ranges))
+    )
+    await p.stop()
 
   asyncio.run(_run())

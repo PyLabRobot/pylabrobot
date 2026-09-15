@@ -22,6 +22,7 @@ from pylabrobot.hamilton.transport.tcp.protocol import HamiltonProtocol, Hoi2Act
 from pylabrobot.hamilton.transport.tcp.wire_types import (
   F32,
   F64,
+  BoolArray,
   I16,
   U16,
   U32,
@@ -3184,12 +3185,7 @@ class PrepGetPositions(PrepStatusRequest["PrepGetPositions.Response"]):
 
 @dataclass(frozen=True)
 class PrepMoveYAbsolute(PrepCommand[None]):
-  """Move channels along Y alone, together (cmd=10, dest=ChannelXYZCoordinator).
-
-  Carries a Y for each channel it names and one velocity. On PRPAA1087 (V1.2.2) X and Z stayed where
-  they were to the micrometre, the velocity was in mm/s, and a pair closer than the firmware's Y
-  spacing was refused (8.75 mm refused, 8.8 mm moved).
-  """
+  """Move channels along Y (cmd=10, dest=ChannelXYZCoordinator)."""
 
   command_id = 10
   firmware_path = CHANNEL_XYZ_COORDINATOR_OBJECT_PATH
@@ -3208,11 +3204,7 @@ class PrepMoveYAbsolute(PrepCommand[None]):
 
 @dataclass(frozen=True)
 class PrepMoveZAbsolute(PrepCommand[None]):
-  """Move channels along Z alone, together (cmd=12, dest=ChannelXYZCoordinator).
-
-  Carries a Z for each channel it names and one velocity. On PRPAA1087 (V1.2.2), without tips, X and Y
-  stayed where they were to the micrometre and the velocity was in mm/s.
-  """
+  """Move channels' tool bottoms along Z (cmd=12, dest=ChannelXYZCoordinator)."""
 
   command_id = 12
   firmware_path = CHANNEL_XYZ_COORDINATOR_OBJECT_PATH
@@ -3231,10 +3223,7 @@ class PrepMoveZAbsolute(PrepCommand[None]):
 
 @dataclass(frozen=True)
 class PrepZDriveGetAcceleration(PrepStatusRequest["PrepZDriveGetAcceleration.Response"]):
-  """Get one channel's Z drive acceleration, in mm/s2 (cmd=16, dest=that channel's ZAxis.ZDrive).
-
-  Both channels' drives read 800 mm/s2 on PRPAA1087 (V1.2.2).
-  """
+  """Get a channel's Z drive acceleration in mm/s2 (cmd=16, dest=ZAxis.ZDrive)."""
 
   command_id = 16
   firmware_path = None
@@ -3256,12 +3245,7 @@ class PrepZDriveGetAcceleration(PrepStatusRequest["PrepZDriveGetAcceleration.Res
 
 @dataclass(frozen=True)
 class PrepZDriveSetAcceleration(PrepCommand[None]):
-  """Set one channel's Z drive acceleration, in mm/s2 (cmd=15, dest=that channel's ZAxis.ZDrive).
-
-  `PrepMoveZAbsolute` follows it: on PRPAA1087 (V1.2.2) 400 mm/s2 made a 47.5 mm move at 113.6 mm/s 143 ms
-  slower than 800, as a trapezoidal profile predicts, and 800 set back read back 800. Whether a value survives
-  the device powering down is not known.
-  """
+  """Set a channel's Z drive acceleration in mm/s2 (cmd=15, dest=ZAxis.ZDrive)."""
 
   command_id = 15
   firmware_path = None
@@ -3333,13 +3317,7 @@ class PrepZSeekLldPosition(PrepCommand["PrepZSeekLldPosition.Response"]):
 
 @dataclass(frozen=True)
 class PrepYSeekLldPosition(PrepCommand["PrepYSeekLldPosition.Response"]):
-  """Y-seek LLD position (cmd=19, dest=ChannelCoordinator).
-
-  Moves one channel along Y, at the start X and Z it is given, until its capacitive LLD triggers or it reaches
-  `seek_parameters.seek_position_y`, at `seek_velocity_y`. No acceleration is carried. On PRPAA1087 (V1.2.2) a search
-  with nothing in the way moved at the velocity sent, stopped at the seek position, and answered `detected` False
-  with a position that does not describe the search.
-  """
+  """Seek one channel along Y until its cLLD triggers (cmd=19, dest=ChannelCoordinator)."""
 
   command_id = 19
   firmware_path = "MLPrepRoot.ChannelCoordinator"
@@ -3355,6 +3333,126 @@ class PrepYSeekLldPosition(PrepCommand["PrepYSeekLldPosition.Response"]):
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> PrepYSeekLldPosition.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepYAxisSeekCapacitiveLld(PrepCommand["PrepYAxisSeekCapacitiveLld.Response"]):
+  """Seek a channel along Y, in its drive frame, until cLLD triggers (cmd=9, dest=YAxis)."""
+
+  command_id = 9
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # Defaults only because `dest` comes first; every caller names them.
+  position: F32 = math.nan
+  velocity: F32 = math.nan
+  detect_mode: WEnum = 0
+  sensitivity: WEnum = 0
+
+  @dataclass(frozen=True)
+  class Response:
+    lld_detected: PaddedBool
+    detect_position: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.position, F32)
+      .add(self.velocity, F32)
+      .add(self.detect_mode, WEnum)
+      .add(self.sensitivity, WEnum)
+    )
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepYAxisSeekCapacitiveLld.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepYDriveGetPosition(PrepStatusRequest["PrepYDriveGetPosition.Response"]):
+  """Get a channel's Y drive position in its drive frame, in mm (cmd=9, dest=YDrive)."""
+
+  command_id = 9
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  @dataclass(frozen=True)
+  class Response:
+    position: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepYDriveGetPosition.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepChannelStartCLldDetection(PrepCommand[None]):
+  """Start a channel's continuous cLLD detection (cmd=14, dest=Calibration)."""
+
+  command_id = 14
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # Defaults only because `dest` comes first; every caller names them.
+  detect_mode: WEnum = 0
+  sensitivity: WEnum = 0
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.detect_mode, WEnum).add(self.sensitivity, WEnum)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepChannelStopCLldDetection(PrepCommand[None]):
+  """Stop a channel's continuous cLLD detection (cmd=15, dest=Calibration)."""
+
+  command_id = 15
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepCLldGetStatus(PrepStatusRequest["PrepCLldGetStatus.Response"]):
+  """Get a channel's cLLD detection status (cmd=1, dest=CLld)."""
+
+  command_id = 1
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  @dataclass(frozen=True)
+  class Response:
+    detected: BoolArray
+    detect_index: U32Array
+    length: U32Array
+    sample_rate: U32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepCLldGetStatus.Response:
     """Decode the declared success response."""
     return parse_into_struct(HoiParamsParser(data), cls.Response)
 

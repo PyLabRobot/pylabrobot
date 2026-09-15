@@ -20,9 +20,10 @@ import dataclasses
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple, cast, get_type_hints
+from typing import Any, Dict, List, Optional, Set, Tuple, cast, get_type_hints
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
+from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.introspection import (
   GetEnumsCommand,
@@ -80,6 +81,13 @@ SIMULATED_INITIALIZED_POSITIONS = {
 
 # The X axis profile PRPAA1087 read at an X speed scale of 100 percent, in mm/s and mm/s2. A simulated
 # axis keeps no profile, so setting one changes nothing it answers.
+# Each channel's Y drive frame reads deck Y plus this, rear first, as measured on PRPAA1087 (V1.2.2).
+SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
+# What a simulated channel touches with in a cLLD search, in mm: the probes' default
+# `stop_disc_diameter`, as simulated channels hold no tips.
+SIMULATED_CLLD_PROBE_DIAMETER = 7.0
+# The reported X less the X axis's own position, in mm, as on PRPAA1087 (V1.2.2).
+SIMULATED_X_AXIS_OFFSET = 0.193
 SIMULATED_X_VELOCITY = 400.0
 SIMULATED_X_ACCELERATION = 2250.0
 
@@ -311,8 +319,225 @@ class _Simulated:
     return None
 
 
+def _first_contact_along(
+  start: float,
+  end: float,
+  across: float,
+  bottom_z: float,
+  axis: int,
+  boxes: List[Tuple[Resource, Coordinate, Coordinate]],
+  radius: float,
+) -> Optional[float]:
+  """Where a channel moving along one horizontal axis first touches a box.
+
+  Args:
+    start: the channel's centre where it starts, in mm.
+    end: the channel's centre where it would end, in mm.
+    across: the channel's centre on the other horizontal axis, in mm.
+    bottom_z: the channel's lowest point, in mm.
+    axis: 0 to move along X, 1 along Y.
+    boxes: what can be touched, with lower and upper corners on the deck.
+    radius: the channel's radius where it touches, in mm.
+
+  Returns:
+    The channel's centre at the first touch, in mm, or None.
+  """
+  other = 1 - axis
+  first, last = sorted((start, end))
+  contacts: List[float] = []
+  for _, low, high in boxes:
+    lows, highs = (low.x, low.y), (high.x, high.y)
+    if high.z <= bottom_z or not lows[other] - radius <= across <= highs[other] + radius:
+      continue
+    near, far = lows[axis] - radius, highs[axis] + radius
+    if near <= start <= far:
+      contacts.append(start)
+    elif end < start and first <= far <= last:
+      contacts.append(far)
+    elif end > start and first <= near <= last:
+      contacts.append(near)
+  if not contacts:
+    return None
+  return max(contacts) if end < start else min(contacts)
+
+
+def _first_contact_below(
+  start_z: float,
+  floor_z: float,
+  x: float,
+  y: float,
+  boxes: List[Tuple[Resource, Coordinate, Coordinate]],
+  radius: float,
+) -> Optional[float]:
+  """Where a channel's lowest point, moving down, first touches the top of a box.
+
+  Args:
+    start_z: where the lowest point starts, in mm.
+    floor_z: how low it may go, in mm.
+    x: the channel's centre along X, in mm.
+    y: the channel's centre along Y, in mm.
+    boxes: what can be touched, with lower and upper corners on the deck.
+    radius: the channel's radius where it touches, in mm.
+
+  Returns:
+    The lowest point's height at the first touch, in mm, or None.
+  """
+  tops: List[float] = []
+  for _, low, high in boxes:
+    if not (low.x - radius <= x <= high.x + radius and low.y - radius <= y <= high.y + radius):
+      continue
+    if low.z < start_z < high.z:
+      tops.append(start_z)
+    elif floor_z <= high.z <= start_z:
+      tops.append(high.z)
+  return max(tops) if tops else None
+
+
 class SimulatedPipettes(_Simulated, Pipettes):
-  """The pipetting channels, answering for themselves."""
+  """The pipetting channels, answering for themselves.
+
+  A cLLD search stops at the first resource on the deck in the channel's way.
+  """
+
+  def __init__(self, *args: Any, **kwargs: Any) -> None:
+    super().__init__(*args, **kwargs)
+    # Channels with continuous cLLD on, and whether each detected since its last start. A detection
+    # is still reported after detection stops, as on PRPAA1087.
+    self._clld_on: Set[int] = set()
+    self._clld_detected: Dict[int, bool] = {}
+
+  def _touchable(self) -> List[Tuple[Resource, Coordinate, Coordinate]]:
+    """The deck's resources a channel can touch.
+
+    Everything with a volume, apart from the arm and what it carries.
+
+    Returns:
+      Each resource with its lower and upper corner on the deck.
+    """
+    deck = self.device.deck
+    if deck is None:
+      return []
+    arm = self.device.x_arm.resource if self.device.x_arm is not None else None
+    carried: Set[int] = set()
+    for held in ([arm] if arm is not None else []) + list(self.resources):
+      carried.add(id(held))
+      carried.update(id(child) for child in held.get_all_children())
+    boxes = []
+    for resource in deck.get_all_children():
+      if id(resource) in carried or resource.location is None:
+        continue
+      size = Coordinate(
+        resource.get_absolute_size_x(),
+        resource.get_absolute_size_y(),
+        resource.get_absolute_size_z(),
+      )
+      if min(size.x, size.y, size.z) <= 0:
+        continue
+      low = resource.get_location_wrt(deck)
+      boxes.append((resource, low, low + size))
+    return boxes
+
+  def _bottom_offset(self, channel: int) -> float:
+    """How far a channel's lowest modelled point is below its reference point.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The offset in mm, 0 or negative.
+    """
+    deck = self.device.deck
+    point = self.get_reference_point_location(channel)
+    if deck is None or point is None or channel >= len(self.resources):
+      return 0.0
+    held = self.resources[channel]
+    lowest = min(
+      (
+        part.get_location_wrt(deck).z
+        for part in [held, *held.get_all_children()]
+        if part.location is not None
+      ),
+      default=point.z,
+    )
+    return min(lowest - point.z, 0.0)
+
+  def _touched_along(
+    self, channel: int, axis: int, start: float, end: float, across: float, z: float
+  ) -> Optional[float]:
+    """Where a channel searching along X or Y first touches a resource.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      axis: 0 to search along X, 1 along Y.
+      start: the channel's centre where it starts, in mm.
+      end: the channel's centre where the search ends, in mm.
+      across: the channel's centre on the other horizontal axis, in mm.
+      z: the channel's reference point height, in mm.
+
+    Returns:
+      The channel's centre at the first touch, in mm, or None.
+    """
+    return _first_contact_along(
+      start,
+      end,
+      across,
+      z + self._bottom_offset(channel),
+      axis,
+      self._touchable(),
+      SIMULATED_CLLD_PROBE_DIAMETER / 2,
+    )
+
+  def sensed_x_move(self, x_from: float, x_to: float) -> float:
+    """Where an X move ends when a channel with detection on touches a resource.
+
+    The detection is recorded on that channel.
+
+    Args:
+      x_from: the arm's reference point before the move, in mm.
+      x_to: where the move would take it, in mm.
+
+    Returns:
+      Where the move ends, in mm.
+    """
+    for channel in sorted(self._clld_on):
+      if self._clld_detected.get(channel):
+        continue
+      _, y, z = self._modelled_location(channel)
+      touched = self._touched_along(channel, 0, x_from, x_to, y, z)
+      if touched is not None:
+        self._clld_detected[channel] = True
+        x_to = touched
+    return x_to
+
+  async def _search_x_using_clld(
+    self,
+    channel_idx: int,
+    here: float,
+    end: float,
+    speed: float,
+    detect_mode: int,
+    sensitivity: int,
+  ) -> Optional[float]:
+    """Look the whole search up in the resource model, and move the arm once to where it ends.
+
+    Args:
+      channel_idx: detecting channel, 0-indexed from the back.
+      here: the arm's x where the search starts, in mm.
+      end: search end in mm.
+      speed: arm speed in mm/s.
+      detect_mode: cLLD detect mode; not modelled.
+      sensitivity: cLLD sensitivity; not modelled.
+
+    Returns:
+      The channel's x where it touches a resource, in mm, or None.
+    """
+    arm = self._driver.x_arm
+    if arm is None:
+      raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
+    _, y, z = self._modelled_location(channel_idx)
+    touched = self._touched_along(channel_idx, 0, here, end, y, z)
+    await arm.move_to_x_position(end if touched is None else touched, speed=speed)
+    return touched
 
   def _declared(self) -> PipettesConfiguration:
     """What this device was told its channels are."""
@@ -392,40 +617,39 @@ class SimulatedPipettes(_Simulated, Pipettes):
           self._move(raised, None, None, height)
       return None
 
-    if isinstance(request, PrepCmd.PrepYSeekLldPosition):
-      # Nothing to detect in simulation: the channel searches to the end of its search and finds nothing.
-      y_seek = request.seek_parameters
-      searching = index_of.get(int(y_seek.channel))
-      if searching is not None:
-        self._move(
-          searching, y_seek.start_position_x, y_seek.seek_position_y, y_seek.start_position_z
-        )
-      return PrepCmd.PrepYSeekLldPosition.Response(
-        result=PrepCmd.SeekResultParameters(
-          default_values=False,
-          channel=y_seek.channel,
-          detected=False,
-          position=y_seek.seek_position_y,
-        )
-      ), "nothing to detect"
-
     if isinstance(request, PrepCmd.PrepZSeekLldPosition):
-      # Nothing to detect in simulation: each channel seeks down to its floor, finds nothing, and is
-      # left at its final height.
+      # Each channel seeks down toward its floor, stops at the top of the first resource under it,
+      # and is left at its final height.
       results = []
+      found = False
       for seek in request.seek_parameters:
         seeking = index_of.get(int(seek.channel))
+        touched = None
         if seeking is not None:
-          self._move(seeking, seek.seek_position_x, seek.seek_position_y, seek.final_position_z)
+          self._move(seeking, seek.seek_position_x, seek.seek_position_y, seek.seek_height)
+          offset = self._bottom_offset(seeking)
+          top = _first_contact_below(
+            seek.seek_height + offset,
+            seek.min_seek_height + offset,
+            seek.seek_position_x,
+            seek.seek_position_y,
+            self._touchable(),
+            SIMULATED_CLLD_PROBE_DIAMETER / 2,
+          )
+          touched = None if top is None else top - offset
+          self._move(seeking, None, None, seek.final_position_z)
+        found = found or touched is not None
         results.append(
           PrepCmd.SeekResultParameters(
             default_values=False,
             channel=seek.channel,
-            detected=False,
-            position=seek.min_seek_height,
+            detected=touched is not None,
+            position=seek.min_seek_height if touched is None else touched,
           )
         )
-      return PrepCmd.PrepZSeekLldPosition.Response(results=results), "nothing to detect"
+      return PrepCmd.PrepZSeekLldPosition.Response(results=results), (
+        "the resource model" if found else "nothing in the way"
+      )
 
     if isinstance(request, PrepCmd.PrepGetChannelBounds):
       declared = self._declared().channels
@@ -448,6 +672,47 @@ class SimulatedPipettes(_Simulated, Pipettes):
           )
         )
       return PrepCmd.PrepGetChannelBounds.Response(bounds=bounds), "the declared channel ranges"
+
+    if isinstance(request, (PrepCmd.PrepYDriveGetPosition, PrepCmd.PrepYAxisSeekCapacitiveLld)):
+      owner = self.device.tree.channel_of(request.dest)
+      if owner is None or owner >= len(SIMULATED_Y_DRIVE_OFFSETS):
+        return None
+      offset = SIMULATED_Y_DRIVE_OFFSETS[owner]
+      if isinstance(request, PrepCmd.PrepYDriveGetPosition):
+        return PrepCmd.PrepYDriveGetPosition.Response(
+          position=self._modelled_location(owner)[1] + offset
+        ), f"channel {owner}'s modelled Y in its drive frame"
+      # The channel searches toward the end of its search, and stops at the first resource in the
+      # way.
+      x, y, z = self._modelled_location(owner)
+      end = request.position - offset
+      touched = self._touched_along(owner, 1, y, end, x, z)
+      self._move(owner, None, end if touched is None else touched, None)
+      return PrepCmd.PrepYAxisSeekCapacitiveLld.Response(
+        lld_detected=touched is not None,
+        detect_position=0.0 if touched is None else touched + offset,
+      ), "the resource model" if touched is not None else "nothing in the way"
+
+    if isinstance(
+      request, (PrepCmd.PrepChannelStartCLldDetection, PrepCmd.PrepChannelStopCLldDetection)
+    ):
+      owner = self.device.tree.channel_of(request.dest)
+      if owner is not None:
+        if isinstance(request, PrepCmd.PrepChannelStartCLldDetection):
+          self._clld_on.add(owner)
+          self._clld_detected[owner] = False
+        else:
+          self._clld_on.discard(owner)
+      return None
+
+    if isinstance(request, PrepCmd.PrepCLldGetStatus):
+      # Whether the channel touched a resource since its detection was last started; nothing is
+      # recorded.
+      owner = self.device.tree.channel_of(request.dest)
+      detected = owner is not None and self._clld_detected.get(owner, False)
+      return PrepCmd.PrepCLldGetStatus.Response(
+        detected=[detected], detect_index=[0], length=[0], sample_rate=1
+      ), "the resource model" if detected else "nothing in the way"
 
     if isinstance(request, PrepCmd.PrepZDriveGetAcceleration):
       return PrepCmd.PrepZDriveGetAcceleration.Response(
@@ -478,8 +743,10 @@ class SimulatedXArm(_Simulated, XArm):
   async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
     x = self.device.modelled_x(default=SIMULATED_INITIALIZED_POSITIONS[0][0])
     if isinstance(request, PrepCmd.PrepXAxisGetCommandedPosition):
-      # The simulated axis counts in the frame the channels report X in.
-      return PrepCmd.PrepXAxisGetCommandedPosition.Response(value=x), "where the model has the arm"
+      # The simulated axis counts in its own frame, offset from the reported X.
+      return PrepCmd.PrepXAxisGetCommandedPosition.Response(
+        value=x - SIMULATED_X_AXIS_OFFSET
+      ), "where the model has the arm"
     if isinstance(request, PrepCmd.PrepXAxisGetVelocity):
       return PrepCmd.PrepXAxisGetVelocity.Response(
         value=SIMULATED_X_VELOCITY
@@ -490,11 +757,18 @@ class SimulatedXArm(_Simulated, XArm):
         "PRPAA1087's profile",
       )
     if isinstance(request, PrepCmd.PrepXAxisMoveAbsolute):
-      self.update_location_by_reference_point(request.position)
+      # A channel with continuous cLLD on stops the arm where it touches a resource.
+      pipettes = self.device.pipettes
+      target = request.position + SIMULATED_X_AXIS_OFFSET
+      if isinstance(pipettes, SimulatedPipettes):
+        target = pipettes.sensed_x_move(x, target)
+      self.update_location_by_reference_point(target)
       return None
     if isinstance(request, PrepCmd.PrepXAxisSeekToHomeFlag):
       # No flag is modelled: the seek trips where the arm stands, and nothing moves.
-      return PrepCmd.PrepXAxisSeekToHomeFlag.Response(value=x), "where the model has the arm"
+      return PrepCmd.PrepXAxisSeekToHomeFlag.Response(
+        value=x - SIMULATED_X_AXIS_OFFSET
+      ), "where the model has the arm"
     return None
 
 

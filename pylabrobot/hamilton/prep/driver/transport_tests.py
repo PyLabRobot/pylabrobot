@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as C
 from pylabrobot.hamilton.prep.driver.errors import PREP_ERROR_CODES
-from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
-from pylabrobot.hamilton.prep.driver.master import ChannelDriveMap, _PrepTCPSession
+from pylabrobot.hamilton.prep.driver.features.pipettes import PipetteChannel, Pipettes
+from pylabrobot.hamilton.prep.driver.master import _PrepTCPSession
 from pylabrobot.hamilton.prep.driver.prep_commands import MLPREP_OBJECT_PATH, PIPETTOR_OBJECT_PATH
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.introspection import MethodInfo, ObjectInfo
@@ -80,12 +80,11 @@ class TestPrepTransport(_SessionTest):
       )
 
     io.on_write = respond
+    channels.channels = [
+      PipetteChannel(index=0, driver=client, sleeve_sensor=rear),
+      PipetteChannel(index=1, driver=client, sleeve_sensor=front),
+    ]
     with (
-      patch.object(
-        client,
-        "request_channel_drives",
-        new=AsyncMock(return_value=ChannelDriveMap([rear, front], [], [])),
-      ),
       patch.object(
         client.io.introspection,
         "get_object",
@@ -115,18 +114,13 @@ class TestPrepTransport(_SessionTest):
       with self.subTest(methods=methods):
         client, io = self.make_driver()
         channels = Pipettes(client)
-        addr = Address(1, 236, 514)
-        with (
-          patch.object(
-            client,
-            "request_channel_drives",
-            new=AsyncMock(return_value=ChannelDriveMap([addr], [], [])),
-          ),
-          patch.object(
-            client.io.introspection,
-            "ensure_method_table",
-            new=AsyncMock(return_value=methods),
-          ),
+        channels.channels = [
+          PipetteChannel(index=0, driver=client, sleeve_sensor=Address(1, 236, 514))
+        ]
+        with patch.object(
+          client.io.introspection,
+          "ensure_method_table",
+          new=AsyncMock(return_value=methods),
         ):
           with self.assertRaisesRegex(RuntimeError, "GetTipPresent"):
             await asyncio.wait_for(channels.sense_tip_presence(), timeout=1)
