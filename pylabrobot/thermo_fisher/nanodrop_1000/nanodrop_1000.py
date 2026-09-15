@@ -122,6 +122,23 @@ class ThermoFisherNanoDrop1000:
 
     self.coefficients = {}
 
+  async def __aenter__(self) -> "ThermoFisherNanoDrop1000":
+    await self.setup()
+    return self
+
+  async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+    """Tear down even when the body raised.
+
+    This matters more than it looks. Every observed case of this instrument being left
+    with its xenon lamp energised was a script that died before reaching stop() — not a
+    teardown that failed. stop() itself is reliable; it just has to be reached.
+
+        async with ThermoFisherNanoDrop1000() as nd:
+          await nd.take_blank()
+          wavelengths, spectra = await nd.measure_absorbance()
+    """
+    await self.stop()
+
   async def send_command(self, payload: List[int]):
     """Generic transport method for writing to the command mailbox."""
     await self.io.write(bytes(payload))
