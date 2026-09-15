@@ -29,11 +29,13 @@ from pylabrobot.legacy.liquid_handling.standard import (
 )
 from pylabrobot.resources import (
   Coordinate,
+  EmbeddedTipRack,
   Liquid,
   Plate,
   Resource,
   Tip,
   TipRack,
+  TipSpot,
   Well,
 )
 from pylabrobot.resources.hamilton import (
@@ -524,16 +526,22 @@ class VantageBackend(HamiltonLiquidHandler):
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
-    tips = [cast(HamiltonTip, op.tip) for op in ops]
-    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
-    tip_length = max(tip.total_tip_length - tip.collar_height for tip in tips)
+    tip_end_positions = []
+    for op in ops:
+      z = op.resource.get_location_wrt(self.deck).z + op.offset.z
+      if isinstance(op.resource, TipSpot) and isinstance(op.resource.parent, EmbeddedTipRack):
+        # Embedded rack spots specify the collar support height; discard uses the tip end.
+        tip = cast(HamiltonTip, op.tip)
+        z -= tip.total_tip_length - tip.collar_height
+      tip_end_positions.append(z)
+    max_z = max(tip_end_positions)
 
     return await self.pip_tip_discard(
       x_position=x_positions,
       y_position=y_positions,
       tip_pattern=channels_involved,
-      begin_z_deposit_position=[round((max_z - tip_length + 10) * 10)] * len(ops),
-      end_z_deposit_position=[round((max_z - tip_length) * 10)] * len(ops),
+      begin_z_deposit_position=[round((max_z + 10) * 10)] * len(ops),
+      end_z_deposit_position=[round(max_z * 10)] * len(ops),
       minimal_traverse_height_at_begin_of_command=[
         round(th * 10)
         for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
