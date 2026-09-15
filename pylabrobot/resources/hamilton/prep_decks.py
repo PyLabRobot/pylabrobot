@@ -1,6 +1,6 @@
 """Hamilton Prep deck."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
@@ -42,9 +42,6 @@ class PrepDeck(Deck):
     super().__init__(
       name=name, size_x=size_x, size_y=size_y, size_z=size_z, origin=origin, category=category
     )
-    if with_core_grippers:
-      # From the Prep PR (#1196); not measured on a device. The device reports no gripper position.
-      self.assign_child_resource(prep_core_gripper_mount(), location=Coordinate(290, 266.5, 62.5))
     spots_list: List[ResourceHolder] = []
     for column in range(2):
       for row in range(4):
@@ -63,30 +60,36 @@ class PrepDeck(Deck):
         spots_list.append(spot)
     self.spots: List[ResourceHolder] = spots_list
 
-    # Where tips are dropped, as on the STAR's waste block.
-    waste_block = Trash(name="waste_block", size_x=13, size_y=132.7, size_z=73)
+    # Where tips are dropped, as on the STAR's waste block, carrying the liquid waste trough, the
+    # teaching needle and the CoRe gripper mount. From the deck's front edge at Y -3 to 2 mm in
+    # front of the gripper mount's back edge (Y 286.5).
+    waste_block = Trash(name="waste_block", size_x=13, size_y=287.5, size_z=73)
     self.assign_child_resource(waste_block, location=Coordinate(280.3, -3, 0))
 
-    # The liquid waste trough, part of the standard deck. As wide as the waste block, and filling the gap from the
-    # waste block's back edge to the teaching needle's front edge. Its depth and height are not measured, and its
-    # volume is the box's.
-    liquid_waste_front_y = -3 + waste_block.get_absolute_size_y()
-    liquid_waste_size_y = 214.29 - liquid_waste_front_y
+    # The liquid waste trough, part of the standard deck. As wide as the waste block, and filling
+    # the gap from the tip drop area's back edge (132.7 mm from the block's front) to the teaching
+    # needle's front edge, half the waste block's height with its top level with the block's top.
+    # Its depth and height are not measured, and its volume is the box's.
+    tip_drop_size_y = 132.7
+    liquid_waste_size_y = 214.29 - (-3 + tip_drop_size_y)
+    liquid_waste_size_z = waste_block.get_absolute_size_z() / 2
     liquid_waste_container = Trough(
       name="liquid_waste_container",
       size_x=waste_block.get_absolute_size_x(),
       size_y=liquid_waste_size_y,
-      size_z=waste_block.get_absolute_size_z(),
-      max_volume=waste_block.get_absolute_size_x()
-      * liquid_waste_size_y
-      * waste_block.get_absolute_size_z(),
+      size_z=liquid_waste_size_z,
+      max_volume=waste_block.get_absolute_size_x() * liquid_waste_size_y * liquid_waste_size_z,
     )
-    self.assign_child_resource(
-      liquid_waste_container, location=Coordinate(280.3, liquid_waste_front_y, 0)
+    waste_block.assign_child_resource(
+      liquid_waste_container,
+      location=Coordinate(
+        0, tip_drop_size_y, waste_block.get_absolute_size_z() - liquid_waste_size_z
+      ),
     )
 
-    # The teaching needle, the one STAR decks carry. X and Y are PRPAA1087's 6 x 6 mm deck site
-    # (DeckConfiguration); the driver moves it to the connected device's at setup. Z is not measured.
+    # The teaching needle, the one STAR decks carry. On the deck, X and Y (284.76, 214.29) are
+    # PRPAA1087's 6 x 6 mm deck site (DeckConfiguration); the driver moves it to the connected
+    # device's at setup. Z is not measured.
     teaching_tip_spot = TipSpot(
       name="teaching_tip",
       size_x=6.0,
@@ -95,10 +98,17 @@ class PrepDeck(Deck):
       size_z=0.0,
       category="teaching_tip",
     )
-    self.assign_child_resource(
+    waste_block.assign_child_resource(
       teaching_tip_spot,
-      location=Coordinate(x=284.76, y=214.29, z=23.85),
+      location=Coordinate(x=4.46, y=217.29, z=23.85),
     )
+
+    if with_core_grippers:
+      # From the Prep PR (#1196), at (290, 266.5, 62.5) on the deck; not measured on a device. The
+      # device reports no gripper position.
+      waste_block.assign_child_resource(
+        prep_core_gripper_mount(), location=Coordinate(9.7, 269.5, 62.5)
+      )
 
     # PRPAA1087's waste sites (DeckConfiguration); the driver moves them to the connected device's at setup.
     for waste_name, y_pos in [("waste_rear", 30.0), ("waste_front", 10.0), ("waste_mph", 112.0)]:
@@ -125,6 +135,7 @@ class PrepDeck(Deck):
     reference_point_from_left: float,
     model: str,
     appearance: Optional[Dict[str, Any]] = None,
+    reference_y_range: Optional[Tuple[float, float]] = None,
   ) -> Resource:
     """Get, or create once, the deck-owned X-arm resource called `name`.
 
@@ -145,6 +156,8 @@ class PrepDeck(Deck):
       model: which arm this is.
       appearance: how a viewer should draw it - `color`, `metalness`, `roughness` - or None for
         the viewer's own default.
+      reference_y_range: the Y its reference point reaches, in mm on the deck, or None for the
+        arm's whole depth.
 
     Returns:
       The arm resource, whether it was just created or already there.
@@ -170,6 +183,10 @@ class PrepDeck(Deck):
       y = self.get_absolute_size_y() - size_y
     else:
       y = device.get_absolute_size_y() - self.location.y - size_y
+    # The reach, as the viewer draws it: from the arm's front edge.
+    if reference_y_range is not None:
+      low, high = reference_y_range
+      x_arm.reference_point["y_range"] = [low - y, high - y]  # type: ignore[attr-defined]
     self.assign_child_resource(x_arm, location=Coordinate(x - reference_point_from_left, y, z))
     return x_arm
 

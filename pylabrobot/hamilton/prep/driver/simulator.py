@@ -86,6 +86,8 @@ SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
 # What a simulated channel touches with in a cLLD search, in mm: the probes' default
 # `stop_disc_diameter`, as simulated channels hold no tips.
 SIMULATED_CLLD_PROBE_DIAMETER = 7.0
+# The reported X less the X axis's own position, in mm, as on PRPAA1087 (V1.2.2).
+SIMULATED_X_AXIS_OFFSET = 0.193
 SIMULATED_X_VELOCITY = 400.0
 SIMULATED_X_ACCELERATION = 2250.0
 
@@ -507,6 +509,36 @@ class SimulatedPipettes(_Simulated, Pipettes):
         x_to = touched
     return x_to
 
+  async def _search_x_using_clld(
+    self,
+    channel_idx: int,
+    here: float,
+    end: float,
+    speed: float,
+    detect_mode: int,
+    sensitivity: int,
+  ) -> Optional[float]:
+    """Look the whole search up in the resource model, and move the arm once to where it ends.
+
+    Args:
+      channel_idx: detecting channel, 0-indexed from the back.
+      here: the arm's x where the search starts, in mm.
+      end: search end in mm.
+      speed: arm speed in mm/s.
+      detect_mode: cLLD detect mode; not modelled.
+      sensitivity: cLLD sensitivity; not modelled.
+
+    Returns:
+      The channel's x where it touches a resource, in mm, or None.
+    """
+    arm = self._driver.x_arm
+    if arm is None:
+      raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
+    _, y, z = self._modelled_location(channel_idx)
+    touched = self._touched_along(channel_idx, 0, here, end, y, z)
+    await arm.move_to_x_position(end if touched is None else touched, speed=speed)
+    return touched
+
   def _declared(self) -> PipettesConfiguration:
     """What this device was told its channels are."""
     return self.device.simulated_pipettes or PipettesConfiguration()
@@ -711,8 +743,10 @@ class SimulatedXArm(_Simulated, XArm):
   async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
     x = self.device.modelled_x(default=SIMULATED_INITIALIZED_POSITIONS[0][0])
     if isinstance(request, PrepCmd.PrepXAxisGetCommandedPosition):
-      # The simulated axis counts in the frame the channels report X in.
-      return PrepCmd.PrepXAxisGetCommandedPosition.Response(value=x), "where the model has the arm"
+      # The simulated axis counts in its own frame, offset from the reported X.
+      return PrepCmd.PrepXAxisGetCommandedPosition.Response(
+        value=x - SIMULATED_X_AXIS_OFFSET
+      ), "where the model has the arm"
     if isinstance(request, PrepCmd.PrepXAxisGetVelocity):
       return PrepCmd.PrepXAxisGetVelocity.Response(
         value=SIMULATED_X_VELOCITY
@@ -725,14 +759,16 @@ class SimulatedXArm(_Simulated, XArm):
     if isinstance(request, PrepCmd.PrepXAxisMoveAbsolute):
       # A channel with continuous cLLD on stops the arm where it touches a resource.
       pipettes = self.device.pipettes
-      target = request.position
+      target = request.position + SIMULATED_X_AXIS_OFFSET
       if isinstance(pipettes, SimulatedPipettes):
         target = pipettes.sensed_x_move(x, target)
       self.update_location_by_reference_point(target)
       return None
     if isinstance(request, PrepCmd.PrepXAxisSeekToHomeFlag):
       # No flag is modelled: the seek trips where the arm stands, and nothing moves.
-      return PrepCmd.PrepXAxisSeekToHomeFlag.Response(value=x), "where the model has the arm"
+      return PrepCmd.PrepXAxisSeekToHomeFlag.Response(
+        value=x - SIMULATED_X_AXIS_OFFSET
+      ), "where the model has the arm"
     return None
 
 

@@ -2009,7 +2009,7 @@ class Pipettes:
     tip_bottom_diameter: float = 1.2,
     stop_disc_diameter: float = 7.0,
     allow_without_tip: bool = False,
-  ) -> float:
+  ) -> Optional[float]:
     """Probe a conductive surface along X with the channel's cLLD, in 0.1 mm arm steps.
 
     Args:
@@ -2025,12 +2025,12 @@ class Pipettes:
       allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
-      Surface x position in mm, rounded to 0.1 mm.
+      Surface x position in mm, rounded to 0.1 mm, or None when nothing was detected.
 
     Raises:
       ValueError: If an argument is out of range or `search_end_position` is not ahead of the arm.
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False, there is no X arm,
-        the X range is unknown, the channel has no cLLD objects, or nothing was detected.
+        the X range is unknown, or the channel has no cLLD objects.
     """
     # Tip: required unless allow_without_tip; what touches is the tip, or the stop disc
     tips = await self.sense_tip_presence()
@@ -2054,7 +2054,6 @@ class Pipettes:
     low_speed, high_speed = arm.configuration.speed_range
     if not low_speed < speed <= high_speed:
       raise ValueError(f"speed must be above {low_speed} and at most {high_speed} mm/s, is {speed}")
-    channel = self.channels[channel_idx]
 
     # Search range: the channels' X range
     left = direction == "left"
@@ -2071,29 +2070,13 @@ class Pipettes:
     if (end >= here) if left else (end <= here):
       raise ValueError(f"a {direction} search from x={here:.2f} cannot end at x={end:.2f} mm")
 
-    # Step the arm with detection on until the channel detects or the search ends
-    offset = await arm.request_axis_offset()
+    # Search until the channel detects or the search ends
     sensitivity = self.default_clld_sensitivity if sensitivity is None else sensitivity
-    step = 0.1  # mm between status reads
-    detected_x: Optional[float] = None
-    try:
-      async with (
-        arm._temporary_x_axis_profile(velocity=speed),
-        channel.clld_detection(detect_mode, sensitivity),
-      ):
-        x = here
-        while x != end:
-          x = max(x - step, end) if left else min(x + step, end)
-          await arm._unchecked_fw_move_absolute(x - offset)
-          if await channel.request_clld_detected():
-            detected_x = (await self.request_locations())[channel_idx].x
-            break
-    finally:
-      await arm._record_where_it_stopped()
+    detected_x = await self._search_x_using_clld(
+      channel_idx, here, end, speed, detect_mode, sensitivity
+    )
     if detected_x is None:
-      raise RuntimeError(
-        f"channel {channel_idx} detected nothing between x={here:.2f} and x={end:.2f} mm"
-      )
+      return None
 
     # Back off inside the X range, and return the surface
     post_detection_x_position = (
@@ -2104,6 +2087,49 @@ class Pipettes:
     await arm.move_to_x_position(post_detection_x_position, speed=speed)
     surface = detected_x - diameter / 2 if left else detected_x + diameter / 2
     return round(surface, 1)
+
+  async def _search_x_using_clld(
+    self,
+    channel_idx: int,
+    here: float,
+    end: float,
+    speed: float,
+    detect_mode: int,
+    sensitivity: int,
+  ) -> Optional[float]:
+    """Step the arm in 0.1 mm steps with the channel's cLLD on, until it detects or reaches `end`.
+
+    Args:
+      channel_idx: detecting channel, 0-indexed from the back.
+      here: the arm's x where the search starts, in mm.
+      end: search end in mm.
+      speed: arm speed in mm/s.
+      detect_mode: cLLD detect mode.
+      sensitivity: cLLD sensitivity.
+
+    Returns:
+      The channel's x where it detected, in mm, or None.
+    """
+    arm = self._driver.x_arm
+    if arm is None:
+      raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
+    channel = self.channels[channel_idx]
+    offset = await arm.request_axis_offset()
+    step = 0.1  # mm between status reads
+    try:
+      async with (
+        arm._temporary_x_axis_profile(velocity=speed),
+        channel.clld_detection(detect_mode, sensitivity),
+      ):
+        x = here
+        while x != end:
+          x = max(x - step, end) if end < here else min(x + step, end)
+          await arm._unchecked_fw_move_absolute(x - offset)
+          if await channel.request_clld_detected():
+            return (await self.request_locations())[channel_idx].x
+    finally:
+      await arm._record_where_it_stopped()
+    return None
 
   # -- y probing (capacitive only) -----------------------------------------------------------------
 
@@ -2152,7 +2178,7 @@ class Pipettes:
     tip_bottom_diameter: float = 1.2,
     stop_disc_diameter: float = 7.0,
     allow_without_tip: bool = False,
-  ) -> float:
+  ) -> Optional[float]:
     """Probe a conductive surface along Y with the channel's YAxis cLLD seek.
 
     Args:
@@ -2168,13 +2194,13 @@ class Pipettes:
       allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
-      Surface y position in mm, rounded to 0.1 mm.
+      Surface y position in mm, rounded to 0.1 mm, or None when nothing was detected.
 
     Raises:
       ValueError: If an argument is out of range, or `search_end_position` is not ahead of the
         channel.
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False, the channel's Y
-        window is unknown, it has no Y axis, or nothing was detected.
+        window is unknown, or it has no Y axis.
     """
     # Tip: required unless allow_without_tip; what touches is the tip, or the stop disc
     tips = await self.sense_tip_presence()
@@ -2243,9 +2269,7 @@ class Pipettes:
     finally:
       await self._record_where_they_stopped()
     if not result.lld_detected:
-      raise RuntimeError(
-        f"channel {channel_idx} detected nothing between y={here.y:.2f} and y={end:.2f} mm"
-      )
+      return None
 
     # Back off inside the search range, and return the surface
     detected_y = float(result.detect_position) - offset
@@ -2259,6 +2283,22 @@ class Pipettes:
     return round(surface, 1)
 
   # -- z probing (capacitive, force) ---------------------------------------------------------------
+
+  async def _unchecked_fw_z_seek_lld_position(
+    self, seek_parameters: List[PrepCmd.LLDChannelSeekParameters]
+  ) -> List[PrepCmd.SeekResultParameters]:
+    """Send `Pipettor.ZSeekLldPosition` (cmd=29). Nothing is guarded and nothing is recorded.
+
+    Args:
+      seek_parameters: one entry per channel to seek.
+
+    Returns:
+      The firmware's result for each entry.
+    """
+    response = await self._driver.send_command(
+      PrepCmd.PrepZSeekLldPosition(seek_parameters=seek_parameters)
+    )
+    return list(response.results)
 
   async def probe_z_using_clld(
     self,
@@ -2372,22 +2412,6 @@ class Pipettes:
     if result is None or not result.detected:
       return None
     return float(result.position)
-
-  async def _unchecked_fw_z_seek_lld_position(
-    self, seek_parameters: List[PrepCmd.LLDChannelSeekParameters]
-  ) -> List[PrepCmd.SeekResultParameters]:
-    """Send `Pipettor.ZSeekLldPosition` (cmd=29). Nothing is guarded and nothing is recorded.
-
-    Args:
-      seek_parameters: one entry per channel to seek.
-
-    Returns:
-      The firmware's result for each entry.
-    """
-    response = await self._driver.send_command(
-      PrepCmd.PrepZSeekLldPosition(seek_parameters=seek_parameters)
-    )
-    return list(response.results)
 
   async def ztouch_probe_z_height_using_channel(self, *args, **kwargs):
     """Probe Z-height using force/motor stall detection. Not yet implemented for the Prep.

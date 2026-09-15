@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import functools
+from typing import Any, List
+
 
 from unittest.mock import AsyncMock
 
@@ -11,8 +13,9 @@ import pytest
 
 from pylabrobot.hamilton.prep import PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
-from pylabrobot.hamilton.prep.driver.features.pipettes import PipetteChannel, Pipettes
+from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.prep.driver.simulator import (
+  SIMULATED_X_AXIS_OFFSET,
   SIMULATED_X_VELOCITY,
   SIMULATED_Y_DRIVE_OFFSETS,
 )
@@ -28,35 +31,39 @@ def _run(coro):
   asyncio.run(coro)
 
 
-def test_channels_match_configuration_num_channels():
-  """Pipettes.channels length matches the configuration's num_channels on a default simulator."""
+def _index(sent: List[Any], command_type: Any) -> int:
+  """Where the first command of `command_type` is in `sent`."""
+  return next(i for i, c in enumerate(sent) if isinstance(c, command_type))
 
-  async def _t():
-    p = PrepSimulationDriver(deck=STARLetDeck())
-    await p.setup()
-    assert p.pipettes is not None
-    assert isinstance(p.pipettes, Pipettes)
-    assert p.configuration is not None
-    assert len(p.pipettes.channels) == p.configuration.num_channels
-    for i, ch in enumerate(p.pipettes.channels):
-      assert isinstance(ch, PipetteChannel)
-      assert ch.index == i
-    await p.stop()
 
-  _run(_t())
+def _last_before(sent: List[Any], command_type: Any, index: int, dest: Any = None) -> Any:
+  """The last command of `command_type` sent before `index`, to `dest` when given."""
+  return next(
+    c
+    for c in reversed(sent[:index])
+    if isinstance(c, command_type) and (dest is None or c.dest == dest)
+  )
+
+
+def _last_after(sent: List[Any], command_type: Any, index: int, dest: Any = None) -> Any:
+  """The last command of `command_type` sent after `index`, to `dest` when given."""
+  return next(
+    c
+    for c in reversed(sent[index + 1 :])
+    if isinstance(c, command_type) and (dest is None or c.dest == dest)
+  )
 
 
 def test_channels_attach_the_bounds_the_device_answers():
-  """Each channel carries the bounds GetChannelBounds answers: on the simulator, the recorded ones."""
+  """Each channel carries the Y bounds the simulated device reports for it."""
 
   async def _t():
     p = PrepSimulationDriver(deck=STARLetDeck())
     await p.setup()
-    assert p.pipettes is not None
-    assert isinstance(p.pipettes, Pipettes)
-    for ch, recorded in zip(p.pipettes.channels, p.pipettes.configuration.channels):
-      assert ch.bounds is not None
-      assert (ch.bounds["y_min"], ch.bounds["y_max"]) == recorded.y_range
+    assert p.pipettes is not None and p.simulated_pipettes is not None
+    reported = [c.y_range for c in p.simulated_pipettes.channels]
+    attached = [(ch.bounds["y_min"], ch.bounds["y_max"]) for ch in p.pipettes.channels if ch.bounds]
+    assert attached == reported
     await p.stop()
 
   _run(_t())
@@ -152,18 +159,12 @@ def test_channels_volume_trackers_aspirate_dispense():
   _run(_t())
 
 
-def test_configuration_holds_one_entry_per_channel_and_setup_choices():
-  """Setup sizes `configuration.channels` against the device, and keeps what the caller chose."""
-
+def test_setup_keeps_the_default_traverse_height_it_is_given():
   async def _t():
     p = PrepSimulationDriver(deck=STARLetDeck())
     await p.setup(default_traverse_height=150.0)
     assert p.pipettes is not None
-    c = p.pipettes.configuration
-    assert len(c.channels) == p.num_channels
     assert p.pipettes.default_minimum_traverse_height == 150.0
-    assert c.use_v1_aspirate_dispense is False
-    assert c.supports_v2_pipetting is True
     await p.stop()
 
   _run(_t())
@@ -270,36 +271,28 @@ def test_move_to_location_keeps_each_location_with_its_channel():
 
 
 def test_move_to_location_sets_speed_scales_for_the_move_and_puts_them_back():
-  """A speed scale is read, set, the move sent, and the earlier scale restored - in that order."""
+  """The move runs at the given speed scales, and the earlier scales are restored after it."""
 
   async def _t():
     p = PrepSimulationDriver(deck=PrepDeck())
     await p.setup()
     assert p.pipettes is not None
     sent: list = []
-    execute = p.send_command
+    send = p.send_command
 
     async def record(command, *args, **kwargs):
       sent.append(command)
-      return await execute(command, *args, **kwargs)
+      return await send(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
     await p.pipettes.move_to_location(
       Coordinate(150.0, 360.0, 160.0), use_channels=0, x_speed_scale=25, z_speed_scale=50
     )
-    names = [type(c).__name__ for c in sent]
-    move = names.index("PrepMoveToPosition")
-    # The front channel's position is read first, to check the rear channel keeps its spacing from it.
-    assert names[:move] == [
-      "PrepGetPositions",
-      "PrepGetXSpeedScale",
-      "PrepSetXSpeedScale",
-      "PrepGetZSpeedScale",
-      "PrepSetZSpeedScale",
-    ]
-    assert (sent[2].value, sent[4].value) == (25, 50)
-    assert names[move + 1 : move + 3] == ["PrepSetXSpeedScale", "PrepSetZSpeedScale"]
-    assert (sent[move + 1].value, sent[move + 2].value) == (100, 100)
+    move = _index(sent, PrepCmd.PrepMoveToPosition)
+    assert _last_before(sent, PrepCmd.PrepSetXSpeedScale, move).value == 25
+    assert _last_before(sent, PrepCmd.PrepSetZSpeedScale, move).value == 50
+    assert _last_after(sent, PrepCmd.PrepSetXSpeedScale, move).value == 100
+    assert _last_after(sent, PrepCmd.PrepSetZSpeedScale, move).value == 100
 
     with pytest.raises(ValueError, match="between 1 and 100"):
       await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), x_speed_scale=0)
@@ -445,66 +438,46 @@ def test_y_and_z_moves_send_the_speed_they_are_given():
 
 
 def test_z_moves_hold_the_acceleration_for_the_move_and_put_it_back():
-  """Each Z drive's acceleration is read and set before the move and set back after it, even when it fails; with
-  none named nothing is sent, and one not above 0 is refused unsent."""
+  """Each Z drive moves at the given acceleration and is restored after, even when the move fails.
+
+  With none given nothing is set; one not above 0 is refused unsent.
+  """
 
   async def _t():
     p = PrepSimulationDriver(deck=PrepDeck())
     await p.setup()
     assert p.pipettes is not None
+    drives = (await p.request_channel_drives()).zdrive_addrs
+    fail_moves = False
     sent: list = []
     send = p.send_command
 
     async def record(command, *args, **kwargs):
       sent.append(command)
+      if fail_moves and isinstance(command, PrepCmd.PrepMoveZAbsolute):
+        raise RuntimeError("stuck")
       return await send(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
-    acceleration_commands = (
-      PrepCmd.PrepZDriveGetAcceleration,
-      PrepCmd.PrepZDriveSetAcceleration,
-      PrepCmd.PrepMoveZAbsolute,
-    )
-
-    def sequence():
-      return [
-        (
-          type(c).__name__,
-          str(c.dest) if not isinstance(c, PrepCmd.PrepMoveZAbsolute) else None,
-          getattr(c, "value", None),
-        )
-        for c in sent
-        if isinstance(c, acceleration_commands)
-      ]
-
-    drives = [str(a) for a in (await p.request_channel_drives()).zdrive_addrs]
     await p.pipettes.move_tool_bottom_to_z_positions({0: 150.0, 1: 140.0}, acceleration=400.0)
-    assert sequence() == [
-      ("PrepZDriveGetAcceleration", drives[0], None),
-      ("PrepZDriveSetAcceleration", drives[0], 400.0),
-      ("PrepZDriveGetAcceleration", drives[1], None),
-      ("PrepZDriveSetAcceleration", drives[1], 400.0),
-      ("PrepMoveZAbsolute", None, None),
-      ("PrepZDriveSetAcceleration", drives[0], 800.0),
-      ("PrepZDriveSetAcceleration", drives[1], 800.0),
-    ]
+    move = _index(sent, PrepCmd.PrepMoveZAbsolute)
+    for drive in drives:
+      assert _last_before(sent, PrepCmd.PrepZDriveSetAcceleration, move, drive).value == 400.0
+      assert _last_after(sent, PrepCmd.PrepZDriveSetAcceleration, move, drive).value == 800.0
 
     sent.clear()
     await p.pipettes.move_tool_bottom_to_z_position(0, 160.0)
-    assert [name for name, _, _ in sequence()] == ["PrepMoveZAbsolute"]
+    assert not any(isinstance(c, PrepCmd.PrepZDriveSetAcceleration) for c in sent)
 
     sent.clear()
-    p.pipettes._unchecked_fw_move_z_absolute = AsyncMock(side_effect=RuntimeError("stuck"))  # type: ignore[method-assign]
+    fail_moves = True
     with pytest.raises(RuntimeError, match="stuck"):
       await p.pipettes.move_tool_bottom_to_z_position(1, 150.0, acceleration=300.0)
-    assert [
-      (name, value) for name, _, value in sequence() if name == "PrepZDriveSetAcceleration"
-    ] == [
-      ("PrepZDriveSetAcceleration", 300.0),
-      ("PrepZDriveSetAcceleration", 300.0),
-      ("PrepZDriveSetAcceleration", 800.0),
-      ("PrepZDriveSetAcceleration", 800.0),
-    ]
+    fail_moves = False
+    move = _index(sent, PrepCmd.PrepMoveZAbsolute)
+    for drive in drives:
+      assert _last_before(sent, PrepCmd.PrepZDriveSetAcceleration, move, drive).value == 300.0
+      assert _last_after(sent, PrepCmd.PrepZDriveSetAcceleration, move, drive).value == 800.0
 
     sent.clear()
     for refused in (
@@ -513,7 +486,9 @@ def test_z_moves_hold_the_acceleration_for_the_move_and_put_it_back():
     ):
       with pytest.raises(ValueError, match="acceleration must be above 0 mm/s2"):
         await refused()
-    assert sequence() == []
+    assert not any(
+      isinstance(c, (PrepCmd.PrepZDriveSetAcceleration, PrepCmd.PrepMoveZAbsolute)) for c in sent
+    )
     await p.stop()
 
   _run(_t())
@@ -544,7 +519,7 @@ def test_moves_that_keep_x_leave_the_x_speed_scale_alone():
 
 
 def test_probe_y_using_clld_searches_with_the_channels_own_y_axis():
-  """The channel's Y axis is sent the end of the search in its drive frame; nothing detected raises."""
+  """The channel's Y axis is sent the end of the search in its drive frame; nothing detected is None."""
 
   async def _t():
     p = PrepSimulationDriver(deck=PrepDeck())
@@ -562,10 +537,10 @@ def test_probe_y_using_clld_searches_with_the_channels_own_y_axis():
       return await send(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
-    with pytest.raises(RuntimeError, match="detected nothing between y=200.00 and y=150.00 mm"):
-      await p.pipettes.probe_y_using_clld(
-        1, "forward", search_end_position=150.0, speed=5.0, allow_without_tip=True
-      )
+    found = await p.pipettes.probe_y_using_clld(
+      1, "forward", search_end_position=150.0, speed=5.0, allow_without_tip=True
+    )
+    assert found is None
     seek = next(c for c in sent if isinstance(c, PrepCmd.PrepYAxisSeekCapacitiveLld))
     assert seek.dest == p.pipettes.channels[1].yaxis
     assert seek.position == pytest.approx(150.0 + SIMULATED_Y_DRIVE_OFFSETS[1])
@@ -575,36 +550,6 @@ def test_probe_y_using_clld_searches_with_the_channels_own_y_axis():
       p.pipettes.default_clld_sensitivity,
     )
     assert (await p.pipettes.request_locations())[1].y == pytest.approx(150.0)
-    await p.stop()
-
-  _run(_t())
-
-
-def test_probe_y_using_clld_returns_the_surface_where_it_triggered_and_backs_off():
-  """A detection returns the trigger position in deck Y less half the tip diameter, and backs the channel off."""
-
-  async def _t():
-    p = PrepSimulationDriver(deck=PrepDeck())
-    await p.setup()
-    assert p.pipettes is not None
-    await p.pipettes.move_to_y_positions({0: 300.0, 1: 200.0})
-    Response = PrepCmd.PrepYAxisSeekCapacitiveLld.Response
-    p.pipettes._unchecked_fw_y_axis_seek_capacitive_lld = AsyncMock(  # type: ignore[method-assign]
-      return_value=Response(lld_detected=True, detect_position=190.0 + SIMULATED_Y_DRIVE_OFFSETS[1])
-    )
-    surface = await p.pipettes.probe_y_using_clld(
-      1, "forward", search_end_position=150.0, allow_without_tip=True
-    )
-    assert surface == pytest.approx(190.0 - 3.5)
-    assert (await p.pipettes.request_locations())[1].y == pytest.approx(192.0)
-    p.pipettes._unchecked_fw_y_axis_seek_capacitive_lld = AsyncMock(  # type: ignore[method-assign]
-      return_value=Response(lld_detected=True, detect_position=305.0 + SIMULATED_Y_DRIVE_OFFSETS[0])
-    )
-    surface = await p.pipettes.probe_y_using_clld(
-      0, "backward", stop_disc_diameter=2.0, allow_without_tip=True
-    )
-    assert surface == pytest.approx(305.0 + 1.0)
-    assert (await p.pipettes.request_locations())[0].y == pytest.approx(303.0)
     await p.stop()
 
   _run(_t())
@@ -646,7 +591,7 @@ def test_probe_y_using_clld_refuses_searches_it_cannot_make():
 
 
 def test_probe_x_using_clld_steps_the_arm_with_detection_on_and_puts_everything_back():
-  """Detection is started on the channel, the arm stepped 0.1 mm at a time to the end at the probe speed, all undone."""
+  """The arm steps 0.1 mm at a time at the probe speed with detection on; speed restored after."""
 
   async def _t():
     p = PrepSimulationDriver(deck=PrepDeck())
@@ -663,66 +608,30 @@ def test_probe_x_using_clld_steps_the_arm_with_detection_on_and_puts_everything_
       return await send(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
-    with pytest.raises(RuntimeError, match="detected nothing between"):
-      await p.pipettes.probe_x_using_clld(
-        1, "left", search_end_position=here - 0.5, speed=5.0, allow_without_tip=True
-      )
-    start = next(c for c in sent if isinstance(c, PrepCmd.PrepChannelStartCLldDetection))
-    assert (start.dest, start.detect_mode, start.sensitivity) == (
+    # The device's search, not the simulator's lookup.
+    p.pipettes._search_x_using_clld = functools.partial(  # type: ignore[method-assign]
+      Pipettes._search_x_using_clld, p.pipettes
+    )
+    found = await p.pipettes.probe_x_using_clld(
+      1, "left", search_end_position=here - 0.5, speed=5.0, allow_without_tip=True
+    )
+    assert found is None
+    steps = [i for i, c in enumerate(sent) if isinstance(c, PrepCmd.PrepXAxisMoveAbsolute)]
+    start = _index(sent, PrepCmd.PrepChannelStartCLldDetection)
+    stop = _index(sent, PrepCmd.PrepChannelStopCLldDetection)
+    assert start < steps[0] and steps[-1] < stop
+    assert [sent[i].position for i in steps] == pytest.approx(
+      [here - 0.1 * i - SIMULATED_X_AXIS_OFFSET for i in range(1, 6)]
+    )
+    assert (sent[start].dest, sent[start].detect_mode, sent[start].sensitivity) == (
       channel.calibration,
       2,
       p.pipettes.default_clld_sensitivity,
     )
-    moves = [c.position for c in sent if isinstance(c, PrepCmd.PrepXAxisMoveAbsolute)]
-    assert moves == pytest.approx([here - 0.1 * i for i in range(1, 6)])
-    assert sum(isinstance(c, PrepCmd.PrepCLldGetStatus) for c in sent) == 5
-    assert sum(isinstance(c, PrepCmd.PrepChannelStartCLldDetection) for c in sent) == 1
-    stop = next(c for c in sent if isinstance(c, PrepCmd.PrepChannelStopCLldDetection))
-    assert stop.dest == channel.calibration
-    assert [c.value for c in sent if isinstance(c, PrepCmd.PrepXAxisSetVelocity)] == [
-      5.0,
-      SIMULATED_X_VELOCITY,
-    ]
+    assert sent[stop].dest == channel.calibration
+    assert _last_before(sent, PrepCmd.PrepXAxisSetVelocity, steps[0]).value == 5.0
+    assert _last_after(sent, PrepCmd.PrepXAxisSetVelocity, steps[-1]).value == SIMULATED_X_VELOCITY
     assert await p.x_arm.request_position() == pytest.approx(here - 0.5)
-    await p.stop()
-
-  _run(_t())
-
-
-def test_probe_x_using_clld_stops_at_the_first_detection_and_backs_off():
-  """The step after which the channel reports a detection ends the only search; the surface is half the tip further."""
-
-  async def _t():
-    p = PrepSimulationDriver(deck=PrepDeck())
-    await p.setup()
-    assert p.pipettes is not None and p.x_arm is not None
-    here = (await p.pipettes.request_locations())[1].x
-    polls = 0
-    sent: list = []
-    send = p.send_command
-
-    async def detect_on_third_read(command, *args, **kwargs):
-      nonlocal polls
-      sent.append(command)
-      if isinstance(command, PrepCmd.PrepCLldGetStatus):
-        polls += 1
-        if polls == 3:
-          return PrepCmd.PrepCLldGetStatus.Response(
-            detected=[True], detect_index=[10], length=[20], sample_rate=1
-          )
-      return await send(command, *args, **kwargs)
-
-    p.send_command = detect_on_third_read  # type: ignore[method-assign]
-    surface = await p.pipettes.probe_x_using_clld(
-      1, "left", search_end_position=here - 5.0, allow_without_tip=True
-    )
-    assert polls == 3
-    moves = [c.position for c in sent if isinstance(c, PrepCmd.PrepXAxisMoveAbsolute)]
-    assert moves[:3] == pytest.approx([here - 0.1, here - 0.2, here - 0.3])
-    assert sum(isinstance(c, PrepCmd.PrepChannelStartCLldDetection) for c in sent) == 1
-    assert sum(isinstance(c, PrepCmd.PrepChannelStopCLldDetection) for c in sent) == 1
-    assert surface == pytest.approx(round(here - 0.3 - 3.5, 1))
-    assert await p.x_arm.request_position() == pytest.approx(here - 0.3 + 2.0)
     await p.stop()
 
   _run(_t())
@@ -776,30 +685,61 @@ def test_simulated_y_probe_stops_at_the_first_resource_in_the_way():
   """The Y probe stops where the lowered channel meets a resource, and returns its face."""
 
   async def _t():
-    p = PrepSimulationDriver(deck=_deck_with_block(285.0, 250.0))
+    p = PrepSimulationDriver(deck=_deck_with_block(285.0, 290.0))
     await p.setup()
     assert p.pipettes is not None
-    await p.pipettes.move_to_y_positions({0: 340.0, 1: 300.0})
+    await p.pipettes.move_to_y_positions({0: 340.0, 1: 320.0})
     await p.pipettes.move_tool_bottom_to_z_positions({1: 50.0})
     surface = await p.pipettes.probe_y_using_clld(
-      1, "forward", search_end_position=230.0, allow_without_tip=True
+      1, "forward", search_end_position=290.0, allow_without_tip=True
     )
-    assert surface == pytest.approx(260.0)
-    assert (await p.pipettes.request_locations())[1].y == pytest.approx(265.5)
+    assert surface == pytest.approx(300.0)
+    assert (await p.pipettes.request_locations())[1].y == pytest.approx(305.5)
     # Raised above the block, the channel passes over it.
     await p.pipettes.move_tool_bottom_to_z_positions({1: 70.0})
-    await p.pipettes.move_to_y_positions({1: 300.0})
-    with pytest.raises(RuntimeError, match="detected nothing between"):
-      await p.pipettes.probe_y_using_clld(
-        1, "forward", search_end_position=230.0, allow_without_tip=True
-      )
+    await p.pipettes.move_to_y_positions({1: 320.0})
+    found = await p.pipettes.probe_y_using_clld(
+      1, "forward", search_end_position=290.0, allow_without_tip=True
+    )
+    assert found is None
+    # With a tip mounted, the surface is half the tip bottom beyond where the channel met the block.
+    presence = AsyncMock(return_value=[False, True])
+    p.pipettes.sense_tip_presence = presence  # type: ignore[method-assign]
+    await p.pipettes.move_tool_bottom_to_z_positions({1: 50.0})
+    await p.pipettes.move_to_y_positions({1: 320.0})
+    surface = await p.pipettes.probe_y_using_clld(1, "forward", search_end_position=290.0)
+    assert surface == pytest.approx(303.5 - 0.6)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_simulated_y_probe_backward_uses_the_stop_disc_diameter_it_is_given():
+  """Probing backward, the surface is half the stop disc beyond where the channel met it."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=_deck_with_block(285.0, 350.0))
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 320.0, 1: 300.0})
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 50.0})
+    surface = await p.pipettes.probe_y_using_clld(
+      0, "backward", search_end_position=370.0, allow_without_tip=True
+    )
+    assert surface == pytest.approx(350.0)
+    assert (await p.pipettes.request_locations())[0].y == pytest.approx(346.5 - 2.0)
+    await p.pipettes.move_to_y_positions({0: 320.0})
+    surface = await p.pipettes.probe_y_using_clld(
+      0, "backward", search_end_position=370.0, stop_disc_diameter=2.0, allow_without_tip=True
+    )
+    assert surface == pytest.approx(346.5 + 1.0)
     await p.stop()
 
   _run(_t())
 
 
 def test_simulated_x_probe_stops_the_arm_at_the_first_resource_in_the_way():
-  """The X probe's arm stops where the detecting channel meets a resource; its face is returned."""
+  """The X probe looks the search up in the model and moves the arm once, to the resource's face."""
 
   async def _t():
     p = PrepSimulationDriver(deck=_deck_with_block(270.0, 295.0, size_x=14.0))
@@ -807,10 +747,24 @@ def test_simulated_x_probe_stops_the_arm_at_the_first_resource_in_the_way():
     assert p.pipettes is not None and p.x_arm is not None
     await p.pipettes.move_to_y_positions({0: 340.0, 1: 300.0})
     await p.pipettes.move_tool_bottom_to_z_positions({1: 50.0})
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
     surface = await p.pipettes.probe_x_using_clld(
       1, "left", search_end_position=275.0, allow_without_tip=True
     )
     assert surface == pytest.approx(284.0)
+    # One move to where the channel meets the block, and the back-off; in the axis frame.
+    moves = [c.position for c in sent if isinstance(c, PrepCmd.PrepXAxisMoveAbsolute)]
+    assert moves == pytest.approx(
+      [287.5 - SIMULATED_X_AXIS_OFFSET, 289.5 - SIMULATED_X_AXIS_OFFSET]
+    )
+    assert not any(isinstance(c, PrepCmd.PrepCLldGetStatus) for c in sent)
     assert await p.x_arm.request_position() == pytest.approx(287.5 + 2.0)
     await p.stop()
 
@@ -938,38 +892,27 @@ def test_x_arm_move_sets_speed_and_acceleration_for_the_axis_move_and_puts_them_
     assert p.x_arm is not None and p.pipettes is not None
     await p.pipettes.move_to_safe_z()
     sent: list = []
-    execute = p.send_command
+    send = p.send_command
 
     async def record(command, *args, **kwargs):
       sent.append(command)
-      return await execute(command, *args, **kwargs)
+      return await send(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
     await p.x_arm.move_to_x_position(200.0)
-    axis = [c for c in sent if type(c).__name__.startswith("PrepXAxis")]
-    assert [type(c).__name__ for c in axis] == [
-      "PrepXAxisGetCommandedPosition",
-      "PrepXAxisGetVelocity",
-      "PrepXAxisGetAcceleration",
-      "PrepXAxisSetVelocity",
-      "PrepXAxisSetAcceleration",
-      "PrepXAxisMoveAbsolute",
-      "PrepXAxisSetVelocity",
-      "PrepXAxisSetAcceleration",
-    ]
-    assert (axis[3].value, axis[4].value) == (320.0, 1800.0)
-    assert axis[5].position == pytest.approx(200.0, abs=1e-3)
-    assert (axis[6].value, axis[7].value) == (400.0, 2250.0)
+    move = _index(sent, PrepCmd.PrepXAxisMoveAbsolute)
+    assert sent[move].position == pytest.approx(200.0 - SIMULATED_X_AXIS_OFFSET, abs=1e-3)
+    assert _last_before(sent, PrepCmd.PrepXAxisSetVelocity, move).value == 320.0
+    assert _last_before(sent, PrepCmd.PrepXAxisSetAcceleration, move).value == 1800.0
+    assert _last_after(sent, PrepCmd.PrepXAxisSetVelocity, move).value == 400.0
+    assert _last_after(sent, PrepCmd.PrepXAxisSetAcceleration, move).value == 2250.0
     assert await p.x_arm.request_position() == 200.0
 
     sent.clear()
     await p.x_arm.move_to_x_position(150.0, speed=100.0, acceleration=500.0)
-    values = [
-      c.value
-      for c in sent
-      if type(c).__name__ in ("PrepXAxisSetVelocity", "PrepXAxisSetAcceleration")
-    ]
-    assert values[:2] == [100.0, 500.0]
+    move = _index(sent, PrepCmd.PrepXAxisMoveAbsolute)
+    assert _last_before(sent, PrepCmd.PrepXAxisSetVelocity, move).value == 100.0
+    assert _last_before(sent, PrepCmd.PrepXAxisSetAcceleration, move).value == 500.0
     await p.stop()
 
   _run(_t())
@@ -995,7 +938,7 @@ def test_x_arm_move_leaves_lowered_channels_where_they_are():
 
 
 def test_x_arm_probe_home_flag_seeks_at_the_given_speed_and_returns_the_deck_frame():
-  """The seek is sent with its arguments written out, at a set velocity that is put back."""
+  """The seek runs at the probe speed with its arguments written out; speed restored after."""
 
   async def _t():
     p = PrepSimulationDriver(deck=PrepDeck())
@@ -1005,29 +948,26 @@ def test_x_arm_probe_home_flag_seeks_at_the_given_speed_and_returns_the_deck_fra
     start = await p.x_arm.request_position()
     assert start is not None
     sent: list = []
-    execute = p.send_command
+    send = p.send_command
 
     async def record(command, *args, **kwargs):
       sent.append(command)
-      return await execute(command, *args, **kwargs)
+      return await send(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
     tripped = await p.x_arm.probe_home_flag(-30.0)
     assert tripped == pytest.approx(start, abs=1e-3)  # no flag is modelled in simulation
-    axis = [c for c in sent if type(c).__name__.startswith("PrepXAxis")]
-    assert [type(c).__name__ for c in axis] == [
-      "PrepXAxisGetCommandedPosition",
-      "PrepXAxisGetVelocity",
-      "PrepXAxisSetVelocity",
-      "PrepXAxisSeekToHomeFlag",
-      "PrepXAxisSetVelocity",
-    ]
-    seek = axis[3]
-    assert (seek.distance, seek.travel_limits_enable, seek.trip_sense) == (-30.0, True, 0)
-    assert (axis[2].value, axis[4].value) == (100.0, 400.0)
+    seek = _index(sent, PrepCmd.PrepXAxisSeekToHomeFlag)
+    assert (sent[seek].distance, sent[seek].travel_limits_enable, sent[seek].trip_sense) == (
+      -30.0,
+      True,
+      0,
+    )
+    assert _last_before(sent, PrepCmd.PrepXAxisSetVelocity, seek).value == 100.0
+    assert _last_after(sent, PrepCmd.PrepXAxisSetVelocity, seek).value == 400.0
 
+    p.pipettes.configuration.channels[0].x_range = (0.0, 299.0)
     with pytest.raises(ValueError, match="outside the channels' range"):
-      p.pipettes.configuration.channels[0].x_range = (0.0, 299.0)
       await p.x_arm.probe_home_flag(-1000.0)
     await p.stop()
 

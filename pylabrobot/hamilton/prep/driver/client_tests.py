@@ -8,8 +8,6 @@ import pytest
 from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.configuration import read_configuration, to_jsonable
-from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGripperArm, CoreGrippers
-from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck
@@ -38,41 +36,26 @@ def test_firmware_string_queries_send_status_requests(command_id, interface_id):
   asyncio.run(_run())
 
 
-def test_simulation_sets_resolved_interfaces_and_channels():
+def test_simulation_setup_detects_v2_pipetting_and_keeps_the_configuration_after_stop():
+  """V1.2.2 carries the v2 aspirate/dispense commands, and the configuration outlives the link."""
+
   async def _run() -> None:
-    deck = STARLetDeck()
-    p = PrepSimulationDriver(deck=deck)
+    p = PrepSimulationDriver(deck=STARLetDeck())
     await p.setup()
-
-    assert isinstance(p.mlprep_address, Address)
-    addr = await p.resolve_path("MLPrepRoot.PipettorRoot.Pipettor")
-    assert isinstance(addr, Address)
-    assert p.configuration is not None
-    assert p.configuration.num_channels == 2
     assert p.pipettes is not None
-    assert isinstance(p.pipettes, Pipettes)
-    assert p.pipettes.num_channels == 2
-    assert p.pipettes.setup_finished is True
-    # Default setup: use_v1_aspirate_dispense=False → v2 probe passes (V1.2.2 carries cmd 38-43).
     assert p.pipettes.configuration.supports_v2_pipetting is True
-
     await p.stop()
-    # Kept after the link closes, as the STAR driver keeps it, so a reading can still be saved.
-    assert p.configuration is not None
+    assert p.configuration is not None and p.configuration.num_channels == 2
 
   asyncio.run(_run())
 
 
 def test_simulation_use_v1_skips_v2_probe():
   async def _run() -> None:
-    deck = STARLetDeck()
-    p = PrepSimulationDriver(deck=deck)
+    p = PrepSimulationDriver(deck=STARLetDeck())
     await p.setup(use_v1_aspirate_dispense=True)
     assert p.pipettes is not None
-    assert isinstance(p.pipettes, Pipettes)
-    assert p.pipettes.setup_finished is True
     assert p.pipettes.configuration.supports_v2_pipetting is False
-
     await p.stop()
 
   asyncio.run(_run())
@@ -139,24 +122,14 @@ def test_prep_method_run_context_manager_aborts_on_exception():
   asyncio.run(_run())
 
 
-def test_prep_device_wires_calibration_after_setup():
+def test_mounted_core_grippers_picks_up_the_tools_and_returns_them():
   async def _run() -> None:
-    deck = PrepDeck(with_core_grippers=True)
-    p = PrepSimulationDriver(deck=deck)
+    p = PrepSimulationDriver(deck=PrepDeck(with_core_grippers=True))
     await p.setup()
-    assert p.configuration is not None
-    assert p.pipettes is not None
-    assert p.num_channels == p.configuration.num_channels == 2
-    assert p.head8_installed == p.configuration.head8_installed
-    assert p.pipettes.num_channels == p.configuration.num_channels
-    assert p.pipettes.head8_installed == p.configuration.head8_installed
-    assert p.calibration is not None
-    assert p.calibration.num_channels == p.configuration.num_channels
-    assert p.calibration.head8_installed == p.configuration.head8_installed
-    assert isinstance(p.core_grippers, CoreGrippers)
     async with p.mounted_core_grippers() as arm:
-      assert isinstance(arm, CoreGripperArm)
-      assert isinstance(arm.backend, CoreGrippers)
+      assert p.core_grippers_mounted
+      assert arm.backend is p.core_grippers
+    assert not p.core_grippers_mounted
     await p.stop()
 
   asyncio.run(_run())

@@ -1070,9 +1070,10 @@ class PrepDriver:
       spot = self.deck.get_resource("teaching_tip")
       footprint = (spot.get_absolute_size_x(), spot.get_absolute_size_y())
       site = next((s for s in c.deck_sites if (s.length, s.width) == footprint), None)
-      if site is not None and spot.location is not None:
+      if site is not None and spot.location is not None and spot.parent is not None:
+        parent = spot.parent.get_location_wrt(self.deck)
         spot.location = Coordinate(
-          site.left_bottom_front_x, site.left_bottom_front_y, spot.location.z
+          site.left_bottom_front_x - parent.x, site.left_bottom_front_y - parent.y, spot.location.z
         )
         logger.debug("teaching needle at deck site %d", site.id)
     for waste_site in c.waste_sites:
@@ -1107,6 +1108,9 @@ class PrepDriver:
       z = self.configuration.default_traverse_height
     else:
       z = self.deck.get_absolute_size_z()
+    # The Y the channels reach between them, which the arm's reference line spans.
+    y_ranges = [c.y_range for c in pipettes.channels if c.y_range is not None]
+    reach = (min(r[0] for r in y_ranges), max(r[1] for r in y_ranges)) if y_ranges else None
     arm.resource = self.deck.get_or_create_x_arm(
       name="x_arm",
       x=positions[0].x,
@@ -1117,6 +1121,7 @@ class PrepDriver:
       reference_point_from_left=c.reference_point_from_left,
       model=c.model,
       appearance=c.appearance,
+      reference_y_range=reach,
     )
 
     # One resource per channel, a child of the arm's as on the STAR: the channels share the arm's X,

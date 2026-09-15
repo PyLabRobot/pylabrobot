@@ -806,8 +806,10 @@ function buildArms() {
     outline.renderOrder = paintOrderOf(index) + ARM_OUTLINE_OFFSET;
 
     const offset = referenceOffset(model);
+    // Along the Y its reference point reaches, when the arm declares it, else the arm's whole depth.
+    const [reachFront, reachBack] = model.reference_point?.y_range ?? [0, sy];
     const line = new THREE.Mesh(
-      new THREE.PlaneGeometry(REFERENCE_WIDTH, sy),
+      new THREE.PlaneGeometry(REFERENCE_WIDTH, reachBack - reachFront),
       new THREE.MeshBasicMaterial({
         color: REFERENCE_LINE,
         transparent: true,
@@ -815,7 +817,7 @@ function buildArms() {
         depthTest: false,
       }),
     );
-    line.position.set(offset, sy / 2, -REFERENCE_DROP);
+    line.position.set(offset, (reachFront + reachBack) / 2, -REFERENCE_DROP);
     // Under the frame in paint order as well as in z, so it reads through the window and is tinted
     // by the carriage everywhere else. Ordering, not position, is what decides this: depth testing
     // is off in an axis view, so a lower render order is the only thing that puts it underneath.
