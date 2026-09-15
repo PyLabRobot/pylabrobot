@@ -2154,7 +2154,7 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
 
 
 class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
-  """Test STAR tip pickup and drop Z position calculations for all tip sizes."""
+  """Test STAR tip pickup and drop Z positions for 10, 50, 300, and 1000 uL tips."""
 
   async def asyncSetUp(self):
     self.backend = STARBackend()
@@ -2215,8 +2215,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
     await self.lh.pick_up_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_calls("C0TP")
-    self.assertEqual(tp, 2248)
-    self.assertEqual(tz, 2168)
+    self.assertEqual(tp, 2244)
+    self.assertEqual(tz, 2164)
 
     self.backend._write_and_read_command.reset_mock()
     self.backend._write_and_read_command.return_value = (
@@ -2224,8 +2224,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     )
     await self.lh.drop_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_calls("C0TR")
-    self.assertEqual(tp, 2248)
-    self.assertEqual(tz, 2168)
+    self.assertEqual(tp, 2244)
+    self.assertEqual(tz, 2164)
 
     tip_rack.unassign()
 
@@ -2259,8 +2259,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
     await self.lh.pick_up_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_calls("C0TP")
-    self.assertEqual(tp, 2266)
-    self.assertEqual(tz, 2166)
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2164)
 
     self.backend._write_and_read_command.reset_mock()
     self.backend._write_and_read_command.return_value = (
@@ -2268,8 +2268,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     )
     await self.lh.drop_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_calls("C0TR")
-    self.assertEqual(tp, 2266)
-    self.assertEqual(tz, 2186)
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2184)
 
     tip_rack.unassign()
 
