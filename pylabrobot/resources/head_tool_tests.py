@@ -34,6 +34,22 @@ class HeadToolTests(unittest.TestCase):
     restored = deserialize(serialize(tool))
     self.assertEqual(restored.pick_up_location, Coordinate(18.0, 4.25, 32.0))
 
+  def test_hamilton_tip_diameter_follows_tip_size(self):
+    from pylabrobot.resources.hamilton import (
+      hamilton_teaching_needle_5000uL,
+      hamilton_tip_10uL,
+      hamilton_tip_300uL_filter,
+      hamilton_tip_5000uL,
+    )
+
+    for creator in (hamilton_tip_10uL, hamilton_tip_300uL_filter, hamilton_tip_1000uL):
+      tip = creator(name="tip")
+      self.assertEqual((tip.get_size_x(), tip.get_size_y()), (8.2, 8.2))
+      self.assertEqual(tip.pick_up_location, Coordinate(4.1, 4.1, tip.total_tip_length))
+    for creator in (hamilton_tip_5000uL, hamilton_teaching_needle_5000uL):
+      tip = creator(name="tip")
+      self.assertEqual((tip.get_size_x(), tip.get_size_y()), (16.4, 16.4))
+
   def test_head_tool_is_abstract(self):
     with self.assertRaises(TypeError):
       HeadTool(name="tool", size_x=1, size_y=1, size_z=1, fitting_depth=0)  # type: ignore[abstract]

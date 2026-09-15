@@ -51,8 +51,8 @@ class TipTests(unittest.TestCase):
       {
         "type": "HamiltonTip",
         "name": "test_tip",
-        "size_x": 0,
-        "size_y": 0,
+        "size_x": 8.2,
+        "size_y": 8.2,
         "size_z": 10.0,
         "category": "tip",
         "has_filter": False,
@@ -62,7 +62,7 @@ class TipTests(unittest.TestCase):
         "pickup_method": "OUT_OF_RACK",
         "tip_size": "HIGH_VOLUME",
         "collar_height": None,
-        "pick_up_location": {"x": 0.0, "y": 0.0, "z": 10.0, "type": "Coordinate"},
+        "pick_up_location": {"x": 4.1, "y": 4.1, "z": 10.0, "type": "Coordinate"},
       },
     )
 
