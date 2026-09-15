@@ -127,6 +127,39 @@ class TestAFailedSledMoveRaisesTheWheel(unittest.IsolatedAsyncioTestCase):
     self.assertLess(sent.index("C0IV"), sent.index("I0XP"))
 
 
+class TestDiscovery(unittest.IsolatedAsyncioTestCase):
+  """Discovery reads what a saved configuration has to carry for a device to be simulated from it."""
+
+  async def test_it_reads_the_initialization_track_and_the_adjustment(self):
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    sent: List[str] = []
+    answer = driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      sent.append(module + command)
+      return await answer(module=module, command=command, **kwargs)
+
+    driver.send_command = recorded  # type: ignore[assignment]
+    await driver.setup()
+
+    self.assertIn("I0QX", sent)
+    self.assertIn("I0RJ", sent)
+
+  async def test_a_device_declared_without_them_still_sets_up(self):
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    declared = driver.simulated_autoload
+    declared.initialization_track = None
+    declared.adjustment_date = None
+    declared.adjusted = None
+
+    await driver.setup()
+
+    feature = driver.autoload
+    assert feature is not None
+    self.assertIsNone(feature.configuration.initialization_track)
+    self.assertIsNone(feature.configuration.adjusted)
+
+
 class TestLoadCarrier(unittest.IsolatedAsyncioTestCase):
   """The command that reads a carrier's barcode is the one that pulls it in off the tray."""
 
