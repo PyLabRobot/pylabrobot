@@ -58,6 +58,14 @@ class ThermoFisherNanoDrop1000PathLengthTests(unittest.TestCase):
     self.assertEqual(self.nd.dark_spectrum, [1.0, 2.0])
     self.assertEqual(self.nd.blank_spectrum, [3.0, 4.0])
 
+  def test_legacy_spectrum_properties_clear_on_none(self):
+    # Setting None means "no baseline", so the entry is removed rather than a None being
+    # stored where a list is expected.
+    self.nd.dark_spectrum = [1.0, 2.0]
+    self.nd.dark_spectrum = None
+    self.assertIsNone(self.nd.dark_spectrum)
+    self.assertNotIn("dark", self.nd.baselines[ThermoFisherNanoDrop1000.PATH_SHORT_MM])
+
 
 class ThermoFisherNanoDrop1000AbsorbanceTests(unittest.TestCase):
   def setUp(self):

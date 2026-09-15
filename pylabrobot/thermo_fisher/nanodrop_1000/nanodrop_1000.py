@@ -65,7 +65,11 @@ class ThermoFisherNanoDrop1000:
 
   @dark_spectrum.setter
   def dark_spectrum(self, value: Optional[List[float]]) -> None:
-    self.baselines.setdefault(self.PATH_SHORT_MM, {})["dark"] = value
+    entry = self.baselines.setdefault(self.PATH_SHORT_MM, {})
+    if value is None:
+      entry.pop("dark", None)
+    else:
+      entry["dark"] = value
 
   @property
   def blank_spectrum(self) -> Optional[List[float]]:
@@ -73,7 +77,11 @@ class ThermoFisherNanoDrop1000:
 
   @blank_spectrum.setter
   def blank_spectrum(self, value: Optional[List[float]]) -> None:
-    self.baselines.setdefault(self.PATH_SHORT_MM, {})["blank"] = value
+    entry = self.baselines.setdefault(self.PATH_SHORT_MM, {})
+    if value is None:
+      entry.pop("blank", None)
+    else:
+      entry["blank"] = value
 
   @classmethod
   def _configure_usb_device(cls, device) -> None:
