@@ -14,6 +14,7 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     Carrier
     Container
     Coordinate
+    CoreGripperTool
     Deck
     head_tool.HeadTool
     ItemizedResource
