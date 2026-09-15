@@ -440,7 +440,7 @@ def max_pixel_at_fraction(
 
   async def evaluate_exposure(im) -> Literal["higher", "lower", "good"]:
     array = np.array(im, dtype=np.float32)
-    value = float(np.max(array)) - (255.0 * fraction)
+    value = np.max(array) - (255.0 * fraction)
     margin_value = 255.0 * margin
     if abs(value) <= margin_value:
       return "good"
