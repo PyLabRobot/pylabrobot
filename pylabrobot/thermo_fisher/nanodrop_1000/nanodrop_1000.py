@@ -214,6 +214,24 @@ class ThermoFisherNanoDrop1000:
 
     return raw_intensities
 
+  async def _read_averaged(self, averages: int = 1) -> List[float]:
+    """Average `averages` consecutive spectra.
+
+    The caller must already have the lamp on and the path selected: averaging only
+    reduces read noise if every scan sees the same optical geometry, so all of them must
+    happen inside one lamp-on, magnet-settled window. Re-seating the solenoid between
+    scans would average over two different liquid columns instead.
+
+    Host-side, because the instrument has no accumulate command.
+    """
+    if averages < 1:
+      raise ValueError(f"averages must be >= 1, got {averages}")
+
+    scans = [await self.get_raw_spectrum() for _ in range(averages)]
+    if averages == 1:
+      return scans[0]
+    return [sum(pixel) / averages for pixel in zip(*scans)]
+
   async def _select_path(self, path_mm: float) -> None:
     """Seat the pedestal solenoid for the requested optical path length."""
     if path_mm not in (self.PATH_LONG_MM, self.PATH_SHORT_MM):
@@ -223,7 +241,9 @@ class ThermoFisherNanoDrop1000:
     await self.set_magnet(path_mm == self.PATH_SHORT_MM)
     await asyncio.sleep(0.2)
 
-  async def take_blank(self, integration_ms=20, paths: Optional[Tuple[float, ...]] = None):
+  async def take_blank(
+    self, integration_ms=20, paths: Optional[Tuple[float, ...]] = None, averages: int = 1
+  ):
     """Acquire dark and blank baselines, by default for both path lengths.
 
     A sample measured on one path cannot be divided by a blank taken on another, so
@@ -241,13 +261,13 @@ class ThermoFisherNanoDrop1000:
     for path_mm in sorted(paths, reverse=True):
       await self.set_lamp(False)
       await self._select_path(path_mm)
-      logger.info("Acquiring dark baseline at %s mm", path_mm)
-      dark = await self.get_raw_spectrum()
+      logger.info("Acquiring dark baseline at %s mm (%dx)", path_mm, averages)
+      dark = await self._read_averaged(averages)
 
       await self.set_lamp(True)
       await asyncio.sleep(0.2)
-      logger.info("Acquiring blank baseline at %s mm", path_mm)
-      blank = await self.get_raw_spectrum()
+      logger.info("Acquiring blank baseline at %s mm (%dx)", path_mm, averages)
+      blank = await self._read_averaged(averages)
       await self.set_lamp(False)
 
       self.baselines[path_mm] = {"dark": dark, "blank": blank}
@@ -311,17 +331,17 @@ class ThermoFisherNanoDrop1000:
       return min(spectra)
     return max(usable)
 
-  async def _acquire_sample(self, path_mm: float) -> List[float]:
+  async def _acquire_sample(self, path_mm: float, averages: int = 1) -> List[float]:
     await self._select_path(path_mm)
     await self.set_lamp(True)
     await asyncio.sleep(0.2)
-    logger.info("Measuring sample at %s mm", path_mm)
-    spectrum = await self.get_raw_spectrum()
+    logger.info("Measuring sample at %s mm (%dx)", path_mm, averages)
+    spectrum = await self._read_averaged(averages)
     await self.set_lamp(False)
     return spectrum
 
   async def measure_absorbance(
-    self, integration_ms=20, path="both"
+    self, integration_ms=20, path="both", averages: int = 1
   ) -> Tuple[List[float], Dict[float, List[float]]]:
     """Measure absorbance on each optical path.
 
@@ -338,6 +358,10 @@ class ThermoFisherNanoDrop1000:
     one path or both, because an absorbance without its path cannot be interpreted or
     compared. `select_path()` picks which to quantify from; `to_path_length()` rescales it
     to a 10 mm cuvette equivalent.
+
+    `averages` repeats the read inside a single lamp-on window and means the spectra.
+    Note that averaging only the sample leaves the blank's noise in place: for the full
+    benefit, blank with take_blank(averages=N) too.
     """
     # TODO [Future Work]: Auto-Exposure Bracketing (HDR)
     # Replace the static `integration_ms` with a loop that fires 8ms, 16ms, 32ms, etc.
@@ -367,12 +391,14 @@ class ThermoFisherNanoDrop1000:
         # Longest first: compressing a liquid column is safe, letting it expand can break
         # it, so descending order never re-forms the column mid-measurement.
         for path_mm in sorted(paths, reverse=True):
-          spectra[path_mm] = self._absorbance(await self._acquire_sample(path_mm), path_mm)
+          spectra[path_mm] = self._absorbance(
+            await self._acquire_sample(path_mm, averages), path_mm
+          )
         return wavelengths, spectra
 
       # Auto: read the long path, and only compress if it saturated.
       path_mm = self.PATH_LONG_MM
-      spectra[path_mm] = self._absorbance(await self._acquire_sample(path_mm), path_mm)
+      spectra[path_mm] = self._absorbance(await self._acquire_sample(path_mm, averages), path_mm)
       peak = self._peak_absorbance(wavelengths, spectra[path_mm])
 
       if peak > self.AUTORANGE_CUTOFF_AU:
@@ -383,7 +409,7 @@ class ThermoFisherNanoDrop1000:
           self.PATH_SHORT_MM,
         )
         short = self.PATH_SHORT_MM
-        spectra = {short: self._absorbance(await self._acquire_sample(short), short)}
+        spectra = {short: self._absorbance(await self._acquire_sample(short, averages), short)}
 
       return wavelengths, spectra
     finally:
