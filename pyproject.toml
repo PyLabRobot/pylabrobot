@@ -66,6 +66,7 @@ pylabrobot = [
   "version.txt",
   "hamilton/star/driver/recordings/*.json",
   "hamilton/star/resource_model/*.glb",
+  "resources/hamilton/resource_model/*.glb",
   "hamilton/star/resource_model/manifest.json",
 ]
 
