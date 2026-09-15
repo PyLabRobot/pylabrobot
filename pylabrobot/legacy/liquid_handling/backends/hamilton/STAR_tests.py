@@ -725,6 +725,30 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     set_tip_tracking(enabled=False)
 
+  async def test_teaching_needle_pickup_and_return(self):
+    """Teaching needles retain their pickup and return heights in the integrated holder."""
+    rack = self.deck.get_resource("teaching_tip_rack")
+    await self.lh.pick_up_tips(rack.get_all_items(), use_channels=list(range(8)))
+    pickup = next(
+      call.kwargs["cmd"]
+      for call in self.STAR._write_and_read_command.call_args_list
+      if call.kwargs["cmd"].startswith("C0TP")
+    )
+    parsed_pickup = parse_star_fw_string(pickup, "tp####tz####")
+    self.assertEqual((parsed_pickup["tp"], parsed_pickup["tz"]), (1830, 1750))
+
+    self.STAR._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
+    await self.lh.return_tips(use_channels=list(range(8)))
+    drop = next(
+      call.kwargs["cmd"]
+      for call in self.STAR._write_and_read_command.call_args_list
+      if call.kwargs["cmd"].startswith("C0TR")
+    )
+    parsed_drop = parse_star_fw_string(drop, "tp####tz####")
+    self.assertEqual((parsed_drop["tp"], parsed_drop["tz"]), (1830, 1750))
+
   async def test_core_read_barcode_success(self):
     """core_read_barcode_of_picked_up_resource should send ZB and return a Barcode."""
 
