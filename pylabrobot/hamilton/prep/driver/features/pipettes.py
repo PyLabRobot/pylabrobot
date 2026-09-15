@@ -1200,21 +1200,19 @@ class Pipettes:
   async def sense_tip_presence(self) -> list[bool]:
     """Sense whether a tip is physically present on each pipettor channel via the sleeve sensor.
 
-    Resolves each channel's Squeeze.SDrive object from the firmware tree, then
-    finds GetTipPresent by name in that object's method table. The query uses
-    the interface and method IDs declared by the firmware. Method tables are
-    cached by the connection's introspection instance.
+    Asks each channel's Squeeze.SDrive object, found at setup, for GetTipPresent by name in that
+    object's method table. The query uses the interface and method IDs declared by the firmware.
+    Method tables are cached by the connection's introspection instance.
 
     Returns:
       List of bools, one per channel (index 0=rearmost). True if tip detected.
     """
-
-    drive_map = await self._driver.request_channel_drives(root_name="Channel Root")
-    if not drive_map.sleeve_sensor_addrs:
+    sensors = [c.sleeve_sensor for c in self.channels if c.sleeve_sensor is not None]
+    if not sensors:
       raise RuntimeError("No channel sleeve sensor addresses discovered.")
 
     results: list[bool] = []
-    for addr in drive_map.sleeve_sensor_addrs:
+    for addr in sensors:
       method = await self._driver.request_method_by_name(addr, "GetTipPresent")
       raw = await self._driver.send_command(
         PrepCmd.PrepProbeRequest(
@@ -1736,7 +1734,7 @@ class Pipettes:
       return
     held: Dict[Address, float] = {}
     try:
-      for drive in (await self._driver.request_channel_drives()).zdrive_addrs:
+      for drive in [c.zdrive for c in self.channels if c.zdrive is not None]:
         response = await self._driver.send_command(PrepCmd.PrepZDriveGetAcceleration(dest=drive))
         held[drive] = float(response.value)
         await self._driver.send_command(
