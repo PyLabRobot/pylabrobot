@@ -61,7 +61,7 @@ class TipTests(unittest.TestCase):
         "maximal_volume": 10.0,
         "pickup_method": "OUT_OF_RACK",
         "tip_size": "HIGH_VOLUME",
-        "collar_height": None,
+        "collar_height": 10.0,
         "pick_up_location": {"x": 4.1, "y": 4.1, "z": 10.0, "type": "Coordinate"},
       },
     )

@@ -50,6 +50,21 @@ class HeadToolTests(unittest.TestCase):
       tip = creator(name="tip")
       self.assertEqual((tip.get_size_x(), tip.get_size_y()), (16.4, 16.4))
 
+  def test_hamilton_collar_height_follows_tip_size(self):
+    from pylabrobot.resources.hamilton import (
+      hamilton_tip_10uL,
+      hamilton_tip_300uL,
+      hamilton_tip_5000uL,
+    )
+    from pylabrobot.resources.imcs.tip_racks import imcs_tip_1000uL
+
+    self.assertEqual(hamilton_tip_10uL(name="tip").collar_height, 6.0)
+    self.assertEqual(hamilton_tip_300uL(name="tip").collar_height, 8.0)
+    self.assertEqual(hamilton_tip_1000uL(name="tip").collar_height, 10.0)
+    self.assertEqual(imcs_tip_1000uL().collar_height, 10.0)
+    with self.assertRaises(ValueError):
+      hamilton_tip_5000uL(name="tip").collar_height
+
   def test_head_tool_is_abstract(self):
     with self.assertRaises(TypeError):
       HeadTool(name="tool", size_x=1, size_y=1, size_z=1, fitting_depth=0)  # type: ignore[abstract]
