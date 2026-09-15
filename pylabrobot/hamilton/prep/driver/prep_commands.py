@@ -3394,6 +3394,62 @@ class PrepYDriveGetPosition(PrepStatusRequest["PrepYDriveGetPosition.Response"])
 
 
 @dataclass(frozen=True)
+class PrepZAxisSeekObstacle(PrepCommand["PrepZAxisSeekObstacle.Response"]):
+  """Seek a channel down, in its Z drive frame, until it meets an obstacle (cmd=14, dest=ZAxis)."""
+
+  command_id = 14
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # Defaults only because `dest` comes first; every caller names them.
+  start_position: F32 = math.nan
+  end_position: F32 = math.nan
+  final_position: F32 = math.nan
+  velocity: F32 = math.nan
+
+  @dataclass(frozen=True)
+  class Response:
+    obstacle_detected: PaddedBool
+    position: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.start_position, F32)
+      .add(self.end_position, F32)
+      .add(self.final_position, F32)
+      .add(self.velocity, F32)
+    )
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepZAxisSeekObstacle.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepZDriveGetPosition(PrepStatusRequest["PrepZDriveGetPosition.Response"]):
+  """Get a channel's Z drive position in its drive frame, in mm (cmd=12, dest=ZDrive)."""
+
+  command_id = 12
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  @dataclass(frozen=True)
+  class Response:
+    position: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepZDriveGetPosition.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
 class PrepChannelStartCLldDetection(PrepCommand[None]):
   """Start a channel's continuous cLLD detection (cmd=14, dest=Calibration)."""
 

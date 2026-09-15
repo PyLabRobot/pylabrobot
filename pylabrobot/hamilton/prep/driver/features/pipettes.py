@@ -493,6 +493,7 @@ class PipetteChannel:
     ydrive: Optional[Address] = None,
     calibration: Optional[Address] = None,
     clld: Optional[Address] = None,
+    zaxis: Optional[Address] = None,
   ) -> None:
     self.index = index
     self._driver = driver
@@ -503,6 +504,7 @@ class PipetteChannel:
     self.ydrive = ydrive
     self.calibration = calibration
     self.clld = clld
+    self.zaxis = zaxis
     self.bounds = bounds  # x_min..z_max from firmware, or None if unavailable
 
   def __repr__(self) -> str:
@@ -535,6 +537,20 @@ class PipetteChannel:
     if self.ydrive is None:
       raise RuntimeError(f"channel {self.index} has no Y drive in the firmware tree")
     response = await self._driver.send_command(PrepCmd.PrepYDriveGetPosition(dest=self.ydrive))
+    return float(response.position)
+
+  async def request_z_drive_position(self) -> float:
+    """Request this channel's Z drive position.
+
+    Returns:
+      The position in the Z drive's own frame, in mm.
+
+    Raises:
+      RuntimeError: If the channel has no Z drive.
+    """
+    if self.zdrive is None:
+      raise RuntimeError(f"channel {self.index} has no Z drive in the firmware tree")
+    response = await self._driver.send_command(PrepCmd.PrepZDriveGetPosition(dest=self.zdrive))
     return float(response.position)
 
   @asynccontextmanager
@@ -939,6 +955,7 @@ class Pipettes:
         ydrive=_drive_addr(drive_map.ydrive_addrs, i),
         calibration=_drive_addr(drive_map.calibration_addrs, i),
         clld=_drive_addr(drive_map.clld_addrs, i),
+        zaxis=_drive_addr(drive_map.zaxis_addrs, i),
       )
       for i in range(num_channels)
     ]
@@ -2411,20 +2428,131 @@ class Pipettes:
       return None
     return float(result.position)
 
-  async def ztouch_probe_z_height_using_channel(self, *args, **kwargs):
-    """Probe Z-height using force/motor stall detection. Not yet implemented for the Prep.
+  async def _unchecked_fw_z_axis_seek_obstacle(
+    self,
+    zaxis: Address,
+    start_position: float,
+    end_position: float,
+    final_position: float,
+    velocity: float,
+    read_timeout: Optional[float] = None,
+  ) -> PrepCmd.PrepZAxisSeekObstacle.Response:
+    """Send `ZAxis.SeekObstacle` without checks.
 
-    TODO: Investigate force-based Z probing commands:
-    - ZAxis.SeekObstacle [1:14] SeekObstacle(startPosition, endPosition, finalPosition, velocity)
-      Currently returns 0x0207 when called directly — needs coordinator routing.
-    - Calibration.ZTouchoff [1:8] — runs a Z touchoff calibration (force-based).
-    - The STAR implements this via a dedicated "ZH" firmware command with PWM-based
-      force detection. The Prep may have an equivalent through the ChannelCoordinator
-      but it was not found in introspection.
+    Args:
+      zaxis: the channel's Z axis.
+      start_position: search start in the channel's Z drive frame, in mm.
+      end_position: search end in the channel's Z drive frame, in mm.
+      final_position: height to finish at in the channel's Z drive frame, in mm.
+      velocity: search speed in mm/s.
+      read_timeout: answer timeout in seconds. Defaults to the link's.
+
+    Returns:
+      The firmware's answer, with the position in the Z drive frame.
     """
-    raise NotImplementedError(
-      "ztouch_probe_z_height_using_channel is not yet implemented for Pipettes."
+    return await self._driver.send_command(
+      PrepCmd.PrepZAxisSeekObstacle(
+        dest=zaxis,
+        start_position=start_position,
+        end_position=end_position,
+        final_position=final_position,
+        velocity=velocity,
+      ),
+      read_timeout=read_timeout,
     )
+
+  async def probe_z_using_ztouch(
+    self,
+    channel_idx: int,
+    *,
+    start_pos_search: Optional[float] = None,
+    speed: float = 10.0,
+    lowest_immers_pos: Optional[float] = None,
+    z_position_at_end_of_a_command: Optional[float] = None,
+    allow_without_tip: bool = False,
+  ) -> Optional[float]:
+    """Lower a channel where it stands until it meets resistance, with its Z axis's obstacle seek.
+
+    Sent as `ZAxis.SeekObstacle`, which has not yet run on a device.
+
+    Args:
+      channel_idx: which channel, 0-indexed from the back.
+      start_pos_search: start height in mm. Defaults to the traverse height.
+      speed: seek speed in mm/s.
+      lowest_immers_pos: lowest height in mm. Defaults to the bottom of the channel's Z range.
+      z_position_at_end_of_a_command: height to finish at in mm. Defaults to `start_pos_search`.
+      allow_without_tip: whether to probe without a mounted tip. False requires one.
+
+    Returns:
+      Height where the channel met the obstacle in mm, or None.
+
+    Raises:
+      ValueError: If an argument is out of range.
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False, the channel
+        reports no position, its Z range is unknown, or it has no Z axis.
+    """
+    # Tip: required unless allow_without_tip
+    if not allow_without_tip:
+      tips = await self.sense_tip_presence()
+      if 0 <= channel_idx < len(tips) and not tips[channel_idx]:
+        raise RuntimeError(
+          f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+        )
+
+    # Arguments
+    if not 0 <= channel_idx < self.num_channels:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, is {channel_idx}"
+      )
+    if speed <= 0:
+      raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    positions = await self.request_locations()
+    if channel_idx >= len(positions):
+      raise RuntimeError(f"channel {channel_idx} reported no position")
+    here = positions[channel_idx]
+    window = (
+      self.configuration.channels[channel_idx].z_range
+      if channel_idx < len(self.configuration.channels)
+      else None
+    )
+    if window is None:
+      raise RuntimeError(f"channel {channel_idx}'s Z range has not been read")
+    start = self._resolve_traverse_height() if start_pos_search is None else start_pos_search
+    floor = window[0] if lowest_immers_pos is None else lowest_immers_pos
+    final = start if z_position_at_end_of_a_command is None else z_position_at_end_of_a_command
+    for name, value in (
+      ("start_pos_search", start),
+      ("lowest_immers_pos", floor),
+      ("z_position_at_end_of_a_command", final),
+    ):
+      if not window[0] <= value <= window[1]:
+        raise ValueError(
+          f"{name}={value} outside channel {channel_idx} range [{window[0]:.1f}, {window[1]:.1f}]"
+        )
+    if floor >= start:
+      raise ValueError(f"lowest_immers_pos={floor} must be below start_pos_search={start}")
+    channel = self.channels[channel_idx] if channel_idx < len(self.channels) else None
+    if channel is None or channel.zaxis is None or channel.zdrive is None:
+      raise RuntimeError(f"channel {channel_idx} has no Z axis in the firmware tree")
+
+    # Z drive frame offset
+    offset = await channel.request_z_drive_position() - here.z
+
+    # Seek until the channel meets an obstacle or reaches the floor
+    try:
+      result = await self._unchecked_fw_z_axis_seek_obstacle(
+        channel.zaxis,
+        start_position=start + offset,
+        end_position=floor + offset,
+        final_position=final + offset,
+        velocity=speed,
+        read_timeout=(abs(here.z - start) + start - floor) / speed + 30,
+      )
+    finally:
+      await self._record_where_they_stopped()
+    if not result.obstacle_detected:
+      return None
+    return float(result.position) - offset
 
   # -- shutdown / serialization --------------------------------------------------------------------
 

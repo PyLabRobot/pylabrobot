@@ -115,7 +115,7 @@ class ChannelDriveMap:
   The Y axis (``YAxis``) and its drive (``YAxis.YDrive``) are listed for the
   channels that have one; the 8-channel head's channels do not. So are the
   channel's ``Calibration`` object (which starts and stops continuous cLLD
-  detection) and its ``CLld`` object (which reports it).
+  detection), its ``CLld`` object (which reports it), and its Z axis (``ZAxis``).
   """
 
   sleeve_sensor_addrs: List[Address]
@@ -125,6 +125,7 @@ class ChannelDriveMap:
   ydrive_addrs: List[Address] = field(default_factory=list)
   calibration_addrs: List[Address] = field(default_factory=list)
   clld_addrs: List[Address] = field(default_factory=list)
+  zaxis_addrs: List[Address] = field(default_factory=list)
 
   @property
   def num_channels_discovered(self) -> int:
@@ -141,6 +142,7 @@ class ChannelDriveMap:
       "ydrive_addrs": list(self.ydrive_addrs),
       "calibration_addrs": list(self.calibration_addrs),
       "clld_addrs": list(self.clld_addrs),
+      "zaxis_addrs": list(self.zaxis_addrs),
     }
 
 
@@ -611,7 +613,7 @@ class PrepDriver:
     :class:`Address`). For each one we walk:
 
     - ``<root>.Channel.Squeeze.SDrive``     → sleeve sensor
-    - ``<root>.Channel.ZAxis.ZDrive``       → Z drive
+    - ``<root>.Channel.ZAxis`` / ``.ZDrive`` → Z axis and Z drive
     - ``<root>.Channel.YAxis`` / ``.YDrive`` → Y axis and Y drive, where the channel has one
     - ``<root>.Channel.Calibration`` / ``.CLld`` → continuous cLLD detection and its status
     - ``<root>.NodeInformation``            → per-channel firmware strings
@@ -647,6 +649,7 @@ class PrepDriver:
     ydrive: List[Address] = []
     calibration: List[Address] = []
     clld: List[Address] = []
+    zaxis: List[Address] = []
 
     for ch_root in channel_root_addrs:
       top = await intro.find_children_by_name(ch_root, "Channel", "NodeInformation")
@@ -666,6 +669,7 @@ class PrepDriver:
         if "SDrive" in sq:
           sleeve.append(sq["SDrive"])
       if (zx_parent := axes.get("ZAxis")) is not None:
+        zaxis.append(zx_parent)
         zx = await intro.find_children_by_name(zx_parent, "ZDrive")
         if "ZDrive" in zx:
           zdrive.append(zx["ZDrive"])
@@ -688,6 +692,7 @@ class PrepDriver:
       ydrive_addrs=ydrive,
       calibration_addrs=calibration,
       clld_addrs=clld,
+      zaxis_addrs=zaxis,
     )
 
   # ----------------------------------------

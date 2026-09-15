@@ -83,6 +83,8 @@ SIMULATED_INITIALIZED_POSITIONS = {
 # axis keeps no profile, so setting one changes nothing it answers.
 # Each channel's Y drive frame reads deck Y plus this, rear first, as measured on PRPAA1087 (V1.2.2).
 SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
+# Each channel's Z drive frame above the reported Z (rear, front), as PRPAA1087's read-only sweep read them.
+SIMULATED_Z_DRIVE_OFFSETS = (171.784, 171.091)
 # What a simulated channel touches with in a cLLD search, in mm: the probes' default
 # `stop_disc_diameter`, as simulated channels hold no tips.
 SIMULATED_CLLD_PROBE_DIAMETER = 7.0
@@ -691,6 +693,34 @@ class SimulatedPipettes(_Simulated, Pipettes):
       return PrepCmd.PrepYAxisSeekCapacitiveLld.Response(
         lld_detected=touched is not None,
         detect_position=0.0 if touched is None else touched + offset,
+      ), "the resource model" if touched is not None else "nothing in the way"
+
+    if isinstance(request, (PrepCmd.PrepZDriveGetPosition, PrepCmd.PrepZAxisSeekObstacle)):
+      owner = self.device.tree.channel_of(request.dest)
+      if owner is None or owner >= len(SIMULATED_Z_DRIVE_OFFSETS):
+        return None
+      offset = SIMULATED_Z_DRIVE_OFFSETS[owner]
+      x, y, z = self._modelled_location(owner)
+      if isinstance(request, PrepCmd.PrepZDriveGetPosition):
+        return PrepCmd.PrepZDriveGetPosition.Response(
+          position=z + offset
+        ), f"channel {owner}'s modelled Z in its drive frame"
+      # The channel seeks down from its start, stops at the top of the first resource under it, and
+      # is left at its final height.
+      bottom = self._bottom_offset(owner)
+      top = _first_contact_below(
+        request.start_position - offset + bottom,
+        request.end_position - offset + bottom,
+        x,
+        y,
+        self._touchable(),
+        SIMULATED_CLLD_PROBE_DIAMETER / 2,
+      )
+      touched = None if top is None else top - bottom
+      self._move(owner, None, None, request.final_position - offset)
+      return PrepCmd.PrepZAxisSeekObstacle.Response(
+        obstacle_detected=touched is not None,
+        position=0.0 if touched is None else touched + offset,
       ), "the resource model" if touched is not None else "nothing in the way"
 
     if isinstance(

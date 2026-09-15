@@ -18,6 +18,7 @@ from pylabrobot.hamilton.prep.driver.simulator import (
   SIMULATED_X_AXIS_OFFSET,
   SIMULATED_X_VELOCITY,
   SIMULATED_Y_DRIVE_OFFSETS,
+  SIMULATED_Z_DRIVE_OFFSETS,
 )
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.resources import Coordinate, Resource
@@ -789,6 +790,97 @@ def test_simulated_z_probe_detects_the_top_of_a_resource_below():
   _run(_t())
 
 
+def test_probe_z_using_ztouch_seeks_with_the_channels_own_z_axis():
+  """The channel's Z axis is sent start, floor and final height in its drive frame; nothing met is None."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None and p.x_arm is not None
+    assert [(c.zaxis, c.zdrive) for c in p.pipettes.channels] == [
+      (Address(1, node, 260), Address(1, node, 516)) for node in (236, 238)
+    ]
+    await p.x_arm.move_to_x_position(100.0)
+    await p.pipettes.move_to_y_positions({0: 300.0, 1: 100.0})
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    found = await p.pipettes.probe_z_using_ztouch(
+      1,
+      start_pos_search=160.0,
+      speed=5.0,
+      lowest_immers_pos=100.0,
+      z_position_at_end_of_a_command=150.0,
+      allow_without_tip=True,
+    )
+    assert found is None
+    seek = next(c for c in sent if isinstance(c, PrepCmd.PrepZAxisSeekObstacle))
+    offset = SIMULATED_Z_DRIVE_OFFSETS[1]
+    assert seek.dest == p.pipettes.channels[1].zaxis
+    assert (seek.start_position, seek.end_position, seek.final_position, seek.velocity) == (
+      pytest.approx((160.0 + offset, 100.0 + offset, 150.0 + offset, 5.0))
+    )
+    assert (await p.pipettes.request_locations())[1].z == pytest.approx(150.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probe_z_using_ztouch_refuses_seeks_it_cannot_make():
+  """No speed, the floor above the start, or outside the Z range: refused before anything is sent."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    probe = functools.partial(p.pipettes.probe_z_using_ztouch, 1, allow_without_tip=True)
+    for kwargs, message in (
+      ({"speed": 0}, "speed must be above 0"),
+      ({"start_pos_search": 100.0, "lowest_immers_pos": 120.0}, "must be below"),
+      ({"lowest_immers_pos": 5.0}, "outside channel 1 range"),
+      ({"z_position_at_end_of_a_command": 400.0}, "outside channel 1 range"),
+    ):
+      with pytest.raises(ValueError, match=message):
+        await probe(**kwargs)
+    with pytest.raises(ValueError, match="channel_idx must be between"):
+      await p.pipettes.probe_z_using_ztouch(2, allow_without_tip=True)
+    assert "PrepZAxisSeekObstacle" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_simulated_ztouch_probe_meets_the_top_of_a_resource_below():
+  """A Z touch probe over a resource meets its top; the channel is left at its final height."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=_deck_with_block(285.0, 295.0))
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 340.0, 1: 300.0})
+    found = await p.pipettes.probe_z_using_ztouch(
+      1, start_pos_search=160.0, lowest_immers_pos=20.0, allow_without_tip=True
+    )
+    assert found == pytest.approx(60.0)
+    assert (await p.pipettes.request_locations())[1].z == pytest.approx(160.0)
+    await p.stop()
+
+  _run(_t())
+
+
 def test_probes_check_the_tip_before_anything_else():
   """Without allow_without_tip, a probe needs a tip and refuses before moving otherwise."""
 
@@ -810,10 +902,13 @@ def test_probes_check_the_tip_before_anything_else():
       await p.pipettes.probe_x_using_clld(1, "left")
     with pytest.raises(RuntimeError, match="no tip on channel 1"):
       await p.pipettes.probe_z_using_clld(1, start_pos_search=160.0, lowest_immers_pos=100.0)
+    with pytest.raises(RuntimeError, match="no tip on channel 1"):
+      await p.pipettes.probe_z_using_ztouch(1, start_pos_search=160.0, lowest_immers_pos=100.0)
     assert not {
       "PrepYAxisSeekCapacitiveLld",
       "PrepXAxisMoveAbsolute",
       "PrepZSeekLldPosition",
+      "PrepZAxisSeekObstacle",
       "PrepMoveYAbsolute",
     } & set(sent)
     await p.stop()
