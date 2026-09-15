@@ -372,6 +372,19 @@ class Autoload:
       c.x_drive_mm_per_increment,
       c.loading_indicators_installed,
     ) = await self.request_module_configuration()
+    # Which track the X drive homes against, and whether this unit was adjusted: read here so a
+    # saved configuration carries them. One that will not say keeps nothing rather than failing
+    # setup, as the device's own identity reads do.
+    try:
+      await self.request_init_slot()
+    except Exception:
+      logger.warning(
+        "the autoload did not say which track it initializes against; leaving it unrecorded"
+      )
+    try:
+      await self.request_adjustment_status()
+    except Exception:
+      logger.warning("the autoload did not say whether it is adjusted; leaving it unrecorded")
     # Both scanners read the 1D symbologies; only the 2D one also reads the 2D ones. An autoload
     # that is neither has no scanner, and its symbologies stay unset.
     if c.autoload_type in ("1D barcode scanner", "2D barcode scanner"):
