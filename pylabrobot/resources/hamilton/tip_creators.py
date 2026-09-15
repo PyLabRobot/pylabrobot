@@ -9,6 +9,7 @@ import enum
 import warnings
 from typing import Optional, Union
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip
 
 
@@ -50,6 +51,12 @@ class HamiltonTip(Tip):
     nominal_volume: Optional[float] = None,
     name: Optional[str] = None,
     collar_height: Optional[float] = None,
+    size_x: float = 0,
+    size_y: float = 0,
+    size_z: Optional[float] = None,
+    category: str = "tip",
+    model: Optional[str] = None,
+    pick_up_location: Optional[Coordinate] = None,
   ):
     if isinstance(tip_size, str):
       tip_size = TipSize[tip_size]
@@ -75,6 +82,12 @@ class HamiltonTip(Tip):
       fitting_depth=fitting_depth,
       collar_height=collar_height,
       name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category=category,
+      model=model,
+      pick_up_location=pick_up_location,
     )
 
     self.pickup_method = pickup_method
@@ -319,7 +332,6 @@ def hamilton_tip_50uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=65,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
   )
 
 
@@ -336,7 +348,6 @@ def hamilton_tip_50uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=60,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
   )
 
 
@@ -356,7 +367,6 @@ def hamilton_tip_300uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=400,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
   )
 
 
@@ -375,7 +385,6 @@ def hamilton_tip_300uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
   )
 
 
@@ -403,7 +412,6 @@ def hamilton_tip_300uL_filter_ultrawide(name: Optional[str] = None) -> HamiltonT
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
   )
 
 

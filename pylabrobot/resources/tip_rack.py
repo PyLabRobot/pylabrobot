@@ -80,10 +80,9 @@ class TipSpot(Resource):
         DeprecationWarning,
       )
       tip = self._make_tip_func()  # type: ignore # ignore type check for deprecated behavior
-      if getattr(tip, "name", None) is None:
+      if not tip.is_named:
         tip.name = self._get_next_tip_name()
-        if hasattr(tip, "tracker"):
-          tip.tracker.thing = tip.name
+        tip.tracker.thing = tip.name
 
     return tip
 

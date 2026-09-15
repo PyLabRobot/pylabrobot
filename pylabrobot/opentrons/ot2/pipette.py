@@ -259,7 +259,7 @@ class _OT2Pipette(ABC):
       tip = tips[0]
       if not self.can_use_tip(tip):
         raise ValueError(f"{self.name} cannot use a {tip.maximal_volume:g} µL-capacity tip")
-      if any(other != tip for other in tips):
+      if any(other.definition() != tip.definition() for other in tips):
         raise ValueError("All nozzles must use the same tip type")
       offset = offset or Coordinate.zero()
       _require_finite_coordinate("offset", offset)

@@ -8,6 +8,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import (
   Any,
+  Dict,
   List,
   Optional,
   Sequence,
@@ -87,7 +88,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self._reading_thread: Optional[threading.Thread] = None
     self._reading_thread_stop = threading.Event()
     self._waiting_tasks: List[HamiltonTask] = []
-    self._tth2tti: dict[int, int] = {}  # hash to tip type index
+    self._tip_type_indices: Dict[Tuple[object, ...], int] = {}  # tip definition to tip type index
 
   def __setattr__(self, name: str, value: Any) -> None:
     if name == "allow_firmware_planning":
@@ -117,7 +118,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
       )
     self._waiting_tasks.clear()
-    self._tth2tti.clear()
+    self._tip_type_indices.clear()
     await self.io.stop()
 
   def serialize(self) -> dict:
@@ -432,10 +433,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     If the tip has previously been defined, used that index. Otherwise, define a new tip type.
     """
 
-    tip_type_hash = hash(tip)
+    definition = tip.definition()
 
-    if tip_type_hash not in self._tth2tti:
-      ttti = len(self._tth2tti) + 1
+    if definition not in self._tip_type_indices:
+      ttti = len(self._tip_type_indices) + 1
       if ttti > 99:
         raise ValueError("Too many tip types defined.")
 
@@ -450,19 +451,19 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         tip_size=tip.tip_size,
         pickup_method=tip.pickup_method,
       )
-      self._tth2tti[tip_type_hash] = ttti
+      self._tip_type_indices[definition] = ttti
 
-    return self._tth2tti[tip_type_hash]
+    return self._tip_type_indices[definition]
 
   def _get_hamilton_tip(self, tip_spots: List[TipSpot]) -> HamiltonTip:
     """Get the single tip type for all tip spots. If it does not exist or is not a HamiltonTip,
     raise an error."""
-    tips = set(tip_spot.get_tip() for tip_spot in tip_spots)
-    if len(tips) > 1:
+    tips = [tip_spot.get_tip() for tip_spot in tip_spots]
+    if len({tip.definition() for tip in tips}) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
     if len(tips) == 0:
       raise ValueError("No tips specified.")
-    tip = tips.pop()
+    tip = tips[0]
     if not isinstance(tip, HamiltonTip):
       raise ValueError(f"Tip {tip} is not a HamiltonTip.")
     return tip
