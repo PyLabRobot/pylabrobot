@@ -23,11 +23,15 @@ from pylabrobot.resources import (
   Coordinate,
   Lid,
   ResourceStack,
+  TipRack,
   agenbio_1_troughplate_190mL_Fl,
   celltreat_96_wellplate_350uL_Ub,
   cor_96_wellplate_360uL_Fb,
+  hamilton_96_tiprack_10uL_filter,
+  hamilton_96_tiprack_50uL_filter,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
+  no_tip_tracking,
   no_volume_tracking,
   set_tip_tracking,
 )
@@ -2296,6 +2300,65 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(tz, 2184)
 
     tip_rack.unassign()
+
+
+class TestSTAR96TipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
+  """Test 96-head pickup and return commands for all four standard filtered tip sizes."""
+
+  async def asyncSetUp(self):
+    """Set up a full-size STAR with mocked communication and a carrier on track 1."""
+    self.backend = STARBackend()
+    self.backend._write_and_read_command = unittest.mock.AsyncMock()
+    self.backend.io = unittest.mock.AsyncMock()
+    self.backend._num_channels = 8
+    self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self.backend.setup = unittest.mock.AsyncMock()
+    self.backend._core_parked = True
+    self.backend._iswap_parked = True
+
+    self.deck = STARDeck()
+    self.tip_car = TIP_CAR_480_A00("tip_carrier")
+    self.deck.assign_child_resource(self.tip_car, track=1)
+    self.lh = LiquidHandler(self.backend, deck=self.deck)
+    await self.lh.setup()
+
+  async def _assert_pickup_and_return(self, rack: TipRack) -> None:
+    """Assert pickup and return commands at the verified 216.4 mm deposit height."""
+    self.tip_car[1] = rack
+    with no_tip_tracking():
+      await self.lh.pick_up_tips96(rack)
+      with self.subTest(operation="pickup"):
+        self.backend._write_and_read_command.assert_has_calls(
+          [
+            _any_write_and_read_command_call("C0EPid0003xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
+          ]
+        )
+
+      self.backend._write_and_read_command.reset_mock()
+      await self.lh.return_tips96()
+      with self.subTest(operation="return"):
+        self.backend._write_and_read_command.assert_has_calls(
+          [
+            _any_write_and_read_command_call("C0ERid0004xs01179xd0yh2418za2164zh2450ze2450"),
+          ]
+        )
+
+  async def test_10uL_tips(self):
+    """Check 10 uL filtered-tip pickup and return with the 96 head."""
+    await self._assert_pickup_and_return(cast(TipRack, hamilton_96_tiprack_10uL_filter("tips")))
+
+  async def test_50uL_tips(self):
+    """Check 50 uL filtered-tip pickup and return with the 96 head."""
+    await self._assert_pickup_and_return(cast(TipRack, hamilton_96_tiprack_50uL_filter("tips")))
+
+  async def test_300uL_tips(self):
+    """Check 300 uL filtered-tip pickup and return with the 96 head."""
+    await self._assert_pickup_and_return(cast(TipRack, hamilton_96_tiprack_300uL_filter("tips")))
+
+  async def test_1000uL_tips(self):
+    """Check 1000 uL filtered-tip pickup and return with the 96 head."""
+    await self._assert_pickup_and_return(cast(TipRack, hamilton_96_tiprack_1000uL_filter("tips")))
 
 
 class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
