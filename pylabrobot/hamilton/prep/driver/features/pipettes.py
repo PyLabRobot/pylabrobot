@@ -46,6 +46,7 @@ from pylabrobot.hamilton.liquid_class_resolver import (
   resolve_hamilton_liquid_classes,
 )
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
+from pylabrobot.hamilton.transport.tcp.messages import HoiParamsParser, parse_into_struct
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
@@ -629,6 +630,9 @@ def _build_pipettor_gantry_move_parameters(
 
 
 # Channel index -> deck waste resource name (PrepDeck: waste_rear, waste_front, waste_mph)
+# How far a Hamilton standard channel tip sits on the stop disc, in mm.
+TIP_FITTING_DEPTH = 8.0
+
 _CHANNEL_TO_WASTE_NAME = {
   0: "waste_rear",
   1: "waste_front",
@@ -1669,29 +1673,20 @@ class Pipettes:
     z = await self.request_z_position(channel)
     tip_presence = await self.sense_tip_presence()
     if channel < len(tip_presence) and tip_presence[channel]:
-      # Query firmware for the held tip definition to get tip length
-      # By name: the method's ids are not the same on every firmware version.
-      raw = await self._driver.request_by_name(PIPETTOR_OBJECT_PATH, "GetTipDefinitionHeld")
-      if raw is not None:
-        import struct as _struct
-
-        data = raw
-        # TipDefinition struct: default_values, id, volume(F32), length(F32), ...
-        # The second F32 is the tip extension length
-        f32_count = 0
-        i = 0
-        while i < len(data) - 7:
-          if data[i] == 0x28 and data[i + 1] == 0x00:
-            f32_count += 1
-            if f32_count == 2:  # second F32 = length
-              tip_length = _struct.unpack_from("<f", data, i + 4)[0]
-              if tip_length > 0:
-                z += tip_length
-              break
-            i += 8
-          else:
-            i += 1
+      z += await self.request_held_tip_length()
     return z
+
+  async def request_held_tip_length(self) -> float:
+    """Request the length of the tip the channels hold, below the stop disc.
+
+    From the tip definition the firmware was given at pickup (`Pipettor.GetTipDefinitionHeld`, by
+    name: its ids are not the same on every firmware version).
+
+    Returns:
+      The tip's length beyond the fitting depth in mm, 0 when no tip is held.
+    """
+    raw = await self._driver.request_by_name(PIPETTOR_OBJECT_PATH, "GetTipDefinitionHeld")
+    return float(parse_into_struct(HoiParamsParser(raw), PrepCmd.HeldTipDefinition).value.length)
 
   async def move_tool_bottom_to_z_positions(
     self,
@@ -2319,7 +2314,7 @@ class Pipettes:
     self,
     channel_idx: int,
     *,
-    start_pos_search: Optional[float] = None,
+    search_start_position: Optional[float] = None,
     speed: Optional[float] = None,
     lowest_immers_pos: Optional[float] = None,
     sensitivity: Optional[int] = None,
@@ -2331,12 +2326,12 @@ class Pipettes:
 
     Args:
       channel_idx: which channel, 0-indexed from the back.
-      start_pos_search: start height in mm. Defaults to the traverse height.
+      search_start_position: start height in mm. Defaults to the traverse height.
       speed: seek speed in mm/s. Defaults to `default_clld_probe_speed`.
       lowest_immers_pos: lowest height in mm. Defaults to the bottom of the channel's Z range.
       sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
       detect_mode: cLLD detect mode. Defaults to `default_clld_detect_mode`.
-      z_position_at_end_of_a_command: height to finish at in mm. Defaults to `start_pos_search`.
+      z_position_at_end_of_a_command: height to finish at in mm. Defaults to `search_start_position`.
       allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
@@ -2364,14 +2359,16 @@ class Pipettes:
       raise RuntimeError(f"channel {channel_idx} reported no position")
     # Sent as the channel stands: given another X or Y, the firmware moves there before seeking.
     x, y = positions[channel_idx].x, positions[channel_idx].y
-    start_pos_search = (
-      self._resolve_traverse_height() if start_pos_search is None else start_pos_search
+    search_start_position = (
+      self._resolve_traverse_height() if search_start_position is None else search_start_position
     )
     speed = self.default_clld_probe_speed if speed is None else speed
     sensitivity = self.default_clld_sensitivity if sensitivity is None else sensitivity
     detect_mode = self.default_clld_detect_mode if detect_mode is None else detect_mode
     z_position_at_end_of_a_command = (
-      start_pos_search if z_position_at_end_of_a_command is None else z_position_at_end_of_a_command
+      search_start_position
+      if z_position_at_end_of_a_command is None
+      else z_position_at_end_of_a_command
     )
     if lowest_immers_pos is None:
       reach_z = (
@@ -2386,14 +2383,14 @@ class Pipettes:
       lowest_immers_pos = reach_z[0]
     if speed <= 0:
       raise ValueError(f"speed must be positive, is {speed}")
-    if lowest_immers_pos > start_pos_search:
+    if lowest_immers_pos > search_start_position:
       raise ValueError(
-        f"lowest_immers_pos={lowest_immers_pos} is above start_pos_search={start_pos_search}"
+        f"lowest_immers_pos={lowest_immers_pos} is above search_start_position={search_start_position}"
       )
     if channel_idx < len(self.configuration.channels):
       reach = self.configuration.channels[channel_idx]
       for name, value, window in (
-        ("start_pos_search", start_pos_search, reach.z_range),
+        ("search_start_position", search_start_position, reach.z_range),
         ("lowest_immers_pos", lowest_immers_pos, reach.z_range),
         ("z_position_at_end_of_a_command", z_position_at_end_of_a_command, reach.z_range),
       ):
@@ -2408,7 +2405,7 @@ class Pipettes:
       seek_position_x=x,
       seek_position_y=y,
       seek_velocity_z=speed,
-      seek_height=start_pos_search,
+      seek_height=search_start_position,
       min_seek_height=lowest_immers_pos,
       final_position_z=z_position_at_end_of_a_command,
       lld_sensitivity=sensitivity,
@@ -2465,23 +2462,29 @@ class Pipettes:
     self,
     channel_idx: int,
     *,
-    start_pos_search: Optional[float] = None,
+    tip_len: Optional[float] = None,
+    search_start_position: Optional[float] = None,
     speed: float = 10.0,
     lowest_immers_pos: Optional[float] = None,
     z_position_at_end_of_a_command: Optional[float] = None,
     allow_without_tip: bool = False,
+    move_channels_to_safe_pos_after: bool = False,
   ) -> Optional[float]:
     """Lower a channel where it stands until it meets resistance, with its Z axis's obstacle seek.
 
-    Sent as `ZAxis.SeekObstacle`, which has not yet run on a device.
+    Sent as `ZAxis.SeekObstacle`, which has not yet run on a device. Heights are of the tip bottom,
+    or of the stop disc without a tip.
 
     Args:
       channel_idx: which channel, 0-indexed from the back.
-      start_pos_search: start height in mm. Defaults to the traverse height.
+      tip_len: total length of the mounted tip in mm. Defaults to the length the firmware holds
+        for it plus the fitting depth.
+      search_start_position: start height in mm. Defaults to the traverse height.
       speed: seek speed in mm/s.
       lowest_immers_pos: lowest height in mm. Defaults to the bottom of the channel's Z range.
-      z_position_at_end_of_a_command: height to finish at in mm. Defaults to `start_pos_search`.
+      z_position_at_end_of_a_command: height to finish at in mm. Defaults to `search_start_position`.
       allow_without_tip: whether to probe without a mounted tip. False requires one.
+      move_channels_to_safe_pos_after: whether to move all channels to Z safety afterwards.
 
     Returns:
       Height where the channel met the obstacle in mm, or None.
@@ -2491,13 +2494,22 @@ class Pipettes:
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False, the channel
         reports no position, its Z range is unknown, or it has no Z axis.
     """
-    # Tip: required unless allow_without_tip
-    if not allow_without_tip:
-      tips = await self.sense_tip_presence()
-      if 0 <= channel_idx < len(tips) and not tips[channel_idx]:
-        raise RuntimeError(
-          f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
-        )
+    # Tip: required unless allow_without_tip; how far it reaches below the stop disc
+    tips = await self.sense_tip_presence()
+    has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
+    if not has_tip and not allow_without_tip:
+      raise RuntimeError(
+        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+      )
+    held = await self.request_held_tip_length() if has_tip else 0.0
+    if tip_len is None:
+      extension = held
+    elif not has_tip:
+      raise ValueError(f"tip_len={tip_len} given, but channel {channel_idx} holds no tip")
+    elif not 20 <= tip_len <= 120:
+      raise ValueError(f"tip_len must be between 20 and 120 mm, is {tip_len}")
+    else:
+      extension = tip_len - TIP_FITTING_DEPTH
 
     # Arguments
     if not 0 <= channel_idx < self.num_channels:
@@ -2517,11 +2529,13 @@ class Pipettes:
     )
     if window is None:
       raise RuntimeError(f"channel {channel_idx}'s Z range has not been read")
-    start = self._resolve_traverse_height() if start_pos_search is None else start_pos_search
+    start = (
+      self._resolve_traverse_height() if search_start_position is None else search_start_position
+    )
     floor = window[0] if lowest_immers_pos is None else lowest_immers_pos
     final = start if z_position_at_end_of_a_command is None else z_position_at_end_of_a_command
     for name, value in (
-      ("start_pos_search", start),
+      ("search_start_position", start),
       ("lowest_immers_pos", floor),
       ("z_position_at_end_of_a_command", final),
     ):
@@ -2530,29 +2544,31 @@ class Pipettes:
           f"{name}={value} outside channel {channel_idx} range [{window[0]:.1f}, {window[1]:.1f}]"
         )
     if floor >= start:
-      raise ValueError(f"lowest_immers_pos={floor} must be below start_pos_search={start}")
+      raise ValueError(f"lowest_immers_pos={floor} must be below search_start_position={start}")
     channel = self.channels[channel_idx] if channel_idx < len(self.channels) else None
     if channel is None or channel.zaxis is None or channel.zdrive is None:
       raise RuntimeError(f"channel {channel_idx} has no Z axis in the firmware tree")
 
-    # Z drive frame offset
-    offset = await channel.request_z_drive_position() - here.z
+    # Z drive frame offset of the stop disc: the reported Z is the held tip's bottom
+    offset = await channel.request_z_drive_position() - (here.z + held)
 
-    # Seek until the channel meets an obstacle or reaches the floor
+    # Seek until the tip bottom meets an obstacle or reaches the floor
     try:
       result = await self._unchecked_fw_z_axis_seek_obstacle(
         channel.zaxis,
-        start_position=start + offset,
-        end_position=floor + offset,
-        final_position=final + offset,
+        start_position=start + extension + offset,
+        end_position=floor + extension + offset,
+        final_position=final + extension + offset,
         velocity=speed,
         read_timeout=(abs(here.z - start) + start - floor) / speed + 30,
       )
     finally:
       await self._record_where_they_stopped()
+    if move_channels_to_safe_pos_after:
+      await self.move_to_safe_z()
     if not result.obstacle_detected:
       return None
-    return float(result.position) - offset
+    return float(result.position) - offset - extension
 
   # -- shutdown / serialization --------------------------------------------------------------------
 

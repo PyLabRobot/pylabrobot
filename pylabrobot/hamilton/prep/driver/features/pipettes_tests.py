@@ -23,7 +23,12 @@ from pylabrobot.hamilton.prep.driver.simulator import (
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
-from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck, hamilton_96_tiprack_50uL_NTR
+from pylabrobot.resources.hamilton import (
+  PrepDeck,
+  STARLetDeck,
+  hamilton_96_tiprack_50uL_NTR,
+  hamilton_tip_300uL,
+)
 from pylabrobot.resources.tip_tracker import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
 
@@ -781,7 +786,7 @@ def test_simulated_z_probe_detects_the_top_of_a_resource_below():
     assert p.pipettes is not None
     await p.pipettes.move_to_y_positions({0: 340.0, 1: 300.0})
     found = await p.pipettes.probe_z_using_clld(
-      1, start_pos_search=160.0, lowest_immers_pos=20.0, allow_without_tip=True
+      1, search_start_position=160.0, lowest_immers_pos=20.0, allow_without_tip=True
     )
     assert found == pytest.approx(60.0)
     assert (await p.pipettes.request_locations())[1].z == pytest.approx(160.0)
@@ -812,7 +817,7 @@ def test_probe_z_using_ztouch_seeks_with_the_channels_own_z_axis():
     p.send_command = record  # type: ignore[method-assign]
     found = await p.pipettes.probe_z_using_ztouch(
       1,
-      start_pos_search=160.0,
+      search_start_position=160.0,
       speed=5.0,
       lowest_immers_pos=100.0,
       z_position_at_end_of_a_command=150.0,
@@ -826,6 +831,48 @@ def test_probe_z_using_ztouch_seeks_with_the_channels_own_z_axis():
       pytest.approx((160.0 + offset, 100.0 + offset, 150.0 + offset, 5.0))
     )
     assert (await p.pipettes.request_locations())[1].z == pytest.approx(150.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probe_z_using_ztouch_seeks_the_tip_bottom_and_can_end_at_z_safety():
+  """Heights are of the tip bottom, by the held tip's length or `tip_len`; all channels to Z safety after."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None and p.x_arm is not None
+    await p.x_arm.move_to_x_position(100.0)
+    await p.pipettes.move_to_y_positions({0: 300.0, 1: 100.0})
+    p.pipettes.head[1].add_tip(hamilton_tip_300uL(name="tip"))
+    assert await p.pipettes.request_held_tip_length() == pytest.approx(51.9)
+    here = (await p.pipettes.request_locations())[1].z
+    drive = await p.pipettes.channels[1].request_z_drive_position()
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    probe = functools.partial(
+      p.pipettes.probe_z_using_ztouch,
+      1,
+      search_start_position=160.0,
+      lowest_immers_pos=100.0,
+      z_position_at_end_of_a_command=150.0,
+    )
+    assert await probe() is None
+    assert await probe(tip_len=70.0, move_channels_to_safe_pos_after=True) is None
+    seeks = [c for c in sent if isinstance(c, PrepCmd.PrepZAxisSeekObstacle)]
+    stop_disc_offset = drive - (here + 51.9)
+    assert seeks[0].start_position == pytest.approx(160.0 + 51.9 + stop_disc_offset)
+    assert seeks[1].start_position == pytest.approx(160.0 + 62.0 + stop_disc_offset)
+    assert _index(sent[sent.index(seeks[1]) :], PrepCmd.PrepMoveZUpToSafe) > 0
+    with pytest.raises(ValueError, match="tip_len must be between 20 and 120"):
+      await probe(tip_len=10.0)
     await p.stop()
 
   _run(_t())
@@ -849,7 +896,7 @@ def test_probe_z_using_ztouch_refuses_seeks_it_cannot_make():
     probe = functools.partial(p.pipettes.probe_z_using_ztouch, 1, allow_without_tip=True)
     for kwargs, message in (
       ({"speed": 0}, "speed must be above 0"),
-      ({"start_pos_search": 100.0, "lowest_immers_pos": 120.0}, "must be below"),
+      ({"search_start_position": 100.0, "lowest_immers_pos": 120.0}, "must be below"),
       ({"lowest_immers_pos": 5.0}, "outside channel 1 range"),
       ({"z_position_at_end_of_a_command": 400.0}, "outside channel 1 range"),
     ):
@@ -872,7 +919,7 @@ def test_simulated_ztouch_probe_meets_the_top_of_a_resource_below():
     assert p.pipettes is not None
     await p.pipettes.move_to_y_positions({0: 340.0, 1: 300.0})
     found = await p.pipettes.probe_z_using_ztouch(
-      1, start_pos_search=160.0, lowest_immers_pos=20.0, allow_without_tip=True
+      1, search_start_position=160.0, lowest_immers_pos=20.0, allow_without_tip=True
     )
     assert found == pytest.approx(60.0)
     assert (await p.pipettes.request_locations())[1].z == pytest.approx(160.0)
@@ -901,9 +948,9 @@ def test_probes_check_the_tip_before_anything_else():
     with pytest.raises(RuntimeError, match="no tip on channel 1"):
       await p.pipettes.probe_x_using_clld(1, "left")
     with pytest.raises(RuntimeError, match="no tip on channel 1"):
-      await p.pipettes.probe_z_using_clld(1, start_pos_search=160.0, lowest_immers_pos=100.0)
+      await p.pipettes.probe_z_using_clld(1, search_start_position=160.0, lowest_immers_pos=100.0)
     with pytest.raises(RuntimeError, match="no tip on channel 1"):
-      await p.pipettes.probe_z_using_ztouch(1, start_pos_search=160.0, lowest_immers_pos=100.0)
+      await p.pipettes.probe_z_using_ztouch(1, search_start_position=160.0, lowest_immers_pos=100.0)
     assert not {
       "PrepYAxisSeekCapacitiveLld",
       "PrepXAxisMoveAbsolute",
@@ -933,7 +980,7 @@ def test_probe_z_using_clld_seeks_where_the_channel_stands():
 
     p.send_command = record  # type: ignore[method-assign]
     found = await p.pipettes.probe_z_using_clld(
-      1, start_pos_search=160.0, lowest_immers_pos=100.0, allow_without_tip=True
+      1, search_start_position=160.0, lowest_immers_pos=100.0, allow_without_tip=True
     )
     assert found is None  # nothing on the deck under the channel
     seeks = [c for c in sent if type(c).__name__ == "PrepZSeekLldPosition"]
@@ -961,17 +1008,17 @@ def test_probe_z_using_clld_refuses_before_sending():
     await p.setup()
     assert p.pipettes is not None
     p.pipettes.configuration.channels[0].z_range = (18.0, 167.5)
-    with pytest.raises(ValueError, match="above start_pos_search"):
+    with pytest.raises(ValueError, match="above search_start_position"):
       await p.pipettes.probe_z_using_clld(
-        0, start_pos_search=120.0, lowest_immers_pos=130.0, allow_without_tip=True
+        0, search_start_position=120.0, lowest_immers_pos=130.0, allow_without_tip=True
       )
     with pytest.raises(ValueError, match="lowest_immers_pos=10.0 outside channel 0"):
       await p.pipettes.probe_z_using_clld(
-        0, start_pos_search=160.0, lowest_immers_pos=10.0, allow_without_tip=True
+        0, search_start_position=160.0, lowest_immers_pos=10.0, allow_without_tip=True
       )
     with pytest.raises(ValueError, match="channel_idx must be between"):
       await p.pipettes.probe_z_using_clld(
-        5, start_pos_search=160.0, lowest_immers_pos=100.0, allow_without_tip=True
+        5, search_start_position=160.0, lowest_immers_pos=100.0, allow_without_tip=True
       )
     await p.stop()
 
@@ -1085,13 +1132,13 @@ def test_probe_z_using_clld_defaults_lowest_z_to_the_bottom_of_the_channel_z_ran
       return await execute(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.probe_z_using_clld(1, start_pos_search=160.0, allow_without_tip=True)
+    await p.pipettes.probe_z_using_clld(1, search_start_position=160.0, allow_without_tip=True)
     seek = next(c for c in sent if type(c).__name__ == "PrepZSeekLldPosition").seek_parameters[0]
     assert seek.min_seek_height == pytest.approx(18.03)
 
     p.pipettes.configuration.channels[1].z_range = None
     with pytest.raises(RuntimeError, match="Z range has not been read"):
-      await p.pipettes.probe_z_using_clld(1, start_pos_search=160.0, allow_without_tip=True)
+      await p.pipettes.probe_z_using_clld(1, search_start_position=160.0, allow_without_tip=True)
     await p.stop()
 
   _run(_t())

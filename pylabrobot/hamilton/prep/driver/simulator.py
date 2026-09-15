@@ -42,7 +42,7 @@ from pylabrobot.hamilton.transport.tcp.packets import Address, HarpPacket, HoiPa
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
-from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, wire_type_of
+from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, Struct, wire_type_of
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources.deck import Deck
 
@@ -748,6 +748,22 @@ class SimulatedPipettes(_Simulated, Pipettes):
       return PrepCmd.PrepZDriveGetAcceleration.Response(
         value=self._declared().z_drive_acceleration
       ), "the declared Z drive acceleration"
+
+    if isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipDefinitionHeld":
+      # The tip the first channel holding one holds, as the definition it was picked up with.
+      tip = next((t.get_tip() for t in self.head.values() if t.has_tip), None)
+      held = PrepCmd.TipDefinition(
+        default_values=False,
+        id=0 if tip is None else 1,
+        volume=0.0 if tip is None else tip.maximal_volume,
+        length=0.0 if tip is None else tip.total_tip_length - tip.fitting_depth,
+        tip_type=0 if tip is None else int(PrepCmd.TipTypes.StandardVolume),
+        has_filter=False if tip is None else tip.has_filter,
+        is_needle=False,
+        is_tool=False,
+        label="No Tip" if tip is None else "simulated",
+      )
+      return HoiParams().add(held, Struct()), "the channels' tip trackers"
 
     if isinstance(request, PrepCmd.PrepProbeRequest):
       owner = self.device.tree.channel_of(request.dest)

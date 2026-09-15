@@ -574,6 +574,13 @@ class TipDefinition:
     )
 
 
+@dataclass(frozen=True)
+class HeldTipDefinition:
+  """`Pipettor.GetTipDefinitionHeld`'s answer: the definition of the tip the channels hold."""
+
+  value: Annotated[TipDefinition, Struct()]
+
+
 @dataclass
 class TipPickupParameters:
   default_values: PaddedBool
