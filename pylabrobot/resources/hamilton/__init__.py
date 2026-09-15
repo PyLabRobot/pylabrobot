@@ -1,4 +1,4 @@
-from .core_gripper_tools import hamilton_core_gripper_tool
+from .core_gripper_tools import HamiltonCoreGripperTool, hamilton_core_gripper_tool
 from .hamilton_decks import (
   HamiltonDeck,
   HamiltonSTARDeck,

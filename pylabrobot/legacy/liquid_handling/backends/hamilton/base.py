@@ -27,9 +27,14 @@ from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipPickupMethod,
   TipSize,
+  hamilton_core_gripper_tool,
 )
+from pylabrobot.resources.hamilton.tip_creators import HamiltonHeadTool, HamiltonToolDefinition
 
 T = TypeVar("T")
+
+# What the firmware's tip type table calls the CO-RE grip tool (cat. 186100).
+CORE_GRIPPER_TIP_TYPE_INDEX = 14
 
 logger = logging.getLogger("pylabrobot")
 
@@ -88,7 +93,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self._reading_thread: Optional[threading.Thread] = None
     self._reading_thread_stop = threading.Event()
     self._waiting_tasks: List[HamiltonTask] = []
-    self._tip_type_indices: Dict[Tuple[object, ...], int] = {}  # tip definition to tip type index
+    # The firmware's own table already carries the CO-RE grip tool at index 14, so that index is
+    # taken rather than handed out to a tip, which would overwrite the grip tool.
+    self._tip_type_indices: Dict[HamiltonToolDefinition, int] = {
+      hamilton_core_gripper_tool().hamilton_tool_definition(): CORE_GRIPPER_TIP_TYPE_INDEX
+    }
 
   def __setattr__(self, name: str, value: Any) -> None:
     if name == "allow_firmware_planning":
@@ -118,7 +127,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
       )
     self._waiting_tasks.clear()
-    self._tip_type_indices.clear()
+    self._tip_type_indices = {
+      hamilton_core_gripper_tool().hamilton_tool_definition(): CORE_GRIPPER_TIP_TYPE_INDEX
+    }
     await self.io.stop()
 
   def serialize(self) -> dict:
@@ -427,29 +438,32 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   ):
     """Tip/needle definition in firmware."""
 
-  async def get_or_assign_tip_type_index(self, tip: HamiltonTip) -> int:
-    """Get a tip type table index for the tip.
+  async def get_or_assign_tip_type_index(self, tool: HamiltonHeadTool) -> int:
+    """Get a tip type table index for the tool, a tip or a grip tool.
 
-    If the tip has previously been defined, used that index. Otherwise, define a new tip type.
+    If a tool with the same definition has been defined, use that index. Otherwise, define a new
+    tip type. Indices the firmware defines itself, such as the grip tool's, are known from the
+    start and are never redefined.
     """
 
-    definition = tip.definition()
+    definition = tool.hamilton_tool_definition()
 
     if definition not in self._tip_type_indices:
-      ttti = len(self._tip_type_indices) + 1
-      if ttti > 99:
+      taken = set(self._tip_type_indices.values())
+      ttti = next((i for i in range(1, 100) if i not in taken), None)
+      if ttti is None:
         raise ValueError("Too many tip types defined.")
 
       await self.define_tip_needle(
         tip_type_table_index=ttti,
-        has_filter=tip.has_filter,
-        tip_length=round((tip.total_tip_length - tip.fitting_depth) * 10),  # in 0.1mm
-        # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register
-        # the same way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to
-        # satisfy the tv >= 1 requirement). tv does not affect pickup (that is tl/tg).
-        maximum_tip_volume=max(round(tip.maximal_volume * 10), 10),
-        tip_size=tip.tip_size,
-        pickup_method=tip.pickup_method,
+        has_filter=definition.has_filter,
+        tip_length=round(definition.tip_length * 10),  # in 0.1mm
+        # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register the same
+        # way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to satisfy the
+        # tv >= 1 requirement). tv does not affect pickup (that is tl/tg).
+        maximum_tip_volume=max(round(definition.maximal_volume * 10), 10),
+        tip_size=definition.tip_size,
+        pickup_method=definition.pickup_method,
       )
       self._tip_type_indices[definition] = ttti
 

@@ -65,6 +65,25 @@ class HeadToolTests(unittest.TestCase):
     with self.assertRaises(ValueError):
       hamilton_tip_5000uL(name="tip").collar_height
 
+  def test_tip_and_grip_tool_share_the_firmware_tool_type(self):
+    """A grip tool fills in the same firmware table entry as a tip, so both state one."""
+    from pylabrobot.resources.hamilton.tip_creators import HamiltonHeadTool, HamiltonToolDefinition
+
+    tip = hamilton_tip_1000uL(name="tip")
+    tool = hamilton_core_gripper_tool(name="tool")
+    for head_tool in (tip, tool):
+      self.assertIsInstance(head_tool, HamiltonHeadTool)
+      self.assertIsInstance(head_tool.hamilton_tool_definition(), HamiltonToolDefinition)
+    self.assertEqual(tip.hamilton_tool_definition().tip_length, 95.1 - 8)
+    self.assertEqual(tool.hamilton_tool_definition().tip_length, 22.0)
+    self.assertNotEqual(tip.hamilton_tool_definition(), tool.hamilton_tool_definition())
+
+  def test_same_tips_share_one_firmware_tool_type(self):
+    a = hamilton_tip_1000uL(name="rack_A1#0")
+    b = hamilton_tip_1000uL(name="rack_B1#0")
+    self.assertEqual(a.hamilton_tool_definition(), b.hamilton_tool_definition())
+    self.assertEqual(len({a.hamilton_tool_definition(), b.hamilton_tool_definition()}), 1)
+
   def test_head_tool_is_abstract(self):
     with self.assertRaises(TypeError):
       HeadTool(name="tool", size_x=1, size_y=1, size_z=1, fitting_depth=0)  # type: ignore[abstract]
@@ -130,7 +149,7 @@ class HeadToolTests(unittest.TestCase):
     self.assertEqual(
       serialize(tool),
       {
-        "type": "CoreGripperTool",
+        "type": "HamiltonCoreGripperTool",
         "name": "core_gripper_tool",
         "size_x": 36.0,
         "size_y": 8.346,

@@ -4,9 +4,35 @@ from typing import Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.core_gripper_tool import CoreGripperTool
+from pylabrobot.resources.hamilton.tip_creators import (
+  HamiltonToolDefinition,
+  TipPickupMethod,
+  TipSize,
+)
+
+# The volume the firmware's tip type table carries for a grip tool. A grip tool holds no liquid, but
+# the table demands at least 1.0 uL, and the value plays no part in picking the tool up.
+GRIP_TOOL_VOLUME = 1.0
 
 
-def hamilton_core_gripper_tool(name: Optional[str] = None) -> CoreGripperTool:
+class HamiltonCoreGripperTool(CoreGripperTool):
+  """A CO-RE grip tool on a Hamilton channel.
+
+  The machine is told about a grip tool through the same tip type table as a tip, so the tool
+  states its own entry.
+  """
+
+  def hamilton_tool_definition(self) -> HamiltonToolDefinition:
+    return HamiltonToolDefinition(
+      has_filter=False,
+      tip_length=self.extension,
+      maximal_volume=GRIP_TOOL_VOLUME,
+      tip_size=TipSize.UNDEFINED,
+      pickup_method=TipPickupMethod.OUT_OF_RACK,
+    )
+
+
+def hamilton_core_gripper_tool(name: Optional[str] = None) -> HamiltonCoreGripperTool:
   """Hamilton CO-RE grip tool, for 1000 uL channels.
 
   Hamilton cat. no.: 186100 (firmware tip type 14)
@@ -21,7 +47,7 @@ def hamilton_core_gripper_tool(name: Optional[str] = None) -> CoreGripperTool:
   not centred on the paddle's envelope in y - the pins stand out on one side - so its orifice is
   at y 4.25 rather than at half the depth.
   """
-  return CoreGripperTool(
+  return HamiltonCoreGripperTool(
     name=name,
     size_x=36.0,
     size_y=8.346,
