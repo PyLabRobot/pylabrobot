@@ -45,8 +45,8 @@ holds. Two general rules fix it, both in `scene.py`: a key called `name` at any 
 particular thing, and inside a nested structure a string matching a resource in this tree is a link
 to it. The rule deliberately stops at the top level, or a deck called "deck" loses its category.
 
-**One channel, not two.** Everything the viewer draws arrives as tracking state: a well's volume, a
-tip spot's fitting, and the position of anything that travels. A moving part reaches the picture
+**One channel, not two.** Everything the viewer draws arrives as tracking state: a well's volume and
+the position of anything that travels. A moving part reaches the picture
 because `Resource.location` publishes when it is set, so an X-arm read off the device is on the
 same path as a well being filled.
 
@@ -61,8 +61,9 @@ interface is worth doing again once state itself can carry that distinction.
 - No WebGPU verification. The headless browser used to check it has no adapter, so it exercised the
   WebGL2 fallback path. Frame rates seen there are software rendering and mean nothing; draw calls
   are the figure that transfers.
-- Tips and liquid are driven from tracker state only. The v1 STAR has no aspirate, dispense or
-  tip-pickup yet, so the demo moves trackers directly. A real command would move the same trackers.
+- Liquid is driven from tracker state only. The v1 STAR has no aspirate or dispense yet, so the
+  demo moves trackers directly. A real command would move the same trackers. Tips are not drawn
+  from tracker state at all: a tip is drawn when it stands in the tree as a resource.
 - Picking is `InstancedMesh` raycasting, which is fine at this size. GPU picking is the production
   answer.
 - GIF recording only works on the WebGPU backend. three's WebGL2 backend cannot read a render

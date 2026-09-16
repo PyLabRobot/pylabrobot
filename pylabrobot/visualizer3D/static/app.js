@@ -56,7 +56,6 @@ import {
   SHELL_OPACITY,
   SPACE_OPACITY,
   structureEdgeStyle,
-  TIP,
   TIP_RACK_OPACITY,
   TREE_HIDDEN,
   VESSEL_EMPTY,
@@ -96,7 +95,6 @@ let vesselOf = new Map(); // index -> the inner body whose colour tracks what is
 // Switching a resource off empties its box; these have to be emptied with it, or hiding a plate
 // leaves ninety-six cavities and their walls floating where the plate was.
 let overlayOf = new Map();
-let tipOf = new Map();
 let edgeOf = new Map();
 // The instances whose model arrived as a file. Their box is not drawn at all and its border is
 // only just there, and both have to be decided from here rather than at the moment the file
@@ -1667,7 +1665,6 @@ const CYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 20).rotateX(Math.PI / 2);
 // Open at both ends. A shaft is a length of tube: the bottom is where a tip goes on and the top is
 // where the channel carries on, so capping either reads as a solid slug hanging off the head.
 const TUBE = new THREE.CylinderGeometry(0.5, 0.5, 1, 20, 1, true).rotateX(Math.PI / 2);
-const CONE = new THREE.ConeGeometry(0.5, 1, 14).rotateX(-Math.PI / 2);
 
 // Above this many instances of one model, outlining each stops being cheap.
 const EDGE_LIMIT = 160;
@@ -1810,7 +1807,6 @@ function buildMeshes() {
   placementOf = new Array(world.names.length);
   vesselOf = new Map();
   overlayOf = new Map();
-  tipOf = new Map();
   edgeOf = new Map();
   drawnFromFile = new Set();
 
@@ -2029,9 +2025,6 @@ function buildMeshes() {
       view.add(inner);
       overlays.push(inner);
     }
-    // Only tip spots get an overlay. What a container holds is shown by colouring its inner body
-    // through `vesselOf`, not by a mesh of its own.
-    if (model.category === "tip_spot") overlays.push(buildOverlay(instances, model));
     const entry = meshes[meshes.length - 1];
     entry.overlays = overlays;
     entry.isVessel = isVessel;
@@ -2044,24 +2037,6 @@ function buildMeshes() {
 function remember(index, mesh, slot, at) {
   if (!overlayOf.has(index)) overlayOf.set(index, []);
   overlayOf.get(index).push({ mesh, slot, at });
-}
-
-function buildOverlay(instances, model) {
-  const mesh = new THREE.InstancedMesh(
-    CONE,
-    new THREE.MeshStandardMaterial({ color: TIP, roughness: 0.55 }),
-    instances.length,
-  );
-  mesh.frustumCulled = false;
-  for (let slot = 0; slot < instances.length; slot++) mesh.setMatrixAt(slot, ZERO);
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.userData.flat = flatVariant(mesh.material);
-  mesh.userData.lit = mesh.material;
-  view.add(mesh);
-  instances.forEach((globalIndex, slot) => {
-    tipOf.set(globalIndex, { mesh, slot, model });
-  });
-  return mesh;
 }
 
 // ---------------------------------------------------------------- live state
@@ -2103,13 +2078,7 @@ function refreshOverlays(index, touched) {
   }
 
   const vessel = vesselOf.get(index);
-  if (vessel && vessel.model.category === "tip_spot") {
-    // Green when a tip is fitted, white when not, as the existing visualizer does. `pending_tip`
-    // is the live intent, so a pickup shows the moment it is requested.
-    const fitted = state ? !!state.pending_tip : false;
-    vessel.mesh.setColorAt(vessel.slot, new THREE.Color(fitted ? TIP : VESSEL_EMPTY));
-    if (vessel.mesh.instanceColor) vessel.mesh.instanceColor.needsUpdate = true;
-  } else if (vessel && Number.isFinite(vessel.model.max_volume)) {
+  if (vessel && Number.isFinite(vessel.model.max_volume)) {
     const volume = state ? (state.pending_volume ?? state.volume ?? 0) : 0;
     const fraction = Math.max(0, Math.min(1, volume / (vessel.model.max_volume || 1)));
     // Empty is white; any liquid at all steps clear of white so a nearly empty well still reads.
@@ -2124,7 +2093,7 @@ function refreshOverlays(index, touched) {
   placeParts(index, touched);
 }
 
-// A well's rim and its cavity, a carrier's floor, a fitted tip: everything drawn outside the box
+// A well's rim and its cavity, a carrier's floor: everything drawn outside the box
 // pipeline. Each one follows the resource it belongs to - emptied when that resource is switched
 // off, put back where it stands when it is switched on, and carried along when it moves.
 function placeParts(index, touched) {
@@ -2134,30 +2103,6 @@ function placeParts(index, touched) {
     if (visible) placeInstance(part.mesh, part.slot, world.matrices[index], ...part.at);
     else part.mesh.setMatrixAt(part.slot, ZERO);
     touched.add(part.mesh);
-  }
-
-  const tip = tipOf.get(index);
-  if (tip) {
-    const [sx, sy, sz] = sizeOf(tip.model);
-    // `pending_tip` is the live intent; `tip` is what has been committed. The viewer follows
-    // intent, so a pickup shows the moment it is requested.
-    const mounted = stateOf.get(index)?.pending_tip ?? null;
-    if (!mounted || !visible) tip.mesh.setMatrixAt(tip.slot, ZERO);
-    else {
-      const length = mounted.total_tip_length || sz;
-      placeInstance(
-        tip.mesh,
-        tip.slot,
-        world.matrices[index],
-        sx * 0.62,
-        sy * 0.62,
-        length,
-        sx / 2,
-        sy / 2,
-        length / 2,
-      );
-    }
-    touched.add(tip.mesh);
   }
 }
 
@@ -2289,7 +2234,6 @@ function summaryOf(index) {
   if (!children.length) {
     const state = stateOf.get(index);
     if (state && state.pending_volume !== undefined) return `${fmt(state.pending_volume)} uL`;
-    if (state && "pending_tip" in state) return state.pending_tip ? "tip" : "";
     // A vacant site is labelled `<empty>` in place of its name, so a summary would repeat it.
     return "";
   }
@@ -2300,7 +2244,8 @@ function summaryOf(index) {
   const kind = modelOf(children[0]).category;
 
   if (kind === "tip_spot") {
-    const filled = children.filter((c) => !!stateOf.get(c)?.pending_tip).length;
+    // A tip is a resource standing in its spot, so a spot holds one when the tree says so.
+    const filled = children.filter((c) => world.childrenOf[c].length > 0).length;
     return `${filled}/${children.length} tips`;
   }
   if (kind === "well") return `${children.length} wells`;
@@ -2645,15 +2590,6 @@ function renderInfoPanel() {
   if (model.max_volume !== undefined) {
     const volume = state ? (state.pending_volume ?? state.volume ?? 0) : 0;
     contents.push(["volume", `${fmt(volume)}${NBSP}/${NBSP}${fmt(model.max_volume)}${NBSP}uL`]);
-  }
-  if (state && "pending_tip" in state) {
-    contents.push(["tip", state.pending_tip ? "fitted" : "none"]);
-    if (state.pending_tip) {
-      for (const key of ["total_tip_length", "nominal_volume", "has_filter"]) {
-        if (state.pending_tip[key] !== undefined)
-          contents.push([key, withUnit(key, state.pending_tip[key])]);
-      }
-    }
   }
 
   const specifics = [];

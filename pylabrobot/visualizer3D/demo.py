@@ -8,7 +8,7 @@ The world is a `Facility`. A simulated `STARDevice` is assigned into it at a coo
 a bench holding a plate and a tip rack that belong to no instrument. The viewer treats them
 identically, because it never asks what anything is.
 
-The v1 STAR has no aspirate, dispense or tip-pickup yet, so the run below drives the trackers
+The v1 STAR has no aspirate or dispense yet, so the run below drives the volume trackers
 directly. That is the same channel the viewer subscribes to either way: a real pipetting command
 would move these trackers rather than talk to the viewer.
 """
@@ -18,7 +18,7 @@ import itertools
 import logging
 
 from pylabrobot.hamilton.star.device import STARDevice, STARLet
-from pylabrobot.resources import set_tip_tracking, set_volume_tracking
+from pylabrobot.resources import set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import (
@@ -28,7 +28,6 @@ from pylabrobot.resources.hamilton import (
 )
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.tip_rack import TipRack
 
 from .facility import Facility
 from .server import Viewer3D
@@ -139,29 +138,17 @@ def fill(plate: Plate, volume: float) -> None:
 
 
 async def run(facility: Resource) -> None:
-  """Move liquid and tips around so the state channel has something to carry."""
+  """Move liquid around so the state channel has something to carry."""
   star = star_of(facility)
-  tips = star.deck.get_resource("tips_0")
   source = star.deck.get_resource("source_0")
   destination = star.deck.get_resource("destination_0")
-  if (
-    not isinstance(tips, TipRack)
-    or not isinstance(source, Plate)
-    or not isinstance(destination, Plate)
-  ):
-    raise TypeError("the demo deck no longer holds the rack and plates this run drives")
+  if not isinstance(source, Plate) or not isinstance(destination, Plate):
+    raise TypeError("the demo deck no longer holds the plates this run drives")
 
   fill(source, 300.0)
   await asyncio.sleep(2.0)
 
   for column in range(12):
-    # Eight tips leave the rack, so eight instances lose their tip body in one message.
-    for row in "ABCDEFGH":
-      spot = tips.get_item(f"{row}{column + 1}")
-      if spot.tracker.has_tip:
-        spot.tracker.remove_tip()
-    await asyncio.sleep(0.35)
-
     for row in "ABCDEFGH":
       well = f"{row}{column + 1}"
       taken = min(150.0, source.get_item(well).tracker.get_used_volume())
@@ -245,7 +232,6 @@ async def work_the_iswap(star) -> None:
 
 async def main() -> None:
   set_volume_tracking(True)
-  set_tip_tracking(True)
 
   facility = build_facility()
   star = star_of(facility)

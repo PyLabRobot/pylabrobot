@@ -20,7 +20,7 @@ export const RESOURCE_COLORS = {
   plate: 0x3a3a3a,
   well: 0xbcc7cf,
   tip_rack: 0x9b6690, // mid: the rack sitting in it
-  tip_spot: 0x6b4f66, // the spot's rim; its inside carries whether a tip is in it
+  tip_spot: 0x6b4f66, // the spot's rim
   tube_rack: 0x122d42,
   tube: 0xbcc7cf,
   trough: 0x756793,
@@ -98,7 +98,6 @@ export const VESSEL_WALL = 0.5;
 // And how solid it is drawn. Slightly see-through, so what is standing in the cavity reads through
 // the wall around it rather than being hidden by it from every angle but straight down.
 export const VESSEL_WALL_OPACITY = 0.85;
-export const TIP = 0x40cda1; // the colour the existing visualizer fills a fitted tip spot with
 export const SELECT = 0x1a4b8c;
 export const HOVER = 0xbbcc33;
 // Ported from the X-arm tracker branch's `XArm` renderer: a translucent frame with a window
