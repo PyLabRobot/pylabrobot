@@ -224,6 +224,6 @@ If you use PyLabRobot in your research, please cite the following:
 
 ---
 
-**Disclaimer:** PyLabRobot is not officially endorsed or supported by any robot manufacturer. If you use a firmware driver such as the STAR driver provided here, you do so at your own risk. Usage of a firmware driver such as STAR may invalidate your warranty. Please contact us with any questions.
+**Disclaimer:** PyLabRobot is officially endorsed and supported by an increasing number of robot manufacturers (https://docs.pylabrobot.org/stable/#supported-by), but not all. If you use a firmware driver, such as the STAR driver provided here, you do so at your own risk. Whether it affects your warranty is between you and your vendor. Please contact us with any questions.
 
 _Developed for the Sculpting Evolution Group at the MIT Media Lab_

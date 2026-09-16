@@ -2005,6 +2005,7 @@
     "status": "basic",
     "api": "pylabrobot.thermo_fisher.nanodrop_1000.ThermoFisherNanoDrop1000",
     "api_version": "v1",
+    "manager": "https://discuss.pylabrobot.org/u/vcjdeboer",
     "code_slug": "thermo_fisher/nanodrop_1000",
     "doc_slug": "thermo_fisher/nanodrop_1000/index"
   },
