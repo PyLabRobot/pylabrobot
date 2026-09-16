@@ -9,7 +9,7 @@ from pylabrobot.hamilton.star.driver.features.head384 import Head384Configuratio
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAPConfiguration
 from pylabrobot.hamilton.star.driver.features.pipettes import PipettesConfiguration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArmConfiguration
-from pylabrobot.utils.configuration_json import restore
+from pylabrobot.utils.configuration_json import _restore
 
 
 @dataclass
@@ -171,10 +171,10 @@ def read_configuration(path: str) -> Dict[str, Any]:
 
   read: Dict[str, Any] = {}
   if "device" in saved:
-    read["device"] = restore(DeviceConfiguration, saved["device"])
+    read["device"] = _restore(DeviceConfiguration, saved["device"])
   read["arms"] = {
     side: {
-      name: restore(ARM_FEATURE_CONFIGURATIONS[name], value)
+      name: _restore(ARM_FEATURE_CONFIGURATIONS[name], value)
       for name, value in carried.items()
       if name in ARM_FEATURE_CONFIGURATIONS
     }
@@ -182,5 +182,5 @@ def read_configuration(path: str) -> Dict[str, Any]:
   }
   for name, configuration in DEVICE_FEATURE_CONFIGURATIONS.items():
     if name in saved:
-      read[name] = restore(configuration, saved[name])
+      read[name] = _restore(configuration, saved[name])
   return read

@@ -31,10 +31,10 @@ Each driver stands alone: one device's package never imports another's. What mor
 
 - **`pylabrobot.utils.configuration_json`** writes a driver's configuration dataclasses to JSON and reads them back
   against their declared field types.
-- **`pylabrobot.utils.liquid_handling`** plans pipetting for any multi-channel device: where channels go inside a
-  container (`compute_channel_offsets`) and which channels can reach their targets in one X/Y move
-  (`plan_batches`). It is pure and synchronous. The device supplies its per-channel minimum spacing and executes
-  the plan with its own moves; `hamilton/prep/driver/features/pipettes_tests.py` and
+- **`pylabrobot.utils.liquid_handling`** plans pipetting for any multi-channel pipette device: where channels go
+  inside a container (`channel_positioning.compute_channel_offsets`) and which channels can reach their targets in
+  one X/Y move (`pipette_batch_scheduling.plan_batches`). It is pure and synchronous. The device supplies its
+  per-channel minimum spacing and executes the plan with its own moves; `hamilton/prep/driver/features/pipettes_tests.py` and
   `hamilton/star/driver/features/pipettes_tests.py` show the pattern.
 
 ### Idempotent public API

@@ -1,6 +1,9 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from pylabrobot.resources.container import Container
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource import Resource
 from pylabrobot.utils.liquid_handling.channel_positioning import (
   _centers_to_offsets,
   _distribute_channels,
@@ -14,9 +17,6 @@ from pylabrobot.utils.liquid_handling.channel_positioning import (
   required_spacing_between,
 )
 from pylabrobot.utils.liquid_handling.errors import ChannelsDoNotFitError
-from pylabrobot.resources.container import Container
-from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.resource import Resource
 
 
 def _make_container(size_y, no_go_zones=None, name="test"):

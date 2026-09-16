@@ -1,14 +1,13 @@
-"""Dataclasses to JSON and back, against the types their fields declare.
-
-JSON loses three things dataclass configurations rely on: a tuple comes back a list, a dict key comes back a string,
-and a date comes back its own text. What each field is declared to be is enough to put all three back, so writing is
-`dataclasses.fields` and reading is the same walk against the declared types. Nothing here is particular to a device.
-"""
-
 import dataclasses
 import datetime
 import typing
 from typing import Any, Union
+
+# -- reading and writing these as JSON ------------------------------------------------------------
+# JSON loses three things these configurations rely on: a tuple comes back a list, a dict key comes
+# back a string, and a date comes back its own text. What each field is declared to be is enough to
+# put all three back, so writing is `dataclasses.fields` and reading is the same walk against the
+# declared types.
 
 
 def to_jsonable(value: Any) -> Any:
@@ -34,7 +33,7 @@ def to_jsonable(value: Any) -> Any:
   return value
 
 
-def restore(hint: Any, value: Any) -> Any:
+def _restore(hint: Any, value: Any) -> Any:
   """One value, back in the type its field is declared to hold.
 
   Args:
@@ -52,17 +51,17 @@ def restore(hint: Any, value: Any) -> Any:
 
   if origin is Union:  # Optional[X] is Union[X, None]; the None case returned above.
     declared = [arg for arg in args if arg is not type(None)]
-    return restore(declared[0], value) if len(declared) == 1 else value
+    return _restore(declared[0], value) if len(declared) == 1 else value
   if origin is tuple:
     # Fixed-length tuples name a type per position; `Tuple[X, ...]` names one for all of them.
     if len(args) == 2 and args[1] is Ellipsis:
-      return tuple(restore(args[0], item) for item in value)
-    return tuple(restore(arg, item) for arg, item in zip(args, value))
+      return tuple(_restore(args[0], item) for item in value)
+    return tuple(_restore(arg, item) for arg, item in zip(args, value))
   if origin is list:
-    return [restore(args[0], item) for item in value]
+    return [_restore(args[0], item) for item in value]
   if origin is dict:
     key_hint, value_hint = args
-    return {restore(key_hint, key): restore(value_hint, item) for key, item in value.items()}
+    return {_restore(key_hint, key): _restore(value_hint, item) for key, item in value.items()}
   if hint is int and isinstance(value, str):
     # A dict keyed by int: JSON wrote the key as text, and the field says what it was.
     return int(value)
@@ -74,5 +73,5 @@ def restore(hint: Any, value: Any) -> Any:
     # field still loads.
     field_types = typing.get_type_hints(hint)
     named = {field.name for field in dataclasses.fields(hint)}
-    return hint(**{n: restore(field_types[n], v) for n, v in value.items() if n in named})
+    return hint(**{n: _restore(field_types[n], v) for n, v in value.items() if n in named})
   return value

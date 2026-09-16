@@ -8,7 +8,7 @@ from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import STARDeck
-from pylabrobot.utils.liquid_handling import plan_batches
+from pylabrobot.utils.liquid_handling.pipette_batch_scheduling import plan_batches
 
 
 async def channels(width: float, positions: List[float]) -> Tuple[Pipettes, List[str]]:

@@ -31,12 +31,12 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Collection, Dict, FrozenSet, List, Optional, Tuple
 
-from pylabrobot.utils.liquid_handling.channel_positioning import (
-  compute_nonconsecutive_channel_offsets,
-)
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
+from pylabrobot.utils.liquid_handling.channel_positioning import (
+  compute_nonconsecutive_channel_offsets,
+)
 
 logger = logging.getLogger(__name__)
 

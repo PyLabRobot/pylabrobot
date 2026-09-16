@@ -29,7 +29,7 @@ from pylabrobot.resources.hamilton import (
 )
 from pylabrobot.resources.tip_tracker import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
-from pylabrobot.utils.liquid_handling import plan_batches
+from pylabrobot.utils.liquid_handling.pipette_batch_scheduling import plan_batches
 
 
 def _run(coro):
