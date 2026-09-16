@@ -364,6 +364,7 @@ class EmbeddedTipRack(TipRack):
     return {
       **super().serialize(),
       "sinking_depth": self.sinking_depth,
+      "frame_height": self._frame_height,
     }
 
 
