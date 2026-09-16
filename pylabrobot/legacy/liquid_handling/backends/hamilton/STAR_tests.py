@@ -2309,6 +2309,10 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
     # the slim tip has the high volume collar, so it is picked up like a 1000 uL tip
     await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn(
+      "C0TTid0001tt01tf1tl0870tv03450tg3tu0",
+      [call.kwargs.get("cmd") for call in self.backend._write_and_read_command.call_args_list],
+    )
     tp, tz = self._get_tp_tz_from_calls("C0TP")
     self.assertEqual(tp, 2264)
     self.assertEqual(tz, 2164)
