@@ -1288,3 +1288,62 @@ main {
     transition: none !important;
   }
 }
+
+/* ---------------------------------------------------------------- boot diagnosis */
+
+/* Shown by boot.js in place of a viewer that could not start or cannot reach its server. */
+#boot-diagnosis {
+  position: fixed;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  width: min(640px, calc(100vw - 32px));
+  padding: 18px 20px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-left: 4px solid #c0392b;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#boot-diagnosis h2 {
+  font-size: 17px;
+  margin-bottom: 10px;
+}
+
+#boot-diagnosis ul {
+  list-style: none;
+  margin-bottom: 10px;
+}
+
+#boot-diagnosis li::before {
+  display: inline-block;
+  width: 1.4em;
+  font-weight: 700;
+}
+
+#boot-diagnosis li.ok::before {
+  content: "\2713";
+  color: green;
+}
+
+#boot-diagnosis li.fail::before {
+  content: "\2717";
+  color: #c0392b;
+}
+
+#boot-diagnosis p {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+#boot-diagnosis button {
+  margin-top: 12px;
+  padding: 4px 12px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  background: #f8f9fa;
+}

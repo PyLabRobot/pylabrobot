@@ -2,7 +2,11 @@
 
 import asyncio
 import json
+import socket
 import unittest
+import urllib.error
+import urllib.request
+from typing import Optional
 
 import websockets
 
@@ -32,7 +36,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
 
   async def connect(self):
     """Open a client and take the scene and the snapshot it is greeted with."""
-    ws = await websockets.connect(f"ws://127.0.0.1:{self.viewer.ws_port}", max_size=None)
+    ws = await websockets.connect(self.viewer.ws_url, max_size=None)
     scene = json.loads(await ws.recv())["data"]
     snapshot = json.loads(await ws.recv())["data"]
     return ws, scene, snapshot
@@ -125,6 +129,75 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(moved["location"]["x"], 400)
     finally:
       await ws.close()
+
+
+class AccessTests(unittest.IsolatedAsyncioTestCase):
+  """Only the page this viewer served, reached by a name this machine answers to, may watch."""
+
+  async def asyncSetUp(self):
+    self.facility = Facility(name="facility", size_x=1000, size_y=1000, size_z=500)
+    self.viewer = Viewer3D(
+      self.facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT, name="tests"
+    )
+    await self.viewer.start()
+
+  async def asyncTearDown(self):
+    await self.viewer.stop()
+
+  def ws(self, token: Optional[str]) -> str:
+    query = "" if token is None else f"?token={token}"
+    return f"ws://127.0.0.1:{self.viewer.ws_port}/{query}"
+
+  async def assert_refused(self, url: str, **kwargs):
+    with self.assertRaises(websockets.InvalidStatus) as refused:
+      await websockets.connect(url, **kwargs)
+    self.assertEqual(refused.exception.response.status_code, 403)
+
+  async def test_a_websocket_without_the_token_is_refused(self):
+    await self.assert_refused(self.ws(None))
+    await self.assert_refused(self.ws("not-the-token"))
+
+  async def test_a_page_from_another_site_is_refused_even_with_the_token(self):
+    await self.assert_refused(self.ws(self.viewer.token), origin="https://example.com")
+
+  async def test_the_served_page_and_a_tunnel_are_let_in(self):
+    for origin in (
+      f"http://127.0.0.1:{self.viewer.fs_port}",
+      "http://localhost:9000",
+      f"http://{socket.gethostname()}.local:{self.viewer.fs_port}",
+      "http://10.60.2.36:1338",
+    ):
+      ws = await websockets.connect(self.ws(self.viewer.token), origin=origin, max_size=None)
+      self.assertEqual(json.loads(await ws.recv())["event"], "scene")
+      await ws.close()
+
+  def get(self, host: str) -> int:
+    request = urllib.request.Request(
+      f"http://127.0.0.1:{self.viewer.fs_port}/", headers={"Host": host}
+    )
+    try:
+      with urllib.request.urlopen(request) as response:
+        return response.status
+    except urllib.error.HTTPError as error:
+      return error.code
+
+  async def test_the_page_is_not_served_to_a_rebound_name(self):
+    """DNS rebinding points a hostile name at 127.0.0.1, which would make its page same-origin
+    with ours and let it read the token out of the HTML."""
+    self.assertEqual(await asyncio.to_thread(self.get, "attacker.example:1338"), 403)
+
+  async def test_the_page_carries_the_token_for_a_known_name(self):
+    for host in ("127.0.0.1:1338", "localhost:1338", "[::1]:1338"):
+      self.assertEqual(await asyncio.to_thread(self.get, host), 200, host)
+    page = await asyncio.to_thread(
+      lambda: urllib.request.urlopen(f"http://127.0.0.1:{self.viewer.fs_port}/").read().decode()
+    )
+    self.assertIn(self.viewer.token, page)
+    self.assertNotIn("{{ ws_token }}", page)
+
+  async def test_every_run_has_its_own_token(self):
+    other = Viewer3D(self.facility, open_browser=False)
+    self.assertNotEqual(other.token, self.viewer.token)
 
 
 if __name__ == "__main__":

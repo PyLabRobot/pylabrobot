@@ -8,14 +8,20 @@ protocol runs on the instrument host. What changed is the payload.
 import asyncio
 import functools
 import hashlib
+import hmac
 import http.server
+import ipaddress
 import json
 import logging
 import math
 import os
+import re
+import secrets
+import socket
 import threading
 import webbrowser
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
+from urllib.parse import parse_qs, urlsplit
 
 import websockets
 
@@ -41,6 +47,32 @@ def _finite(obj: Any) -> Any:
   if isinstance(obj, (list, tuple)):
     return [_finite(v) for v in obj]
   return obj
+
+
+def _hostname_of(authority: Optional[str]) -> Optional[str]:
+  """The hostname in a `Host` header or an `Origin`, lower-cased and without port or brackets."""
+  if not authority:
+    return None
+  netloc = urlsplit(authority if "//" in authority else f"//{authority}").hostname
+  return netloc.lower() if netloc else None
+
+
+def _is_ip_literal(hostname: str) -> bool:
+  try:
+    ipaddress.ip_address(hostname)
+    return True
+  except ValueError:
+    return False
+
+
+HELLO_FIELDS = ("backend", "renderer", "error", "userAgent")
+
+
+def _printable(value: Any, limit: int = 200) -> Optional[str]:
+  """A browser-supplied value as short, single-line printable text, or None."""
+  if not isinstance(value, str) or not value:
+    return None
+  return re.sub(r"[^\x20-\x7e]", "?", value)[:limit]
 
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -98,6 +130,18 @@ class Viewer3D:
     ws_port: websocket port.
     open_browser: whether to open a browser window on start.
     name: what to show in the header, as the existing visualizer shows the calling script.
+    allowed_hosts: extra hostnames a browser may reach the viewer by, e.g. a DNS name for this
+      machine. IP addresses, `localhost`, and this machine's hostname (and `<hostname>.local`) are
+      always accepted.
+
+  Who may watch. The deck state is not public, and a websocket is not covered by the browser's
+  same-origin policy: any web page open in the operator's browser could otherwise connect to
+  `ws://127.0.0.1:<ws_port>` and read it. So every run makes a secret token, bakes it into the page
+  it serves, and refuses a websocket without it. The token only protects anything while a foreign
+  page cannot read ours, which DNS rebinding would allow - a hostile name resolved to 127.0.0.1 makes
+  the page same-origin with it. Both servers therefore also refuse a hostname they do not recognise, in
+  the HTTP `Host` header and in the websocket `Origin`. An IP address cannot be rebound, so any is
+  accepted, which is what keeps an SSH tunnel or a LAN address working without configuration.
   """
 
   def __init__(
@@ -109,6 +153,7 @@ class Viewer3D:
     open_browser: bool = True,
     name: str = "facility",
     models_root: Optional[str] = None,
+    allowed_hosts: Iterable[str] = (),
   ):
     self.root = root
     self.host = host
@@ -116,6 +161,12 @@ class Viewer3D:
     self.ws_port = ws_port
     self.open_browser = open_browser
     self.name = name
+    self.token = secrets.token_urlsafe(32)
+    machine = socket.gethostname().lower()
+    # The interface bound to counts as a way in when it is a name rather than an address.
+    self.allowed_hosts = {"localhost", machine, f"{machine}.local", host.lower()} | {
+      h.lower().strip("[]") for h in allowed_hosts
+    }
     # Where a resource's `reference_glb` is resolved from. One root for the whole scene, so a
     # resource names its model the same way wherever the tree is built and whoever runs it.
     self.models_root = os.path.abspath(os.path.expanduser(models_root)) if models_root else None
@@ -156,6 +207,7 @@ class Viewer3D:
     self._moved: set = set()
     self._scene_timer: Optional[asyncio.TimerHandle] = None
     self.rebuilds = 0  # how many scene rebuilds a run actually cost
+    self.clients_seen: List[Dict[str, Optional[str]]] = []  # what each page said it draws with
 
     self._subscribe(root)
     # A newly assigned resource has to start publishing too, or its state never reaches the viewer.
@@ -229,6 +281,34 @@ class Viewer3D:
     self._scene_dirty = False
     self.rebuilds += 1
     await self._send_scene_to_all()
+
+  # -- access ----------------------------------------------------------------
+
+  def _host_allowed(self, hostname: Optional[str]) -> bool:
+    if hostname is None:
+      return False
+    return _is_ip_literal(hostname) or hostname in self.allowed_hosts
+
+  @property
+  def ws_url(self) -> str:
+    """Where a client outside a browser connects, token included."""
+    return f"ws://127.0.0.1:{self.ws_port}/?token={self.token}"
+
+  def _check_websocket(self, connection, request):
+    """Refuse a websocket handshake without this run's token or from a page we did not serve.
+
+    A browser always sends `Origin` on a websocket; a client that is not a browser may leave it out,
+    and still needs the token.
+    """
+    offered = parse_qs(urlsplit(request.path).query).get("token", [""])[0]
+    if not hmac.compare_digest(offered.encode(), self.token.encode()):
+      logger.warning("refused a websocket without this viewer's token")
+      return connection.respond(403, "Forbidden\n")
+    origin = request.headers.get("Origin")
+    if origin is not None and not self._host_allowed(_hostname_of(origin)):
+      logger.warning("refused a websocket from origin %r", origin[:200])
+      return connection.respond(403, "Forbidden\n")
+    return None
 
   # -- transport -------------------------------------------------------------
 
@@ -394,12 +474,41 @@ class Viewer3D:
       )
     )
     try:
-      async for _ in websocket:
-        pass
+      async for message in websocket:
+        self._on_client_message(message)
     except Exception:
       pass
     finally:
       self._clients.discard(websocket)
+
+  def _on_client_message(self, message: Any) -> None:
+    """A page says what it draws with, or why it could not draw at all.
+
+    Printed rather than logged because the person to tell is the one watching the notebook, who
+    otherwise only sees a browser tab that shows nothing. Everything in it came from a browser, so
+    it is shortened and stripped to printable text before it is shown.
+    """
+    try:
+      parsed = json.loads(message)
+    except (TypeError, ValueError):
+      return
+    if not isinstance(parsed, dict) or parsed.get("event") != "hello":
+      return
+    data = parsed.get("data")
+    if not isinstance(data, dict):
+      return
+    self.clients_seen.append({k: _printable(data.get(k)) for k in HELLO_FIELDS})
+    hello = self.clients_seen[-1]
+    if hello["error"]:
+      print(f"viewer: a browser could not show the scene: {hello['error']}")
+      print(f"  renderer: {hello['renderer'] or 'none'}  browser: {hello['userAgent']}")
+      return
+    drawing = hello["backend"] or "unknown backend"
+    if hello["renderer"]:
+      drawing += f" on {hello['renderer']}"
+    if data.get("software") is True:
+      drawing += " - software rendering, expect it to be slow"
+    print(f"viewer: a browser connected, drawing with {drawing}")
 
   # -- static files ----------------------------------------------------------
 
@@ -407,7 +516,9 @@ class Viewer3D:
     directory = STATIC_DIR
     ws_port = self.ws_port
     name = self.name
+    token = self.token
     mesh_files = self._mesh_files
+    host_allowed = self._host_allowed
 
     class Handler(http.server.SimpleHTTPRequestHandler):
       def __init__(self, *args, **kwargs):
@@ -420,7 +531,20 @@ class Viewer3D:
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+      def do_HEAD(self):
+        if self._refuse_foreign_host():
+          return
+        super().do_HEAD()
+
+      def _refuse_foreign_host(self) -> bool:
+        if host_allowed(_hostname_of(self.headers.get("Host"))):
+          return False
+        self.send_error(403, "unrecognised Host; pass it to Viewer3D(allowed_hosts=...)")
+        return True
+
       def do_GET(self):
+        if self._refuse_foreign_host():
+          return
         # Match on the path alone: a link may carry a query string (`/?view=top`), and serving the
         # template unsubstituted in that case leaves the page with no websocket port.
         path = self.path.split("?", 1)[0].split("#", 1)[0]
@@ -440,6 +564,7 @@ class Viewer3D:
         if path in ("/", "/index.html"):
           with open(os.path.join(directory, "index.html"), "r", encoding="utf-8") as f:
             content = f.read().replace("{{ ws_port }}", str(ws_port))
+            content = content.replace("{{ ws_token }}", token)
             content = content.replace("{{ source_filename }}", name)
           body = content.encode("utf-8")
           self.send_response(200)
@@ -471,7 +596,9 @@ class Viewer3D:
     # quietly shows someone else's facility.
     while True:
       try:
-        self._ws_server = await websockets.serve(self._handler, self.host, self.ws_port)
+        self._ws_server = await websockets.serve(
+          self._handler, self.host, self.ws_port, process_request=self._check_websocket
+        )
         break
       except OSError:
         self.ws_port += 1

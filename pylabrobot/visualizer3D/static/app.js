@@ -3619,6 +3619,24 @@ function showStatus(connected) {
     el.classList.toggle("disconnected", !connected);
   }
   statusLabel.textContent = connected ? "Connected" : "Disconnected";
+  window.dispatchEvent(new CustomEvent("plr:status", { detail: { connected } }));
+}
+
+/** Tell the server what this page draws with, so a slow or odd viewer is visible from Python. */
+function sayHello() {
+  const probe = window.plrCapability ?? {};
+  const webgpu = !!renderer.backend?.isWebGPUBackend;
+  socket.send(
+    JSON.stringify({
+      event: "hello",
+      data: {
+        backend: webgpu ? "WebGPU" : "WebGL2",
+        renderer: webgpu ? null : probe.renderer,
+        software: webgpu ? false : !!probe.software,
+        userAgent: navigator.userAgent,
+      },
+    }),
+  );
 }
 
 document.addEventListener("visibilitychange", () => {
@@ -3635,9 +3653,12 @@ function connect() {
   ) {
     return;
   }
-  socket = new WebSocket(`ws://${location.hostname}:${window.WS_PORT}`);
+  socket = new WebSocket(window.WS_URL);
   framed = false;
-  socket.onopen = () => showStatus(true);
+  socket.onopen = () => {
+    showStatus(true);
+    sayHello();
+  };
   socket.onclose = () => {
     showStatus(false);
     setTimeout(connect, 1500);

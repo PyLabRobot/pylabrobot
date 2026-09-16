@@ -293,9 +293,17 @@
 <script type="importmap">
 { "imports": { "three": "./vendor/three.webgpu.min.js", "three/addons/": "./vendor/" } }
 </script>
-<script type="module">
+<script>
   window.WS_PORT = "{{ ws_port }}";
+  window.WS_URL = `ws://${location.hostname}:{{ ws_port }}/?token={{ ws_token }}`;
+  // boot.js explains every failure it can see, but a browser too old to run it at all sees nothing.
+  setTimeout(() => {
+    if (window.__plrBooted) return;
+    const label = document.getElementById("status-label");
+    label.textContent = "Browser not supported";
+    label.className = "disconnected";
+  }, 5000);
 </script>
-<script type="module" src="./app.js"></script>
+<script type="module" src="./boot.js"></script>
 </body>
 </html>

@@ -71,6 +71,60 @@ interface is worth doing again once state itself can carry that distinction.
   adapter. It captures the viewport only, not the floating panels over it.
 - No GUI editing mode.
 
+## Design fault: the renderer gates everything
+
+**Symptom.** The page stays on "Loading..." forever. No error shows on the page, and nothing connects to the
+websocket port.
+
+**Why.** `app.js` runs `await renderer.init()` as the module loads. If the browser has neither WebGPU nor WebGL2,
+that throws, the module stops, and `connect()` never runs. The tree, search and inspector never appear either,
+even though none of them need a GPU. The same symptom also comes from a websocket that can't be reached
+(a tunnel with only one port, or a port that moved up on collision), so the two causes look identical.
+
+**Where it breaks.** WebGL2 is often missing even on capable hardware: the browser blocklists the GPU, a
+sandbox can't reach the driver, or the session has no GPU (VMs, some remote desktops, CI). Chrome also no longer
+falls back to software rendering on its own. The browser tests don't catch any of this. They are
+headless (always software rendering), and they skip entirely off macOS
+(`CHROME` is a macOS path).
+
+**On the Jetson AGX Orin workcell host** (JetPack 5, Xorg, no `/dev/dri`), verified 2026-09-16:
+
+| browser | default | fix |
+|---|---|---|
+| Chromium (snap) | no WebGL: EGL can't start inside the snap | `--enable-unsafe-swiftshader`: software only, the snap can't reach the GPU |
+| Firefox (apt) | no WebGL: blocklisted, because `glxtest: drmGetDevices2 failed` | hardware WebGL2 ("NVIDIA Tegra Orin"), but only with all three settings below |
+
+```
+__EGL_VENDOR_LIBRARY_FILENAMES=/usr/lib/aarch64-linux-gnu/tegra-egl/nvidia.json firefox
+# about:config  gfx.x11-egl.force-enabled = true   webgl.force-enabled = true
+```
+
+Leave out the environment variable and glvnd picks Mesa's EGL, so Firefox renders on the CPU (llvmpipe). WebGPU is never available.
+
+**Better design, ship in this order.** This came out of an adversarial review. The server-side items were checked against the code.
+
+1. Make the browser tests find Chrome on Linux (env var or `shutil.which`). Add runs with no GPU, and with the
+   page served but the websocket port closed.
+2. Construct `WebGPURenderer` with `forceWebGL: true`, and make WebGPU opt-in (`?backend=webgpu`). At 24–34 draw
+   calls WebGPU gains nothing and doubles the paths to test.
+3. **Done.** Add a small `boot.js` that checks capability and websocket reachability, then `import("./app.js")` inside
+   try/catch. A failure becomes an on-page diagnosis with a per-browser fix instead of "Loading...". The client
+   sends its backend and renderer string over the websocket, and Python prints it, e.g.
+   `viewer: a browser connected, drawing with WebGL2 on llvmpipe - software rendering, expect it to be slow`.
+4. **Done.** Check the websocket `Origin` (and the HTTP `Host`) and require a per-run token baked into `index.html`. Browsers don't apply same-origin
+   rules to websockets, so without this any web page open in the operator's browser could read the deck state.
+5. Serve HTTP and the websocket on one port (websockets `process_request`), and connect with
+   `new URL("ws", location)`. That leaves one tunnel, and it works behind a proxy or HTTPS. If the port is taken,
+   fail loudly instead of moving up silently.
+6. Capture GIF frames with `drawImage(renderer.domElement)` straight after `render`. `preserveDrawingBuffer` is
+   already on, so this should work on both backends (untested).
+7. Detect software renderers and switch to a low-cost mode: pixel ratio 1, no antialias, no PMREM environment.
+8. Send broadcasts to all clients at once and drop slow ones. Today one slow remote viewer stalls updates for every client.
+
+Rejected: a Canvas2D fallback renderer (a second renderer that would drift from the first) and a full
+scene/renderer split (`world.js` already holds the scene state). Revisit classic `WebGLRenderer` only if the WebGL
+backend of `WebGPURenderer` misbehaves.
+
 ## Interface
 
 The shell follows the existing visualizer: its palette and metrics, the navbar with the source

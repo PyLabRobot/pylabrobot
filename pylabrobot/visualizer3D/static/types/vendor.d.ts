@@ -39,4 +39,7 @@ declare const GIF: any;
 
 interface Window {
   WS_PORT: string;
+  WS_URL: string;
+  plrCapability?: { webgl2: boolean; renderer: string | null; software: boolean };
+  __plrBooted?: boolean;
 }
