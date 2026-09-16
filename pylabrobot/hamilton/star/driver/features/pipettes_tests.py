@@ -166,7 +166,7 @@ class TestPositionInZDirection(unittest.IsolatedAsyncioTestCase):
 
 
 class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
-  """A simulated channel answers for the tip hanging from its mounting shaft.
+  """A simulated channel answers for the tip on its mounting shaft.
 
   The master reports the bottom of what a channel carries and the channel reports its stop disc, so
   a tip on a shaft has to show up in both reads, a stop disc apart, the way it does on a device.
@@ -196,7 +196,7 @@ class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(overhang, self.tip.total_tip_length - self.tip.fitting_depth, places=1)
 
   async def test_the_grip_tool_reaches_to_its_grip_line_as_the_firmware_counts_it(self):
-    """The firmware counts the grip tool 30 mm long, to its grip line, not to the paddle's edge."""
+    """The firmware counts the grip tool to its grip line, 30 mm, not to its 32 mm bottom."""
     from pylabrobot.resources.hamilton import hamilton_core_gripper_tool
 
     self.shaft.mount_tip(hamilton_core_gripper_tool(name="grip"))

@@ -105,12 +105,11 @@ class ResourceStack(Resource):
 
   def _nesting_overlap(self, upper: Resource, lower: Optional[Resource]) -> float:
     """How far ``upper`` sinks into ``lower`` when stacked in the z direction (``0`` if they do not
-    nest). Only a bare plate stacked on a bare plate with a known ``stacking_z_height`` nests; the
-    overlap is then ``size_z - stacking_z_height`` (i.e. the plate adds only its stacking pitch to
-    the stack instead of its full height)."""
+    nest). A bare plate on a bare plate, or a standing tip rack on a standing tip rack, with a known
+    ``stacking_z_height`` nests; the overlap is then ``size_z - stacking_z_height``."""
     if self.direction != "z":
       return 0.0
-    # Deferred: tip_rack imports this module, to tell whether a rack has anything stacked on it.
+    # Deferred: tip_rack imports this module.
     from pylabrobot.resources.tip_rack import StandingTipRack
 
     if (

@@ -1,8 +1,6 @@
 import unittest
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.resource_stack import ResourceStack
-from pylabrobot.resources.tip_rack import StandingTipRack
 from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
@@ -19,6 +17,8 @@ from pylabrobot.resources.hamilton import (
   hamilton_mfx_resource_holder_ntr4,
   hamilton_tip_carrier_L5_ntr_a00,
 )
+from pylabrobot.resources.resource_stack import ResourceStack
+from pylabrobot.resources.tip_rack import StandingTipRack
 
 
 class StandardTipCarrierTests(unittest.TestCase):
@@ -67,9 +67,7 @@ class StandardTipCarrierTests(unittest.TestCase):
 
 class NestedTipCarrierTests(unittest.TestCase):
   def test_tip_spot_positions_on_star_deck(self):
-    # C0TP of run10 in bct_re 2603_STAR_tippickup/260916_tippickup_testing:
-    # hamilton_tip_carrier_L5_ntr_a00 at x 752.5 with the 10, 50 and 300 uL racks on sites 5, 4 and
-    # 3, all picked up at z 184.0
+    # Venus' pick-up positions, with the carrier at x 752.5
     for rack_fn, site, a1_y in [
       (hamilton_96_tiprack_10uL_NTR, 0, 145.8),
       (hamilton_96_tiprack_50uL_NTR, 1, 241.8),
@@ -89,8 +87,7 @@ class NestedTipCarrierTests(unittest.TestCase):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
   def test_tip_spot_positions_on_the_mfx_ntr4_module(self):
-    # C0TP and C0EP of run6, run7 and run8 in bct_re 2603_STAR_tippickup/260916_tippickup_testing:
-    # the MFX carrier at x 932.5 with each rack on its NTR4 site, all picked up at z 184.0
+    # Venus' pick-up positions, with the MFX carrier at x 932.5 and the module in slot 3
     for rack_fn in (
       hamilton_96_tiprack_10uL_NTR,
       hamilton_96_tiprack_50uL_NTR,

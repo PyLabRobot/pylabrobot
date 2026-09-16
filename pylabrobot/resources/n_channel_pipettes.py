@@ -1,7 +1,7 @@
 """Pipetting channels, and the rigid grids some devices carry them in."""
 
 from collections import OrderedDict
-from typing import Any, Dict, List, Literal, Mapping, Optional, get_args
+from typing import Any, Dict, List, Literal, Mapping, Optional, cast, get_args
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.head_tool import HeadTool
@@ -96,31 +96,23 @@ class TipMountingShaft(Resource):
     """Everything but the tool it is carrying, which is state."""
     return [child for child in self.children if not isinstance(child, HeadTool)]
 
-  def mount_tip(self, tip: Resource) -> None:
-    """Take a tip onto this shaft.
+  def mount_tip(self, tip: HeadTool) -> None:
+    """Take a tip onto this shaft, once the device has confirmed the pickup.
 
-    The tip is centred on the shaft, and the channel reaches `fitting_depth` into it: its pick-up
-    location, the top of the opening, is `fitting_depth` above the shaft's end.
-
-    Call this once the device has confirmed the pickup: a shaft that is given a tip it did not
-    manage to collect reports one it is not holding.
+    The tip is centred on the shaft, its pick-up location `fitting_depth` above the shaft's end.
 
     Args:
-      tip: the tip that was collected. It is reparented here, so it leaves wherever it was.
+      tip: the tip that was collected. It is reparented here.
 
     Raises:
       RuntimeError: If this shaft is already carrying a tip.
     """
     if self.has_tip():
       raise RuntimeError(f"{self.name} is already carrying {self.children[0].name}")
-    location = (
-      Coordinate(
-        x=self.get_size_x() / 2 - tip.pick_up_location.x,
-        y=self.get_size_y() / 2 - tip.pick_up_location.y,
-        z=tip.fitting_depth - tip.pick_up_location.z,
-      )
-      if isinstance(tip, HeadTool)
-      else Coordinate(0.0, 0.0, -tip.get_absolute_size_z())
+    location = Coordinate(
+      x=self.get_size_x() / 2 - tip.pick_up_location.x,
+      y=self.get_size_y() / 2 - tip.pick_up_location.y,
+      z=tip.fitting_depth - tip.pick_up_location.z,
     )
     self.assign_child_resource(tip, location=location)
 
@@ -143,20 +135,11 @@ class TipMountingShaft(Resource):
     return tip
 
   def tip_bottom(self) -> Coordinate:
-    """Where the bottom of what this shaft carries is, relative to the channel.
-
-    The shaft's own reference point when it is empty, and the end of the tip when it is not,
-    which is what has to clear the deck.
-
-    Returns:
-      The offset from the channel to the bottom of what it carries.
-    """
+    """Where the bottom of what this shaft carries is, relative to the shaft's end."""
     tip = self.tip
-    if tip is None or tip.location is None:
+    if tip is None:
       return Coordinate.zero()
-    # Where the tip actually ends: a tool is held by its collar, so part of it is up inside the
-    # channel and only the rest of it reaches below.
-    return Coordinate(0.0, 0.0, tip.location.z)
+    return Coordinate(0.0, 0.0, cast(Coordinate, tip.location).z)
 
   def serialize(self) -> dict:
     """What its size does not say: how it holds a tip, and that it is round rather than a box."""

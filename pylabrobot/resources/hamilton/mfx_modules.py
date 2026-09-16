@@ -31,11 +31,11 @@ def hamilton_mfx_resource_holder_ntr4(name: str) -> ResourceHolder:
 
   return ResourceHolder(
     name=name,
-    size_x=134.0,  # Hamilton's NTR4Module.x
-    size_y=94.0,  # Hamilton's NTR4Module.x
+    size_x=134.0,  # Hamilton's NTR4Module 3D model
+    size_y=94.0,  # Hamilton's NTR4Module 3D model
     size_z=29.0,  # TODO: measure
-    # Venus' NTR4 site (6.3, 298.2, 29) sits in the MFX slot at (0, 293, 18.195), and a nested tip
-    # rack's SLAS footprint, 127.76 x 85.48, stands centred on the 122.4 x 82.6 site.
+    # Venus' NTR4 site (6.3, 298.2, 29) in the MFX slot at (0, 293, 18.195), with an NTR's SLAS
+    # footprint centred on its 122.4 x 82.6.
     child_location=Coordinate(
       x=6.3 + (122.4 - 127.76) / 2,
       y=298.2 - 293.0 + (82.6 - 85.48) / 2,

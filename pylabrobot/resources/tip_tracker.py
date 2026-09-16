@@ -39,10 +39,7 @@ TrackerCallback = Callable[[], None]
 class TipTracker(SerializableMixin):
   """A tip tracker tracks tip operations and raises errors if the tip operations are invalid.
 
-  Given a `holder` - the tip spot it belongs to - the tip it tracks is a child of that spot, and the
-  tracker moves it in and out of the resource tree. The tip is then in one place rather than two,
-  and where it is is what the tree says. Without a holder, as for a channel, the tracker keeps the
-  tip itself.
+  With a `holder`, the tip spot it belongs to, the tracked tip is a child of that spot.
   """
 
   def __init__(self, thing: str, holder: Optional["TipSpot"] = None):
@@ -55,18 +52,12 @@ class TipTracker(SerializableMixin):
 
     self._callback: Optional[TrackerCallback] = None
 
-  def _carried(self) -> Optional["Tip"]:
-    """The tip the holder is carrying, if it is carrying one."""
-    if self._holder is None:
-      return None
-    return next((child for child in self._holder.children if isinstance(child, Tip)), None)
-
   def _sync(self) -> None:
     """Make the holder carry exactly the pending tip."""
     holder = self._holder
     if holder is None:
       return
-    carried = self._carried()
+    carried = next((child for child in holder.children if isinstance(child, Tip)), None)
     if carried is self._pending_tip:
       return
     if carried is not None:
@@ -75,8 +66,7 @@ class TipTracker(SerializableMixin):
     if tip is not None:
       if tip.parent is not None:
         tip.parent.unassign_child_resource(tip)
-      # Centred on the spot, with its collar sticking up out of the hole: the pick-up location, the
-      # top of the tip, is `collar_height` above the spot.
+      # Centred on the spot, its pick-up location `collar_height` above the spot.
       collar_height = tip.collar_height if tip.has_collar_height else 0.0
       location = Coordinate(
         x=holder.get_size_x() / 2 - tip.pick_up_location.x,

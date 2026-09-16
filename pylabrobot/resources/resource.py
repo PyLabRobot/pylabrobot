@@ -254,12 +254,7 @@ class Resource(SerializableMixin):
     )
 
   def comparable_children(self) -> List["Resource"]:
-    """The children that make this resource what it is.
-
-    Everything it holds, unless holding something is state rather than structure: a tip spot with a
-    tip in it is the same spot as one without, in the same way that a well with liquid in it is the
-    same well.
-    """
+    """The children compared in equality: all of them, unless a subclass holds some as state."""
     return self.children
 
   def __eq__(self, other):

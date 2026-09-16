@@ -17,17 +17,10 @@ def _without_names(value: object) -> Any:
 
 
 class HeadTool(Resource):
-  """Something a channel picks up and carries on its end: a tip, a needle, a gripper tool.
+  """Something a channel picks up and carries: a tip, a needle, a gripper tool.
 
-  Every head tool is mounted the same way. It has a collar with an orifice the channel moves into,
-  at its `pick_up_location`, and the channel reaches `fitting_depth` into it.
-
-  The size of a head tool is its physical envelope, with `size_z` running from its lowest point to
-  the top of its collar.
-
-  A head tool is a resource, so it is identified by its name. Two tools that are the same kind of
-  tool - interchangeable for a backend, which declares one tool type for both - have equal
-  :meth:`kind`, whatever their names.
+  The channel enters the tool's opening at `pick_up_location` and reaches `fitting_depth` into it.
+  Tools that are interchangeable for a backend have equal :meth:`kind`, whatever their names.
 
   Attributes:
     fitting_depth: the overlap between the tool and the channel, in mm
@@ -53,12 +46,11 @@ class HeadTool(Resource):
       size_y: size of the tool's envelope in the y direction, in mm.
       size_z: size of the tool's envelope in the z direction, in mm.
       fitting_depth: the overlap between the tool and the channel, in mm.
-      collar_height: the height of the collar the channel pushes into, in mm.
+      collar_height: the height of the tool's collar, in mm.
       category: the category of the tool.
       model: the model of the tool.
-      pick_up_location: the centre of the top of the orifice the channel moves into, relative to
-        the tool's left front bottom corner. Defaults to the centre of the top of the tool's
-        envelope, which is where it is for a tool whose collar is centred on it.
+      pick_up_location: the centre of the top of the opening the channel enters, relative to the
+        tool's left front bottom corner. Defaults to the centre of the tool's top.
     """
 
     super().__init__(
@@ -116,21 +108,11 @@ class HeadTool(Resource):
     return self._collar_height is not None
 
   def kind(self) -> Tuple[object, ...]:
-    """What this tool is, as opposed to which one it is.
-
-    Everything the tool says about itself except its name, so two tools of the same kind are one
-    kind whatever they are called and wherever they are: a backend that has to declare a tool to a
-    machine declares one per kind. A vendor that states more about its tools says more here too,
-    without having to be asked for it separately.
-    """
+    """The tool's serialized form without names: equal for tools of the same kind."""
     return cast(Tuple[object, ...], _without_names(self.serialize()))
 
   def serialize(self) -> dict:
-    """What this tool is.
-
-    Where it is is left out: a tool is carried, and the spot or shaft carrying it states where it
-    sits, so a serialized tool reads the same whichever holder it is in and none.
-    """
+    """Serialize the tool, without its location, which its holder determines."""
     data = {
       **super().serialize(),
       "fitting_depth": self.fitting_depth,

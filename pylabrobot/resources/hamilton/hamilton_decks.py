@@ -458,9 +458,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Z_GRAB_LIMIT = 285
 
     def check_z_height(resource: Resource):
-      # What the device carries belongs up there: it rides above the deck by design, and nothing
-      # traverses or grabs it, so the warnings below say nothing about it. That includes a tool on a
-      # channel, which is checked when it is mounted, not only as part of its channel.
+      # What the device carries, including a tool on a channel, is above the deck by design.
       if resource.category in ("x_arm", "head96") or isinstance(resource, HeadTool):
         return
 

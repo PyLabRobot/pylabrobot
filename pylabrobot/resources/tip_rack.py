@@ -112,12 +112,7 @@ class TipSpot(Resource):
     self.tracker.remove_tip()
 
   def serialize(self) -> dict:
-    """Serialize the tip spot.
-
-    The tip a spot carries is a child of it, but it is reported through the spot's state, as it
-    always was, rather than as a child here: a spot's serialized form says what kind of tip it
-    holds, and its state says whether one is in it.
-    """
+    """Serialize the tip spot. Its tip is state, not a serialized child."""
     data = {
       **super().serialize(),
       "prototype_tip": self.make_tip().serialize(),
@@ -213,10 +208,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
   @property
   def _available(self) -> bool:
-    """Whether nothing - a lid, or another rack in its stack - sits on top of this rack.
-
-    Derived from where the rack is each time, so it holds however the deck has changed since.
-    """
+    """Whether nothing, a lid or another rack in its stack, sits on top of this rack."""
     # A rack's spots are assigned when it is made; anything put on the rack comes after them.
     if len(self.children) > 0 and isinstance(self.children[-1], Lid):
       return False
@@ -343,19 +335,13 @@ class EmbeddedTipRack(TipRack):
 
 
 class StandingTipRack(TipRack):
-  """A tip rack that stands on its own.
+  """A tip rack that stands on its own rather than sinking into a holder.
 
-  Its defining geometric characteristic is that it is completely self-sufficient: it does not
-  sink into a separate holder, it stands on whatever surface or site it is placed on, and its tip
-  spots are at the top of its own body.
-
-  Some standing tip racks nest: a full rack sits on the one below it, its tips reaching down into
-  that rack's tips, so each rack in the nest is `stacking_z_height` above the one it stands on. A
-  nest is a z-growing :class:`~pylabrobot.resources.ResourceStack` of such racks.
+  Racks that nest are stacked in a z-growing :class:`~pylabrobot.resources.ResourceStack`.
 
   Attributes:
-    stacking_z_height: how far a rack of the same kind nested on this one stands above it, in mm,
-      or None if the rack does not nest.
+    stacking_z_height: how far a nested rack stands above the one below it, in mm, or None if the
+      rack does not nest.
   """
 
   def __init__(

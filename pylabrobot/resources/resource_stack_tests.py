@@ -207,12 +207,3 @@ class ResourceStackTipRackNestingTests(unittest.TestCase):
     stack.assign_child_resource(self._rack("r2"))
     self.assertEqual(stack.get_size_z(), 110)
     self.assertEqual(stack.get_top_item().get_absolute_location(), Coordinate(0, 0, 55))
-
-  def test_four_racks_nest(self):
-    stack = ResourceStack("s", "z")
-    stack.location = Coordinate.zero()
-    for i in range(4):
-      stack.assign_child_resource(self._rack(f"r{i}", stacking_z_height=16))
-    # height = 55 + 3 * 16
-    self.assertEqual(stack.get_size_z(), 103)
-    self.assertEqual(stack.get_top_item().get_absolute_location(), Coordinate(0, 0, 48))

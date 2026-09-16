@@ -10,14 +10,10 @@ from pylabrobot.resources.head_tool import HeadTool
 
 
 class HamiltonCoreGripperTool(HeadTool):
-  """A CO-RE grip tool: a paddle a channel picks up, so two channels can grip a plate.
+  """A CO-RE grip tool, picked up by a pair of channels to grip a plate.
 
-  The working point is the grip line, the axis through the pins that press against the plate, so
-  `total_length` runs from the top of the collar to that line rather than to the paddle's lowest
-  edge.
-
-  The machine is told about a grip tool through the same tip type table as a tip, so the tool
-  states its own entry.
+  `total_length` runs from the top of the tool to its grip line, the axis through its pins, which the
+  firmware's grip heights refer to.
   """
 
   def __init__(
@@ -75,15 +71,9 @@ def hamilton_core_gripper_tool(name: Optional[str] = None) -> HamiltonCoreGrippe
 
   Hamilton cat. no.: 186100 (firmware tip type 14)
 
-  The firmware's tip table gives this tool a length of 30 mm: the distance from the collar's top
-  rim to the grip line through the centres of the two pins. The paddle itself is 32 mm tall, its
-  lowest edge 2 mm below the grip line, and 36 mm wide; lying along x, with its pins pointing +y,
-  it is 36 x 8.346 x 32 mm.
-
-  The collar is the standard 8 mm CO-RE collar (outer diameter 8.2 mm), and its bore steps in
-  8.1 mm below the rim, which is the 8 mm fitting depth of a 300 uL or 1000 uL tip. The collar is
-  not centred on the paddle's envelope in y - the pins stand out on one side - so its orifice is
-  at y 4.25 rather than at half the depth.
+  36 x 8.346 x 32 mm, lying along x with its pins pointing +y. Its grip line is 30 mm below its top,
+  as in the firmware's tip table. The collar is the standard 8 mm CO-RE collar; its opening is off
+  centre in y, at 4.25.
   """
   return HamiltonCoreGripperTool(
     name=name,

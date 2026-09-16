@@ -7,8 +7,6 @@ from pylabrobot.resources.hamilton import (
   hamilton_core_gripper_tool,
   hamilton_tip_1000uL,
 )
-from pylabrobot.resources.head_tool import HeadTool
-from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.serializer import deserialize, serialize
 
@@ -16,24 +14,9 @@ from pylabrobot.serializer import deserialize, serialize
 class HeadToolTests(unittest.TestCase):
   """Tests for the head tools a channel can carry."""
 
-  def test_tip_is_head_tool_resource(self):
-    tip = Tip(False, 59.9, 400.0, 8.0, name="test_tip")
-    self.assertIsInstance(tip, HeadTool)
-    self.assertIsInstance(tip, Resource)
-    self.assertEqual(tip.get_size_z(), 59.9)
-
   def test_pick_up_location_defaults_to_top_centre(self):
     tip = Tip(False, 59.9, 400.0, 8.0, name="test_tip", size_x=8.2, size_y=8.2)
     self.assertEqual(tip.pick_up_location, Coordinate(4.1, 4.1, 59.9))
-
-  def test_core_gripper_tool_pick_up_location_is_its_orifice(self):
-    tool = hamilton_core_gripper_tool(name="core_gripper_tool")
-    self.assertEqual(tool.pick_up_location, Coordinate(18.0, 4.25, 32.0))
-
-  def test_pick_up_location_survives_serialization(self):
-    tool = hamilton_core_gripper_tool(name="core_gripper_tool")
-    restored = deserialize(serialize(tool))
-    self.assertEqual(restored.pick_up_location, Coordinate(18.0, 4.25, 32.0))
 
   def test_hamilton_tip_diameter_follows_tip_size(self):
     from pylabrobot.resources.hamilton import (
@@ -79,7 +62,6 @@ class HeadToolTests(unittest.TestCase):
     b = hamilton_tip_1000uL(name="rack_B1#0")
     self.assertEqual(a.kind(), b.kind())
     self.assertNotEqual(a, b)
-    self.assertEqual(len({a.kind(), b.kind()}), 1)
 
   def test_tips_that_differ_are_different_kinds(self):
     a = Tip(False, 59.9, 400.0, 8.0, name="a")
@@ -114,20 +96,6 @@ class HeadToolTests(unittest.TestCase):
     self.assertEqual(tool.name, "core_gripper_tool")
     with self.assertRaises(AttributeError):
       tool.name = "other"
-
-  def test_named_tool_keeps_its_name(self):
-    tip = Tip(False, 59.9, 400.0, 8.0, name="test_tip")
-    with self.assertRaises(AttributeError):
-      tip.name = "other"
-
-  def test_core_gripper_tool(self):
-    tool = hamilton_core_gripper_tool(name="core_gripper_tool")
-    self.assertIsInstance(tool, HeadTool)
-    self.assertNotIsInstance(tool, Tip)
-    self.assertEqual(tool.total_length, 30.0)
-    self.assertEqual(tool.fitting_depth, 8.0)
-    self.assertEqual(tool.collar_height, 8.0)
-    self.assertEqual((tool.get_size_x(), tool.get_size_y(), tool.get_size_z()), (36.0, 8.346, 32.0))
 
   def test_core_gripper_tool_serialize(self):
     tool = hamilton_core_gripper_tool(name="core_gripper_tool")

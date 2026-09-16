@@ -53,7 +53,7 @@ class TipRackNamingTests(unittest.TestCase):
 
 
 class TipSpotHoldsItsTip(unittest.TestCase):
-  """A tip spot carries its tip as a child, hanging by its collar."""
+  """A tip spot carries its tip as a child."""
 
   def setUp(self):
     self.rack = cast(TipRack, hamilton_96_tiprack_300uL("rack"))
@@ -64,8 +64,8 @@ class TipSpotHoldsItsTip(unittest.TestCase):
     self.assertIs(tip.parent, self.spot)
     self.assertEqual([child.name for child in self.spot.children], [tip.name])
 
-  def test_a_tip_hangs_by_its_collar(self):
-    """The collar's underside rests on the spot, so the rest of the tip hangs below it."""
+  def test_a_tip_rests_by_its_collar(self):
+    """The tip's top is its collar height above the spot."""
     tip = self.spot.get_tip()
     self.assertEqual(tip.location, Coordinate(-0.5, -0.5, tip.collar_height - tip.total_tip_length))
 

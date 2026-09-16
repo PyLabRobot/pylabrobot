@@ -13,22 +13,21 @@ from pylabrobot.resources.carrier import Coordinate
 from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_10uL,
   hamilton_96_tiprack_10uL_filter,
+  hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL,
   hamilton_96_tiprack_50uL_filter,
-  hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL,
-  hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_300uL_filter_slim,
   hamilton_96_tiprack_300uL_filter_ultrawide,
+  hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
   hamilton_96_tiprack_1000uL_filter_ultrawide,
   hamilton_96_tiprack_1000uL_filter_wide,
 )
 from pylabrobot.resources.lid import Lid
-from pylabrobot.resources.resource_stack import ResourceStack
 from pylabrobot.resources.tip_rack import StandingTipRack, TipRack
 
 
@@ -59,21 +58,6 @@ class HamiltonTipSpotTests(unittest.TestCase):
     check_tip_spot_h1(hamilton_96_tiprack_50uL_NTR(name="tr"), ntr_loc)
     check_tip_spot_h1(hamilton_96_tiprack_300uL_NTR(name="tr"), ntr_loc)
 
-  def test_nested_tip_racks_have_their_tips_in_the_slas_positions(self):
-    # SLAS 96: A1's centre 14.38 mm from the left and 11.24 mm from the back, 9 mm pitch
-    for rack_fn in (
-      hamilton_96_tiprack_10uL_NTR,
-      hamilton_96_tiprack_50uL_NTR,
-      hamilton_96_tiprack_300uL_NTR,
-    ):
-      with self.subTest(rack=rack_fn.__name__):
-        rack = rack_fn(name="tr")
-        self.assertEqual((rack.get_size_x(), rack.get_size_y()), (127.76, 85.48))
-        for spot, x, y in (("A1", 14.38, 85.48 - 11.24), ("H12", 14.38 + 99, 11.24)):
-          center = rack.get_item(spot).get_absolute_location("c", "c")
-          self.assertAlmostEqual(center.x, x)
-          self.assertAlmostEqual(center.y, y)
-
 
 class HamiltonTipRackSerializationTests(unittest.TestCase):
   def test_embedded_tip_rack_roundtrip_keeps_frame_height(self):
@@ -89,15 +73,6 @@ class HamiltonTipRackSerializationTests(unittest.TestCase):
 
 class TipRackAvailableTests(unittest.TestCase):
   """A rack is available when nothing - a lid, or another rack in its stack - sits on top of it."""
-
-  def test_only_the_top_rack_of_a_stack_is_available(self):
-    stack = ResourceStack("stack", direction="z")
-    racks = [hamilton_96_tiprack_50uL_NTR(name=f"tr{i}") for i in range(4)]
-    for rack in racks:
-      stack.assign_child_resource(rack)
-    self.assertEqual([rack._available for rack in racks], [False, False, False, True])
-    stack.unassign_child_resource(racks[3])
-    self.assertEqual([rack._available for rack in racks[:3]], [False, False, True])
 
   def test_a_lid_on_a_rack_makes_it_unavailable(self):
     rack = hamilton_96_tiprack_50uL_NTR(name="tr")

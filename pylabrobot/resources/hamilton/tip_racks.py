@@ -1,3 +1,5 @@
+import warnings
+
 from pylabrobot.resources.tip import TipCreator
 from pylabrobot.resources.tip_rack import (
   EmbeddedTipRack,
@@ -25,7 +27,7 @@ from .tip_creators import (
 )
 
 
-def hamilton_tiprack_standard(
+def hamilton_96_tiprack_standard(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> EmbeddedTipRack:
   """Universal tip rack for Hamilton STAR systems."""
@@ -34,15 +36,13 @@ def hamilton_tiprack_standard(
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model=hamilton_tiprack_standard.__name__,
+    model=hamilton_96_tiprack_standard.__name__,
     sinking_depth=6.0,  # sinking depth
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
       num_items_y=8,
-      # The spot is the hole the tip drops into: 7.2 mm across, measured on the rack's own model,
-      # where the tip's 8.2 mm collar comes to rest. dx and dy carry the corner of that square, so
-      # they sit 0.9 mm inside the 9 mm pitch and every spot keeps its centre.
+      # The spot is the 7.2 mm hole, measured on the rack's model, centred on the 9 mm pitch.
       dx=8.1,
       dy=6.2,
       dz=7.7 - 0.2,  # depth of hole
@@ -61,35 +61,23 @@ def hamilton_tiprack_standard(
 def hamilton_96_tiprack_ntr(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> StandingTipRack:
-  """Nested tip rack (NTR) for Hamilton STAR systems, the same body for every tip it carries.
-
-  The body is an SLAS 96-position footprint, 127.76 x 85.48 mm, with its tips in the SLAS
-  positions. Venus declares the rack by the 122.4 x 82.6 area inside that footprint, with A1 11.7 mm
-  in from its left and 9.8 mm from its back: centred on the footprint, those are the SLAS positions
-  exactly, as are the holes of Hamilton's own model of the rack.
-  """
+  """Nested tip rack (NTR) for Hamilton STAR systems: an SLAS footprint with SLAS tip positions."""
   return StandingTipRack(
     name=name,
     size_x=127.76,
     size_y=85.48,
     size_z=55.0,  # the top face, where the collars rest
     model=hamilton_96_tiprack_ntr.__name__,
-    # One rack nested on another stands 16 mm higher: Venus' StackHt, and the 48 mm between its
-    # NTR1 and NTR4 carrier sites is three of them.
-    # TODO: measure a nest on the instrument; Venus does not model nests, so nothing has checked it.
+    # Venus' StackHt. TODO: measure a nest on the instrument.
     stacking_z_height=16.0,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
       num_items_y=8,
-      # The spot is the 7.2 mm hole the tip drops into (Hamilton's model: 7.34, Venus: 6.8).
-      # SLAS 96 positions: A1's centre 14.38 mm from the left and 11.24 mm from the back edge, so
-      # H1's is 85.48 - 11.24 - 63 from the front, each less half a spot.
+      # SLAS 96: A1's centre 14.38 mm from the left and 11.24 mm from the back; 7.2 mm holes.
       dx=14.38 - 3.6,
       dy=85.48 - 11.24 - 7 * 9.0 - 3.6,
-      # The tip's collar rests on the top face, 55 mm above the bottom of the rack: firmware spot z
-      # 184.0 with the rack standing at 129.0 on hamilton_tip_carrier_L5_ntr_a00, for the 10, 50
-      # and 300 uL racks alike.
+      # Collars rest on the top face: firmware z 184.0 with the rack base at 129.0.
       dz=55.0,
       item_dx=9.0,
       item_dy=9.0,
@@ -110,7 +98,7 @@ def hamilton_96_tiprack_10uL_filter(name: str, with_tips: bool = True) -> Embedd
   Hamilton name: 'LTF'
   Tip Rack with 96x 10ul Low Volume Tip with filter
   """
-  return hamilton_tiprack_standard(
+  return hamilton_96_tiprack_standard(
     name=name, make_tip=hamilton_tip_10uL_filter, with_tips=with_tips
   )
 
@@ -119,7 +107,7 @@ def hamilton_96_tiprack_10uL(name: str, with_tips: bool = True) -> EmbeddedTipRa
   """Hamilton cat. no.: 235900 (non-sterile) 235935 (sterile)
   Hamilton name: 'LT'
   Tip Rack with 96x 10ul Low Volume Tip"""
-  return hamilton_tiprack_standard(name=name, make_tip=hamilton_tip_10uL, with_tips=with_tips)
+  return hamilton_96_tiprack_standard(name=name, make_tip=hamilton_tip_10uL, with_tips=with_tips)
 
 
 def hamilton_96_tiprack_10uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
@@ -136,7 +124,7 @@ def hamilton_96_tiprack_50uL_filter(name: str, with_tips: bool = True) -> Embedd
   """Hamilton cat. no.: 235948 (non-sterile), 235979 (sterile), 235829 (clear, non-sterile)
   Hamilton name: 'TIP_50ul_w_filter'
   Tip Rack with 96x 50ul Tip"""
-  return hamilton_tiprack_standard(
+  return hamilton_96_tiprack_standard(
     name=name, make_tip=hamilton_tip_50uL_filter, with_tips=with_tips
   )
 
@@ -145,7 +133,7 @@ def hamilton_96_tiprack_50uL(name: str, with_tips: bool = True) -> EmbeddedTipRa
   """Hamilton cat. no.: 235966 (non-sterile) 235978 (sterile)
   Hamilton name: 'TIP_50ul'
   Tip Rack with 96x 50ul Tip no filter"""
-  return hamilton_tiprack_standard(name=name, make_tip=hamilton_tip_50uL, with_tips=with_tips)
+  return hamilton_96_tiprack_standard(name=name, make_tip=hamilton_tip_50uL, with_tips=with_tips)
 
 
 def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
@@ -162,7 +150,7 @@ def hamilton_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> Embed
   """Hamilton cat. no.: 235830 (clear, non-sterile), 235903 (non-sterile), 235938 (sterile)
   Hamilton name: 'STF'
   Tip Rack with 96x 300ul Standard Volume Tip with filter"""
-  return hamilton_tiprack_standard(
+  return hamilton_96_tiprack_standard(
     name=name, make_tip=hamilton_tip_300uL_filter, with_tips=with_tips
   )
 
@@ -171,7 +159,7 @@ def hamilton_96_tiprack_300uL(name: str, with_tips: bool = True) -> EmbeddedTipR
   """Hamilton cat. no.: 235834 (clear, non-sterile), 235902 (non-sterile), 235937 (sterile)
   Hamilton name: 'ST'
   Tip Rack with 96x 300ul Standard Volume Tip"""
-  return hamilton_tiprack_standard(name=name, make_tip=hamilton_tip_300uL, with_tips=with_tips)
+  return hamilton_96_tiprack_standard(name=name, make_tip=hamilton_tip_300uL, with_tips=with_tips)
 
 
 def hamilton_96_tiprack_300uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
@@ -185,7 +173,7 @@ def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> 
   """Hamilton cat. no.: 235646 (CORE-II: conductive)
   Hamilton name: 'STF_Slim'
   Tip Rack with 96x 300ul Slim Standard Volume Tip with filter"""
-  return hamilton_tiprack_standard(
+  return hamilton_96_tiprack_standard(
     name=name, make_tip=hamilton_tip_300uL_filter_slim, with_tips=with_tips
   )
 
@@ -196,7 +184,7 @@ def hamilton_96_tiprack_300uL_filter_ultrawide(
   """Hamilton cat. no.: 235449 (1.55 mm oriface, non-sterile)
   Hamilton name: 'STF'
   Tip Rack with 96x 300ul Wide Bore Standard Volume Tip with filter"""
-  return hamilton_tiprack_standard(
+  return hamilton_96_tiprack_standard(
     name=name, make_tip=hamilton_tip_300uL_filter_ultrawide, with_tips=with_tips
   )
 
@@ -209,7 +197,7 @@ def hamilton_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> Embe
   Hamilton name: 'HTF'
   Tip Rack with 96x 1000ul High Volume Tip with filter
   """
-  return hamilton_tiprack_standard(
+  return hamilton_96_tiprack_standard(
     name=name, make_tip=hamilton_tip_1000uL_filter, with_tips=with_tips
   )
 
@@ -218,7 +206,7 @@ def hamilton_96_tiprack_1000uL(name: str, with_tips: bool = True) -> EmbeddedTip
   """Hamilton cat. no.: 235822 (clear, non-sterile), 235904 (non-sterile), 235939 (sterile)
   Hamilton name: 'HT'
   Tip Rack with 96x 1000ul High Volume Tip"""
-  return hamilton_tiprack_standard(name=name, make_tip=hamilton_tip_1000uL, with_tips=with_tips)
+  return hamilton_96_tiprack_standard(name=name, make_tip=hamilton_tip_1000uL, with_tips=with_tips)
 
 
 def hamilton_96_tiprack_1000uL_filter_wide(name: str, with_tips: bool = True) -> EmbeddedTipRack:
@@ -236,7 +224,7 @@ def hamilton_96_tiprack_1000uL_filter_wide(name: str, with_tips: bool = True) ->
   Orifice Size: 1.2mm
   """
 
-  return hamilton_tiprack_standard(
+  return hamilton_96_tiprack_standard(
     name=name, make_tip=hamilton_tip_1000uL_filter_wide, with_tips=with_tips
   )
 
@@ -258,7 +246,7 @@ def hamilton_96_tiprack_1000uL_filter_ultrawide(
   Orifice Size: 3.2mm
   """
 
-  return hamilton_tiprack_standard(
+  return hamilton_96_tiprack_standard(
     name=name, make_tip=hamilton_tip_1000uL_filter_ultrawide, with_tips=with_tips
   )
 
@@ -326,6 +314,19 @@ def hamilton_24_tiprack_5000uL(name: str, with_tips: bool = True) -> TipRack:
 
 
 # # # # # # # # # # Deprecation Warnings # # # # # # # # # #
+
+
+def hamilton_tiprack_standard(
+  name: str, make_tip: TipCreator, with_tips: bool = True
+) -> EmbeddedTipRack:
+  """Deprecated alias for `hamilton_96_tiprack_standard`."""
+  warnings.warn(
+    "hamilton_tiprack_standard is deprecated. Use 'hamilton_96_tiprack_standard' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_96_tiprack_standard(name=name, make_tip=make_tip, with_tips=with_tips)
+
 
 # TODO: remove after December 2025 (giving approx. 3 month transition period)
 
