@@ -20,9 +20,7 @@ class HeadToolTests(unittest.TestCase):
     tip = Tip(False, 59.9, 400.0, 8.0, name="test_tip")
     self.assertIsInstance(tip, HeadTool)
     self.assertIsInstance(tip, Resource)
-    self.assertEqual(tip.total_length, 59.9)
     self.assertEqual(tip.get_size_z(), 59.9)
-    self.assertAlmostEqual(tip.extension, 51.9)
 
   def test_pick_up_location_defaults_to_top_centre(self):
     tip = Tip(False, 59.9, 400.0, 8.0, name="test_tip", size_x=8.2, size_y=8.2)
@@ -72,13 +70,9 @@ class HeadToolTests(unittest.TestCase):
     """A machine is told about a grip tool through the same fields as a tip, so it states them."""
     tip = hamilton_tip_1000uL(name="tip")
     tool = hamilton_core_gripper_tool(name="tool")
-    self.assertEqual((tip.has_filter, tip.extension), (False, 95.1 - 8))
-    self.assertEqual((tool.has_filter, tool.maximal_volume, tool.extension), (False, 1.0, 22.0))
+    self.assertEqual(tip.has_filter, False)
+    self.assertEqual((tool.has_filter, tool.maximal_volume), (False, 1.0))
     self.assertNotEqual(tip.kind(), tool.kind())
-
-  def test_head_tool_is_abstract(self):
-    with self.assertRaises(TypeError):
-      HeadTool(name="tool", size_x=1, size_y=1, size_z=1, fitting_depth=0)  # type: ignore[abstract]
 
   def test_two_tips_of_one_kind_are_one_kind_but_not_one_tip(self):
     a = hamilton_tip_1000uL(name="rack_A1#0")
@@ -133,7 +127,6 @@ class HeadToolTests(unittest.TestCase):
     self.assertEqual(tool.total_length, 30.0)
     self.assertEqual(tool.fitting_depth, 8.0)
     self.assertEqual(tool.collar_height, 8.0)
-    self.assertEqual(tool.extension, 22.0)
     self.assertEqual((tool.get_size_x(), tool.get_size_y(), tool.get_size_z()), (36.0, 8.346, 32.0))
 
   def test_core_gripper_tool_serialize(self):

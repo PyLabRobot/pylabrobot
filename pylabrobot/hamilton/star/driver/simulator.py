@@ -43,6 +43,8 @@ from pylabrobot.hamilton.star.driver.master import STARDriver
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.resources.carrier import Carrier
+from pylabrobot.resources.hamilton.core_gripper_tools import HamiltonCoreGripperTool
+from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.hamilton.hamilton_decks import (
   HamiltonDeck,
@@ -176,13 +178,21 @@ class SimulatedPipettes(_Simulated, Pipettes):
     return channel < len(mounted) and mounted[channel]
 
   def _below_stop_disc(self, channel: int) -> float:
-    """How far a channel's lowest point sits below its stop disc, in mm.
+    """How far a channel's lowest point sits below its stop disc, in mm, as the firmware counts it.
 
-    The end of the tip hanging from its shaft, or nothing: a tip a channel was only started with has
-    no geometry to reach below it.
+    The firmware counts a tool's length below the channel from its tip type table: a tip's own
+    length less its fitting depth, and for the CO-RE grip tool 30 mm to its grip line, not to the
+    paddle's lowest edge. A tip a channel was only started with has no length to reach below it.
     """
     shaft = self._shaft(channel)
-    return 0.0 if shaft is None else -shaft.tip_bottom().z
+    if shaft is None or shaft.tip is None:
+      return 0.0
+    tool = shaft.tip
+    if isinstance(tool, HamiltonCoreGripperTool):
+      return tool.total_length - tool.fitting_depth
+    if isinstance(tool, HeadTool):
+      return tool.get_size_z() - tool.fitting_depth
+    return -shaft.tip_bottom().z
 
   def _modelled_y(self, channel: int) -> float:
     """Where the model has one channel along Y, in mm.

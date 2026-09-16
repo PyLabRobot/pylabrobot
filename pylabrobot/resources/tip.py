@@ -11,8 +11,7 @@ from pylabrobot.resources.volume_tracker import VolumeTracker
 class Tip(HeadTool):
   """A single tip.
 
-  A tip is a head tool whose working point is its end, so its `total_length` is the tip's own
-  length, and so is its `size_z`.
+  A tip's `size_z` is its total length.
 
   Attributes:
     has_filter: whether the tip type has a filter
@@ -78,10 +77,6 @@ class Tip(HeadTool):
       )
 
     self.tracker = VolumeTracker(thing=name or "tip_tracker", max_volume=self.maximal_volume)
-
-  @property
-  def total_length(self) -> float:
-    return self.total_tip_length
 
   def serialize(self) -> dict:
     return {

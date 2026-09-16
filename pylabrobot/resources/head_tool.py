@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
 from typing import Any, Optional, Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
@@ -17,12 +16,11 @@ def _without_names(value: object) -> Any:
   return value
 
 
-class HeadTool(Resource, metaclass=ABCMeta):
+class HeadTool(Resource):
   """Something a channel picks up and carries on its end: a tip, a needle, a gripper tool.
 
   Every head tool is mounted the same way. It has a collar with an orifice the channel moves into,
-  the channel reaches `fitting_depth` into that collar, and the tool's working point - the end of a
-  tip, the grip line of a gripper tool - lies `total_length` below the top of the collar.
+  at its `pick_up_location`, and the channel reaches `fitting_depth` into it.
 
   The size of a head tool is its physical envelope, with `size_z` running from its lowest point to
   the top of its collar.
@@ -116,16 +114,6 @@ class HeadTool(Resource, metaclass=ABCMeta):
   def has_collar_height(self) -> bool:
     """Whether this tool states the height of its collar."""
     return self._collar_height is not None
-
-  @property
-  @abstractmethod
-  def total_length(self) -> float:
-    """Distance from the top of the tool's collar to its working point, in mm."""
-
-  @property
-  def extension(self) -> float:
-    """How far the working point sits below the end of the channel carrying the tool, in mm."""
-    return self.total_length - self.fitting_depth
 
   def kind(self) -> Tuple[object, ...]:
     """What this tool is, as opposed to which one it is.

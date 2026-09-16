@@ -32,9 +32,6 @@ from pylabrobot.resources.hamilton import (
   hamilton_core_gripper_tool,
 )
 
-# What a Hamilton machine can be told about and pick up: a tip, or a grip tool.
-HamiltonHeadTool = Union[HamiltonTip, HamiltonCoreGripperTool]
-
 T = TypeVar("T")
 
 # What the firmware's tip type table calls the CO-RE grip tool (cat. 186100).
@@ -440,7 +437,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   ):
     """Tip/needle definition in firmware."""
 
-  async def get_or_assign_tip_type_index(self, tool: HamiltonHeadTool) -> int:
+  async def get_or_assign_tip_type_index(
+    self, tool: Union[HamiltonTip, HamiltonCoreGripperTool]
+  ) -> int:
     """Get a tip type table index for the tool, a tip or a grip tool.
 
     If a tool with the same definition has been defined, use that index. Otherwise, define a new
@@ -459,7 +458,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       await self.define_tip_needle(
         tip_type_table_index=ttti,
         has_filter=tool.has_filter,
-        tip_length=round(tool.extension * 10),  # in 0.1mm
+        # in 0.1 mm: how far the tool reaches below the channel
+        tip_length=round((tool.get_size_z() - tool.fitting_depth) * 10),
         # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register the same
         # way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to satisfy the
         # tv >= 1 requirement). tv does not affect pickup (that is tl/tg).
