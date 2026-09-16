@@ -20,7 +20,6 @@ from .cellvis import *
 from .container import Container
 from .container_rack import ContainerRack
 from .coordinate import Coordinate
-from .core_gripper_tool import CoreGripperTool
 from .corning import *
 from .deck import Deck
 from .diy import *

@@ -2,8 +2,11 @@ import unittest
 from typing import Any, Dict
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.core_gripper_tool import CoreGripperTool
-from pylabrobot.resources.hamilton import hamilton_core_gripper_tool, hamilton_tip_1000uL
+from pylabrobot.resources.hamilton import (
+  HamiltonCoreGripperTool,
+  hamilton_core_gripper_tool,
+  hamilton_tip_1000uL,
+)
 from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
@@ -166,6 +169,6 @@ class HeadToolTests(unittest.TestCase):
   def test_core_gripper_tool_deserialize(self):
     tool = hamilton_core_gripper_tool(name="core_gripper_tool")
     restored = deserialize(serialize(tool))
-    self.assertIsInstance(restored, CoreGripperTool)
+    self.assertIsInstance(restored, HamiltonCoreGripperTool)
     self.assertEqual(restored, tool)
     self.assertEqual(restored.definition(), tool.definition())
