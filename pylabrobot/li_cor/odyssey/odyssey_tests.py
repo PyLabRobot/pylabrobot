@@ -21,8 +21,10 @@ from pylabrobot.li_cor.odyssey.tagging import build_identity_description, tag_ti
 
 try:
   from PIL import Image  # type: ignore[import-not-found]
+
+  HAS_PILLOW = True
 except ImportError:
-  Image = None
+  HAS_PILLOW = False
 
 
 class OdysseyProtocolTests(unittest.IsolatedAsyncioTestCase):
@@ -340,7 +342,7 @@ class TaggingTests(unittest.TestCase):
     self.assertEqual(tag_tiff_with_identity(b"bad image"), b"bad image")
     self.assertEqual(tag_tiff_with_identity(b"bad image", {"pid": "unit"}), b"bad image")
 
-  @unittest.skipIf(Image is None, "Pillow is not installed")
+  @unittest.skipUnless(HAS_PILLOW, "Pillow is not installed")
   def test_tiff_tagging_preserves_pixels(self):
     raw = _tiff()
     tagged = tag_tiff_with_identity(raw, {"pid": "unit"}, channel=700)
@@ -349,7 +351,7 @@ class TaggingTests(unittest.TestCase):
       self.assertEqual(json.loads(image.tag_v2[270]), {"pid": "unit", "channel": 700})
       self.assertEqual(image.tag_v2[305], "PyLabRobot Odyssey")
 
-  @unittest.skipIf(Image is None, "Pillow is not installed")
+  @unittest.skipUnless(HAS_PILLOW, "Pillow is not installed")
   def test_tiff_tagging_preserves_all_pages_tags_and_compressed_image_bytes(self):
     with Image.new("I;16", (3, 2), 42) as first, Image.new("I;16", (3, 2), 999) as second:
       buffer = io.BytesIO()
@@ -375,7 +377,7 @@ class TaggingTests(unittest.TestCase):
             self.assertEqual(result.tag_v2[tag], value)
         self.assertEqual(json.loads(result.tag_v2[270]), {"pid": "instrument", "channel": 800})
 
-  @unittest.skipIf(Image is None, "Pillow is not installed")
+  @unittest.skipUnless(HAS_PILLOW, "Pillow is not installed")
   def test_big_endian_tiff_and_short_software_tag_are_preserved(self):
     with Image.new("I;16B", (2, 1), 513) as image:
       buffer = io.BytesIO()
