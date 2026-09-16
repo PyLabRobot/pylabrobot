@@ -5,7 +5,10 @@ from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes, PipettesConfiguration
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.utils.liquid_handling import plan_batches
 
 
 async def channels(width: float, positions: List[float]) -> Tuple[Pipettes, List[str]]:
@@ -163,3 +166,41 @@ class TestPositionInZDirection(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(pipettes.configuration.z_range, (floor + 10.0, 300.0))
     self.assertEqual(len(reached), len(pipettes.configuration.channels))
+
+
+class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
+  """A v1 device plans with `pylabrobot.utils.liquid_handling`, from its own minimum channel spacing."""
+
+  async def test_one_column_is_one_move_and_two_columns_are_two(self):
+    """Four wells down one column fit one X/Y move at the channels' spacing; spread across columns they do not."""
+    deck = STARDeck()
+    plate = cor_axy_96_wellplate_500uL_Ub("plate")
+    deck.assign_child_resource(plate, location=Coordinate(400, 100, 100))
+    driver = STARSimulationDriver(deck=deck, declared_configuration_json=RECORDING_STAR)
+    await driver.setup()
+    pipettes = driver.pipettes
+    assert pipettes is not None
+    gap = pipettes._min_spacing_between(0, 1)
+    spacings = [gap] * pipettes.num_channels
+
+    one_column = plan_batches(
+      use_channels=[0, 1, 2, 3],
+      containers=[plate.get_well(name) for name in ("A1", "B1", "C1", "D1")],
+      channel_spacings=spacings,
+      wrt_resource=deck,
+      x_tolerance=0.1,
+    )
+    self.assertEqual(len(one_column), 1)
+    ys = one_column[0].y_positions
+    for back, front in ((0, 1), (1, 2), (2, 3)):
+      self.assertGreaterEqual(ys[back] - ys[front], gap - 1e-6)
+
+    two_columns = plan_batches(
+      use_channels=[0, 1],
+      containers=[plate.get_well("A1"), plate.get_well("A2")],
+      channel_spacings=spacings,
+      wrt_resource=deck,
+      x_tolerance=0.1,
+    )
+    self.assertEqual(len(two_columns), 2)
+    await driver.stop()

@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import functools
 from typing import Any, List
-
-
 from unittest.mock import AsyncMock
 
 import pytest
@@ -31,6 +29,7 @@ from pylabrobot.resources.hamilton import (
 )
 from pylabrobot.resources.tip_tracker import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
+from pylabrobot.utils.liquid_handling import plan_batches
 
 
 def _run(coro):
@@ -1390,6 +1389,46 @@ def test_default_y_windows_are_not_applied_on_a_device_with_an_8_channel_head():
     assert p.pipettes is not None and p.head8 is not None
     assert p.pipettes.configuration.channels[0].y_range is None
     assert p.pipettes.configuration.channels[1].y_range is not None
+    await p.stop()
+
+  _run(_t())
+
+
+def test_batches_are_planned_from_the_channels_minimum_spacing():
+  """A v1 device plans with `pylabrobot.utils.liquid_handling`: its minimum channel spacing is the planner's input.
+
+  Two wells one row apart in the same column fit one X/Y move at the Prep's spacing; two wells in different
+  columns need two.
+  """
+
+  async def _t():
+    deck = PrepDeck()
+    plate = deck[4] = cor_axy_96_wellplate_500uL_Ub("plate")
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    gap = p.pipettes._min_spacing_between(0, 1)
+    spacings = [gap] * p.pipettes.num_channels
+
+    one_column = plan_batches(
+      use_channels=[0, 1],
+      containers=[plate.get_well("A1"), plate.get_well("B1")],
+      channel_spacings=spacings,
+      wrt_resource=deck,
+      x_tolerance=0.1,
+    )
+    assert len(one_column) == 1
+    ys = one_column[0].y_positions
+    assert ys[0] - ys[1] >= gap - 1e-6
+
+    two_columns = plan_batches(
+      use_channels=[0, 1],
+      containers=[plate.get_well("A1"), plate.get_well("A2")],
+      channel_spacings=spacings,
+      wrt_resource=deck,
+      x_tolerance=0.1,
+    )
+    assert len(two_columns) == 2
     await p.stop()
 
   _run(_t())
