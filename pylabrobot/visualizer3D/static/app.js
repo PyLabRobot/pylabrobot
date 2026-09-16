@@ -636,7 +636,15 @@ function buildGripMark(index, model, pad) {
   // than taken as the far end of its own box: the two agree on this gripper, and only because its
   // box is its link length - a tool that grips somewhere other than its tip would have the mark
   // drawn at the tip, which is the one place it is not.
-  plane.userData.local = new THREE.Matrix4().makeTranslation(tcp.x, tcp.y, tcp.z);
+  //
+  // The tool states that point from its joint, not from its own origin, so the joint is added back:
+  // left out, the mark stands the joint's offset away from where the jaws close.
+  const joint = model.proximal_joint;
+  plane.userData.local = new THREE.Matrix4().makeTranslation(
+    joint.x + tcp.x,
+    joint.y + tcp.y,
+    joint.z + tcp.z,
+  );
   plane.matrix.multiplyMatrices(world.matrices[index], plane.userData.local);
   plane.matrixWorldNeedsUpdate = true;
   view.add(plane);
