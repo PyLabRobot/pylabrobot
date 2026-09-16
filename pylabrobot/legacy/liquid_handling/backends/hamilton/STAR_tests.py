@@ -2301,6 +2301,29 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
     tip_rack.unassign()
 
+  async def test_300uL_filter_slim_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL_filter_slim
+
+    tip_rack = hamilton_96_tiprack_300uL_filter_slim("tips")
+    self.tip_car[1] = tip_rack
+
+    # the slim tip has the high volume collar, so it is picked up like a 1000 uL tip
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2164)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
+    await self.lh.drop_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2184)
+
+    tip_rack.unassign()
+
 
 class TestSTAR96TipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
   """Test 96-head pickup and return commands for all four standard filtered tip sizes."""

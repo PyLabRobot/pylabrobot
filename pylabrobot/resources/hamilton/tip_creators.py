@@ -389,7 +389,7 @@ def hamilton_tip_300uL_filter_slim(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=360,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
+    collar_height=10.0,
   )
 
 
