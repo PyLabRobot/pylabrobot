@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from pylabrobot.legacy.liquid_handling.channel_positioning import (
+from pylabrobot.utils.liquid_handling.channel_positioning import (
   _centers_to_offsets,
   _distribute_channels,
   _get_compartments,
@@ -13,7 +13,7 @@ from pylabrobot.legacy.liquid_handling.channel_positioning import (
   compute_nonconsecutive_channel_offsets,
   required_spacing_between,
 )
-from pylabrobot.legacy.liquid_handling.errors import ChannelsDoNotFitError
+from pylabrobot.utils.liquid_handling.errors import ChannelsDoNotFitError
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -412,7 +412,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     c.get_absolute_size_y.return_value = size_y
     return c
 
-  @patch("pylabrobot.legacy.liquid_handling.channel_positioning.compute_channel_offsets")
+  @patch("pylabrobot.utils.liquid_handling.channel_positioning.compute_channel_offsets")
   def test_even_span_no_center_offset(self, mock_offsets):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
     result = compute_nonconsecutive_channel_offsets(self._mock_container(50.0), [0, 1], self.S)
@@ -420,7 +420,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
     self.assertAlmostEqual(result[0].y, 4.5)
     self.assertAlmostEqual(result[1].y, -4.5)
 
-  @patch("pylabrobot.legacy.liquid_handling.channel_positioning.compute_channel_offsets")
+  @patch("pylabrobot.utils.liquid_handling.channel_positioning.compute_channel_offsets")
   def test_odd_span_passes_through_offsets(self, mock_offsets):
     mock_offsets.return_value = [
       Coordinate(0, 9.0, 0),
@@ -437,7 +437,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
       compute_nonconsecutive_channel_offsets(self._mock_container(10.0), [0, 1], self.S)
     )
 
-  @patch("pylabrobot.legacy.liquid_handling.channel_positioning.compute_channel_offsets")
+  @patch("pylabrobot.utils.liquid_handling.channel_positioning.compute_channel_offsets")
   def test_non_consecutive_uses_full_physical_span(self, mock_offsets):
     mock_offsets.return_value = [
       Coordinate(0, 10.0, 0),
@@ -451,7 +451,7 @@ class TestComputeSingleContainerOffsets(unittest.TestCase):
       resource=unittest.mock.ANY, num_channels=3, spread="wide", channel_spacings=[9.0] * 3
     )
 
-  @patch("pylabrobot.legacy.liquid_handling.channel_positioning.compute_channel_offsets")
+  @patch("pylabrobot.utils.liquid_handling.channel_positioning.compute_channel_offsets")
   def test_mixed_spacing_uses_effective(self, mock_offsets):
     mock_offsets.return_value = [
       Coordinate(0, 18.0, 0),

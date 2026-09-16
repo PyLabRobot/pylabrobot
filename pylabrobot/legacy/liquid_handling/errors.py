@@ -1,5 +1,7 @@
 from typing import Dict
 
+from pylabrobot.utils.liquid_handling.errors import ChannelsDoNotFitError  # noqa: F401
+
 
 class NoChannelError(Exception):
   """Raised when no channel is available, e.g. when trying to pick up a tip with no empty channels.
@@ -8,11 +10,6 @@ class NoChannelError(Exception):
   Examples:
   - when trying to pick up a tip with no empty channels available on a robot
   """
-
-
-class ChannelsDoNotFitError(Exception):
-  """Raised when channels cannot be positioned within a resource's compartments while respecting
-  no-go zones and spacing constraints."""
 
 
 class ChannelizedError(Exception):

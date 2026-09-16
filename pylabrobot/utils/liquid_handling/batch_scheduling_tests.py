@@ -1,10 +1,10 @@
-"""Tests for pipette_batch_scheduling module."""
+"""Tests for the batch_scheduling module."""
 
 import unittest
 from typing import Iterable, List
 from unittest.mock import MagicMock, patch
 
-from pylabrobot.legacy.liquid_handling.pipette_batch_scheduling import (
+from pylabrobot.utils.liquid_handling.batch_scheduling import (
   ChannelBatch,
   _span_required,
   enumerate_valid_batches,
@@ -117,17 +117,13 @@ class TestIsValidBatch(unittest.TestCase):
     cs = _containers([100.0, 100.0], [244.9, 200.0])  # 44.9mm — short
     self.assertIsNone(is_valid_batch([0, 1], [0, 3], cs, sp, DECK, x_tolerance=0.1))
 
-  @patch(
-    "pylabrobot.legacy.liquid_handling.pipette_batch_scheduling.compute_nonconsecutive_channel_offsets"
-  )
+  @patch("pylabrobot.utils.liquid_handling.batch_scheduling.compute_nonconsecutive_channel_offsets")
   def test_container_fit_failure_rejects_batch(self, mock_offsets):
     mock_offsets.return_value = None
     c = _mock_container(100.0, 200.0, size_y=3.0)
     self.assertIsNone(is_valid_batch([0, 1], [0, 1], [c, c], self.S, DECK, x_tolerance=0.1))
 
-  @patch(
-    "pylabrobot.legacy.liquid_handling.pipette_batch_scheduling.compute_nonconsecutive_channel_offsets"
-  )
+  @patch("pylabrobot.utils.liquid_handling.batch_scheduling.compute_nonconsecutive_channel_offsets")
   def test_container_fit_sets_spread_positions(self, mock_offsets):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
     c = _mock_container(100.0, 200.0, size_y=50.0)
@@ -348,9 +344,7 @@ class TestPlanBatches(unittest.TestCase):
     self.assertAlmostEqual(y[1], 245.0 - 9.0)
     self.assertAlmostEqual(y[2], 245.0 - 9.0 - 18.0)
 
-  @patch(
-    "pylabrobot.legacy.liquid_handling.pipette_batch_scheduling.compute_nonconsecutive_channel_offsets"
-  )
+  @patch("pylabrobot.utils.liquid_handling.batch_scheduling.compute_nonconsecutive_channel_offsets")
   def test_auto_spread_same_container(self, mock_offsets):
     mock_offsets.return_value = [Coordinate(0, 4.5, 0), Coordinate(0, -4.5, 0)]
     trough = _mock_container(100.0, 200.0, size_y=50.0, name="trough")
@@ -373,9 +367,7 @@ class TestPlanBatchesNoGoZones(unittest.TestCase):
 
   S = [9.0] * 8
 
-  @patch(
-    "pylabrobot.legacy.liquid_handling.pipette_batch_scheduling.compute_nonconsecutive_channel_offsets"
-  )
+  @patch("pylabrobot.utils.liquid_handling.batch_scheduling.compute_nonconsecutive_channel_offsets")
   def test_fits_pair_but_not_triple_in_container(self, mock_offsets):
     # Container fits any adjacent pair but not three channels at once.
     def fake_offsets(container, channels, spacings):
