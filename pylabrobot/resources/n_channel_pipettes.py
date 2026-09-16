@@ -7,7 +7,6 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.tip_holder import collar_seat
 from pylabrobot.resources.well import CrossSectionType
 
 TipPickupMode = Literal["friction", "core"]
@@ -93,21 +92,15 @@ class TipMountingShaft(Resource):
     """Whether this shaft is carrying a tip."""
     return len(self.children) > 0
 
-  def tip_location(self, tool: HeadTool) -> Coordinate:
-    """Where a tool this shaft carries sits: on the shaft's axis, hanging below it.
-
-    A shaft holds a tool the way a tip spot does, by its collar, and differs only in how deep it
-    grips: a channel reaches `fitting_depth` into the collar, so that much of the tool is above
-    this shaft's own end and the rest of it hangs below.
-    """
-    return collar_seat(self, tool, tool.fitting_depth)
-
   def comparable_children(self) -> List[Resource]:
     """Everything but the tool it is carrying, which is state."""
     return [child for child in self.children if not isinstance(child, HeadTool)]
 
   def mount_tip(self, tip: Resource) -> None:
-    """Take a tip onto this shaft, hanging below it by however far it stands proud.
+    """Take a tip onto this shaft.
+
+    The tip is centred on the shaft, and the channel reaches `fitting_depth` into it: its pick-up
+    location, the top of the opening, is `fitting_depth` above the shaft's end.
 
     Call this once the device has confirmed the pickup: a shaft that is given a tip it did not
     manage to collect reports one it is not holding.
@@ -121,7 +114,11 @@ class TipMountingShaft(Resource):
     if self.has_tip():
       raise RuntimeError(f"{self.name} is already carrying {self.children[0].name}")
     location = (
-      self.tip_location(tip)
+      Coordinate(
+        x=self.get_size_x() / 2 - tip.pick_up_location.x,
+        y=self.get_size_y() / 2 - tip.pick_up_location.y,
+        z=tip.fitting_depth - tip.pick_up_location.z,
+      )
       if isinstance(tip, HeadTool)
       else Coordinate(0.0, 0.0, -tip.get_absolute_size_z())
     )

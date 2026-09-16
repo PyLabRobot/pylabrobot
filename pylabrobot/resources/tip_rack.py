@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.tip import Tip, TipCreator
-from pylabrobot.resources.tip_holder import collar_seat
 from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
 from pylabrobot.serializer import deserialize
 
@@ -64,16 +63,6 @@ class TipSpot(Resource):
     self._make_tip_func = make_tip
 
     self.tracker.register_callback(self._state_updated)
-
-  def tip_location(self, tool: HeadTool) -> Coordinate:
-    """Where a tip this spot holds sits: on its own axis, hanging in the hole.
-
-    A spot is the hole's mouth, and a tip is caught by its collar, so the collar's underside rests
-    on this plane and the rest of the tip hangs below it. A tool that does not state a collar
-    height is held by the top of its collar instead, which is where it would sit with none.
-    """
-    seat = tool.collar_height if tool.has_collar_height else 0.0
-    return collar_seat(self, tool, seat)
 
   def comparable_children(self) -> List[Resource]:
     """Everything but the tip it is holding, which is state."""

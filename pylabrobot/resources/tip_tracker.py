@@ -4,10 +4,7 @@ from typing import TYPE_CHECKING, Callable, Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
-from pylabrobot.resources.head_tool import HeadTool
-from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_holder import TipHolder
 from pylabrobot.serializer import SerializableMixin, deserialize
 
 if TYPE_CHECKING:
@@ -42,13 +39,13 @@ TrackerCallback = Callable[[], None]
 class TipTracker(SerializableMixin):
   """A tip tracker tracks tip operations and raises errors if the tip operations are invalid.
 
-  Given a `holder` - a tip spot, or the mounting shaft of a channel - the tip it tracks is a child
-  of that holder, and the tracker moves it in and out of the resource tree. The tip is then in one
-  place rather than two, and where it is is what the tree says. Without a holder the tracker keeps
-  the tip itself, which is what a channel does until it is given a shaft.
+  Given a `holder` - the tip spot it belongs to - the tip it tracks is a child of that spot, and the
+  tracker moves it in and out of the resource tree. The tip is then in one place rather than two,
+  and where it is is what the tree says. Without a holder, as for a channel, the tracker keeps the
+  tip itself.
   """
 
-  def __init__(self, thing: str, holder: Optional[Resource] = None):
+  def __init__(self, thing: str, holder: Optional["TipSpot"] = None):
     self.thing = thing
     self._holder = holder
     self._is_disabled = False
@@ -57,17 +54,6 @@ class TipTracker(SerializableMixin):
     self._tip_origin: Optional["TipSpot"] = None  # not currently in a transaction, do we need that?
 
     self._callback: Optional[TrackerCallback] = None
-
-  def attach_holder(self, holder: Optional[Resource]) -> None:
-    """Give this tracker the holder its tip lives in.
-
-    Taken after construction because a channel gets its mounting shaft while the device is set up,
-    after the tracker that follows it exists. The tip it is tracking moves into the holder.
-    """
-    if holder is self._holder:
-      return
-    self._holder = holder
-    self._sync()
 
   def _carried(self) -> Optional["Tip"]:
     """The tip the holder is carrying, if it is carrying one."""
@@ -89,10 +75,13 @@ class TipTracker(SerializableMixin):
     if tip is not None:
       if tip.parent is not None:
         tip.parent.unassign_child_resource(tip)
-      location = (
-        holder.tip_location(tip)
-        if isinstance(holder, TipHolder) and isinstance(tip, HeadTool)
-        else Coordinate.zero()
+      # Centred on the spot, with its collar sticking up out of the hole: the pick-up location, the
+      # top of the tip, is `collar_height` above the spot.
+      collar_height = tip.collar_height if tip.has_collar_height else 0.0
+      location = Coordinate(
+        x=holder.get_size_x() / 2 - tip.pick_up_location.x,
+        y=holder.get_size_y() / 2 - tip.pick_up_location.y,
+        z=collar_height - tip.pick_up_location.z,
       )
       holder.assign_child_resource(tip, location=location)
 
