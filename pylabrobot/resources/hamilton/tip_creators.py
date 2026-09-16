@@ -408,13 +408,14 @@ def hamilton_tip_300uL_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_300uL_filter_slim(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 300 uL slim tip with filter"""
+  """Hamilton cat. no.: 235646 (CORE-II: conductive)
+  Hamilton 300 uL slim tip with filter"""
   return HamiltonTip(
     name=name,
     has_filter=True,
-    total_tip_length=94.8,
+    total_tip_length=95.0,
     nominal_volume=300,
-    maximal_volume=360,
+    maximal_volume=345,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
   )

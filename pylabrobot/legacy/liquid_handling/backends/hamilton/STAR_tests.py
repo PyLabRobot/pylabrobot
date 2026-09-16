@@ -1783,7 +1783,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_288_C00(name="tip carrier")
     tip_car[0] = tr = hamilton_96_tiprack_1000uL(name="tips_01").rotated(z=90)
     assert tr.rotation.z == 90
-    assert tr.location == Coordinate(82.6, 0, -6.0)
+    assert tr.location == Coordinate(78.3, -3.95, -6.0)
     deck.assign_child_resource(tip_car, track=2)
     await lh.setup()
 
@@ -2286,6 +2286,33 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.tip_car[1] = tip_rack
 
     await self.lh.pick_up_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2164)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
+    await self.lh.drop_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2184)
+
+    tip_rack.unassign()
+
+  async def test_300uL_filter_slim_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL_filter_slim
+
+    tip_rack = hamilton_96_tiprack_300uL_filter_slim("tips")
+    self.tip_car[1] = tip_rack
+
+    # the slim tip has the high volume collar, so it is picked up like a 1000 uL tip
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn(
+      "C0TTid0001tt01tf1tl0870tv03450tg3tu0",
+      [call.kwargs.get("cmd") for call in self.backend._write_and_read_command.call_args_list],
+    )
     tp, tz = self._get_tp_tz_from_calls("C0TP")
     self.assertEqual(tp, 2264)
     self.assertEqual(tz, 2164)
