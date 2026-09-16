@@ -119,7 +119,7 @@ class MultiFloFX:
   """
 
   family: ClassVar[InstrumentFamily] = InstrumentFamily.MULTIFLO_FX
-  checked_on_hardware: ClassVar[bool] = False
+  checked_on_hardware: ClassVar[bool] = True
 
   def __init__(
     self,
