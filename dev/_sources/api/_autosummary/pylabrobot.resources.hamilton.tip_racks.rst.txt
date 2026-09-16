@@ -42,6 +42,7 @@ pylabrobot.resources.hamilton.tip\_racks
       hamilton_96_tiprack_50uL
       hamilton_96_tiprack_50uL_NTR
       hamilton_96_tiprack_50uL_filter
+      hamilton_tiprack_standard
    
    
 

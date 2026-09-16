@@ -15,12 +15,7 @@ pylabrobot.resources.tip.Tip
    .. autosummary::
       :toctree: .
    
-      ~Tip.name
-      ~Tip.nominal_volume
-      ~Tip.has_filter
-      ~Tip.total_tip_length
-      ~Tip.maximal_volume
-      ~Tip.fitting_depth
+      ~Tip.collar_height
    
    
 

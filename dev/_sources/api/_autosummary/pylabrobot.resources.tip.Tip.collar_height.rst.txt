@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.collar\_height
+===========================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. autoproperty:: Tip.collar_height
