@@ -219,16 +219,16 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       Coordinate(302.5, 63.0, 100.0),
     )
 
-    # Subresources.
+    # Tip spots are at the support height: 100 + 114.95 - 6 + 7.5 = 216.45 mm.
     self.assertEqual(
       cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_item("A1").get_absolute_location()
       + cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_item("A1").center(),
-      Coordinate(117.900, 145.800, 164.450),
+      Coordinate(117.900, 145.800, 216.450),
     )
     self.assertEqual(
       cast(TipRack, self.lh.deck.get_resource("tip_rack_04")).get_item("A1").get_absolute_location()
       + cast(TipRack, self.lh.deck.get_resource("tip_rack_04")).get_item("A1").center(),
-      Coordinate(117.900, 433.800, 131.450),
+      Coordinate(117.900, 433.800, 216.450),
     )
 
     self.assertEqual(
@@ -685,7 +685,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(pickup["resources"][0]["type"], "TipSpot")
     self.assertTrue(
       any(
-        ancestor["name"] == self.tip_rack.name and ancestor["type"] == "TipRack"
+        ancestor["name"] == self.tip_rack.name and ancestor["type"] == "EmbeddedTipRack"
         for ancestor in pickup["resources"][0]["ancestors"]
       )
     )
@@ -731,7 +731,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ],
     )
     self.assertEqual(events[0].context["resources"][0]["name"], self.tip_rack.name)
-    self.assertEqual(events[0].context["resources"][0]["type"], "TipRack")
+    self.assertEqual(events[0].context["resources"][0]["type"], "EmbeddedTipRack")
 
   async def _exercise_evented_operations_with_argument_style(
     self, *, use_keywords: bool
