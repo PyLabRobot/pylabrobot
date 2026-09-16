@@ -99,9 +99,14 @@ class PrepDevice(Resource):
       use_v1_aspirate_dispense=use_v1_aspirate_dispense,
     )
 
-  async def stop(self):
-    """Put the device down."""
-    await self.driver.stop()
+  async def stop(self, skip_raise_to_z_safety: bool = False):
+    """Put the device down.
+
+    Args:
+      skip_raise_to_z_safety: leave the channels where they stand, instead of raising them to Z safety first.
+        The next lateral move will crash a channel that is low.
+    """
+    await self.driver.stop(skip_raise_to_z_safety=skip_raise_to_z_safety)
 
   # -- what the device carries ------------------------------------------------------------
   # Read through: they do not exist until setup has run.

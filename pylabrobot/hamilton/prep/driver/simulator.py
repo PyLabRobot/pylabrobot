@@ -85,6 +85,8 @@ SIMULATED_INITIALIZED_POSITIONS = {
 SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
 # Each channel's Z drive frame above the reported Z (rear, front), as PRPAA1087's read-only sweep read them.
 SIMULATED_Z_DRIVE_OFFSETS = (171.784, 171.091)
+# What PRPAA1087's Z drives read for the PWM that limits how hard they push.
+SIMULATED_Z_DRIVE_PWM = 125
 # What a simulated channel touches with in a cLLD search, in mm: the probes' default
 # `stop_disc_diameter`, as simulated channels hold no tips.
 SIMULATED_CLLD_PROBE_DIAMETER = 7.0
@@ -407,6 +409,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
     # is still reported after detection stops, as on PRPAA1087.
     self._clld_on: Set[int] = set()
     self._clld_detected: Dict[int, bool] = {}
+    self._z_drive_pwm: Dict[int, int] = {}
 
   def _touchable(self) -> List[Tuple[Resource, Coordinate, Coordinate]]:
     """The deck's resources a channel can touch.
@@ -694,6 +697,17 @@ class SimulatedPipettes(_Simulated, Pipettes):
         lld_detected=touched is not None,
         detect_position=0.0 if touched is None else touched + offset,
       ), "the resource model" if touched is not None else "nothing in the way"
+
+    if isinstance(request, PrepCmd.PrepZDriveSetPwm):
+      # Nothing is modelled about how hard the drive pushes; the value is accepted and read back.
+      self._z_drive_pwm[self.device.tree.channel_of(request.dest) or 0] = int(request.value)
+      return None
+
+    if isinstance(request, PrepCmd.PrepZDriveGetPwm):
+      owner = self.device.tree.channel_of(request.dest)
+      return PrepCmd.PrepZDriveGetPwm.Response(
+        value=self._z_drive_pwm.get(owner or 0, SIMULATED_Z_DRIVE_PWM)
+      ), "the declared Z drive PWM"
 
     if isinstance(request, (PrepCmd.PrepZDriveGetPosition, PrepCmd.PrepZAxisSeekObstacle)):
       owner = self.device.tree.channel_of(request.dest)

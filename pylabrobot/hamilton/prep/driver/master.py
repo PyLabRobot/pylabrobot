@@ -408,7 +408,7 @@ class PrepDriver:
           low.append(f"channel {channel} at {z:.1f} mm, safe is {safe:.1f} mm")
     return low
 
-  async def stop(self):
+  async def stop(self, skip_raise_to_z_safety: bool = False):
     """Close the link, leaving the device safe to move laterally.
 
     The device keeps its state; only this driver lets go of it. Every pipetting channel is moved up to Z safety
@@ -416,6 +416,10 @@ class PrepDriver:
     next lateral move to crash it. The 8-channel head is not raised: no move of its Z alone is known.
 
     The link closes whether or not that succeeds. Repeatable: a driver that is not set up is left alone.
+
+    Args:
+      skip_raise_to_z_safety: leave the channels where they stand. The next lateral move of the arm or of a
+        channel will crash a channel that is low, so only for holding a position between sessions.
     """
     if not self._setup_finished:
       return
@@ -427,7 +431,13 @@ class PrepDriver:
           "want them returned."
         )
         self._core_gripper_arm = None
-      if self.pipettes is not None:
+      if skip_raise_to_z_safety:
+        low = await self.features_below_safe_z()
+        logger.warning(
+          "leaving the device without raising the channels: %s",
+          "; ".join(low) if low else "nothing is low",
+        )
+      elif self.pipettes is not None:
         try:
           await self.pipettes.move_to_safe_z()
         except Exception:

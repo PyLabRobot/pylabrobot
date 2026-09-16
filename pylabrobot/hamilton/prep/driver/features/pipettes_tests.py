@@ -878,6 +878,74 @@ def test_probe_z_using_ztouch_seeks_the_tip_bottom_and_can_end_at_z_safety():
   _run(_t())
 
 
+def test_probe_z_using_ztouch_holds_the_push_force_for_the_seek_and_puts_it_back():
+  """push_force_pwm is set before the seek and restored after; below 40 the drive cannot lift, so it is refused."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None and p.x_arm is not None
+    await p.x_arm.move_to_x_position(100.0)
+    await p.pipettes.move_to_y_positions({0: 300.0, 1: 100.0})
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.probe_z_using_ztouch(
+      1,
+      search_start_position=160.0,
+      lowest_immers_pos=100.0,
+      allow_without_tip=True,
+      push_force_pwm=40,
+    )
+    seek = _index(sent, PrepCmd.PrepZAxisSeekObstacle)
+    held = _last_before(sent, PrepCmd.PrepZDriveSetPwm, seek)
+    put_back = _last_after(sent, PrepCmd.PrepZDriveSetPwm, seek)
+    assert (held.value, held.dest) == (40, p.pipettes.channels[1].zdrive)
+    assert put_back.value == 125
+    with pytest.raises(ValueError, match="push_force_pwm must be between 40 and 125"):
+      await p.pipettes.probe_z_using_ztouch(1, allow_without_tip=True, push_force_pwm=30)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probe_z_using_ztouch_reads_an_untouched_search_as_nothing():
+  """The firmware answers the end of an untouched search as a detection; that comes back as None."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None and p.x_arm is not None
+    await p.x_arm.move_to_x_position(100.0)
+    await p.pipettes.move_to_y_positions({0: 300.0, 1: 100.0})
+    offset = SIMULATED_Z_DRIVE_OFFSETS[1]
+    at_the_end = PrepCmd.PrepZAxisSeekObstacle.Response(
+      obstacle_detected=True, position=100.0 - 0.9 + offset
+    )
+    p.pipettes._unchecked_fw_z_axis_seek_obstacle = AsyncMock(return_value=at_the_end)  # type: ignore[method-assign]
+    found = await p.pipettes.probe_z_using_ztouch(
+      1, search_start_position=160.0, lowest_immers_pos=100.0, allow_without_tip=True
+    )
+    assert found is None
+    # A surface well above the end is a real detection.
+    at_a_surface = PrepCmd.PrepZAxisSeekObstacle.Response(
+      obstacle_detected=True, position=120.0 + offset
+    )
+    p.pipettes._unchecked_fw_z_axis_seek_obstacle = AsyncMock(return_value=at_a_surface)  # type: ignore[method-assign]
+    found = await p.pipettes.probe_z_using_ztouch(
+      1, search_start_position=160.0, lowest_immers_pos=100.0, allow_without_tip=True
+    )
+    assert found == pytest.approx(120.0)
+    await p.stop()
+
+  _run(_t())
+
+
 def test_probe_z_using_ztouch_refuses_seeks_it_cannot_make():
   """No speed, the floor above the start, or outside the Z range: refused before anything is sent."""
 

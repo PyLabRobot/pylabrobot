@@ -278,6 +278,29 @@ def test_stop_raises_the_channels_to_z_safety_and_reads_them_back():
   asyncio.run(_run())
 
 
+def test_stop_can_leave_the_channels_where_they_stand():
+  """skip_raise_to_z_safety closes the link without raising anything, and says what is low."""
+
+  async def _run() -> None:
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.stop(skip_raise_to_z_safety=True)
+    assert not any(isinstance(c, PrepCmd.PrepMoveZUpToSafe) for c in sent)
+    assert p._setup_finished is False
+
+  asyncio.run(_run())
+
+
 def test_stop_closes_the_link_when_the_channels_do_not_go_up():
   """A retract that fails is logged with what is still low, and the link closes anyway."""
 

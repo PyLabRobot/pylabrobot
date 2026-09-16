@@ -3435,6 +3435,48 @@ class PrepZAxisSeekObstacle(PrepCommand["PrepZAxisSeekObstacle.Response"]):
 
 
 @dataclass(frozen=True)
+class PrepZDriveSetPwm(PrepCommand[None]):
+  """Set a channel's Z drive PWM, the limit on how hard it pushes (cmd=19, dest=ZAxis.ZDrive)."""
+
+  command_id = 19
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # A default only because `dest` comes first; every caller names the value.
+  value: int = 125
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams().add(self.value, U16)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepZDriveGetPwm(PrepStatusRequest["PrepZDriveGetPwm.Response"]):
+  """Get a channel's Z drive PWM (cmd=20, dest=ZAxis.ZDrive)."""
+
+  command_id = 20
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  @dataclass(frozen=True)
+  class Response:
+    value: U16
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepZDriveGetPwm.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
 class PrepZDriveGetPosition(PrepStatusRequest["PrepZDriveGetPosition.Response"]):
   """Get a channel's Z drive position in its drive frame, in mm (cmd=12, dest=ZDrive)."""
 

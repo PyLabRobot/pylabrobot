@@ -554,6 +554,47 @@ class PipetteChannel:
     response = await self._driver.send_command(PrepCmd.PrepZDriveGetPosition(dest=self.zdrive))
     return float(response.position)
 
+  async def request_z_drive_pwm(self) -> int:
+    """Request this channel's Z drive PWM, the limit on how hard it pushes.
+
+    Returns:
+      The PWM, 0 to 125.
+
+    Raises:
+      RuntimeError: If the channel has no Z drive.
+    """
+    if self.zdrive is None:
+      raise RuntimeError(f"channel {self.index} has no Z drive in the firmware tree")
+    response = await self._driver.send_command(PrepCmd.PrepZDriveGetPwm(dest=self.zdrive))
+    return int(response.value)
+
+  @asynccontextmanager
+  async def _temporary_z_drive_pwm(self, value: Optional[int]) -> AsyncIterator[None]:
+    """Run the enclosed block with this channel's Z drive PWM at `value`, then put it back.
+
+    Args:
+      value: the PWM to hold, or None to leave the drive as it is.
+
+    Raises:
+      RuntimeError: If the channel has no Z drive.
+    """
+    if value is None:
+      yield
+      return
+    if self.zdrive is None:
+      raise RuntimeError(f"channel {self.index} has no Z drive in the firmware tree")
+    held = await self.request_z_drive_pwm()
+    await self._driver.send_command(PrepCmd.PrepZDriveSetPwm(dest=self.zdrive, value=value))
+    try:
+      yield
+    finally:
+      try:
+        await self._driver.send_command(PrepCmd.PrepZDriveSetPwm(dest=self.zdrive, value=held))
+      except Exception:
+        logger.warning(
+          "could not put channel %d's Z drive PWM back to %d", self.index, held, exc_info=True
+        )
+
   @asynccontextmanager
   async def clld_detection(self, detect_mode: int, sensitivity: int) -> AsyncIterator[None]:
     """Run the enclosed block with this channel's continuous cLLD detection on.
@@ -2469,10 +2510,17 @@ class Pipettes:
     z_position_at_end_of_a_command: Optional[float] = None,
     allow_without_tip: bool = False,
     move_channels_to_safe_pos_after: bool = False,
+    end_tolerance: float = 1.2,
+    push_force_pwm: Optional[int] = None,
   ) -> Optional[float]:
     """Lower a channel where it stands until it meets resistance, with its Z axis's obstacle seek.
 
-    Sent as `ZAxis.SeekObstacle`, which has not yet run on a device. Heights are of the tip bottom,
+    Sent as `ZAxis.SeekObstacle`. What it does, measured on PRPAA1087 on 2026-09-16: it goes to the start at
+    full speed, searches down at `speed`, and on contact keeps pressing until the Z drive's following error
+    reaches its limit of 150 increments (1.6 mm), then stops and answers. Its answer sits about 0.15 mm above
+    where the drive actually stopped. Only a firm surface is detected: a finger is pushed through, because it
+    yields and no following error builds. Reaching the end of the search untouched is also answered as a
+    detection, about 1 mm below the end, which `end_tolerance` turns back into None. Heights are of the tip bottom,
     or of the stop disc without a tip.
 
     Args:
@@ -2485,6 +2533,10 @@ class Pipettes:
       z_position_at_end_of_a_command: height to finish at in mm. Defaults to `search_start_position`.
       allow_without_tip: whether to probe without a mounted tip. False requires one.
       move_channels_to_safe_pos_after: whether to move all channels to Z safety afterwards.
+      end_tolerance: how close to `lowest_immers_pos` an answer counts as the end of an untouched search
+        rather than a surface, in mm.
+      push_force_pwm: the Z drive's PWM to hold for the seek, 40 to 125, put back afterwards. None leaves the
+        drive as it is (125 on PRPAA1087). Below 40 the drive cannot lift the channel again: 30 stalled it.
 
     Returns:
       Height where the channel met the obstacle in mm, or None.
@@ -2518,6 +2570,8 @@ class Pipettes:
       )
     if speed <= 0:
       raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    if push_force_pwm is not None and not 40 <= push_force_pwm <= 125:
+      raise ValueError(f"push_force_pwm must be between 40 and 125, is {push_force_pwm}")
     positions = await self.request_locations()
     if channel_idx >= len(positions):
       raise RuntimeError(f"channel {channel_idx} reported no position")
@@ -2554,21 +2608,32 @@ class Pipettes:
 
     # Seek until the tip bottom meets an obstacle or reaches the floor
     try:
-      result = await self._unchecked_fw_z_axis_seek_obstacle(
-        channel.zaxis,
-        start_position=start + extension + offset,
-        end_position=floor + extension + offset,
-        final_position=final + extension + offset,
-        velocity=speed,
-        read_timeout=(abs(here.z - start) + start - floor) / speed + 30,
-      )
+      async with channel._temporary_z_drive_pwm(push_force_pwm):
+        result = await self._unchecked_fw_z_axis_seek_obstacle(
+          channel.zaxis,
+          start_position=start + extension + offset,
+          end_position=floor + extension + offset,
+          final_position=final + extension + offset,
+          velocity=speed,
+          read_timeout=(abs(here.z - start) + start - floor) / speed + 30,
+        )
     finally:
       await self._record_where_they_stopped()
     if move_channels_to_safe_pos_after:
       await self.move_to_safe_z()
     if not result.obstacle_detected:
       return None
-    return float(result.position) - offset - extension
+    surface = float(result.position) - offset - extension
+    if abs(surface - floor) <= end_tolerance:
+      logger.info(
+        "channel %d reached the end of its search at %.3f mm without meeting anything; the firmware answers "
+        "that as a detection at %.3f mm",
+        channel_idx,
+        floor,
+        surface,
+      )
+      return None
+    return surface
 
   # -- shutdown / serialization --------------------------------------------------------------------
 
