@@ -113,6 +113,11 @@ class HeadTool(Resource, metaclass=ABCMeta):
     return self._collar_height
 
   @property
+  def has_collar_height(self) -> bool:
+    """Whether this tool states the height of its collar."""
+    return self._collar_height is not None
+
+  @property
   @abstractmethod
   def total_length(self) -> float:
     """Distance from the top of the tool's collar to its working point, in mm."""
@@ -133,9 +138,17 @@ class HeadTool(Resource, metaclass=ABCMeta):
     return cast(Tuple[object, ...], _without_names(self.serialize()))
 
   def serialize(self) -> dict:
-    return {
+    """What this tool is.
+
+    Where it is is left out: a tool is carried, and the spot or shaft carrying it states where it
+    sits, so a serialized tool reads the same whichever holder it is in and none.
+    """
+    data = {
       **super().serialize(),
       "fitting_depth": self.fitting_depth,
       "collar_height": self._collar_height,
       "pick_up_location": serialize(self.pick_up_location),
     }
+    for held_by_the_holder in ("location", "parent_name"):
+      data.pop(held_by_the_holder, None)
+    return data

@@ -2,8 +2,12 @@ import contextlib
 import sys
 from typing import TYPE_CHECKING, Callable, Optional, cast
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
+from pylabrobot.resources.head_tool import HeadTool
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
+from pylabrobot.resources.tip_holder import TipHolder
 from pylabrobot.serializer import SerializableMixin, deserialize
 
 if TYPE_CHECKING:
@@ -36,16 +40,50 @@ TrackerCallback = Callable[[], None]
 
 
 class TipTracker(SerializableMixin):
-  """A tip tracker tracks tip operations and raises errors if the tip operations are invalid."""
+  """A tip tracker tracks tip operations and raises errors if the tip operations are invalid.
 
-  def __init__(self, thing: str):
+  Given a `holder` - a tip spot, or the mounting shaft of a channel - the tip it tracks is a child
+  of that holder, and the tracker moves it in and out of the resource tree. The tip is then in one
+  place rather than two, and where it is is what the tree says. Without a holder the tracker keeps
+  the tip itself, which is what a channel does until it is given a shaft.
+  """
+
+  def __init__(self, thing: str, holder: Optional[Resource] = None):
     self.thing = thing
+    self._holder = holder
     self._is_disabled = False
     self._tip: Optional["Tip"] = None
     self._pending_tip: Optional["Tip"] = None
     self._tip_origin: Optional["TipSpot"] = None  # not currently in a transaction, do we need that?
 
     self._callback: Optional[TrackerCallback] = None
+
+  def _carried(self) -> Optional["Tip"]:
+    """The tip the holder is carrying, if it is carrying one."""
+    if self._holder is None:
+      return None
+    return next((child for child in self._holder.children if isinstance(child, Tip)), None)
+
+  def _sync(self) -> None:
+    """Make the holder carry exactly the pending tip."""
+    holder = self._holder
+    if holder is None:
+      return
+    carried = self._carried()
+    if carried is self._pending_tip:
+      return
+    if carried is not None:
+      holder.unassign_child_resource(carried)
+    tip = self._pending_tip
+    if tip is not None:
+      if tip.parent is not None:
+        tip.parent.unassign_child_resource(tip)
+      location = (
+        holder.tip_location(tip)
+        if isinstance(holder, TipHolder) and isinstance(tip, HeadTool)
+        else Coordinate.zero()
+      )
+      holder.assign_child_resource(tip, location=location)
 
   @property
   def is_disabled(self) -> bool:
@@ -93,6 +131,7 @@ class TipTracker(SerializableMixin):
     if self._pending_tip is not None:
       raise HasTipError(f"{self.thing} already has a tip.")
     self._pending_tip = tip
+    self._sync()
 
     self._tip_origin = origin
 
@@ -106,6 +145,7 @@ class TipTracker(SerializableMixin):
     if self._pending_tip is None:
       raise NoTipError(f"{self.thing} does not have a tip.")
     self._pending_tip = None
+    self._sync()
 
     if commit:
       self.commit()
@@ -124,11 +164,13 @@ class TipTracker(SerializableMixin):
     if self.is_disabled:
       raise RuntimeError("Tip tracker is disabled. Call `enable()`.")
     self._pending_tip = self._tip
+    self._sync()
 
   def clear(self) -> None:
     """Clear the history."""
     self._tip = None
     self._pending_tip = None
+    self._sync()
 
   def serialize(self) -> dict:
     """Serialize the state of the tip tracker."""
@@ -143,6 +185,7 @@ class TipTracker(SerializableMixin):
 
     self._tip = cast(Optional[Tip], deserialize(state.get("tip")))
     self._pending_tip = cast(Optional[Tip], deserialize(state.get("pending_tip")))
+    self._sync()
 
   def get_tip_origin(self) -> Optional["TipSpot"]:
     """Get the origin of the current tip, if known."""

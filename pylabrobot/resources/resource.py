@@ -253,6 +253,15 @@ class Resource(SerializableMixin):
       "when it is created. Create the resource with the name you want instead."
     )
 
+  def comparable_children(self) -> List["Resource"]:
+    """The children that make this resource what it is.
+
+    Everything it holds, unless holding something is state rather than structure: a tip spot with a
+    tip in it is the same spot as one without, in the same way that a well with liquid in it is the
+    same well.
+    """
+    return self.children
+
   def __eq__(self, other):
     return (
       isinstance(other, Resource)
@@ -262,7 +271,7 @@ class Resource(SerializableMixin):
       and self.get_absolute_size_z() == other.get_absolute_size_z()
       and self.location == other.location
       and self.category == other.category
-      and self.children == other.children
+      and self.comparable_children() == other.comparable_children()
       and self.metadata == other.metadata
     )
 

@@ -6,7 +6,9 @@ from collections import OrderedDict
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.tip import Tip, TipCreator
+from pylabrobot.resources.tip_holder import collar_seat
 from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
 from pylabrobot.serializer import deserialize
 
@@ -52,7 +54,7 @@ class TipSpot(Resource):
       category=category,
       metadata=metadata,
     )
-    self.tracker = TipTracker(thing="Tip spot")
+    self.tracker = TipTracker(thing=name, holder=self)
     self.parent: Optional["TipRack"] = None
 
     self._tip_counter: int = 0
@@ -60,6 +62,20 @@ class TipSpot(Resource):
     self._make_tip_func = make_tip
 
     self.tracker.register_callback(self._state_updated)
+
+  def tip_location(self, tool: HeadTool) -> Coordinate:
+    """Where a tip this spot holds sits: on its own axis, hanging in the hole.
+
+    A spot is the hole's mouth, and a tip is caught by its collar, so the collar's underside rests
+    on this plane and the rest of the tip hangs below it. A tool that does not state a collar
+    height is held by the top of its collar instead, which is where it would sit with none.
+    """
+    seat = tool.collar_height if tool.has_collar_height else 0.0
+    return collar_seat(self, tool, seat)
+
+  def comparable_children(self) -> List[Resource]:
+    """Everything but the tip it is holding, which is state."""
+    return [child for child in self.children if not isinstance(child, HeadTool)]
 
   def _get_next_tip_name(self) -> str:
     """Generate a unique name for the next tip originating from this spot."""
@@ -105,11 +121,18 @@ class TipSpot(Resource):
     self.tracker.remove_tip()
 
   def serialize(self) -> dict:
-    """Serialize the tip spot."""
-    return {
+    """Serialize the tip spot.
+
+    The tip a spot carries is a child of it, but it is reported through the spot's state, as it
+    always was, rather than as a child here: a spot's serialized form says what kind of tip it
+    holds, and its state says whether one is in it.
+    """
+    data = {
       **super().serialize(),
       "prototype_tip": self.make_tip().serialize(),
     }
+    data.pop("children", None)
+    return data
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False) -> TipSpot:

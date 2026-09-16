@@ -1,11 +1,13 @@
 """Pipetting channels, and the rigid grids some devices carry them in."""
 
 from collections import OrderedDict
-from typing import Any, Dict, Literal, Mapping, Optional, get_args
+from typing import Any, Dict, List, Literal, Mapping, Optional, get_args
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.tip_holder import collar_seat
 from pylabrobot.resources.well import CrossSectionType
 
 TipPickupMode = Literal["friction", "core"]
@@ -91,6 +93,19 @@ class TipMountingShaft(Resource):
     """Whether this shaft is carrying a tip."""
     return len(self.children) > 0
 
+  def tip_location(self, tool: HeadTool) -> Coordinate:
+    """Where a tool this shaft carries sits: on the shaft's axis, hanging below it.
+
+    A shaft holds a tool the way a tip spot does, by its collar, and differs only in how deep it
+    grips: a channel reaches `fitting_depth` into the collar, so that much of the tool is above
+    this shaft's own end and the rest of it hangs below.
+    """
+    return collar_seat(self, tool, tool.fitting_depth)
+
+  def comparable_children(self) -> List[Resource]:
+    """Everything but the tool it is carrying, which is state."""
+    return [child for child in self.children if not isinstance(child, HeadTool)]
+
   def mount_tip(self, tip: Resource) -> None:
     """Take a tip onto this shaft, hanging below it by however far it stands proud.
 
@@ -105,7 +120,12 @@ class TipMountingShaft(Resource):
     """
     if self.has_tip():
       raise RuntimeError(f"{self.name} is already carrying {self.children[0].name}")
-    self.assign_child_resource(tip, location=Coordinate(0.0, 0.0, -tip.get_absolute_size_z()))
+    location = (
+      self.tip_location(tip)
+      if isinstance(tip, HeadTool)
+      else Coordinate(0.0, 0.0, -tip.get_absolute_size_z())
+    )
+    self.assign_child_resource(tip, location=location)
 
   def release_tip(self) -> Resource:
     """Let go of the tip this shaft is carrying.
