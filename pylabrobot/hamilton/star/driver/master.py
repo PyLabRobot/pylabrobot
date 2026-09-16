@@ -21,7 +21,6 @@ from pylabrobot.hamilton.protocol.text.router import ReplyRouter
 from pylabrobot.hamilton.star.driver.configuration import (
   DeviceConfiguration,
   read_configuration,
-  to_jsonable,
 )
 from pylabrobot.hamilton.star.driver.errors import (
   STAR_MODULE_ID_LENGTH,
@@ -53,6 +52,7 @@ from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMet
 from pylabrobot.resources.manipulator import LinkBody
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 from pylabrobot.resources.resource import Resource
+from pylabrobot.utils.configuration_json import to_jsonable
 
 logger = logging.getLogger(__name__)
 

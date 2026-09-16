@@ -6,9 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
-# The JSON walk is the STAR's: it is written against dataclass field types, and nothing in it is
-# particular to that device.
-from pylabrobot.hamilton.star.driver.configuration import _restore, to_jsonable
+from pylabrobot.utils.configuration_json import restore, to_jsonable
 
 from .features.pipettes import PipettesConfiguration
 from .prep_commands import DeckBounds, DeckSiteInfo, WasteSiteInfo
@@ -64,7 +62,7 @@ def read_configuration(path: str) -> Dict[str, Any]:
     saved = json.load(f)
   read: Dict[str, Any] = {}
   if "device" in saved:
-    read["device"] = _restore(DeviceConfiguration, saved["device"])
+    read["device"] = restore(DeviceConfiguration, saved["device"])
   if "pipettes" in saved:
-    read["pipettes"] = _restore(PipettesConfiguration, saved["pipettes"])
+    read["pipettes"] = restore(PipettesConfiguration, saved["pipettes"])
   return read

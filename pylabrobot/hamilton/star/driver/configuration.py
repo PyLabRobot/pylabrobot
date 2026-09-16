@@ -1,9 +1,7 @@
-import dataclasses
 import datetime
 import json
-import typing
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 from pylabrobot.hamilton.star.driver.features.autoload import AutoloadConfiguration
 from pylabrobot.hamilton.star.driver.features.head96 import Head96Configuration
@@ -11,6 +9,7 @@ from pylabrobot.hamilton.star.driver.features.head384 import Head384Configuratio
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAPConfiguration
 from pylabrobot.hamilton.star.driver.features.pipettes import PipettesConfiguration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArmConfiguration
+from pylabrobot.utils.configuration_json import restore
 
 
 @dataclass
@@ -139,80 +138,6 @@ class DeviceConfiguration:
   """Right arm minimal Y position [mm] (yx). Default: 6.0."""
 
 
-# -- reading and writing these as JSON ------------------------------------------------------------
-# JSON loses three things these configurations rely on: a tuple comes back a list, a dict key comes
-# back a string, and a date comes back its own text. What each field is declared to be is enough to
-# put all three back, so writing is `dataclasses.fields` and reading is the same walk against the
-# declared types.
-
-
-def to_jsonable(value: Any) -> Any:
-  """The value as JSON holds it.
-
-  Args:
-    value: what to convert - a configuration, or anything one holds.
-
-  Returns:
-    The same value in types `json.dump` accepts.
-  """
-  if dataclasses.is_dataclass(value) and not isinstance(value, type):
-    return {
-      field.name: to_jsonable(getattr(value, field.name)) for field in dataclasses.fields(value)
-    }
-  if isinstance(value, datetime.date):
-    return value.isoformat()
-  if isinstance(value, (list, tuple)):
-    return [to_jsonable(item) for item in value]
-  if isinstance(value, dict):
-    # Keys are written as text because JSON has no other kind. What they were is on the field.
-    return {str(key): to_jsonable(item) for key, item in value.items()}
-  return value
-
-
-def _restore(hint: Any, value: Any) -> Any:
-  """One value, back in the type its field is declared to hold.
-
-  Args:
-    hint: the declared type.
-    value: the value as JSON held it.
-
-  Returns:
-    The value in the declared type.
-  """
-  if value is None:
-    return None
-
-  origin = typing.get_origin(hint)
-  args = typing.get_args(hint)
-
-  if origin is Union:  # Optional[X] is Union[X, None]; the None case returned above.
-    declared = [arg for arg in args if arg is not type(None)]
-    return _restore(declared[0], value) if len(declared) == 1 else value
-  if origin is tuple:
-    # Fixed-length tuples name a type per position; `Tuple[X, ...]` names one for all of them.
-    if len(args) == 2 and args[1] is Ellipsis:
-      return tuple(_restore(args[0], item) for item in value)
-    return tuple(_restore(arg, item) for arg, item in zip(args, value))
-  if origin is list:
-    return [_restore(args[0], item) for item in value]
-  if origin is dict:
-    key_hint, value_hint = args
-    return {_restore(key_hint, key): _restore(value_hint, item) for key, item in value.items()}
-  if hint is int and isinstance(value, str):
-    # A dict keyed by int: JSON wrote the key as text, and the field says what it was.
-    return int(value)
-  if hint is datetime.date:
-    return datetime.date.fromisoformat(value)
-  if dataclasses.is_dataclass(hint) and isinstance(hint, type):
-    # A nested configuration: rebuilt field by field against what its own class declares. Names the
-    # class does not have are left out, so a file written by a driver that has since dropped a
-    # field still loads.
-    field_types = typing.get_type_hints(hint)
-    named = {field.name for field in dataclasses.fields(hint)}
-    return hint(**{n: _restore(field_types[n], v) for n, v in value.items() if n in named})
-  return value
-
-
 # What each name in a saved configuration is, so reading one back knows what to build. A feature an
 # arm carries is looked up in the first; one fitted to the device itself in the second.
 ARM_FEATURE_CONFIGURATIONS: Dict[str, type] = {
@@ -246,10 +171,10 @@ def read_configuration(path: str) -> Dict[str, Any]:
 
   read: Dict[str, Any] = {}
   if "device" in saved:
-    read["device"] = _restore(DeviceConfiguration, saved["device"])
+    read["device"] = restore(DeviceConfiguration, saved["device"])
   read["arms"] = {
     side: {
-      name: _restore(ARM_FEATURE_CONFIGURATIONS[name], value)
+      name: restore(ARM_FEATURE_CONFIGURATIONS[name], value)
       for name, value in carried.items()
       if name in ARM_FEATURE_CONFIGURATIONS
     }
@@ -257,5 +182,5 @@ def read_configuration(path: str) -> Dict[str, Any]:
   }
   for name, configuration in DEVICE_FEATURE_CONFIGURATIONS.items():
     if name in saved:
-      read[name] = _restore(configuration, saved[name])
+      read[name] = restore(configuration, saved[name])
   return read
