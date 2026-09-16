@@ -21,16 +21,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `LinkBody` (`pylabrobot.resources.LinkBody`): one rigid member of a manipulator, an ordinary resource whose origin is a corner and which carries its `proximal_joint` and `distal_joint` as coordinates within it. The link is the line between the two joints and `length` is the distance, `None` on a member that ends the chain. A member turns about its proximal joint rather than its origin. (#1249)
 - `MechanicalGripper` (`pylabrobot.resources.MechanicalGripper`): a `LinkBody` that ends the chain, holding what it takes between two fingers. Its far end is a `tool_center_point` rather than a joint, it is sized to its body because `jaw_width` moves the fingers, and the jaws straddle the grip centre. (#1249)
 - `StandingTipRack`: a tip rack that stands on its own rather than sinking into a holder, with an optional `stacking_z_height` for racks that nest; a rack nested on it is placed that far above it by default, and the height round-trips through `serialize`.
-- Hamilton nested tip racks (NTR) `hamilton_96_tiprack_10uL_NTR` and `hamilton_96_tiprack_300uL_NTR`, built with `hamilton_nested_tiprack` like `hamilton_96_tiprack_50uL_NTR`. Their tip spots reproduce the firmware positions Venus sends on `TIP_CAR_NTR_A00`.
+- Hamilton nested tip racks (NTR) `hamilton_96_tiprack_10uL_NTR` and `hamilton_96_tiprack_300uL_NTR`, built with `hamilton_nested_tiprack` like `hamilton_96_tiprack_50uL_NTR`. Their tip spots reproduce the firmware positions Venus sends on `hamilton_tip_carrier_L5_ntr_a00`.
 
 ### Changed
 
-- `hamilton_96_tiprack_50uL_NTR` is a `StandingTipRack` on the rack's measured body (127.35 x 84.8 x 56), with its tip spots where the collars rest, 55 mm above the rack's bottom (was 13.5), so a tip is placed like one in an embedded rack. `TIP_CAR_NTR_A00` stands the rack centred on its sites, and the Vantage discard takes the tip end from these spots as it does for embedded racks.
+- `hamilton_96_tiprack_50uL_NTR` is a `StandingTipRack` on the rack's measured body (127.35 x 84.8 x 56), with its tip spots where the collars rest, 55 mm above the rack's bottom (was 13.5), so a tip is placed like one in an embedded rack. `hamilton_tip_carrier_L5_ntr_a00` stands the rack centred on its sites, and the Vantage discard takes the tip end from these spots as it does for embedded racks.
 - `HamiltonDeck` and `HamiltonSTARDeck`: `num_tracks` replaces `num_rails` and `track=` replaces `rails=`; the old names are deprecated but keep working, as do decks saved with `num_rails`. A STAR deck counts two fewer tracks than it counted rails (STARlet 30, STAR 54) at the same positions, so a count passed positionally to `HamiltonSTARDeck` is now read as tracks.
 
 ### Deprecated
 
 - `NestedTipRack`: use `StandingTipRack` with a `stacking_z_height`.
+- `TIP_CAR_NTR_A00`: renamed `hamilton_tip_carrier_L5_ntr_a00`, following the `hamilton_<kind>_carrier_<...>` naming; the old name still works and warns.
 
 ### Fixed
 

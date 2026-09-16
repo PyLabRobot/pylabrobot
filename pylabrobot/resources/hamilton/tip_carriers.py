@@ -1,5 +1,7 @@
 """ML Star tip carriers"""
 
+import warnings
+
 from pylabrobot.resources.carrier import (
   ResourceHolder,
   TipCarrier,
@@ -331,8 +333,12 @@ def TIP_CAR_96BC_5mlT_A00(name: str) -> TipCarrier:
   )
 
 
-def TIP_CAR_NTR_A00(name: str) -> TipCarrier:
-  """Carrier with 5 nestable tip rack positions"""
+def hamilton_tip_carrier_L5_ntr_a00(name: str) -> TipCarrier:
+  """Hamilton cat. no.: 182074
+  Hamilton name: 'TIP_CAR_NTR_A00'.
+  Carrier for 5 stacks of up to 4x 96 nested tip racks (NTR), landscape.
+  6 track(T) wide.
+  """
   return TipCarrier(
     name=name,
     size_x=135.0,
@@ -354,5 +360,18 @@ def TIP_CAR_NTR_A00(name: str) -> TipCarrier:
       child_location=Coordinate(x=(122.4 - 127.35) / 2, y=(82.6 - 84.8) / 2, z=0),
       name_prefix=name,
     ),
-    model="TIP_CAR_NTR_A00",
+    model=hamilton_tip_carrier_L5_ntr_a00.__name__,
   )
+
+
+# Deprecated names for backwards compatibility
+
+
+def TIP_CAR_NTR_A00(name: str) -> TipCarrier:
+  """Deprecated alias for `hamilton_tip_carrier_L5_ntr_a00`."""
+  warnings.warn(
+    "TIP_CAR_NTR_A00 is deprecated. Use 'hamilton_tip_carrier_L5_ntr_a00' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_tip_carrier_L5_ntr_a00(name)

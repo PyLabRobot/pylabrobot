@@ -375,6 +375,8 @@ def hamilton_tip_300uL(name: Optional[str] = None) -> HamiltonTip:
 
   Variants:
     - Hamilton cat. no.: 235937 - black/conductive, framed EmbeddedTipRack, sterile
+    - Hamilton cat. no.: 235950 - black/conductive, nested StandingTipRack, non-sterile
+    - Hamilton cat. no.: 235985 - black/conductive, nested StandingTipRack, sterile
     - Hamilton cat. no.: 235965 - transparent, nested StandingTipRack, non-sterile
     - Hamilton cat. no.: 235931 - steel (single tip)
   """

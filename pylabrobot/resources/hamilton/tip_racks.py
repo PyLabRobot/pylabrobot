@@ -88,8 +88,8 @@ def hamilton_nested_tiprack(
       dx=11.7 + (127.35 - 122.4) / 2 - 3.6,
       dy=82.6 - 9.8 - 7 * 9.0 + (84.8 - 82.6) / 2 - 3.6,
       # The tip's collar rests 55 mm above the bottom of the rack: firmware spot z 184.0 with the
-      # rack standing at 129.0 on TIP_CAR_NTR_A00, for the 10, 50 and 300 uL racks alike. The
-      # model's top is at 56.
+      # rack standing at 129.0 on hamilton_tip_carrier_L5_ntr_a00, for the 10, 50 and 300 uL racks
+      # alike. The model's top is at 56.
       # TODO: find the 1 mm between the model's top and where the collar rests.
       dz=55.0,
       item_dx=9.0,
@@ -176,7 +176,7 @@ def hamilton_96_tiprack_300uL(name: str, with_tips: bool = True) -> EmbeddedTipR
 
 
 def hamilton_96_tiprack_300uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
-  """Hamilton cat. no.: 235965 (clear, non-sterile)
+  """Hamilton cat. no.: 235950 (non-sterile), 235965 (clear, non-sterile), 235985 (sterile)
   Hamilton name: 'ST_L_NE_stack'
   Nested Tip Rack with 96x 300ul Standard Volume Tip"""
   return hamilton_nested_tiprack(name=name, make_tip=hamilton_tip_300uL, with_tips=with_tips)

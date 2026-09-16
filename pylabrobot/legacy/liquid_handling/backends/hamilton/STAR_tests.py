@@ -19,7 +19,6 @@ from pylabrobot.resources import (
   PLT_CAR_P3AC_A01,
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
-  TIP_CAR_NTR_A00,
   Container,
   Coordinate,
   Lid,
@@ -33,6 +32,7 @@ from pylabrobot.resources import (
   hamilton_96_tiprack_50uL_filter,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
+  hamilton_tip_carrier_L5_ntr_a00,
   no_tip_tracking,
   no_volume_tracking,
   set_tip_tracking,
@@ -943,8 +943,9 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_tip_pickup_from_nested_tip_rack(self):
     # run10 in bct_re 2603_STAR_tippickup/260916_tippickup_testing picked up the 10 uL NTR on
-    # TIP_CAR_NTR_A00 with C0TT...tf0tl0219tv00150tg1tu0 and C0TP...xp07704&yp1458...tp1900tz1840
-    tip_car = TIP_CAR_NTR_A00(name="ntr carrier")
+    # hamilton_tip_carrier_L5_ntr_a00 with C0TT...tf0tl0219tv00150tg1tu0 and
+    # C0TP...xp07704&yp1458...tp1900tz1840
+    tip_car = hamilton_tip_carrier_L5_ntr_a00(name="ntr carrier")
     tip_car[0] = rack = hamilton_96_tiprack_10uL_NTR(name="ntr")
     self.deck.assign_child_resource(tip_car, location=Coordinate(752.5, 63, 100))
     await self.lh.pick_up_tips(rack["A1", "B1"])

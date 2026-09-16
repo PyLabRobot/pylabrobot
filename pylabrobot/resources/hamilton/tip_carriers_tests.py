@@ -4,7 +4,6 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
-  TIP_CAR_NTR_A00,
   STARDeck,
   TIP_CAR_72_4mlTF_C00,
   TIP_CAR_96BC_5mlT_A00,
@@ -14,6 +13,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
+  hamilton_tip_carrier_L5_ntr_a00,
 )
 
 
@@ -63,8 +63,9 @@ class StandardTipCarrierTests(unittest.TestCase):
 
 class NestedTipCarrierTests(unittest.TestCase):
   def test_tip_spot_positions_on_star_deck(self):
-    # C0TP of run10 in bct_re 2603_STAR_tippickup/260916_tippickup_testing: TIP_CAR_NTR_A00 at
-    # x 752.5 with the 10, 50 and 300 uL racks on sites 5, 4 and 3, all picked up at z 184.0
+    # C0TP of run10 in bct_re 2603_STAR_tippickup/260916_tippickup_testing:
+    # hamilton_tip_carrier_L5_ntr_a00 at x 752.5 with the 10, 50 and 300 uL racks on sites 5, 4 and
+    # 3, all picked up at z 184.0
     for rack_fn, site, a1_y in [
       (hamilton_96_tiprack_10uL_NTR, 0, 145.8),
       (hamilton_96_tiprack_50uL_NTR, 1, 241.8),
@@ -72,7 +73,7 @@ class NestedTipCarrierTests(unittest.TestCase):
     ]:
       with self.subTest(rack=rack_fn.__name__):
         deck = STARDeck()
-        carrier = TIP_CAR_NTR_A00("carrier")
+        carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")
         carrier[site] = rack = rack_fn("rack")
         deck.assign_child_resource(carrier, location=Coordinate(752.5, 63, 100))
         for spot, expected in (
@@ -96,7 +97,7 @@ class NestedTipCarrierTests(unittest.TestCase):
         self.assertAlmostEqual(tip.get_location_wrt(rack).z, container_base, delta=0.15)
 
   def test_a_nested_rack_stands_on_the_one_below(self):
-    carrier = TIP_CAR_NTR_A00("carrier")
+    carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")
     carrier[0] = bottom = hamilton_96_tiprack_50uL_NTR("bottom")
     top = hamilton_96_tiprack_50uL_NTR("top")
     bottom.assign_child_resource(top)
