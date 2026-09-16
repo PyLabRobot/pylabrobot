@@ -2054,6 +2054,7 @@
     "status": "wip",
     "api": "pylabrobot.li_cor.OdysseyClassic",
     "api_version": "v1",
+    "manager": "https://discuss.pylabrobot.org/u/vcjdeboer",
     "code_slug": "li_cor/odyssey",
     "doc_slug": "li_cor/odyssey/hello-world",
     "notes": "HTTP scan control and TIFF retrieval; port pending hardware verification."
