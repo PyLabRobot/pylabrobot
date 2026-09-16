@@ -115,7 +115,7 @@ class ChannelDriveMap:
   The Y axis (``YAxis``) and its drive (``YAxis.YDrive``) are listed for the
   channels that have one; the 8-channel head's channels do not. So are the
   channel's ``Calibration`` object (which starts and stops continuous cLLD
-  detection) and its ``CLld`` object (which reports it).
+  detection), its ``CLld`` object (which reports it), and its Z axis (``ZAxis``).
   """
 
   sleeve_sensor_addrs: List[Address]
@@ -125,6 +125,7 @@ class ChannelDriveMap:
   ydrive_addrs: List[Address] = field(default_factory=list)
   calibration_addrs: List[Address] = field(default_factory=list)
   clld_addrs: List[Address] = field(default_factory=list)
+  zaxis_addrs: List[Address] = field(default_factory=list)
 
   @property
   def num_channels_discovered(self) -> int:
@@ -141,6 +142,7 @@ class ChannelDriveMap:
       "ydrive_addrs": list(self.ydrive_addrs),
       "calibration_addrs": list(self.calibration_addrs),
       "clld_addrs": list(self.clld_addrs),
+      "zaxis_addrs": list(self.zaxis_addrs),
     }
 
 
@@ -292,10 +294,20 @@ class PrepDriver:
     *,
     smart: bool = True,
     force_initialize: bool = False,
+    skip_device_initialization: bool = False,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ):
-    """Connect, discover the device, initialize MLPrep, construct peers."""
+    """Connect, discover the device, initialize MLPrep, construct peers.
+
+    A device that reports itself initialized is left as it was found, so what the channels hold is read and
+    logged, and they are raised to Z safety, before anything can move laterally.
+
+    Args:
+      skip_device_initialization: do not run the device's own initialization procedure on a device that reports
+        itself down. Its moves are then whatever the caller sends, and a device that has not initialized may
+        refuse them.
+    """
     logger.debug("Setting up Prep on %s ...", self.describe_link())
     try:
       await self._open()
@@ -306,7 +318,10 @@ class PrepDriver:
 
       # 2. Bring the device to a known state.
       logger.debug("[PHASE 2] Device initialization")
-      await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
+      if skip_device_initialization:
+        logger.warning("skipping the device initialization procedure, as asked")
+      else:
+        await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
 
       # 3. Each feature brings itself up.
       logger.debug("[PHASE 3] Feature initialization")
@@ -333,6 +348,26 @@ class PrepDriver:
             use_v1_aspirate_dispense=use_v1_aspirate_dispense,
           )
         await self.head8._on_setup()
+
+      # What the device was left holding, and where it was left standing: read before anything moves laterally,
+      # then raise what can be raised. The 8-channel head is not raised: no move of its Z alone is known.
+      tips = await self.pipettes.sense_tip_presence()
+      logger.info(
+        "tips held at setup: %s",
+        ", ".join(f"channel {i}" for i, held in enumerate(tips) if held) or "none",
+      )
+      try:
+        await self.pipettes.move_to_safe_z()
+      except Exception:
+        # A device that has not initialized refuses to move; setup still has to finish so the caller can look.
+        logger.warning("could not raise the channels to Z safety at setup", exc_info=True)
+      # Asked, not assumed, as `stop` asks: a device that reported itself initialized was left as someone
+      # else left it, and a raise that answers has not said where it arrived.
+      low = await self.features_below_safe_z()
+      if low:
+        logger.warning("not everything is at Z safety after setup: %s", "; ".join(low))
+      if self.head8 is not None:
+        logger.warning("the 8-channel head is not raised at setup: no move of its Z alone is known")
 
       if self.core_grippers is None:
         self.core_grippers = CoreGrippers(self)
@@ -406,7 +441,7 @@ class PrepDriver:
           low.append(f"channel {channel} at {z:.1f} mm, safe is {safe:.1f} mm")
     return low
 
-  async def stop(self):
+  async def stop(self, skip_raise_to_z_safety: bool = False):
     """Close the link, leaving the device safe to move laterally.
 
     The device keeps its state; only this driver lets go of it. Every pipetting channel is moved up to Z safety
@@ -414,6 +449,10 @@ class PrepDriver:
     next lateral move to crash it. The 8-channel head is not raised: no move of its Z alone is known.
 
     The link closes whether or not that succeeds. Repeatable: a driver that is not set up is left alone.
+
+    Args:
+      skip_raise_to_z_safety: leave the channels where they stand. The next lateral move of the arm or of a
+        channel will crash a channel that is low, so only for holding a position between sessions.
     """
     if not self._setup_finished:
       return
@@ -425,7 +464,13 @@ class PrepDriver:
           "want them returned."
         )
         self._core_gripper_arm = None
-      if self.pipettes is not None:
+      if skip_raise_to_z_safety:
+        low = await self.features_below_safe_z()
+        logger.warning(
+          "leaving the device without raising the channels: %s",
+          "; ".join(low) if low else "nothing is low",
+        )
+      elif self.pipettes is not None:
         try:
           await self.pipettes.move_to_safe_z()
         except Exception:
@@ -611,7 +656,7 @@ class PrepDriver:
     :class:`Address`). For each one we walk:
 
     - ``<root>.Channel.Squeeze.SDrive``     → sleeve sensor
-    - ``<root>.Channel.ZAxis.ZDrive``       → Z drive
+    - ``<root>.Channel.ZAxis`` / ``.ZDrive`` → Z axis and Z drive
     - ``<root>.Channel.YAxis`` / ``.YDrive`` → Y axis and Y drive, where the channel has one
     - ``<root>.Channel.Calibration`` / ``.CLld`` → continuous cLLD detection and its status
     - ``<root>.NodeInformation``            → per-channel firmware strings
@@ -647,6 +692,7 @@ class PrepDriver:
     ydrive: List[Address] = []
     calibration: List[Address] = []
     clld: List[Address] = []
+    zaxis: List[Address] = []
 
     for ch_root in channel_root_addrs:
       top = await intro.find_children_by_name(ch_root, "Channel", "NodeInformation")
@@ -666,6 +712,7 @@ class PrepDriver:
         if "SDrive" in sq:
           sleeve.append(sq["SDrive"])
       if (zx_parent := axes.get("ZAxis")) is not None:
+        zaxis.append(zx_parent)
         zx = await intro.find_children_by_name(zx_parent, "ZDrive")
         if "ZDrive" in zx:
           zdrive.append(zx["ZDrive"])
@@ -688,6 +735,7 @@ class PrepDriver:
       ydrive_addrs=ydrive,
       calibration_addrs=calibration,
       clld_addrs=clld,
+      zaxis_addrs=zaxis,
     )
 
   # ----------------------------------------

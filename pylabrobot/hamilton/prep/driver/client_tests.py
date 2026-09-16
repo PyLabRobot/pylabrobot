@@ -13,6 +13,11 @@ from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck
 
 
+def _index_of(sent: list, command_type) -> "int | None":
+  """Where the first command of `command_type` is in `sent`, or None."""
+  return next((i for i, c in enumerate(sent) if isinstance(c, command_type)), None)
+
+
 @pytest.mark.parametrize("command_id,interface_id", [(9, 3), (8, 3), (2, 2), (5, 3)])
 def test_firmware_string_queries_send_status_requests(command_id, interface_id):
   """Identity queries send the requested method and decode its string response."""
@@ -238,7 +243,7 @@ def test_setup_logs_one_summary_of_what_was_found(caplog):
     assert "    channel 1 (front):" in summary
     assert "  8-channel head: none" in summary
     infos = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
-    assert infos == [summary]
+    assert infos == ["tips held at setup: none", summary]
     await p.stop()
 
   asyncio.run(_run())
@@ -273,6 +278,81 @@ def test_stop_raises_the_channels_to_z_safety_and_reads_them_back():
     up = [c for c in sent if isinstance(c, PrepCmd.PrepMoveZUpToSafe)]
     assert len(up) == 1 and len(up[0].channels) == 2
     assert found == [[]]
+    assert p._setup_finished is False
+
+  asyncio.run(_run())
+
+
+def test_setup_reads_what_is_held_and_raises_the_channels():
+  """A device left low or holding a tip is read and raised before anything moves laterally."""
+
+  async def _run() -> None:
+    p = PrepSimulationDriver(deck=PrepDeck())
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.setup()
+    assert p.pipettes is not None
+    tip_reads = _index_of(sent, PrepCmd.PrepProbeRequest)
+    up = _index_of(sent, PrepCmd.PrepMoveZUpToSafe)
+    assert tip_reads is not None and up is not None and tip_reads < up
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_setup_raises_a_device_that_was_left_low():
+  """A device left with a channel low is raised at setup, and nothing is low afterwards."""
+
+  async def _run() -> None:
+    deck = PrepDeck()
+    first = PrepSimulationDriver(deck=deck)
+    await first.setup()
+    assert first.pipettes is not None
+    await first.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
+    assert len(await first.features_below_safe_z()) == 1
+    await first.stop(skip_raise_to_z_safety=True)
+
+    second = PrepSimulationDriver(deck=deck)
+    sent: list = []
+    send = second.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    second.send_command = record  # type: ignore[method-assign]
+    await second.setup()
+    assert _index_of(sent, PrepCmd.PrepMoveZUpToSafe) is not None
+    assert await second.features_below_safe_z() == []
+    await second.stop()
+
+  asyncio.run(_run())
+
+
+def test_stop_can_leave_the_channels_where_they_stand():
+  """skip_raise_to_z_safety closes the link without raising anything, and says what is low."""
+
+  async def _run() -> None:
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.stop(skip_raise_to_z_safety=True)
+    assert not any(isinstance(c, PrepCmd.PrepMoveZUpToSafe) for c in sent)
     assert p._setup_finished is False
 
   asyncio.run(_run())

@@ -42,7 +42,7 @@ from pylabrobot.hamilton.transport.tcp.packets import Address, HarpPacket, HoiPa
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
-from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, wire_type_of
+from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, Struct, wire_type_of
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources.deck import Deck
 
@@ -83,6 +83,10 @@ SIMULATED_INITIALIZED_POSITIONS = {
 # axis keeps no profile, so setting one changes nothing it answers.
 # Each channel's Y drive frame reads deck Y plus this, rear first, as measured on PRPAA1087 (V1.2.2).
 SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
+# Each channel's Z drive frame above the reported Z (rear, front), as PRPAA1087's read-only sweep read them.
+SIMULATED_Z_DRIVE_OFFSETS = (171.784, 171.091)
+# What PRPAA1087's Z drives read for the PWM that limits how hard they push.
+SIMULATED_Z_DRIVE_PWM = 125
 # What a simulated channel touches with in a cLLD search, in mm: the probes' default
 # `stop_disc_diameter`, as simulated channels hold no tips.
 SIMULATED_CLLD_PROBE_DIAMETER = 7.0
@@ -405,6 +409,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
     # is still reported after detection stops, as on PRPAA1087.
     self._clld_on: Set[int] = set()
     self._clld_detected: Dict[int, bool] = {}
+    self._z_drive_pwm: Dict[int, int] = {}
 
   def _touchable(self) -> List[Tuple[Resource, Coordinate, Coordinate]]:
     """The deck's resources a channel can touch.
@@ -693,6 +698,45 @@ class SimulatedPipettes(_Simulated, Pipettes):
         detect_position=0.0 if touched is None else touched + offset,
       ), "the resource model" if touched is not None else "nothing in the way"
 
+    if isinstance(request, PrepCmd.PrepZDriveSetPwm):
+      # Nothing is modelled about how hard the drive pushes; the value is accepted and read back.
+      self._z_drive_pwm[self.device.tree.channel_of(request.dest) or 0] = int(request.value)
+      return None
+
+    if isinstance(request, PrepCmd.PrepZDriveGetPwm):
+      owner = self.device.tree.channel_of(request.dest)
+      return PrepCmd.PrepZDriveGetPwm.Response(
+        value=self._z_drive_pwm.get(owner or 0, SIMULATED_Z_DRIVE_PWM)
+      ), "the declared Z drive PWM"
+
+    if isinstance(request, (PrepCmd.PrepZDriveGetPosition, PrepCmd.PrepZAxisSeekObstacle)):
+      owner = self.device.tree.channel_of(request.dest)
+      if owner is None or owner >= len(SIMULATED_Z_DRIVE_OFFSETS):
+        return None
+      offset = SIMULATED_Z_DRIVE_OFFSETS[owner]
+      x, y, z = self._modelled_location(owner)
+      if isinstance(request, PrepCmd.PrepZDriveGetPosition):
+        return PrepCmd.PrepZDriveGetPosition.Response(
+          position=z + offset
+        ), f"channel {owner}'s modelled Z in its drive frame"
+      # The channel seeks down from its start, stops at the top of the first resource under it, and
+      # is left at its final height.
+      bottom = self._bottom_offset(owner)
+      top = _first_contact_below(
+        request.start_position - offset + bottom,
+        request.end_position - offset + bottom,
+        x,
+        y,
+        self._touchable(),
+        SIMULATED_CLLD_PROBE_DIAMETER / 2,
+      )
+      touched = None if top is None else top - bottom
+      self._move(owner, None, None, request.final_position - offset)
+      return PrepCmd.PrepZAxisSeekObstacle.Response(
+        obstacle_detected=touched is not None,
+        position=0.0 if touched is None else touched + offset,
+      ), "the resource model" if touched is not None else "nothing in the way"
+
     if isinstance(
       request, (PrepCmd.PrepChannelStartCLldDetection, PrepCmd.PrepChannelStopCLldDetection)
     ):
@@ -718,6 +762,22 @@ class SimulatedPipettes(_Simulated, Pipettes):
       return PrepCmd.PrepZDriveGetAcceleration.Response(
         value=self._declared().z_drive_acceleration
       ), "the declared Z drive acceleration"
+
+    if isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipDefinitionHeld":
+      # The tip the first channel holding one holds, as the definition it was picked up with.
+      tip = next((t.get_tip() for t in self.head.values() if t.has_tip), None)
+      held = PrepCmd.TipDefinition(
+        default_values=False,
+        id=0 if tip is None else 1,
+        volume=0.0 if tip is None else tip.maximal_volume,
+        length=0.0 if tip is None else tip.total_tip_length - tip.fitting_depth,
+        tip_type=0 if tip is None else int(PrepCmd.TipTypes.StandardVolume),
+        has_filter=False if tip is None else tip.has_filter,
+        is_needle=False,
+        is_tool=False,
+        label="No Tip" if tip is None else "simulated",
+      )
+      return HoiParams().add(held, Struct()), "the channels' tip trackers"
 
     if isinstance(request, PrepCmd.PrepProbeRequest):
       owner = self.device.tree.channel_of(request.dest)

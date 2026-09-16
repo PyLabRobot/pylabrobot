@@ -81,6 +81,7 @@ class PrepDevice(Resource):
     self,
     smart: bool = True,
     force_initialize: bool = False,
+    skip_device_initialization: bool = False,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ):
@@ -89,19 +90,26 @@ class PrepDevice(Resource):
     Args:
       smart: as `PrepDriver.setup` takes it.
       force_initialize: as `PrepDriver.setup` takes it.
+      skip_device_initialization: as `PrepDriver.setup` takes it.
       default_traverse_height: as `PrepDriver.setup` takes it.
       use_v1_aspirate_dispense: as `PrepDriver.setup` takes it.
     """
     await self.driver.setup(
       smart=smart,
       force_initialize=force_initialize,
+      skip_device_initialization=skip_device_initialization,
       default_traverse_height=default_traverse_height,
       use_v1_aspirate_dispense=use_v1_aspirate_dispense,
     )
 
-  async def stop(self):
-    """Put the device down."""
-    await self.driver.stop()
+  async def stop(self, skip_raise_to_z_safety: bool = False):
+    """Put the device down.
+
+    Args:
+      skip_raise_to_z_safety: leave the channels where they stand, instead of raising them to Z safety first.
+        The next lateral move will crash a channel that is low.
+    """
+    await self.driver.stop(skip_raise_to_z_safety=skip_raise_to_z_safety)
 
   # -- what the device carries ------------------------------------------------------------
   # Read through: they do not exist until setup has run.
