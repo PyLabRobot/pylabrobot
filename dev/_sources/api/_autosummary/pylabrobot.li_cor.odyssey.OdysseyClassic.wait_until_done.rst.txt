@@ -1,0 +1,6 @@
+pylabrobot.li\_cor.odyssey.OdysseyClassic.wait\_until\_done
+===========================================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. automethod:: OdysseyClassic.wait_until_done

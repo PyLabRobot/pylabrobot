@@ -1,0 +1,6 @@
+pylabrobot.li\_cor.odyssey.OdysseyClassic.get\_instrument\_info
+===============================================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. automethod:: OdysseyClassic.get_instrument_info

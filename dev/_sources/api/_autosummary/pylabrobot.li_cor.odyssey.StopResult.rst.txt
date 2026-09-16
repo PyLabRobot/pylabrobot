@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.li\_cor.odyssey.StopResult
+=====================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. autoclass:: StopResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~StopResult.state
+      ~StopResult.partial
+      ~StopResult.channels_available
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~StopResult.__init__
+   
+   

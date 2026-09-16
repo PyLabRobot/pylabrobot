@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.li\_cor.odyssey.OdysseyStatus
+========================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. autoclass:: OdysseyStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OdysseyStatus.current_user
+      ~OdysseyStatus.lid_open
+      ~OdysseyStatus.progress
+      ~OdysseyStatus.time_remaining
+      ~OdysseyStatus.state
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OdysseyStatus.__init__
+   
+   

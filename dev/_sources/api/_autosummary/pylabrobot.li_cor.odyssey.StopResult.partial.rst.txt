@@ -1,0 +1,6 @@
+pylabrobot.li\_cor.odyssey.StopResult.partial
+=============================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. autoattribute:: StopResult.partial

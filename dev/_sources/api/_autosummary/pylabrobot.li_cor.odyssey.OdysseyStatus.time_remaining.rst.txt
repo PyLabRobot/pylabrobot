@@ -1,0 +1,6 @@
+pylabrobot.li\_cor.odyssey.OdysseyStatus.time\_remaining
+========================================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. autoattribute:: OdysseyStatus.time_remaining

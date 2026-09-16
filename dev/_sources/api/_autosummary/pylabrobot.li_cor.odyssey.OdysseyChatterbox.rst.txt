@@ -1,0 +1,28 @@
+﻿:orphan:
+
+
+pylabrobot.li\_cor.odyssey.OdysseyChatterbox
+============================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. autoclass:: OdysseyChatterbox
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OdysseyChatterbox.__init__
+      ~OdysseyChatterbox.request
+      ~OdysseyChatterbox.request_raw
+      ~OdysseyChatterbox.setup
+      ~OdysseyChatterbox.stop
+   
+   
