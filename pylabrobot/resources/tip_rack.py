@@ -292,59 +292,6 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     return [ts.get_tip() for ts in self.get_all_items()]
 
 
-class NestedTipRack(TipRack):
-  """A nested tip rack."""
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    stacking_z_height: float,
-    ordered_items: Optional[Dict[str, TipSpot]] = None,
-    ordering: Optional[OrderedDict[str, str]] = None,
-    category: str = "tip_rack",
-    model: Optional[str] = None,
-    with_tips: bool = True,
-  ):
-    # Call the superclass constructor
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      ordered_items=ordered_items,
-      ordering=ordering,
-      category=category,
-      model=model,
-      with_tips=with_tips,
-    )
-
-    self.stacking_z_height = stacking_z_height
-
-  def __repr__(self) -> str:
-    return (
-      f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
-      f"size_y={self._size_y}, size_z={self._size_z}, "
-      f"stacking_z_height={self.stacking_z_height}, location={self.location})"
-    )
-
-  def assign_child_resource(
-    self,
-    resource: Resource,
-    location: Optional[Coordinate] = None,
-    reassign: bool = True,
-  ):
-    if isinstance(resource, NestedTipRack):
-      location = location or Coordinate(0, 0, self.stacking_z_height)
-    else:
-      assert location is not None, (
-        "Location must be specified if " + "resource is not a NestedTipRack."
-      )
-    return super().assign_child_resource(resource, location=location, reassign=reassign)
-
-
 class EmbeddedTipRack(TipRack):
   """The EmbeddedTipRack - this is what some might call a "standard" TipRack; they cannot stand on their own, they require an EmbeddedTipRackHolder at all times to be functional.
 
@@ -391,6 +338,106 @@ class EmbeddedTipRack(TipRack):
 
 
 class StandingTipRack(TipRack):
-  """It's defining geometric characteristic is that it is completely self-sufficient and does not require a separate TipHolder to embed into."""
+  """A tip rack that stands on its own.
 
-  # TODO
+  Its defining geometric characteristic is that it is completely self-sufficient: it does not
+  sink into a separate holder, it stands on whatever surface or site it is placed on, and its tip
+  spots are at the top of its own body.
+
+  Some standing tip racks nest: a full rack sits on the one below it, its tips reaching down into
+  that rack's tips, so each rack in the nest is `stacking_z_height` above the one it stands on.
+  Such a rack takes the rack standing on it as a child, placed there by default.
+
+  Attributes:
+    stacking_z_height: how far a rack of the same kind nested on this one stands above it, in mm,
+      or None if the rack does not nest.
+  """
+
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    ordered_items: Optional[Dict[str, TipSpot]] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
+    category: str = "tip_rack",
+    model: Optional[str] = None,
+    with_tips: bool = True,
+    metadata: Optional[Mapping[str, Any]] = None,
+    stacking_z_height: Optional[float] = None,
+  ):
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      ordered_items=ordered_items,
+      ordering=ordering,
+      category=category,
+      model=model,
+      with_tips=with_tips,
+      metadata=metadata,
+    )
+    self.stacking_z_height = stacking_z_height
+
+  def __repr__(self) -> str:
+    return (
+      f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
+      f"size_y={self._size_y}, size_z={self._size_z}, "
+      f"stacking_z_height={self.stacking_z_height}, location={self.location})"
+    )
+
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True,
+  ):
+    if location is None and isinstance(resource, StandingTipRack):
+      if self.stacking_z_height is None:
+        raise ValueError(f"{self.name!r} does not nest: its stacking_z_height is not defined.")
+      location = Coordinate(0, 0, self.stacking_z_height)
+    if location is None:
+      raise ValueError(f"A location must be given to assign {resource.name!r} to {self.name!r}.")
+    return super().assign_child_resource(resource, location=location, reassign=reassign)
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), "stacking_z_height": self.stacking_z_height}
+
+
+class NestedTipRack(StandingTipRack):
+  """Deprecated. Use :class:`StandingTipRack` with a `stacking_z_height` instead."""
+
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    stacking_z_height: float,
+    ordered_items: Optional[Dict[str, TipSpot]] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
+    category: str = "tip_rack",
+    model: Optional[str] = None,
+    with_tips: bool = True,
+    metadata: Optional[Mapping[str, Any]] = None,
+  ):
+    warnings.warn(
+      "NestedTipRack is deprecated, use StandingTipRack with a stacking_z_height instead",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      ordered_items=ordered_items,
+      ordering=ordering,
+      category=category,
+      model=model,
+      with_tips=with_tips,
+      metadata=metadata,
+      stacking_z_height=stacking_z_height,
+    )

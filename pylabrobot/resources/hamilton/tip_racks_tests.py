@@ -15,8 +15,10 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_10uL_filter,
   hamilton_96_tiprack_50uL,
   hamilton_96_tiprack_50uL_filter,
+  hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL,
+  hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_300uL_filter_slim,
   hamilton_96_tiprack_300uL_filter_ultrawide,
@@ -25,7 +27,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_1000uL_filter_ultrawide,
   hamilton_96_tiprack_1000uL_filter_wide,
 )
-from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.resources.tip_rack import StandingTipRack, TipRack
 
 
 class HamiltonTipSpotTests(unittest.TestCase):
@@ -50,11 +52,19 @@ class HamiltonTipSpotTests(unittest.TestCase):
     check_tip_spot_h1(hamilton_96_tiprack_1000uL_filter_wide(name="tr"), common_tip_rack_loc)
     check_tip_spot_h1(hamilton_96_tiprack_1000uL_filter_ultrawide(name="tr"), common_tip_rack_loc)
 
-    ntr_loc = Coordinate(x=13.525, y=11.625, z=13.5)
+    ntr_loc = Coordinate(x=14.175, y=10.9, z=55.0)
+    check_tip_spot_h1(hamilton_96_tiprack_10uL_NTR(name="tr"), ntr_loc)
     check_tip_spot_h1(hamilton_96_tiprack_50uL_NTR(name="tr"), ntr_loc)
+    check_tip_spot_h1(hamilton_96_tiprack_300uL_NTR(name="tr"), ntr_loc)
 
 
 class HamiltonTipRackSerializationTests(unittest.TestCase):
   def test_embedded_tip_rack_roundtrip_keeps_frame_height(self):
     tip_rack = TipRack.deserialize(hamilton_96_tiprack_1000uL(name="tr").serialize())
     self.assertEqual(tip_rack.frame_height, 10.0)
+
+  def test_standing_tip_rack_roundtrip_keeps_stacking_z_height(self):
+    tip_rack = TipRack.deserialize(hamilton_96_tiprack_50uL_NTR(name="tr").serialize())
+    assert isinstance(tip_rack, StandingTipRack)
+    self.assertEqual(tip_rack.stacking_z_height, 16.0)
+    self.assertEqual(tip_rack, hamilton_96_tiprack_50uL_NTR(name="tr"))
