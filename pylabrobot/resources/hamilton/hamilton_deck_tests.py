@@ -65,6 +65,17 @@ class HamiltonDeckTests(unittest.TestCase):
     with self.assertRaises(ValueError):
       deck.assign_child_resource(Resource("front_2", size_x=20, size_y=20, size_z=20), track=32)
 
+  def test_names_the_module_had_still_import(self):
+    from pylabrobot.resources.hamilton import core_grippers, hamilton_decks, star_decks
+
+    for name in ("HamiltonSTARDeck", "STARDeck", "STARLetDeck"):
+      self.assertIs(getattr(hamilton_decks, name), getattr(star_decks, name))
+    self.assertIs(
+      hamilton_decks.hamilton_core_gripper_1000ul_at_waste,
+      core_grippers.hamilton_core_gripper_1000ul_at_waste,
+    )
+    self.assertEqual((hamilton_decks.STARLET_NUM_RAILS, hamilton_decks.STAR_NUM_RAILS), (32, 56))
+
   def test_hamilton_deck_takes_its_track_count_first_as_it_took_rails(self):
     class OwnDeck(HamiltonDeck):
       def track_to_location(self, track: int) -> Coordinate:
