@@ -17,3 +17,7 @@
 # Tecan Infinite 200 PRO
 /docs/user_guide/tecan/infinite/ @hazlamshamin
 /pylabrobot/legacy/plate_reading/tecan/infinite_backend* @hazlamshamin
+
+# LI-COR Odyssey Classic
+/docs/user_guide/li_cor/odyssey/ @vcjdeboer
+/pylabrobot/li_cor/odyssey/ @vcjdeboer
