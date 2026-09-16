@@ -1457,6 +1457,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     max_z_hamilton = max(z_positions_mm)
 
+    # TODO: integrate NTR (NestedTipRack)
     tip_rack = ops[0].resource.parent
     if not isinstance(tip_rack, EmbeddedTipRack):
       raise TypeError("Tip rack must be an EmbeddedTipRack")
@@ -1619,6 +1620,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
       max_z_hamilton = max(z_positions_mm)
 
+      # TODO: integrate NTR (NestedTipRack)
       tip_rack = ops[0].resource.parent
       if not isinstance(tip_rack, EmbeddedTipRack):
         raise TypeError("Tip rack must be an EmbeddedTipRack")
