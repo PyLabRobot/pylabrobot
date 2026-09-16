@@ -294,10 +294,20 @@ class PrepDriver:
     *,
     smart: bool = True,
     force_initialize: bool = False,
+    skip_device_initialization: bool = False,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ):
-    """Connect, discover the device, initialize MLPrep, construct peers."""
+    """Connect, discover the device, initialize MLPrep, construct peers.
+
+    A device that reports itself initialized is left as it was found, so what the channels hold is read and
+    logged, and they are raised to Z safety, before anything can move laterally.
+
+    Args:
+      skip_device_initialization: do not run the device's own initialization procedure on a device that reports
+        itself down. Its moves are then whatever the caller sends, and a device that has not initialized may
+        refuse them.
+    """
     logger.debug("Setting up Prep on %s ...", self.describe_link())
     try:
       await self._open()
@@ -308,7 +318,10 @@ class PrepDriver:
 
       # 2. Bring the device to a known state.
       logger.debug("[PHASE 2] Device initialization")
-      await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
+      if skip_device_initialization:
+        logger.warning("skipping the device initialization procedure, as asked")
+      else:
+        await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
 
       # 3. Each feature brings itself up.
       logger.debug("[PHASE 3] Feature initialization")
@@ -335,6 +348,26 @@ class PrepDriver:
             use_v1_aspirate_dispense=use_v1_aspirate_dispense,
           )
         await self.head8._on_setup()
+
+      # What the device was left holding, and where it was left standing: read before anything moves laterally,
+      # then raise what can be raised. The 8-channel head is not raised: no move of its Z alone is known.
+      tips = await self.pipettes.sense_tip_presence()
+      logger.info(
+        "tips held at setup: %s",
+        ", ".join(f"channel {i}" for i, held in enumerate(tips) if held) or "none",
+      )
+      try:
+        await self.pipettes.move_to_safe_z()
+      except Exception:
+        # A device that has not initialized refuses to move; setup still has to finish so the caller can look.
+        logger.warning("could not raise the channels to Z safety at setup", exc_info=True)
+      # Asked, not assumed, as `stop` asks: a device that reported itself initialized was left as someone
+      # else left it, and a raise that answers has not said where it arrived.
+      low = await self.features_below_safe_z()
+      if low:
+        logger.warning("not everything is at Z safety after setup: %s", "; ".join(low))
+      if self.head8 is not None:
+        logger.warning("the 8-channel head is not raised at setup: no move of its Z alone is known")
 
       if self.core_grippers is None:
         self.core_grippers = CoreGrippers(self)
