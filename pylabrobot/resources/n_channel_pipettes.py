@@ -155,7 +155,11 @@ class TipMountingShaft(Resource):
       The offset from the channel to the bottom of what it carries.
     """
     tip = self.tip
-    return Coordinate.zero() if tip is None else Coordinate(0.0, 0.0, -tip.get_absolute_size_z())
+    if tip is None or tip.location is None:
+      return Coordinate.zero()
+    # Where the tip actually ends: a tool is held by its collar, so part of it is up inside the
+    # channel and only the rest of it reaches below.
+    return Coordinate(0.0, 0.0, tip.location.z)
 
   def serialize(self) -> dict:
     """What its size does not say: how it holds a tip, and that it is round rather than a box."""

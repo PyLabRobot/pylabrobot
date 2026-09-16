@@ -58,6 +58,17 @@ class TipTracker(SerializableMixin):
 
     self._callback: Optional[TrackerCallback] = None
 
+  def attach_holder(self, holder: Optional[Resource]) -> None:
+    """Give this tracker the holder its tip lives in.
+
+    Taken after construction because a channel gets its mounting shaft while the device is set up,
+    after the tracker that follows it exists. The tip it is tracking moves into the holder.
+    """
+    if holder is self._holder:
+      return
+    self._holder = holder
+    self._sync()
+
   def _carried(self) -> Optional["Tip"]:
     """The tip the holder is carrying, if it is carrying one."""
     if self._holder is None:
