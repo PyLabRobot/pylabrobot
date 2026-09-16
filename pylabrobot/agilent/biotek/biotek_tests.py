@@ -24,7 +24,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   """Tests for the Cytation5Backend."""
 
   async def asyncSetUp(self):
-    self.backend = BioTekPlateReaderDriver(timeout=0.1)
+    self.backend = BioTekPlateReaderDriver()
     self.backend.io = unittest.mock.MagicMock()
     self.backend.io.setup = unittest.mock.AsyncMock()
     self.backend.io.stop = unittest.mock.AsyncMock()

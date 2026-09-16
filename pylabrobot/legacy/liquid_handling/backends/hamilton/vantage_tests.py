@@ -2,7 +2,7 @@ import unittest
 from typing import Any, List, Optional
 
 from pylabrobot.legacy.liquid_handling import LiquidHandler
-from pylabrobot.legacy.liquid_handling.standard import Pickup
+from pylabrobot.legacy.liquid_handling.standard import Drop, Pickup
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
@@ -10,6 +10,7 @@ from pylabrobot.resources import (
   cor_96_wellplate_360uL_Fb,
   hamilton_96_tiprack_10uL,
   hamilton_96_tiprack_50uL,
+  hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL,
   hamilton_96_tiprack_1000uL,
   set_tip_tracking,
@@ -252,12 +253,12 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[0] = self.tip_rack = hamilton_96_tiprack_1000uL(name="tip_rack_01")
     self.tip_car[1] = self.small_tip_rack = hamilton_96_tiprack_10uL(name="tip_rack_02")
-    self.deck.assign_child_resource(self.tip_car, rails=18)
+    self.deck.assign_child_resource(self.tip_car, track=18)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
     self.plt_car[1] = self.other_plate = cor_96_wellplate_360uL_Fb(name="plate_02")
-    self.deck.assign_child_resource(self.plt_car, rails=24)
+    self.deck.assign_child_resource(self.plt_car, track=24)
 
     self.maxDiff = None
 
@@ -355,13 +356,13 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_tip_pickup_01(self):
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
-      "A1PMTPid0012xp4329 4329 0&yp1458 1368 0&tm1 1 0&tt1 1&tp2266 2266&tz2166 2166&th2450 2450&"
+      "A1PMTPid0012xp4329 4329 0&yp1458 1368 0&tm1 1 0&tt1 1&tp2264 2264&tz2164 2164&th2450 2450&"
       "te2450 2450&ba0 0&td1 1&",
       PICKUP_TIP_FORMAT,
     )
 
   async def test_tip_drop_01(self):
-    await self.test_tip_pickup_01()  # pick up tips first
+    await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
     await self.lh.drop_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
       "A1PMTRid013xp04329 04329 0&yp1458 1368 0&tm1 1 0&tp1414 1414&tz1314 1314&th2450 2450&"
@@ -377,12 +378,34 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_small_tip_drop(self):
-    await self.test_small_tip_pickup()  # pick up tips first
+    await self.lh.pick_up_tips(self.small_tip_rack["A1"])
     await self.lh.drop_tips(self.small_tip_rack["A1"])
     self._assert_command_sent_once(
-      "A1PMTRid0012xp4329 0&yp2418 0&tp2024&tz1924&th2450&te2450&tm1 0&ts0td0&",
+      "A1PMTRid0012xp4329 0&yp2418 0&tp2025&tz1925&th2450&te2450&tm1 0&ts0td0&",
       DROP_TIP_FORMAT,
     )
+
+  async def test_discard_tips_to_trash(self):
+    """Trash coordinates specify the drop height without a tip-length correction."""
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    await self.lh.discard_tips()
+    command = next(cmd for cmd in self.mockVantage.commands if cmd.startswith("A1PMTR"))
+    parsed = parse_vantage_fw_string(command, DROP_TIP_FORMAT)
+    self.assertEqual(parsed["tp"], [1471])
+    self.assertEqual(parsed["tz"], [1371])
+
+  async def test_nested_tip_rack_drop(self):
+    """Nested rack spots specify the tip-end height directly."""
+    rack = hamilton_96_tiprack_50uL_NTR("nested_tips")
+    self.deck.assign_child_resource(rack, location=Coordinate(100, 200, 150))
+    spot = rack.get_item("A1")
+    await self.mockVantage.drop_tips(
+      [Drop(resource=spot, tip=spot.get_tip(), offset=Coordinate.zero())], use_channels=[0]
+    )
+    command = next(cmd for cmd in self.mockVantage.commands if cmd.startswith("A1PMTR"))
+    parsed = parse_vantage_fw_string(command, DROP_TIP_FORMAT)
+    self.assertEqual(parsed["tp"], [1735])
+    self.assertEqual(parsed["tz"], [1635])
 
   async def test_aspirate(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])  # pick up tips first
@@ -584,7 +607,7 @@ class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(self.backend, deck=self.deck)
 
     self.tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    self.deck.assign_child_resource(self.tip_car, rails=18)
+    self.deck.assign_child_resource(self.tip_car, track=18)
 
     await self.lh.setup()
     set_tip_tracking(enabled=False)
@@ -614,8 +637,8 @@ class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.backend.commands = []
     await self.lh.drop_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_commands("A1PMTR", DROP_TIP_FORMAT)
-    self.assertEqual(tp, [2024])
-    self.assertEqual(tz, [1924])
+    self.assertEqual(tp, [2025])
+    self.assertEqual(tz, [1925])
 
     tip_rack.unassign()
 
@@ -626,15 +649,15 @@ class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     # Pickup
     await self.lh.pick_up_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_commands("A1PMTP", PICKUP_TIP_FORMAT)
-    self.assertEqual(tp, [2248])
-    self.assertEqual(tz, [2168])
+    self.assertEqual(tp, [2244])
+    self.assertEqual(tz, [2164])
 
     # Drop
     self.backend.commands = []
     await self.lh.drop_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_commands("A1PMTR", DROP_TIP_FORMAT)
-    self.assertEqual(tp, [1844])
-    self.assertEqual(tz, [1744])
+    self.assertEqual(tp, [1840])
+    self.assertEqual(tz, [1740])
 
     tip_rack.unassign()
 
@@ -652,8 +675,8 @@ class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.backend.commands = []
     await self.lh.drop_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_commands("A1PMTR", DROP_TIP_FORMAT)
-    self.assertEqual(tp, [1744])
-    self.assertEqual(tz, [1644])
+    self.assertEqual(tp, [1745])
+    self.assertEqual(tz, [1645])
 
     tip_rack.unassign()
 
@@ -664,8 +687,8 @@ class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     # Pickup
     await self.lh.pick_up_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_commands("A1PMTP", PICKUP_TIP_FORMAT)
-    self.assertEqual(tp, [2266])
-    self.assertEqual(tz, [2166])
+    self.assertEqual(tp, [2264])
+    self.assertEqual(tz, [2164])
 
     # Drop
     self.backend.commands = []

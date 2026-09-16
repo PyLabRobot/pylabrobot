@@ -21,3 +21,7 @@
 # LI-COR Odyssey Classic
 /docs/user_guide/li_cor/odyssey/ @vcjdeboer
 /pylabrobot/li_cor/odyssey/ @vcjdeboer
+
+# Thermo Fisher NanoDrop 1000
+/docs/user_guide/thermo_fisher/nanodrop_1000/ @vcjdeboer
+/pylabrobot/thermo_fisher/nanodrop_1000/ @vcjdeboer
