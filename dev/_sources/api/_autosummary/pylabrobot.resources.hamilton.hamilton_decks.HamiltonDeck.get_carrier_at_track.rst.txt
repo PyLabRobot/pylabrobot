@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck.get\_carrier\_at\_track
+==================================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.hamilton_decks
+
+.. automethod:: HamiltonDeck.get_carrier_at_track

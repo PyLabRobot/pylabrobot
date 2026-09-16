@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.resources.hamilton.STARDeck &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -49,7 +49,7 @@
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../_static/plr_devices.js?v=ba1a2da2"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.hamilton.STARDeck';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.21.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -60,12 +60,12 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/graphviz.js?v=0710df9f"></script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.resources.hamilton.STARDeck.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.resources.hamilton.STARLetDeck" href="pylabrobot.resources.hamilton.STARLetDeck.html" />
-    <link rel="prev" title="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.unassign_child_resource" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.unassign_child_resource.html" />
+    <link rel="next" title="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_highest_known_point" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_highest_known_point.html" />
+    <link rel="prev" title="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_anchor" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_anchor.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.2" />
@@ -565,7 +565,10 @@
     
     <li class="breadcrumb-item"><a href="../pylabrobot.resources.html" class="nav-link">pylabrobot.resources package</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources.hamilton.STARDeck</span></li>
+    
+    <li class="breadcrumb-item"><a href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.html" class="nav-link">pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track</span></li>
   </ul>
 </nav>
 </div>
@@ -582,24 +585,28 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-resources-hamilton-stardeck">
-<h1>pylabrobot.resources.hamilton.STARDeck<a class="headerlink" href="#pylabrobot-resources-hamilton-stardeck" title="Link to this heading">#</a></h1>
-<dl class="py function">
-<dt class="sig sig-object py" id="pylabrobot.resources.hamilton.STARDeck">
-<span class="sig-prename descclassname"><span class="pre">pylabrobot.resources.hamilton.</span></span><span class="sig-name descname"><span class="pre">STARDeck</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">origin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><span class="pre">Coordinate</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">Coordinate(x=0,</span> <span class="pre">y=0,</span> <span class="pre">z=0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_trash</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_trash96</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_teaching_rack</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">core_grippers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'1000uL-at-waste'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'1000uL-5mL-on-waste'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'1000uL-5mL-on-waste'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">HamiltonSTARDeck</span></span></span><a class="headerlink" href="#pylabrobot.resources.hamilton.STARDeck" title="Link to this definition">#</a></dt>
-<dd><p>Create a new STAR deck.</p>
+  <section id="pylabrobot-resources-hamilton-hamilton-decks-hamiltondeck-get-carrier-at-track">
+<h1>pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track<a class="headerlink" href="#pylabrobot-resources-hamilton-hamilton-decks-hamiltondeck-get-carrier-at-track" title="Link to this heading">#</a></h1>
+<dl class="py method">
+<dt class="sig sig-object py" id="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track">
+<span class="sig-prename descclassname"><span class="pre">HamiltonDeck.</span></span><span class="sig-name descname"><span class="pre">get_carrier_at_track</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">track</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="pylabrobot.resources.Carrier.html#pylabrobot.resources.Carrier" title="pylabrobot.resources.carrier.Carrier"><span class="pre">Carrier</span></a></span></span><a class="headerlink" href="#pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track" title="Link to this definition">#</a></dt>
+<dd><p>The carrier covering a track, from where the carriers sit on this deck.</p>
+<p>A carrier covers every track from the one it is placed at to
+<code class="code docutils literal notranslate"><span class="pre">compute_right_track_of_carrier</span></code>, so a six-track carrier at track 15 answers for 15 to 20. This
+finds it from any of them, which is what lets a caller name a carrier by the track it was put
+at while the autoload addresses it by its rightmost.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>origin</strong> (<a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><em>Coordinate</em></a>)</p></li>
-<li><p><strong>with_trash</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
-<li><p><strong>with_trash96</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
-<li><p><strong>with_teaching_rack</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
-<li><p><strong>core_grippers</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'1000uL-at-waste'</em><em>, </em><em>'1000uL-5mL-on-waste'</em><em>] </em><em>| </em><em>None</em>)</p></li>
-</ul>
+<dd class="field-odd"><p><strong>track</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – any track the carrier covers, counted from 1.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The carrier there.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If no carrier on this deck covers that track.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><em>HamiltonSTARDeck</em></p>
+<dd class="field-even"><p><a class="reference internal" href="pylabrobot.resources.Carrier.html#pylabrobot.resources.Carrier" title="pylabrobot.resources.carrier.Carrier"><em>Carrier</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -617,20 +624,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.unassign_child_resource.html"
+       href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_anchor.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.unassign_child_resource</p>
+        <p class="prev-next-title">pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_anchor</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.resources.hamilton.STARLetDeck.html"
+       href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_highest_known_point.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.resources.hamilton.STARLetDeck</p>
+        <p class="prev-next-title">pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_highest_known_point</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -653,7 +660,7 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.resources.hamilton.STARDeck"><code class="docutils literal notranslate"><span class="pre">STARDeck()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track"><code class="docutils literal notranslate"><span class="pre">HamiltonDeck.get_carrier_at_track()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -661,7 +668,7 @@
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.resources.hamilton.STARDeck.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -676,7 +683,7 @@
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.resources.hamilton.STARDeck.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
