@@ -101,6 +101,26 @@ __EGL_VENDOR_LIBRARY_FILENAMES=/usr/lib/aarch64-linux-gnu/tegra-egl/nvidia.json 
 
 Leave out the environment variable and glvnd picks Mesa's EGL, so Firefox renders on the CPU (llvmpipe). WebGPU is never available.
 
+Measured with 1,165 instances (six plates, six tip racks) at 1920x1080, dragging the camera:
+
+| browser | scene ready | frame rate while orbiting |
+|---|---|---|
+| Firefox, recipe above (Orin GPU) | 3.4 s | 40-60 fps |
+| Firefox, no env var (llvmpipe) | 11.3 s | 1-4 fps |
+| Chromium snap, `--enable-unsafe-swiftshader` | 4 s | about one frame per 3 s |
+
+To make the recipe permanent, put the two prefs in a dedicated profile's `user.js` and set the variable in a small
+launcher that backgrounds Firefox (`webbrowser.open` waits for the command to exit):
+
+```sh
+#!/bin/sh
+export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/lib/aarch64-linux-gnu/tegra-egl/nvidia.json
+setsid firefox --profile "$HOME/.mozilla/firefox-gpu" "$@" </dev/null >/dev/null 2>&1 &
+```
+
+Then `export BROWSER=<that launcher>` in `~/.profile`, so `Viewer3D` opens it. A Firefox that is already running
+without the variable renders on the CPU, and the URL opens in it, so start it through the launcher.
+
 **Better design, ship in this order.** This came out of an adversarial review. The server-side items were checked against the code.
 
 1. Make the browser tests find Chrome on Linux (env var or `shutil.which`). Add runs with no GPU, and with the
