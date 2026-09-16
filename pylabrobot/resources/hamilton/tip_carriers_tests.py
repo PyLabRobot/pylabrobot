@@ -4,7 +4,13 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
+  TIP_CAR_NTR_A00,
   STARDeck,
+  TIP_CAR_72_4mlTF_C00,
+  TIP_CAR_96BC_5mlT_A00,
+  hamilton_24_tiprack_4000uL_filter,
+  hamilton_24_tiprack_5000uL,
+  hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_1000uL,
 )
 
@@ -40,3 +46,15 @@ class StandardTipCarrierTests(unittest.TestCase):
           actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
           for axis in ("x", "y", "z"):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
+
+  def test_non_embedded_racks_on_their_carriers(self):
+    # TODO: model the 4 mL / 5 mL racks and the NTR, then place them like the standard rack
+    for carrier_fn, rack_fn in [
+      (TIP_CAR_72_4mlTF_C00, hamilton_24_tiprack_4000uL_filter),
+      (TIP_CAR_96BC_5mlT_A00, hamilton_24_tiprack_5000uL),
+      (TIP_CAR_NTR_A00, hamilton_96_tiprack_50uL_NTR),
+    ]:
+      with self.subTest(carrier=carrier_fn.__name__):
+        carrier = carrier_fn("carrier")
+        carrier[0] = rack = rack_fn("rack")
+        self.assertEqual(rack.location, Coordinate.zero())
