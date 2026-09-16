@@ -30,4 +30,13 @@ class EmbeddedTipRackHolder(ResourceHolder):
   def get_default_child_location(self, resource: Resource) -> Coordinate:
     if not isinstance(resource, EmbeddedTipRack):
       raise ValueError("Can only hold EmbeddedTipRack resources.")
-    return get_child_location(resource) + Coordinate(x=0, y=0, z=-resource.sinking_depth)
+    # the rack's frame might be larger (and sometimes smaller) than the opening it sinks into, and sits centered over it
+    return (
+      get_child_location(resource)
+      + Coordinate(
+        x=(self.get_absolute_size_x() - resource.get_absolute_size_x()) / 2,
+        y=(self.get_absolute_size_y() - resource.get_absolute_size_y()) / 2,
+        z=-resource.sinking_depth,
+      )
+      + self.child_location
+    )
