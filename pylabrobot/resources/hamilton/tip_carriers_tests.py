@@ -1,6 +1,8 @@
 import unittest
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource_stack import ResourceStack
+from pylabrobot.resources.tip_rack import StandingTipRack
 from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
@@ -13,6 +15,8 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
+  hamilton_mfx_carrier_L5_base,
+  hamilton_mfx_resource_holder_ntr4,
   hamilton_tip_carrier_L5_ntr_a00,
 )
 
@@ -84,6 +88,58 @@ class NestedTipCarrierTests(unittest.TestCase):
           for axis in ("x", "y", "z"):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
+  def test_tip_spot_positions_on_the_mfx_ntr4_module(self):
+    # C0TP and C0EP of run6, run7 and run8 in bct_re 2603_STAR_tippickup/260916_tippickup_testing:
+    # the MFX carrier at x 932.5 with each rack on its NTR4 site, all picked up at z 184.0
+    for rack_fn in (
+      hamilton_96_tiprack_10uL_NTR,
+      hamilton_96_tiprack_50uL_NTR,
+      hamilton_96_tiprack_300uL_NTR,
+    ):
+      with self.subTest(rack=rack_fn.__name__):
+        deck = STARDeck()
+        module = hamilton_mfx_resource_holder_ntr4("module")
+        carrier = hamilton_mfx_carrier_L5_base("carrier", modules={3: module})
+        module.assign_child_resource(rack := rack_fn("rack"))
+        deck.assign_child_resource(carrier, location=Coordinate(932.5, 63, 100))
+        for spot, expected in (
+          ("A1", Coordinate(950.5, 434.0, 184.0)),
+          ("H12", Coordinate(1049.5, 371.0, 184.0)),
+        ):
+          actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
+          for axis in ("x", "y", "z"):
+            self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
+
+  def test_a_stack_of_nested_tip_racks_on_both_holders(self):
+    # Each rack in a nest stands its 16 mm stacking height above the one below, so the top rack's
+    # A1 is at 184.0 + 16 per rack below it. Derived: no capture has picked up from a nest.
+    module = hamilton_mfx_resource_holder_ntr4("module")
+    mfx = hamilton_mfx_carrier_L5_base("mfx", modules={3: module})
+    ntr_carrier = hamilton_tip_carrier_L5_ntr_a00("ntr_carrier")
+    for holder, carrier, location, racks, a1 in [
+      (module, mfx, Coordinate(932.5, 63, 100), 4, Coordinate(950.5, 434.0, 184.0 + 3 * 16)),
+      (
+        ntr_carrier.sites[1],
+        ntr_carrier,
+        Coordinate(752.5, 63, 100),
+        2,
+        Coordinate(770.4, 241.8, 200.0),
+      ),
+    ]:
+      with self.subTest(holder=holder.name, racks=racks):
+        deck = STARDeck()
+        stack = ResourceStack(f"stack_{racks}", direction="z")
+        holder.assign_child_resource(stack)
+        for i in range(racks):
+          stack.assign_child_resource(hamilton_96_tiprack_50uL_NTR(f"{holder.name}_ntr{i}"))
+        deck.assign_child_resource(carrier, location=location)
+        self.assertAlmostEqual(stack.get_size_z(), 55 + (racks - 1) * 16)
+        top = stack.get_top_item()
+        assert isinstance(top, StandingTipRack)
+        actual = top.get_item("A1").get_absolute_location("c", "c", "b")
+        for axis in ("x", "y", "z"):
+          self.assertAlmostEqual(getattr(actual, axis), getattr(a1, axis))
+
   def test_tips_end_where_venus_puts_the_tip_container(self):
     # Cntr.1.base of LT_L_NE_stack, TIP_50ul_L_NE_stack and ST_L_NE_stack, above the rack's bottom
     for rack_fn, container_base in [
@@ -95,13 +151,3 @@ class NestedTipCarrierTests(unittest.TestCase):
         rack = rack_fn("rack")
         tip = rack.get_item("A1").get_tip()
         self.assertAlmostEqual(tip.get_location_wrt(rack).z, container_base, delta=0.15)
-
-  def test_a_nested_rack_stands_on_the_one_below(self):
-    carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")
-    carrier[0] = bottom = hamilton_96_tiprack_50uL_NTR("bottom")
-    top = hamilton_96_tiprack_50uL_NTR("top")
-    bottom.assign_child_resource(top)
-    self.assertEqual(
-      top.get_item("A1").get_absolute_location("c", "c", "b"),
-      bottom.get_item("A1").get_absolute_location("c", "c", "b") + Coordinate(0, 0, 16),
-    )

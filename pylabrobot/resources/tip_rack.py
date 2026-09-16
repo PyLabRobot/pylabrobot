@@ -13,7 +13,9 @@ from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
 from pylabrobot.serializer import deserialize
 
 from .itemized_resource import ItemizedResource
+from .lid import Lid
 from .resource import Resource
+from .resource_stack import ResourceStack
 
 
 class TipSpot(Resource):
@@ -220,6 +222,20 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})"
     )
 
+  @property
+  def _available(self) -> bool:
+    """Whether nothing - a lid, or another rack in its stack - sits on top of this rack.
+
+    Derived from where the rack is each time, so it holds however the deck has changed since.
+    """
+    # A rack's spots are assigned when it is made; anything put on the rack comes after them.
+    if len(self.children) > 0 and isinstance(self.children[-1], Lid):
+      return False
+    stack = self.parent
+    return not (
+      isinstance(stack, ResourceStack) and stack.direction == "z" and stack.children[-1] is not self
+    )
+
   @staticmethod
   def _occupied_func(item: TipSpot):
     return "V" if item.has_tip() else "-"
@@ -345,8 +361,8 @@ class StandingTipRack(TipRack):
   spots are at the top of its own body.
 
   Some standing tip racks nest: a full rack sits on the one below it, its tips reaching down into
-  that rack's tips, so each rack in the nest is `stacking_z_height` above the one it stands on.
-  Such a rack takes the rack standing on it as a child, placed there by default.
+  that rack's tips, so each rack in the nest is `stacking_z_height` above the one it stands on. A
+  nest is a z-growing :class:`~pylabrobot.resources.ResourceStack` of such racks.
 
   Attributes:
     stacking_z_height: how far a rack of the same kind nested on this one stands above it, in mm,
@@ -388,20 +404,6 @@ class StandingTipRack(TipRack):
       f"stacking_z_height={self.stacking_z_height}, location={self.location})"
     )
 
-  def assign_child_resource(
-    self,
-    resource: Resource,
-    location: Optional[Coordinate] = None,
-    reassign: bool = True,
-  ):
-    if location is None and isinstance(resource, StandingTipRack):
-      if self.stacking_z_height is None:
-        raise ValueError(f"{self.name!r} does not nest: its stacking_z_height is not defined.")
-      location = Coordinate(0, 0, self.stacking_z_height)
-    if location is None:
-      raise ValueError(f"A location must be given to assign {resource.name!r} to {self.name!r}.")
-    return super().assign_child_resource(resource, location=location, reassign=reassign)
-
   def serialize(self) -> dict:
     return {**super().serialize(), "stacking_z_height": self.stacking_z_height}
 
@@ -441,3 +443,15 @@ class NestedTipRack(StandingTipRack):
       metadata=metadata,
       stacking_z_height=stacking_z_height,
     )
+
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True,
+  ):
+    if isinstance(resource, NestedTipRack):
+      location = location or Coordinate(0, 0, cast(float, self.stacking_z_height))
+    else:
+      assert location is not None, "Location must be specified if resource is not a NestedTipRack."
+    return super().assign_child_resource(resource, location=location, reassign=reassign)

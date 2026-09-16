@@ -355,9 +355,8 @@ def hamilton_tip_carrier_L5_ntr_a00(name: str) -> TipCarrier:
       ],
       resource_size_x=122.4,
       resource_size_y=82.6,
-      # A nested tip rack's body, 127.35 x 84.8, stands centred on the 122.4 x 82.6 site Venus
-      # declares for it (see hamilton_nested_tiprack).
-      child_location=Coordinate(x=(122.4 - 127.35) / 2, y=(82.6 - 84.8) / 2, z=0),
+      # A nested tip rack's SLAS footprint, 127.76 x 85.48, stands centred on the site.
+      child_location=Coordinate(x=(122.4 - 127.76) / 2, y=(82.6 - 85.48) / 2, z=0),
       name_prefix=name,
     ),
     model=hamilton_tip_carrier_L5_ntr_a00.__name__,

@@ -45,6 +45,7 @@ from pylabrobot.resources.errors import (
 )
 from pylabrobot.resources.hamilton import (
   STARLetDeck,
+  hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
 )
@@ -1310,6 +1311,29 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       self.assertTrue(self.lh.head96[i].has_tip)
 
     set_tip_tracking(enabled=False)
+
+
+class TestTipsFromStackedRacks(unittest.IsolatedAsyncioTestCase):
+  """Two nested tip racks on top of each other: only the top one can be used."""
+
+  async def asyncSetUp(self):
+    self.backend = _create_mock_backend(num_channels=8)
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    self.stack = ResourceStack("ntr_stack", direction="z")
+    self.bottom = hamilton_96_tiprack_50uL_NTR(name="bottom")
+    self.top = hamilton_96_tiprack_50uL_NTR(name="top")
+    self.stack.assign_child_resource(self.bottom)
+    self.stack.assign_child_resource(self.top)
+    self.deck.assign_child_resource(self.stack, location=Coordinate(100, 100, 0))
+    await self.lh.setup()
+
+  async def test_only_the_top_rack_can_be_picked_up_from(self):
+    with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
+      await self.lh.pick_up_tips([self.bottom.get_item("A1")])
+    self.backend.pick_up_tips.assert_not_called()
+    await self.lh.pick_up_tips([self.top.get_item("A1")])
+    self.backend.pick_up_tips.assert_called_once()
 
 
 class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):

@@ -58,22 +58,22 @@ def hamilton_tiprack_standard(
   )
 
 
-def hamilton_nested_tiprack(
+def hamilton_96_tiprack_ntr(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> StandingTipRack:
   """Nested tip rack (NTR) for Hamilton STAR systems, the same body for every tip it carries.
 
-  The body is its measured model, 127.35 x 84.8 x 56 mm. Venus declares the rack by a 122.4 x
-  82.6 footprint, the site it stands in, with A1 11.7 mm in from the left and 9.8 mm from the back
-  of that site; the model's holes sit there to within 0.25 mm when the model is centred on the
-  site, so the spots are placed from Venus' numbers on the centred body.
+  The body is an SLAS 96-position footprint, 127.76 x 85.48 mm, with its tips in the SLAS
+  positions. Venus declares the rack by the 122.4 x 82.6 area inside that footprint, with A1 11.7 mm
+  in from its left and 9.8 mm from its back: centred on the footprint, those are the SLAS positions
+  exactly, as are the holes of Hamilton's own model of the rack.
   """
   return StandingTipRack(
     name=name,
-    size_x=127.35,
-    size_y=84.8,
-    size_z=56.0,
-    model=hamilton_nested_tiprack.__name__,
+    size_x=127.76,
+    size_y=85.48,
+    size_z=55.0,  # the top face, where the collars rest
+    model=hamilton_96_tiprack_ntr.__name__,
     # One rack nested on another stands 16 mm higher: Venus' StackHt, and the 48 mm between its
     # NTR1 and NTR4 carrier sites is three of them.
     # TODO: measure a nest on the instrument; Venus does not model nests, so nothing has checked it.
@@ -82,15 +82,14 @@ def hamilton_nested_tiprack(
       TipSpot,
       num_items_x=12,
       num_items_y=8,
-      # The spot is the 7.2 mm hole the tip drops into, measured on the rack's model (Venus: 6.8).
-      # A1's centre is 11.7 + (127.35 - 122.4) / 2 from the left and H1's 82.6 - 9.8 - 63 +
-      # (84.8 - 82.6) / 2 from the front, less half a spot.
-      dx=11.7 + (127.35 - 122.4) / 2 - 3.6,
-      dy=82.6 - 9.8 - 7 * 9.0 + (84.8 - 82.6) / 2 - 3.6,
-      # The tip's collar rests 55 mm above the bottom of the rack: firmware spot z 184.0 with the
-      # rack standing at 129.0 on hamilton_tip_carrier_L5_ntr_a00, for the 10, 50 and 300 uL racks
-      # alike. The model's top is at 56.
-      # TODO: find the 1 mm between the model's top and where the collar rests.
+      # The spot is the 7.2 mm hole the tip drops into (Hamilton's model: 7.34, Venus: 6.8).
+      # SLAS 96 positions: A1's centre 14.38 mm from the left and 11.24 mm from the back edge, so
+      # H1's is 85.48 - 11.24 - 63 from the front, each less half a spot.
+      dx=14.38 - 3.6,
+      dy=85.48 - 11.24 - 7 * 9.0 - 3.6,
+      # The tip's collar rests on the top face, 55 mm above the bottom of the rack: firmware spot z
+      # 184.0 with the rack standing at 129.0 on hamilton_tip_carrier_L5_ntr_a00, for the 10, 50
+      # and 300 uL racks alike.
       dz=55.0,
       item_dx=9.0,
       item_dy=9.0,
@@ -127,7 +126,7 @@ def hamilton_96_tiprack_10uL_NTR(name: str, with_tips: bool = True) -> StandingT
   """Hamilton cat. no.: 235949 (non-sterile), 235971 (clear, non-sterile), 235983 (sterile)
   Hamilton name: 'LT_L_NE_stack'
   Nested Tip Rack with 96x 10ul Low Volume Tip"""
-  return hamilton_nested_tiprack(name=name, make_tip=hamilton_tip_10uL, with_tips=with_tips)
+  return hamilton_96_tiprack_ntr(name=name, make_tip=hamilton_tip_10uL, with_tips=with_tips)
 
 
 # # # # # # # # # # 50 ul Tips # # # # # # # # # #
@@ -153,7 +152,7 @@ def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> StandingT
   """Hamilton cat. no.: 235947 (non-sterile), 235964 (clear, non-sterile), 235987 (sterile)
   Hamilton name: 'TIP_50ul_L_NE_stack'
   Nested Tip Rack with 96x 50ul Tip no filter"""
-  return hamilton_nested_tiprack(name=name, make_tip=hamilton_tip_50uL, with_tips=with_tips)
+  return hamilton_96_tiprack_ntr(name=name, make_tip=hamilton_tip_50uL, with_tips=with_tips)
 
 
 # # # # # # # # # # 300 ul Tips # # # # # # # # # #
@@ -179,7 +178,7 @@ def hamilton_96_tiprack_300uL_NTR(name: str, with_tips: bool = True) -> Standing
   """Hamilton cat. no.: 235950 (non-sterile), 235965 (clear, non-sterile), 235985 (sterile)
   Hamilton name: 'ST_L_NE_stack'
   Nested Tip Rack with 96x 300ul Standard Volume Tip"""
-  return hamilton_nested_tiprack(name=name, make_tip=hamilton_tip_300uL, with_tips=with_tips)
+  return hamilton_96_tiprack_ntr(name=name, make_tip=hamilton_tip_300uL, with_tips=with_tips)
 
 
 def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> EmbeddedTipRack:
