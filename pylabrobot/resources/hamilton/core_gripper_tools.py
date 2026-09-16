@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Optional
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton.tip_creators import TipPickupMethod, TipSize
 from pylabrobot.resources.head_tool import HeadTool
-from pylabrobot.resources.hamilton.tip_creators import (
-  HamiltonToolDefinition,
-  TipPickupMethod,
-  TipSize,
-)
-
-# The volume the firmware's tip type table carries for a grip tool. A grip tool holds no liquid, but
-# the table demands at least 1.0 uL, and the value plays no part in picking the tool up.
-GRIP_TOOL_VOLUME = 1.0
 
 
 class HamiltonCoreGripperTool(HeadTool):
@@ -59,22 +51,17 @@ class HamiltonCoreGripperTool(HeadTool):
       pick_up_location=pick_up_location,
     )
     self._total_length = total_length
+    # What the machine has to be told about this tool, in the same tip type table a tip goes in:
+    # a grip tool holds no liquid, but the table demands at least 1.0 uL, and the value plays no
+    # part in picking the tool up.
+    self.has_filter = False
+    self.maximal_volume = 1.0
+    self.tip_size = TipSize.UNDEFINED
+    self.pickup_method = TipPickupMethod.OUT_OF_RACK
 
   @property
   def total_length(self) -> float:
     return self._total_length
-
-  def definition(self) -> Tuple[object, ...]:
-    return (self.total_length, self.fitting_depth, self._collar_height)
-
-  def hamilton_tool_definition(self) -> HamiltonToolDefinition:
-    return HamiltonToolDefinition(
-      has_filter=False,
-      tip_length=self.extension,
-      maximal_volume=GRIP_TOOL_VOLUME,
-      tip_size=TipSize.UNDEFINED,
-      pickup_method=TipPickupMethod.OUT_OF_RACK,
-    )
 
   def serialize(self) -> dict:
     return {

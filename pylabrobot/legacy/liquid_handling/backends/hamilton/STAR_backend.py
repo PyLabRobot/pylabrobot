@@ -1477,7 +1477,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip_spots = [op.resource for op in ops]
     tips = [cast(HamiltonTip, tip_spot.get_tip()) for tip_spot in tip_spots]
-    if len({tip.definition() for tip in tips}) > 1:
+    if len({tip.kind() for tip in tips}) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
     ttti = await self.get_or_assign_tip_type_index(tips[0])
 

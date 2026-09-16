@@ -2996,10 +2996,10 @@ class LiquidHandler(Resource, Machine):
         tip_spot for has_tip, tip_spot in zip(tip_status, tip_rack.get_all_items()) if has_tip
       ]
 
-      # Identify model by the tip's definition
-      current_model = tipspots_w_tips[0].tracker.get_tip().definition()
+      # Identify model by what kind of tip it is
+      current_model = tipspots_w_tips[0].tracker.get_tip().kind()
       if not all(
-        tip_spot.tracker.get_tip().definition() == current_model for tip_spot in tipspots_w_tips[1:]
+        tip_spot.tracker.get_tip().kind() == current_model for tip_spot in tipspots_w_tips[1:]
       ):
         raise ValueError(
           f"Tip rack {tip_rack.name} has mixed tip models, cannot consolidate: "

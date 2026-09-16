@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import serialize
+
+
+def _without_names(value: object) -> Any:
+  """`value` with every name dropped, and hashable: dicts become sorted tuples, lists tuples."""
+  if isinstance(value, dict):
+    return tuple(sorted((k, _without_names(v)) for k, v in value.items() if k != "name"))
+  if isinstance(value, list):
+    return tuple(_without_names(v) for v in value)
+  return value
 
 
 class HeadTool(Resource, metaclass=ABCMeta):
@@ -19,8 +28,8 @@ class HeadTool(Resource, metaclass=ABCMeta):
   the top of its collar.
 
   A head tool is a resource, so it is identified by its name. Two tools that are the same kind of
-  tool - interchangeable for a backend, which defines one tool type for both - have equal
-  :meth:`definition`, whatever their names.
+  tool - interchangeable for a backend, which declares one tool type for both - have equal
+  :meth:`kind`, whatever their names.
 
   Attributes:
     fitting_depth: the overlap between the tool and the channel, in mm
@@ -113,12 +122,15 @@ class HeadTool(Resource, metaclass=ABCMeta):
     """How far the working point sits below the end of the channel carrying the tool, in mm."""
     return self.total_length - self.fitting_depth
 
-  @abstractmethod
-  def definition(self) -> Tuple[object, ...]:
-    """The parameters that make two tools the same kind of tool.
+  def kind(self) -> Tuple[object, ...]:
+    """What this tool is, as opposed to which one it is.
 
-    A backend that defines tool types in firmware defines one type per definition.
+    Everything the tool says about itself except its name, so two tools of the same kind are one
+    kind whatever they are called and wherever they are: a backend that has to declare a tool to a
+    machine declares one per kind. A vendor that states more about its tools says more here too,
+    without having to be asked for it separately.
     """
+    return cast(Tuple[object, ...], _without_names(self.serialize()))
 
   def serialize(self) -> dict:
     return {

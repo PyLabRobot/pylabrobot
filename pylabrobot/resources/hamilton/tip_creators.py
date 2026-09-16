@@ -7,8 +7,7 @@ See the TT command.
 
 import enum
 import warnings
-from dataclasses import dataclass
-from typing import Dict, Optional, Protocol, Union, runtime_checkable
+from typing import Dict, Optional, Union
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip
@@ -57,36 +56,6 @@ class TipDropMethod(enum.Enum):
 
   PLACE_SHIFT = 0
   DROP = 1
-
-
-@dataclass(frozen=True)
-class HamiltonToolDefinition:
-  """What a Hamilton machine has to be told about a tool before a channel may pick it up.
-
-  This is one entry of the firmware's tip type table (see the TT command). A tip fills it in from
-  what it is made of; a grip tool fills in the same table, because the firmware knows no difference
-  between the two - it is holding something on a channel either way.
-
-  Attributes:
-    tip_length: how far the tool's working point sits below the end of the channel, in mm
-    maximal_volume: the volume the table carries for the tool, in uL
-    tip_size: the collar the channel latches onto
-  """
-
-  has_filter: bool
-  tip_length: float
-  maximal_volume: float
-  tip_size: TipSize
-  pickup_method: TipPickupMethod
-
-
-@runtime_checkable
-class HamiltonHeadTool(Protocol):
-  """A head tool a Hamilton machine can be told about."""
-
-  def hamilton_tool_definition(self) -> HamiltonToolDefinition:
-    """The firmware tip type table entry for this tool."""
-    ...
 
 
 class HamiltonTip(Tip):
@@ -157,15 +126,6 @@ class HamiltonTip(Tip):
       f"total_tip_length={self.total_tip_length}, "
       f"collar_height={self._collar_height}, "
       f"pickup_method={self.pickup_method.name})"
-    )
-
-  def hamilton_tool_definition(self) -> HamiltonToolDefinition:
-    return HamiltonToolDefinition(
-      has_filter=self.has_filter,
-      tip_length=self.extension,
-      maximal_volume=self.maximal_volume,
-      tip_size=self.tip_size,
-      pickup_method=self.pickup_method,
     )
 
   def serialize(self):

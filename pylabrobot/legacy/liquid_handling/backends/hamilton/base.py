@@ -14,6 +14,7 @@ from typing import (
   Sequence,
   Tuple,
   TypeVar,
+  Union,
 )
 
 from pylabrobot.hamilton.protocol.text.framing import to_list
@@ -24,12 +25,15 @@ from pylabrobot.legacy.liquid_handling.backends.backend import (
 from pylabrobot.legacy.liquid_handling.standard import PipettingOp
 from pylabrobot.resources import TipSpot
 from pylabrobot.resources.hamilton import (
+  HamiltonCoreGripperTool,
   HamiltonTip,
   TipPickupMethod,
   TipSize,
   hamilton_core_gripper_tool,
 )
-from pylabrobot.resources.hamilton.tip_creators import HamiltonHeadTool, HamiltonToolDefinition
+
+# What a Hamilton machine can be told about and pick up: a tip, or a grip tool.
+HamiltonHeadTool = Union[HamiltonTip, HamiltonCoreGripperTool]
 
 T = TypeVar("T")
 
@@ -95,8 +99,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self._waiting_tasks: List[HamiltonTask] = []
     # The firmware's own table already carries the CO-RE grip tool at index 14, so that index is
     # taken rather than handed out to a tip, which would overwrite the grip tool.
-    self._tip_type_indices: Dict[HamiltonToolDefinition, int] = {
-      hamilton_core_gripper_tool().hamilton_tool_definition(): CORE_GRIPPER_TIP_TYPE_INDEX
+    self._tip_type_indices: Dict[Tuple[object, ...], int] = {
+      hamilton_core_gripper_tool().kind(): CORE_GRIPPER_TIP_TYPE_INDEX
     }
 
   def __setattr__(self, name: str, value: Any) -> None:
@@ -127,9 +131,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
       )
     self._waiting_tasks.clear()
-    self._tip_type_indices = {
-      hamilton_core_gripper_tool().hamilton_tool_definition(): CORE_GRIPPER_TIP_TYPE_INDEX
-    }
+    self._tip_type_indices = {hamilton_core_gripper_tool().kind(): CORE_GRIPPER_TIP_TYPE_INDEX}
     await self.io.stop()
 
   def serialize(self) -> dict:
@@ -446,9 +448,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     start and are never redefined.
     """
 
-    definition = tool.hamilton_tool_definition()
+    kind = tool.kind()
 
-    if definition not in self._tip_type_indices:
+    if kind not in self._tip_type_indices:
       taken = set(self._tip_type_indices.values())
       ttti = next((i for i in range(1, 100) if i not in taken), None)
       if ttti is None:
@@ -456,24 +458,24 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
       await self.define_tip_needle(
         tip_type_table_index=ttti,
-        has_filter=definition.has_filter,
-        tip_length=round(definition.tip_length * 10),  # in 0.1mm
+        has_filter=tool.has_filter,
+        tip_length=round(tool.extension * 10),  # in 0.1mm
         # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register the same
         # way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to satisfy the
         # tv >= 1 requirement). tv does not affect pickup (that is tl/tg).
-        maximum_tip_volume=max(round(definition.maximal_volume * 10), 10),
-        tip_size=definition.tip_size,
-        pickup_method=definition.pickup_method,
+        maximum_tip_volume=max(round(tool.maximal_volume * 10), 10),
+        tip_size=tool.tip_size,
+        pickup_method=tool.pickup_method,
       )
-      self._tip_type_indices[definition] = ttti
+      self._tip_type_indices[kind] = ttti
 
-    return self._tip_type_indices[definition]
+    return self._tip_type_indices[kind]
 
   def _get_hamilton_tip(self, tip_spots: List[TipSpot]) -> HamiltonTip:
     """Get the single tip type for all tip spots. If it does not exist or is not a HamiltonTip,
     raise an error."""
     tips = [tip_spot.get_tip() for tip_spot in tip_spots]
-    if len({tip.definition() for tip in tips}) > 1:
+    if len({tip.kind() for tip in tips}) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
     if len(tips) == 0:
       raise ValueError("No tips specified.")

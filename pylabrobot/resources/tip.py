@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.head_tool import HeadTool
@@ -82,16 +82,6 @@ class Tip(HeadTool):
   @property
   def total_length(self) -> float:
     return self.total_tip_length
-
-  def definition(self) -> Tuple[object, ...]:
-    return (
-      self.has_filter,
-      self.total_tip_length,
-      self.nominal_volume,
-      self.maximal_volume,
-      self.fitting_depth,
-      self._collar_height,
-    )
 
   def serialize(self) -> dict:
     return {
