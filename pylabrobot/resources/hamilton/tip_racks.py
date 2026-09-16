@@ -38,13 +38,16 @@ def hamilton_universal_rack(name: str, make_tip, with_tips: bool = True) -> Embe
       TipSpot,
       num_items_x=12,
       num_items_y=8,
-      dx=7.2,
-      dy=5.3,
+      # The spot is the hole the tip drops into: 7.2 mm across, measured on the rack's own model,
+      # where the tip's 8.2 mm collar comes to rest. dx and dy carry the corner of that square, so
+      # they sit 0.9 mm inside the 9 mm pitch and every spot keeps its centre.
+      dx=8.1,
+      dy=6.2,
       dz=7.7 - 0.2,  # depth of hole
       item_dx=9.0,
       item_dy=9.0,
-      size_x=9.0,
-      size_y=9.0,
+      size_x=7.2,
+      size_y=7.2,
       make_tip=make_tip,
       name_prefix=name,
     ),
