@@ -43,9 +43,11 @@ from pylabrobot.hamilton.star.driver.master import STARDriver
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.resources.carrier import Carrier
+from pylabrobot.resources.hamilton.core_gripper_tools import HamiltonCoreGripperTool
 from pylabrobot.resources.hamilton.hamilton_decks import (
   HamiltonDeck,
 )
+from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +159,35 @@ class SimulatedPipettes(_Simulated, Pipettes):
     await super().initialize(*args, **kwargs)
     self.device.tips_mounted = [False] * len(self.device.tips_mounted)
 
+  def _shaft(self, channel: int) -> Optional[TipMountingShaft]:
+    """The mounting shaft that models a channel, or None while nothing models it yet."""
+    if channel >= len(self.resources):
+      return None
+    return next(
+      (child for child in self.resources[channel].children if isinstance(child, TipMountingShaft)),
+      None,
+    )
+
+  def _carries_tip(self, channel: int) -> bool:
+    """Whether a channel carries a tip: one on its shaft, or one it was started with."""
+    shaft = self._shaft(channel)
+    if shaft is not None and shaft.has_tip():
+      return True
+    mounted = self.device.tips_mounted
+    return channel < len(mounted) and mounted[channel]
+
+  def _below_stop_disc(self, channel: int) -> float:
+    """How far a channel's lowest point sits below its stop disc, in mm, as the firmware counts it.
+
+    The firmware counts the CO-RE grip tool to its grip line, `total_length` below its top.
+    """
+    shaft = self._shaft(channel)
+    if shaft is None:
+      return 0.0
+    if isinstance(shaft.tip, HamiltonCoreGripperTool):
+      return shaft.tip.total_length - shaft.tip.fitting_depth
+    return -shaft.tip_bottom().z
+
   def _modelled_y(self, channel: int) -> float:
     """Where the model has one channel along Y, in mm.
 
@@ -197,15 +228,21 @@ class SimulatedPipettes(_Simulated, Pipettes):
         )
 
       if command == "RT":
-        return {"rt": [int(mounted) for mounted in self.device.tips_mounted]}, "what is mounted"
+        return (
+          {"rt": [int(self._carries_tip(channel)) for channel in range(self.num_channels)]},
+          "what the channels carry",
+        )
 
       if command == "RZ":
-        # The master reports the bottom of whatever a channel carries. A simulated channel has no
-        # tip geometry, so that is its stop disc, which is what the model holds; on a device the
-        # two part company the moment a tip goes on, which is why both reads exist.
+        # The master reports the bottom of what a channel carries, or its stop disc when empty.
         return (
-          {"rz": [round(self._modelled_z(channel) * 10) for channel in range(self.num_channels)]},
-          "where the model has the channels along Z",
+          {
+            "rz": [
+              round((self._modelled_z(channel) - self._below_stop_disc(channel)) * 10)
+              for channel in range(self.num_channels)
+            ]
+          },
+          "where the model has the bottom of what each channel carries",
         )
 
       return None
@@ -242,11 +279,11 @@ class SimulatedPipettes(_Simulated, Pipettes):
 
   async def _unchecked_fw_move_lowest_point_to_z_positions(self, zs: Dict[int, float]):
     # A move is what puts a channel somewhere. Written after the move, not before: one the real
-    # method refuses never happened. A simulated channel carries no tip, so the lowest point it
-    # has is its stop disc, which is what the model holds.
+    # method refuses never happened. The move places the lowest point - the end of a carried tip,
+    # or the stop disc - and the model holds the stop disc, so a tip puts it that much higher.
     resp = await super()._unchecked_fw_move_lowest_point_to_z_positions(zs)
     for channel, z in zs.items():
-      self.update_location_by_reference_point(channel, z=z)
+      self.update_location_by_reference_point(channel, z=z + self._below_stop_disc(channel))
     return resp
 
   async def move_stop_disc_to_z_position(self, channel: int, z: float, *args: Any, **kwargs: Any):
