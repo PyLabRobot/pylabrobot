@@ -89,6 +89,42 @@ def hamilton_96_tiprack_solid_coreii(
   )
 
 
+def hamilton_96_tiprack_solid_corei(
+  name: str, make_tip: TipCreator, with_tips: bool = True
+) -> EmbeddedTipRack:
+  """Solid CO-RE I tip rack for Hamilton STAR systems: the CO-RE II rack's generation before, 3.5 mm
+  lower, as Hamilton's `Core96_TipSupport` definitions place its tips.
+
+  Its height is `hamilton_96_tiprack_solid_coreii`'s less 3.5 mm; only where its spots stand is
+  Hamilton's, the body itself is not measured.
+  """
+  return EmbeddedTipRack(
+    name=name,
+    size_x=122.0,
+    size_y=78.5,
+    size_z=22.0,
+    model=hamilton_96_tiprack_solid_corei.__name__,
+    sinking_depth=9.5,  # the body below the rim, which rests on the holder
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      # The spots of every other rack, centred on the rack.
+      dx=7.9,
+      dy=4.15,
+      dz=22.0,  # the top of the rack
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=7.2,
+      size_y=7.2,
+      make_tip=make_tip,
+      name_prefix=name,
+    ),
+    with_tips=with_tips,
+    frame_height=None,
+  )
+
+
 def hamilton_96_tiprack_ntr(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> StandingTipRack:
