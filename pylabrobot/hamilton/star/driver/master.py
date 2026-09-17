@@ -1597,8 +1597,10 @@ class STARDriver:
       if resource is None:
         width = c.channels[channel].width
         if width is None:
-          logger.warning("channel %d reported no width, so it is not modelled", channel)
-          continue
+          # Discovery reads every channel's width, so one without it means the channels were never
+          # asked. Modelling the rest would leave the list one short and every later channel's
+          # resource one out of step with its channel.
+          raise RuntimeError(f"channel {channel} has no width read yet; run discovery first")
         resource = Resource(
           name=name,
           size_x=width,

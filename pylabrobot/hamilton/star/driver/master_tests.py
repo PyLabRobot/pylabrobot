@@ -408,6 +408,30 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
     )
 
 
+class TestChannelResources(unittest.IsolatedAsyncioTestCase):
+  """A channel is modelled by a resource of its own, and the list of them runs channel by channel."""
+
+  async def test_a_channel_without_a_width_is_refused_rather_than_skipped(self):
+    """Skipping one would put every later channel's resource one out of step with its channel."""
+    from pylabrobot.hamilton.star.device import RECORDING_STAR
+    from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+    from pylabrobot.resources.hamilton import STARDeck
+
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    await driver.setup()
+    pipettes = driver.pipettes
+    assert pipettes is not None
+    channels = [resource.name for resource in pipettes.resources]
+    self.assertEqual(channels, [f"pipette_channel_{channel}" for channel in range(len(channels))])
+
+    pipettes.configuration.channels[2].width = None
+    for resource in list(pipettes.resources):
+      resource.parent.unassign_child_resource(resource)  # type: ignore[union-attr]
+    with self.assertRaises(RuntimeError):
+      await driver._create_pipette_resources()
+    await driver.stop()
+
+
 class TestEveryConfiguration(unittest.IsolatedAsyncioTestCase):
   """Every combination of what a STAR can be fitted with, and what each one builds.
 
