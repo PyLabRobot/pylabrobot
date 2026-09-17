@@ -1,24 +1,26 @@
 import warnings
 
 from pylabrobot.resources.carrier import Coordinate, PlateHolder
-from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
 
 
-def MFX_TIP_module(name: str) -> ResourceHolder:
+def MFX_TIP_module(name: str) -> EmbeddedTipRackHolder:
   """Hamilton cat. no.: 188160
-  Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack).
+  Hamilton name: 'Tip Module BC'
+  Module to position a high-, standard- or low volume framed tip rack (but not a 384 tip rack).
+
+  A framed rack sinks into it and is centred over it, as in a tip carrier's site.
   """
 
-  # resource_size_x=122.4,
-  # resource_size_y=82.6,
+  # Hamilton's base for the module: 114.7 mm above the carrier's base, less the carrier.
+  top = 114.7 - 18.195
 
-  return ResourceHolder(
+  return EmbeddedTipRackHolder(
     name=name,
     size_x=135.0,
     size_y=94.0,
-    size_z=214.8 - 18.195 - 100,
-    # probe height - carrier_height - deck_height
-    child_location=Coordinate(6.2, 5.0, 214.8 - 18.195 - 100),
+    size_z=top,
+    child_location=Coordinate(0.0, 0.0, top),
     model="MFX_TIP_module",
   )
 

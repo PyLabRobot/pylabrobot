@@ -5,13 +5,17 @@ from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
   TIP_CAR_NTR_A00,
+  MFX_TIP_module,
   STARDeck,
   TIP_CAR_72_4mlTF_C00,
   TIP_CAR_96BC_5mlT_A00,
   hamilton_24_tiprack_4000uL_filter,
   hamilton_24_tiprack_5000uL,
+  hamilton_96_tiprack_10uL,
   hamilton_96_tiprack_50uL_NTR,
+  hamilton_96_tiprack_300uL,
   hamilton_96_tiprack_1000uL,
+  hamilton_mfx_carrier_L5_base,
 )
 
 
@@ -43,6 +47,24 @@ class StandardTipCarrierTests(unittest.TestCase):
         carrier[0] = rack = hamilton_96_tiprack_1000uL(name="rack").rotated(z=rotation)
         deck.assign_child_resource(carrier, track=1)
         for spot, expected in (("A1", a1), ("H12", h12)):
+          actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
+          for axis in ("x", "y", "z"):
+            self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
+
+  def test_tip_spot_positions_on_mfx_tip_module(self):
+    # positions whose firmware commands match Venus
+    for rack_fn, slot, a1 in [
+      (hamilton_96_tiprack_10uL, 0, Coordinate(770.5, 146.0, 216.2)),
+      (hamilton_96_tiprack_300uL, 4, Coordinate(770.5, 530.0, 216.2)),
+    ]:
+      with self.subTest(rack=rack_fn.__name__):
+        deck = STARDeck()
+        module = MFX_TIP_module("module")
+        deck.assign_child_resource(
+          hamilton_mfx_carrier_L5_base("mfx_carrier", modules={slot: module}), track=30
+        )
+        module.assign_child_resource(rack := rack_fn("rack"))
+        for spot, expected in (("A1", a1), ("H12", a1 + Coordinate(99.0, -63.0, 0.0))):
           actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
           for axis in ("x", "y", "z"):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
