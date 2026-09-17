@@ -52,7 +52,6 @@ class StandardTipCarrierTests(unittest.TestCase):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
   def test_tip_spot_positions_on_mfx_tip_module(self):
-    # positions whose firmware commands match Venus
     for rack_fn, slot, a1 in [
       (hamilton_96_tiprack_10uL, 0, Coordinate(770.5, 146.0, 216.2)),
       (hamilton_96_tiprack_300uL, 4, Coordinate(770.5, 530.0, 216.2)),

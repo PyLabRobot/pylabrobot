@@ -13,8 +13,6 @@ def hamilton_mfx_tiprackholder_standard(name: str) -> EmbeddedTipRackHolder:
   module's opening and is centred over it, as in a tip carrier's site.
   """
 
-  # The rack stands on the module's top: Hamilton's base for the module, 114.7 mm above the
-  # carrier's base, less the carrier.
   top = 114.7 - 18.195
 
   return EmbeddedTipRackHolder(
