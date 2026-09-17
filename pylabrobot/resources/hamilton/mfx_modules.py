@@ -43,7 +43,8 @@ def hamilton_mfx_module_tiprackholder_ntr(name: str) -> ResourceHolder:
     size_x=135.0,
     size_y=94.0,  # Hamilton's NTR4Module 3D model
     size_z=20.0,  # measured
-    child_location=Coordinate(x=3.62, y=3.76, z=10.8),
+    # The rack stands centred in the module's pocket, its SBS footprint on the module's centre.
+    child_location=Coordinate(x=(135.0 - 127.76) / 2, y=(94.0 - 85.48) / 2, z=10.8),
     model=hamilton_mfx_module_tiprackholder_ntr.__name__,
   )
 

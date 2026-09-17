@@ -87,7 +87,8 @@ class NestedTipCarrierTests(unittest.TestCase):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
   def test_tip_spot_positions_on_the_mfx_ntr4_module(self):
-    # Hamilton's pick-up positions, with the MFX carrier at x 932.5 and the module in slot 3
+    # The rack centred on the module, with the MFX carrier at x 932.5 and the module in slot 3.
+    # Hamilton's own definitions pick up 0.5 mm further forward, at y 434.0 and 371.0.
     for rack_fn in (
       hamilton_96_tiprack_10uL_NTR,
       hamilton_96_tiprack_50uL_NTR,
@@ -100,8 +101,8 @@ class NestedTipCarrierTests(unittest.TestCase):
         module.assign_child_resource(rack := rack_fn("rack"))
         deck.assign_child_resource(carrier, location=Coordinate(932.5, 63, 100))
         for spot, expected in (
-          ("A1", Coordinate(950.5, 434.0, 184.0)),
-          ("H12", Coordinate(1049.5, 371.0, 184.0)),
+          ("A1", Coordinate(950.5, 434.5, 184.0)),
+          ("H12", Coordinate(1049.5, 371.5, 184.0)),
         ):
           actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
           for axis in ("x", "y", "z"):
@@ -136,7 +137,7 @@ class NestedTipCarrierTests(unittest.TestCase):
     mfx = hamilton_mfx_carrier_L5_base("mfx", modules={3: module})
     ntr_carrier = hamilton_tip_carrier_L5_ntr_a00("ntr_carrier")
     for holder, carrier, location, racks, a1 in [
-      (module, mfx, Coordinate(932.5, 63, 100), 4, Coordinate(950.5, 434.0, 184.0 + 3 * 16)),
+      (module, mfx, Coordinate(932.5, 63, 100), 4, Coordinate(950.5, 434.5, 184.0 + 3 * 16)),
       (
         ntr_carrier.sites[1],
         ntr_carrier,
