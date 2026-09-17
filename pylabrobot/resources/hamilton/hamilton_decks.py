@@ -11,6 +11,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import NoLocationError
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
+from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
 
@@ -457,9 +458,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Z_GRAB_LIMIT = 285
 
     def check_z_height(resource: Resource):
-      # What the device carries belongs up there: it rides above the deck by design, and nothing
-      # traverses or grabs it, so the warnings below say nothing about it.
-      if resource.category in ("x_arm", "head96"):
+      # What the device carries, including a tool on a channel, is above the deck by design.
+      if resource.category in ("x_arm", "head96") or isinstance(resource, HeadTool):
         return
 
       try:
@@ -483,7 +483,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
           z_top,
         )
 
-      for child in resource.children:
+      for child in resource.comparable_children():
         check_z_height(child)
 
     check_z_height(resource)
@@ -658,7 +658,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       new_depth = depth + 1 if resource.category not in exclude_categories else depth
       return max(
         [(longest + longest_depth * depth_weight)]
-        + [find_longest_child_name(c, new_depth) for c in resource.children]
+        + [find_longest_child_name(c, new_depth) for c in resource.comparable_children()]
       )
 
     def find_longest_type_name(resource: Resource):
@@ -666,7 +666,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       longest = (
         len(resource.__class__.__name__) if resource.category not in exclude_categories else 0
       )
-      return max([longest] + [find_longest_type_name(child) for child in resource.children])
+      return max(
+        [longest] + [find_longest_type_name(child) for child in resource.comparable_children()]
+      )
 
     # Calculate the maximum lengths of the resource name and type for proper alignment
     max_name_length = find_longest_child_name(self)
@@ -735,7 +737,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     def print_tree(resource: Resource, depth=0):
       r_summary = print_resource_line(resource, depth=depth)
 
-      for child in resource.children:
+      # What a holder carries is state, so the deck's layout leaves it out.
+      for child in resource.comparable_children():
         if isinstance(child, ResourceHolder):
           r_summary += "\n"
           if child.resource is not None:

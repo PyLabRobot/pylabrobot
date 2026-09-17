@@ -163,3 +163,51 @@ class TestPositionInZDirection(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(pipettes.configuration.z_range, (floor + 10.0, 300.0))
     self.assertEqual(len(reached), len(pipettes.configuration.channels))
+
+
+class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
+  """A simulated channel answers for the tip on its mounting shaft.
+
+  The master reports the bottom of what a channel carries and the channel reports its stop disc, so
+  a tip on a shaft has to show up in both reads, a stop disc apart, the way it does on a device.
+  """
+
+  async def asyncSetUp(self):
+    from pylabrobot.resources.hamilton import hamilton_tip_300uL
+    from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
+
+    self.pipettes = await simulated_channels()
+    self.shaft = next(
+      child for child in self.pipettes.resources[0].children if isinstance(child, TipMountingShaft)
+    )
+    self.tip = hamilton_tip_300uL(name="tip")
+
+  async def test_a_tip_on_a_shaft_is_sensed_on_that_channel_only(self):
+    self.assertEqual(await self.pipettes.sense_tip_presence(), [0] * self.pipettes.num_channels)
+    self.shaft.mount_tip(self.tip)
+    presence = await self.pipettes.sense_tip_presence()
+    self.assertEqual(presence[0], 1)
+    self.assertEqual(presence[1:], [0] * (self.pipettes.num_channels - 1))
+
+  async def test_the_overhang_is_how_far_the_tip_reaches_below_the_channel(self):
+    """Part of a tip is up inside the channel, so the overhang is its length less its fitting."""
+    self.shaft.mount_tip(self.tip)
+    overhang = await self.pipettes.request_tip_overhang(0)
+    self.assertAlmostEqual(overhang, self.tip.total_tip_length - self.tip.fitting_depth, places=1)
+
+  async def test_the_grip_tool_reaches_to_its_grip_line_as_the_firmware_counts_it(self):
+    """The firmware counts the grip tool to its grip line, 30 mm, not to its 32 mm bottom."""
+    from pylabrobot.resources.hamilton import hamilton_core_gripper_tool
+
+    self.shaft.mount_tip(hamilton_core_gripper_tool(name="grip"))
+    self.assertAlmostEqual(await self.pipettes.request_tip_overhang(0), 30.0 - 8.0, places=1)
+
+  async def test_moving_the_tip_end_puts_the_stop_disc_an_overhang_higher(self):
+    self.shaft.mount_tip(self.tip)
+    low, high = self.pipettes.configuration.z_range
+    z = (low + high) / 2 - 20
+    await self.pipettes.move_tool_bottom_to_z_positions({0: z})
+    stop_disc = await self.pipettes.request_stop_disc_z_position(0)
+    self.assertAlmostEqual(
+      stop_disc - z, self.tip.total_tip_length - self.tip.fitting_depth, places=1
+    )

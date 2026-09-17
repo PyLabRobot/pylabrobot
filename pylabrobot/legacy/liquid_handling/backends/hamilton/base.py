@@ -8,11 +8,13 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import (
   Any,
+  Dict,
   List,
   Optional,
   Sequence,
   Tuple,
   TypeVar,
+  Union,
 )
 
 from pylabrobot.hamilton.protocol.text.framing import to_list
@@ -23,12 +25,17 @@ from pylabrobot.legacy.liquid_handling.backends.backend import (
 from pylabrobot.legacy.liquid_handling.standard import PipettingOp
 from pylabrobot.resources import TipSpot
 from pylabrobot.resources.hamilton import (
+  HamiltonCoreGripperTool,
   HamiltonTip,
   TipPickupMethod,
   TipSize,
+  hamilton_core_gripper_tool,
 )
 
 T = TypeVar("T")
+
+# What the firmware's tip type table calls the CO-RE grip tool (cat. 186100).
+CORE_GRIPPER_TIP_TYPE_INDEX = 14
 
 logger = logging.getLogger("pylabrobot")
 
@@ -87,7 +94,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self._reading_thread: Optional[threading.Thread] = None
     self._reading_thread_stop = threading.Event()
     self._waiting_tasks: List[HamiltonTask] = []
-    self._tth2tti: dict[int, int] = {}  # hash to tip type index
+    # The firmware's own table already carries the CO-RE grip tool at index 14, so that index is
+    # taken rather than handed out to a tip, which would overwrite the grip tool.
+    self._tip_type_indices: Dict[Tuple[object, ...], int] = {
+      hamilton_core_gripper_tool().kind(): CORE_GRIPPER_TIP_TYPE_INDEX
+    }
 
   def __setattr__(self, name: str, value: Any) -> None:
     if name == "allow_firmware_planning":
@@ -117,7 +128,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
       )
     self._waiting_tasks.clear()
-    self._tth2tti.clear()
+    self._tip_type_indices = {hamilton_core_gripper_tool().kind(): CORE_GRIPPER_TIP_TYPE_INDEX}
     await self.io.stop()
 
   def serialize(self) -> dict:
@@ -426,43 +437,49 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   ):
     """Tip/needle definition in firmware."""
 
-  async def get_or_assign_tip_type_index(self, tip: HamiltonTip) -> int:
-    """Get a tip type table index for the tip.
+  async def get_or_assign_tip_type_index(
+    self, tool: Union[HamiltonTip, HamiltonCoreGripperTool]
+  ) -> int:
+    """Get a tip type table index for the tool, a tip or a grip tool.
 
-    If the tip has previously been defined, used that index. Otherwise, define a new tip type.
+    If a tool with the same definition has been defined, use that index. Otherwise, define a new
+    tip type. Indices the firmware defines itself, such as the grip tool's, are known from the
+    start and are never redefined.
     """
 
-    tip_type_hash = hash(tip)
+    kind = tool.kind()
 
-    if tip_type_hash not in self._tth2tti:
-      ttti = len(self._tth2tti) + 1
-      if ttti > 99:
+    if kind not in self._tip_type_indices:
+      taken = set(self._tip_type_indices.values())
+      ttti = next((i for i in range(1, 100) if i not in taken), None)
+      if ttti is None:
         raise ValueError("Too many tip types defined.")
 
       await self.define_tip_needle(
         tip_type_table_index=ttti,
-        has_filter=tip.has_filter,
-        tip_length=round((tip.total_tip_length - tip.fitting_depth) * 10),  # in 0.1mm
-        # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register
-        # the same way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to
-        # satisfy the tv >= 1 requirement). tv does not affect pickup (that is tl/tg).
-        maximum_tip_volume=max(round(tip.maximal_volume * 10), 10),
-        tip_size=tip.tip_size,
-        pickup_method=tip.pickup_method,
+        has_filter=tool.has_filter,
+        # in 0.1 mm: how far the tool reaches below the channel
+        tip_length=round((tool.get_size_z() - tool.fitting_depth) * 10),
+        # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register the same
+        # way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to satisfy the
+        # tv >= 1 requirement). tv does not affect pickup (that is tl/tg).
+        maximum_tip_volume=max(round(tool.maximal_volume * 10), 10),
+        tip_size=tool.tip_size,
+        pickup_method=tool.pickup_method,
       )
-      self._tth2tti[tip_type_hash] = ttti
+      self._tip_type_indices[kind] = ttti
 
-    return self._tth2tti[tip_type_hash]
+    return self._tip_type_indices[kind]
 
   def _get_hamilton_tip(self, tip_spots: List[TipSpot]) -> HamiltonTip:
     """Get the single tip type for all tip spots. If it does not exist or is not a HamiltonTip,
     raise an error."""
-    tips = set(tip_spot.get_tip() for tip_spot in tip_spots)
-    if len(tips) > 1:
+    tips = [tip_spot.get_tip() for tip_spot in tip_spots]
+    if len({tip.kind() for tip in tips}) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
     if len(tips) == 0:
       raise ValueError("No tips specified.")
-    tip = tips.pop()
+    tip = tips[0]
     if not isinstance(tip, HamiltonTip):
       raise ValueError(f"Tip {tip} is not a HamiltonTip.")
     return tip

@@ -2,6 +2,7 @@ import contextlib
 import sys
 from typing import TYPE_CHECKING, Callable, Optional, cast
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.tip import Tip
 from pylabrobot.serializer import SerializableMixin, deserialize
@@ -36,16 +37,43 @@ TrackerCallback = Callable[[], None]
 
 
 class TipTracker(SerializableMixin):
-  """A tip tracker tracks tip operations and raises errors if the tip operations are invalid."""
+  """A tip tracker tracks tip operations and raises errors if the tip operations are invalid.
 
-  def __init__(self, thing: str):
+  With a `holder`, the tip spot it belongs to, the tracked tip is a child of that spot.
+  """
+
+  def __init__(self, thing: str, holder: Optional["TipSpot"] = None):
     self.thing = thing
+    self._holder = holder
     self._is_disabled = False
     self._tip: Optional["Tip"] = None
     self._pending_tip: Optional["Tip"] = None
     self._tip_origin: Optional["TipSpot"] = None  # not currently in a transaction, do we need that?
 
     self._callback: Optional[TrackerCallback] = None
+
+  def _sync(self) -> None:
+    """Make the holder carry exactly the pending tip."""
+    holder = self._holder
+    if holder is None:
+      return
+    carried = next((child for child in holder.children if isinstance(child, Tip)), None)
+    if carried is self._pending_tip:
+      return
+    if carried is not None:
+      holder.unassign_child_resource(carried)
+    tip = self._pending_tip
+    if tip is not None:
+      if tip.parent is not None:
+        tip.parent.unassign_child_resource(tip)
+      # Centred on the spot, its pick-up location `collar_height` above the spot.
+      collar_height = tip.collar_height if tip.has_collar_height else 0.0
+      location = Coordinate(
+        x=holder.get_size_x() / 2 - tip.pick_up_location.x,
+        y=holder.get_size_y() / 2 - tip.pick_up_location.y,
+        z=collar_height - tip.pick_up_location.z,
+      )
+      holder.assign_child_resource(tip, location=location)
 
   @property
   def is_disabled(self) -> bool:
@@ -93,6 +121,7 @@ class TipTracker(SerializableMixin):
     if self._pending_tip is not None:
       raise HasTipError(f"{self.thing} already has a tip.")
     self._pending_tip = tip
+    self._sync()
 
     self._tip_origin = origin
 
@@ -106,6 +135,7 @@ class TipTracker(SerializableMixin):
     if self._pending_tip is None:
       raise NoTipError(f"{self.thing} does not have a tip.")
     self._pending_tip = None
+    self._sync()
 
     if commit:
       self.commit()
@@ -124,11 +154,13 @@ class TipTracker(SerializableMixin):
     if self.is_disabled:
       raise RuntimeError("Tip tracker is disabled. Call `enable()`.")
     self._pending_tip = self._tip
+    self._sync()
 
   def clear(self) -> None:
     """Clear the history."""
     self._tip = None
     self._pending_tip = None
+    self._sync()
 
   def serialize(self) -> dict:
     """Serialize the state of the tip tracker."""
@@ -143,6 +175,7 @@ class TipTracker(SerializableMixin):
 
     self._tip = cast(Optional[Tip], deserialize(state.get("tip")))
     self._pending_tip = cast(Optional[Tip], deserialize(state.get("pending_tip")))
+    self._sync()
 
   def get_tip_origin(self) -> Optional["TipSpot"]:
     """Get the origin of the current tip, if known."""
