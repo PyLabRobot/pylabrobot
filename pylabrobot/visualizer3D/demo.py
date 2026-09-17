@@ -23,7 +23,6 @@ from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
-  MFX_TIP_module,
   hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL_filter,
@@ -32,7 +31,8 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
   hamilton_mfx_carrier_L5_base,
-  hamilton_mfx_resource_holder_ntr4,
+  hamilton_mfx_module_tiprackholder_ntr,
+  hamilton_mfx_module_tiprackholder_standard,
   hamilton_tip_carrier_L5_ntr_a00,
 )
 from pylabrobot.resources.plate import Plate
@@ -92,11 +92,11 @@ def build_facility() -> Facility:
   # The same nested racks on MFX NTR4 modules, and two MFX tip modules holding framed racks: the
   # last six tracks, up to the waste block.
   modules = {
-    0: hamilton_mfx_resource_holder_ntr4(name="mfx_ntr4_0"),
-    1: hamilton_mfx_resource_holder_ntr4(name="mfx_ntr4_1"),
-    2: hamilton_mfx_resource_holder_ntr4(name="mfx_ntr4_2"),
-    3: MFX_TIP_module(name="mfx_tip_module_3"),
-    4: MFX_TIP_module(name="mfx_tip_module_4"),
+    0: hamilton_mfx_module_tiprackholder_ntr(name="mfx_ntr4_0"),
+    1: hamilton_mfx_module_tiprackholder_ntr(name="mfx_ntr4_1"),
+    2: hamilton_mfx_module_tiprackholder_ntr(name="mfx_ntr4_2"),
+    3: hamilton_mfx_module_tiprackholder_standard(name="mfx_tiprack_holder_3"),
+    4: hamilton_mfx_module_tiprackholder_standard(name="mfx_tiprack_holder_4"),
   }
   mfx_carrier = hamilton_mfx_carrier_L5_base(name="mfx_carrier", modules=modules)
   modules[0].assign_child_resource(hamilton_96_tiprack_10uL_NTR(name="mfx_ntr_10uL"))

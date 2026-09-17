@@ -339,19 +339,21 @@ def hamilton_tip_carrier_L5_ntr_a00(name: str) -> TipCarrier:
   Carrier for 5 stacks of up to 4x 96 nested tip racks (NTR), landscape.
   6 track(T) wide.
   """
+  site_z = 29.0
   return TipCarrier(
     name=name,
     size_x=135.0,
     size_y=497.0,
-    size_z=130.0,
+    # 29 mm above its sites. Hamilton's TIP_CAR_NTR_A00 definition states 130 mm, which the carrier is not.
+    size_z=site_z + 29.0,
     sites=create_homogeneous_resources(
       klass=ResourceHolder,
       locations=[
-        Coordinate(6.2, 10.0, 29.0),
-        Coordinate(6.2, 106.0, 29.0),
-        Coordinate(6.2, 202.0, 29.0),
-        Coordinate(6.2, 298.0, 29.0),
-        Coordinate(6.2, 394.0, 29.0),
+        Coordinate(6.2, 10.0, site_z),
+        Coordinate(6.2, 106.0, site_z),
+        Coordinate(6.2, 202.0, site_z),
+        Coordinate(6.2, 298.0, site_z),
+        Coordinate(6.2, 394.0, site_z),
       ],
       resource_size_x=122.4,
       resource_size_y=82.6,

@@ -14,11 +14,11 @@ def hamilton_mfx_carrier_L5_base(name: str, modules: Dict[int, ResourceHolder]) 
   Labware carrier base for up to 5 Multiflex Modules
   """
   locations = [
-    Coordinate(0.0, 5.0, 18.195),
-    Coordinate(0.0, 101.0, 18.195),
-    Coordinate(0.0, 197.0, 18.195),
-    Coordinate(0.0, 293.0, 18.195),
-    Coordinate(0.0, 389.0, 18.195),
+    Coordinate(0.0, 5.0, 18.2),
+    Coordinate(0.0, 101.0, 18.2),
+    Coordinate(0.0, 197.0, 18.2),
+    Coordinate(0.0, 293.0, 18.2),
+    Coordinate(0.0, 389.0, 18.2),
   ]
   half_locations = [c + Coordinate(y=90 / 2) for c in locations[:-1]]
   sites: Dict[int, ResourceHolder] = {}
@@ -36,7 +36,7 @@ def hamilton_mfx_carrier_L5_base(name: str, modules: Dict[int, ResourceHolder]) 
     name=name,
     size_x=135.0,
     size_y=497.0,
-    size_z=18.195,
+    size_z=18.2,
     sites=sites,
     model="MFX_CAR_L5_base",
   )
