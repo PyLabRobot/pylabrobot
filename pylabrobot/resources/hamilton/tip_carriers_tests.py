@@ -15,8 +15,8 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL,
   hamilton_96_tiprack_1000uL,
-  hamilton_96_tiprack_solid_corei,
-  hamilton_96_tiprack_solid_coreii,
+  hamilton_96_tiprack_raised_core_i,
+  hamilton_96_tiprack_raised_core_ii,
   hamilton_mfx_carrier_L5_base,
   hamilton_mfx_tiprackholder_standard,
   hamilton_tip_10uL,
@@ -74,8 +74,8 @@ class StandardTipCarrierTests(unittest.TestCase):
 
   def test_solid_tip_rack_positions_on_star_deck(self):
     for rack_fn, a1_z in [
-      (hamilton_96_tiprack_solid_coreii, 230.95),
-      (hamilton_96_tiprack_solid_corei, 227.45),
+      (hamilton_96_tiprack_raised_core_ii, 230.95),
+      (hamilton_96_tiprack_raised_core_i, 227.45),
     ]:
       with self.subTest(rack=rack_fn.__name__):
         deck = STARDeck()

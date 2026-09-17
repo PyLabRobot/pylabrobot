@@ -55,10 +55,10 @@ def hamilton_tiprack_standard(
   )
 
 
-def _hamilton_96_tiprack_solid(
+def _hamilton_96_tiprack_raised(
   name: str, model: str, size_z: float, make_tip: TipCreator, with_tips: bool
 ) -> EmbeddedTipRack:
-  """A solid CO-RE 96 tip support: a framed rack's footprint without a frame, its spots on its top."""
+  """A rack that holds its tips on its top face, rather than down in wells as a standard rack does."""
   return EmbeddedTipRack(
     name=name,
     size_x=122.0,
@@ -85,32 +85,32 @@ def _hamilton_96_tiprack_solid(
   )
 
 
-def hamilton_96_tiprack_solid_coreii(
+def hamilton_96_tiprack_raised_core_ii(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> EmbeddedTipRack:
   """Hamilton cat. no.: 6608647
-  Hamilton name: 'Core96_TipSupport' (CO-RE II)
-  Solid CO-RE II tip support for the CO-RE 96 head and the channels.
+  Raised CO-RE II tip rack: a thick, unbending body with no frame, holding its tips 16 mm above the
+  holder it sinks into, where a standard rack holds them 1.5 mm above it. Takes the tip it holds -
+  10, 50, 300 or 1000 uL - as `make_tip`.
   """
-  return _hamilton_96_tiprack_solid(
+  return _hamilton_96_tiprack_raised(
     name=name,
-    model=hamilton_96_tiprack_solid_coreii.__name__,
+    model=hamilton_96_tiprack_raised_core_ii.__name__,
     size_z=25.5,
     make_tip=make_tip,
     with_tips=with_tips,
   )
 
 
-def hamilton_96_tiprack_solid_corei(
+def hamilton_96_tiprack_raised_core_i(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> EmbeddedTipRack:
-  """Hamilton name: 'Core96_TipSupport' (CO-RE I)
-  Solid CO-RE I tip support for the CO-RE 96 head and the channels: the CO-RE II support's generation
-  before, with its spots 3.5 mm lower. The body is not measured.
+  """Raised CO-RE I tip rack: the generation before `hamilton_96_tiprack_raised_core_ii`, holding its
+  tips 3.5 mm lower. Its body is not measured.
   """
-  return _hamilton_96_tiprack_solid(
+  return _hamilton_96_tiprack_raised(
     name=name,
-    model=hamilton_96_tiprack_solid_corei.__name__,
+    model=hamilton_96_tiprack_raised_core_i.__name__,
     size_z=22.0,
     make_tip=make_tip,
     with_tips=with_tips,

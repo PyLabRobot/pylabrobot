@@ -262,21 +262,15 @@ class TestRendering(unittest.TestCase):
     self.assertIn('class="plr-device-row-toggle"', html)
     self.assertIn('aria-expanded="false"', html)
     self.assertIn('data-has-models="true"', html)
-    self.assertIn(
-      f'<tr class="plr-device-model-row" data-device-id="{device_id}"', html
-    )
+    self.assertIn(f'<tr class="plr-device-model-row" data-device-id="{device_id}"', html)
     self.assertIn(
       '<td class="plr-device-model-name" colspan="3"><span class="plr-device-model">'
       '<span class="plr-device-model__arrow" aria-hidden="true">↳</span>'
       f'<span class="plr-device-model__label">{model_name}</span>',
       html,
     )
-    self.assertIn(
-      '<td class="plr-device-model-status"><span class="plr-tip"', html
-    )
-    device_row = next(
-      line for line in html.splitlines() if f'id="device-{device_id}"' in line
-    )
+    self.assertIn('<td class="plr-device-model-status"><span class="plr-tip"', html)
+    device_row = next(line for line in html.splitlines() if f'id="device-{device_id}"' in line)
     self.assertIn(model_name.lower(), device_row.split('data-search="', 1)[1].split('"', 1)[0])
 
     model_row = next(
