@@ -148,7 +148,7 @@ class HamiltonDeckTests(unittest.TestCase):
           │
     (31)  ├── waste_block               Resource              (775.000, 115.000, 100.000)
           │   ├── teaching_tip_rack     TipRack               (780.900, 461.100, 100.000)
-          │   ├── core_grippers         HamiltonCoreGrippers  (797.500, 085.500, 205.000)
+          │   ├── core_grippers         HamiltonCoreGrippers  (778.000, 085.500, 200.500)
           │
     (32)  ├── trash                     Trash                 (800.000, 190.600, 137.100)
     """[1:]
@@ -215,3 +215,22 @@ class HamiltonDeckTests(unittest.TestCase):
         "careful when grabbing this resource.",
       ],
     )
+
+  def test_core_grippers_on_waste_as_probed(self):
+    # Probed on a STAR: holder top 220.0, 19.5 mm tall, tool tops (collar tops) 235.0. The collars
+    # stand where the legacy pick-up sends the channels: x on the holder's centre, y 107.0 and 125.0.
+    for deck, x in ((STARDeck(), 1337.5), (STARLetDeck(), 797.5)):
+      with self.subTest(deck=type(deck).__name__):
+        holder = deck.get_resource("core_grippers")
+        self.assertAlmostEqual(holder.get_location_wrt(deck, x="c").x, x)
+        self.assertAlmostEqual(holder.get_location_wrt(deck).z, 200.5)
+        self.assertAlmostEqual(holder.get_location_wrt(deck, z="t").z, 220.0)
+        front = deck.get_resource("core_grippers_tool_front")
+        back = deck.get_resource("core_grippers_tool_back")
+        for tool in (front, back):
+          self.assertAlmostEqual(tool.get_location_wrt(deck, x="c", z="t").x, x)
+          self.assertAlmostEqual(tool.get_location_wrt(deck, z="t").z, 235.0)
+        # the collar is 4.25 mm from the side of the tool its pins face
+        self.assertAlmostEqual(front.get_location_wrt(deck).y, 107.0 - 4.25)
+        # the back tool is turned 180 degrees, so its own front faces the back of the deck
+        self.assertAlmostEqual(back.get_location_wrt(deck, y="f").y, 125.0 + 4.25)

@@ -128,17 +128,23 @@ class HamiltonSTARDeck(HamiltonDeck):
       if with_teaching_rack:
         raise RuntimeError("Teaching rack cannot be created when no waste block is present.")
 
+    # `x` is where the channels take the tools, the holder's centre x; the holder is placed by its
+    # left edge.
     if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if self.num_tracks == STAR_NUM_TRACKS else 798
+      holder = hamilton_core_gripper_1000ul_at_waste()
       waste_block.assign_child_resource(
-        hamilton_core_gripper_1000ul_at_waste(),
-        location=Coordinate(x=x, y=105.550 - 26 - 9.5, z=205) - waste_block.location,
+        holder,
+        location=Coordinate(x=x - holder.get_size_x() / 2, y=105.550 - 26 - 9.5, z=205)
+        - waste_block.location,
       )
     elif core_grippers == "1000uL-5mL-on-waste":  # "on waste"
       x = 1337.5 if self.num_tracks == STAR_NUM_TRACKS else 797.5
+      holder = hamilton_core_gripper_1000ul_5ml_on_waste()
       waste_block.assign_child_resource(
-        hamilton_core_gripper_1000ul_5ml_on_waste(),
-        location=Coordinate(x=x, y=125 - 18 - 21.5, z=205) - waste_block.location,
+        holder,
+        location=Coordinate(x=x - holder.get_size_x() / 2, y=125 - 18 - 21.5, z=200.5)  # probed
+        - waste_block.location,
       )
 
   def serialize(self) -> dict:
