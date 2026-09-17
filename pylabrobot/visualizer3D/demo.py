@@ -4,9 +4,8 @@ Run it:
 
     python -m pylabrobot.visualizer3D.demo
 
-The world is a `Facility`. A simulated `STARDevice` is assigned into it at a coordinate, and so is
-a bench holding a plate and a tip rack that belong to no instrument. The viewer treats them
-identically, because it never asks what anything is.
+The world is a `Facility`. A bench stands at its origin and a simulated `STARDevice` stands on the
+bench. The viewer treats them identically, because it never asks what anything is.
 
 The v1 STAR has no aspirate or dispense yet, so the run below drives the volume trackers
 directly. That is the same channel the viewer subscribes to either way: a real pipetting command
@@ -24,7 +23,17 @@ from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
+  MFX_TIP_module,
+  hamilton_96_tiprack_10uL_NTR,
+  hamilton_96_tiprack_50uL_NTR,
+  hamilton_96_tiprack_300uL_filter,
+  hamilton_96_tiprack_300uL_filter_slim,
+  hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
+  hamilton_96_tiprack_1000uL_filter,
+  hamilton_mfx_carrier_L5_base,
+  hamilton_mfx_resource_holder_ntr4,
+  hamilton_tip_carrier_L5_ntr_a00,
 )
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
@@ -44,26 +53,60 @@ def star_of(facility: Resource) -> STARDevice:
 
 
 def build_facility() -> Facility:
-  """A facility with a STAR in it and a bench beside it."""
+  """A facility with a bench in it and a STAR standing on the bench."""
   facility = Facility(name="facility", size_x=2600, size_y=1400, size_z=1000)
 
+  # A bench is not a device, has no deck and no driver, and still takes part in the same
+  # cartesian space. This is the case the old visualizer had no way to express. It stands at the
+  # facility's origin and the STAR stands on it. The STAR is assigned first all the same, since
+  # `star_of` finds it as the facility's first child.
+  bench = Resource(name="bench", size_x=900, size_y=600, size_z=880, category="bench")
+
   star = STARLet(simulation=True)
-  facility.assign_child_resource(star, location=Coordinate(0, 0, 0))
+  facility.assign_child_resource(star, location=Coordinate(0, 0, bench.get_size_z()))
+  facility.assign_child_resource(bench, location=Coordinate(0, 0, 0))
 
   tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
-  for slot in range(3):
-    tip_carrier[slot] = hamilton_96_tiprack_1000uL(name=f"tips_{slot}")
+  # Filtered and unfiltered side by side, so the filter in a tip can be told apart.
+  tip_carrier[0] = hamilton_96_tiprack_1000uL(name="tips_0")
+  tip_carrier[1] = hamilton_96_tiprack_1000uL_filter(name="tips_1")
+  tip_carrier[2] = hamilton_96_tiprack_300uL_filter(name="tips_2")
   star.deck.assign_child_resource(tip_carrier, rails=1)
 
   plate_carrier = PLT_CAR_L5AC_A00(name="source_carrier")
   for slot in range(5):
     plate_carrier[slot] = cor_96_wellplate_360uL_Fb(name=f"source_{slot}")
-  star.deck.assign_child_resource(plate_carrier, rails=8)
+  star.deck.assign_child_resource(plate_carrier, track=7)
 
   destination_carrier = PLT_CAR_L5AC_A00(name="destination_carrier")
   for slot in range(5):
     destination_carrier[slot] = cor_96_wellplate_360uL_Fb(name=f"destination_{slot}")
-  star.deck.assign_child_resource(destination_carrier, rails=14)
+  star.deck.assign_child_resource(destination_carrier, track=13)
+
+  ntr_carrier = hamilton_tip_carrier_L5_ntr_a00(name="ntr_carrier")
+  ntr_carrier[0] = hamilton_96_tiprack_10uL_NTR(name="ntr_10uL")
+  ntr_carrier[1] = hamilton_96_tiprack_50uL_NTR(name="ntr_50uL")
+  ntr_carrier[2] = hamilton_96_tiprack_300uL_NTR(name="ntr_300uL")
+  star.deck.assign_child_resource(ntr_carrier, track=19)
+
+  # The same nested racks on MFX NTR4 modules, and two MFX tip modules holding framed racks: the
+  # last six tracks, up to the waste block.
+  modules = {
+    0: hamilton_mfx_resource_holder_ntr4(name="mfx_ntr4_0"),
+    1: hamilton_mfx_resource_holder_ntr4(name="mfx_ntr4_1"),
+    2: hamilton_mfx_resource_holder_ntr4(name="mfx_ntr4_2"),
+    3: MFX_TIP_module(name="mfx_tip_module_3"),
+    4: MFX_TIP_module(name="mfx_tip_module_4"),
+  }
+  mfx_carrier = hamilton_mfx_carrier_L5_base(name="mfx_carrier", modules=modules)
+  modules[0].assign_child_resource(hamilton_96_tiprack_10uL_NTR(name="mfx_ntr_10uL"))
+  modules[1].assign_child_resource(hamilton_96_tiprack_50uL_NTR(name="mfx_ntr_50uL"))
+  modules[2].assign_child_resource(hamilton_96_tiprack_300uL_NTR(name="mfx_ntr_300uL"))
+  modules[3].assign_child_resource(hamilton_96_tiprack_1000uL_filter(name="mfx_tips_1000uL_filter"))
+  modules[4].assign_child_resource(
+    hamilton_96_tiprack_300uL_filter_slim(name="mfx_tips_300uL_filter_slim")
+  )
+  star.deck.assign_child_resource(mfx_carrier, track=25)
 
   # The deck's own `size_z` is 900 mm, taken from the instrument's configuration file. That is the
   # working envelope, not the deck's extent, and it leaves the deck protruding 75.5 mm through the
@@ -73,17 +116,6 @@ def build_facility() -> Facility:
   DECK_HEIGHT = 334.7 + 140.0
   star.deck._size_z = DECK_HEIGHT
   star.deck._local_size_z = DECK_HEIGHT
-
-  # A bench is not a device, has no deck and no driver, and still takes part in the same
-  # cartesian space. This is the case the old visualizer had no way to express.
-  bench = Resource(name="bench", size_x=900, size_y=600, size_z=880, category="bench")
-  facility.assign_child_resource(bench, location=Coordinate(1300, 60, 0))
-  bench.assign_child_resource(
-    cor_96_wellplate_360uL_Fb(name="bench_plate"), location=Coordinate(60, 60, 880)
-  )
-  bench.assign_child_resource(
-    hamilton_96_tiprack_1000uL(name="bench_tips"), location=Coordinate(60, 240, 880)
-  )
 
   return facility
 
