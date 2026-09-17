@@ -117,7 +117,9 @@ def _status_badge(device: Device, styles: Optional[Dict[str, str]] = None) -> st
   return _status_badge_for_status(str(device["status"]), styles)
 
 
-def _status_badge_for_status(status: str, styles: Optional[Dict[str, str]] = None) -> str:
+def _status_badge_for_status(
+  status: str, styles: Optional[Dict[str, str]] = None
+) -> str:
   label = STATUS_LABELS.get(status, status)
   extra = _tint(STATUS_HUES.get(status)) if styles else ""
   return (
@@ -195,7 +197,7 @@ def _links(
   if device.get("oem"):
     links.append(
       f'<a {attrs} href="{escape(str(device["oem"]))}" rel="nofollow noopener">'
-      f"{_icon('oem')}OEM</a>"
+      f'{_icon("oem")}OEM</a>'
     )
   return links
 
@@ -334,7 +336,8 @@ def render_card_markdown(device: Device, doc_uri: DocURI, code_uri: CodeURI) -> 
     lines.append(
       "Models: "
       + ", ".join(
-        f"{_model_name(model)} ({_model_status_label(device, model)})" for model in device["models"]
+        f"{_model_name(model)} ({_model_status_label(device, model)})"
+        for model in device["models"]
       )
     )
   if device.get("capabilities"):
@@ -408,7 +411,7 @@ def render_table(
       doc_uri(str(device["doc_slug"])) if device.get("doc_slug") else None,
     )
     if models:
-      device_label = f"{device['vendor']} {device['name']}"
+      device_label = f'{device["vendor"]} {device["name"]}'
       name_cell = (
         '<button type="button" class="plr-device-row-toggle" aria-expanded="false"'
         f' data-device-label="{escape(device_label)}"'
@@ -416,7 +419,9 @@ def render_table(
         '<span aria-hidden="true">›</span></button>' + name_cell
       )
     if device.get("notes"):
-      name_cell += _tooltip('<span class="plr-device-note">*</span>', str(device["notes"]))
+      name_cell += _tooltip(
+        '<span class="plr-device-note">*</span>', str(device["notes"])
+      )
     models_attr = ' data-has-models="true"' if models else ""
     rows.append(
       f'<tr class="plr-device-row" id="device-{escape(device_id)}"'
@@ -444,7 +449,7 @@ def render_table(
         '<span class="plr-device-model__arrow" aria-hidden="true">↳</span>'
         f'<span class="plr-device-model__label">{escape(model_name)}</span></span></td>'
         f'<td class="plr-device-model-status">'
-        f"{_tooltip(_status_badge_for_status(model_status), STATUS_DESCRIPTIONS.get(model_status, ''))}"
+        f'{_tooltip(_status_badge_for_status(model_status), STATUS_DESCRIPTIONS.get(model_status, ""))}'
         '</td><td colspan="2"></td>'
         "</tr>"
       )

@@ -4,139 +4,133 @@ from .nodes import plr_card_grid_placeholder
 
 
 def _split_tags(raw):
-  if not raw:
-    return []
-  return [t.strip() for t in raw.split(",") if t.strip()]
+    if not raw:
+        return []
+    return [t.strip() for t in raw.split(",") if t.strip()]
 
 
 def _ensure_env_map(env):
-  if not hasattr(env, "plr_cards"):
-    env.plr_cards = {}
-  return env.plr_cards
+    if not hasattr(env, "plr_cards"):
+        env.plr_cards = {}
+    return env.plr_cards
 
 
 class _BaseCardDirective(Directive):
-  has_content = False
-  required_arguments = 0
-  optional_arguments = 0
-  final_argument_whitespace = False
-  option_spec = {
-    "header": directives.unchanged_required,
-    "card_description": directives.unchanged,
-    "link": directives.unchanged_required,
-    "tags": directives.unchanged,
-  }
+    has_content = False
+    required_arguments = 0
+    optional_arguments = 0
+    final_argument_whitespace = False
+    option_spec = {
+        "header": directives.unchanged_required,
+        "card_description": directives.unchanged,
+        "link": directives.unchanged_required,
+        "tags": directives.unchanged,
+    }
 
-  def run(self):
-    env = self.state.document.settings.env
-    docname = env.docname
-    cards_map = _ensure_env_map(env)
-    cards = cards_map.setdefault(docname, [])
-    cards.append(
-      {
-        "header": self.options.get("header", ""),
-        "desc": self.options.get("card_description", ""),
-        "link": self.options.get("link", ""),
-        "tags": _split_tags(self.options.get("tags", "")),
-      }
-    )
-    # No visible node; actual rendering happens in the grid placeholder.
-    return []
+    def run(self):
+        env = self.state.document.settings.env
+        docname = env.docname
+        cards_map = _ensure_env_map(env)
+        cards = cards_map.setdefault(docname, [])
+        cards.append({
+            "header": self.options.get("header", ""),
+            "desc": self.options.get("card_description", ""),
+            "link": self.options.get("link", ""),
+            "tags": _split_tags(self.options.get("tags", "")),
+        })
+        # No visible node; actual rendering happens in the grid placeholder.
+        return []
 
 
 class PyLabRobotCard(_BaseCardDirective):
-  """
-  Add a card. Aliases:
-    - .. customcarditem::        (compat)
-    - .. plrcard::               (PyLabRobot)
-  Options:
-    :header: Title (required)
-    :card_description: Short text
-    :link: path/to/page.html (required)
-    :tags: Tag1, Tag2
-  """
+    """
+    Add a card. Aliases:
+      - .. customcarditem::        (compat)
+      - .. plrcard::               (PyLabRobot)
+    Options:
+      :header: Title (required)
+      :card_description: Short text
+      :link: path/to/page.html (required)
+      :tags: Tag1, Tag2
+    """
 
 
 class _BaseGridDirective(Directive):
-  has_content = False
+    has_content = False
 
-  def run(self):
-    return [plr_card_grid_placeholder("")]
+    def run(self):
+        return [plr_card_grid_placeholder("")]
 
 
 class PyLabRobotCardGrid(_BaseGridDirective):
-  """
-  Insert a grid of the cards collected in this page. Aliases:
-    - .. cardgrid::              (compat)
-    - .. plrcardgrid::           (PyLabRobot)
-  """
+    """
+    Insert a grid of the cards collected in this page. Aliases:
+      - .. cardgrid::              (compat)
+      - .. plrcardgrid::           (PyLabRobot)
+    """
 
 
 def _purge(app, env, docname):
-  if hasattr(env, "plr_cards") and docname in env.plr_cards:
-    del env.plr_cards[docname]
+    if hasattr(env, "plr_cards") and docname in env.plr_cards:
+        del env.plr_cards[docname]
 
 
 def _merge(app, env, docnames, other):
-  if not hasattr(other, "plr_cards"):
-    return
-  if not hasattr(env, "plr_cards"):
-    env.plr_cards = {}
-  env.plr_cards.update(other.plr_cards)
+    if not hasattr(other, "plr_cards"):
+        return
+    if not hasattr(env, "plr_cards"):
+        env.plr_cards = {}
+    env.plr_cards.update(other.plr_cards)
 
 
 def _page_ctx(app, pagename, templatename, context, doctree):
-  env = app.builder.env
-  per_page = getattr(env, "plr_cards", {}).get(pagename, [])
-  all_tags = []
-  for cards in getattr(env, "plr_cards", {}).values():
-    for c in cards:
-      all_tags.extend(c.get("tags", []))
-  all_tags = sorted(set(all_tags), key=str.lower)
-  context["plr_cards"] = per_page
-  context["plr_cards_all_tags"] = all_tags
-
+    env = app.builder.env
+    per_page = getattr(env, "plr_cards", {}).get(pagename, [])
+    all_tags = []
+    for cards in getattr(env, "plr_cards", {}).values():
+        for c in cards:
+            all_tags.extend(c.get("tags", []))
+    all_tags = sorted(set(all_tags), key=str.lower)
+    context["plr_cards"] = per_page
+    context["plr_cards_all_tags"] = all_tags
 
 from docutils import nodes
 
 
 def _replace_placeholders(app, doctree, fromdocname):
-  if not hasattr(app.builder, "templates"):
-    return
-  env = app.builder.env
-  per_page = getattr(env, "plr_cards", {}).get(fromdocname, [])
+    if not hasattr(app.builder, "templates"):
+        return
+    env = app.builder.env
+    per_page = getattr(env, "plr_cards", {}).get(fromdocname, [])
 
-  page_tags = sorted({t for c in per_page for t in c.get("tags", [])}, key=str.lower)
+    page_tags = sorted({t for c in per_page for t in c.get("tags", [])}, key=str.lower)
 
-  for node in doctree.traverse(plr_card_grid_placeholder):
-    html = app.builder.templates.render(
-      "plr_card_grid.html",
-      {
-        "cards": per_page,
-        "all_tags": page_tags,
-      },
-    )
-    raw = nodes.raw("", html, format="html")
-    node.replace_self(raw)
+    for node in doctree.traverse(plr_card_grid_placeholder):
+        html = app.builder.templates.render("plr_card_grid.html", {
+            "cards": per_page,
+            "all_tags": page_tags,
+        })
+        raw = nodes.raw("", html, format="html")
+        node.replace_self(raw)
 
 
 def setup(app):
-  from sphinx.application import Sphinx  # noqa: F401
+    from sphinx.application import Sphinx  # noqa: F401
 
-  # Register directives (compat + PLR names)
-  app.add_directive("customcarditem", PyLabRobotCard)  # compat
-  app.add_directive("plrcard", PyLabRobotCard)  # PLR
-  app.add_directive("cardgrid", PyLabRobotCardGrid)  # compat
-  app.add_directive("plrcardgrid", PyLabRobotCardGrid)  # PLR
+    # Register directives (compat + PLR names)
+    app.add_directive("customcarditem", PyLabRobotCard)     # compat
+    app.add_directive("plrcard", PyLabRobotCard)            # PLR
+    app.add_directive("cardgrid", PyLabRobotCardGrid)       # compat
+    app.add_directive("plrcardgrid", PyLabRobotCardGrid)    # PLR
 
-  # Events
-  app.connect("env-purge-doc", _purge)
-  app.connect("env-merge-info", _merge)
-  app.connect("html-page-context", _page_ctx)
-  app.connect("doctree-resolved", _replace_placeholders)
+    # Events
+    app.connect("env-purge-doc", _purge)
+    app.connect("env-merge-info", _merge)
+    app.connect("html-page-context", _page_ctx)
+    app.connect("doctree-resolved", _replace_placeholders)
 
-  return {
-    "version": "1.0",
-    "parallel_read_safe": True,
-    "parallel_write_safe": True,
-  }
+    return {
+        "version": "1.0",
+        "parallel_read_safe": True,
+        "parallel_write_safe": True,
+    }

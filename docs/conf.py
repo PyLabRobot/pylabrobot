@@ -19,9 +19,7 @@ sys.path.insert(0, os.path.abspath(".."))
 sys.path.append(os.path.abspath("./_exts"))
 
 # Read version from version.txt
-with open(
-  os.path.join(os.path.dirname(__file__), "..", "pylabrobot", "version.txt"), encoding="utf-8"
-) as f:
+with open(os.path.join(os.path.dirname(__file__), "..", "pylabrobot", "version.txt"), encoding="utf-8") as f:
   version = f.read().strip()
 release = os.environ.get("DOCS_VERSION", version)
 
@@ -111,7 +109,7 @@ if "plr_cards.css" not in html_css_files:
 html_js_files = list(globals().get("html_js_files", []))
 html_js_files.append("graphviz.js")
 if "plr_cards.js" not in html_js_files:
-  html_js_files.append("plr_cards.js")  # served from _static/plr_cards.js
+  html_js_files.append("plr_cards.js")    # served from _static/plr_cards.js
 
 # NOTE: templates_path already includes "_templates", which is where
 #       plr_card_grid.html should live.
@@ -220,7 +218,6 @@ suppress_warnings.append("autosectionlabel.*")
 
 html_favicon = "_static/favicon.ico"
 
-
 def copy_cookbook_assets(app, exception):
   if exception:
     return
@@ -236,7 +233,6 @@ def copy_cookbook_assets(app, exception):
       d = os.path.join(dst, r)
       os.makedirs(os.path.dirname(d), exist_ok=True)
       shutil.copy2(s, d)
-
 
 def setup(app):
   app.connect("build-finished", copy_cookbook_assets)
