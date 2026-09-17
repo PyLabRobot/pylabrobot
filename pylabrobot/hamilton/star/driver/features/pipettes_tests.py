@@ -399,6 +399,15 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
         spots, use_channels=[0, 3], offsets=[Coordinate.zero(), Coordinate(y=4)]
       )
 
+  async def test_a_channel_with_nothing_modelling_it_is_refused(self):
+    """A deck given after setup leaves the channels unmodelled: the tip would belong to nothing."""
+    pipettes, rack, sent = await channels_over_a_rack()
+    pipettes.resources = []
+    with self.assertRaises(RuntimeError):
+      await pipettes.pick_up_tips([rack.get_item("A1")])
+    self.assertIsNotNone(rack.get_item("A1").tip)
+    self.assertEqual(sent, [])
+
   async def test_a_channel_carrying_a_tip_is_refused_another(self):
     from pylabrobot.resources.errors import HasTipError
 

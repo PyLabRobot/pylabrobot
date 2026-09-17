@@ -1554,6 +1554,11 @@ class Pipettes:
       mounted = self.get_mounted_tip(channel)
       if mounted is not None:
         raise HasTipError(f"channel {channel} already carries {mounted.name}")
+      if self.shaft(channel) is None:
+        # Nowhere to put the tip it collects, so it would come off its spot and belong to nothing.
+        # A driver given its deck only after setup has no resource for a channel until setup runs
+        # again with that deck.
+        raise RuntimeError(f"channel {channel} is not modelled; set the driver up with its deck")
 
     xs, ys, pattern = self._tip_command_positions(tip_spots, use_channels, offsets)
     tip_type_index = await self._driver.get_or_assign_tip_type_index(hamilton_tips[0])
@@ -1629,10 +1634,8 @@ class Pipettes:
         if not picked_up[channel]:
           continue
         shaft = self.shaft(channel)
-        if shaft is not None:
-          shaft.mount_tip(tip)
-        elif tip.parent is not None:
-          tip.parent.unassign_child_resource(tip)
+        assert shaft is not None  # refused above, before the command was sent
+        shaft.mount_tip(tip)
       await self._record_after_tip_command()
 
   async def drop_tips(
