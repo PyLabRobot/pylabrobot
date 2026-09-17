@@ -43,3 +43,14 @@ class TestTipTracker(unittest.TestCase):
 
     with self.assertRaises(NoTipError):
       tracker.get_tip()
+
+  def test_a_pending_removal_keeps_the_tip_readable_until_it_commits(self):
+    """A liquid handler removes a spot's tip before its backend asks the spot which tip it is."""
+    tracker = TipTracker(thing="tester")
+    tracker.add_tip(self.tip)
+    tracker.remove_tip(commit=False)
+    self.assertEqual(tracker.has_tip, False)
+    self.assertEqual(tracker.get_tip(), self.tip)
+    tracker.commit()
+    with self.assertRaises(NoTipError):
+      tracker.get_tip()
