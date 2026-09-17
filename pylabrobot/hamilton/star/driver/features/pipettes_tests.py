@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 from typing import Any, List, Optional, Tuple
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
@@ -398,6 +399,24 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
       await pipettes.pick_up_tips(
         spots, use_channels=[0, 3], offsets=[Coordinate.zero(), Coordinate(y=4)]
       )
+
+  async def test_a_model_that_cannot_be_updated_does_not_hide_the_devices_error(self):
+    """What the device said is the error worth having; a stale model is only logged."""
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    with (
+      patch.object(
+        pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError("the device"))
+      ),
+      patch.object(pipettes, "sense_tip_presence", AsyncMock(return_value=[1] + [0] * 7)),
+      patch.object(
+        pipettes.shaft(0), "mount_tip", unittest.mock.Mock(side_effect=RuntimeError("the model"))
+      ),
+    ):
+      with self.assertRaisesRegex(RuntimeError, "the device"):
+        await pipettes.pick_up_tips([spot])
 
   async def test_a_channel_with_nothing_modelling_it_is_refused(self):
     """A deck given after setup leaves the channels unmodelled: the tip would belong to nothing."""

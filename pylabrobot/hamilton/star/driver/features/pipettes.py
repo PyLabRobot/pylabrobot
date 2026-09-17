@@ -1585,6 +1585,7 @@ class Pipettes:
     )
 
     picked_up: Dict[int, bool] = {channel: True for channel in use_channels}
+    command_error: Optional[BaseException] = None
     try:
       await self._unchecked_fw_pick_up_tips(
         x_positions=xs,
@@ -1597,6 +1598,7 @@ class Pipettes:
         pickup_method=pickup_method or hamilton_tips[0].pickup_method,
       )
     except BaseException as failure:
+      command_error = failure
       # A command can stop part way, and both the device's answers say which channels it got to:
       # the error names the ones that faulted, and the channels themselves say what they carry now.
       # The sensed answer is the better one, and a cancelled command may not let them give it.
@@ -1630,12 +1632,18 @@ class Pipettes:
       picked_up = sensed
       raise
     finally:
-      for spot, tip, channel in zip(tip_spots, tips, use_channels):
-        if not picked_up[channel]:
-          continue
-        shaft = self.shaft(channel)
-        assert shaft is not None  # refused above, before the command was sent
-        shaft.mount_tip(tip)
+      try:
+        for spot, tip, channel in zip(tip_spots, tips, use_channels):
+          if not picked_up[channel]:
+            continue
+          shaft = self.shaft(channel)
+          assert shaft is not None  # refused above, before the command was sent
+          shaft.mount_tip(tip)
+      except Exception:
+        # What the device said is the error worth having: this one only says the model is stale.
+        if command_error is None:
+          raise
+        logger.exception("could not record which tips the channels collected")
       await self._record_after_tip_command()
 
   async def drop_tips(
@@ -1737,6 +1745,7 @@ class Pipettes:
     )
 
     dropped: Dict[int, bool] = {channel: True for channel in use_channels}
+    command_error: Optional[BaseException] = None
     try:
       await self._unchecked_fw_drop_tips(
         x_positions=xs,
@@ -1749,6 +1758,7 @@ class Pipettes:
         discarding_method=drop_method,
       )
     except BaseException as failure:
+      command_error = failure
       # As the pick-up takes it, from the error and then from the channels: one that still carries
       # its tip has not dropped it.
       faulted = channels_that_faulted(failure)
@@ -1781,12 +1791,18 @@ class Pipettes:
       dropped = sensed
       raise
     finally:
-      for target, channel in zip(targets, use_channels):
-        if not dropped[channel]:
-          continue
-        tip = self._release_modelled_tip(channel)
-        if tip is not None and isinstance(target, TipSpot) and target.tracks_tips:
-          target.assign_tip(tip)
+      try:
+        for target, channel in zip(targets, use_channels):
+          if not dropped[channel]:
+            continue
+          tip = self._release_modelled_tip(channel)
+          if tip is not None and isinstance(target, TipSpot) and target.tracks_tips:
+            target.assign_tip(tip)
+      except Exception:
+        # What the device said is the error worth having: this one only says the model is stale.
+        if command_error is None:
+          raise
+        logger.exception("could not record which tips the channels let go of")
       await self._record_after_tip_command()
 
   async def return_tips(self, use_channels: Optional[List[int]] = None, **kwargs) -> None:
