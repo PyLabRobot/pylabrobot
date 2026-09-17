@@ -388,6 +388,7 @@ def hamilton_tip_300uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=400,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    model="hamilton_tip_300uL",
   )
 
 
@@ -452,6 +453,7 @@ def hamilton_tip_1000uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=1250,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    model="hamilton_tip_1000uL",
   )
 
 
