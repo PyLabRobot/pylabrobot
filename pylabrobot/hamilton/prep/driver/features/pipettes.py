@@ -779,22 +779,20 @@ class Pipettes:
     self,
     driver: "PrepDriver",
     *,
-    default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
     configuration: Optional[PipettesConfiguration] = None,
   ) -> None:
     """
     Args:
       driver: the driver to send commands through, whose configuration holds what the device reported.
-      default_traverse_height: sets `default_minimum_traverse_height`, when given.
       use_v1_aspirate_dispense: sets `configuration.use_v1_aspirate_dispense`, when set.
       configuration: the channels' configuration. Defaults to `PipettesConfiguration()`.
     """
     self._driver = driver
     self.configuration = configuration or PipettesConfiguration()
-    # The height to travel at when a command names none, in mm. None leaves it to the height the
-    # device reports.
-    self.default_minimum_traverse_height: Optional[float] = default_traverse_height
+    # The height to travel at when a command names none, in mm. Setup replaces it with what the device
+    # reports.
+    self.default_minimum_traverse_height: float = 167.5
     # Default speed and acceleration along each axis, in mm/s and mm/s2: PyLabRobot's defaults are 80
     # percent of what the axis does on PRPAA1087 (V1.2.2).
     # X: 80 % of the X axis profile (`XAxis.GetVelocity` 400 mm/s, `GetAcceleration` 2250 mm/s2) at
@@ -837,17 +835,21 @@ class Pipettes:
     """
     cfg = self._configuration
     logger.debug(
-      "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
+      "Hardware config: has_enclosure=%s, safe_speeds=%s, "
       "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, head8_installed=%s",
       cfg.has_enclosure,
       cfg.safe_speeds_enabled,
-      cfg.default_traverse_height,
       cfg.deck_bounds,
       len(cfg.deck_sites),
       len(cfg.waste_sites),
       cfg.num_channels,
       cfg.head8_installed,
     )
+
+    reported = await self._driver.request_default_traverse_height()
+    if reported is not None:
+      self.default_minimum_traverse_height = reported
+    logger.debug("default minimum traverse height: %s", self.default_minimum_traverse_height)
 
     await self.discover()
     if not any(c.x_range is not None for c in self.configuration.channels):
@@ -1333,25 +1335,8 @@ class Pipettes:
   # ----------------------------------------
 
   def _resolve_traverse_height(self, final_z: Optional[float] = None) -> float:
-    """Resolve final_z: explicit arg > user-set default > probed value. Raises if none available."""
-    if final_z is not None:
-      return final_z
-    if self.default_minimum_traverse_height is not None:
-      return self.default_minimum_traverse_height
-    try:
-      cfg = self._configuration
-    except RuntimeError:
-      height: Optional[float] = None
-    else:
-      height = cfg.default_traverse_height
-    if height is not None:
-      return height
-    raise RuntimeError(
-      "Default traverse height is required for this operation but could not be determined. "
-      "Either pass final_z explicitly to this call, or set it via "
-      "Pipettes(..., default_traverse_height=<mm>) or pipettes.default_minimum_traverse_height. "
-      "If the instrument supports it, the value is also probed during setup(); ensure setup() completed successfully."
-    ) from None
+    """The height to travel at: `final_z` when given, else `default_minimum_traverse_height`."""
+    return self.default_minimum_traverse_height if final_z is None else final_z
 
   async def request_channel_bounds(self) -> List[ChannelBounds]:
     """Request per-channel movement bounds from the firmware (cmd=10).

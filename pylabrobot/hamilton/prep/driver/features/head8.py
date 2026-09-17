@@ -101,17 +101,17 @@ class Head8:
     self,
     driver: "PrepDriver",
     *,
-    default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ) -> None:
     """
     Args:
       driver: the driver to send commands through.
-      default_traverse_height: the height to travel at when a command names none, in mm.
       use_v1_aspirate_dispense: whether to aspirate and dispense with the v1 commands.
     """
     self._driver = driver
-    self._user_traverse_height = default_traverse_height
+    # The height to travel at when a command names none, in mm. Setup replaces it with what the device
+    # reports.
+    self.default_minimum_traverse_height: float = 167.5
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
     self.channels: List[PipetteChannel] = []  # built by discover
     self._supports_v2_pipetting: Optional[bool] = None
@@ -125,6 +125,9 @@ class Head8:
     return self._driver.deck
 
   async def _on_setup(self) -> None:
+    reported = await self._driver.request_default_traverse_height()
+    if reported is not None:
+      self.default_minimum_traverse_height = reported
     await self.discover()
     if self._use_v1_aspirate_dispense:
       self._supports_v2_pipetting = False
@@ -212,14 +215,7 @@ class Head8:
   # ----------------------------------------
 
   def _resolve_traverse_height(self, final_z: Optional[float] = None) -> float:
-    if final_z is not None:
-      return final_z
-    if self._user_traverse_height is not None:
-      return self._user_traverse_height
-    height: Optional[float] = self._configuration.default_traverse_height
-    if height is None:
-      raise RuntimeError("No traverse height available; set default_traverse_height")
-    return height
+    return self.default_minimum_traverse_height if final_z is None else final_z
 
   # -- tips ----------------------------------------------------------------------------------------
 

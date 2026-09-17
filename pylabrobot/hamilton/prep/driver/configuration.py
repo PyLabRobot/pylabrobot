@@ -38,8 +38,6 @@ class DeviceConfiguration:
   # -- how it is set up --
   safe_speeds_enabled: bool = False
   """Whether MLPrep reports its safe speeds on."""
-  default_traverse_height: Optional[float] = None
-  """The height the channels travel at between positions, in mm. None if it could not be read."""
   deck_bounds: Optional[DeckBounds] = None
   """The deck's extent on each axis, from the deck configuration."""
   deck_sites: Tuple[DeckSiteInfo, ...] = ()

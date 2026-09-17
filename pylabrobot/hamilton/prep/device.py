@@ -82,7 +82,7 @@ class PrepDevice(Resource):
     smart: bool = True,
     force_initialize: bool = False,
     skip_device_initialization: bool = False,
-    default_traverse_height: Optional[float] = None,
+    default_minimum_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ):
     """Bring the device up.
@@ -91,14 +91,14 @@ class PrepDevice(Resource):
       smart: as `PrepDriver.setup` takes it.
       force_initialize: as `PrepDriver.setup` takes it.
       skip_device_initialization: as `PrepDriver.setup` takes it.
-      default_traverse_height: as `PrepDriver.setup` takes it.
+      default_minimum_traverse_height: as `PrepDriver.setup` takes it.
       use_v1_aspirate_dispense: as `PrepDriver.setup` takes it.
     """
     await self.driver.setup(
       smart=smart,
       force_initialize=force_initialize,
       skip_device_initialization=skip_device_initialization,
-      default_traverse_height=default_traverse_height,
+      default_minimum_traverse_height=default_minimum_traverse_height,
       use_v1_aspirate_dispense=use_v1_aspirate_dispense,
     )
 

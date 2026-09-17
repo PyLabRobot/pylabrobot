@@ -615,7 +615,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
       return None
 
     if isinstance(request, PrepCmd.PrepMoveZUpToSafe):
-      height = self.device.simulated_configuration.default_traverse_height
+      height = self.device.simulated_default_minimum_traverse_height
       for enum in request.channels:
         raised = index_of.get(int(enum))
         if raised is not None and height is not None:
@@ -960,6 +960,7 @@ class PrepSimulationDriver(PrepDriver):
     declared_configuration_json: Optional[str] = None,
     firmware_tree_json: Optional[str] = None,
     initialized: bool = False,
+    default_minimum_traverse_height: float = 167.5,
   ):
     """
     Args:
@@ -970,6 +971,8 @@ class PrepSimulationDriver(PrepDriver):
         then has. Defaults to `FIRMWARE_TREE_V1_2_2`.
       initialized: whether the device reports itself already initialized. One that has just been
         switched on does not.
+      default_minimum_traverse_height: what the device answers `GetDefaultTraverseHeight` with, and where it
+        raises channels to Z safety, in mm. Defaults to what PRPAA1087 (V1.2.2) reports.
 
     Raises:
       ValueError: If the declared configuration holds no device.
@@ -992,6 +995,7 @@ class PrepSimulationDriver(PrepDriver):
       self.firmware_tree_json, head8_installed=bool(configuration.head8_installed)
     )
     self.initialized = initialized
+    self.simulated_default_minimum_traverse_height = default_minimum_traverse_height
 
     # The features this device has, each answering for itself. Setup builds only the ones that are
     # not already there, so these stand in for the real ones throughout.
@@ -1052,11 +1056,9 @@ class PrepSimulationDriver(PrepDriver):
     if isinstance(request, PrepCmd.PrepGetSafeSpeedsEnabled):
       return PrepCmd.PrepGetSafeSpeedsEnabled.Response(value=c.safe_speeds_enabled), declared
     if isinstance(request, PrepCmd.PrepGetDefaultTraverseHeight):
-      if c.default_traverse_height is None:
-        return None
       return PrepCmd.PrepGetDefaultTraverseHeight.Response(
-        value=c.default_traverse_height
-      ), declared
+        value=self.simulated_default_minimum_traverse_height
+      ), "the height it was told to travel at"
     if isinstance(request, PrepCmd.PrepGetDeckBounds):
       b = c.deck_bounds
       if b is None:

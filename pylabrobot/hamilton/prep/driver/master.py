@@ -295,7 +295,7 @@ class PrepDriver:
     smart: bool = True,
     force_initialize: bool = False,
     skip_device_initialization: bool = False,
-    default_traverse_height: Optional[float] = None,
+    default_minimum_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ):
     """Connect, discover the device, initialize MLPrep, construct peers.
@@ -307,6 +307,8 @@ class PrepDriver:
       skip_device_initialization: do not run the device's own initialization procedure on a device that reports
         itself down. Its moves are then whatever the caller sends, and a device that has not initialized may
         refuse them.
+      default_minimum_traverse_height: the height the pipettes and the 8-channel head travel at when a command
+        names none, in mm. Replaces what the device reports.
     """
     logger.debug("Setting up Prep on %s ...", self.describe_link())
     try:
@@ -334,20 +336,18 @@ class PrepDriver:
         self.calibration = Calibration(self)
       if self.pipettes is None:
         self.pipettes = Pipettes(self)
-      if default_traverse_height is not None:
-        self.pipettes.default_minimum_traverse_height = default_traverse_height
       if use_v1_aspirate_dispense:
         self.pipettes.configuration.use_v1_aspirate_dispense = True
       await self.pipettes._on_setup()
+      if default_minimum_traverse_height is not None:
+        self.pipettes.default_minimum_traverse_height = default_minimum_traverse_height
 
       if self.pipettes.head8_installed:
         if self.head8 is None:
-          self.head8 = Head8(
-            self,
-            default_traverse_height=default_traverse_height,
-            use_v1_aspirate_dispense=use_v1_aspirate_dispense,
-          )
+          self.head8 = Head8(self, use_v1_aspirate_dispense=use_v1_aspirate_dispense)
         await self.head8._on_setup()
+        if default_minimum_traverse_height is not None:
+          self.head8.default_minimum_traverse_height = default_minimum_traverse_height
 
       # What the device was left holding, and where it was left standing: read before anything moves laterally,
       # then raise what can be raised. The 8-channel head is not raised: no move of its Z alone is known.
@@ -416,7 +416,7 @@ class PrepDriver:
 
     Read back rather than taken on trust: a retract that answered without arriving leaves the device looking
     safe while a lateral move would drive whatever is still low into whatever is in the way. Each channel's stop
-    disc is held to the traverse height the device reports, so a mounted tip does not count as low. The 8-channel
+    disc is held to the pipettes' `default_minimum_traverse_height`, so a mounted tip does not count as low. The 8-channel
     head is not judged: no read of its height is known.
 
     Args:
@@ -424,13 +424,13 @@ class PrepDriver:
 
     Returns:
       One entry per channel that is low, naming it and where it says it is. Empty when everything is up, or when
-      the device reported no traverse height to hold the channels to.
+      there are no pipettes.
     """
     low: List[str] = []
     pipettes = self.pipettes
-    safe = None if self.configuration is None else self.configuration.default_traverse_height
-    if pipettes is None or safe is None:
+    if pipettes is None:
       return low
+    safe = pipettes.default_minimum_traverse_height
     for channel in range(pipettes.num_channels):
       try:
         z = await pipettes.request_stop_disc_z_position(channel)
@@ -826,10 +826,8 @@ class PrepDriver:
     mlprep = self.mlprep_address
     enc_resp = await self.send_command(PrepCmd.PrepGetIsEnclosurePresent(dest=mlprep))
     safe_resp = await self.send_command(PrepCmd.PrepGetSafeSpeedsEnabled(dest=mlprep))
-    height_resp = await self.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=mlprep))
     has_enclosure = bool(enc_resp.value) if enc_resp else False
     safe_speeds_enabled = bool(safe_resp.value) if safe_resp else False
-    default_traverse_height = float(height_resp.value) if height_resp else None
 
     deck_bounds: Optional[PrepCmd.DeckBounds] = None
     deck_sites: Tuple[PrepCmd.DeckSiteInfo, ...] = ()
@@ -898,7 +896,6 @@ class PrepDriver:
       head8_installed=head8_installed,
       has_enclosure=has_enclosure,
       safe_speeds_enabled=safe_speeds_enabled,
-      default_traverse_height=default_traverse_height,
       deck_bounds=deck_bounds,
       deck_sites=deck_sites,
       waste_sites=waste_sites,
@@ -910,6 +907,15 @@ class PrepDriver:
     if result is None:
       return False
     return bool(result.value)
+
+  async def request_default_traverse_height(self) -> Optional[float]:
+    """The height MLPrep travels at when a command names none (GetDefaultTraverseHeight), in mm.
+
+    Returns:
+      The height, or None if the device does not answer it.
+    """
+    result = await self.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=self.mlprep_address))
+    return None if result is None else float(result.value)
 
   async def request_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
     """Firmware object tree. ``print(await prep.request_firmware_tree())`` for a diagnostic dump."""
@@ -1021,7 +1027,8 @@ class PrepDriver:
     if c is None:
       return "[Hamilton Prep] not discovered yet"
 
-    traverse = "unknown" if c.default_traverse_height is None else f"{c.default_traverse_height} mm"
+    height = None if self.pipettes is None else self.pipettes.default_minimum_traverse_height
+    traverse = "unknown" if height is None else f"{height} mm"
     lines = [
       f"[Hamilton Prep] Connected on {self.describe_link()}",
       f"  Serial: {c.serial_number or 'unknown'}",
@@ -1152,10 +1159,8 @@ class PrepDriver:
     tops = [c.z_range[1] for c in self.pipettes.configuration.channels if c.z_range is not None]
     if tops:
       z = max(tops)
-    elif self.configuration is not None and self.configuration.default_traverse_height is not None:
-      z = self.configuration.default_traverse_height
     else:
-      z = self.deck.get_absolute_size_z()
+      z = self.pipettes.default_minimum_traverse_height
     # The Y the channels reach between them, which the arm's reference line spans.
     y_ranges = [c.y_range for c in pipettes.channels if c.y_range is not None]
     reach = (min(r[0] for r in y_ranges), max(r[1] for r in y_ranges)) if y_ranges else None

@@ -164,11 +164,15 @@ def test_channels_volume_trackers_aspirate_dispense():
   _run(_t())
 
 
-def test_setup_keeps_the_default_traverse_height_it_is_given():
+def test_default_minimum_traverse_height_is_plrs_then_the_devices_then_the_one_setup_is_given():
   async def _t():
-    p = PrepSimulationDriver(deck=STARLetDeck())
-    await p.setup(default_traverse_height=150.0)
+    p = PrepSimulationDriver(deck=STARLetDeck(), default_minimum_traverse_height=160.0)
     assert p.pipettes is not None
+    assert p.pipettes.default_minimum_traverse_height == 167.5
+    await p.setup()
+    assert p.pipettes.default_minimum_traverse_height == 160.0
+    await p.stop()
+    await p.setup(default_minimum_traverse_height=150.0)
     assert p.pipettes.default_minimum_traverse_height == 150.0
     await p.stop()
 
