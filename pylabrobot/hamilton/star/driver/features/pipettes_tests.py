@@ -258,7 +258,8 @@ async def channels_over_a_rack() -> Tuple[Pipettes, Any, List[str]]:
   """Simulated channels, a 300 uL rack on track 16, and every tip command sent from here on.
 
   Returns:
-    The feature, the rack, and the `C0 TT`, `TP` and `TR` commands as sent, without their ids.
+    The feature, the rack, and the `C0 TT`, `TP`, `TR`, `EP` and `ER` commands as sent, without
+    their ids.
   """
   from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL
 
@@ -273,7 +274,7 @@ async def channels_over_a_rack() -> Tuple[Pipettes, Any, List[str]]:
   log = pipettes._driver._log_exchange  # type: ignore[attr-defined]
 
   def recorded(written: str, read: Optional[str]) -> None:
-    if written[:4] in ("C0TT", "C0TP", "C0TR"):
+    if written[:4] in ("C0TT", "C0TP", "C0TR", "C0EP", "C0ER"):
       sent.append(written)
     log(written, read)
 
@@ -450,7 +451,8 @@ class TestTipHandlingUntracked(unittest.IsolatedAsyncioTestCase):
 class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
   """The commands for Hamilton's tip racks are what Hamilton's own software sends.
 
-  Each rack on the holders Hamilton's software picked up from, as recorded, but for `td`:
+  Each rack on the holders Hamilton's software picked up from, with the channels and with the
+  96-head, as recorded, but for `td`:
   Hamilton's software sends `td1`, and PyLabRobot sends `td0`, letting the firmware take the pick-up
   process from the tip type. Tip tracking is on, so each tip goes back into its spot.
   """
@@ -504,6 +506,10 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
           spots = rack["A1:H1"]
           await pipettes.pick_up_tips(spots)
           await pipettes.drop_tips(spots)
+          head96 = pipettes._driver.head96
+          assert head96 is not None
+          await head96.pick_up_tips(rack)
+          await head96.drop_tips(rack)
 
           tt = sent[0][4:8]
           xp = " ".join([xs] * 8)
@@ -514,6 +520,8 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
               f"C0TT{tt}{definition}",
               f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz1840th2450td0",
               f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1",
+              f"C0EPxs{xs}xd0yh{a1_y[size]}{tt}wu0za1840zh2450ze2450",
+              f"C0ERxs{xs}xd0yh{a1_y[size]}za1840zh2450ze2450",
             ],
           )
 
@@ -565,17 +573,24 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
         spots = rack["A1:H1"]
         await pipettes.pick_up_tips(spots)
         await pipettes.drop_tips(spots)
+        head96 = pipettes._driver.head96
+        assert head96 is not None
+        await head96.pick_up_tips(rack)
+        await head96.drop_tips(rack)
 
         tt = sent[0][4:8]
         # A1 17.9 mm right of the carrier, 145.8 mm back on site 0, sites 96 mm apart (0.1 mm)
-        xp = " ".join([f"{round(carrier_x * 10) + 179:05}"] * 8)
-        yp = " ".join(f"{1458 + 960 * site - 90 * row:04}" for row in range(8))
+        xs, a1_y = f"{round(carrier_x * 10) + 179:05}", 1458 + 960 * site
+        xp = " ".join([xs] * 8)
+        yp = " ".join(f"{a1_y - 90 * row:04}" for row in range(8))
         self.assertEqual(
           sent,
           [
             f"C0TT{tt}{definition}",
             f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2164th2450td0",
             f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1",
+            f"C0EPxs{xs}xd0yh{a1_y}{tt}wu0za2164zh2450ze2450",
+            f"C0ERxs{xs}xd0yh{a1_y}za2164zh2450ze2450",
           ],
         )
 
@@ -616,16 +631,23 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
         spots = rack["A1:H1"]
         await pipettes.pick_up_tips(spots)
         await pipettes.drop_tips(spots)
+        head96 = pipettes._driver.head96
+        assert head96 is not None
+        await head96.pick_up_tips(rack)
+        await head96.drop_tips(rack)
 
         tt = sent[0][4:8]
         # A1 146.0 mm back on slot 0, slots 96 mm apart (0.1 mm)
-        xp = " ".join(["07705"] * 8)
-        yp = " ".join(f"{1460 + 960 * slot - 90 * row:04}" for row in range(8))
+        xs, a1_y = "07705", 1460 + 960 * slot
+        xp = " ".join([xs] * 8)
+        yp = " ".join(f"{a1_y - 90 * row:04}" for row in range(8))
         self.assertEqual(
           sent,
           [
             f"C0TT{tt}{definition}",
             f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2162th2450td0",
             f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1",
+            f"C0EPxs{xs}xd0yh{a1_y}{tt}wu0za2162zh2450ze2450",
+            f"C0ERxs{xs}xd0yh{a1_y}za2162zh2450ze2450",
           ],
         )
