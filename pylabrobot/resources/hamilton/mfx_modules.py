@@ -31,9 +31,11 @@ def hamilton_mfx_module_tiprackholder_ntr(name: str) -> ResourceHolder:
 
   return ResourceHolder(
     name=name,
-    size_x=134.0,  # Hamilton's NTR4Module 3D model
+    # 134 mm across, as every MFX module is, and modelled as the 135 mm its carrier slot is: the
+    # track's sliding blocks centre the module in it.
+    size_x=135.0,
     size_y=94.0,  # Hamilton's NTR4Module 3D model
-    size_z=20.0,  # Hamilton's NTR4Module 3D model
+    size_z=20.0,  # measured
     child_location=Coordinate(x=3.62, y=3.76, z=10.8),
     model=hamilton_mfx_module_tiprackholder_ntr.__name__,
   )
