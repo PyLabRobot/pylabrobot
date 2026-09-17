@@ -5,6 +5,7 @@ import unittest
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
+from pylabrobot.resources.hamilton import hamilton_96_tiprack_1000uL
 from pylabrobot.resources.resource import Resource
 from pylabrobot.visualizer3D.facility import Facility
 from pylabrobot.visualizer3D.scene import build_scene
@@ -55,6 +56,24 @@ class SceneTests(unittest.TestCase):
       json.dumps(warm.serialize(), sort_keys=True),
       json.dumps(build_scene(facility).serialize(), sort_keys=True),
     )
+
+  def test_a_racked_tip_hangs_from_its_collar_whether_or_not_models_are_reused(self):
+    """A tip serializes without its location; the scene places it where its spot put it."""
+    facility = Facility(name="facility", size_x=1000, size_y=1000, size_z=500)
+    rack = hamilton_96_tiprack_1000uL(name="rack", with_tips=True)
+    facility.assign_child_resource(rack, location=Coordinate(100, 100, 0))
+    tip = rack.get_item("A1").get_tip()
+    location = tip.location
+    assert location is not None
+
+    cold = build_scene(facility)
+    warm = build_scene(facility, known=cold.derived, known_names=frozenset(cold.names))
+    for scene in (cold, warm):
+      index = scene.names.index(tip.name)
+      self.assertEqual(
+        tuple(scene.transforms[6 * index : 6 * index + 3]),
+        (location.x, location.y, location.z),
+      )
 
   def test_models_are_not_reused_when_the_names_change(self):
     """Whether a string counts as a reference depends on which names exist, so a changed tree

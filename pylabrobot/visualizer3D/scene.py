@@ -259,6 +259,9 @@ def build_scene(
 
     data = resource.serialize()
     data.pop("children", None)
+    # Read off the resource, as `add_known` does: a tip's serialized data has no location.
+    if resource.location is not None:
+      data["location"] = resource.location.serialize()
     declared = {
       field: _declared(getattr(resource, field))
       for field in DECLARED_FIELDS
