@@ -84,6 +84,8 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 # one flat index be unambiguous across every package.
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_SUFFIX = ".glb"
+# What a filtered tip's model name ends in, after the name of the tip it is filtered from.
+FILTER_SUFFIX = "_filter"
 
 
 @functools.lru_cache(maxsize=None)
@@ -423,7 +425,12 @@ class Viewer3D:
     for model in models:
       reference = model.pop("reference_glb", None)
       if reference is None and "mesh" not in model:
-        found = on_disk.get(str(model.get("model") or ""))
+        name = str(model.get("model") or "")
+        found = on_disk.get(name)
+        # A filtered tip is the same moulded body with a filter pressed into it, so it is drawn
+        # with its unfiltered twin's file, and the page adds the filter. Its own name stays its own.
+        if found is None and model.get("category") == "tip" and name.endswith(FILTER_SUFFIX):
+          found = on_disk.get(name[: -len(FILTER_SUFFIX)])
         if found is not None:
           model["mesh"] = {
             "path": found,

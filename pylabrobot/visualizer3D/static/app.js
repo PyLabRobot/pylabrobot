@@ -35,6 +35,9 @@ import {
   DEG,
   EDGE_WIDTH_3D,
   EDGE_WIDTH_FLAT,
+  FILTER,
+  FILTER_BELOW_COLLAR,
+  FILTER_WIDTH_UNMEASURED,
   FLAT_EDGE,
   GLAZED_MAX_OPACITY,
   GRIP_MARK_OPACITY,
@@ -95,6 +98,8 @@ let vesselOf = new Map(); // index -> the inner body whose colour tracks what is
 // Switching a resource off empties its box; these have to be emptied with it, or hiding a plate
 // leaves ninety-six cavities and their walls floating where the plate was.
 let overlayOf = new Map();
+// model index -> the filter discs drawn in its tips, so reading the tip's file can size them.
+let filterDiscsOf = new Map();
 let edgeOf = new Map();
 // The instances whose model arrived as a file. Their box is not drawn at all and its border is
 // only just there, and both have to be decided from here rather than at the moment the file
@@ -416,6 +421,8 @@ function buildDeclaredMeshes() {
         // The scene may have been rebuilt while this was in flight. Placing it then would leave
         // objects nothing owns, positioned by transforms that no longer apply.
         if (!world || names.some((n, k) => world.indexOfName.get(n) !== instances[k])) return;
+
+        fitFilterDiscs(modelIndex, gltf.scene, scale, declared.up ?? "Y");
 
         instances.forEach((index, k) => {
           const scene = k === 0 ? gltf.scene : gltf.scene.clone(true);
@@ -1673,6 +1680,8 @@ const CYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 20).rotateX(Math.PI / 2);
 // Open at both ends. A shaft is a length of tube: the bottom is where a tip goes on and the top is
 // where the channel carries on, so capping either reads as a solid slug hanging off the head.
 const TUBE = new THREE.CylinderGeometry(0.5, 0.5, 1, 20, 1, true).rotateX(Math.PI / 2);
+// Flat in XY, facing up: a filter lies across a tip standing on the deck.
+const DISC = new THREE.CircleGeometry(0.5, 32);
 
 // Above this many instances of one model, outlining each stops being cheap.
 const EDGE_LIMIT = 160;
@@ -1815,6 +1824,7 @@ function buildMeshes() {
   placementOf = new Array(world.names.length);
   vesselOf = new Map();
   overlayOf = new Map();
+  filterDiscsOf = new Map();
   edgeOf = new Map();
   drawnFromFile = new Set();
 
@@ -2021,8 +2031,14 @@ function buildMeshes() {
         // is the opposite of what the box means. A hair taller only, so that from directly above it
         // does not fight the box's own top face for depth.
         const at = [sx, sy, sz * 1.02, sx / 2, sy / 2, (sz * 1.02) / 2];
-        placeInstance(inner, slot, world.matrices[globalIndex], ...at);
-        remember(globalIndex, inner, slot, at);
+        // A spot holding a tip shows the tip, and the white of an empty hole would lie across its
+        // bore - over the filter, which sits just below the spot.
+        if (model.category === "tip_spot" && world.childrenOf[globalIndex].length > 0) {
+          inner.setMatrixAt(slot, ZERO);
+        } else {
+          placeInstance(inner, slot, world.matrices[globalIndex], ...at);
+          remember(globalIndex, inner, slot, at);
+        }
         inner.setColorAt(slot, white);
         vesselOf.set(globalIndex, { mesh: inner, slot, model });
       });
@@ -2033,12 +2049,94 @@ function buildMeshes() {
       view.add(inner);
       overlays.push(inner);
     }
+    if (model.category === "tip" && model.has_filter && Number.isFinite(model.collar_height)) {
+      overlays.push(buildFilterDiscs(modelIndex, instances, model, sx, sy, sz));
+    }
     const entry = meshes[meshes.length - 1];
     entry.overlays = overlays;
     entry.isVessel = isVessel;
     entry.holdsEnclosure = holdsEnclosure;
     entry.enclosedModels = [...enclosedModels];
   }
+}
+
+/**
+ * A filter in every tip of one model: a white disc across the bore, `FILTER_BELOW_COLLAR` below the
+ * collar. One instanced mesh however many tips there are, so a rack of filtered tips costs one draw.
+ */
+function buildFilterDiscs(modelIndex, instances, model, sx, sy, sz) {
+  const disc = new THREE.InstancedMesh(
+    DISC,
+    new THREE.MeshBasicMaterial({ color: FILTER, side: THREE.DoubleSide }),
+    instances.length,
+  );
+  disc.frustumCulled = false;
+  // A tip stands on its bottom end, so its top is its length and the collar hangs from there.
+  const z = sz - (model.collar_height + FILTER_BELOW_COLLAR);
+  const width = sx * FILTER_WIDTH_UNMEASURED;
+  const placed = [];
+  instances.forEach((globalIndex, slot) => {
+    const at = [width, width, 1, sx / 2, sy / 2, z];
+    placeInstance(disc, slot, world.matrices[globalIndex], ...at);
+    remember(globalIndex, disc, slot, at);
+    placed.push({ index: globalIndex, at });
+  });
+  disc.instanceMatrix.needsUpdate = true;
+  disc.userData.lit = disc.material;
+  disc.userData.flat = flatVariant(disc.material);
+  view.add(disc);
+  filterDiscsOf.set(modelIndex, { mesh: disc, placed, z, cx: sx / 2, cy: sy / 2 });
+  return disc;
+}
+
+/**
+ * Size a model's filter discs to the bore its own file has at their height, once the file is here.
+ * The file is in the tip's frame, so the plane the disc lies in cuts the tip's inner wall at the
+ * nearest distance from the axis.
+ */
+function fitFilterDiscs(modelIndex, scene, scale, up) {
+  const discs = filterDiscsOf.get(modelIndex);
+  if (!discs) return;
+  scene.scale.setScalar(scale);
+  if (up === "Y") scene.rotation.x = Math.PI / 2;
+  scene.updateMatrixWorld(true);
+  const width = boreWidthAt(scene, discs.z, discs.cx, discs.cy);
+  if (width === null) return;
+  const touched = new Set();
+  for (const { index, at } of discs.placed) {
+    at[0] = width;
+    at[1] = width;
+    placeParts(index, touched);
+  }
+  for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true;
+}
+
+/** Twice the nearest a surface of `object` comes to the axis through (cx, cy), in the plane z. */
+function boreWidthAt(object, z, cx, cy) {
+  let nearest = Number.POSITIVE_INFINITY;
+  const corners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  object.traverse((o) => {
+    if (!o.isMesh) return;
+    const position = o.geometry.attributes.position;
+    const index = o.geometry.index;
+    const count = index ? index.count : position.count;
+    for (let i = 0; i + 2 < count; i += 3) {
+      for (let k = 0; k < 3; k++) {
+        const vertex = index ? index.getX(i + k) : i + k;
+        corners[k].fromBufferAttribute(position, vertex).applyMatrix4(o.matrixWorld);
+      }
+      // Where each edge crosses the plane, if it does.
+      for (let k = 0; k < 3; k++) {
+        const p = corners[k];
+        const q = corners[(k + 1) % 3];
+        if (p.z === q.z || (p.z - z) * (q.z - z) > 0) continue;
+        const t = (z - p.z) / (q.z - p.z);
+        const r = Math.hypot(p.x + t * (q.x - p.x) - cx, p.y + t * (q.y - p.y) - cy);
+        if (r < nearest) nearest = r;
+      }
+    }
+  });
+  return Number.isFinite(nearest) ? 2 * nearest : null;
 }
 
 // Where one instanced part stands, so it can be put back after being emptied.

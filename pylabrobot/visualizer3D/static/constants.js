@@ -98,6 +98,12 @@ export const VESSEL_WALL = 0.5;
 // And how solid it is drawn. Slightly see-through, so what is standing in the cavity reads through
 // the wall around it rather than being hidden by it from every angle but straight down.
 export const VESSEL_WALL_OPACITY = 0.85;
+// A tip's filter: a white disc across the bore, this far below the collar, in mm.
+export const FILTER = 0xffffff;
+export const FILTER_BELOW_COLLAR = 2;
+// How wide the disc is drawn, as a share of the tip's outer width, until the tip's own file has
+// been read for the bore at that height.
+export const FILTER_WIDTH_UNMEASURED = 0.6;
 export const SELECT = 0x1a4b8c;
 export const HOVER = 0xbbcc33;
 // Ported from the X-arm tracker branch's `XArm` renderer: a translucent frame with a window
