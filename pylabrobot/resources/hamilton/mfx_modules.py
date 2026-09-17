@@ -16,8 +16,9 @@ def hamilton_mfx_module_tiprackholder_standard(name: str) -> EmbeddedTipRackHold
   site.
   """
 
-  # The rack stands on the module's top: Hamilton's probe height, less the carrier and the deck.
-  top = 214.8 - 18.2 - 100.0  # 96.6 mm
+  # The rack stands on the module's top: Hamilton's Base for Tip Module BC (188160), 114.7 above the
+  # carrier's base, less the carrier.
+  top = 114.7 - 18.2  # 96.5 mm
 
   return EmbeddedTipRackHolder(
     name=name,

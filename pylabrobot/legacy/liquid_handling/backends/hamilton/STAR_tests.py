@@ -19,23 +19,30 @@ from pylabrobot.resources import (
   PLT_CAR_P3AC_A01,
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
+  TIP_CAR_480BC_A00,
   Container,
   Coordinate,
   Lid,
+  ResourceHolder,
   ResourceStack,
   TipRack,
   agenbio_1_troughplate_190mL_Fl,
   celltreat_96_wellplate_350uL_Ub,
   cor_96_wellplate_360uL_Fb,
+  hamilton_96_tiprack_10uL,
   hamilton_96_tiprack_10uL_filter,
   hamilton_96_tiprack_10uL_NTR,
+  hamilton_96_tiprack_50uL,
   hamilton_96_tiprack_50uL_filter,
   hamilton_96_tiprack_50uL_NTR,
+  hamilton_96_tiprack_300uL,
+  hamilton_96_tiprack_300uL_filter_slim,
   hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
   hamilton_mfx_carrier_L5_base,
   hamilton_mfx_module_tiprackholder_ntr,
+  hamilton_mfx_module_tiprackholder_standard,
   hamilton_tip_carrier_L5_ntr_a00,
   no_tip_tracking,
   no_volume_tracking,
@@ -2395,7 +2402,7 @@ class TestSTAR96TipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
 
 class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
-  """Firmware sent for the Hamilton NTRs matches what Hamilton's own software sends."""
+  """Firmware sent for Hamilton tip racks matches what Hamilton's own software sends."""
 
   async def asyncSetUp(self):
     self.backend = STARBackend()
@@ -2472,6 +2479,107 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
           await self.lh.drop_tips96(rack)
           self.assertEqual(self._sent("C0ER"), f"C0ERxs{xs}xd0yh{a1_y[size]}za1840zh2450ze2450")
           holder.unassign_child_resource(rack)
+
+  async def test_framed_tip_racks_on_tip_carrier_ground_truth(self):
+    carriers = {x: TIP_CAR_480BC_A00(f"tip_carrier_{x}") for x in (437.5, 572.5)}
+    for x, carrier in carriers.items():
+      self.deck.assign_child_resource(carrier, location=Coordinate(x, 63, 100))
+    # rack, carrier x, site, tip definition (without its index), start of pick up, channel drop tp/tz
+    # (stop disc, ti1)
+    tips = [
+      (hamilton_96_tiprack_10uL, 437.5, 0, "tf0tl0219tv00150tg1tu0", "2224", "tp2224tz2144"),
+      (hamilton_96_tiprack_50uL, 437.5, 1, "tf0tl0424tv00650tg2tu0", "2244", "tp2244tz2164"),
+      (hamilton_96_tiprack_300uL, 572.5, 0, "tf0tl0519tv04000tg2tu0", "2244", "tp2244tz2164"),
+      (
+        hamilton_96_tiprack_1000uL_filter,
+        572.5,
+        1,
+        "tf1tl0871tv10650tg3tu0",
+        "2264",
+        "tp2264tz2184",
+      ),
+      (
+        hamilton_96_tiprack_300uL_filter_slim,
+        572.5,
+        2,
+        "tf1tl0870tv03450tg3tu0",
+        "2264",
+        "tp2264tz2184",
+      ),
+    ]
+    for rack_fn, carrier_x, site, definition, tp, drop in tips:
+      with self.subTest(tip=rack_fn.__name__):
+        rack = rack_fn(rack_fn.__name__)
+        carriers[carrier_x][site] = rack
+        self.backend._write_and_read_command.reset_mock()
+        self.backend._tip_type_indices.clear()  # so each tip definition is sent
+
+        await self.lh.pick_up_tips(rack["A1:H1"])
+        # A1 17.9 mm right of the carrier, 145.8 mm back on site 0, sites 96 mm apart (0.1 mm)
+        xs = f"{round(carrier_x * 10) + 179:05}"
+        a1_y = 1458 + 960 * site
+        xp = " ".join([xs] * 8)
+        yp = " ".join(f"{a1_y - 90 * row:04}" for row in range(8))
+        tt = self._sent("C0TT")[4:8]
+        self.assertEqual(self._sent("C0TT"), f"C0TT{tt}{definition}")
+        self.assertEqual(
+          self._sent("C0TP"), f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2164th2450td0"
+        )
+        await self.lh.drop_tips(rack["A1:H1"])
+        self.assertEqual(
+          self._sent("C0TR"), f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1"
+        )
+
+        await self.lh.pick_up_tips96(rack)
+        self.assertEqual(self._sent("C0EP"), f"C0EPxs{xs}xd0yh{a1_y}{tt}wu0za2164zh2450ze2450")
+        await self.lh.drop_tips96(rack)
+        self.assertEqual(self._sent("C0ER"), f"C0ERxs{xs}xd0yh{a1_y}za2164zh2450ze2450")
+
+  async def test_framed_tip_racks_on_mfx_tip_module_ground_truth(self):
+    self.deck.unassign_child_resource(self.ntr_carrier)
+    modules: dict[int, ResourceHolder] = {
+      slot: hamilton_mfx_module_tiprackholder_standard(f"tip_module_{slot}") for slot in (0, 1, 4)
+    }
+    self.deck.assign_child_resource(
+      hamilton_mfx_carrier_L5_base("tip_module_carrier", modules=modules),
+      location=Coordinate(752.5, 63, 100),
+    )
+    # rack, slot, tip definition (without its index), start of pick up, channel drop tp/tz (stop disc,
+    # ti1)
+    tips = [
+      (hamilton_96_tiprack_10uL, 0, "tf0tl0219tv00150tg1tu0", "2222", "tp2222tz2142"),
+      (hamilton_96_tiprack_50uL, 1, "tf0tl0424tv00650tg2tu0", "2242", "tp2242tz2162"),
+      (hamilton_96_tiprack_300uL, 4, "tf0tl0519tv04000tg2tu0", "2242", "tp2242tz2162"),
+      (hamilton_96_tiprack_1000uL_filter, 0, "tf1tl0871tv10650tg3tu0", "2262", "tp2262tz2182"),
+      (hamilton_96_tiprack_300uL_filter_slim, 1, "tf1tl0870tv03450tg3tu0", "2262", "tp2262tz2182"),
+    ]
+    for rack_fn, slot, definition, tp, drop in tips:
+      with self.subTest(tip=rack_fn.__name__):
+        rack = rack_fn(rack_fn.__name__)
+        modules[slot].assign_child_resource(rack)
+        self.backend._write_and_read_command.reset_mock()
+        self.backend._tip_type_indices.clear()  # so each tip definition is sent
+
+        await self.lh.pick_up_tips(rack["A1:H1"])
+        # A1 146.0 mm back on slot 0, slots 96 mm apart (0.1 mm)
+        xs, a1_y = "07705", 1460 + 960 * slot
+        xp = " ".join([xs] * 8)
+        yp = " ".join(f"{a1_y - 90 * row:04}" for row in range(8))
+        tt = self._sent("C0TT")[4:8]
+        self.assertEqual(self._sent("C0TT"), f"C0TT{tt}{definition}")
+        self.assertEqual(
+          self._sent("C0TP"), f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2162th2450td0"
+        )
+        await self.lh.drop_tips(rack["A1:H1"])
+        self.assertEqual(
+          self._sent("C0TR"), f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1"
+        )
+
+        await self.lh.pick_up_tips96(rack)
+        self.assertEqual(self._sent("C0EP"), f"C0EPxs{xs}xd0yh{a1_y}{tt}wu0za2162zh2450ze2450")
+        await self.lh.drop_tips96(rack)
+        self.assertEqual(self._sent("C0ER"), f"C0ERxs{xs}xd0yh{a1_y}za2162zh2450ze2450")
+        modules[slot].unassign_child_resource(rack)
 
 
 class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):

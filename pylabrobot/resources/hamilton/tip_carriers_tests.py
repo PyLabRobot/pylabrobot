@@ -127,8 +127,8 @@ class NestedTipCarrierTests(unittest.TestCase):
 
     carrier_z = on_carrier.get_item("A1").get_location_wrt(deck).z
     module_z = on_module.get_item("A1").get_location_wrt(deck).z
-    self.assertAlmostEqual(module_z, 100 + 18.2 + 96.6 - 6.0 + 7.5)
-    self.assertLess(abs(module_z - carrier_z), 0.2)
+    self.assertAlmostEqual(module_z, 100 + 18.2 + 96.5 - 6.0 + 7.5)
+    self.assertLess(abs(module_z - carrier_z), 0.3)
 
   def test_a_stack_of_nested_tip_racks_on_both_holders(self):
     # Each rack in a nest stands its 16 mm stacking height above the one below, so the top rack's
