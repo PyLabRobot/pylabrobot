@@ -55,6 +55,68 @@ def hamilton_tiprack_standard(
   )
 
 
+def _hamilton_96_tiprack_raised(
+  name: str, model: str, size_z: float, make_tip: TipCreator, with_tips: bool
+) -> EmbeddedTipRack:
+  """A rack that holds its tips on its top face, rather than down in wells as a standard rack does."""
+  return EmbeddedTipRack(
+    name=name,
+    size_x=122.0,
+    size_y=78.5,
+    size_z=size_z,
+    model=model,
+    sinking_depth=9.5,  # the body below the rim, which rests on the holder
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      # the spots of every other rack, centred on the rack
+      dx=7.0,
+      dy=3.25,
+      dz=size_z,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
+      make_tip=make_tip,
+      name_prefix=name,
+    ),
+    with_tips=with_tips,
+  )
+
+
+def hamilton_96_tiprack_raised_core_ii(
+  name: str, make_tip: TipCreator, with_tips: bool = True
+) -> EmbeddedTipRack:
+  """Hamilton cat. no.: 6608647
+  Raised CO-RE II tip rack: a thick, unbending body with no frame, holding its tips 16 mm above the
+  holder it sinks into, where a standard rack holds them 1.5 mm above it. Takes the tip it holds -
+  10, 50, 300 or 1000 uL - as `make_tip`.
+  """
+  return _hamilton_96_tiprack_raised(
+    name=name,
+    model=hamilton_96_tiprack_raised_core_ii.__name__,
+    size_z=25.5,
+    make_tip=make_tip,
+    with_tips=with_tips,
+  )
+
+
+def hamilton_96_tiprack_raised_core_i(
+  name: str, make_tip: TipCreator, with_tips: bool = True
+) -> EmbeddedTipRack:
+  """Raised CO-RE I tip rack: the generation before `hamilton_96_tiprack_raised_core_ii`, holding its
+  tips 3.5 mm lower. Its body is not measured.
+  """
+  return _hamilton_96_tiprack_raised(
+    name=name,
+    model=hamilton_96_tiprack_raised_core_i.__name__,
+    size_z=22.0,
+    make_tip=make_tip,
+    with_tips=with_tips,
+  )
+
+
 # # # # # # # # # # 10 ul Tips # # # # # # # # # #
 
 
