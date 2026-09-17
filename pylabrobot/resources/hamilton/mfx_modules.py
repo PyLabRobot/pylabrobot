@@ -16,9 +16,9 @@ def MFX_TIP_module(name: str) -> ResourceHolder:
     name=name,
     size_x=135.0,
     size_y=94.0,
-    size_z=214.8 - 18.195 - 100,
+    size_z=214.8 - 18.2 - 100,
     # probe height - carrier_height - deck_height
-    child_location=Coordinate(6.2, 5.0, 214.8 - 18.195 - 100),
+    child_location=Coordinate(6.2, 5.0, 214.8 - 18.2 - 100),
     model="MFX_TIP_module",
   )
 
@@ -33,14 +33,8 @@ def hamilton_mfx_module_tiprackholder_ntr(name: str) -> ResourceHolder:
     name=name,
     size_x=134.0,  # Hamilton's NTR4Module 3D model
     size_y=94.0,  # Hamilton's NTR4Module 3D model
-    size_z=29.0,  # TODO: measure
-    # Hamilton's NTR4 site (6.3, 298.2, 29) in the MFX slot at (0, 293, 18.195), with an NTR's SLAS
-    # footprint centred on its 122.4 x 82.6.
-    child_location=Coordinate(
-      x=6.3 + (122.4 - 127.76) / 2,
-      y=298.2 - 293.0 + (82.6 - 85.48) / 2,
-      z=29.0 - 18.195,
-    ),
+    size_z=20.0,  # Hamilton's NTR4Module 3D model
+    child_location=Coordinate(x=3.62, y=3.76, z=10.8),
     model=hamilton_mfx_module_tiprackholder_ntr.__name__,
   )
 
@@ -58,9 +52,9 @@ def hamilton_mfx_plateholder_DWP_flat(name: str) -> PlateHolder:
     name=name,
     size_x=135.0,
     size_y=94.0,
-    size_z=178.0 - 18.195 - 100,  # 59.81mm
+    size_z=178.0 - 18.2 - 100,  # 59.8 mm
     # probe height - carrier_height - deck_height
-    child_location=Coordinate(4.0, 3.5, 178.0 - 18.195 - 100),
+    child_location=Coordinate(4.0, 3.5, 178.0 - 18.2 - 100),
     model=hamilton_mfx_plateholder_DWP_flat.__name__,
     pedestal_size_z=0,
   )
@@ -79,7 +73,7 @@ def hamilton_mfx_plateholder_DWP_metal_tapped(name: str) -> PlateHolder:
     size_y=94.0,  # measured
     size_z=76.4,  # measured
     # probe height - carrier_height - deck_height
-    child_location=Coordinate(4.0, 4.0, 183.95 - 18.195 - 100),  # measured
+    child_location=Coordinate(4.0, 4.0, 183.95 - 18.2 - 100),  # measured
     pedestal_size_z=-4.74,
     model=hamilton_mfx_plateholder_DWP_metal_tapped.__name__,
   )
