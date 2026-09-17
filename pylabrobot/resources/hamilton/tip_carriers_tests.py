@@ -130,6 +130,26 @@ class NestedTipCarrierTests(unittest.TestCase):
     self.assertAlmostEqual(module_z, 100 + 18.2 + 96.5 - 6.0 + 7.5)
     self.assertLess(abs(module_z - carrier_z), 0.3)
 
+  def test_a_solid_coreii_rack_has_the_spots_of_a_framed_rack_at_its_top(self):
+    from pylabrobot.resources.hamilton import (
+      TIP_CAR_480_A00,
+      hamilton_96_tiprack_300uL,
+      hamilton_96_tiprack_solid_coreii,
+      hamilton_tip_300uL,
+    )
+
+    carrier = TIP_CAR_480_A00("tip_carrier")
+    carrier[0] = framed = hamilton_96_tiprack_300uL("framed")
+    carrier[1] = solid = hamilton_96_tiprack_solid_coreii("solid", make_tip=hamilton_tip_300uL)
+    for spot in ("A1", "H12"):
+      framed_spot = framed.get_item(spot).get_absolute_location("c", "c", "b")
+      solid_spot = solid.get_item(spot).get_absolute_location("c", "c", "b")
+      self.assertAlmostEqual(solid_spot.x, framed_spot.x)
+      self.assertAlmostEqual(
+        solid_spot.y - carrier.sites[1].location.y, framed_spot.y - carrier.sites[0].location.y
+      )
+      self.assertAlmostEqual(solid_spot.z, solid.get_absolute_location().z + 25.5)
+
   def test_a_stack_of_nested_tip_racks_on_both_holders(self):
     # Each rack in a nest stands its 16 mm stacking height above the one below, so the top rack's
     # A1 is at 184.0 + 16 per rack below it. Derived: no capture has picked up from a nest.

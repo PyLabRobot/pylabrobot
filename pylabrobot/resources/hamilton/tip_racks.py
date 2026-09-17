@@ -58,6 +58,37 @@ def hamilton_96_tiprack_standard(
   )
 
 
+def hamilton_96_tiprack_solid_coreii(
+  name: str, make_tip: TipCreator, with_tips: bool = True
+) -> EmbeddedTipRack:
+  """Solid CO-RE II tip rack for Hamilton STAR systems: a framed rack's footprint, without a frame."""
+  return EmbeddedTipRack(
+    name=name,
+    size_x=122.0,
+    size_y=78.5,
+    size_z=25.5,
+    model=hamilton_96_tiprack_solid_coreii.__name__,
+    sinking_depth=9.5,  # the body below the rim, which rests on the holder
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      # The spots of every other rack, centred on the rack.
+      dx=7.9,
+      dy=4.15,
+      dz=25.5,  # the top of the rack
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=7.2,
+      size_y=7.2,
+      make_tip=make_tip,
+      name_prefix=name,
+    ),
+    with_tips=with_tips,
+    frame_height=None,
+  )
+
+
 def hamilton_96_tiprack_ntr(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> StandingTipRack:
