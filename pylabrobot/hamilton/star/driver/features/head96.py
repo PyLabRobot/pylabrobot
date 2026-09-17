@@ -75,14 +75,6 @@ class Head96Configuration(HeadConfiguration):
   # it is stated here rather than taken from `y_range`.
   tip_command_y_range: Tuple[float, float] = (108.0, 560.0)
 
-  # How far the tips a rack holds stand proud of it once mounted, by tip size. The head has to
-  # descend by the tip's length past its fitting depth to seat it, and the two odd sizes need a
-  # correction on top.
-  tip_engage_correction_low_volume: float = 2.0
-  tip_engage_correction_other: float = -2.0
-  # How far above a tip rack's own top the head releases tips onto it, in mm.
-  tip_drop_clearance: float = 1.45
-
   # Where the dispensing drive is sent before tips are collected off a rack, as a piston volume in
   # uL. The device does not lower the drive itself, so a head left with its piston up would
   # mount tips against it.

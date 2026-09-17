@@ -291,9 +291,6 @@
           108.0,
           560.0
         ],
-        "tip_engage_correction_low_volume": 2.0,
-        "tip_engage_correction_other": -2.0,
-        "tip_drop_clearance": 1.45,
         "dispensing_drive_position_before_rack_pickup": 218.19,
         "y_increment_floor": 6528
       },
