@@ -27,7 +27,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_50uL_NTR,
   hamilton_tip_300uL,
 )
-from pylabrobot.resources.tip_tracker import set_tip_tracking
+from pylabrobot.resources.tip_tracking import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
 from pylabrobot.utils.liquid_handling.pipette_batch_scheduling import plan_batches
 
@@ -75,7 +75,7 @@ def test_channels_attach_the_bounds_the_device_answers():
 
 
 def test_channels_tip_trackers_pick_and_drop():
-  """pick_up_tips / drop_tips update spot + channel TipTrackers when tip tracking is on."""
+  """pick_up_tips / drop_tips move each tip between its spot and its channel's shaft."""
 
   async def _t():
     set_tip_tracking(True)
@@ -89,18 +89,20 @@ def test_channels_tip_trackers_pick_and_drop():
       n = min(2, p.pipettes.num_channels)
       spots = spots[:n]
       use = list(range(n))
-      assert all(s.has_tip() for s in spots)
+      assert all(s.tip is not None for s in spots)
       assert all(t is None for t in p.pipettes.get_mounted_tips()[:n])
 
       await p.pipettes.pick_up_tips(spots, use_channels=use)
-      assert all(not s.has_tip() for s in spots)
+      assert all(s.tip is None for s in spots)
       mounted = p.pipettes.get_mounted_tips()
       assert all(mounted[i] is not None for i in use)
-      assert all(p.pipettes.head[i].has_tip for i in use)
+      for i in use:
+        tip = p.pipettes.get_mounted_tip(i)
+        assert tip is not None and tip.parent is p.pipettes.shaft(i)
 
       await p.pipettes.drop_tips(spots, use_channels=use)
-      assert all(s.has_tip() for s in spots)
-      assert all(not p.pipettes.head[i].has_tip for i in use)
+      assert all(s.tip is not None for s in spots)
+      assert all(p.pipettes.get_mounted_tip(i) is None for i in use)
       await p.stop()
     finally:
       set_tip_tracking(False)
@@ -140,7 +142,8 @@ def test_channels_volume_trackers_aspirate_dispense():
       for well in src:
         assert well.tracker.get_used_volume() == pytest.approx(80.0)
       for ch in use:
-        tip = p.pipettes.head[ch].get_tip()
+        tip = p.pipettes.get_mounted_tip(ch)
+        assert tip is not None
         assert tip.tracker.get_used_volume() == pytest.approx(20.0)
 
       await p.pipettes.dispense(
@@ -152,7 +155,8 @@ def test_channels_volume_trackers_aspirate_dispense():
       for well in dst:
         assert well.tracker.get_used_volume() == pytest.approx(20.0)
       for ch in use:
-        tip = p.pipettes.head[ch].get_tip()
+        tip = p.pipettes.get_mounted_tip(ch)
+        assert tip is not None
         assert tip.tracker.get_used_volume() == pytest.approx(0.0)
 
       await p.pipettes.drop_tips(spots, use_channels=use)
@@ -848,7 +852,9 @@ def test_probe_z_using_ztouch_seeks_the_tip_bottom_and_can_end_at_z_safety():
     assert p.pipettes is not None and p.x_arm is not None
     await p.x_arm.move_to_x_position(100.0)
     await p.pipettes.move_to_y_positions({0: 300.0, 1: 100.0})
-    p.pipettes.head[1].add_tip(hamilton_tip_300uL(name="tip"))
+    shaft = p.pipettes.shaft(1)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="tip"))
     assert await p.pipettes.request_held_tip_length() == pytest.approx(51.9)
     here = (await p.pipettes.request_locations())[1].z
     drive = await p.pipettes.channels[1].request_z_drive_position()

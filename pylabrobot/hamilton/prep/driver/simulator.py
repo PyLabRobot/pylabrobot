@@ -765,7 +765,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
 
     if isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipDefinitionHeld":
       # The tip the first channel holding one holds, as the definition it was picked up with.
-      tip = next((t.get_tip() for t in self.head.values() if t.has_tip), None)
+      tip = next((t for t in self.get_mounted_tips() if t is not None), None)
       held = PrepCmd.TipDefinition(
         default_values=False,
         id=0 if tip is None else 1,
@@ -777,7 +777,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
         is_tool=False,
         label="No Tip" if tip is None else "simulated",
       )
-      return HoiParams().add(held, Struct()), "the channels' tip trackers"
+      return HoiParams().add(held, Struct()), "the channels' mounting shafts"
 
     if isinstance(request, PrepCmd.PrepProbeRequest):
       owner = self.device.tree.channel_of(request.dest)
@@ -790,9 +790,8 @@ class SimulatedPipettes(_Simulated, Pipettes):
           return None
         return HoiParams().add(version, Str), f"channel {owner}'s declared firmware"
       if method == "GetTipPresent":
-        tracker = self.head.get(owner)
-        present = tracker is not None and tracker.has_tip
-        return HoiParams().add(int(present), U32), f"channel {owner}'s tip tracker"
+        present = self.get_mounted_tip(owner) is not None
+        return HoiParams().add(int(present), U32), f"channel {owner}'s mounting shaft"
 
     return None
 

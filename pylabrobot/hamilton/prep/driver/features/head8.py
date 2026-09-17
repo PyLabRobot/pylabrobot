@@ -22,7 +22,18 @@ from __future__ import annotations
 
 import logging
 import struct as _struct
-from typing import TYPE_CHECKING, Awaitable, Callable, List, Literal, Optional, Sequence, Union
+from typing import (
+  TYPE_CHECKING,
+  Awaitable,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Union,
+  cast,
+)
 
 from pylabrobot.hamilton.liquid_class_resolver import (
   corrected_volumes_for_ops,
@@ -32,20 +43,22 @@ from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
 from pylabrobot.resources import Container, Coordinate, Tip, Trash
+from pylabrobot.resources.errors import HasTipError
+from pylabrobot.resources.n_channel_pipettes import (
+  SHAFT_DIAMETER,
+  SHAFT_LENGTH,
+  NChannelPipette,
+  TipMountingShaft,
+)
 from pylabrobot.resources.resource_state import (
-  TipDropIntent,
-  TipPickupIntent,
   VolumeTransferIntent,
   all_channels_succeeded,
-  finalize_tip_ops,
   finalize_volume_ops,
-  queue_tip_drops,
-  queue_tip_pickups,
   queue_volume_transfers,
   successes_from_failed_channels,
 )
 from pylabrobot.resources.tip_rack import TipSpot
-from pylabrobot.legacy.tip_tracker import TipTracker
+from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well
 
 from .. import prep_commands as PrepCmd
@@ -88,6 +101,42 @@ _V2_MPH_CMD_IDS: frozenset = frozenset({29, 30, 31, 32, 33, 34})
 _PROBE_POS_TOLERANCE_MM: float = 1.0  # max deviation from expected 9mm pitch before raising
 
 
+def head8_pipette(name: str = "head8") -> NChannelPipette:
+  """The 8MPH as a resource: one column of eight tip mounting shafts, probe 0 at the back.
+
+  Only its channels are modelled, the grid the device reports, not the body around them: the
+  resource spans the shafts and nothing more. A tip a probe carries is its shaft's child.
+
+  Args:
+    name: what to call it.
+
+  Returns:
+    The pipette.
+  """
+  span_y = (NUM_PROBES - 1) * PROBE_PITCH_MM
+  return NChannelPipette(
+    name=name,
+    size_x=SHAFT_DIAMETER,
+    size_y=span_y + SHAFT_DIAMETER,
+    size_z=SHAFT_LENGTH,
+    # Where a tip is picked up: the axis of probe 0's shaft, at its end.
+    reference_point=Coordinate(SHAFT_DIAMETER / 2, span_y + SHAFT_DIAMETER / 2, 0),
+    ordered_items=create_ordered_items_2d(
+      TipMountingShaft,
+      name_prefix=name,
+      num_items_x=1,
+      num_items_y=NUM_PROBES,
+      dx=0,
+      dy=0,
+      dz=0,
+      item_dx=PROBE_PITCH_MM,
+      item_dy=PROBE_PITCH_MM,
+      tip_pickup_mode="core",
+    ),
+    model="hamilton_prep_8mph",
+  )
+
+
 class Head8:
   """8-channel Multi-Pipetting Head for the Hamilton Prep.
 
@@ -115,9 +164,8 @@ class Head8:
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
     self.channels: List[PipetteChannel] = []  # built by discover
     self._supports_v2_pipetting: Optional[bool] = None
-    self.head: dict[int, TipTracker] = {
-      i: TipTracker(thing=f"Head8 channel {i}") for i in range(NUM_PROBES)
-    }
+    # The head's probes, each a shaft carrying the tip it has picked up.
+    self.resource: NChannelPipette = head8_pipette()
 
   @property
   def deck(self) -> Optional["Deck"]:
@@ -147,9 +195,8 @@ class Head8:
       logger.debug("MPH V2 aspirate/dispense support: True")
 
   async def _on_stop(self) -> None:
+    # The tips the probes carry are resources on their shafts, and stopping moves none.
     self._supports_v2_pipetting = None
-    for tracker in self.head.values():
-      tracker.clear()
 
   # -- session / discovery -------------------------------------------------------------------------
 
@@ -283,17 +330,28 @@ class Head8:
 
   # -- tip pickup / drop ---------------------------------------------------------------------------
 
+  def shaft(self, channel: int) -> TipMountingShaft:
+    """The mounting shaft modelling a probe.
+
+    Args:
+      channel: which probe, 0 at the back.
+    """
+    return self.resource.get_item(channel)
+
   def get_mounted_tips(self) -> List[Optional[Tip]]:
-    """Tips currently mounted on the 8MPH (``None`` if empty)."""
-    return [self.head[i].get_tip() if self.head[i].has_tip else None for i in range(NUM_PROBES)]
+    """Tips currently mounted on the 8MPH (``None`` if empty): what each probe's shaft carries."""
+    tips: List[Optional[Tip]] = []
+    for i in range(NUM_PROBES):
+      tip = self.shaft(i).tip
+      tips.append(tip if isinstance(tip, Tip) else None)
+    return tips
 
   def _require_mounted_tips(self) -> List[Tip]:
     tips: List[Tip] = []
-    for i in range(NUM_PROBES):
-      tracker = self.head[i]
-      if not tracker.has_tip:
+    for tip in self.get_mounted_tips():
+      if tip is None:
         raise RuntimeError("No tips mounted on head8; call pick_up_tips first.")
-      tips.append(tracker.get_tip())
+      tips.append(tip)
     return tips
 
   def _require_mounted_tip(self) -> Tip:
@@ -303,7 +361,7 @@ class Head8:
     self,
     use_channels: Sequence[int],
     *,
-    tip_intents: Optional[Sequence[Union[TipPickupIntent, TipDropIntent]]] = None,
+    on_outcome: Optional[Callable[[Dict[int, bool]], None]] = None,
     volume_intents: Optional[Sequence[VolumeTransferIntent]] = None,
     send: Callable[[], Awaitable[None]],
   ) -> None:
@@ -317,10 +375,16 @@ class Head8:
     except BaseException as e:
       error = e
       successes = {ch: False for ch in use_channels}
-    if tip_intents is not None:
-      finalize_tip_ops(tip_intents, successes)
-    if volume_intents is not None:
-      finalize_volume_ops(volume_intents, successes)
+    try:
+      if on_outcome is not None:
+        on_outcome(successes)
+      if volume_intents is not None:
+        finalize_volume_ops(volume_intents, successes)
+    except Exception:
+      # What the device said is the error worth having: this one only says the model is stale.
+      if error is None:
+        raise
+      logger.exception("could not record what the command did")
     if error is not None:
       raise error
 
@@ -346,7 +410,10 @@ class Head8:
       raise ValueError(f"pick_up_tips requires {NUM_PROBES} tip spots, got {len(tip_spots)}")
     resolved_final_z = self._resolve_traverse_height(final_z)
 
-    tips = [s.get_tip() for s in tip_spots]
+    for ch in use_channels:
+      if self.shaft(ch).has_tip():
+        raise RuntimeError(f"Channel {ch} already has a tip")
+    tips = [s.tip_for_pickup() for s in tip_spots]
     ref_spot = tip_spots[0]
     tip = tips[0]
     rack = ref_spot.parent
@@ -373,16 +440,12 @@ class Head8:
       is_needle=False,
       is_tool=False,
     )
-    tip_intents = [
-      TipPickupIntent(
-        channel=ch,
-        tip_spot=spot,
-        tip=t,
-        channel_tracker=self.head[ch],
-      )
-      for ch, spot, t in zip(use_channels, tip_spots, tips)
-    ]
-    queue_tip_pickups(tip_intents)
+
+    def mount(picked_up: Dict[int, bool]) -> None:
+      # A tip is a resource: once the device has it, it moves off its spot onto the probe's shaft.
+      for ch, t in zip(use_channels, tips):
+        if picked_up.get(ch, False):
+          self.shaft(ch).mount_tip(t)
 
     async def _send() -> None:
       await self._driver.send_command(
@@ -398,7 +461,7 @@ class Head8:
         )
       )
 
-    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
+    await self._finalize_head8_command(use_channels, on_outcome=mount, send=_send)
 
   async def drop_tips(
     self,
@@ -442,16 +505,25 @@ class Head8:
     )
     roll_off = 3.0 if (is_trash and tip_roll_off_distance == 0.0) else tip_roll_off_distance
     mounted = self._require_mounted_tips()
-    tip_intents = [
-      TipDropIntent(
-        channel=ch,
-        destination=dest,
-        tip=mounted[ch],
-        channel_tracker=self.head[ch],
-      )
-      for ch, dest in zip(use_channels, destinations)
-    ]
-    queue_tip_drops(tip_intents)
+    for ch in use_channels:
+      used = mounted[ch].tracker.get_used_volume()
+      if not mounted[ch].tracker.is_disabled and used > 1e-6:
+        raise RuntimeError(f"Cannot drop tip on channel {ch} with volume {used} uL")
+    spots = [d for d in destinations if isinstance(d, TipSpot)]
+    if len({id(spot) for spot in spots}) != len(spots):
+      raise ValueError("each tip must go into a spot of its own")
+    for spot in spots:
+      if spot.tracks_tips and spot.tip is not None:
+        raise HasTipError(f"{spot.name} already holds a tip")
+
+    def release(dropped: Dict[int, bool]) -> None:
+      # Once the device has let go, a tip goes into its spot, or belongs to nothing in the waste.
+      for ch, destination in zip(use_channels, destinations):
+        if not dropped.get(ch, False):
+          continue
+        released = self.shaft(ch).release_tip()
+        if isinstance(destination, TipSpot) and destination.tracks_tips:
+          destination.assign_tip(cast(Tip, released))
 
     async def _send() -> None:
       await self._driver.send_command(
@@ -463,7 +535,7 @@ class Head8:
         )
       )
 
-    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
+    await self._finalize_head8_command(use_channels, on_outcome=release, send=_send)
 
   # -- shared LLD / TADM resolution helpers --------------------------------------------------------
 

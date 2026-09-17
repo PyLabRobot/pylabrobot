@@ -8,22 +8,14 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.resource_state import (
-  TipDropIntent,
-  TipPickupIntent,
   VolumeTransferIntent,
-  finalize_tip_ops,
   finalize_volume_ops,
   place_resource,
-  queue_tip_drops,
-  queue_tip_pickups,
   queue_volume_transfers,
   successes_from_failed_channels,
 )
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipSpot
-from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.resources.tip_tracking import set_tip_tracking
-from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.volume_tracker import set_volume_tracking
 from pylabrobot.resources.well import Well, WellBottomType
 
@@ -38,68 +30,7 @@ def _tip(name: str = "t") -> Tip:
   )
 
 
-def _spot(name: str = "spot") -> TipSpot:
-  spot = TipSpot(name=name, size_x=9, size_y=9, size_z=0, make_tip=_tip)
-  spot.tracker.add_tip(spot.make_tip(), origin=spot, commit=True)
-  return spot
-
-
-class TestResourceStateTips(unittest.TestCase):
-  def setUp(self) -> None:
-    set_tip_tracking(True)
-    set_volume_tracking(False)
-
-  def tearDown(self) -> None:
-    set_tip_tracking(False)
-    set_volume_tracking(False)
-
-  def test_pickup_commit_clears_spot_and_mounts_channel(self) -> None:
-    spot = _spot()
-    channel = TipTracker(thing="ch0")
-    tip = spot.get_tip()
-    intents = [TipPickupIntent(channel=0, tip_spot=spot, tip=tip, channel_tracker=channel)]
-    queue_tip_pickups(intents)
-    finalize_tip_ops(intents, {0: True})
-    self.assertFalse(spot.has_tip())
-    self.assertTrue(channel.has_tip)
-    self.assertIs(channel.get_tip(), tip)
-
-  def test_pickup_rollback_restores_spot(self) -> None:
-    spot = _spot()
-    channel = TipTracker(thing="ch0")
-    tip = spot.get_tip()
-    intents = [TipPickupIntent(channel=0, tip_spot=spot, tip=tip, channel_tracker=channel)]
-    queue_tip_pickups(intents)
-    finalize_tip_ops(intents, {0: False})
-    self.assertTrue(spot.has_tip())
-    self.assertFalse(channel.has_tip)
-
-  def test_drop_to_spot_and_trash(self) -> None:
-    spot = _spot("src")
-    dest = TipSpot(name="dest", size_x=9, size_y=9, size_z=0, make_tip=_tip)
-    trash = Trash(name="trash", size_x=10, size_y=10, size_z=10)
-    channel = TipTracker(thing="ch0")
-    tip = spot.get_tip()
-    pick = [TipPickupIntent(channel=0, tip_spot=spot, tip=tip, channel_tracker=channel)]
-    queue_tip_pickups(pick)
-    finalize_tip_ops(pick, {0: True})
-
-    drop_spot = [TipDropIntent(channel=0, destination=dest, tip=tip, channel_tracker=channel)]
-    queue_tip_drops(drop_spot)
-    finalize_tip_ops(drop_spot, {0: True})
-    self.assertTrue(dest.has_tip())
-    self.assertFalse(channel.has_tip)
-
-    tip2 = dest.get_tip()
-    pick2 = [TipPickupIntent(channel=0, tip_spot=dest, tip=tip2, channel_tracker=channel)]
-    queue_tip_pickups(pick2)
-    finalize_tip_ops(pick2, {0: True})
-    drop_trash = [TipDropIntent(channel=0, destination=trash, tip=tip2, channel_tracker=channel)]
-    queue_tip_drops(drop_trash)
-    finalize_tip_ops(drop_trash, {0: True})
-    self.assertFalse(channel.has_tip)
-    self.assertFalse(dest.has_tip())
-
+class TestResourceStateOutcomes(unittest.TestCase):
   def test_successes_from_failed_channels(self) -> None:
     self.assertEqual(
       successes_from_failed_channels([0, 1], {1: Exception("x")}),

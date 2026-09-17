@@ -55,20 +55,15 @@ from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.resource_state import (
-  TipDropIntent,
-  TipPickupIntent,
   VolumeTransferIntent,
   all_channels_succeeded,
-  finalize_tip_ops,
   finalize_volume_ops,
-  queue_tip_drops,
-  queue_tip_pickups,
   queue_volume_transfers,
   successes_from_failed_channels,
 )
-from pylabrobot.resources.tip_rack import TipSpot
-from pylabrobot.legacy.tip_tracker import TipTracker
+from pylabrobot.resources.tip_rack import TipSpot, tip_origin
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well
 
@@ -821,7 +816,9 @@ class Pipettes:
     self.channels: List[PipetteChannel] = []
     # The firmware's ChannelIndex for each channel, back to front. Discovery sets it from the device.
     self.channel_order: Tuple[int, ...] = tuple(PrepCmd.channel_order_legacy_prep)
-    self.head: dict[int, TipTracker] = {}
+    # A channel carries its tip on its shaft. Only a deck that models no channels - one that is not
+    # a PrepDeck - leaves nowhere to put it, and then it is held here instead.
+    self._unmodelled_tips: Dict[int, Tip] = {}
     # One per channel, hung from the X-arm's resource when the driver was given a deck. Setup puts
     # them there; reads and moves keep them in step.
     self.resources: List[Resource] = []
@@ -873,12 +870,10 @@ class Pipettes:
       self.configuration.supports_v2_pipetting = True
       logger.debug("V2 aspirate/dispense support: True")
 
-    self._ensure_head()
     self.setup_finished = True
 
   async def _on_stop(self):
-    for tracker in self.head.values():
-      tracker.clear()
+    """Nothing to undo: the tips a channel carries are resources on its shaft, and stopping moves none."""
 
   async def stop(self) -> None:
     self.setup_finished = False
@@ -1027,12 +1022,6 @@ class Pipettes:
         z_range=None if bounds is None else (bounds["z_min"], bounds["z_max"]),
       )
     self.configuration.check_channels_agree()
-
-  def _ensure_head(self) -> None:
-    """Ensure pipette-side TipTrackers exist for each dual-channel index."""
-    for i in range(self.num_channels):
-      if i not in self.head:
-        self.head[i] = TipTracker(thing=f"Channel {i}")
 
   async def _probe_v2_support(self) -> bool:
     """Probe the pipettor for v2 aspirate/dispense command support.
@@ -2635,44 +2624,80 @@ class Pipettes:
 
   # -- tip pickup / drop ---------------------------------------------------------------------------
 
+  def shaft(self, channel: int) -> Optional[TipMountingShaft]:
+    """The mounting shaft modelling a channel, or None while nothing models it."""
+    if channel >= len(self.resources):
+      return None
+    return next(
+      (child for child in self.resources[channel].children if isinstance(child, TipMountingShaft)),
+      None,
+    )
+
+  def get_mounted_tip(self, channel: int) -> Optional[Tip]:
+    """The tip the model has on a channel's shaft, or None if it carries none."""
+    shaft = self.shaft(channel)
+    if shaft is None:
+      return self._unmodelled_tips.get(channel)
+    tip = shaft.tip
+    return tip if isinstance(tip, Tip) else None
+
+  def _mount_tip(self, channel: int, tip: Tip) -> None:
+    """Put a collected tip on a channel in the model."""
+    shaft = self.shaft(channel)
+    if shaft is not None:
+      shaft.mount_tip(tip)
+      return
+    if tip.parent is not None:
+      tip.parent.unassign_child_resource(tip)
+    self._unmodelled_tips[channel] = tip
+
+  def _release_tip(self, channel: int) -> Optional[Tip]:
+    """Take a channel's tip off it in the model, leaving it assigned to nothing."""
+    shaft = self.shaft(channel)
+    if shaft is None:
+      return self._unmodelled_tips.pop(channel, None)
+    return cast(Tip, shaft.release_tip()) if shaft.has_tip() else None
+
   def get_mounted_tips(self) -> List[Optional[Tip]]:
-    """Tips currently mounted on the dual-channel head (``None`` if empty)."""
-    self._ensure_head()
-    return [
-      self.head[i].get_tip() if self.head[i].has_tip else None for i in range(self.num_channels)
-    ]
+    """The tip on each channel's shaft, back to front, ``None`` where there is none."""
+    return [self.get_mounted_tip(i) for i in range(self.num_channels)]
 
   def _require_mounted_tips(self, use_channels: List[int]) -> List[Tip]:
-    self._ensure_head()
     tips: List[Tip] = []
     for ch in use_channels:
-      tracker = self.head[ch]
-      if not tracker.has_tip:
-        raise RuntimeError(f"No tip mounted on channel {ch}; call pick_up_tips first.")
-      tips.append(tracker.get_tip())
+      tip = self.get_mounted_tip(ch)
+      if tip is None:
+        raise NoTipError(f"No tip mounted on channel {ch}; call pick_up_tips first.")
+      tips.append(tip)
     return tips
+
+  @staticmethod
+  async def _send_channel_command(
+    use_channels: Sequence[int], send: Callable[[], Awaitable[None]]
+  ) -> Tuple[Dict[int, bool], Optional[BaseException]]:
+    """Send a command addressed to channels, and say which of them it succeeded on.
+
+    Returns:
+      Whether it succeeded on each channel, and what it failed with, for the caller to raise once
+      it has recorded what did happen. A command that failed outright succeeded on none.
+    """
+    try:
+      await send()
+      return all_channels_succeeded(use_channels), None
+    except ChannelizedError as e:
+      return successes_from_failed_channels(use_channels, e.errors), e
+    except BaseException as e:
+      return {ch: False for ch in use_channels}, e
 
   async def _finalize_channel_command(
     self,
     use_channels: Sequence[int],
     *,
-    tip_intents: Optional[Sequence[Union[TipPickupIntent, TipDropIntent]]] = None,
     volume_intents: Optional[Sequence[VolumeTransferIntent]] = None,
     send: Callable[[], Awaitable[None]],
   ) -> None:
-    """Send a Prep command and commit/rollback queued tip or volume intents."""
-    error: Optional[BaseException] = None
-    try:
-      await send()
-      successes = all_channels_succeeded(use_channels)
-    except ChannelizedError as e:
-      error = e
-      successes = successes_from_failed_channels(use_channels, e.errors)
-    except BaseException as e:
-      error = e
-      successes = {ch: False for ch in use_channels}
-    if tip_intents is not None:
-      finalize_tip_ops(tip_intents, successes)
+    """Send a Prep command and commit/rollback queued volume intents."""
+    successes, error = await self._send_channel_command(use_channels, send)
     if volume_intents is not None:
       finalize_volume_ops(volume_intents, successes)
     if error is not None:
@@ -2711,7 +2736,9 @@ class Pipettes:
     if len(offsets_list) != len(tip_spots):
       raise ValueError("len(offsets) must equal len(tip_spots)")
 
-    tips = [spot.get_tip() for spot in tip_spots]
+    if not tip_spots:
+      return
+    tips = [spot.tip_for_pickup() for spot in tip_spots]
     resolved_final_z = self._resolve_traverse_height(final_z)
 
     indexed = {
@@ -2759,17 +2786,10 @@ class Pipettes:
         use_channels=use_channels,
       )
 
-    self._ensure_head()
-    tip_intents = [
-      TipPickupIntent(
-        channel=ch,
-        tip_spot=spot,
-        tip=tip,
-        channel_tracker=self.head[ch],
-      )
-      for ch, spot, tip in zip(use_channels, tip_spots, tips)
-    ]
-    queue_tip_pickups(tip_intents)
+    for ch in use_channels:
+      mounted = self.get_mounted_tip(ch)
+      if mounted is not None:
+        raise HasTipError(f"Channel {ch} already carries {mounted.name}")
 
     async def _send() -> None:
       await self._driver.send_command(
@@ -2784,7 +2804,20 @@ class Pipettes:
         )
       )
 
-    await self._finalize_channel_command(use_channels, tip_intents=tip_intents, send=_send)
+    # A tip is a resource: once the device has it, it moves off its spot onto the channel's shaft.
+    picked_up, error = await self._send_channel_command(use_channels, _send)
+    try:
+      for ch, spot, tip in zip(use_channels, tip_spots, tips):
+        if not picked_up[ch]:
+          continue
+        self._mount_tip(ch, tip)
+    except Exception:
+      # What the device said is the error worth having: this one only says the model is stale.
+      if error is None:
+        raise
+      logger.exception("could not record which tips the channels collected")
+    if error is not None:
+      raise error
 
   async def drop_tips(
     self,
@@ -2806,6 +2839,8 @@ class Pipettes:
     z_position + 10mm so the tip bottom stays above adjacent tips in the rack.
     """
     destinations = list(destinations)
+    if not destinations:
+      return
     use_channels = use_channels if use_channels is not None else list(range(len(destinations)))
     if len(destinations) != len(use_channels):
       raise ValueError(
@@ -2857,16 +2892,17 @@ class Pipettes:
         )
       )
 
-    tip_intents = [
-      TipDropIntent(
-        channel=ch,
-        destination=dest,
-        tip=tip,
-        channel_tracker=self.head[ch],
-      )
-      for ch, dest, tip in zip(use_channels, destinations, tips)
-    ]
-    queue_tip_drops(tip_intents)
+    for ch, tip in zip(use_channels, tips):
+      if not tip.tracker.is_disabled and tip.tracker.get_used_volume() > 1e-6:
+        raise RuntimeError(
+          f"Cannot drop tip on channel {ch} with volume {tip.tracker.get_used_volume()} uL"
+        )
+    spots = [dest for dest in destinations if isinstance(dest, TipSpot)]
+    if len({id(spot) for spot in spots}) != len(spots):
+      raise ValueError("each tip must go into a spot of its own")
+    for spot in spots:
+      if spot.tracks_tips and spot.tip is not None:
+        raise HasTipError(f"{spot.name} already holds a tip")
 
     async def _send() -> None:
       await self._driver.send_command(
@@ -2878,7 +2914,52 @@ class Pipettes:
         )
       )
 
-    await self._finalize_channel_command(use_channels, tip_intents=tip_intents, send=_send)
+    # Once the device has let go, a tip goes into its spot, or belongs to nothing in the waste.
+    dropped, error = await self._send_channel_command(use_channels, _send)
+    try:
+      for ch, dest in zip(use_channels, destinations):
+        if not dropped[ch]:
+          continue
+        released = self._release_tip(ch)
+        if released is not None and isinstance(dest, TipSpot) and dest.tracks_tips:
+          dest.assign_tip(released)
+    except Exception:
+      # What the device said is the error worth having: this one only says the model is stale.
+      if error is None:
+        raise
+      logger.exception("could not record which tips the channels let go of")
+    if error is not None:
+      raise error
+
+  async def return_tips(self, use_channels: Optional[List[int]] = None, **kwargs) -> None:
+    """Put each channel's tip back in the tip spot it was picked up from, as legacy does.
+
+    The spot is found from the tip itself: a spot names the tips it makes after itself.
+
+    Args:
+      use_channels: which channels. Of these, only those carrying a tip return one. Every channel,
+        when None.
+      kwargs: passed on to `drop_tips`.
+
+    Raises:
+      RuntimeError: If no channel carries a tip, or a tip's spot is not on the deck.
+    """
+    deck = self._require_deck()
+    channels = range(self.num_channels) if use_channels is None else use_channels
+    spots: List[TipSpot] = []
+    carrying: List[int] = []
+    for ch in sorted(channels):
+      tip = self.get_mounted_tip(ch)
+      if tip is None:
+        continue
+      spot = tip_origin(tip, deck)
+      if spot is None:
+        raise RuntimeError(f"the spot channel {ch}'s tip {tip.name} came from is not on the deck")
+      spots.append(spot)
+      carrying.append(ch)
+    if not spots:
+      raise RuntimeError("No tips have been picked up.")
+    await self.drop_tips(spots, use_channels=carrying, **kwargs)
 
   def can_pick_up_tip(self, channel: int, tip: Tip) -> bool:
     """Check if the tip can be picked up by the specified channel.
