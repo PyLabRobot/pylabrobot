@@ -423,6 +423,84 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(pipettes.get_mounted_tip(1))
     self.assertIs(tips[1].parent, spots[1])
 
+  async def test_a_failed_pickup_lifts_the_channels_out_of_the_rack(self):
+    """Whatever state a failure leaves them in, the channels come up to the traverse height."""
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    with patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError)):
+      with self.assertRaises(RuntimeError):
+        await pipettes.pick_up_tips([rack.get_item("A1")])
+    self.assertAlmostEqual(
+      await pipettes.request_stop_disc_z_position(0),
+      pipettes.default_minimum_traverse_height,
+      places=1,
+    )
+
+  async def test_a_pickup_that_faults_on_one_channel_keeps_the_others_tips(self):
+    """Not every pick-up uses every channel: the error names the ones that faulted, by channel.
+
+    The channels cannot be asked here, so what the error says is what the model takes.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from pylabrobot.hamilton.star.driver.errors import HardwareError, STARFirmwareError
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spots = [rack.get_item("A1"), rack.get_item("C1")]
+    tips = [spot.tip for spot in spots]
+    failure = STARFirmwareError(
+      errors={
+        "Pipetting channel 3": HardwareError(
+          message="no tip picked up", trace_information=75, raw_response="", raw_module="P3"
+        )
+      },
+      raw_response="C0TPid0001er99/00 P3/75",
+    )
+    with (
+      patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=failure)),
+      patch.object(pipettes, "sense_tip_presence", AsyncMock(side_effect=RuntimeError)),
+    ):
+      with self.assertRaises(RuntimeError):
+        await pipettes.pick_up_tips(spots, use_channels=[0, 2])
+    self.assertIs(pipettes.get_mounted_tip(0), tips[0])
+    self.assertIsNone(pipettes.get_mounted_tip(2))
+    self.assertIs(tips[1].parent, spots[1])
+
+  async def test_a_cancelled_pickup_moves_only_the_tips_the_channels_sense(self):
+    """A cancellation is not an answer: what the channels carry is, and here they carry nothing."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spots = [rack.get_item("A1"), rack.get_item("B1")]
+    tips = [spot.tip for spot in spots]
+    with patch.object(
+      pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=asyncio.CancelledError)
+    ):
+      with self.assertRaises(asyncio.CancelledError):
+        await pipettes.pick_up_tips(spots)
+    self.assertIsNone(pipettes.get_mounted_tip(0))
+    self.assertIs(tips[0].parent, spots[0])
+    self.assertIs(tips[1].parent, spots[1])
+
+  async def test_a_cancelled_drop_leaves_the_tips_the_channels_still_carry(self):
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    tip = spot.tip
+    await pipettes.pick_up_tips([spot])
+    with patch.object(
+      pipettes, "_unchecked_fw_drop_tips", AsyncMock(side_effect=asyncio.CancelledError)
+    ):
+      with self.assertRaises(asyncio.CancelledError):
+        await pipettes.drop_tips([spot])
+    self.assertIs(pipettes.get_mounted_tip(0), tip)
+    self.assertIs(tip.parent, pipettes.shaft(0))
+    self.assertIsNone(spot.tip)
+
   async def test_initialization_leaves_no_tips_on_the_channels(self):
     pipettes, rack, _ = await channels_over_a_rack()
     tip = rack.get_item("A1").tip

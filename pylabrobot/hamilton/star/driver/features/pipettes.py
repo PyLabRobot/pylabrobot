@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, cast
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
+from pylabrobot.hamilton.star.driver.errors import channels_that_faulted
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
@@ -1442,19 +1443,6 @@ class Pipettes:
     await self._record_where_they_stopped("y")
     await self._record_where_they_stopped("z")
 
-  async def _channels_that_carry_a_tip(self, use_channels: List[int]) -> Optional[Dict[int, bool]]:
-    """Ask the channels which of them carry a tip, after a command that may have stopped part way.
-
-    Returns:
-      Whether each named channel carries one, or None if they could not be asked.
-    """
-    try:
-      presence = await self.sense_tip_presence()
-    except Exception:
-      logger.warning("could not sense which channels carry tips; the model is left as it was")
-      return None
-    return {channel: bool(presence[channel]) for channel in use_channels}
-
   async def _unchecked_fw_pick_up_tips(
     self,
     x_positions: List[int],
@@ -1603,10 +1591,38 @@ class Pipettes:
         minimum_traverse_height_at_beginning_of_a_command=traverse,
         pickup_method=pickup_method or hamilton_tips[0].pickup_method,
       )
-    except Exception:
-      picked_up = await self._channels_that_carry_a_tip(use_channels) or {
-        channel: False for channel in use_channels
-      }
+    except BaseException as failure:
+      # A command can stop part way, and both the device's answers say which channels it got to:
+      # the error names the ones that faulted, and the channels themselves say what they carry now.
+      # The sensed answer is the better one, and a cancelled command may not let them give it.
+      faulted = channels_that_faulted(failure)
+      picked_up = (
+        {channel: channel not in faulted for channel in use_channels}
+        if faulted
+        else {channel: False for channel in use_channels}
+      )
+      presence = await self.sense_tip_presence()
+      sensed = {channel: bool(presence[channel]) for channel in use_channels}
+      disagreed = [
+        channel for channel in use_channels if faulted and sensed[channel] != picked_up[channel]
+      ]
+      if disagreed:
+        logger.warning(
+          "channels %s carry something other than what the error said: the error named %s as "
+          "faulted, and the channels sense %s. Taking what they sense.",
+          disagreed,
+          sorted(faulted),
+          sensed,
+        )
+      # Out of the rack before anything else touches the deck: the channels go to the height the
+      # command would have travelled at, by their stop discs, whatever state they were left in.
+      try:
+        await self.move_stop_disc_to_z_positions(
+          {channel: traverse / 10 for channel in use_channels}
+        )
+      except BaseException:
+        logger.warning("could not lift the channels to %.1f mm after the failure", traverse / 10)
+      picked_up = sensed
       raise
     finally:
       for spot, tip, channel in zip(tip_spots, tips, use_channels):
@@ -1729,13 +1745,37 @@ class Pipettes:
         z_position_at_end_of_a_command=z_end,
         discarding_method=drop_method,
       )
-    except Exception:
-      still = await self._channels_that_carry_a_tip(use_channels)
+    except BaseException as failure:
+      # As the pick-up takes it, from the error and then from the channels: one that still carries
+      # its tip has not dropped it.
+      faulted = channels_that_faulted(failure)
       dropped = (
-        {channel: not carries for channel, carries in still.items()}
-        if still is not None
+        {channel: channel not in faulted for channel in use_channels}
+        if faulted
         else {channel: False for channel in use_channels}
       )
+      presence = await self.sense_tip_presence()
+      sensed = {channel: not presence[channel] for channel in use_channels}
+      disagreed = [
+        channel for channel in use_channels if faulted and sensed[channel] != dropped[channel]
+      ]
+      if disagreed:
+        logger.warning(
+          "channels %s carry something other than what the error said: the error named %s as "
+          "faulted, and the channels still carry %s. Taking what they sense.",
+          disagreed,
+          sorted(faulted),
+          {channel: bool(presence[channel]) for channel in use_channels},
+        )
+      # Out of the rack before anything else touches the deck: the channels go to the height the
+      # command would have travelled at, by their stop discs, whatever state they were left in.
+      try:
+        await self.move_stop_disc_to_z_positions(
+          {channel: traverse / 10 for channel in use_channels}
+        )
+      except BaseException:
+        logger.warning("could not lift the channels to %.1f mm after the failure", traverse / 10)
+      dropped = sensed
       raise
     finally:
       for target, channel in zip(targets, use_channels):
