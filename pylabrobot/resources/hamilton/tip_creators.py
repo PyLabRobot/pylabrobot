@@ -564,6 +564,7 @@ def hamilton_teaching_needle_300uL(name: Optional[str] = None) -> HamiltonTip:
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=8.0,
+    model="hamilton_teaching_needle_300uL",
   )
 
 
