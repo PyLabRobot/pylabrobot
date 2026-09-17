@@ -14,7 +14,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
   hamilton_mfx_carrier_L5_base,
-  hamilton_mfx_resource_holder_ntr4,
+  hamilton_mfx_module_tiprackholder_ntr,
   hamilton_tip_carrier_L5_ntr_a00,
 )
 from pylabrobot.resources.resource_stack import ResourceStack
@@ -38,7 +38,7 @@ class StandardTipCarrierTests(unittest.TestCase):
         self.assertAlmostEqual(rack_center.y, site_center.y)
 
   def test_tip_spot_positions_on_star_deck(self):
-    # positions whose firmware commands match Venus
+    # positions whose firmware commands match Hamilton's own software
     for carrier_fn, rotation, a1, h12 in [
       (TIP_CAR_480_A00, 0, Coordinate(117.9, 145.8, 216.45), Coordinate(216.9, 82.8, 216.45)),
       (TIP_CAR_288_C00, 90, Coordinate(113.5, 111.0, 216.2), Coordinate(176.5, 210.0, 216.2)),
@@ -67,7 +67,7 @@ class StandardTipCarrierTests(unittest.TestCase):
 
 class NestedTipCarrierTests(unittest.TestCase):
   def test_tip_spot_positions_on_star_deck(self):
-    # Venus' pick-up positions, with the carrier at x 752.5
+    # Hamilton's pick-up positions, with the carrier at x 752.5
     for rack_fn, site, a1_y in [
       (hamilton_96_tiprack_10uL_NTR, 0, 145.8),
       (hamilton_96_tiprack_50uL_NTR, 1, 241.8),
@@ -87,7 +87,7 @@ class NestedTipCarrierTests(unittest.TestCase):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
   def test_tip_spot_positions_on_the_mfx_ntr4_module(self):
-    # Venus' pick-up positions, with the MFX carrier at x 932.5 and the module in slot 3
+    # Hamilton's pick-up positions, with the MFX carrier at x 932.5 and the module in slot 3
     for rack_fn in (
       hamilton_96_tiprack_10uL_NTR,
       hamilton_96_tiprack_50uL_NTR,
@@ -95,7 +95,7 @@ class NestedTipCarrierTests(unittest.TestCase):
     ):
       with self.subTest(rack=rack_fn.__name__):
         deck = STARDeck()
-        module = hamilton_mfx_resource_holder_ntr4("module")
+        module = hamilton_mfx_module_tiprackholder_ntr("module")
         carrier = hamilton_mfx_carrier_L5_base("carrier", modules={3: module})
         module.assign_child_resource(rack := rack_fn("rack"))
         deck.assign_child_resource(carrier, location=Coordinate(932.5, 63, 100))
@@ -110,7 +110,7 @@ class NestedTipCarrierTests(unittest.TestCase):
   def test_a_stack_of_nested_tip_racks_on_both_holders(self):
     # Each rack in a nest stands its 16 mm stacking height above the one below, so the top rack's
     # A1 is at 184.0 + 16 per rack below it. Derived: no capture has picked up from a nest.
-    module = hamilton_mfx_resource_holder_ntr4("module")
+    module = hamilton_mfx_module_tiprackholder_ntr("module")
     mfx = hamilton_mfx_carrier_L5_base("mfx", modules={3: module})
     ntr_carrier = hamilton_tip_carrier_L5_ntr_a00("ntr_carrier")
     for holder, carrier, location, racks, a1 in [
@@ -137,7 +137,7 @@ class NestedTipCarrierTests(unittest.TestCase):
         for axis in ("x", "y", "z"):
           self.assertAlmostEqual(getattr(actual, axis), getattr(a1, axis))
 
-  def test_tips_end_where_venus_puts_the_tip_container(self):
+  def test_tips_end_where_hamilton_puts_the_tip_container(self):
     # Cntr.1.base of LT_L_NE_stack, TIP_50ul_L_NE_stack and ST_L_NE_stack, above the rack's bottom
     for rack_fn, container_base in [
       (hamilton_96_tiprack_10uL_NTR, 31.0),

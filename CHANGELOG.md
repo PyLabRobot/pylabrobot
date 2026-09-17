@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `HeadTool` (`pylabrobot.resources.head_tool.HeadTool`): a resource a channel carries, with `fitting_depth`, `collar_height`, `pick_up_location` and `kind()`, which is equal for tools a backend can use interchangeably.
 - `HamiltonCoreGripperTool` and `hamilton_core_gripper_tool`: the CO-RE grip tool as a `HeadTool`, with its 30 mm grip line as `total_length`.
 - `StandingTipRack`: a tip rack that stands on its own rather than sinking into a holder, with an optional `stacking_z_height`. Standing tip racks nest in a z-growing `ResourceStack`, as plates do.
-- `hamilton_96_tiprack_10uL_NTR` and `hamilton_96_tiprack_300uL_NTR`, built on `hamilton_96_tiprack_ntr` like `hamilton_96_tiprack_50uL_NTR`, and `hamilton_mfx_resource_holder_ntr4`, the MFX module for NTR stacks (191425).
+- `hamilton_96_tiprack_10uL_NTR` and `hamilton_96_tiprack_300uL_NTR`, built on `hamilton_96_tiprack_ntr` like `hamilton_96_tiprack_50uL_NTR`, and `hamilton_mfx_module_tiprackholder_ntr`, the MFX module for NTR stacks (191425).
 
 ### Changed
 
