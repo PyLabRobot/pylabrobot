@@ -108,7 +108,7 @@ class NestedTipCarrierTests(unittest.TestCase):
           for axis in ("x", "y", "z"):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
-  def test_a_framed_rack_sinks_into_the_mfx_tiprack_holder_as_into_a_tip_carrier(self):
+  def test_standard_tiprack_sinks_into_the_mfx_tiprackholder_as_into_a_tip_carrier(self):
     """The rack's skirt drops into the module, so its spots stand where a tip carrier puts them."""
     from pylabrobot.resources.hamilton import (
       TIP_CAR_480_A00,
@@ -123,12 +123,19 @@ class NestedTipCarrierTests(unittest.TestCase):
     module = hamilton_mfx_module_tiprackholder_standard("module")
     mfx = hamilton_mfx_carrier_L5_base("mfx", modules={0: module})
     module.assign_child_resource(on_module := hamilton_96_tiprack_1000uL_filter("on_module"))
-    deck.assign_child_resource(mfx, track=7)
+    deck.assign_child_resource(mfx, location=Coordinate(932.5, 63, 100))
 
     carrier_z = on_carrier.get_item("A1").get_location_wrt(deck).z
     module_z = on_module.get_item("A1").get_location_wrt(deck).z
     self.assertAlmostEqual(module_z, 100 + 18.2 + 96.5 - 6.0 + 7.5)
     self.assertLess(abs(module_z - carrier_z), 0.3)
+
+    # Hamilton's pick-up positions for a framed rack on the tip module, from the `1_Tip` and `3_Tip`
+    # sites of an MFX carrier its software defines: the rack centred on the module, in slot 0.
+    for spot, expected in (("A1", (950.5, 146.0)), ("H12", (1049.5, 83.0))):
+      actual = on_module.get_item(spot).get_absolute_location("c", "c", "b")
+      self.assertAlmostEqual(actual.x, expected[0])
+      self.assertAlmostEqual(actual.y, expected[1])
 
   def test_a_solid_coreii_rack_has_the_spots_of_a_framed_rack_at_its_top(self):
     from pylabrobot.resources.hamilton import (
