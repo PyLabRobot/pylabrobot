@@ -312,6 +312,7 @@ def hamilton_tip_10uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=15,
     tip_size=TipSize.LOW_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    model="hamilton_tip_10uL",
   )
 
 
@@ -330,6 +331,7 @@ def hamilton_tip_10uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=10,
     tip_size=TipSize.LOW_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    model="hamilton_tip_10uL_filter",
   )
 
 
@@ -351,6 +353,7 @@ def hamilton_tip_50uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=65,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    model="hamilton_tip_50uL",
   )
 
 
@@ -367,6 +370,7 @@ def hamilton_tip_50uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=60,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    model="hamilton_tip_50uL_filter",
   )
 
 
