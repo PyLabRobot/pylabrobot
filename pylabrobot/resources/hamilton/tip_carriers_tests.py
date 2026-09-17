@@ -134,15 +134,15 @@ class NestedTipCarrierTests(unittest.TestCase):
     from pylabrobot.resources.hamilton import (
       TIP_CAR_480_A00,
       hamilton_96_tiprack_300uL,
-      hamilton_96_tiprack_solid_corei,
-      hamilton_96_tiprack_solid_coreii,
+      hamilton_96_tiprack_raised_core_i,
+      hamilton_96_tiprack_raised_core_ii,
       hamilton_tip_300uL,
     )
 
     carrier = TIP_CAR_480_A00("tip_carrier")
     carrier[0] = framed = hamilton_96_tiprack_300uL("framed")
-    carrier[1] = solid = hamilton_96_tiprack_solid_coreii("solid", make_tip=hamilton_tip_300uL)
-    carrier[2] = corei = hamilton_96_tiprack_solid_corei("corei", make_tip=hamilton_tip_300uL)
+    carrier[1] = solid = hamilton_96_tiprack_raised_core_ii("solid", make_tip=hamilton_tip_300uL)
+    carrier[2] = corei = hamilton_96_tiprack_raised_core_i("corei", make_tip=hamilton_tip_300uL)
     # Hamilton's definitions: 16.0 and 12.5 mm above the site
     for rack, above in ((solid, 16.0), (corei, 12.5)):
       spot_z = rack.get_item("A1").get_absolute_location("c", "c", "b").z

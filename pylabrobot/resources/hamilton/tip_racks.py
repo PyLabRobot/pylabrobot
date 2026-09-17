@@ -58,16 +58,19 @@ def hamilton_96_tiprack_standard(
   )
 
 
-def hamilton_96_tiprack_solid_coreii(
+def hamilton_96_tiprack_raised_core_ii(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> EmbeddedTipRack:
-  """Solid CO-RE II tip rack for Hamilton STAR systems: a framed rack's footprint, without a frame."""
+  """Hamilton cat. no.: 6608647
+  Raised CO-RE II tip rack: a thick, unbending body with no frame, holding its tips 16 mm above the
+  holder it sinks into, where a standard rack holds them 1.5 mm above it.
+  """
   return EmbeddedTipRack(
     name=name,
     size_x=122.0,
     size_y=78.5,
     size_z=25.5,
-    model=hamilton_96_tiprack_solid_coreii.__name__,
+    model=hamilton_96_tiprack_raised_core_ii.__name__,
     sinking_depth=9.5,  # the body below the rim, which rests on the holder
     ordered_items=create_ordered_items_2d(
       TipSpot,
@@ -89,21 +92,18 @@ def hamilton_96_tiprack_solid_coreii(
   )
 
 
-def hamilton_96_tiprack_solid_corei(
+def hamilton_96_tiprack_raised_core_i(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> EmbeddedTipRack:
-  """Solid CO-RE I tip rack for Hamilton STAR systems: the CO-RE II rack's generation before, 3.5 mm
-  lower, as Hamilton's `Core96_TipSupport` definitions place its tips.
-
-  Its height is `hamilton_96_tiprack_solid_coreii`'s less 3.5 mm; only where its spots stand is
-  Hamilton's, the body itself is not measured.
+  """Raised CO-RE I tip rack: the generation before `hamilton_96_tiprack_raised_core_ii`, holding its
+  tips 3.5 mm lower. Its body is not measured.
   """
   return EmbeddedTipRack(
     name=name,
     size_x=122.0,
     size_y=78.5,
     size_z=22.0,
-    model=hamilton_96_tiprack_solid_corei.__name__,
+    model=hamilton_96_tiprack_raised_core_i.__name__,
     sinking_depth=9.5,  # the body below the rim, which rests on the holder
     ordered_items=create_ordered_items_2d(
       TipSpot,
