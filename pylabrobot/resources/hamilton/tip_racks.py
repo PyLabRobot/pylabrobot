@@ -55,6 +55,69 @@ def hamilton_tiprack_standard(
   )
 
 
+def _hamilton_96_tiprack_solid(
+  name: str, model: str, size_z: float, make_tip: TipCreator, with_tips: bool
+) -> EmbeddedTipRack:
+  """A solid CO-RE 96 tip support: a framed rack's footprint without a frame, its spots on its top."""
+  return EmbeddedTipRack(
+    name=name,
+    size_x=122.0,
+    size_y=78.5,
+    size_z=size_z,
+    model=model,
+    sinking_depth=9.5,  # the body below the rim, which rests on the holder
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      # the spots of every other rack, centred on the rack
+      dx=7.0,
+      dy=3.25,
+      dz=size_z,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
+      make_tip=make_tip,
+      name_prefix=name,
+    ),
+    with_tips=with_tips,
+  )
+
+
+def hamilton_96_tiprack_solid_coreii(
+  name: str, make_tip: TipCreator, with_tips: bool = True
+) -> EmbeddedTipRack:
+  """Hamilton cat. no.: 6608647
+  Hamilton name: 'Core96_TipSupport' (CO-RE II)
+  Solid CO-RE II tip support for the CO-RE 96 head and the channels.
+  """
+  return _hamilton_96_tiprack_solid(
+    name=name,
+    model=hamilton_96_tiprack_solid_coreii.__name__,
+    size_z=25.5,
+    make_tip=make_tip,
+    with_tips=with_tips,
+  )
+
+
+def hamilton_96_tiprack_solid_corei(
+  name: str, make_tip: TipCreator, with_tips: bool = True
+) -> EmbeddedTipRack:
+  """Hamilton name: 'Core96_TipSupport' (CO-RE I)
+  Solid CO-RE I tip support for the CO-RE 96 head and the channels: the CO-RE II support's generation
+  before, with its spots 3.5 mm lower, where Hamilton's definitions place them. The body is not
+  measured.
+  """
+  return _hamilton_96_tiprack_solid(
+    name=name,
+    model=hamilton_96_tiprack_solid_corei.__name__,
+    size_z=22.0,
+    make_tip=make_tip,
+    with_tips=with_tips,
+  )
+
+
 # # # # # # # # # # 10 ul Tips # # # # # # # # # #
 
 
