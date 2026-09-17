@@ -5,7 +5,6 @@ from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
   TIP_CAR_NTR_A00,
-  MFX_TIP_module,
   STARDeck,
   TIP_CAR_72_4mlTF_C00,
   TIP_CAR_96BC_5mlT_A00,
@@ -16,6 +15,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL,
   hamilton_96_tiprack_1000uL,
   hamilton_mfx_carrier_L5_base,
+  hamilton_mfx_tiprackholder_standard,
 )
 
 
@@ -59,7 +59,7 @@ class StandardTipCarrierTests(unittest.TestCase):
     ]:
       with self.subTest(rack=rack_fn.__name__):
         deck = STARDeck()
-        module = MFX_TIP_module("module")
+        module = hamilton_mfx_tiprackholder_standard("module")
         deck.assign_child_resource(
           hamilton_mfx_carrier_L5_base("mfx_carrier", modules={slot: module}), track=30
         )

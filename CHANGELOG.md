@@ -24,7 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- `MFX_TIP_module` is an `EmbeddedTipRackHolder` at Hamilton's height for Tip Module BC (188160), so a framed rack sinks into it and is centred on it as in a tip carrier: its tip spots were 6.1 mm too high. `hamilton_mfx_carrier_L5_base`'s sites start 0.5 mm further forward, at 4.5 mm, where Hamilton's definitions put the modules. Every framed rack on the module now gives the firmware Venus sends.
+- `MFX_TIP_module` is now `hamilton_mfx_tiprackholder_standard`, named for what it holds. The old name still works and warns.
+- `hamilton_mfx_tiprackholder_standard` is an `EmbeddedTipRackHolder`, so an `EmbeddedTipRack` sinks into it and is centred over its opening, as in a tip carrier's site. Since the tip rack refactor (#849) moved an embedded rack's origin, this holder, still a plain `ResourceHolder`, placed racks 6.1 mm above where it placed them before, ignoring their `sinking_depth`.
+- `hamilton_mfx_carrier_L5_base`'s sites start 0.5 mm further forward, at 4.5 mm: modules are 94 mm deep on a 96 mm pitch and centre what they hold, which is where Hamilton's own definitions place that content. Everything on an MFX carrier moves with it.
 - `HamiltonDeck` and `HamiltonSTARDeck`: `num_tracks` replaces `num_rails` and `track=` replaces `rails=`; the old names are deprecated but keep working, as do decks saved with `num_rails`. A STAR deck counts two fewer tracks than it counted rails (STARlet 30, STAR 54) at the same positions, so a count passed positionally to `HamiltonSTARDeck` is now read as tracks.
 
 ### Fixed
