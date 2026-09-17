@@ -659,7 +659,7 @@
   <section class="tex2jax_ignore mathjax_ignore" id="mfxcarrier">
 <h1>MFXCarrier<a class="headerlink" href="#mfxcarrier" title="Link to this heading">#</a></h1>
 <p>MFX Carriers are a user-configurable carrier system, created by Hamilton. The user can configure the carrier system by placing plate sites, tip racks, tilt modules and other items at specific locations by screwing them into pre-threaded holes in the carrier. Different carrier bases are available.</p>
-<p>In this tutorial, we will show how to create a custom carrier system using the MFX Carriers in PyLabRobot. We will use the <code class="docutils literal notranslate"><span class="pre">MFX_CAR_L5_base</span></code> as the base, and a deep well plate module (<code class="docutils literal notranslate"><span class="pre">MFX_DWP_rackbased_module</span></code>) and a tip module (<code class="docutils literal notranslate"><span class="pre">MFX_TIP_module</span></code>) as the modules.</p>
+<p>In this tutorial, we will show how to create a custom carrier system using the MFX Carriers in PyLabRobot. We will use the <code class="docutils literal notranslate"><span class="pre">MFX_CAR_L5_base</span></code> as the base, and a deep well plate module (<code class="docutils literal notranslate"><span class="pre">MFX_DWP_rackbased_module</span></code>) and a tip module (<code class="docutils literal notranslate"><span class="pre">hamilton_mfx_tiprackholder_standard</span></code>) as the modules.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
@@ -673,7 +673,7 @@
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
   <span class="n">hamilton_mfx_carrier_L5_base</span><span class="p">,</span>
   <span class="n">hamilton_mfx_plateholder_DWP_flat</span><span class="p">,</span>
-  <span class="n">MFX_TIP_module</span><span class="p">,</span>
+  <span class="n">hamilton_mfx_tiprackholder_standard</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -696,7 +696,7 @@
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_tip_rack_module</span> <span class="o">=</span> <span class="n">MFX_TIP_module</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"my_tip_rack_module"</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_tip_rack_module</span> <span class="o">=</span> <span class="n">hamilton_mfx_tiprackholder_standard</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"my_tip_rack_module"</span><span class="p">)</span>
 <span class="n">my_tip_rack_module</span>
 </pre></div>
 </div>
