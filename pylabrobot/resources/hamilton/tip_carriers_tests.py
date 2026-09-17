@@ -73,8 +73,6 @@ class StandardTipCarrierTests(unittest.TestCase):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
   def test_solid_tip_rack_positions_on_star_deck(self):
-    # CO-RE II: positions whose firmware commands match Venus. CO-RE I: where Hamilton's definition
-    # puts the spots.
     for rack_fn, a1_z in [
       (hamilton_96_tiprack_solid_coreii, 230.95),
       (hamilton_96_tiprack_solid_corei, 227.45),

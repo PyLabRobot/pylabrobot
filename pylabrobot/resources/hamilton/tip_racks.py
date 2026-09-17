@@ -106,8 +106,7 @@ def hamilton_96_tiprack_solid_corei(
 ) -> EmbeddedTipRack:
   """Hamilton name: 'Core96_TipSupport' (CO-RE I)
   Solid CO-RE I tip support for the CO-RE 96 head and the channels: the CO-RE II support's generation
-  before, with its spots 3.5 mm lower, where Hamilton's definitions place them. The body is not
-  measured.
+  before, with its spots 3.5 mm lower. The body is not measured.
   """
   return _hamilton_96_tiprack_solid(
     name=name,
