@@ -44,6 +44,7 @@ from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.resources.carrier import Carrier
 from pylabrobot.resources.hamilton.core_gripper_tools import HamiltonCoreGripperTool
+from pylabrobot.resources.hamilton.tip_creators import TipDropMethod, TipPickupMethod
 from pylabrobot.resources.hamilton.hamilton_decks import (
   HamiltonDeck,
 )
@@ -284,6 +285,72 @@ class SimulatedPipettes(_Simulated, Pipettes):
     resp = await super()._unchecked_fw_move_lowest_point_to_z_positions(zs)
     for channel, z in zs.items():
       self.update_location_by_reference_point(channel, z=z + self._below_stop_disc(channel))
+    return resp
+
+  def _record_tip_command(
+    self, x_positions: List[int], y_positions: List[int], tip_pattern: List[bool], z: int
+  ) -> None:
+    """Put the arm and the channels where a tip command leaves them, as the reads will find them.
+
+    The arm ends over the last column the command visited, each channel taking part at its Y, and
+    every channel at the height the command ends at.
+    """
+    involved = [i for i, used in enumerate(tip_pattern) if used and i < self.num_channels]
+    if involved:
+      self.arm.update_location_by_reference_point(x_positions[involved[-1]] / 10)
+    for channel in involved:
+      self.update_location_by_reference_point(channel, y=y_positions[channel] / 10)
+    for channel in range(self.num_channels):
+      self.update_location_by_reference_point(channel, z=z / 10)
+
+  async def _unchecked_fw_pick_up_tips(
+    self,
+    x_positions: List[int],
+    y_positions: List[int],
+    tip_pattern: List[bool],
+    tip_type_index: int,
+    begin_tip_pick_up_process: int,
+    end_tip_pick_up_process: int,
+    minimum_traverse_height_at_beginning_of_a_command: int,
+    pickup_method: TipPickupMethod,
+  ):
+    resp = await super()._unchecked_fw_pick_up_tips(
+      x_positions=x_positions,
+      y_positions=y_positions,
+      tip_pattern=tip_pattern,
+      tip_type_index=tip_type_index,
+      begin_tip_pick_up_process=begin_tip_pick_up_process,
+      end_tip_pick_up_process=end_tip_pick_up_process,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+      pickup_method=pickup_method,
+    )
+    self._record_tip_command(
+      x_positions, y_positions, tip_pattern, minimum_traverse_height_at_beginning_of_a_command
+    )
+    return resp
+
+  async def _unchecked_fw_drop_tips(
+    self,
+    x_positions: List[int],
+    y_positions: List[int],
+    tip_pattern: List[bool],
+    begin_tip_deposit_process: int,
+    end_tip_deposit_process: int,
+    minimum_traverse_height_at_beginning_of_a_command: int,
+    z_position_at_end_of_a_command: int,
+    discarding_method: TipDropMethod,
+  ):
+    resp = await super()._unchecked_fw_drop_tips(
+      x_positions=x_positions,
+      y_positions=y_positions,
+      tip_pattern=tip_pattern,
+      begin_tip_deposit_process=begin_tip_deposit_process,
+      end_tip_deposit_process=end_tip_deposit_process,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+      z_position_at_end_of_a_command=z_position_at_end_of_a_command,
+      discarding_method=discarding_method,
+    )
+    self._record_tip_command(x_positions, y_positions, tip_pattern, z_position_at_end_of_a_command)
     return resp
 
   async def move_stop_disc_to_z_position(self, channel: int, z: float, *args: Any, **kwargs: Any):
@@ -695,6 +762,8 @@ class SimulatedISWAP(_Simulated, iSWAP):
           return {"rg": [home, home]}, "the gripper's home and parking width"
         width = c.gripper_mm_to_increments(gripper.jaw_width)
         return {"rg": [width, width]}, "how far the model has the jaws open"
+    if (module, command) == ("C0", "RG"):
+      return {"rg": int(self.device.iswap_parked)}, "whether the arm was last parked"
     if (module, command) == ("C0", "QP"):
       # Whether the arm holds something is whether the model has anything hanging off the gripper
       # that is not part of the gripper: its body and its two fingers are its own.
@@ -1053,6 +1122,7 @@ class STARSimulationDriver(STARDriver):
     self.simulated_head384: Head384Configuration = carried.get("head384") or Head384Configuration()
     self.simulated_pipettes: Optional[PipettesConfiguration] = carried.get("pipettes")
     self.simulated_iswap: iSWAPConfiguration = carried.get("iswap") or iSWAPConfiguration()
+    self.iswap_parked = True
 
     channels = self.simulated_configuration.num_pip_channels
     if tips_mounted is None:
@@ -1218,6 +1288,12 @@ class STARSimulationDriver(STARDriver):
       num_channels=self.num_channels if carries_a_list else 0,
       **kwargs,
     )
+    # Whether the iSWAP is parked is what its last move was: parking parks it, and any other move of
+    # the arm, or initializing it, takes it out of its parking position.
+    if (module, command) == ("C0", "PG"):
+      self.iswap_parked = True
+    elif (module, command) == ("C0", "FI") or (module == "R0" and command[0] not in ("R", "Q")):
+      self.iswap_parked = False
     answered = await self._answer(module, command, **kwargs)
     if answered is None:
       self._log_exchange(cmd, None)

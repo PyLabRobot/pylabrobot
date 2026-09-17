@@ -4,7 +4,7 @@ from collections import OrderedDict
 from typing import Any, Dict, List, Literal, Mapping, Optional, cast, get_args
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.head_tool import HeadTool
+from pylabrobot.resources.head_tool import HeadTool, move_tool
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.well import CrossSectionType
@@ -114,7 +114,7 @@ class TipMountingShaft(Resource):
       y=self.get_size_y() / 2 - tip.pick_up_location.y,
       z=tip.fitting_depth - tip.pick_up_location.z,
     )
-    self.assign_child_resource(tip, location=location)
+    move_tool(tip, lambda: self.assign_child_resource(tip, location=location))
 
   def release_tip(self) -> Resource:
     """Let go of the tip this shaft is carrying.

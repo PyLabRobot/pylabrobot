@@ -56,6 +56,9 @@ from pylabrobot.utils.configuration_json import to_jsonable
 
 logger = logging.getLogger(__name__)
 
+# The tip type table entry the CO-RE grip tool is picked up by, as legacy reserves it.
+CORE_GRIPPER_TIP_TYPE_INDEX = 14
+
 # What a declaration and a device have to agree on for the one to stand for the other: what is
 # fitted and how much of it. Everything else is either identity, which is the device's own, or
 # geometry, which follows from what is fitted.
@@ -1048,8 +1051,11 @@ class STARDriver:
     """
     kind = tip.kind()
     if kind not in self._tip_type_indices:
-      index = len(self._tip_type_indices) + 1
-      if index > 99:
+      # The first free entry, as legacy takes them, skipping the one the CO-RE grip tool is
+      # picked up by: writing a tip there would change what the grip tool is to the device.
+      taken = set(self._tip_type_indices.values()) | {CORE_GRIPPER_TIP_TYPE_INDEX}
+      index = next((i for i in range(1, 100) if i not in taken), None)
+      if index is None:
         raise ValueError("the tip type table is full: 99 tip types have already been defined.")
       await self.define_tip_needle(
         tip_type_table_index=index,

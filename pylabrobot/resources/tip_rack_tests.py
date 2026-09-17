@@ -2,6 +2,7 @@ import unittest
 from typing import cast
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.errors import HasTipError
 from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
@@ -86,3 +87,62 @@ class TipSpotHoldsItsTip(unittest.TestCase):
     """What a holder carries is state, so a deck round-trips to an equal deck."""
     empty = cast(TipRack, hamilton_96_tiprack_300uL("rack", with_tips=False))
     self.assertEqual(self.rack, empty)
+
+
+class TipSpotHoldsItsTipInTheTree(unittest.TestCase):
+  """What `TipSpot.tip` reports is the tree alone: a tip moved by anything is where the tree has it."""
+
+  def setUp(self):
+    self.rack = cast(TipRack, hamilton_96_tiprack_300uL("rack"))
+    self.spot = self.rack.get_item("A1")
+
+  def test_a_tip_taken_out_of_the_tree_leaves_the_spot_empty(self):
+    tip = self.spot.unassign_tip()
+    self.assertIsNone(tip.parent)
+    self.assertIsNone(self.spot.tip)
+
+  def test_a_tip_put_into_the_tree_is_the_spots_tip(self):
+    tip = self.spot.unassign_tip()
+    self.spot.assign_tip(tip)
+    self.assertIs(self.spot.tip, tip)
+    self.assertEqual(tip.location, Coordinate(-0.5, -0.5, tip.collar_height - tip.total_tip_length))
+
+  def test_a_tip_mounted_on_a_shaft_in_the_same_tree_leaves_its_spot(self):
+    from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
+    from pylabrobot.resources.resource import Resource
+
+    world = Resource("world", size_x=500, size_y=500, size_z=500)
+    world.assign_child_resource(self.rack, location=Coordinate.zero())
+    shaft = TipMountingShaft("shaft", tip_pickup_mode="core")
+    world.assign_child_resource(shaft, location=Coordinate(300, 300, 300))
+    tip = self.spot.tip
+    assert tip is not None
+    shaft.mount_tip(tip)
+    self.assertIs(tip.parent, shaft)
+    self.assertIsNone(self.spot.tip)
+
+  def test_a_spot_holding_a_tip_is_refused_another(self):
+    other = self.rack.get_item("B1").unassign_tip()
+    with self.assertRaises(HasTipError):
+      self.spot.assign_tip(other)
+
+  def test_a_tip_that_cannot_be_mounted_stays_in_its_spot(self):
+    from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
+
+    shaft = TipMountingShaft("shaft", tip_pickup_mode="core")
+
+    def refuse(resource):
+      raise RuntimeError("refused")
+
+    shaft.register_will_assign_resource_callback(refuse)
+    tip = self.spot.tip
+    assert tip is not None
+    with self.assertRaises(RuntimeError):
+      shaft.mount_tip(tip)
+    self.assertIs(tip.parent, self.spot)
+    self.assertIs(self.spot.tip, tip)
+
+  def test_a_second_tip_assigned_directly_is_refused(self):
+    other = self.rack.get_item("B1").unassign_tip()
+    with self.assertRaises(HasTipError):
+      self.spot.assign_child_resource(other, location=Coordinate.zero())

@@ -16,7 +16,8 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipSpot
-from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
+from pylabrobot.legacy.tip_tracker import TipTracker
+from pylabrobot.resources.tip_tracking import does_tip_tracking
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.volume_tracker import does_volume_tracking
 

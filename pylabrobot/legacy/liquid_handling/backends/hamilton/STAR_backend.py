@@ -157,7 +157,7 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
-from pylabrobot.resources.tip_tracker import does_tip_tracking
+from pylabrobot.resources.tip_tracking import does_tip_tracking
 from pylabrobot.resources.trash import Trash
 
 # The name SubsystemError had before it moved here, kept so existing code still catches it.

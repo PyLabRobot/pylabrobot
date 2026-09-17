@@ -68,7 +68,7 @@ from pylabrobot.resources.resource_state import (
   successes_from_failed_channels,
 )
 from pylabrobot.resources.tip_rack import TipSpot
-from pylabrobot.resources.tip_tracker import TipTracker
+from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well
 

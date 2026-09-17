@@ -45,7 +45,7 @@ from pylabrobot.resources.resource_state import (
   successes_from_failed_channels,
 )
 from pylabrobot.resources.tip_rack import TipSpot
-from pylabrobot.resources.tip_tracker import TipTracker
+from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.resources.well import Well
 
 from .. import prep_commands as PrepCmd

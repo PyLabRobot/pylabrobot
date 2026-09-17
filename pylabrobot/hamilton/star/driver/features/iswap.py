@@ -2935,6 +2935,15 @@ class iSWAP:
 
   # -- parking ---------------------------------------------------------------
 
+  async def request_parked(self) -> bool:
+    """Request whether the arm is in its parking position. `C0 RG`.
+
+    Returns:
+      True when it is parked.
+    """
+    resp = await self._driver.send_command(module="C0", command="RG", fmt="rg#")
+    return cast(int, resp["rg"]) == 1
+
   async def _unchecked_fw_park(self, traverse_height: Optional[float] = None):
     """Close the gripper and park the arm. Nothing is guarded and nothing is recorded.
 

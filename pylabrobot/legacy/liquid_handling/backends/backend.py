@@ -23,7 +23,7 @@ from pylabrobot.legacy.liquid_handling.standard import (
 )
 from pylabrobot.legacy.machines.backend import MachineBackend
 from pylabrobot.resources import Deck, Tip
-from pylabrobot.resources.tip_tracker import TipTracker
+from pylabrobot.legacy.tip_tracker import TipTracker
 
 
 class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):

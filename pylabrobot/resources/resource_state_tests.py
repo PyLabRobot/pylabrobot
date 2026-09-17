@@ -21,7 +21,8 @@ from pylabrobot.resources.resource_state import (
 )
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipSpot
-from pylabrobot.resources.tip_tracker import TipTracker, set_tip_tracking
+from pylabrobot.legacy.tip_tracker import TipTracker
+from pylabrobot.resources.tip_tracking import set_tip_tracking
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.volume_tracker import set_volume_tracking
 from pylabrobot.resources.well import Well, WellBottomType
