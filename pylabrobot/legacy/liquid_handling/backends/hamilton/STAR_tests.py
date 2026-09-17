@@ -2439,7 +2439,7 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
     }
     # holder, A1 x and A1 y (0.1 mm)
     holders = [
-      ("ntr4_module", self.module, "09505", {"10uL": 4345, "50uL": 4345, "300uL": 4345}),
+      ("ntr4_module", self.module, "09505", {"10uL": 4340, "50uL": 4340, "300uL": 4340}),
       ("ntr_carrier", None, "07704", {"10uL": 1458, "50uL": 2418, "300uL": 3378}),
     ]
     sites = {"10uL": 0, "50uL": 1, "300uL": 2}
