@@ -448,9 +448,9 @@ class TestTipHandlingUntracked(unittest.IsolatedAsyncioTestCase):
 
 
 class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
-  """The commands for Hamilton's nested tip racks are what Hamilton's own software sends.
+  """The commands for Hamilton's tip racks are what Hamilton's own software sends.
 
-  Each rack on an NTR4 module on an MFX carrier and on an NTR carrier, as recorded, but for `td`:
+  Each rack on the holders Hamilton's software picked up from, as recorded, but for `td`:
   Hamilton's software sends `td1`, and PyLabRobot sends `td0`, letting the firmware take the pick-up
   process from the tip type. Tip tracking is on, so each tip goes back into its spot.
   """
@@ -516,3 +516,116 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
               f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1",
             ],
           )
+
+  async def test_framed_tip_racks_on_tip_carrier_ground_truth(self):
+    from pylabrobot.resources.hamilton import (
+      TIP_CAR_480BC_A00,
+      hamilton_96_tiprack_10uL,
+      hamilton_96_tiprack_50uL,
+      hamilton_96_tiprack_300uL,
+      hamilton_96_tiprack_300uL_filter_slim,
+      hamilton_96_tiprack_1000uL_filter,
+    )
+
+    # rack, carrier x, site, tip definition (without its index), pick-up tp, drop tp/tz (stop disc,
+    # ti1)
+    tips = [
+      (hamilton_96_tiprack_10uL, 437.5, 0, "tf0tl0219tv00150tg1tu0", "2224", "tp2224tz2144"),
+      (hamilton_96_tiprack_50uL, 437.5, 1, "tf0tl0424tv00650tg2tu0", "2244", "tp2244tz2164"),
+      (hamilton_96_tiprack_300uL, 572.5, 0, "tf0tl0519tv04000tg2tu0", "2244", "tp2244tz2164"),
+      (
+        hamilton_96_tiprack_1000uL_filter,
+        572.5,
+        1,
+        "tf1tl0871tv10650tg3tu0",
+        "2264",
+        "tp2264tz2184",
+      ),
+      (
+        hamilton_96_tiprack_300uL_filter_slim,
+        572.5,
+        2,
+        "tf1tl0870tv03450tg3tu0",
+        "2264",
+        "tp2264tz2184",
+      ),
+    ]
+
+    for rack_fn, carrier_x, site, definition, tp, drop in tips:
+      with self.subTest(tip=rack_fn.__name__):
+        pipettes, _, sent = await channels_over_a_rack()
+        deck = pipettes._driver.deck
+        assert deck is not None
+        deck.unassign_child_resource(deck.get_resource("tip_carrier"))  # where this carrier goes
+        carrier = TIP_CAR_480BC_A00("ground_truth_carrier")
+        deck.assign_child_resource(carrier, location=Coordinate(carrier_x, 63, 100))
+        carrier[site] = rack = rack_fn(rack_fn.__name__)
+        sent.clear()
+
+        spots = rack["A1:H1"]
+        await pipettes.pick_up_tips(spots)
+        await pipettes.drop_tips(spots)
+
+        tt = sent[0][4:8]
+        # A1 17.9 mm right of the carrier, 145.8 mm back on site 0, sites 96 mm apart (0.1 mm)
+        xp = " ".join([f"{round(carrier_x * 10) + 179:05}"] * 8)
+        yp = " ".join(f"{1458 + 960 * site - 90 * row:04}" for row in range(8))
+        self.assertEqual(
+          sent,
+          [
+            f"C0TT{tt}{definition}",
+            f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2164th2450td0",
+            f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1",
+          ],
+        )
+
+  async def test_framed_tip_racks_on_mfx_tip_module_ground_truth(self):
+    from pylabrobot.resources.hamilton import (
+      hamilton_96_tiprack_10uL,
+      hamilton_96_tiprack_50uL,
+      hamilton_96_tiprack_300uL,
+      hamilton_96_tiprack_300uL_filter_slim,
+      hamilton_96_tiprack_1000uL_filter,
+      hamilton_mfx_carrier_L5_base,
+      hamilton_mfx_module_tiprackholder_standard,
+    )
+
+    # rack, MFX slot, tip definition (without its index), pick-up tp, drop tp/tz (stop disc, ti1)
+    tips = [
+      (hamilton_96_tiprack_10uL, 0, "tf0tl0219tv00150tg1tu0", "2222", "tp2222tz2142"),
+      (hamilton_96_tiprack_50uL, 1, "tf0tl0424tv00650tg2tu0", "2242", "tp2242tz2162"),
+      (hamilton_96_tiprack_300uL, 4, "tf0tl0519tv04000tg2tu0", "2242", "tp2242tz2162"),
+      (hamilton_96_tiprack_1000uL_filter, 0, "tf1tl0871tv10650tg3tu0", "2262", "tp2262tz2182"),
+      (hamilton_96_tiprack_300uL_filter_slim, 1, "tf1tl0870tv03450tg3tu0", "2262", "tp2262tz2182"),
+    ]
+
+    for rack_fn, slot, definition, tp, drop in tips:
+      with self.subTest(tip=rack_fn.__name__):
+        pipettes, _, sent = await channels_over_a_rack()
+        deck = pipettes._driver.deck
+        assert deck is not None
+        module = hamilton_mfx_module_tiprackholder_standard("tip_module")
+        deck.assign_child_resource(
+          hamilton_mfx_carrier_L5_base("mfx_carrier", modules={slot: module}),
+          location=Coordinate(752.5, 63, 100),
+        )
+        rack = rack_fn(rack_fn.__name__)
+        module.assign_child_resource(rack)
+        sent.clear()
+
+        spots = rack["A1:H1"]
+        await pipettes.pick_up_tips(spots)
+        await pipettes.drop_tips(spots)
+
+        tt = sent[0][4:8]
+        # A1 146.0 mm back on slot 0, slots 96 mm apart (0.1 mm)
+        xp = " ".join(["07705"] * 8)
+        yp = " ".join(f"{1460 + 960 * slot - 90 * row:04}" for row in range(8))
+        self.assertEqual(
+          sent,
+          [
+            f"C0TT{tt}{definition}",
+            f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2162th2450td0",
+            f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1",
+          ],
+        )
