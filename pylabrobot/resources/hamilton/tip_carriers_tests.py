@@ -72,7 +72,7 @@ class StandardTipCarrierTests(unittest.TestCase):
           for axis in ("x", "y", "z"):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
-  def test_solid_tip_rack_positions_on_star_deck(self):
+  def test_raised_tip_rack_positions_on_star_deck(self):
     for rack_fn, a1_z in [
       (hamilton_96_tiprack_raised_core_ii, 230.95),
       (hamilton_96_tiprack_raised_core_i, 227.45),
