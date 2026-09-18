@@ -1373,12 +1373,13 @@ class Pipettes:
       index = channel_indices.get(int(bounds.channel))
       if index is not None:
         by_channel[index] = {
-          "x_min": bounds.x_min,
-          "x_max": bounds.x_max,
-          "y_min": bounds.y_min,
-          "y_max": bounds.y_max,
-          "z_min": bounds.z_min,
-          "z_max": bounds.z_max,
+          # To 0.01 mm: the device answers in float32, whose step here is a ten-thousandth of that.
+          "x_min": round(bounds.x_min, 2),
+          "x_max": round(bounds.x_max, 2),
+          "y_min": round(bounds.y_min, 2),
+          "y_max": round(bounds.y_max, 2),
+          "z_min": round(bounds.z_min, 2),
+          "z_max": round(bounds.z_max, 2),
         }
     return by_channel
 
@@ -1425,10 +1426,69 @@ class Pipettes:
     for p in resp.positions:
       ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
       if ch_idx is not None:
-        indexed.append((ch_idx, Coordinate(x=p.position_x, y=p.position_y, z=p.position_z)))
+        # To 0.01 mm, as the bounds are: what the device answers is float32.
+        indexed.append(
+          (
+            ch_idx,
+            Coordinate(
+              x=round(p.position_x, 2), y=round(p.position_y, 2), z=round(p.position_z, 2)
+            ),
+          )
+        )
 
     indexed.sort(key=lambda pair: pair[0])
     return [coord for _, coord in indexed]
+
+  def _check_reachable(self, channel: int, axis: Literal["x", "y", "z"], value: float) -> None:
+    """Raise unless a channel reaches a position along one axis.
+
+    The windows are the firmware's own, read at setup; a channel whose window was not read is left
+    unchecked.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      axis: which axis - `x` along the gantry, `y` across it, `z` up and down.
+      value: where it would be sent, in mm.
+
+    Raises:
+      ValueError: If the channel cannot reach it.
+    """
+    if channel >= len(self.configuration.channels):
+      return
+    window = getattr(self.configuration.channels[channel], f"{axis}_range")
+    if window is None:
+      return
+    low, high = window
+    # Below its Z minimum a channel is only sent by a probe, which judges its own depth.
+    if value > high or (axis != "z" and value < low):
+      raise ValueError(f"{axis}={value} outside channel {channel} range [{low:.1f}, {high:.1f}]")
+
+  async def _unchecked_fw_move_to_position(
+    self,
+    x: float,
+    channels: List[int],
+    y: Union[float, List[float]],
+    z: Union[float, List[float]],
+    via_lane: bool = False,
+  ) -> None:
+    """Send the gantry move (cmd=26, or 27 via the lane). Nothing is guarded and nothing is recorded.
+
+    Args:
+      x: where to send the gantry, in mm.
+      channels: which channels, sorted, 0-indexed from the back.
+      y: where to send each channel along Y, in mm; one value for all, or one per channel.
+      z: where to send each channel along Z, in mm; one value for all, or one per channel.
+      via_lane: travel by the firmware's lane rather than directly.
+    """
+    move_parameters = _build_pipettor_gantry_move_parameters(
+      x, channels, y, z, channel_order=self.channel_order
+    )
+    if via_lane:
+      await self._driver.send_command(
+        PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters)
+      )
+    else:
+      await self._driver.send_command(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
 
   # -- x position ----------------------------------------------------------------------------------
 
@@ -1448,23 +1508,43 @@ class Pipettes:
       raise RuntimeError("the channels reported no positions")
     return float(positions[0].x)
 
-  async def move_to_x_position(self, x: float) -> None:
-    """Move the gantry X axis to a position (in mm).
+  async def move_to_x_position(
+    self,
+    x: float,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    minimum_traverse_height: Optional[float] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
+  ) -> None:
+    """Move the gantry along X. The channels share it, so they all move.
 
-    On the Prep, X is shared across all channels (single gantry): all channels move together in X.
-
-    Analogous to STARBackend.move_to_x_position().
+    The arm's own axis move, which leaves Y and Z where they are.
 
     Args:
-      x: Target X position in mm.
+      x: target x in mm.
+      speed: speed in mm/s. Defaults to the arm's `default_speed`.
+      acceleration: acceleration in mm/s2. Defaults to the arm's `default_acceleration`.
+      minimum_traverse_height: raise every channel standing below this height, in mm, before the
+        arm travels. `default_minimum_traverse_height` when None; 0 raises nothing.
+      z_speed: how fast to raise them, in mm/s. `default_z_speed` when None.
+      z_acceleration: the Z drive acceleration for the raise, in mm/s2, then restored.
 
     Raises:
-      RuntimeError: If the channels report no positions.
+      ValueError: If a channel cannot reach `x`, or a speed or acceleration is out of range.
+      RuntimeError: If there is no arm to move.
     """
-    positions = await self.request_locations()
-    if not positions:
-      raise RuntimeError("the channels reported no positions")
-    await self.move_to_location(Coordinate(x, positions[0].y, positions[0].z), use_channels=0)
+    arm = None if self._driver is None else self._driver.x_arm
+    if arm is None:
+      raise RuntimeError("no arm to move; have you called `prep.setup()`?")
+    await arm.move_to_x_position(
+      x,
+      speed=speed,
+      acceleration=acceleration,
+      minimum_traverse_height=minimum_traverse_height,
+      z_speed=z_speed,
+      z_acceleration=z_acceleration,
+    )
 
   # -- y position ----------------------------------------------------------------------------------
 
@@ -1561,15 +1641,7 @@ class Pipettes:
           targets[i + 1] = targets[i] - spacing
 
     for channel, y in targets.items():
-      window = (
-        self.configuration.channels[channel].y_range
-        if channel < len(self.configuration.channels)
-        else None
-      )
-      if window is not None and not window[0] <= y <= window[1]:
-        raise ValueError(
-          f"y={y} outside channel {channel} range [{window[0]:.1f}, {window[1]:.1f}]"
-        )
+      self._check_reachable(channel, "y", y)
     self._check_y_spacing(targets, named=ys, make_space_available=not make_space)
 
     try:
@@ -1732,10 +1804,7 @@ class Pipettes:
       if not 0 <= channel < len(positions):
         raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
     for channel, z in zs.items():
-      if channel < len(self.configuration.channels):
-        z_range = self.configuration.channels[channel].z_range
-        if z_range is not None and z > z_range[1]:
-          raise ValueError(f"z={z} above channel {channel} maximum {z_range[1]:.1f}")
+      self._check_reachable(channel, "z", z)
     targets = {i: position.z for i, position in enumerate(positions)}
     targets.update(zs)
 
@@ -1857,164 +1926,175 @@ class Pipettes:
 
   # -- xyz position --------------------------------------------------------------------------------
 
+  async def move_to_xy_positions(
+    self,
+    x: float,
+    ys: Dict[int, float],
+    *,
+    minimum_traverse_height: Optional[float] = None,
+    via_lane: bool = False,
+    x_speed: Optional[float] = None,
+    x_speed_scale: Optional[int] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
+  ) -> None:
+    """Move the channels across the deck, travelling at one height.
+
+    Every channel below `minimum_traverse_height` is raised to it first, and the lateral move is
+    sent with Z already there. Left to itself the gantry drives X, Y and Z at once from some
+    positions.
+
+    Args:
+      x: where to send the gantry, in mm. The channels share it.
+      ys: where to send each channel, in mm, keyed by channel, 0-indexed from the back. A channel
+        left out keeps its Y, and is raised with the others.
+      minimum_traverse_height: the height to travel at, in mm. `default_minimum_traverse_height`
+        when None; 0 raises nothing, so the channels travel at the height they stand at.
+      via_lane: travel by the firmware's lane - Y, then X - rather than both together.
+      x_speed: how fast to drive X, in mm/s, set as the nearest X speed scale and put back after.
+        `default_x_speed` when the move takes the gantry to another x.
+      x_speed_scale: the X speed scale itself, in percent, 1 to 100, instead of `x_speed`.
+      z_speed: how fast to raise the channels, in mm/s. `default_z_speed` when None.
+      z_acceleration: the Z drive acceleration for the raise, in mm/s2, then restored. None leaves
+        it.
+
+    Raises:
+      ValueError: If a channel does not exist, a position is out of its reach, the channels would
+        stand closer than they may in Y, or a speed or scale is out of range.
+      RuntimeError: If a speed scale is given but there is no driver to set it through.
+    """
+    if not ys:
+      return
+    if x_speed is not None and x_speed_scale is not None:
+      raise ValueError("give x_speed or x_speed_scale, not both")
+    channels = sorted(ys)
+    if max(channels) >= self.num_channels or min(channels) < 0:
+      raise ValueError(f"channels must be between 0 and {self.num_channels - 1}, are {channels}")
+    traverse = (
+      self.default_minimum_traverse_height
+      if minimum_traverse_height is None
+      else minimum_traverse_height
+    )
+    for channel in channels:
+      self._check_reachable(channel, "x", x)
+      self._check_reachable(channel, "y", ys[channel])
+      self._check_reachable(channel, "z", traverse)
+
+    arm = None if self._driver is None else self._driver.x_arm
+    x_arm_configuration = arm.configuration if arm is not None else XArmConfiguration()
+    if x_speed is not None:
+      x_speed_scale = x_arm_configuration.speed_to_scale_percent(x_speed)
+    if x_speed_scale is not None and not 1 <= x_speed_scale <= 100:
+      raise ValueError(f"x speed scale must be between 1 and 100 percent, is {x_speed_scale}")
+    if x_speed_scale is not None and self._driver is None:
+      raise RuntimeError("speed scales are set through the driver, and this has none")
+    named_speed = x_speed is not None or x_speed_scale is not None
+
+    restore_x: Optional[int] = None
+    try:
+      # Every channel rides the gantry, so a channel that is low travels low: all are raised.
+      standing = await self.request_locations()
+      below = {channel: traverse for channel, at in enumerate(standing) if at.z < traverse}
+      if below:
+        await self.move_tool_bottom_to_z_positions(
+          below, speed=z_speed, acceleration=z_acceleration
+        )
+
+      # The spacing is judged on where every channel ends up, the ones not named included.
+      final_y = {channel: at.y for channel, at in enumerate(standing)}
+      final_y.update(ys)
+      self._check_y_spacing(final_y, named=channels)
+
+      # With no speed named, the default is set only for a move that takes the gantry somewhere.
+      if not named_speed and not (standing and standing[0].x == x):
+        x_speed_scale = x_arm_configuration.speed_to_scale_percent(self.default_x_speed)
+      if self._driver is not None and x_speed_scale is not None:
+        restore_x = await self._driver.request_x_speed_scale()
+        await self._driver.set_x_speed_scale(x_speed_scale)
+
+      await self._unchecked_fw_move_to_position(
+        x,
+        channels,
+        [ys[channel] for channel in channels],
+        [traverse] * len(channels),
+        via_lane=via_lane,
+      )
+      # What was asked, recorded as soon as the command answers; the read below replaces it with
+      # where the channels actually stopped.
+      if arm is not None:
+        arm.update_location_by_reference_point(x)
+      for channel in channels:
+        self.update_location_by_reference_point(channel, y=ys[channel], z=traverse)
+    finally:
+      try:
+        if self._driver is not None and restore_x is not None:
+          await self._driver.set_x_speed_scale(restore_x)
+      finally:
+        await self._record_where_they_stopped()
+
   async def move_to_location(
     self,
     location: Union[Coordinate, List[Coordinate]],
     use_channels: Optional[Union[int, List[int]]] = 0,
     *,
+    minimum_traverse_height: Optional[float] = None,
     via_lane: bool = False,
     x_speed: Optional[float] = None,
     x_speed_scale: Optional[int] = None,
-    z_speed_scale: Optional[int] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
   ) -> None:
-    """Move channels to locations on the deck (cmd=26, or 27 via the lane).
+    """Move channels to locations on the deck: raise, travel, descend.
 
-    The channels ride one gantry, so they share X: every location must name the same x.
-
-    The move command carries no speed. What the firmware offers is MLPrep's X and Z speed scales,
-    which hold for every move until changed, so a scale given here is set for this move and the one
-    that was set before is put back afterwards, whether or not the move succeeded. Y has no scale.
+    Three moves the gantry cannot blend into one another. Each records where it left the channels,
+    so this has no `finally` of its own; what it raises, it raises before anything has moved.
 
     Args:
-      location: where to send each channel's reference point, in mm on the deck. One location for
-        every channel named, or one per channel, in the order of `use_channels`.
+      location: where to send each channel's reference point, in mm on the deck. One location, or
+        one per channel in the order of `use_channels`.
       use_channels: which channels, 0-indexed from the back. One index, or a list. Defaults to 0.
-      via_lane: travel by the firmware's lane rather than directly.
-      x_speed: how fast to drive X for this move, in mm/s. Set as the nearest X speed scale, so it
-        is rounded to whole multiples of `XArmConfiguration.speed_per_scale_percent`. Defaults to
-        `default_x_speed` when the move takes the gantry to another x; a move that keeps it where it
-        stands leaves the scale as it is.
-      x_speed_scale: overrides `x_speed` with the X speed scale itself, in percent, 1 to 100. Give
-        one or the other, not both.
-      z_speed_scale: how fast to drive Z for this move, in percent of full speed, 1 to 100. None
-        keeps the scale MLPrep has.
+      minimum_traverse_height: the height to travel at, in mm. `default_minimum_traverse_height`
+        when None; 0 raises nothing, so the channels travel at the height they stand at.
+      via_lane: travel by the firmware's lane - Y, then X - rather than both together.
+      x_speed: how fast to drive X for the lateral move, in mm/s.
+      x_speed_scale: the X speed scale itself, in percent, instead of `x_speed`.
+      z_speed: how fast to raise and to descend, in mm/s. `default_z_speed` when None.
+      z_acceleration: the Z drive acceleration for both, in mm/s2, then restored. None leaves it.
 
     Raises:
-      ValueError: If a channel does not exist, the locations do not match the channels, they do not
-        share one x, a location is outside a channel's reach, a speed or speed scale is out of
-        range, or both `x_speed` and `x_speed_scale` are given.
-      RuntimeError: If a speed scale is given but there is no driver to set it through.
+      ValueError: As `move_to_xy_positions`, and if the locations do not match the channels named
+        or do not share one x.
     """
-    if x_speed is not None and x_speed_scale is not None:
-      raise ValueError("give x_speed or x_speed_scale, not both")
-    x_speed_named = x_speed is not None or x_speed_scale is not None
-    arm = None if self._driver is None else self._driver.x_arm
-    x_arm_configuration = arm.configuration if arm is not None else XArmConfiguration()
-    if x_speed is not None:
-      x_speed_scale = x_arm_configuration.speed_to_scale_percent(x_speed)
-    for axis, scale in (("x", x_speed_scale), ("z", z_speed_scale)):
-      if scale is not None and not 1 <= scale <= 100:
-        raise ValueError(f"{axis} speed scale must be between 1 and 100 percent, is {scale}")
-    if (x_speed_scale is not None or z_speed_scale is not None) and self._driver is None:
-      raise RuntimeError("speed scales are set through the driver, and this has none")
-    if use_channels is None:
-      named = [0]
-    elif isinstance(use_channels, list):
-      named = list(use_channels)
+    if isinstance(use_channels, list):
+      channels = list(use_channels)
     else:
-      # int or int-like (e.g. numpy.int64); single channel
-      named = [int(use_channels)]
-    if named and (max(named) >= self.num_channels or min(named) < 0):
-      raise ValueError(f"use_channels must be between 0 and {self.num_channels - 1}, are {named}")
-    locations = location if isinstance(location, list) else [location] * len(named)
-    if len(locations) != len(named):
-      raise ValueError(f"{len(locations)} locations given for {len(named)} channels")
-    if len({loc.x for loc in locations}) > 1:
+      channels = [0 if use_channels is None else int(use_channels)]
+    locations = location if isinstance(location, list) else [location] * len(channels)
+    if len(locations) != len(channels):
+      raise ValueError(f"{len(locations)} locations given for {len(channels)} channels")
+    if len({point.x for point in locations}) > 1:
       raise ValueError(
         f"the channels share one gantry, so every location needs the same x; got "
-        f"{sorted({loc.x for loc in locations})}"
+        f"{sorted({point.x for point in locations})}"
       )
-    # Each location stays with the channel it was named for, in channel order.
-    paired = sorted(zip(named, locations), key=lambda pair: pair[0])
-    channels = [channel for channel, _ in paired]
-    x = locations[0].x if locations else 0.0
-    y_vals = [loc.y for _, loc in paired]
-    z_vals = [loc.z for _, loc in paired]
+    for channel, point in zip(channels, locations):
+      self._check_reachable(channel, "z", point.z)
 
-    # Validate against per-channel movement bounds (cached from firmware at setup).
-    for i, (y_i, z_i) in enumerate(zip(y_vals, z_vals)):
-      ch = channels[i]
-      if ch < len(self.configuration.channels):
-        c = self.configuration.channels[ch]
-        if c.x_range is not None and not c.x_range[0] <= x <= c.x_range[1]:
-          raise ValueError(
-            f"x={x} outside channel {ch} range [{c.x_range[0]:.1f}, {c.x_range[1]:.1f}]"
-          )
-        if c.y_range is not None and not c.y_range[0] <= y_i <= c.y_range[1]:
-          raise ValueError(
-            f"y={y_i} outside channel {ch} range [{c.y_range[0]:.1f}, {c.y_range[1]:.1f}]"
-          )
-        if c.z_range is not None and z_i > c.z_range[1]:
-          raise ValueError(f"z={z_i} above channel {ch} maximum {c.z_range[1]:.1f}")
-
-    # Where the channels stand: for the Y a channel not named keeps, and for whether the gantry moves.
-    standing: List[Coordinate] = []
-    if len(channels) < len(self.channel_order) or not x_speed_named:
-      standing = await self._unchecked_fw_request_positions()
-    # With no speed named, the default X speed is set only for a move that takes the gantry somewhere.
-    if not x_speed_named and not (standing and standing[0].x == x):
-      x_speed_scale = x_arm_configuration.speed_to_scale_percent(self.default_x_speed)
-
-    # Every channel's Y after the move: where it is sent, or, for a channel not named, where it stands.
-    final_y: Dict[int, float] = {}
-    if len(channels) < len(self.channel_order):
-      final_y = {i: position.y for i, position in enumerate(standing)}
-    final_y.update(zip(channels, y_vals))
-    self._check_y_spacing(final_y, named=channels)
-
-    # The scales in force before this move, to put back once it is done.
-    restore_x: Optional[int] = None
-    restore_z: Optional[int] = None
-    try:
-      if self._driver is not None and x_speed_scale is not None:
-        restore_x = await self._driver.request_x_speed_scale()
-        await self._driver.set_x_speed_scale(x_speed_scale)
-      if self._driver is not None and z_speed_scale is not None:
-        restore_z = await self._driver.request_z_speed_scale()
-        await self._driver.set_z_speed_scale(z_speed_scale)
-      await self._unchecked_fw_move_to_position(x, channels, y_vals, z_vals, via_lane=via_lane)
-      # What was asked, recorded as soon as the command answers; the read below replaces it with
-      # where the channels actually stopped.
-      arm = None if self._driver is None else self._driver.x_arm
-      if arm is not None:
-        arm.update_location_by_reference_point(x)
-      for channel, y_i, z_i in zip(channels, y_vals, z_vals):
-        self.update_location_by_reference_point(channel, y=y_i, z=z_i)
-    finally:
-      try:
-        if self._driver is not None and restore_x is not None:
-          await self._driver.set_x_speed_scale(restore_x)
-        if self._driver is not None and restore_z is not None:
-          await self._driver.set_z_speed_scale(restore_z)
-      finally:
-        await self._record_where_they_stopped()
-
-  async def _unchecked_fw_move_to_position(
-    self,
-    x: float,
-    channels: List[int],
-    y: Union[float, List[float]],
-    z: Union[float, List[float]],
-    via_lane: bool = False,
-  ) -> None:
-    """Send the gantry move (cmd=26, or 27 via the lane). Nothing is guarded and nothing is recorded.
-
-    Args:
-      x: where to send the gantry, in mm.
-      channels: which channels, sorted, 0-indexed from the back.
-      y: where to send each channel along Y, in mm; one value for all, or one per channel.
-      z: where to send each channel along Z, in mm; one value for all, or one per channel.
-      via_lane: travel by the firmware's lane rather than directly.
-    """
-    move_parameters = _build_pipettor_gantry_move_parameters(
-      x, channels, y, z, channel_order=self.channel_order
+    await self.move_to_xy_positions(
+      locations[0].x,
+      {channel: point.y for channel, point in zip(channels, locations)},
+      minimum_traverse_height=minimum_traverse_height,
+      via_lane=via_lane,
+      x_speed=x_speed,
+      x_speed_scale=x_speed_scale,
+      z_speed=z_speed,
+      z_acceleration=z_acceleration,
     )
-    if via_lane:
-      await self._driver.send_command(
-        PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters)
-      )
-    else:
-      await self._driver.send_command(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+    await self.move_tool_bottom_to_z_positions(
+      {channel: point.z for channel, point in zip(channels, locations)},
+      speed=z_speed,
+      acceleration=z_acceleration,
+    )
 
   # ----------------------------------------
   # Probing
@@ -2781,9 +2861,10 @@ class Pipettes:
         indexed[ch][0].get_location_wrt(self._require_deck(), "c", "c", "t") + indexed[ch][2]
         for ch in use_channels
       ]
-      await self.move_to_location(
-        [Coordinate(locs[0].x, loc.y, traverse_h) for loc in locs],
-        use_channels=use_channels,
+      await self.move_to_xy_positions(
+        locs[0].x,
+        {ch: loc.y for ch, loc in zip(use_channels, locs)},
+        minimum_traverse_height=traverse_h,
       )
 
     for ch in use_channels:

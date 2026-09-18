@@ -346,6 +346,9 @@ class PrepDriver:
         if self.head8 is None:
           self.head8 = Head8(self, use_v1_aspirate_dispense=use_v1_aspirate_dispense)
         await self.head8._on_setup()
+        # One height governs the arm: the head rides the channels' gantry, so it travels at what
+        # they travel at rather than at a second number that happens to match.
+        self.head8.default_minimum_traverse_height = self.pipettes.default_minimum_traverse_height
         if default_minimum_traverse_height is not None:
           self.head8.default_minimum_traverse_height = default_minimum_traverse_height
 
@@ -367,6 +370,12 @@ class PrepDriver:
       if low:
         logger.warning("not everything is at Z safety after setup: %s", "; ".join(low))
       if self.head8 is not None:
+        # TODO: the head is left where it stands, and every lateral move travels it there. No move
+        # of its Z alone is known, and the device reports neither its position nor its bounds, so
+        # nothing here can tell that it is low or lift it. `MoveZUpToSafe` takes ChannelIndex values
+        # and the MPH has one (3): try it on a device with a head fitted, and if it answers, raise
+        # the head in `Pipettes.move_to_xy_positions` and `XArm.move_to_x_position` as the channels
+        # are raised.
         logger.warning("the 8-channel head is not raised at setup: no move of its Z alone is known")
 
       if self.core_grippers is None:

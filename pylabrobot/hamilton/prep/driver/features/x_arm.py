@@ -254,7 +254,13 @@ class XArm:
     await self._driver.send_command(PrepCmd.PrepXAxisMoveAbsolute(position=position))
 
   async def move_to_x_position(
-    self, x: float, speed: Optional[float] = None, acceleration: Optional[float] = None
+    self,
+    x: float,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    minimum_traverse_height: Optional[float] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
   ) -> None:
     """Move the arm along X with `XAxis.MoveAbsolute`.
 
@@ -262,6 +268,9 @@ class XArm:
       x: target x in mm.
       speed: speed in mm/s. Defaults to `default_speed`.
       acceleration: acceleration in mm/s2. Defaults to `default_acceleration`.
+      minimum_traverse_height: raise every channel standing below this height, in mm, before the
+        arm travels. The pipettes' `default_minimum_traverse_height` when None; 0 raises nothing,
+        so the channels travel at the height they stand at.
 
     Raises:
       ValueError: If `x`, `speed` or `acceleration` is out of range.
@@ -282,6 +291,20 @@ class XArm:
         raise ValueError(
           f"x={x} outside the channels' range [{channel.x_range[0]:.1f}, {channel.x_range[1]:.1f}]"
         )
+    traverse = (
+      pipettes.default_minimum_traverse_height
+      if minimum_traverse_height is None
+      else minimum_traverse_height
+    )
+    below = {
+      channel: traverse
+      for channel, at in enumerate(await pipettes.request_locations())
+      if at.z < traverse
+    }
+    if below:
+      await pipettes.move_tool_bottom_to_z_positions(
+        below, speed=z_speed, acceleration=z_acceleration
+      )
     offset = await self.request_axis_offset()
     try:
       async with self._temporary_x_axis_profile(velocity=speed, acceleration=acceleration):

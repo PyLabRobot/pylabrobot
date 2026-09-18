@@ -194,7 +194,7 @@ def test_move_to_location_refuses_what_the_channel_bounds_exclude():
     c.x_range, c.y_range, c.z_range = (0.0, 400.0), (0.0, 400.0), (0.0, 170.0)
     with pytest.raises(ValueError, match="outside channel 0"):
       await p.pipettes.move_to_location(Coordinate(500.0, 100.0, 100.0), use_channels=0)
-    with pytest.raises(ValueError, match="above channel 0 maximum"):
+    with pytest.raises(ValueError, match=r"z=200.0 outside channel 0"):
       await p.pipettes.move_to_location(Coordinate(100.0, 100.0, 200.0), use_channels=0)
     with pytest.raises(ValueError, match="same x"):
       await p.pipettes.move_to_location(
@@ -299,13 +299,13 @@ def test_move_to_location_sets_speed_scales_for_the_move_and_puts_them_back():
 
     p.send_command = record  # type: ignore[method-assign]
     await p.pipettes.move_to_location(
-      Coordinate(150.0, 360.0, 160.0), use_channels=0, x_speed_scale=25, z_speed_scale=50
+      Coordinate(150.0, 360.0, 160.0), use_channels=0, x_speed_scale=25, z_speed=40.0
     )
     move = _index(sent, PrepCmd.PrepMoveToPosition)
     assert _last_before(sent, PrepCmd.PrepSetXSpeedScale, move).value == 25
-    assert _last_before(sent, PrepCmd.PrepSetZSpeedScale, move).value == 50
     assert _last_after(sent, PrepCmd.PrepSetXSpeedScale, move).value == 100
-    assert _last_after(sent, PrepCmd.PrepSetZSpeedScale, move).value == 100
+    # the descent takes the speed it was given, in mm/s rather than the firmware's percent
+    assert _last_after(sent, PrepCmd.PrepMoveZAbsolute, move).velocity == 40.0
 
     with pytest.raises(ValueError, match="between 1 and 100"):
       await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), x_speed_scale=0)
@@ -1137,20 +1137,50 @@ def test_x_arm_move_sets_speed_and_acceleration_for_the_axis_move_and_puts_them_
   _run(_t())
 
 
-def test_x_arm_move_leaves_lowered_channels_where_they_are():
-  """An X axis move neither raises the channels nor refuses while one is lowered."""
+def test_x_arm_move_raises_lowered_channels_up_to_the_height_it_is_given():
+  """The arm travels at the traverse height; a height of 0 raises nothing."""
 
   async def _t():
     p = PrepSimulationDriver(deck=PrepDeck())
     await p.setup()
     assert p.x_arm is not None and p.pipettes is not None
+    traverse = p.pipettes.default_minimum_traverse_height
+
     await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 100.0), use_channels=1)
-    z_before = [position.z for position in await p.pipettes.request_locations()]
     await p.x_arm.move_to_x_position(200.0)
     assert await p.x_arm.request_position() == 200.0
-    assert [position.z for position in await p.pipettes.request_locations()] == z_before
+    assert [at.z for at in await p.pipettes.request_locations()] == [traverse, traverse]
+
+    await p.pipettes.move_to_location(Coordinate(200.0, 200.0, 100.0), use_channels=1)
+    z_before = [at.z for at in await p.pipettes.request_locations()]
+    await p.x_arm.move_to_x_position(180.0, minimum_traverse_height=0)
+    assert [at.z for at in await p.pipettes.request_locations()] == z_before
+
     with pytest.raises(ValueError, match="speed must be above 0"):
       await p.x_arm.move_to_x_position(200.0, speed=500.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_x_position_is_the_arms_axis_move():
+  """The channels' X move is the arm's: one axis, no gantry move carrying Y and Z with it."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_x_position(200.0)
+    assert "PrepXAxisMoveAbsolute" in sent
+    assert "PrepMoveToPosition" not in sent
     await p.stop()
 
   _run(_t())
@@ -1439,6 +1469,142 @@ def test_batches_are_planned_from_the_channels_minimum_spacing():
       x_tolerance=0.1,
     )
     assert len(two_columns) == 2
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_xy_positions_raises_every_low_channel_then_travels_at_that_height():
+  """A channel left out of the move still rides the gantry, so it is raised with the others."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_location(
+      [Coordinate(150.0, 250.0, 90.0), Coordinate(150.0, 200.0, 80.0)], use_channels=[0, 1]
+    )
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_xy_positions(200.0, {0: 300.0}, minimum_traverse_height=160.0)
+
+    # up first, then across: the gantry never has a descent to blend into the lateral move
+    assert sent.index("PrepMoveZAbsolute") < sent.index("PrepMoveToPosition")
+    assert sent.count("PrepMoveToPosition") == 1
+    at = await p.pipettes.request_locations()
+    assert (at[0].x, at[0].y, at[0].z) == (200.0, 300.0, 160.0)
+    assert (at[1].y, at[1].z) == (200.0, 160.0)  # not named, kept its y, raised all the same
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_xy_positions_travels_without_raising_when_the_channels_are_high_enough():
+  """Channels already at the height are not sent a Z move they do not need."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_location(
+      [Coordinate(150.0, 250.0, 167.5), Coordinate(150.0, 200.0, 167.5)], use_channels=[0, 1]
+    )
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_xy_positions(200.0, {0: 300.0, 1: 250.0})
+    assert "PrepMoveZAbsolute" not in sent
+    assert sent.count("PrepMoveToPosition") == 1
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_xy_positions_refuses_what_a_channel_cannot_reach():
+  """The reach is checked before anything moves, the traverse height included."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    c = p.pipettes.configuration.channels[0]
+    c.x_range, c.y_range, c.z_range = (0.0, 400.0), (0.0, 400.0), (0.0, 170.0)
+    with pytest.raises(ValueError, match=r"x=500.0 outside channel 0"):
+      await p.pipettes.move_to_xy_positions(500.0, {0: 100.0})
+    with pytest.raises(ValueError, match=r"y=500.0 outside channel 0"):
+      await p.pipettes.move_to_xy_positions(100.0, {0: 500.0})
+    with pytest.raises(ValueError, match=r"z=200.0 outside channel 0"):
+      await p.pipettes.move_to_xy_positions(100.0, {0: 100.0}, minimum_traverse_height=200.0)
+    with pytest.raises(ValueError, match="channels must be between"):
+      await p.pipettes.move_to_xy_positions(100.0, {5: 100.0})
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_location_rises_travels_then_descends():
+  """Three commands, in that order: the descent cannot be blended into the lateral move."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_location(
+      [Coordinate(150.0, 250.0, 90.0), Coordinate(150.0, 200.0, 90.0)], use_channels=[0, 1]
+    )
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_location(
+      [Coordinate(200.0, 300.0, 100.0), Coordinate(200.0, 250.0, 120.0)],
+      use_channels=[0, 1],
+      minimum_traverse_height=160.0,
+    )
+    moves = [c for c in sent if c in ("PrepMoveZAbsolute", "PrepMoveToPosition")]
+    assert moves == ["PrepMoveZAbsolute", "PrepMoveToPosition", "PrepMoveZAbsolute"]
+    at = await p.pipettes.request_locations()
+    assert (at[0].x, at[0].y, at[0].z) == (200.0, 300.0, 100.0)
+    assert (at[1].x, at[1].y, at[1].z) == (200.0, 250.0, 120.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_location_refuses_a_z_the_channel_cannot_reach_before_moving():
+  """The target Z is checked with the rest, so nothing is raised for a move that cannot finish."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    p.pipettes.configuration.channels[0].z_range = (0.0, 170.0)
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    with pytest.raises(ValueError, match=r"z=200.0 outside channel 0"):
+      await p.pipettes.move_to_location(Coordinate(150.0, 250.0, 200.0), use_channels=0)
+    assert "PrepMoveZAbsolute" not in sent and "PrepMoveToPosition" not in sent
     await p.stop()
 
   _run(_t())

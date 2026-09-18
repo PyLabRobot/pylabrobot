@@ -262,7 +262,32 @@ class Head8:
   # ----------------------------------------
 
   def _resolve_traverse_height(self, final_z: Optional[float] = None) -> float:
+    """The height to travel at: `final_z` when given, else `default_minimum_traverse_height`."""
     return self.default_minimum_traverse_height if final_z is None else final_z
+
+  def _check_reachable(self, axis: Literal["x", "y", "z"], value: float) -> None:
+    """Raise unless the head reaches a position along one axis.
+
+    The one gate a position passes through, as `Pipettes._check_reachable` is for the channels. The
+    head rides the channels' gantry, so X is theirs.
+
+    TODO: `GetChannelBounds` answers for the channels only, not for the MPH, so Y and Z go
+    unchecked. Check them here once a device reports the head's own windows.
+
+    Args:
+      axis: which axis - `x` along the gantry, `y` across it, `z` up and down.
+      value: where it would be sent, in mm.
+
+    Raises:
+      ValueError: If the head cannot reach it.
+    """
+    if axis != "x":
+      return
+    pipettes = self._driver.pipettes
+    if pipettes is None:
+      return
+    for channel in range(pipettes.num_channels):
+      pipettes._check_reachable(channel, "x", value)
 
   # -- tips ----------------------------------------------------------------------------------------
 
@@ -315,6 +340,9 @@ class Head8:
       z: Z height (e.g. traverse).
       via_lane: Use lane-aware move when True.
     """
+    self._check_reachable("x", x)
+    self._check_reachable("y", y)
+    self._check_reachable("z", z)
     if via_lane:
       await self._driver.send_command(
         PrepCmd.MphMoveToPositionViaLane(x_position=x, y_position=y, z_position=z)
@@ -424,6 +452,7 @@ class Head8:
     )
     loc = ref_spot.get_location_wrt(self._require_deck(), "c", "c", "t") + offset
 
+    self._check_reachable("x", loc.x)
     if pre_position:
       traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
       await self.move_to_position(loc.x, loc.y, traverse_h)
@@ -658,6 +687,7 @@ class Head8:
     PrepCmd.AspirateParametersNoLldAndTadm2,
     PrepCmd.AspirateParametersNoLldAndMonitoring2,
   ]:
+    self._check_reachable("x", ref_x)
     aspirate = PrepCmd.AspirateParameters(
       default_values=False,
       x_position=ref_x,
@@ -763,6 +793,7 @@ class Head8:
     PrepCmd.AspirateParametersNoLldAndTadm,
     PrepCmd.AspirateParametersNoLldAndMonitoring,
   ]:
+    self._check_reachable("x", ref_x)
     aspirate = PrepCmd.AspirateParameters(
       default_values=False,
       x_position=ref_x,
