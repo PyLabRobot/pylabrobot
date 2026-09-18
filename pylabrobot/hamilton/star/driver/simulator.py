@@ -692,6 +692,34 @@ class SimulatedHead384(_SimulatedHead, Head384):
 class SimulatedISWAP(_Simulated, iSWAP):
   """The iSWAP, answering for itself."""
 
+  async def _unchecked_fw_park(self, traverse_height: Optional[float] = None):
+    """Park, and put the model where parking leaves the arm: every drive on its stop."""
+    resp = await super()._unchecked_fw_park(traverse_height)
+    c = self.configuration
+    stops = (
+      c.rotation_drive_predefined_y_positions_increments,
+      c.rotation_drive_predefined_z_positions_increments,
+      c.rotation_drive_predefined_increments,
+      c.wrist_drive_predefined_increments,
+      c.gripper_drive_predefined_increments,
+    )
+    if any(table is None for table in stops):
+      return resp
+    y_stops, z_stops, rotation_stops, wrist_stops, gripper_stops = cast(
+      Tuple[Dict[str, int], ...], stops
+    )
+    self.update_location_by_reference_point(
+      y=c.y_increments_to_mm(y_stops["parking"]),
+      z=c.z_increments_to_mm(z_stops["parking"]) + c.rotation_drive_z_offset_above_finger,
+    )
+    self.rotation_drive_update_angle(
+      c.rotation_drive_increments_to_angle(rotation_stops["parking"])
+    )
+    self.wrist_drive_update_angle(c.wrist_increments_to_deg(wrist_stops["parking"]))
+    # Parking closes the jaws, and the gripper's table names that stop its home.
+    self.gripper_update_width(c.gripper_increments_to_mm(gripper_stops["home"]))
+    return resp
+
   async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
     """Answer a read from the model.
 
@@ -762,8 +790,6 @@ class SimulatedISWAP(_Simulated, iSWAP):
           return {"rg": [home, home]}, "the gripper's home and parking width"
         width = c.gripper_mm_to_increments(gripper.jaw_width)
         return {"rg": [width, width]}, "how far the model has the jaws open"
-    if (module, command) == ("C0", "RG"):
-      return {"rg": int(self.device.iswap_parked)}, "whether the arm was last parked"
     if (module, command) == ("C0", "QP"):
       # Whether the arm holds something is whether the model has anything hanging off the gripper
       # that is not part of the gripper: its body and its two fingers are its own.
@@ -1122,7 +1148,6 @@ class STARSimulationDriver(STARDriver):
     self.simulated_head384: Head384Configuration = carried.get("head384") or Head384Configuration()
     self.simulated_pipettes: Optional[PipettesConfiguration] = carried.get("pipettes")
     self.simulated_iswap: iSWAPConfiguration = carried.get("iswap") or iSWAPConfiguration()
-    self.iswap_parked = True
 
     channels = self.simulated_configuration.num_pip_channels
     if tips_mounted is None:
@@ -1288,12 +1313,6 @@ class STARSimulationDriver(STARDriver):
       num_channels=self.num_channels if carries_a_list else 0,
       **kwargs,
     )
-    # Whether the iSWAP is parked is what its last move was: parking parks it, and any other move of
-    # the arm, or initializing it, takes it out of its parking position.
-    if (module, command) == ("C0", "PG"):
-      self.iswap_parked = True
-    elif (module, command) == ("C0", "FI") or (module == "R0" and command[0] not in ("R", "Q")):
-      self.iswap_parked = False
     answered = await self._answer(module, command, **kwargs)
     if answered is None:
       self._log_exchange(cmd, None)
