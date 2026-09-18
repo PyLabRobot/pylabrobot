@@ -122,6 +122,9 @@ pre-filtered list on a vendor page.
 `device-card` renders one device. It works anywhere MyST is parsed, including markdown cells in the
 notebooks under `docs/user_guide` — put one at the top of a machine's hello-world notebook so the
 page carries the same vendor, models, support level, capabilities and links as the table.
+Models appear in a scrollable table with a colored support badge for each model. The table's
+height is capped so long model lists keep the card compact. When a model has
+no explicit status, its badge uses the device's support level.
 
 ````md
 ```{device-card} curiox-ht2000

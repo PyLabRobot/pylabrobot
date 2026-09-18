@@ -97,7 +97,7 @@ class NimbusDeck(HamiltonDeck):
             If None, no gripper resource is created.
     """
     super().__init__(
-      num_rails=num_rails,
+      num_tracks=num_rails,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
@@ -210,21 +210,19 @@ class NimbusDeck(HamiltonDeck):
     )
     waste_block.assign_child_resource(nimbus_core_gripper_1000ul_at_waste(), location=rel)
 
-  def rails_to_location(self, rails: int) -> Coordinate:
-    """Convert a rail identifier to an absolute (x, y, z) coordinate.
+  def track_to_location(self, track: int) -> Coordinate:
+    """Where a track starts on this deck.
 
-    Converts rail number (1-30) to PyLabRobot coordinates. Internally maps
-    hardware tracks to API rails for consistency with other Hamilton decks.
-    Uses instance attributes for rail positions, which can be set from config files.
+    Read from instance attributes, which can be set from config files.
 
     Args:
-        rails: Rail number (1-30, maps to hardware tracks)
+        track: the track, counted from 1.
 
     Returns:
-        PyLabRobot coordinate relative to deck origin
+        Its position, in this deck's own frame.
     """
     # Calculate X position in Hamilton coordinates using instance attributes
-    x_hamilton = self._rail_start_x + (rails - 1) * self._rail_width
+    x_hamilton = self._rail_start_x + (track - 1) * self._rail_width
     y_hamilton = self._rail_y
     z_hamilton = 0.0
 

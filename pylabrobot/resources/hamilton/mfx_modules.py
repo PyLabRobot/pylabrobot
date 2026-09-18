@@ -1,26 +1,40 @@
 import warnings
 
 from pylabrobot.resources.carrier import Coordinate, PlateHolder
-from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
 
 
-def MFX_TIP_module(name: str) -> ResourceHolder:
+def hamilton_mfx_tiprackholder_standard(name: str) -> EmbeddedTipRackHolder:
   """Hamilton cat. no.: 188160
-  Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack).
+  Hamilton name: 'MFX_TIP_module'
+  Module to position a high-, standard- or low volume tip rack (but not a 384 tip rack).
+
+  Takes an `EmbeddedTipRack` - Hamilton calls these 'framed' tip racks - which sinks into the
+  module's opening and is centred over it, as in a tip carrier's site.
   """
 
-  # resource_size_x=122.4,
-  # resource_size_y=82.6,
+  top = 114.7 - 18.195
 
-  return ResourceHolder(
+  return EmbeddedTipRackHolder(
     name=name,
     size_x=135.0,
     size_y=94.0,
-    size_z=214.8 - 18.195 - 100,
-    # probe height - carrier_height - deck_height
-    child_location=Coordinate(6.2, 5.0, 214.8 - 18.195 - 100),
-    model="MFX_TIP_module",
+    size_z=top,
+    # Only the height: the holder centres a framed rack in X and Y and sinks it into its opening.
+    child_location=Coordinate(x=0.0, y=0.0, z=top),
+    model=hamilton_mfx_tiprackholder_standard.__name__,
   )
+
+
+def MFX_TIP_module(name: str) -> EmbeddedTipRackHolder:
+  """Deprecated: use `hamilton_mfx_tiprackholder_standard`."""
+  warnings.warn(
+    "MFX_TIP_module is deprecated and will be removed in the future. "
+    "Use 'hamilton_mfx_tiprackholder_standard' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_mfx_tiprackholder_standard(name=name)
 
 
 def hamilton_mfx_plateholder_DWP_flat(name: str) -> PlateHolder:

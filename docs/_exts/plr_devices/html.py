@@ -38,6 +38,15 @@ INLINE = {
   "row": "display:flex;gap:0.6rem;margin-top:0.35rem;font-size:0.85rem;",
   "key": "flex:0 0 4.6rem;font-weight:600;opacity:0.65;",
   "value": "min-width:0;overflow-wrap:anywhere;",
+  "models_scroll": "max-height:18rem;overflow:auto;margin:0.75rem 0;",
+  "models": "width:100%;margin:0;border-collapse:collapse;font-size:0.85rem;color:inherit;",
+  "models_caption": "caption-side:top;text-align:left;font-weight:600;padding:0 0 0.35rem;",
+  "models_heading": f"padding:0.35rem 0.5rem;text-align:left;font-weight:600;background:{SURFACE};"
+  f"border-bottom:1px solid {HAIRLINE};",
+  "model_name": f"padding:0.35rem 0.5rem;text-align:left;font-weight:400;"
+  f"overflow-wrap:anywhere;border-bottom:1px solid {HAIRLINE};",
+  "model_support": f"width:1%;padding:0.35rem 0.5rem;white-space:nowrap;"
+  f"border-bottom:1px solid {HAIRLINE};",
   "api": "font-size:0.82rem;background:transparent;padding:0;overflow-wrap:anywhere;",
   "links": "margin-top:0.75rem;font-size:0.9rem;",
   "link": "margin-right:0.5rem;",
@@ -130,6 +139,28 @@ def _model_status(device: Device, model: Dict[str, str]) -> str:
 def _model_status_label(device: Device, model: Dict[str, str]) -> str:
   status = _model_status(device, model)
   return STATUS_LABELS.get(status, status)
+
+
+def _card_models(device: Device, styles: Optional[Dict[str, str]]) -> str:
+  """Render each model with its support badge in an accessible, compact table."""
+  if not device.get("models"):
+    return ""
+  rows = "".join(
+    f'<tr><th scope="row"{_style(styles, "model_name")}>{escape(_model_name(model))}</th>'
+    f"<td{_style(styles, 'model_support')}>"
+    f"{_status_badge_for_status(_model_status(device, model), styles)}</td></tr>"
+    for model in device["models"]
+  )
+  return (
+    '<div class="plr-device-card__models-scroll" role="region" tabindex="0"'
+    f' aria-label="{escape(str(device["vendor"]))} {escape(str(device["name"]))} models"'
+    f"{_style(styles, 'models_scroll')}>"
+    f'<table class="plr-device-card__models"{_style(styles, "models")}>'
+    f"<caption{_style(styles, 'models_caption')}>Models</caption>"
+    f'<thead><tr><th scope="col"{_style(styles, "models_heading")}>Model</th>'
+    f'<th scope="col"{_style(styles, "models_heading")}>Support</th></tr></thead>'
+    f"<tbody>{rows}</tbody></table></div>"
+  )
 
 
 def _api_version_badge(device: Device, styles: Optional[Dict[str, str]] = None) -> str:
@@ -256,17 +287,6 @@ def render_card(
   links = _links(device, doc_uri, code_uri, styles)
 
   rows = []
-  if device.get("models"):
-    rows.append(
-      (
-        "Models",
-        ", ".join(
-          f"{escape(_model_name(model))} "
-          f"({escape(_model_status_label(device, model))})"
-          for model in device["models"]
-        ),
-      )
-    )
   if device.get("api"):
     api = escape(str(device["api"]))
     rows.append(("API", f'<code class="plr-device-api"{_style(styles, "api")}>{api}</code>'))
@@ -293,6 +313,7 @@ def render_card(
   </div>
   <div class="plr-device-card__kind"{_style(styles, "kind")}>{escape(str(device["kind"]))}</div>
   <div class="plr-device-card__badges"{_style(styles, "badges")}>{capabilities}</div>
+  {_card_models(device, styles)}
   {meta}
   <div class="plr-device-card__links"{_style(styles, "links")}>{" ".join(links)}</div>
 </div>"""

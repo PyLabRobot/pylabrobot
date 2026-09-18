@@ -149,9 +149,21 @@ class TestRendering(unittest.TestCase):
         "models": [{"name": "HT2000"}, {"name": "HT2100", "status": "wip"}],
       }
     )
-    html = render_card(device, _no_link, _no_link)
-    self.assertIn("Models", html)
-    self.assertIn("HT2000 (Mostly), HT2100 (WIP)", html)
+    for styles in (None, INLINE):
+      with self.subTest(inline=styles is INLINE):
+        html = render_card(device, _no_link, _no_link, styles)
+        table = html.split('<table class="plr-device-card__models"', 1)[1].split("</table>")[0]
+        self.assertIn(">Models</caption>", table)
+        self.assertIn('scope="col"', table)
+        self.assertIn(">Model</th>", table)
+        self.assertIn(">Support</th>", table)
+        rows = table.split("<tbody>")[1].split("</tr>")
+        self.assertIn(">HT2000</th>", rows[0])
+        self.assertIn("plr-device-status--mostly", rows[0])
+        self.assertIn(">Mostly</span>", rows[0])
+        self.assertIn(">HT2100</th>", rows[1])
+        self.assertIn("plr-device-status--wip", rows[1])
+        self.assertIn(">WIP</span>", rows[1])
 
   def test_card_links_only_what_resolves(self):
     html = render_card(self.device, _no_link, _no_link)

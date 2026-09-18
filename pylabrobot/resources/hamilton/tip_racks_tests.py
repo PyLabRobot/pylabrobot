@@ -52,3 +52,9 @@ class HamiltonTipSpotTests(unittest.TestCase):
 
     ntr_loc = Coordinate(x=13.525, y=11.625, z=13.5)
     check_tip_spot_h1(hamilton_96_tiprack_50uL_NTR(name="tr"), ntr_loc)
+
+
+class HamiltonTipRackSerializationTests(unittest.TestCase):
+  def test_embedded_tip_rack_roundtrip_keeps_frame_height(self):
+    tip_rack = TipRack.deserialize(hamilton_96_tiprack_1000uL(name="tr").serialize())
+    self.assertEqual(tip_rack.frame_height, 10.0)
