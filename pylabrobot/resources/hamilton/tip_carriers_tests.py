@@ -235,9 +235,9 @@ class NestedTipCarrierTests(unittest.TestCase):
         for axis in ("x", "y", "z"):
           self.assertAlmostEqual(getattr(actual, axis), getattr(a1, axis))
 
-  def test_tips_end_where_hamilton_puts_the_tip_container(self):
-    # Cntr.1.base of LT_L_NE_stack, TIP_50ul_L_NE_stack and ST_L_NE_stack, above the rack's bottom
-    for rack_fn, container_base in [
+  def test_a_tip_ends_above_the_nested_racks_bottom(self):
+    # How far a tip's end stands above the rack's bottom, by tip size
+    for rack_fn, tip_end in [
       (hamilton_96_tiprack_10uL_NTR, 31.0),
       (hamilton_96_tiprack_50uL_NTR, 12.6),
       (hamilton_96_tiprack_300uL_NTR, 3.0),
@@ -245,4 +245,4 @@ class NestedTipCarrierTests(unittest.TestCase):
       with self.subTest(rack=rack_fn.__name__):
         rack = rack_fn("rack")
         tip = rack.get_item("A1").get_tip()
-        self.assertAlmostEqual(tip.get_location_wrt(rack).z, container_base, delta=0.15)
+        self.assertAlmostEqual(tip.get_location_wrt(rack).z, tip_end, delta=0.15)
