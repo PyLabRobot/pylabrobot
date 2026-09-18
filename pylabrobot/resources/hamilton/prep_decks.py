@@ -285,7 +285,7 @@ class PrepDeck(Deck):
       name: what to call it. The deck puts its own prefix in front, so two devices' arms stand in
         one tree.
       x: where the arm is now, in mm, at its reference point.
-      z: the height it rides at, in mm: the top of the channels' travel.
+      z: the height it rides at, in mm on this deck, to the underside of its body.
       size_x: how wide the arm is, in mm.
       size_y: how deep the arm is, in mm.
       size_z: how tall the arm is, in mm.

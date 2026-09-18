@@ -32,6 +32,9 @@ class XArmConfiguration:
   """How deep the arm is, in mm. Its back is flush with the back of the device."""
   size_z: float = 69.0
   """How tall the arm is, in mm."""
+  ride_height: float = 248.5
+  """How high the arm rides, in mm on the deck, measured to the underside of its body. Measured on
+  the arm: what the channels report is how far they travel, not where the arm sits."""
   reference_point_from_left: float = -80.0
   """Where the gantry's x refers to, in mm from the arm's left edge. The channels hang to the arm's left,
   so their axis - which is what the Prep reports - sits about 80 mm left of that edge."""

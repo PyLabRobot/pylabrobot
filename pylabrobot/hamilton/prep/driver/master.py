@@ -1219,13 +1219,9 @@ class PrepDriver:
       return
     arm, c = self.x_arm, self.x_arm.configuration
     pipettes = self.pipettes.configuration
-    # The arm rides at the top of the channels' travel: what their bounds say, or the traverse height
-    # when no bounds were read.
-    tops = [c.z_range[1] for c in self.pipettes.configuration.channels if c.z_range is not None]
-    if tops:
-      z = max(tops)
-    else:
-      z = self.pipettes.default_minimum_traverse_height
+    # The arm rides at the height it was measured at, not at the top of the channels' travel: what
+    # the channels report is how far they travel, not where the arm sits.
+    z = c.ride_height
     # The Y the channels reach between them, which the arm's reference line spans.
     y_ranges = [c.y_range for c in pipettes.channels if c.y_range is not None]
     reach = (min(r[0] for r in y_ranges), max(r[1] for r in y_ranges)) if y_ranges else None
