@@ -138,7 +138,8 @@ class HamiltonSTARDeck(HamiltonDeck):
       x = 1337.5 if self.num_tracks == STAR_NUM_TRACKS else 797.5
       waste_block.assign_child_resource(
         hamilton_core_gripper_1000ul_5ml_on_waste(),
-        location=Coordinate(x=x, y=125 - 18 - 21.5, z=205) - waste_block.location,
+        location=Coordinate(x=x, y=125 - 18 - 21.5, z=200.5)  # probed
+        - waste_block.location,
       )
 
   def serialize(self) -> dict:

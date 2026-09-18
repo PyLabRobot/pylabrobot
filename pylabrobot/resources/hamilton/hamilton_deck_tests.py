@@ -148,7 +148,7 @@ class HamiltonDeckTests(unittest.TestCase):
           │
     (31)  ├── waste_block               Resource              (775.000, 115.000, 100.000)
           │   ├── teaching_tip_rack     TipRack               (780.900, 461.100, 100.000)
-          │   ├── core_grippers         HamiltonCoreGrippers  (797.500, 085.500, 205.000)
+          │   ├── core_grippers         HamiltonCoreGrippers  (797.500, 085.500, 200.500)
           │
     (32)  ├── trash                     Trash                 (800.000, 190.600, 137.100)
     """[1:]
@@ -215,3 +215,13 @@ class HamiltonDeckTests(unittest.TestCase):
         "careful when grabbing this resource.",
       ],
     )
+
+  def test_core_gripper_holder_on_the_waste_block_as_probed(self):
+    # Probed on a STAR: the holder's top is at 220.0 and it is 19.5 mm tall, so it stands at 200.5.
+    # Its centre is the x the channels take the tools at.
+    for deck, x in ((STARDeck(), 1337.5), (STARLetDeck(), 797.5)):
+      with self.subTest(deck=type(deck).__name__):
+        holder = deck.get_resource("core_grippers")
+        self.assertAlmostEqual(holder.get_location_wrt(deck).x, x)
+        self.assertAlmostEqual(holder.get_location_wrt(deck).z, 200.5)
+        self.assertAlmostEqual(holder.get_location_wrt(deck, z="t").z, 220.0)
