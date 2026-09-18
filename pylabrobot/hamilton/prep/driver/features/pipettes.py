@@ -2173,6 +2173,10 @@ class Pipettes:
 
   # -- x probing (capacitive only) -----------------------------------------------------------------
 
+  # How close to a search start counts as being at it. A device answers where it stopped, which is
+  # never exactly where it was sent, so an exact comparison sends every probe travelling again.
+  AT_SEARCH_START = 0.1
+
   async def probe_x_using_clld(
     self,
     channel_idx: int,
@@ -2243,7 +2247,7 @@ class Pipettes:
     standing = (await self.request_locations())[channel_idx]
     if search_start_position is not None:
       self._check_reachable(channel_idx, "x", search_start_position)
-      if round(search_start_position, 2) != round(standing.x, 2):
+      if abs(search_start_position - standing.x) > self.AT_SEARCH_START:
         # There first, the way any travel goes: up to the traverse height, across, and back down to
         # the height the caller had the channel at, so the search itself is X alone. An arm already
         # at the start is left alone: nothing is gained by sending it where it stands.
@@ -2370,9 +2374,10 @@ class Pipettes:
     Args:
       channel_idx: which channel, 0-indexed from the back.
       direction: "forward" (decreasing y) or "backward" (increasing y).
-      search_start_position: where to search from in mm. The channel is moved there first unless it
-        is already there, making room for it as `move_to_y_positions` does. Searches from where the
-        channel stands when None.
+      search_start_position: where to search from in mm. The channel travels there first unless it
+        is already there, raising every channel below `default_minimum_traverse_height` on the way,
+        making room for it, and coming back down to where it stood. Searches from where the channel
+        stands when None.
       search_end_position: search end in mm. Defaults to as far as the channel may go.
       speed: search speed in mm/s.
       sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
@@ -2411,12 +2416,18 @@ class Pipettes:
       raise ValueError(f"speed must be above 0 mm/s, is {speed}")
     forward = direction == "forward"
     positions = await self.request_locations()
-    if search_start_position is not None and round(search_start_position, 2) != round(
-      positions[channel_idx].y, 2
+    if (
+      search_start_position is not None
+      and abs(search_start_position - positions[channel_idx].y) > self.AT_SEARCH_START
     ):
-      # There first, with the neighbours moved aside as far as the spacing needs. A channel already
-      # at the start is left alone: nothing is gained by sending it where it stands.
-      await self.move_to_y_positions({channel_idx: search_start_position}, make_space=True)
+      # There first, the way the X probe travels to its start: up to the traverse height, across -
+      # with the neighbours moved aside as far as the spacing needs - and back down to the height
+      # the caller had the channel at. A channel already at the start is left alone.
+      standing = positions[channel_idx]
+      await self.move_to_xy_positions(
+        standing.x, {channel_idx: search_start_position}, make_space=True
+      )
+      await self.move_tool_bottom_to_z_positions({channel_idx: standing.z})
       positions = await self.request_locations()
     here = positions[channel_idx]
 

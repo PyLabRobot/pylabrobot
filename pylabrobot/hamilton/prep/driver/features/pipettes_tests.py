@@ -1942,13 +1942,20 @@ def test_an_x_probe_given_a_start_travels_there_first_and_keeps_the_height_it_wa
     standing = (await p.pipettes.request_locations())[0]
     assert round(standing.z, 1) == 90.0
 
-    # An arm already at the start is left where it is: nothing is sent to move it there.
-    sent.clear()
-    here = (await p.pipettes.request_locations())[0].x
-    await p.pipettes.probe_x_using_clld(
-      0, "left", search_start_position=here, search_end_position=here - 5.0, allow_without_tip=True
-    )
-    assert "PrepMoveZAbsolute" not in sent  # no raise, no descent: it is already there
+    # An arm already at the start is left where it is, to within what a device answers: no raise,
+    # no descent, nothing sent to move it there. Read where it stands each time, because the search
+    # before it left the arm where it stopped.
+    for nudge in (0.0, 0.006):
+      here = (await p.pipettes.request_locations())[0].x
+      sent.clear()
+      await p.pipettes.probe_x_using_clld(
+        0,
+        "left",
+        search_start_position=here - nudge,
+        search_end_position=here - 5.0,
+        allow_without_tip=True,
+      )
+      assert "PrepMoveZAbsolute" not in sent
     standing = (await p.pipettes.request_locations())[0]
     assert round(standing.z, 1) == 90.0  # the height the caller had it at, not Z safety
     await p.stop()
@@ -1969,16 +1976,20 @@ def test_a_y_probe_given_a_start_moves_there_first_and_makes_room_for_it():
     send = p.send_command
 
     async def record(command, *args, **kwargs):
-      if isinstance(command, PrepCmd.PrepMoveYAbsolute):
-        sent.append({c.channel: round(c.y_position, 1) for c in command.channels})
+      if isinstance(command, (PrepCmd.PrepMoveToPosition, PrepCmd.PrepMoveZAbsolute)):
+        sent.append(type(command).__name__)
       return await send(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_tool_bottom_to_z_positions({1: 80.0})
+    sent.clear()
     await p.pipettes.probe_y_using_clld(
       1, "forward", search_start_position=300.0, search_end_position=290.0, allow_without_tip=True
     )
-    assert sent and sent[0][1] == 300.0  # moved to the start
-    assert sent[0][2] == 340.0  # its neighbour was already far enough back to stay
+    # Raised to the traverse height, across to the start, and back down to where it was
+    assert sent[:3] == ["PrepMoveZAbsolute", "PrepMoveToPosition", "PrepMoveZAbsolute"]
+    standing = (await p.pipettes.request_locations())[1]
+    assert round(standing.z, 1) == 80.0
 
     # Already there: nothing is sent to move it again.
     sent.clear()
