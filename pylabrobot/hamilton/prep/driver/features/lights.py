@@ -35,6 +35,7 @@ COLORS: Dict[str, Tuple[int, int, int, int]] = {
   "yellow": (0, 255, 200, 0),
   "green": (0, 0, 255, 0),
   "cyan": (0, 0, 255, 255),
+  "turquoise": (0, 0, 255, 180),
   "blue": (0, 0, 0, 255),
   "purple": (0, 110, 0, 255),
   "magenta": (0, 255, 0, 255),
@@ -97,6 +98,25 @@ def mix(first: Color, second: Color, fraction: float) -> Tuple[int, int, int, in
   return (white, red, green, blue)
 
 
+def flicker(period: float) -> Frame:
+  """A new random colour every `period` seconds.
+
+  Args:
+    period: seconds one colour stands for.
+  """
+  showing: Dict[int, Tuple[int, int, int, int]] = {}
+
+  def frame(elapsed: float) -> Tuple[Color, float]:
+    step = int(elapsed / period)
+    if step not in showing:
+      showing.clear()
+      white, red, green, blue = (random.randint(1, 255) for _ in range(4))
+      showing[step] = (white, red, green, blue)
+    return showing[step], 100.0
+
+  return frame
+
+
 def swell(
   color: Color, period: float, low: float, high: float, peak_color: Optional[Color] = None
 ) -> Frame:
@@ -123,6 +143,9 @@ def swell(
 class Lights:
   """The deck light. Built at setup, as `prep.lights`, if the device has one."""
 
+  # How long setup stands at its ready colour before darkening the deck, in seconds.
+  default_ready_seconds: float = 1.5
+
   def __init__(self, driver: "PrepDriver") -> None:
     """
     Args:
@@ -130,18 +153,14 @@ class Lights:
     """
     self._driver = driver
     self._animation: Optional["asyncio.Task[None]"] = None
+    # Whether the animation being cancelled is making way for a colour this light is about to set.
+    self._handing_over = False
     # What a command uses when it names nothing. Set them to change what this light does.
     self.default_brightness: float = 100.0
     # How long one colour stands before the next, while an animation runs. A set takes about a
     # millisecond, so 50 a second is well inside what the device takes, and finer than an eye
     # resolves.
     self.default_animation_step: float = 0.02
-    self.default_error_pulse_color: Color = "red"  # at its dimmest
-    self.default_error_pulse_peak_color: Optional[Color] = "deep orange"  # at its brightest
-    self.default_error_pulse_period: float = 2.0  # seconds for one swell, up and back down
-    self.default_error_pulse_low: float = 30.0  # percent it dims to
-    self.default_error_pulse_high: float = 100.0  # percent it brightens to
-    self.default_disco_seconds: float = 7.0
 
   # ----------------------------------------
   # The light
@@ -174,8 +193,13 @@ class Lights:
     return (result.white, result.red, result.green, result.blue)
 
   def stop_animation(self) -> None:
-    """Stop an animation, if one is running. The light stays at the colour it reached."""
+    """Stop an animation, if one is running, for a colour to be set in its place.
+
+    The light stays at the colour it reached, for whoever stopped it to set the next one. An
+    animation cancelled by anything else darkens the deck instead, since nobody is coming.
+    """
     if self._animation is not None and not self._animation.done():
+      self._handing_over = True
       self._animation.cancel()
     self._animation = None
 
@@ -218,12 +242,29 @@ class Lights:
   # ----------------------------------------
 
   async def _run(self, frame: Frame, duration: Optional[float]) -> None:
-    """Show an animation off the clock, not off a frame count, until its time is up."""
+    """Show an animation off the clock, not off a frame count, until its time is up.
+
+    A frame the light already stands at is not sent again, so a held colour costs one command.
+    """
     loop = asyncio.get_running_loop()
     started = loop.time()
-    while duration is None or loop.time() - started < duration:
-      await self._set(*frame(loop.time() - started))
-      await asyncio.sleep(self.default_animation_step)
+    showing: Optional[Tuple[Color, float]] = None
+    try:
+      while duration is None or loop.time() - started < duration:
+        shown = frame(loop.time() - started)
+        if shown != showing:
+          await self._set(*shown)
+          showing = shown
+        await asyncio.sleep(self.default_animation_step)
+    except asyncio.CancelledError:
+      # Cancelled from outside - a stopped protocol, an interrupted notebook, a loop shutting down.
+      # Nobody is coming to set a colour, so the deck is darkened rather than left standing at the
+      # frame this stopped on. The darkening goes out on its own, since a cancelled task cannot
+      # wait for it.
+      if not self._handing_over:
+        asyncio.ensure_future(self._set("off"))
+      self._handing_over = False
+      raise
     await self._set("off")
 
   async def animate(self, frame: Frame, duration: Optional[float] = None) -> None:
@@ -249,7 +290,27 @@ class Lights:
       if not animation.cancelled():
         raise
 
-  async def animate_error_pulse(self, duration: Optional[float] = None) -> None:
+  async def hold(self, color: Color, duration: float, brightness: Optional[float] = None) -> None:
+    """Show a colour for a while, then darken. Holds until its time is up.
+
+    Args:
+      color: the colour to hold.
+      duration: how many seconds to hold it for.
+      brightness: how bright to make it look, 0 to 100, or None for `default_brightness`.
+    """
+    await self.set_color(color, brightness)
+    await asyncio.sleep(duration)
+    await self.turn_off()
+
+  async def animate_error_pulse(
+    self,
+    duration: Optional[float] = None,
+    color: Color = "red",
+    peak_color: Optional[Color] = "deep orange",
+    period: float = 2.0,
+    low: float = 30.0,
+    high: float = 100.0,
+  ) -> None:
     """Pulse the deck red, swelling into a deep orange, to be seen across a room.
 
     The pulse runs in the background, so this returns as soon as it is on.
@@ -257,34 +318,24 @@ class Lights:
     Args:
       duration: how many seconds to pulse for, after which the light goes off. None pulses until
         the light is turned off or set to something else.
-
-    The colours it swells between, how long a swell takes, and the percentages it swells between
-    are the `default_error_pulse_*` attributes.
+      color: the colour at its dimmest.
+      peak_color: the colour at its brightest, blended into as it swells. None keeps one colour.
+      period: seconds for one swell, up and back down.
+      low: what percentage of how bright it looks it dims to.
+      high: what percentage it brightens to.
     """
     await self.animate(
-      swell(
-        self.default_error_pulse_color,
-        period=self.default_error_pulse_period,
-        low=self.default_error_pulse_low,
-        high=self.default_error_pulse_high,
-        peak_color=self.default_error_pulse_peak_color,
-      ),
-      duration,
+      swell(color, period=period, low=low, high=high, peak_color=peak_color), duration
     )
 
-  async def disco(self, seconds: Optional[float] = None) -> None:
-    """Easter egg: random colours for a while, then the colour the light stood at.
+  async def disco(self, duration: Optional[float] = 15, step: float = 0.1) -> None:
+    """Easter egg: random colours, and then the deck goes dark.
+
+    Runs in the background, so this returns as soon as it is on.
 
     Args:
-      seconds: how long to cycle for, or None for `default_disco_seconds`.
+      duration: how many seconds to cycle for, after which the light goes off. None cycles until
+        the light is turned off or set to something else.
+      step: how many seconds one colour stands for.
     """
-    seconds = self.default_disco_seconds if seconds is None else seconds
-    self.stop_animation()
-    before = await self.request_color()
-    interval = 0.1
-    try:
-      for _ in range(max(1, round(seconds / interval))):
-        await self._set([random.randint(1, 255) for _ in range(4)])
-        await asyncio.sleep(interval)
-    finally:
-      await self._set(before)
+    await self.animate(flicker(step), duration)

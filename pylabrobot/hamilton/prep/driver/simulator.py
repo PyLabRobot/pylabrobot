@@ -51,6 +51,7 @@ from .configuration import DeviceConfiguration
 from .errors import PREP_ERROR_CODES
 from .features.pipettes import Pipettes, PipettesConfiguration
 from .features.x_arm import XArm
+from .features.lights import Lights
 from .master import PrepDriver, _ResolvedPrepCommand
 from .prep_commands import MPH_OBJECT_PATH, PrepCommand
 
@@ -981,6 +982,10 @@ class PrepSimulationDriver(PrepDriver):
       declared_configuration_json=declared_configuration_json or RECORDING_PREP,
       io=_SimulatedIO(self),
     )
+    # Its light stands where a real one would, but nobody is looking at it, so setup does not
+    # stand at its ready colour. Built here, so setup keeps it rather than making its own.
+    self.lights = Lights(self)
+    self.lights.default_ready_seconds = 0.0
     configuration = self.declared.get("device")
     if configuration is None:
       raise ValueError(

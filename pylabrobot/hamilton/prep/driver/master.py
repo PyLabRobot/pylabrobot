@@ -318,6 +318,14 @@ class PrepDriver:
       logger.debug("[PHASE 1] Discovery")
       await self.discover()
 
+      # The light as early as the device's method table allows, so the deck says the device is
+      # working for all of the initializing and bringing up that is left. A colour, not an
+      # animation: the host drives every frame down this same connection, and setup keeps it busy.
+      if self.lights is None and await self.request_deck_light_installed():
+        self.lights = Lights(self)
+      if self.lights is not None:
+        await self.lights.set_color("turquoise")
+
       # 2. Bring the device to a known state.
       logger.debug("[PHASE 2] Device initialization")
       if skip_device_initialization:
@@ -380,8 +388,6 @@ class PrepDriver:
 
       if self.core_grippers is None:
         self.core_grippers = CoreGrippers(self)
-      if self.lights is None and await self.request_deck_light_installed():
-        self.lights = Lights(self)
       if self.x_arm is None:
         self.x_arm = XArm(self)
       # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
@@ -391,10 +397,18 @@ class PrepDriver:
         await self._create_capability_resources()
       self._setup_finished = True
     except Exception:
+      # The deck said the device was working; it is not, and the link is about to go.
+      if self.lights is not None:
+        self.lights.stop_animation()
       await self._close()
       raise
 
     logger.info("%s", self.format_setup_summary())
+
+    # Setup got all the way here, so say so, and leave the deck as setup found it: dark. Setup
+    # stands at the green, so that a caller which stops or exits straight after still sees it.
+    if self.lights is not None:
+      await self.lights.hold("green", duration=self.lights.default_ready_seconds)
 
   async def _open(self) -> None:
     """Open the link and check that a Prep answers on it.
@@ -455,7 +469,8 @@ class PrepDriver:
   async def stop(self, skip_raise_to_z_safety: bool = False):
     """Close the link, leaving the device safe to move laterally.
 
-    The device keeps its state; only this driver lets go of it. Every pipetting channel is moved up to Z safety
+    The device keeps its state, but not the deck light: it is darkened, since a colour stands on
+    the device with nobody holding it. Only this driver lets go. Every pipetting channel is moved up to Z safety
     first, and where the channels stopped is read back: a driver that let go with a channel low would leave the
     next lateral move to crash it. The 8-channel head is not raised: no move of its Z alone is known.
 
@@ -499,6 +514,13 @@ class PrepDriver:
         await self.pipettes._on_stop()
       if self.head8 is not None:
         await self.head8._on_stop()
+      if self.lights is not None:
+        # A colour stands on the device without a host to hold it, so a driver that let go mid-hold
+        # would leave the deck lit for good.
+        try:
+          await self.lights.turn_off()
+        except Exception:
+          logger.warning("could not darken the deck light", exc_info=True)
       await self._close()
       self._setup_finished = False
 
