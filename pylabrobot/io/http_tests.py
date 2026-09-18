@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import json
@@ -198,3 +199,21 @@ class HTTPRawTests(unittest.IsolatedAsyncioTestCase):
     await self.transport.stop()
     with self.assertRaisesRegex(RuntimeError, "setup"):
       await self.transport.request_raw("GET", "/status")
+
+
+class HTTPConstructionTests(unittest.TestCase):
+  """Building a transport, which happens in ordinary synchronous code."""
+
+  def test_can_be_built_without_a_running_loop(self) -> None:
+    """A device object is built before anything is set up, and often outside a coroutine. On
+    Python 3.9 an asyncio primitive constructed there looks for a loop to bind to and raises when
+    there is none - which there is not, once anything has run and closed one."""
+    asyncio.run(asyncio.sleep(0))
+    HTTP(human_readable_device_name="test device", base_url="http://device.invalid")
+
+  def test_a_request_before_setup_says_to_set_up(self) -> None:
+    """Rather than failing on the lock that setup would have built."""
+    transport = HTTP(human_readable_device_name="test device", base_url="http://device.invalid")
+    with self.assertRaises(RuntimeError) as caught:
+      asyncio.run(transport.request("GET", "/x"))
+    self.assertIn("setup() first", str(caught.exception))
