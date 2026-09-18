@@ -228,13 +228,18 @@ def test_setup_logs_one_summary_of_what_was_found(caplog):
   async def _run() -> None:
     p = PrepSimulationDriver(deck=STARLetDeck())
     assert p.format_setup_summary() == "[Hamilton Prep] not discovered yet"
-    # The pylabrobot logger does not propagate to the root, so caplog listens on it directly.
+    # caplog listens on this logger directly. Whether a record also reaches caplog's root handler
+    # depends on `setup_logger` having run, which sets `propagate = False` on `pylabrobot` - so it
+    # is held off here for the duration, and each record is captured once either way.
     prep_logger = logging.getLogger("pylabrobot.hamilton.prep")
     prep_logger.addHandler(caplog.handler)
+    propagated = prep_logger.propagate
+    prep_logger.propagate = False
     try:
       with caplog.at_level(logging.DEBUG, logger="pylabrobot.hamilton.prep"):
         await p.setup()
     finally:
+      prep_logger.propagate = propagated
       prep_logger.removeHandler(caplog.handler)
     summary = p.format_setup_summary()
     assert summary.startswith("[Hamilton Prep] Connected on simulation (no link)")
