@@ -15,6 +15,7 @@ IDs directly.
 from __future__ import annotations
 
 import enum
+import functools
 import logging
 import math
 import struct as _struct
@@ -24,6 +25,8 @@ from typing import (
   TYPE_CHECKING,
   Any,
   AsyncIterator,
+  Awaitable,
+  Callable,
   Collection,
   Dict,
   Generic,
@@ -2488,6 +2491,148 @@ class Pipettes:
     await self.move_to_y_positions({channel_idx: back_off}, speed=speed)
     surface = detected_y - diameter / 2 if forward else detected_y + diameter / 2
     return round(surface, 1)
+
+  async def _probe_one_edge(
+    self,
+    channel_idx: int,
+    x_start: float,
+    ys: Dict[int, float],
+    traverse_height: float,
+    probing_height: float,
+    repeats: int,
+    search: Callable[[], Awaitable[Optional[float]]],
+  ) -> List[Optional[float]]:
+    """Approach one edge and search it `repeats` times, returning what each search found.
+
+    Args:
+      channel_idx: the probing channel.
+      x_start: where the gantry stands for this edge, in mm.
+      ys: where every channel stands for it: the probing one at the start of its search, the others
+        clear of where that search ends.
+      traverse_height: the height to travel at, in mm.
+      probing_height: the height to search at, in mm.
+      repeats: how many searches.
+      search: the search itself.
+
+    A search that detects nothing leaves the channel at the end of it, so the approach is made
+    again before the next try.
+    """
+
+    async def approach() -> None:
+      await self.move_to_xy_positions(x_start, ys, minimum_traverse_height_start=traverse_height)
+      await self.move_tool_bottom_to_z_positions({channel_idx: probing_height})
+
+    await approach()
+    found: List[Optional[float]] = []
+    for _ in range(repeats):
+      surface = await search()
+      found.append(surface)
+      if surface is None:
+        await approach()
+    return found
+
+  async def probe_edges_using_clld(
+    self,
+    channel_idx: int,
+    target: Coordinate,
+    repeats: int = 2,
+    back_approach: float = 15.0,
+    front_approach: float = 9.0,
+    side_approach: float = 12.0,
+    below_the_top: float = 1.0,
+    between_edges: float = 20.0,
+    speed: float = 5.0,
+  ) -> Dict[str, List[Optional[float]]]:
+    """Find the four edges of something on the deck, with the channel's cLLD.
+
+    One edge at a time: the channel goes to the height of what it is probing, comes at the edge from
+    outside, and is lifted clear before the next one. What each search answers is the surface the
+    channel met, so the four together bracket the object. The channels end at Z safety.
+
+    Args:
+      channel_idx: the probing channel, 0-indexed from the back. Only a channel whose cLLD detects
+        answers anything; another sweeps and finds nothing.
+      target: the centre of what is being probed, and its top, in deck mm.
+      repeats: how many times to search each edge.
+      back_approach: how far behind the centre the backward-facing search starts, in mm.
+      front_approach: how far in front of it the forward-facing search starts, in mm.
+      side_approach: how far to either side the X searches start, in mm.
+      below_the_top: how far below the target's top to probe, in mm.
+      between_edges: how far above the top to lift between edges, in mm.
+      speed: search speed for the Y searches, in mm/s.
+
+    Returns:
+      What each search found, keyed "back", "front", "right" and "left", each list as long as
+      `repeats`, with None where nothing was detected.
+    """
+    reach = self.configuration.channels[channel_idx].x_range
+    rightmost = (
+      target.x + side_approach if reach is None else min(target.x + side_approach, reach[1])
+    )
+
+    def y_search(
+      direction: Literal["forward", "backward"],
+    ) -> Callable[[], Awaitable[Optional[float]]]:
+      return functools.partial(
+        self.probe_y_using_clld,
+        channel_idx,
+        direction,
+        search_end_position=target.y,
+        speed=speed,
+        allow_without_tip=True,
+      )
+
+    def x_search(direction: Literal["left", "right"]) -> Callable[[], Awaitable[Optional[float]]]:
+      return functools.partial(
+        self.probe_x_using_clld,
+        channel_idx,
+        direction,
+        search_end_position=target.x + (1.0 if direction == "left" else -1.0),
+        allow_without_tip=True,
+      )
+
+    def with_room_for_the_search(y_start: float) -> Dict[int, float]:
+      """Where every channel stands: this one at `y_start`, the others clear of its whole search.
+
+      A neighbour has to be clear of where the search *ends* as well as where it begins, or the
+      channel runs out of room partway and the search is refused.
+      """
+      nearest, furthest = min(y_start, target.y), max(y_start, target.y)
+      standing = {channel_idx: y_start}
+      for other in range(self.num_channels):
+        if other == channel_idx:
+          continue
+        spacing = self._min_spacing_between(channel_idx, other)
+        standing[other] = nearest - spacing if other > channel_idx else furthest + spacing
+      return standing
+
+    # Each edge, as the machine meets it: where the channels stand, and the search that finds it.
+    edges: Dict[str, Tuple[float, Dict[int, float], Callable[[], Awaitable[Optional[float]]]]] = {
+      "back": (target.x, with_room_for_the_search(target.y + back_approach), y_search("forward")),
+      "front": (
+        target.x,
+        with_room_for_the_search(target.y - front_approach),
+        y_search("backward"),
+      ),
+      "right": (rightmost, with_room_for_the_search(target.y), x_search("left")),
+      "left": (target.x - side_approach, with_room_for_the_search(target.y), x_search("right")),
+    }
+
+    await self.move_to_safe_z()
+    measurements: Dict[str, List[Optional[float]]] = {}
+    for edge, (x_start, ys, search) in edges.items():
+      measurements[edge] = await self._probe_one_edge(
+        channel_idx,
+        x_start,
+        ys,
+        traverse_height=target.z,
+        probing_height=target.z - below_the_top,
+        repeats=repeats,
+        search=search,
+      )
+      await self.move_tool_bottom_to_z_positions({channel_idx: target.z + between_edges})
+    await self.move_to_safe_z()
+    return measurements
 
   # -- z probing (capacitive, force) ---------------------------------------------------------------
 

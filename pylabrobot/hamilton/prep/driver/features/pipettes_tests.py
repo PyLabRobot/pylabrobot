@@ -2005,3 +2005,46 @@ def test_a_y_probe_given_a_start_moves_there_first_and_makes_room_for_it():
     await p.stop()
 
   _run(_t())
+
+
+def test_probing_four_edges_comes_at_each_from_outside_and_lifts_between_them():
+  """Back and front in Y, right and left in X, each approached from its own side."""
+
+  async def _t():
+    deck = PrepDeck()
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    target = Coordinate(150.0, 200.0, 60.0)
+
+    pipettes = p.pipettes
+    searched: list = []
+    probe_y, probe_x = pipettes.probe_y_using_clld, pipettes.probe_x_using_clld
+
+    async def record_y(channel, direction, **kwargs):
+      standing = (await pipettes.request_locations())[channel]
+      searched.append(("y", direction, round(standing.y, 1), round(standing.z, 1)))
+      return await probe_y(channel, direction, **kwargs)
+
+    async def record_x(channel, direction, **kwargs):
+      standing = (await pipettes.request_locations())[channel]
+      searched.append(("x", direction, round(standing.x, 1), round(standing.z, 1)))
+      return await probe_x(channel, direction, **kwargs)
+
+    pipettes.probe_y_using_clld = record_y  # type: ignore[method-assign, assignment]
+    pipettes.probe_x_using_clld = record_x  # type: ignore[method-assign, assignment]
+    found = await p.pipettes.probe_edges_using_clld(0, target, repeats=1)
+
+    assert list(found) == ["back", "front", "right", "left"]
+    assert all(len(measurements) == 1 for measurements in found.values())
+    # Each search starts outside the target and 1 mm below its top, and none of them detects here.
+    assert searched == [
+      ("y", "forward", 215.0, 59.0),
+      ("y", "backward", 191.0, 59.0),
+      ("x", "left", 162.0, 59.0),
+      ("x", "right", 138.0, 59.0),
+    ]
+    assert (await p.pipettes.request_locations())[0].z == pytest.approx(167.5)  # left at Z safety
+    await p.stop()
+
+  _run(_t())
