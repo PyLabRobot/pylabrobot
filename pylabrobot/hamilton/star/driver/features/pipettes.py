@@ -591,7 +591,7 @@ class Pipettes:
     y_positions: Optional[List[float]] = None,
     begin_of_tip_deposit_process: Optional[float] = None,
     end_of_tip_deposit_process: Optional[float] = None,
-    z_position_at_end_of_a_command: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
     tip_pattern: Optional[List[bool]] = None,
     tip_type: Optional[int] = None,
     discarding_method: Optional[int] = None,
@@ -607,7 +607,7 @@ class Pipettes:
         them evenly across the Y band the procedure uses.
       begin_of_tip_deposit_process: Z to start the eject from, in mm.
       end_of_tip_deposit_process: Z the eject ends at, in mm.
-      z_position_at_end_of_a_command: Z to leave the channels at, in mm.
+      minimum_traverse_height_end: Z to leave the channels at, in mm.
       tip_pattern: which channels take part. Defaults to all of them.
       tip_type: tip type table index.
       discarding_method: how tips are discarded.
@@ -625,8 +625,8 @@ class Pipettes:
       begin_of_tip_deposit_process = c.initialize_begin_of_tip_deposit
     if end_of_tip_deposit_process is None:
       end_of_tip_deposit_process = c.initialize_end_of_tip_deposit
-    if z_position_at_end_of_a_command is None:
-      z_position_at_end_of_a_command = c.initialize_z_position_at_end
+    if minimum_traverse_height_end is None:
+      minimum_traverse_height_end = c.initialize_z_position_at_end
     if tip_type is None:
       tip_type = c.initialize_tip_type
     if discarding_method is None:
@@ -641,7 +641,7 @@ class Pipettes:
       yp=[f"{round(y * 10):04}" for y in y_positions],
       tp=f"{round(begin_of_tip_deposit_process * 10):04}",
       tz=f"{round(end_of_tip_deposit_process * 10):04}",
-      te=f"{round(z_position_at_end_of_a_command * 10):04}",
+      te=f"{round(minimum_traverse_height_end * 10):04}",
       tm=[f"{tm:01}" for tm in tip_pattern],
       tt=f"{tip_type:02}",
       ti=discarding_method,
@@ -1451,7 +1451,7 @@ class Pipettes:
     tip_type_index: int,
     begin_tip_pick_up_process: int,
     end_tip_pick_up_process: int,
-    minimum_traverse_height_at_beginning_of_a_command: int,
+    minimum_traverse_height_start: int,
     pickup_method: TipPickupMethod,
   ):
     """Send the pick-up as it is given, in tenths of a millimetre. `C0 TP`."""
@@ -1467,7 +1467,7 @@ class Pipettes:
       tt=f"{tip_type_index:02}",
       tp=f"{begin_tip_pick_up_process:04}",
       tz=f"{end_tip_pick_up_process:04}",
-      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      th=f"{minimum_traverse_height_start:04}",
       td=pickup_method.value,
     )
 
@@ -1478,8 +1478,8 @@ class Pipettes:
     tip_pattern: List[bool],
     begin_tip_deposit_process: int,
     end_tip_deposit_process: int,
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    z_position_at_end_of_a_command: int,
+    minimum_traverse_height_start: int,
+    minimum_traverse_height_end: int,
     discarding_method: TipDropMethod,
   ):
     """Send the drop as it is given, in tenths of a millimetre. `C0 TR`.
@@ -1497,8 +1497,8 @@ class Pipettes:
       tm=tip_pattern,
       tp=begin_tip_deposit_process,
       tz=end_tip_deposit_process,
-      th=minimum_traverse_height_at_beginning_of_a_command,
-      te=z_position_at_end_of_a_command,
+      th=minimum_traverse_height_start,
+      te=minimum_traverse_height_end,
       ti=discarding_method.value,
     )
 
@@ -1509,7 +1509,7 @@ class Pipettes:
     offsets: Optional[List[Coordinate]] = None,
     begin_tip_pick_up_process: Optional[float] = None,
     end_tip_pick_up_process: Optional[float] = None,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
     pickup_method: Optional[TipPickupMethod] = None,
   ) -> None:
     """Pick up a tip from each spot, one channel per spot, and move each onto its channel.
@@ -1527,7 +1527,7 @@ class Pipettes:
       begin_tip_pick_up_process: where the pick-up begins, in mm. The spot plus the collar height
         when None.
       end_tip_pick_up_process: where it ends, in mm. The spot when None.
-      minimum_traverse_height_at_beginning_of_a_command: how high the channels travel first, in mm.
+      minimum_traverse_height_start: how high the channels travel first, in mm.
         `default_minimum_traverse_height` when None.
       pickup_method: out of a rack or out of wash liquid. The tip's own when None.
 
@@ -1578,8 +1578,8 @@ class Pipettes:
     traverse = round(
       (
         self.default_minimum_traverse_height
-        if minimum_traverse_height_at_beginning_of_a_command is None
-        else minimum_traverse_height_at_beginning_of_a_command
+        if minimum_traverse_height_start is None
+        else minimum_traverse_height_start
       )
       * 10
     )
@@ -1594,7 +1594,7 @@ class Pipettes:
         tip_type_index=tip_type_index,
         begin_tip_pick_up_process=begin,
         end_tip_pick_up_process=end,
-        minimum_traverse_height_at_beginning_of_a_command=traverse,
+        minimum_traverse_height_start=traverse,
         pickup_method=pickup_method or hamilton_tips[0].pickup_method,
       )
     except BaseException as failure:
@@ -1654,8 +1654,8 @@ class Pipettes:
     drop_method: Optional[TipDropMethod] = None,
     begin_tip_deposit_process: Optional[float] = None,
     end_tip_deposit_process: Optional[float] = None,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    z_position_at_end_of_a_command: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
   ) -> None:
     """Drop each channel's tip into a tip spot or anywhere else, such as the waste.
 
@@ -1673,8 +1673,8 @@ class Pipettes:
       drop_method: `DROP` when every target is a tip spot and `PLACE_SHIFT` otherwise, when None.
       begin_tip_deposit_process: where the deposit begins, in mm.
       end_tip_deposit_process: where it ends, in mm.
-      minimum_traverse_height_at_beginning_of_a_command: how high the channels travel first, in mm.
-      z_position_at_end_of_a_command: where the channels are left, in mm.
+      minimum_traverse_height_start: how high the channels travel first, in mm.
+      minimum_traverse_height_end: where the channels are left, in mm.
 
     Raises:
       NoTipError: If a channel carries no tip in the model.
@@ -1730,16 +1730,16 @@ class Pipettes:
     traverse = round(
       (
         self.default_minimum_traverse_height
-        if minimum_traverse_height_at_beginning_of_a_command is None
-        else minimum_traverse_height_at_beginning_of_a_command
+        if minimum_traverse_height_start is None
+        else minimum_traverse_height_start
       )
       * 10
     )
     z_end = round(
       (
         self.default_minimum_traverse_height
-        if z_position_at_end_of_a_command is None
-        else z_position_at_end_of_a_command
+        if minimum_traverse_height_end is None
+        else minimum_traverse_height_end
       )
       * 10
     )
@@ -1753,8 +1753,8 @@ class Pipettes:
         tip_pattern=pattern,
         begin_tip_deposit_process=begin,
         end_tip_deposit_process=end,
-        minimum_traverse_height_at_beginning_of_a_command=traverse,
-        z_position_at_end_of_a_command=z_end,
+        minimum_traverse_height_start=traverse,
+        minimum_traverse_height_end=z_end,
         discarding_method=drop_method,
       )
     except BaseException as failure:

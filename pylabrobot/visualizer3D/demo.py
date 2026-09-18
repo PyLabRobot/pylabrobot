@@ -150,7 +150,7 @@ def declare_channel_access(star) -> None:
     if star.x_arm.configuration.reference_point == "center":
       star.x_arm.resource.window = {"width": 185.0, "inset_y": 20.0}
 
-  waste_block = next((child for child in star.deck.children if child.name == "waste_block"), None)
+  waste_block = star.deck.waste_block
   if waste_block is not None:
     x_to = min(x_to, waste_block.get_location_wrt(star.deck).x)
 

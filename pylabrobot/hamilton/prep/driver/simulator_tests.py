@@ -94,9 +94,9 @@ def test_setup_places_the_teaching_needle_and_waste_positions_where_the_device_r
 
   async def _run() -> None:
     deck = PrepDeck()
-    needle = deck.get_resource("teaching_tip")
-    waste = deck.get_resource("waste_front")
-    assert needle.location is not None
+    needle = deck.teaching_tip_spot
+    waste = deck.waste_positions["waste_front"]
+    assert needle is not None and needle.location is not None
     height = needle.location.z
     needle.location = Coordinate(0.0, 0.0, height)
     waste.location = Coordinate(0.0, 0.0, 0.0)
@@ -151,7 +151,7 @@ def test_the_arm_reference_line_spans_the_channels_combined_y_ranges():
     p = PrepSimulationDriver(deck=deck)
     await p.setup()
     assert p.pipettes is not None
-    arm = deck.get_resource("x_arm")
+    arm = deck.get_resource(deck.prefixed("x_arm"))
     front = arm.get_location_wrt(deck).y
     ranges = [c.y_range for c in p.pipettes.configuration.channels if c.y_range is not None]
     low, high = arm.reference_point["y_range"]  # type: ignore[attr-defined]

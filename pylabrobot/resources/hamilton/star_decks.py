@@ -1,9 +1,13 @@
 """Hamilton STAR, STARlet and STARplus decks."""
 
-from typing import Literal, Optional, cast
+import warnings
+from typing import Literal, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.deck import _built
+from pylabrobot.resources.errors import ResourceNotFoundError
 from pylabrobot.resources.hamilton.core_grippers import (
+  HamiltonCoreGrippers,
   hamilton_core_gripper_1000ul_5ml_on_waste,
   hamilton_core_gripper_1000ul_at_waste,
 )
@@ -29,7 +33,8 @@ class HamiltonSTARDeck(HamiltonDeck):
     size_x: Optional[float] = None,
     size_y: Optional[float] = None,
     size_z: Optional[float] = None,
-    name="deck",
+    name: str = "STAR_Deck",
+    prefix: Optional[str] = None,
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
     with_waste_block: bool = True,
@@ -44,7 +49,9 @@ class HamiltonSTARDeck(HamiltonDeck):
   ) -> None:
     """Create a new STAR(let) deck of the given size.
 
-    `with_trash` and `with_teaching_rack` require `with_waste_block` to be true. `num_rails` is
+    `with_trash` and `with_teaching_rack` require `with_waste_block` to be true. `prefix` is what
+    this deck names what it carries after: the device it belongs to, so two of them stand in one
+    tree. It defaults to this deck's own name, without the `_Deck` it ends in. `num_rails` is
     deprecated: it counted two more than `num_tracks`.
     """
 
@@ -62,18 +69,26 @@ class HamiltonSTARDeck(HamiltonDeck):
       category=category,
       origin=origin,
       model=model,
+      prefix=prefix,
     )
+    prefix = self.prefix
 
     if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
-      trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
+      trash96 = Trash(f"{prefix}_trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # tiprack
       self.assign_child_resource(
         resource=trash96,
         location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=216.4),
       )
 
     if with_waste_block:
-      waste_block = Resource(name="waste_block", size_x=30, size_y=445.2, size_z=100)
+      waste_block = Resource(
+        name=f"{prefix}_waste_block",
+        size_x=30,
+        size_y=445.2,
+        size_z=100,
+        category="waste_block",
+      )
       self.assign_child_resource(
         waste_block,
         location=Coordinate(x=self.track_to_location(self.num_tracks + 1).x, y=115.0, z=100),
@@ -82,23 +97,17 @@ class HamiltonSTARDeck(HamiltonDeck):
       # assign trash area, positioned 25mm to the right of the waste block
       # only run if the waste block is actually assigned.
       if with_trash:
-        if with_waste_block:
-          waste_block_x = self.get_resource("waste_block").get_location_wrt(self).x
-        else:
-          # Fallback: anchor to the rightmost rail when no waste block is present.
-          waste_block_x = self.track_to_location(self.num_tracks + 1).x
-
-        trash_x = waste_block_x + 25
+        trash_x = waste_block.get_location_wrt(self).x + 25
 
         self.assign_child_resource(
-          resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
+          resource=Trash(f"{prefix}_trash", size_x=0, size_y=241.2, size_z=0),
           location=Coordinate(x=trash_x, y=190.6, z=137.1),
         )
 
       if with_teaching_rack:
         tip_spots = [
           TipSpot(
-            name=f"teaching_tip_rack_tip_spot_{i}",
+            name=f"{prefix}_teaching_tip_rack_tip_spot_{i}",
             size_x=9.0,
             size_y=9.0,
             size_z=0,
@@ -111,7 +120,7 @@ class HamiltonSTARDeck(HamiltonDeck):
           ts.location = Coordinate(x=0, y=7 * 9 - 9 * i, z=75.0)
 
         teaching_tip_rack = TipRack(
-          name="teaching_tip_rack",
+          name=f"{prefix}_teaching_tip_rack",
           size_x=9,
           size_y=9 * 8,
           size_z=50.4,
@@ -132,7 +141,7 @@ class HamiltonSTARDeck(HamiltonDeck):
     # left edge.
     if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if self.num_tracks == STAR_NUM_TRACKS else 798
-      holder = hamilton_core_gripper_1000ul_at_waste()
+      holder = hamilton_core_gripper_1000ul_at_waste(name=f"{prefix}_core_gripper_holder")
       waste_block.assign_child_resource(
         holder,
         location=Coordinate(x=x - holder.get_size_x() / 2, y=105.550 - 26 - 9.5, z=205)
@@ -140,7 +149,7 @@ class HamiltonSTARDeck(HamiltonDeck):
       )
     elif core_grippers == "1000uL-5mL-on-waste":  # "on waste"
       x = 1337.5 if self.num_tracks == STAR_NUM_TRACKS else 797.5
-      holder = hamilton_core_gripper_1000ul_5ml_on_waste()
+      holder = hamilton_core_gripper_1000ul_5ml_on_waste(name=f"{prefix}_core_gripper_holder")
       waste_block.assign_child_resource(
         holder,
         location=Coordinate(x=x - holder.get_size_x() / 2, y=125 - 18 - 21.5, z=200.5)  # probed
@@ -155,16 +164,67 @@ class HamiltonSTARDeck(HamiltonDeck):
       "core_grippers": None,  # data encoded as child. (not very pretty to have this key though...)
     }
 
+  # -- what the deck carries --------------------------------------------------------------------
+
+  @property
+  def waste_block(self) -> Optional[Resource]:
+    """The waste block on the deck's right, or None if this deck was built without one."""
+    return _built(self.children, "waste_block", Resource)
+
+  @property
+  def trash96(self) -> Optional[Trash]:
+    """Where the 96-head discards tips, or None if this deck was built without it."""
+    return _built(self.children, "trash_core96", Trash)
+
+  @property
+  def trash(self) -> Optional[Trash]:
+    """Where the channels discard tips, or None if this deck was built without it."""
+    return _built(self.children, "trash", Trash)
+
+  @property
+  def teaching_tip_rack(self) -> Optional[TipRack]:
+    """The teaching needles on the waste block, or None if this deck was built without them."""
+    block = self.waste_block
+    return None if block is None else _built(block.children, "teaching_tip_rack", TipRack)
+
+  @property
+  def core_gripper_holder(self) -> Optional[HamiltonCoreGrippers]:
+    """The CO-RE gripper holder on the waste block, or None if this deck carries none."""
+    block = self.waste_block
+    if block is None:
+      return None
+    # `core_grippers` is what a deck saved before the holder was named for what it is calls it.
+    return _built(block.children, "core_gripper_holder", HamiltonCoreGrippers) or _built(
+      block.children, "core_grippers", HamiltonCoreGrippers
+    )
+
+  @property
+  def core_grippers(self) -> Optional[HamiltonCoreGrippers]:
+    """Deprecated: use `core_gripper_holder`. The tools are what the grippers are."""
+    warnings.warn(
+      "HamiltonSTARDeck.core_grippers is deprecated. Use 'core_gripper_holder' instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.core_gripper_holder
+
   def track_to_location(self, track: int) -> Coordinate:
     x = 100.0 + (track - 1) * _TRACK_WIDTH
     return Coordinate(x=x, y=63, z=100)
 
   def get_trash_area96(self) -> Trash:
-    if not self.has_resource("trash_core96"):
+    trash96 = self.trash96
+    if trash96 is None:
       raise RuntimeError(
         "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
       )
-    return cast(Trash, self.get_resource("trash_core96"))
+    return trash96
+
+  def get_trash_area(self) -> Trash:
+    trash = self.trash
+    if trash is None:
+      raise ResourceNotFoundError("Trash area not found")
+    return trash
 
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas and the waste block."""
@@ -173,12 +233,14 @@ class HamiltonSTARDeck(HamiltonDeck):
       resource = self.get_resource(resource_name)
       if isinstance(resource, Trash) and not include_trash:
         continue
-      if resource.name == "waste_block":
+      if resource is self.waste_block:
         continue
       resource.unassign()
 
 
 def STARLetDeck(
+  name: str = "STARlet_Deck",
+  prefix: Optional[str] = None,
   origin: Coordinate = Coordinate.zero(),
   with_trash: bool = True,
   with_trash96: bool = True,
@@ -190,6 +252,8 @@ def STARLetDeck(
   """Create a new STARLet deck."""
 
   return HamiltonSTARDeck(
+    name=name,
+    prefix=prefix,
     num_tracks=30,
     size_x=1005.0,
     size_y=653.5,
@@ -203,6 +267,8 @@ def STARLetDeck(
 
 
 def STARDeck(
+  name: str = "STAR_Deck",
+  prefix: Optional[str] = None,
   origin: Coordinate = Coordinate.zero(),
   with_trash: bool = True,
   with_trash96: bool = True,
@@ -214,6 +280,8 @@ def STARDeck(
   """Create a new STAR deck."""
 
   return HamiltonSTARDeck(
+    name=name,
+    prefix=prefix,
     num_tracks=54,
     size_x=1545.0,
     size_y=653.5,
@@ -235,6 +303,8 @@ def STARDeck(
 
 
 def STARPlusDeck(
+  name: str = "STARplus_Deck",
+  prefix: Optional[str] = None,
   origin: Coordinate = Coordinate.zero(),
   with_trash: bool = True,
   with_trash96: bool = True,
@@ -249,6 +319,8 @@ def STARPlusDeck(
   """
 
   return HamiltonSTARDeck(
+    name=name,
+    prefix=prefix,
     num_tracks=76,
     size_x=2040.0,
     size_y=653.5,

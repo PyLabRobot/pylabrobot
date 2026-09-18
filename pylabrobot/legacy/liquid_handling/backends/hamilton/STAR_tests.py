@@ -744,7 +744,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_teaching_needle_pickup_and_return(self):
     """Teaching needles retain their pickup and return heights in the integrated holder."""
-    rack = self.deck.get_resource("teaching_tip_rack")
+    rack = self.deck.teaching_tip_rack
+    assert rack is not None
     await self.lh.pick_up_tips(rack.get_all_items(), use_channels=list(range(8)))
     pickup = next(
       call.kwargs["cmd"]
@@ -1417,7 +1418,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.reset_mock()
     detected = await self.STAR.head96_probe_z_using_clld(
       tip_len=50.0,  # overhang = 50 - 8 = 42 mm
-      lowest_immers_pos=140.0,
+      search_end_position=140.0,
       start_pos_search=250.0,
       speed=10.0,
       acceleration=300.0,

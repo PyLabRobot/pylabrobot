@@ -370,7 +370,7 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
     self.assertIn("EI 96-head", moves)
     self.assertEqual(
       head.configuration.tip_discard_location,
-      head._position_centred_in(star.deck.get_resource("trash_core96")),
+      head._position_centred_in(star.deck.get_trash_area96()),
     )
 
   async def test_a_feature_left_down_is_named_once_setup_has_run(self):
@@ -417,12 +417,15 @@ class TestChannelResources(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
     from pylabrobot.resources.hamilton import STARDeck
 
-    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    deck = STARDeck()
+    driver = STARSimulationDriver(deck=deck, declared_configuration_json=RECORDING_STAR)
     await driver.setup()
     pipettes = driver.pipettes
     assert pipettes is not None
     channels = [resource.name for resource in pipettes.resources]
-    self.assertEqual(channels, [f"pipette_channel_{channel}" for channel in range(len(channels))])
+    self.assertEqual(
+      channels, [deck.prefixed(f"pipette_channel_{channel}") for channel in range(len(channels))]
+    )
 
     pipettes.configuration.channels[2].width = None
     for resource in list(pipettes.resources):

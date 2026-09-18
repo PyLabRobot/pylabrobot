@@ -311,7 +311,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
     tip_type_index: int,
     begin_tip_pick_up_process: int,
     end_tip_pick_up_process: int,
-    minimum_traverse_height_at_beginning_of_a_command: int,
+    minimum_traverse_height_start: int,
     pickup_method: TipPickupMethod,
   ):
     resp = await super()._unchecked_fw_pick_up_tips(
@@ -321,12 +321,10 @@ class SimulatedPipettes(_Simulated, Pipettes):
       tip_type_index=tip_type_index,
       begin_tip_pick_up_process=begin_tip_pick_up_process,
       end_tip_pick_up_process=end_tip_pick_up_process,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+      minimum_traverse_height_start=minimum_traverse_height_start,
       pickup_method=pickup_method,
     )
-    self._record_tip_command(
-      x_positions, y_positions, tip_pattern, minimum_traverse_height_at_beginning_of_a_command
-    )
+    self._record_tip_command(x_positions, y_positions, tip_pattern, minimum_traverse_height_start)
     return resp
 
   async def _unchecked_fw_drop_tips(
@@ -336,8 +334,8 @@ class SimulatedPipettes(_Simulated, Pipettes):
     tip_pattern: List[bool],
     begin_tip_deposit_process: int,
     end_tip_deposit_process: int,
-    minimum_traverse_height_at_beginning_of_a_command: int,
-    z_position_at_end_of_a_command: int,
+    minimum_traverse_height_start: int,
+    minimum_traverse_height_end: int,
     discarding_method: TipDropMethod,
   ):
     resp = await super()._unchecked_fw_drop_tips(
@@ -346,11 +344,11 @@ class SimulatedPipettes(_Simulated, Pipettes):
       tip_pattern=tip_pattern,
       begin_tip_deposit_process=begin_tip_deposit_process,
       end_tip_deposit_process=end_tip_deposit_process,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
-      z_position_at_end_of_a_command=z_position_at_end_of_a_command,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      minimum_traverse_height_end=minimum_traverse_height_end,
       discarding_method=discarding_method,
     )
-    self._record_tip_command(x_positions, y_positions, tip_pattern, z_position_at_end_of_a_command)
+    self._record_tip_command(x_positions, y_positions, tip_pattern, minimum_traverse_height_end)
     return resp
 
   async def move_stop_disc_to_z_position(self, channel: int, z: float, *args: Any, **kwargs: Any):

@@ -21,6 +21,7 @@ from pylabrobot.hamilton.prep.driver.simulator import (
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
+from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton import (
   PrepDeck,
   STARLetDeck,
@@ -626,7 +627,7 @@ def test_probe_x_using_clld_steps_the_arm_with_detection_on_and_puts_everything_
       Pipettes._search_x_using_clld, p.pipettes
     )
     found = await p.pipettes.probe_x_using_clld(
-      1, "left", search_end_position=here - 0.5, speed=5.0, allow_without_tip=True
+      1, "left", search_end_position=here - 0.5, allow_without_tip=True
     )
     assert found is None
     steps = [i for i, c in enumerate(sent) if isinstance(c, PrepCmd.PrepXAxisMoveAbsolute)]
@@ -669,7 +670,6 @@ def test_probe_x_using_clld_refuses_searches_it_cannot_make():
     probe = functools.partial(p.pipettes.probe_x_using_clld, allow_without_tip=True)
     for call, message in (
       (lambda: probe(1, "up"), "direction"),  # type: ignore[arg-type]
-      (lambda: probe(1, "left", search_end_position=here - 1.0, speed=0), "speed must be above 0"),
       (lambda: probe(1, "left", search_end_position=here + 1.0), "cannot end at"),
       (lambda: probe(2, "left"), "channel_idx must be between"),
     ):
@@ -708,8 +708,9 @@ def test_simulated_y_probe_stops_at_the_first_resource_in_the_way():
     )
     assert surface == pytest.approx(300.0)
     assert (await p.pipettes.request_locations())[1].y == pytest.approx(305.5)
-    # Raised above the block, the channel passes over it.
-    await p.pipettes.move_tool_bottom_to_z_positions({1: 70.0})
+    # Raised above the block, the channel passes over it. The deck's own waste block is 75 mm
+    # tall, so clearing it takes more than the test block's 60.
+    await p.pipettes.move_tool_bottom_to_z_positions({1: 80.0})
     await p.pipettes.move_to_y_positions({1: 320.0})
     found = await p.pipettes.probe_y_using_clld(
       1, "forward", search_end_position=290.0, allow_without_tip=True
@@ -793,7 +794,7 @@ def test_simulated_z_probe_detects_the_top_of_a_resource_below():
     assert p.pipettes is not None
     await p.pipettes.move_to_y_positions({0: 340.0, 1: 300.0})
     found = await p.pipettes.probe_z_using_clld(
-      1, search_start_position=160.0, lowest_immers_pos=20.0, allow_without_tip=True
+      1, search_start_position=160.0, search_end_position=20.0, allow_without_tip=True
     )
     assert found == pytest.approx(60.0)
     assert (await p.pipettes.request_locations())[1].z == pytest.approx(160.0)
@@ -826,8 +827,8 @@ def test_probe_z_using_ztouch_seeks_with_the_channels_own_z_axis():
       1,
       search_start_position=160.0,
       speed=5.0,
-      lowest_immers_pos=100.0,
-      z_position_at_end_of_a_command=150.0,
+      search_end_position=100.0,
+      minimum_traverse_height_end=150.0,
       allow_without_tip=True,
     )
     assert found is None
@@ -870,8 +871,8 @@ def test_probe_z_using_ztouch_seeks_the_tip_bottom_and_can_end_at_z_safety():
       p.pipettes.probe_z_using_ztouch,
       1,
       search_start_position=160.0,
-      lowest_immers_pos=100.0,
-      z_position_at_end_of_a_command=150.0,
+      search_end_position=100.0,
+      minimum_traverse_height_end=150.0,
     )
     assert await probe() is None
     assert await probe(tip_len=70.0, move_channels_to_safe_pos_after=True) is None
@@ -907,7 +908,7 @@ def test_probe_z_using_ztouch_holds_the_push_force_for_the_seek_and_puts_it_back
     await p.pipettes.probe_z_using_ztouch(
       1,
       search_start_position=160.0,
-      lowest_immers_pos=100.0,
+      search_end_position=100.0,
       allow_without_tip=True,
       push_force_pwm=40,
     )
@@ -938,7 +939,7 @@ def test_probe_z_using_ztouch_reads_an_untouched_search_as_nothing():
     )
     p.pipettes._unchecked_fw_z_axis_seek_obstacle = AsyncMock(return_value=at_the_end)  # type: ignore[method-assign]
     found = await p.pipettes.probe_z_using_ztouch(
-      1, search_start_position=160.0, lowest_immers_pos=100.0, allow_without_tip=True
+      1, search_start_position=160.0, search_end_position=100.0, allow_without_tip=True
     )
     assert found is None
     # A surface well above the end is a real detection.
@@ -947,7 +948,7 @@ def test_probe_z_using_ztouch_reads_an_untouched_search_as_nothing():
     )
     p.pipettes._unchecked_fw_z_axis_seek_obstacle = AsyncMock(return_value=at_a_surface)  # type: ignore[method-assign]
     found = await p.pipettes.probe_z_using_ztouch(
-      1, search_start_position=160.0, lowest_immers_pos=100.0, allow_without_tip=True
+      1, search_start_position=160.0, search_end_position=100.0, allow_without_tip=True
     )
     assert found == pytest.approx(120.0)
     await p.stop()
@@ -973,9 +974,9 @@ def test_probe_z_using_ztouch_refuses_seeks_it_cannot_make():
     probe = functools.partial(p.pipettes.probe_z_using_ztouch, 1, allow_without_tip=True)
     for kwargs, message in (
       ({"speed": 0}, "speed must be above 0"),
-      ({"search_start_position": 100.0, "lowest_immers_pos": 120.0}, "must be below"),
-      ({"lowest_immers_pos": 5.0}, "outside channel 1 range"),
-      ({"z_position_at_end_of_a_command": 400.0}, "outside channel 1 range"),
+      ({"search_start_position": 100.0, "search_end_position": 120.0}, "must be below"),
+      ({"search_end_position": 5.0}, "outside channel 1 range"),
+      ({"minimum_traverse_height_end": 400.0}, "outside channel 1 range"),
     ):
       with pytest.raises(ValueError, match=message):
         await probe(**kwargs)
@@ -996,7 +997,7 @@ def test_simulated_ztouch_probe_meets_the_top_of_a_resource_below():
     assert p.pipettes is not None
     await p.pipettes.move_to_y_positions({0: 340.0, 1: 300.0})
     found = await p.pipettes.probe_z_using_ztouch(
-      1, search_start_position=160.0, lowest_immers_pos=20.0, allow_without_tip=True
+      1, search_start_position=160.0, search_end_position=20.0, allow_without_tip=True
     )
     assert found == pytest.approx(60.0)
     assert (await p.pipettes.request_locations())[1].z == pytest.approx(160.0)
@@ -1025,9 +1026,11 @@ def test_probes_check_the_tip_before_anything_else():
     with pytest.raises(RuntimeError, match="no tip on channel 1"):
       await p.pipettes.probe_x_using_clld(1, "left")
     with pytest.raises(RuntimeError, match="no tip on channel 1"):
-      await p.pipettes.probe_z_using_clld(1, search_start_position=160.0, lowest_immers_pos=100.0)
+      await p.pipettes.probe_z_using_clld(1, search_start_position=160.0, search_end_position=100.0)
     with pytest.raises(RuntimeError, match="no tip on channel 1"):
-      await p.pipettes.probe_z_using_ztouch(1, search_start_position=160.0, lowest_immers_pos=100.0)
+      await p.pipettes.probe_z_using_ztouch(
+        1, search_start_position=160.0, search_end_position=100.0
+      )
     assert not {
       "PrepYAxisSeekCapacitiveLld",
       "PrepXAxisMoveAbsolute",
@@ -1057,7 +1060,7 @@ def test_probe_z_using_clld_seeks_where_the_channel_stands():
 
     p.send_command = record  # type: ignore[method-assign]
     found = await p.pipettes.probe_z_using_clld(
-      1, search_start_position=160.0, lowest_immers_pos=100.0, allow_without_tip=True
+      1, search_start_position=160.0, search_end_position=100.0, allow_without_tip=True
     )
     assert found is None  # nothing on the deck under the channel
     seeks = [c for c in sent if type(c).__name__ == "PrepZSeekLldPosition"]
@@ -1069,7 +1072,10 @@ def test_probe_z_using_clld_seeks_where_the_channel_stands():
     )
     assert (seek.seek_height, seek.min_seek_height, seek.final_position_z) == (160.0, 100.0, 160.0)
     assert seek.seek_velocity_z == p.pipettes.default_clld_probe_speed
-    assert (seek.lld_sensitivity, seek.detect_mode) == (1, 0)
+    # What the sweep on PRPAA1087 found detects, and what every probe run since has used.
+    assert (seek.lld_sensitivity, seek.detect_mode) == (3, 2)
+    assert (p.pipettes.default_clld_sensitivity, p.pipettes.default_clld_detect_mode) == (3, 2)
+    assert p.pipettes.default_clld_probe_speed == 10.0
     after = (await p.pipettes.request_locations())[1]
     assert (after.x, after.y, after.z) == pytest.approx((before.x, before.y, 160.0), abs=1e-3)
     await p.stop()
@@ -1087,15 +1093,15 @@ def test_probe_z_using_clld_refuses_before_sending():
     p.pipettes.configuration.channels[0].z_range = (18.0, 167.5)
     with pytest.raises(ValueError, match="above search_start_position"):
       await p.pipettes.probe_z_using_clld(
-        0, search_start_position=120.0, lowest_immers_pos=130.0, allow_without_tip=True
+        0, search_start_position=120.0, search_end_position=130.0, allow_without_tip=True
       )
-    with pytest.raises(ValueError, match="lowest_immers_pos=10.0 outside channel 0"):
+    with pytest.raises(ValueError, match="search_end_position=10.0 outside channel 0"):
       await p.pipettes.probe_z_using_clld(
-        0, search_start_position=160.0, lowest_immers_pos=10.0, allow_without_tip=True
+        0, search_start_position=160.0, search_end_position=10.0, allow_without_tip=True
       )
     with pytest.raises(ValueError, match="channel_idx must be between"):
       await p.pipettes.probe_z_using_clld(
-        5, search_start_position=160.0, lowest_immers_pos=100.0, allow_without_tip=True
+        5, search_start_position=160.0, search_end_position=100.0, allow_without_tip=True
       )
     await p.stop()
 
@@ -1153,7 +1159,7 @@ def test_x_arm_move_raises_lowered_channels_up_to_the_height_it_is_given():
 
     await p.pipettes.move_to_location(Coordinate(200.0, 200.0, 100.0), use_channels=1)
     z_before = [at.z for at in await p.pipettes.request_locations()]
-    await p.x_arm.move_to_x_position(180.0, minimum_traverse_height=0)
+    await p.x_arm.move_to_x_position(180.0, minimum_traverse_height_start=0)
     assert [at.z for at in await p.pipettes.request_locations()] == z_before
 
     with pytest.raises(ValueError, match="speed must be above 0"):
@@ -1353,9 +1359,19 @@ def test_spacing_refusals_say_what_is_wrong_and_what_would_fit():
     )
     here = await p.pipettes.request_locations()
     with pytest.raises(
-      ValueError, match=r"Channel 0 was not named, so it stays at y=200\.00 mm\.$"
+      ValueError,
+      match=r"Channel 0 was not named, so it stays at y=200\.00 mm; make_space=True moves it out of "
+      r"the way\.$",
     ):
       await p.pipettes.move_to_location(Coordinate(here[1].x, 195.0, here[1].z), use_channels=1)
+
+    # And with it, channel 0 gives way rather than the move being refused.
+    await p.pipettes.move_to_location(
+      Coordinate(here[1].x, 195.0, here[1].z), use_channels=1, make_space=True
+    )
+    after = await p.pipettes.request_locations()
+    assert round(after[1].y, 2) == 195.0
+    assert round(after[0].y, 2) == 204.0  # pushed back to the minimum spacing, and no further
     await p.stop()
 
   _run(_t())
@@ -1492,7 +1508,7 @@ def test_move_to_xy_positions_raises_every_low_channel_then_travels_at_that_heig
       return await send(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.move_to_xy_positions(200.0, {0: 300.0}, minimum_traverse_height=160.0)
+    await p.pipettes.move_to_xy_positions(200.0, {0: 300.0}, minimum_traverse_height_start=160.0)
 
     # up first, then across: the gantry never has a descent to blend into the lateral move
     assert sent.index("PrepMoveZAbsolute") < sent.index("PrepMoveToPosition")
@@ -1545,7 +1561,7 @@ def test_move_to_xy_positions_refuses_what_a_channel_cannot_reach():
     with pytest.raises(ValueError, match=r"y=500.0 outside channel 0"):
       await p.pipettes.move_to_xy_positions(100.0, {0: 500.0})
     with pytest.raises(ValueError, match=r"z=200.0 outside channel 0"):
-      await p.pipettes.move_to_xy_positions(100.0, {0: 100.0}, minimum_traverse_height=200.0)
+      await p.pipettes.move_to_xy_positions(100.0, {0: 100.0}, minimum_traverse_height_start=200.0)
     with pytest.raises(ValueError, match="channels must be between"):
       await p.pipettes.move_to_xy_positions(100.0, {5: 100.0})
     await p.stop()
@@ -1574,7 +1590,7 @@ def test_move_to_location_rises_travels_then_descends():
     await p.pipettes.move_to_location(
       [Coordinate(200.0, 300.0, 100.0), Coordinate(200.0, 250.0, 120.0)],
       use_channels=[0, 1],
-      minimum_traverse_height=160.0,
+      minimum_traverse_height_start=160.0,
     )
     moves = [c for c in sent if c in ("PrepMoveZAbsolute", "PrepMoveToPosition")]
     assert moves == ["PrepMoveZAbsolute", "PrepMoveToPosition", "PrepMoveZAbsolute"]
@@ -1605,6 +1621,376 @@ def test_move_to_location_refuses_a_z_the_channel_cannot_reach_before_moving():
     with pytest.raises(ValueError, match=r"z=200.0 outside channel 0"):
       await p.pipettes.move_to_location(Coordinate(150.0, 250.0, 200.0), use_channels=0)
     assert "PrepMoveZAbsolute" not in sent and "PrepMoveToPosition" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_one_channel_picks_up_a_spot_in_front_of_where_the_other_stands():
+  """The channels share a gantry, so the one not picking up gives way rather than the call failing."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+
+    # Channel 1 stands where channel 0 has to go: in front of the spot it is sent to.
+    spot = rack.get_item("A1")
+    y = spot.get_location_wrt(deck, "c", "c", "t").y
+    await p.pipettes.move_to_y_positions({0: y + 30.0, 1: y + 20.0})
+
+    await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    standing = await p.pipettes.request_locations()
+    assert round(standing[0].y, 2) == round(y, 2)  # channel 0 arrived at the spot
+    assert round(standing[1].y, 2) == round(y - 9.0, 2)  # channel 1 moved just out of its way
+
+    # The move underneath still refuses on its own, where nothing has been asked to give way.
+    await p.pipettes.drop_tips(rack["A1"], use_channels=[0])
+    await p.pipettes.move_to_y_positions({0: y + 30.0, 1: y + 20.0})
+    with pytest.raises(ValueError):
+      await p.pipettes.move_to_xy_positions(100.0, {0: y})
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_channel_that_carries_a_tip_is_refused_before_anything_moves():
+  """A refusal moves nothing: the check is in the arguments, not after the approach."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    with pytest.raises(HasTipError):
+      await p.pipettes.pick_up_tips(rack["A2"], use_channels=[0])
+    assert "PrepMoveToPosition" not in sent  # refused where it stood
+    assert "PrepPickUpTips" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_channel_the_sensors_say_carries_a_tip_is_refused_too():
+  """A tip left on from another session is in the sleeve sensors, not in the model."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    assert p.pipettes.get_mounted_tip(0) is None  # the model holds nothing
+
+    async def senses_one(*args, **kwargs):
+      return [True, False]
+
+    p.pipettes.sense_tip_presence = senses_one  # type: ignore[method-assign]
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    with pytest.raises(HasTipError, match="senses a tip"):
+      await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    assert "PrepMoveToPosition" not in sent
+    assert "PrepPickUpTips" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_channel_the_sensors_say_lost_its_tip_is_not_asked_to_drop_one():
+  """A tip knocked off on the way is in the sleeve sensors, not in the model."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    assert p.pipettes.get_mounted_tip(0) is not None  # the model holds one
+
+    async def senses_none(*args, **kwargs):
+      return [False, False]
+
+    p.pipettes.sense_tip_presence = senses_none  # type: ignore[method-assign]
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    with pytest.raises(NoTipError, match="senses no tip"):
+      await p.pipettes.drop_tips(rack["A1"], use_channels=[0])
+    assert "PrepDropTips" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_spots_at_different_x_are_picked_up_in_as_many_moves_as_it_takes():
+  """The channels ride one gantry, so spots at two x are two moves, not a refusal."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      if isinstance(command, PrepCmd.PrepPickUpTips):
+        sent.append([(t.channel, round(t.x_position, 2)) for t in command.tip_positions])
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.pick_up_tips(rack["A1", "A2"], use_channels=[0, 1])
+    assert len(sent) == 2  # one x each
+    assert [x for picked in sent for _, x in picked] == [17.25, 26.25]
+    assert [tip is not None for tip in p.pipettes.get_mounted_tips()] == [True, True]
+
+    sent.clear()
+    await p.pipettes.drop_tips(rack["A1", "A2"], use_channels=[0, 1])
+    assert p.pipettes.get_mounted_tips() == [None, None]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_spots_in_one_column_are_picked_up_in_a_single_move():
+  """What fits in one move stays one move: the planning costs nothing where nothing is needed."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      if isinstance(command, PrepCmd.PrepPickUpTips):
+        sent.append([t.channel for t in command.tip_positions])
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.pick_up_tips(rack["A1", "B1"], use_channels=[0, 1])
+    assert len(sent) == 1 and len(sent[0]) == 2
+    await p.stop()
+
+  _run(_t())
+
+
+def test_z_positions_are_read_for_every_channel_in_one_command():
+  """The same GetPositions that answers X and Y, in the deck's frame, recorded on each channel."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    zs = await p.pipettes.request_z_positions()
+    assert sent == ["PrepGetPositions"]
+    assert zs == [at.z for at in await p.pipettes.request_locations()]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_initializing_waits_longer_than_the_drivers_default():
+  """A command that takes longer than any this device performs is one it will not answer."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    assert p.default_read_timeout == 60.0  # settable, and what a command waits when it names none
+    waited: list = []
+    send = p.send_command
+
+    async def record(command, *args, read_timeout=None, **kwargs):
+      waited.append((type(command).__name__, read_timeout))
+      return await send(command, *args, read_timeout=read_timeout, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.setup(force_initialize=True)
+    assert [t for name, t in waited if "Initialize" in name] == [300.0]
+    # Everything else names none, so it waits `default_read_timeout`.
+    assert {t for name, t in waited if "Initialize" not in name} == {None}
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_first_group_is_reached_at_the_starting_height_and_the_rest_at_the_one_between():
+  """Two groups mean a raise between them, which is its own height, not the starting one."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+
+    given: list = []
+    one_move = p.pipettes.pick_up_tips_in_one_move
+
+    async def record(*args, **kwargs):
+      given.append(args[3] if len(args) > 3 else kwargs.get("minimum_traverse_height_start"))
+      return await one_move(*args, **kwargs)
+
+    p.pipettes.pick_up_tips_in_one_move = record  # type: ignore[method-assign]
+    await p.pipettes.pick_up_tips(
+      rack["A1", "A2"],
+      use_channels=[0, 1],
+      minimum_traverse_height_start=150.0,
+      minimum_traverse_height_during=120.0,
+    )
+    assert given == [150.0, 120.0]  # to the first group, then between the groups
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_starting_height_is_a_floor_and_leaves_a_higher_channel_where_it_is():
+  """Below it is brought up; above it travels where it stands. Sending it would drive a high one down."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_tool_bottom_to_z_positions({1: 40.0})
+    standing = await p.pipettes.request_locations()
+    assert (round(standing[0].z, 2), round(standing[1].z, 2)) == (167.5, 40.0)
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      if isinstance(command, PrepCmd.PrepMoveToPosition):
+        sent.append(
+          {a.channel: round(a.z_position, 2) for a in command.move_parameters.axis_parameters}
+        )
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_xy_positions(
+      120.0, {0: 200.0, 1: 150.0}, minimum_traverse_height_start=62.0
+    )
+    # Channel 0 is at 167.5, well above the floor, and stays there; channel 1 comes up to it.
+    assert sent == [{2: 167.5, 1: 62.0}]
+    after = await p.pipettes.request_locations()
+    assert (round(after[0].z, 2), round(after[1].z, 2)) == (167.5, 62.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_an_x_probe_given_a_start_travels_there_first_and_keeps_the_height_it_was_at():
+  """A full arm move to the start - raising what is low - then back down, so the search is X alone."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_location(
+      Coordinate(150.0, 200.0, 90.0), use_channels=0, make_space=True
+    )
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      if isinstance(command, (PrepCmd.PrepXAxisMoveAbsolute, PrepCmd.PrepMoveZAbsolute)):
+        sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.probe_x_using_clld(
+      0, "left", search_start_position=200.0, search_end_position=190.0, allow_without_tip=True
+    )
+    # Raised to the traverse height, across to the start, and back down to where it was
+    assert sent[:3] == ["PrepMoveZAbsolute", "PrepXAxisMoveAbsolute", "PrepMoveZAbsolute"]
+    standing = (await p.pipettes.request_locations())[0]
+    assert round(standing.z, 1) == 90.0
+
+    # An arm already at the start is left where it is: nothing is sent to move it there.
+    sent.clear()
+    here = (await p.pipettes.request_locations())[0].x
+    await p.pipettes.probe_x_using_clld(
+      0, "left", search_start_position=here, search_end_position=here - 5.0, allow_without_tip=True
+    )
+    assert "PrepMoveZAbsolute" not in sent  # no raise, no descent: it is already there
+    standing = (await p.pipettes.request_locations())[0]
+    assert round(standing.z, 1) == 90.0  # the height the caller had it at, not Z safety
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_y_probe_given_a_start_moves_there_first_and_makes_room_for_it():
+  """As the X probe travels to its start, this one moves in Y, its neighbour giving way."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 340.0, 1: 320.0})
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      if isinstance(command, PrepCmd.PrepMoveYAbsolute):
+        sent.append({c.channel: round(c.y_position, 1) for c in command.channels})
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.probe_y_using_clld(
+      1, "forward", search_start_position=300.0, search_end_position=290.0, allow_without_tip=True
+    )
+    assert sent and sent[0][1] == 300.0  # moved to the start
+    assert sent[0][2] == 340.0  # its neighbour was already far enough back to stay
+
+    # Already there: nothing is sent to move it again.
+    sent.clear()
+    here = (await p.pipettes.request_locations())[1].y
+    await p.pipettes.probe_y_using_clld(
+      1,
+      "forward",
+      search_start_position=here,
+      search_end_position=here - 5.0,
+      allow_without_tip=True,
+    )
+    assert sent == []
     await p.stop()
 
   _run(_t())

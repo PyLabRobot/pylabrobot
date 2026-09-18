@@ -173,10 +173,10 @@ class STARDevice(Resource):
       size_y: how deep it is, in mm. Defaults to the deck's own depth.
       size_z: how tall it is, in mm. Defaults to the deck's own height.
       extension_housing: whether the left extension housing is fitted. It becomes a resource of its
-        own, `left_extension_housing`, standing to the LEFT of the chassis at a negative x. It does
-        NOT change the device's size: see `EXTENSION_HOUSING_SIZE`.
+        own, `<name>_left_extension_housing`, standing to the LEFT of the chassis at a negative
+        x. It does NOT change the device's size: see `EXTENSION_HOUSING_SIZE`.
       left_side_panel_installed: whether the chassis's left side panel is on. It becomes a
-        resource of its own, `left_side_panel`, at `SIDE_PANEL_X`. Declared rather than
+        resource of its own, `<name>_left_side_panel`, at `SIDE_PANEL_X`. Declared rather than
         discovered: the panel bolts off in seconds and the device does not report it. Passed on
         to the driver, which stops an arm short of a fitted one.
       deck_location: where the deck sits inside it, BEFORE any extension housing. Defaults to the
@@ -234,7 +234,7 @@ class STARDevice(Resource):
     if left_side_panel_installed:
       self.assign_child_resource(
         Resource(
-          name="left_side_panel",
+          name=f"{name}_left_side_panel",
           size_x=SIDE_PANEL_SIZE[0],
           size_y=SIDE_PANEL_SIZE[1],
           size_z=SIDE_PANEL_SIZE[2],
@@ -248,7 +248,7 @@ class STARDevice(Resource):
       # To the left, hung so its top and its back are level with the device's.
       self.assign_child_resource(
         Resource(
-          name="left_extension_housing",
+          name=f"{name}_left_extension_housing",
           size_x=EXTENSION_HOUSING_SIZE[0],
           size_y=EXTENSION_HOUSING_SIZE[1],
           size_z=EXTENSION_HOUSING_SIZE[2],
@@ -264,6 +264,16 @@ class STARDevice(Resource):
 
   # -- what the device carries ------------------------------------------------------------
   # Read through: the optional ones do not exist until discovery says what is fitted.
+
+  @property
+  def left_side_panel(self) -> Optional[Resource]:
+    """The chassis's left side panel, on a device it is declared installed on."""
+    return next((c for c in self.children if c.category == "left_side_panel"), None)
+
+  @property
+  def left_extension_housing(self) -> Optional[Resource]:
+    """The left extension housing, on a device it is fitted to."""
+    return next((c for c in self.children if c.category == "left_extension_housing"), None)
 
   @property
   def left_x_arm(self) -> Optional[XArm]:
@@ -364,7 +374,7 @@ def STAR(
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
   driver: Optional[STARDriver] = None,
-  name: str = "Hamilton STAR",
+  name: str = "STAR",
   size_x: float = STAR_SIZE_X,
   size_y: float = MANUAL_SIZE_Y,
   size_z: float = SIZE_Z,
@@ -373,7 +383,7 @@ def STAR(
 ) -> STARDevice:
   """A full-size STAR, on a full-size STAR deck."""
   if deck is None:
-    deck = STARDeck()
+    deck = STARDeck(name=f"{name}_Deck", prefix=name)
   if simulation and driver is None and declared_configuration_json is None:
     declared_configuration_json = RECORDING_STAR
   if driver is None:
@@ -401,7 +411,7 @@ def STARLet(
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
   driver: Optional[STARDriver] = None,
-  name: str = "Hamilton STARlet",
+  name: str = "STARlet",
   size_x: float = STARLET_SIZE_X,
   size_y: float = MANUAL_SIZE_Y,
   size_z: float = SIZE_Z,
@@ -410,7 +420,7 @@ def STARLet(
 ) -> STARDevice:
   """A STARlet, on a STARlet deck."""
   if deck is None:
-    deck = STARLetDeck()
+    deck = STARLetDeck(name=f"{name}_Deck", prefix=name)
   if simulation and driver is None and declared_configuration_json is None:
     declared_configuration_json = RECORDING_STARLET
   if driver is None:
@@ -438,7 +448,7 @@ def STARPlus(
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
   driver: Optional[STARDriver] = None,
-  name: str = "Hamilton STARplus",
+  name: str = "STARplus",
   size_x: float = STARPLUS_SIZE_X,
   size_y: float = MANUAL_SIZE_Y,
   size_z: float = SIZE_Z,
@@ -455,7 +465,7 @@ def STARPlus(
     The device, on a STARplus deck.
   """
   if deck is None:
-    deck = STARPlusDeck()
+    deck = STARPlusDeck(name=f"{name}_Deck", prefix=name)
   if simulation and driver is None and declared_configuration_json is None:
     declared_configuration_json = RECORDING_STARPLUS
   if driver is None:

@@ -7,7 +7,7 @@ from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
 
 def hamilton_mfx_tiprackholder_standard(name: str) -> EmbeddedTipRackHolder:
   """Hamilton cat. no.: 188160
-  Hamilton name: 'MFX_TIP_module'
+  Hamilton name: 'MFX_TIP_module' or sometimes 'Tip Module BC'
   Module to position a high-, standard- or low volume tip rack (but not a 384 tip rack).
 
   Takes an `EmbeddedTipRack` - Hamilton calls these 'framed' tip racks - which sinks into the
@@ -108,7 +108,9 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
   rather than pedestal, so pedestal_size_z=0,
   """
 
-  width = 134.0
+  # 134 mm measured, and modelled as the 135 mm its carrier slot is: the track's sliding blocks centre
+  # the module in it, so a plate centred on the module is centred on the slot.
+  width = 135.0
   length = 92.10
 
   return PlateHolder(

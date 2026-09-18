@@ -436,7 +436,7 @@ class Head96(Head):
     offset: Optional[Coordinate] = None,
     tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
     minimum_height_command_end: Optional[float] = None,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
   ) -> None:
     """Pick up a rack of tips on the whole head, as legacy's `pick_up_tips96`. `C0 EP`.
 
@@ -449,7 +449,7 @@ class Head96(Head):
       tip_pickup_method: `from_rack` sends the dispensing drive down first, since the device does
         not; `from_waste` and `full_blowout` move the plunger up before mounting.
       minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
-      minimum_traverse_height_at_beginning_of_a_command: in mm.
+      minimum_traverse_height_start: in mm.
         `configuration.traversal_z_position` when None.
 
     Raises:
@@ -477,7 +477,7 @@ class Head96(Head):
       offset or Coordinate.zero()
     )
     traverse_z, end_z = self._resolve_tip_command_heights(
-      minimum_traverse_height_at_beginning_of_a_command, minimum_height_command_end
+      minimum_traverse_height_start, minimum_height_command_end
     )
     self._check_tip_command(location, traverse_z, end_z, skip_z=True)
 
@@ -512,7 +512,7 @@ class Head96(Head):
     resource: Resource,
     offset: Optional[Coordinate] = None,
     minimum_height_command_end: Optional[float] = None,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
   ) -> None:
     """Drop the head's tips into a tip rack or anywhere else, as legacy's `drop_tips96`. `C0 ER`.
 
@@ -524,7 +524,7 @@ class Head96(Head):
       resource: a 96 tip rack, or anything else, such as the trash.
       offset: added to where the head goes, in mm.
       minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
-      minimum_traverse_height_at_beginning_of_a_command: in mm.
+      minimum_traverse_height_start: in mm.
         `configuration.traversal_z_position` when None.
 
     Raises:
@@ -541,7 +541,7 @@ class Head96(Head):
       location = self._position_centred_in(resource)
     location += offset or Coordinate.zero()
     traverse_z, end_z = self._resolve_tip_command_heights(
-      minimum_traverse_height_at_beginning_of_a_command, minimum_height_command_end
+      minimum_traverse_height_start, minimum_height_command_end
     )
     self._check_tip_command(location, traverse_z, end_z, skip_z=True)
 

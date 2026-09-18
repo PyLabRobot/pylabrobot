@@ -135,6 +135,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     origin: Coordinate = Coordinate.zero(),
     num_rails: Optional[int] = None,
     model: Optional[str] = None,
+    prefix: Optional[str] = None,
   ):
     # What `@abstractmethod` refused before either could be left to the other: a deck with neither.
     if (
@@ -154,6 +155,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       size_z=size_z,
       category=category,
       origin=origin,
+      prefix=prefix,
     )
     # `Deck` takes no model, so it is set here rather than passed up.
     self.model = model
@@ -279,7 +281,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     and where along it the drive's position refers to.
 
     Args:
-      name: what to call it, e.g. "left_x_arm".
+      name: what to call it, e.g. "left_x_arm". The deck puts its own prefix in front, so two
+        devices' arms stand in one tree.
       x: where the arm is now, in mm, at its reference point.
       size_x: how wide the arm is, in mm, end to end.
       reference_point_from_left: how far along it, from its left edge in mm, the drive's position
@@ -289,6 +292,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Returns:
       The arm resource, whether it was just created or already there.
     """
+    name = self.prefixed(name)
     if self.has_resource(name):
       return self.get_resource(name)
     # The arm rides at the channel stop-disk safety height, level with the raised stop discs so it
@@ -333,15 +337,16 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     do not duplicate it.
 
     Args:
-      name: where the carrier-handling wheel is, in mm, on this deck. The wheel is the point the
+      name: what to call it. The deck puts its own prefix in front.
+      x: where the carrier-handling wheel is, in mm, on this deck. The wheel is the point the
         drive reports, so the sled is placed around it.
-      x: where the wheel is, in mm, on this deck.
       reference_point_from_left: how far the point the drive reports - the carrier-handling
         wheel - sits from the sled's left edge, in mm.
 
     Returns:
       The sled resource, whether it was just created or already there.
     """
+    name = self.prefixed(name)
     if self.has_resource(name):
       return self.get_resource(name)
     # The whole part, transport and barcode reader. The 316.2 this replaces came off the
@@ -388,11 +393,12 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     that same track on the deck.
 
     Args:
-      name: what to call it.
+      name: what to call it. The deck puts its own prefix in front.
 
     Returns:
       The tray resource, whether it was just created or already there.
     """
+    name = self.prefixed(name)
     if self.has_resource(name):
       return self.get_resource(name)
     # Measured against the two things on the deck it lines up with: where the first carrier starts,

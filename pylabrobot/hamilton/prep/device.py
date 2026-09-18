@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
 from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
-from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
+from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGripperArm, CoreGrippers
 from pylabrobot.hamilton.prep.driver.features.head8 import Head8
 from pylabrobot.hamilton.prep.driver.features.lights import Lights
 from pylabrobot.hamilton.prep.driver.features.method import MethodLifecycle
@@ -151,6 +151,33 @@ class PrepDevice(Resource):
     """Calibration."""
     return self.driver.calibration
 
+  # -- core gripper tools ----------------------------------------------------
+
+  async def pick_up_core_grippers(self) -> CoreGripperArm:
+    """Pick up the CoRe gripper tools from the holder the deck carries.
+
+    Returns:
+      The arm the mounted tools make, which moves plates.
+
+    Raises:
+      RuntimeError: If the tools are already mounted, or setup has not run.
+      TypeError: If the deck carries no holder for them.
+    """
+    return await self.driver.pick_up_core_grippers()
+
+  async def return_core_grippers(self) -> None:
+    """Put the CoRe gripper tools back in their holder. A device holding none is left alone."""
+    await self.driver.return_core_grippers()
+
+  @asynccontextmanager
+  async def mounted_core_grippers(self) -> AsyncIterator[CoreGripperArm]:
+    """The CoRe gripper arm, with the tools picked up for as long as the block runs.
+
+    They are returned on the way out, whether the block ends or raises.
+    """
+    async with self.driver.mounted_core_grippers() as arm:
+      yield arm
+
   # -- error lighting --------------------------------------------------------
 
   async def signal_error(self, duration: Optional[float] = 8.0, wait: bool = False) -> None:
@@ -193,7 +220,7 @@ def Prep(
   declared_configuration_json: Optional[str] = None,
   firmware_tree_json: Optional[str] = None,
   driver: Optional[PrepDriver] = None,
-  name: str = "Hamilton Prep",
+  name: str = "Prep",
   size_x: float = PREP_SIZE_X,
   size_y: float = PREP_SIZE_Y,
   size_z: float = PREP_SIZE_Z,
@@ -220,7 +247,7 @@ def Prep(
     The device, on a Prep deck.
   """
   if deck is None:
-    deck = PrepDeck()
+    deck = PrepDeck(name=f"{name}_Deck", prefix=name)
   if driver is None:
     if simulation:
       driver = PrepSimulationDriver(

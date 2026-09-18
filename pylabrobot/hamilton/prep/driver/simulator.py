@@ -23,7 +23,6 @@ import os
 from typing import Any, Dict, List, Optional, Set, Tuple, cast, get_type_hints
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
-from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.introspection import (
   GetEnumsCommand,
@@ -44,14 +43,15 @@ from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, Struct, wire_type_of
 from pylabrobot.io.socket import Socket
+from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.deck import Deck
 
 from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration
 from .errors import PREP_ERROR_CODES
+from .features.lights import Lights
 from .features.pipettes import Pipettes, PipettesConfiguration
 from .features.x_arm import XArm
-from .features.lights import Lights
 from .master import PrepDriver, _ResolvedPrepCommand
 from .prep_commands import MPH_OBJECT_PATH, PrepCommand
 
@@ -520,7 +520,6 @@ class SimulatedPipettes(_Simulated, Pipettes):
     channel_idx: int,
     here: float,
     end: float,
-    speed: float,
     detect_mode: int,
     sensitivity: int,
   ) -> Optional[float]:
@@ -530,7 +529,6 @@ class SimulatedPipettes(_Simulated, Pipettes):
       channel_idx: detecting channel, 0-indexed from the back.
       here: the arm's x where the search starts, in mm.
       end: search end in mm.
-      speed: arm speed in mm/s.
       detect_mode: cLLD detect mode; not modelled.
       sensitivity: cLLD sensitivity; not modelled.
 
@@ -542,7 +540,9 @@ class SimulatedPipettes(_Simulated, Pipettes):
       raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
     _, y, z = self._modelled_location(channel_idx)
     touched = self._touched_along(channel_idx, 0, here, end, y, z)
-    await arm.move_to_x_position(end if touched is None else touched, speed=speed)
+    await arm.move_to_x_position(
+      end if touched is None else touched, minimum_traverse_height_start=z
+    )
     return touched
 
   def _declared(self) -> PipettesConfiguration:

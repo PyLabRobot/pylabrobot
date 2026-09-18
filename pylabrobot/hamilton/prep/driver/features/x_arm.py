@@ -36,7 +36,9 @@ class XArmConfiguration:
   """Where the gantry's x refers to, in mm from the arm's left edge. The channels hang to the arm's left,
   so their axis - which is what the Prep reports - sits about 80 mm left of that edge."""
   model: str = "hamilton_prep_x_arm"
-  """Which 3D model draws it. None ships yet, so the viewer draws a box of this size."""
+  """Which 3D model draws it. The model is measured off the arm, and stands where the arm does: its
+  right edge on this box's right edge, its front edge and the body's underside on its own origin.
+  The back shuttle reaches left of the box and below it, as the part does."""
   appearance: Dict[str, Any] = field(
     default_factory=lambda: {"color": 0xC0C4C8, "metalness": 0.6, "roughness": 0.35}
   )
@@ -258,7 +260,7 @@ class XArm:
     x: float,
     speed: Optional[float] = None,
     acceleration: Optional[float] = None,
-    minimum_traverse_height: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
     z_speed: Optional[float] = None,
     z_acceleration: Optional[float] = None,
   ) -> None:
@@ -268,8 +270,8 @@ class XArm:
       x: target x in mm.
       speed: speed in mm/s. Defaults to `default_speed`.
       acceleration: acceleration in mm/s2. Defaults to `default_acceleration`.
-      minimum_traverse_height: raise every channel standing below this height, in mm, before the
-        arm travels. The pipettes' `default_minimum_traverse_height` when None; 0 raises nothing,
+      minimum_traverse_height_start: raise every channel standing below this height, in mm, before
+        the arm travels. The pipettes' `default_minimum_traverse_height` when None; 0 raises nothing,
         so the channels travel at the height they stand at.
 
     Raises:
@@ -293,8 +295,8 @@ class XArm:
         )
     traverse = (
       pipettes.default_minimum_traverse_height
-      if minimum_traverse_height is None
-      else minimum_traverse_height
+      if minimum_traverse_height_start is None
+      else minimum_traverse_height_start
     )
     below = {
       channel: traverse

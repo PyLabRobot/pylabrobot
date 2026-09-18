@@ -6,7 +6,16 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import (
+  Any,
+  AsyncIterator,
+  Dict,
+  List,
+  Optional,
+  Tuple,
+  TypeVar,
+  Union,
+)
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
@@ -27,6 +36,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.hamilton.prep_decks import PrepDeck
+from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 
 from . import prep_commands as PrepCmd
@@ -279,6 +289,10 @@ class PrepDriver:
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
     self.lights: Optional[Lights] = None
+    # How long to wait for a command's answer, in seconds. A command that takes longer than any
+    # this device performs is one it is not going to answer, and a caller waiting on it cannot halt
+    # the device or say so. Initializing names its own.
+    self.default_read_timeout: float = 60.0
     self.method: Optional[MethodLifecycle] = None
     self.calibration: Optional[Calibration] = None
     # The gantry the channels ride. Built at setup, and kept across setups like the configuration.
@@ -582,7 +596,7 @@ class PrepDriver:
     Args:
       command: the command. One declaring a `firmware_path` is sent to that object's address on this
         connection; one given an explicit `dest` is sent there.
-      read_timeout: how long to wait for the answer, in seconds. Defaults to the link's.
+      read_timeout: how long to wait for the answer, in seconds. `default_read_timeout` when None.
 
     Returns:
       The command's decoded response.
@@ -590,6 +604,7 @@ class PrepDriver:
     Raises:
       RuntimeError: If the command's firmware path does not resolve on this device.
     """
+    read_timeout = self.default_read_timeout if read_timeout is None else read_timeout
     session = self.io._session
     resolved = await self._resolve_command(command)
     if isinstance(resolved, _ResolvedPrepCommand):
@@ -600,7 +615,13 @@ class PrepDriver:
   async def exchange(
     self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
   ) -> CommandResponse:
-    """Send a command and return the device's full terminal frame, firmware errors included."""
+    """Send a command and return the device's full terminal frame, firmware errors included.
+
+    Args:
+      command: the command to send.
+      read_timeout: how long to wait for the answer, in seconds. `default_read_timeout` when None.
+    """
+    read_timeout = self.default_read_timeout if read_timeout is None else read_timeout
     session = self.io._session
     return await session.exchange(await self._resolve_command(command), read_timeout=read_timeout)
 
@@ -1022,8 +1043,17 @@ class PrepDriver:
     self.configuration = configuration
     return configuration
 
-  async def _initialize_instrument(self, *, smart: bool, force_initialize: bool) -> None:
-    """Send ``MLPrep.Initialize`` when needed."""
+  async def _initialize_instrument(
+    self, *, smart: bool, force_initialize: bool, read_timeout: float = 300.0
+  ) -> None:
+    """Send ``MLPrep.Initialize`` when needed.
+
+    Args:
+      smart: whether the device initializes only what it judges it has to.
+      force_initialize: run the procedure without asking whether it has already run.
+      read_timeout: how long to wait for the procedure, in seconds. A wide margin over the 17 s it
+        has been measured to take at its longest, rather than `default_read_timeout`.
+    """
     if not force_initialize:
       try:
         already = await self.request_initialization_status()
@@ -1044,7 +1074,8 @@ class PrepDriver:
           rolloff_distance=3,
           channel_parameters=[],
         ),
-      )
+      ),
+      read_timeout=read_timeout,
     )
     logger.debug("the device initialization procedure has run")
 
@@ -1063,11 +1094,11 @@ class PrepDriver:
     height = None if self.pipettes is None else self.pipettes.default_minimum_traverse_height
     traverse = "unknown" if height is None else f"{height} mm"
     lines = [
-      f"[Hamilton Prep] Connected on {self.describe_link()}",
-      f"  Serial: {c.serial_number or 'unknown'}",
-      f"  Firmware: {c.firmware_version or 'unknown'}",
-      f"  Configuration: enclosure {'installed' if c.has_enclosure else 'none'}, "
-      f"safe speeds {'on' if c.safe_speeds_enabled else 'off'}, traverse height {traverse}",
+      f"[Hamilton Prep] Connected on {self.describe_link()}\n",
+      f"  Serial: {c.serial_number or 'unknown'}\n",
+      f"  Firmware: {c.firmware_version or 'unknown'}\n",
+      f"  Configuration: \n - enclosure {'installed' if c.has_enclosure else 'none'}, "
+      f" - safe speeds {'on' if c.safe_speeds_enabled else 'off'},\n - traverse height {traverse}",
     ]
     deck = f"{len(c.deck_sites)} sites, {len(c.waste_sites)} waste sites"
     if c.deck_bounds is not None:
@@ -1154,8 +1185,8 @@ class PrepDriver:
     if not isinstance(self.deck, PrepDeck) or self.configuration is None:
       return
     c = self.configuration
-    if self.deck.has_resource("teaching_tip"):
-      spot = self.deck.get_resource("teaching_tip")
+    spot = self.deck.teaching_tip_spot
+    if spot is not None:
       footprint = (spot.get_absolute_size_x(), spot.get_absolute_size_y())
       site = next((s for s in c.deck_sites if (s.length, s.width) == footprint), None)
       if site is not None and spot.location is not None and spot.parent is not None:
@@ -1166,9 +1197,10 @@ class PrepDriver:
         logger.debug("teaching needle at deck site %d", site.id)
     for waste_site in c.waste_sites:
       name = _WASTE_SITE_NAMES.get(waste_site.index)
-      if name is None or not self.deck.has_resource(name):
+      waste = self.deck.waste_positions.get(name) if name is not None else None
+      if waste is None:
         continue
-      self.deck.get_resource(name).location = Coordinate(
+      waste.location = Coordinate(
         waste_site.x_position, waste_site.y_position, waste_site.z_position
       )
       logger.debug("%s at waste site %d", name, waste_site.index)
@@ -1214,7 +1246,7 @@ class PrepDriver:
     # and each has its own Y and Z.
     self.pipettes.resources = []
     for channel in range(len(positions)):
-      name = f"pipette_channel_{channel}"
+      name = self.deck.prefixed(f"pipette_channel_{channel}")
       resource = next((child for child in arm.resource.children if child.name == name), None)
       if resource is None:
         resource = Resource(
@@ -1249,6 +1281,15 @@ class PrepDriver:
     return self._core_gripper_arm
 
   @property
+  def core_gripper_holder(self) -> Optional[HamiltonCoreGrippers]:
+    """The holder this Prep's deck parks its CO-RE grip tools in, by type, or None."""
+    if self.deck is None:
+      return None
+    return next(
+      (r for r in self.deck.get_all_children() if isinstance(r, HamiltonCoreGrippers)), None
+    )
+
+  @property
   def core_grippers_mounted(self) -> bool:
     return self._core_gripper_arm is not None
 
@@ -1259,19 +1300,25 @@ class PrepDriver:
     if self.pipettes is None or self.core_grippers is None:
       raise RuntimeError("PrepDriver.setup() has not run.")
 
-    mount = self.deck.get_resource("core_grippers")
-    if not isinstance(mount, HamiltonCoreGrippers):
-      raise TypeError(
-        "deck must have a resource named 'core_grippers' of type HamiltonCoreGrippers"
-      )
+    mount = self.core_gripper_holder
+    if mount is None:
+      raise TypeError("the deck carries no CO-RE gripper holder")
 
-    loc = mount.get_location_wrt(self.deck)
+    tools = [child for child in mount.children if isinstance(child, HeadTool)]
+    if not tools:
+      raise TypeError("the holder carries no CO-RE grip tools to pick up")
+
+    # How far down the channel goes: onto the tools where they stand, and into them as far as they
+    # take a channel. The holder's own base is 25 mm below that, and their tops 8 mm above it -
+    # a channel stopped at either does not seat the tool, and the device answers that none is held.
+    loc = mount.get_location_wrt(self.deck, x="c")
+    engage = min(tool.get_location_wrt(self.deck, z="t").z - tool.fitting_depth for tool in tools)
     await self.core_grippers.pick_up_tool(
       tool_position_x=loc.x,
-      tool_position_z=loc.z,
+      tool_position_z=engage,
       front_channel_position_y=loc.y + mount.front_channel_y_center,
       rear_channel_position_y=loc.y + mount.back_channel_y_center,
-      tool_seek=loc.z + 10.0,
+      tool_seek=engage + 10.0,
     )
 
     self._core_gripper_arm = CoreGripperArm(

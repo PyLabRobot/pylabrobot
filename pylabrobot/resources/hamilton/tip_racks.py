@@ -143,8 +143,9 @@ def hamilton_96_tiprack_raised_core_ii(
 def hamilton_96_tiprack_raised_core_i(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> EmbeddedTipRack:
-  """Raised CO-RE I tip rack: the generation before `hamilton_96_tiprack_raised_core_ii`, holding its
-  tips 3.5 mm lower. Its body is not measured.
+  """Hamilton cat. no.: 182040
+  Raised CO-RE I tip rack: the generation before `hamilton_96_tiprack_raised_core_ii`,
+  holding its tips 3.5 mm lower.
   """
   return _hamilton_96_tiprack_raised(
     name=name,

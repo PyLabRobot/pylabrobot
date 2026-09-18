@@ -1,12 +1,28 @@
 from __future__ import annotations
 
-from typing import Any, List, Mapping, Optional, cast
+from typing import Any, List, Mapping, Optional, Type, TypeVar, cast
 
 from pylabrobot.resources.errors import ResourceNotFoundError
 
 from .coordinate import Coordinate
 from .resource import Resource
 from .trash import Trash
+
+T = TypeVar("T", bound=Resource)
+
+
+def _built(resources: List[Resource], suffix: str, cls: Type[T]) -> Optional[T]:
+  """The resource a deck built and called `suffix`, whatever prefix it gave it.
+
+  Found by what it is called rather than held as an attribute, so a deck read back from a file
+  finds it too.
+  """
+  for resource in resources:
+    if isinstance(resource, cls) and (
+      resource.name == suffix or resource.name.endswith(f"_{suffix}")
+    ):
+      return resource
+  return None
 
 
 class Deck(Resource):
@@ -21,8 +37,14 @@ class Deck(Resource):
     origin: Coordinate = Coordinate(0, 0, 0),
     category: str = "deck",
     metadata: Optional[Mapping[str, Any]] = None,
+    prefix: Optional[str] = None,
   ):
-    """Initialize a new deck."""
+    """Initialize a new deck.
+
+    `prefix` is what this deck names the resources it owns after: the device it belongs to, so two
+    devices stand in one tree without their names colliding. It defaults to this deck's own name,
+    without the `_Deck` it may end in.
+    """
 
     super().__init__(
       name=name,
@@ -33,6 +55,13 @@ class Deck(Resource):
       metadata=metadata,
     )
     self.location = origin
+    if prefix is None:
+      prefix = name[: -len("_Deck")] if name.endswith("_Deck") else name
+    self.prefix = prefix
+
+  def prefixed(self, name: str) -> str:
+    """`name` under this deck's prefix, which is what the device owning the deck is called."""
+    return f"{self.prefix}_{name}"
 
   def serialize(self) -> dict:
     """Serialize this deck."""

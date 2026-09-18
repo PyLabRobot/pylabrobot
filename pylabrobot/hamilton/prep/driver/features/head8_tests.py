@@ -217,8 +217,8 @@ def test_head8_move_to_position_sends_mph_wire_commands():
   asyncio.run(_run())
 
 
-def test_pick_up_tips_default_pre_position_sends_mph_move_then_pickup():
-  """Default pre_position=True moves the head before the one MphPickupTips."""
+def test_pick_up_tips_sends_the_move_over_the_spots_then_the_pickup():
+  """The head is taken over the spots before the one MphPickupTips, so it descends straight down."""
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
@@ -233,29 +233,6 @@ def test_pick_up_tips_default_pre_position_sends_mph_move_then_pickup():
     pickups = [i for i, c in enumerate(captured) if isinstance(c, PrepCmd.MphPickupTips)]
     assert len(pickups) == 1
     assert any(isinstance(c, PrepCmd.MphMoveToPosition) for c in captured[: pickups[0]])
-
-    await p.stop()
-
-  asyncio.run(_run())
-
-
-def test_pick_up_tips_pre_position_false_skips_mph_move():
-  """Explicit pre_position=False sends only MphPickupTips among MPH move/pickup pair."""
-
-  async def _run() -> None:
-    deck, tip_rack, _, _ = _make_deck()
-    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
-    await p.setup()
-    assert p.head8 is not None
-
-    captured, _ = _record_send(p)
-
-    await p.head8.pick_up_tips(tip_rack.column(1), pre_position=False)
-
-    mph_moves = [c for c in captured if isinstance(c, PrepCmd.MphMoveToPosition)]
-    pickups = [c for c in captured if isinstance(c, PrepCmd.MphPickupTips)]
-    assert mph_moves == []
-    assert len(pickups) == 1
 
     await p.stop()
 

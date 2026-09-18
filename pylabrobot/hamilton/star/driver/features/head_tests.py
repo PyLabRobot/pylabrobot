@@ -177,7 +177,7 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     await self.head.pick_up_tips(self.tip_rack)
     await self.head.drop_tips(self.tip_rack)
     await self.head.pick_up_tips(self.tip_rack)
-    await self.head.drop_tips(self.deck.get_resource("trash_core96"))
+    await self.head.drop_tips(self.deck.get_trash_area96())
     self.assertEqual(
       self.sent,
       [

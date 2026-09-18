@@ -163,37 +163,39 @@ class CoreGrippers:
     tool_x_radius: float = 2.0,
     tool_y_radius: float = 2.0,
     tip_definition: Optional[PrepCmd.TipPickupParameters] = None,
-    pre_position: bool = True,
   ) -> None:
     """Pick up CoRe gripper tool (PrepPickUpTool, cmd=15).
 
-    When ``pre_position`` is True (default), moves both channels to the tool XY at
-    traverse height before the firmware pickup (same pattern as tip pickup).
-    After pickup, moves channels to safe Z.
+    Both channels travel over the tools at traverse height first, as a tip pick-up does, so the
+    pick-up itself is straight down. Afterwards they are moved to safe Z.
     """
     if tool_seek is None:
       tool_seek = tool_position_z + 10.0
     if tip_definition is None:
       tip_definition = PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
-    if pre_position:
-      await self._channels.move_to_xy_positions(
-        tool_position_x,
-        {0: rear_channel_position_y, 1: front_channel_position_y},
-        minimum_traverse_height=self._channels._resolve_traverse_height(),
-      )
-    await self._driver.send_command(
-      PrepCmd.PrepPickUpTool(
-        tip_definition=tip_definition,
-        tool_position_x=tool_position_x,
-        tool_position_z=tool_position_z,
-        front_channel_position_y=front_channel_position_y,
-        rear_channel_position_y=rear_channel_position_y,
-        tool_seek=tool_seek,
-        tool_x_radius=tool_x_radius,
-        tool_y_radius=tool_y_radius,
-      )
+    # Over the tools first, so the pick-up itself is straight down
+    await self._channels.move_to_xy_positions(
+      tool_position_x,
+      {0: rear_channel_position_y, 1: front_channel_position_y},
+      minimum_traverse_height_start=self._channels._resolve_traverse_height(),
     )
-    await self._channels.move_to_safe_z()
+    try:
+      await self._driver.send_command(
+        PrepCmd.PrepPickUpTool(
+          tip_definition=tip_definition,
+          tool_position_x=tool_position_x,
+          tool_position_z=tool_position_z,
+          front_channel_position_y=front_channel_position_y,
+          rear_channel_position_y=rear_channel_position_y,
+          tool_seek=tool_seek,
+          tool_x_radius=tool_x_radius,
+          tool_y_radius=tool_y_radius,
+        )
+      )
+    finally:
+      # Down at the tools is where a pick-up leaves the channels, whether it worked or not, and the
+      # next lateral move would drag them through the holder.
+      await self._channels.move_to_safe_z()
 
   async def drop_tool(self, *, move_to_safe_z_first: bool = True) -> None:
     """Drop CoRe gripper tool (PrepDropTool, cmd=16)."""
