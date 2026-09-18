@@ -238,6 +238,17 @@ class Lights:
     self._animation = asyncio.create_task(self._run(frame, duration))
     self._animation.add_done_callback(_log_animation_end)
 
+  async def wait_for_animation(self) -> None:
+    """Hold until the animation running has ended, if one is. A stopped animation is not waited on."""
+    animation = self._animation
+    if animation is None:
+      return
+    try:
+      await animation
+    except asyncio.CancelledError:
+      if not animation.cancelled():
+        raise
+
   async def animate_error_pulse(self, duration: Optional[float] = None) -> None:
     """Pulse the deck red, swelling into a deep orange, to be seen across a room.
 

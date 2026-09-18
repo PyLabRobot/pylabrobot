@@ -1335,6 +1335,56 @@ class PrepDriver:
     return True
 
   # ----------------------------------------
+  # Error lighting
+  # ----------------------------------------
+
+  async def signal_error(self, duration: Optional[float] = 8.0, wait: bool = False) -> None:
+    """Pulse the deck red, if this device has a light to say it with.
+
+    It says that something went wrong, and is not part of what went wrong: it never raises, and a
+    device with no light does nothing at all.
+
+    Args:
+      duration: how many seconds to pulse for, or None to pulse until the light is turned off or
+        set to something else, leaving the deck lit after the error.
+      wait: hold until the pulse is over and the deck is dark. The pulse otherwise runs in the
+        background, which is what a notebook or a running protocol wants; a script that exits the
+        moment it raises takes its event loop with it, and needs this to show anything.
+
+    Raises:
+      ValueError: If `wait` is asked of a pulse with no duration, which would never return.
+    """
+    if wait and duration is None:
+      raise ValueError("a pulse with no duration never ends, so it cannot be waited on")
+    if self.lights is None:
+      return
+    try:
+      await self.lights.animate_error_pulse(duration=duration)
+      if wait:
+        await self.lights.wait_for_animation()
+    except Exception:
+      logger.debug("could not signal an error on the deck light", exc_info=True)
+
+  @asynccontextmanager
+  async def error_lighting(
+    self, duration: Optional[float] = 8.0, wait: bool = False
+  ) -> AsyncIterator[None]:
+    """Pulse the deck red when something inside raises, and let it raise on.
+
+    Nothing is caught or hidden: the error carries on to whoever was going to handle it.
+
+    Args:
+      duration: how many seconds to pulse for, or None to leave the deck pulsing after the error,
+        until the light is turned off or set to something else.
+      wait: as `signal_error`.
+    """
+    try:
+      yield
+    except Exception:
+      await self.signal_error(duration=duration, wait=wait)
+      raise
+
+  # ----------------------------------------
   # Speed scales
   # ----------------------------------------
 

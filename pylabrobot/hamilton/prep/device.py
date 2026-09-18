@@ -1,7 +1,8 @@
 """The Prep: the device, and what it knows about its own deck."""
 
 import logging
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
 
 from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
 from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
@@ -149,6 +150,31 @@ class PrepDevice(Resource):
   def calibration(self) -> Optional[Calibration]:
     """Calibration."""
     return self.driver.calibration
+
+  # -- error lighting --------------------------------------------------------
+
+  async def signal_error(self, duration: Optional[float] = 8.0, wait: bool = False) -> None:
+    """Pulse the deck red, if this device has a light to say it with. Never raises.
+
+    Args:
+      duration: how many seconds to pulse for, or None to leave the deck pulsing after the error.
+      wait: hold until the pulse is over, for a script that exits the moment it raises.
+    """
+    await self.driver.signal_error(duration=duration, wait=wait)
+
+  @asynccontextmanager
+  async def error_lighting(
+    self, duration: Optional[float] = 8.0, wait: bool = False
+  ) -> AsyncIterator[None]:
+    """Pulse the deck red when something inside raises, and let it raise on.
+
+    Args:
+      duration: how many seconds to pulse for, or None to leave the deck pulsing after the error,
+        until the light is turned off or set to something else.
+      wait: as `signal_error`.
+    """
+    async with self.driver.error_lighting(duration=duration, wait=wait):
+      yield
 
   # -- session ---------------------------------------------------------------
 
