@@ -78,6 +78,11 @@ To build the documentation, run `make docs` in the root directory. The documenta
 
 ## Common Tasks
 
+### Testing a device
+
+You can contribute by testing PyLabRobot on hardware you have access to and reporting successful
+runs or failures. See {doc}`/user_guide/needs-testing` for the device table and reporting process.
+
 ### Fixing a bug
 
 Bug fixes are an easy way to get started contributing.

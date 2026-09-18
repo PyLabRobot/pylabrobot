@@ -41,6 +41,7 @@ Append an object to `docs/_static/devices.json`:
 | `models` | no | Model objects when one entry covers several models. `name` is required; `status` may be `wip`, `basic`, `mostly`, or `full` and defaults to the device status when omitted. Models render as searchable sub-rows with their support status beneath the device. |
 | `kind` | yes | Device type, e.g. `plate reader`, `sealer`, `arm`. Must be one of `KINDS` in `docs/_exts/plr_devices/data.py`. |
 | `status` | yes | One of `wip`, `basic`, `mostly`, `full`. See {doc}`/user_guide/machines` for what each level means. |
+| `needs_hardware_testing` | no | Boolean, default `false`. Set `true` when hardware testing is needed, based on the device's docs, driver warnings, or reports. Each model can also set this boolean; omitted model flags inherit the device flag. |
 | `capabilities` | no | Core functions, e.g. `["heating", "shaking"]`. Must come from `CAPABILITIES` in `docs/_exts/plr_devices/data.py`. These drive the badges and the capability filter. |
 | `api` | no | Import path of the driver class, e.g. `pylabrobot.curiox.CurioxHT2000`. |
 | `api_version` | no | `v1`, or `v0` for drivers still under `pylabrobot.legacy`. |
@@ -116,6 +117,28 @@ Options narrow it down:
 `capabilities`, `vendor`, `kind` and `status` each take one value and filter the rows. `search` and
 `filters` take `false` to hide the search box or the chips, which is useful for a short,
 pre-filtered list on a vendor page.
+
+The {doc}`/user_guide/needs-testing` page uses:
+
+````md
+```{device-table}
+:needs-hardware-testing:
+```
+````
+
+This includes devices that need hardware testing and families with at least one model that needs
+it. Only flagged models appear in this table; other tables and cards keep the complete model list.
+An explicit model flag overrides the device default. For example, a family can have
+`"needs_hardware_testing": true` with `"needs_hardware_testing": false` on its tested model.
+A family whose models are all explicitly `false` is excluded. An omitted or `false` flag means
+there is no testing request recorded, not a claim that all firmware or operations are verified.
+
+Use existing docs, code warnings, or linked hardware reports to set the flag; do not infer it from
+`wip` or any other support level. A device or model awaiting initial hardware verification has
+`status: "wip"`, even if its shared driver works on other models. After reviewing a hardware report,
+update only the tested model or device, preserve flags for untested siblings, and link the evidence
+in the device guide. Follow
+the reporting and follow-up process on {doc}`/user_guide/needs-testing`.
 
 ## Rendering a card
 
