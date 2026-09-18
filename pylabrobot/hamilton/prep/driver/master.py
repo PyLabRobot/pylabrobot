@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-import random
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, TypeVar, Union
@@ -37,6 +35,7 @@ from .errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from .features.calibration import Calibration
 from .features.core_grippers import CoreGripperArm, CoreGrippers
 from .features.head8 import Head8
+from .features.lights import Lights
 from .features.method import MethodLifecycle
 from .features.pipettes import Pipettes
 from .features.x_arm import XArm
@@ -279,6 +278,7 @@ class PrepDriver:
     self.pipettes: Optional[Pipettes] = None
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
+    self.lights: Optional[Lights] = None
     self.method: Optional[MethodLifecycle] = None
     self.calibration: Optional[Calibration] = None
     # The gantry the channels ride. Built at setup, and kept across setups like the configuration.
@@ -380,6 +380,8 @@ class PrepDriver:
 
       if self.core_grippers is None:
         self.core_grippers = CoreGrippers(self)
+      if self.lights is None and await self.request_deck_light_installed():
+        self.lights = Lights(self)
       if self.x_arm is None:
         self.x_arm = XArm(self)
       # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
@@ -1321,29 +1323,16 @@ class PrepDriver:
   # Deck light
   # ----------------------------------------
 
-  async def request_deck_light(self) -> Tuple[int, int, int, int]:
-    result = await self.send_command(PrepCmd.PrepGetDeckLight())
-    if result is None:
-      raise ValueError("No response from GetDeckLight.")
-    return (result.white, result.red, result.green, result.blue)
+  async def request_deck_light_installed(self) -> bool:
+    """Request whether this device has a deck light, by whether its firmware declares one.
 
-  async def set_deck_light(self, white: int, red: int, green: int, blue: int) -> None:
-    await self.send_command(PrepCmd.PrepSetDeckLight(white=white, red=red, green=green, blue=blue))
-
-  async def disco_mode(self) -> None:
-    """Easter egg: cycle deck lights then restore previous state."""
-    white, red, green, blue = await self.request_deck_light()
+    What the light stands at, and how to set it, is `lights`, built at setup if this answers True.
+    """
     try:
-      for _ in range(69):
-        await self.set_deck_light(
-          white=random.randint(1, 255),
-          red=random.randint(1, 255),
-          green=random.randint(1, 255),
-          blue=random.randint(1, 255),
-        )
-        await asyncio.sleep(0.1)
-    finally:
-      await self.set_deck_light(white=white, red=red, green=green, blue=blue)
+      await self.request_method_by_name(MLPREP_OBJECT_PATH, "SetDeckLight")
+    except (RuntimeError, PrepMethodNotFoundError):
+      return False
+    return True
 
   # ----------------------------------------
   # Speed scales
