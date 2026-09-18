@@ -12,13 +12,13 @@ from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.configuration import (
   DeviceConfiguration,
   read_configuration,
-  to_jsonable,
 )
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfiguration
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
+from pylabrobot.utils.configuration_json import to_jsonable
 
 # What each read answers, keyed by the command that asks: the arm at 362.9 mm, in tenths of a
 # millimetre and in motor counts, as the drive reports it.

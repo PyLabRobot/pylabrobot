@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `to_jsonable`, and the walk that reads a saved configuration back against the types its fields declare, move from `pylabrobot.hamilton.star.driver.configuration` to `pylabrobot.utils.configuration_json`, so a driver other than the STAR's can read and write its own configurations with them. Import `to_jsonable` from the new module; what it does is unchanged.
 - `HamiltonDeck` and `HamiltonSTARDeck`: `num_tracks` replaces `num_rails` and `track=` replaces `rails=`; the old names are deprecated but keep working, as do decks saved with `num_rails`. A STAR deck counts two fewer tracks than it counted rails (STARlet 30, STAR 54) at the same positions, so a count passed positionally to `HamiltonSTARDeck` is now read as tracks.
 
 ### Fixed

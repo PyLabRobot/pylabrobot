@@ -18,12 +18,12 @@ from pylabrobot.hamilton.star.device import (
 from pylabrobot.hamilton.star.driver.configuration import (
   DeviceConfiguration,
   read_configuration,
-  to_jsonable,
 )
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck
 from pylabrobot.resources.hamilton.hamilton_decks import STAR_NUM_TRACKS, STARLET_NUM_TRACKS
+from pylabrobot.utils.configuration_json import to_jsonable
 
 # The device this package ships a recording of, read through the one reader there is: tests need a
 # device to start from, and this is the one they stand in for.
