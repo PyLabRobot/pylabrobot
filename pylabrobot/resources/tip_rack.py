@@ -46,8 +46,8 @@ class TipSpot(Resource):
 
     super().__init__(
       name,
-      size_x=size_y,
-      size_y=size_x,
+      size_x=size_x,
+      size_y=size_y,
       size_z=size_z,
       category=category,
       metadata=metadata,
