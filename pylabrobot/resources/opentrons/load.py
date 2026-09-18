@@ -4,9 +4,10 @@ import os
 import urllib.request
 from typing import Dict, List, cast
 
-from pylabrobot.resources import Coordinate, Tip, TipRack, TipSpot
+from pylabrobot.resources import Coordinate, Tip, TipSpot
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.tip_rack import StandingTipRack
 from pylabrobot.resources.tube_rack import TubeRack
 
 
@@ -41,7 +42,7 @@ def _download_ot_resource_file(ot_name: str, force_download: bool):
 
 def load_ot_tip_rack(
   ot_name: str, plr_resource_name: str, with_tips: bool = True, force_download: bool = False
-) -> TipRack:
+) -> StandingTipRack:
   """Convert an Opentrons tip rack definition file to a PyLabRobot TipRack resource."""
 
   data = _download_ot_resource_file(ot_name=ot_name, force_download=force_download)
@@ -88,19 +89,15 @@ def load_ot_tip_rack(
   flattened_ordering = [item for sublist in ordering for item in sublist]
   ordered_items = dict(zip(flattened_ordering, wells))
 
-  tr = TipRack(
+  return StandingTipRack(
     name=plr_resource_name,
     size_x=data["dimensions"]["xDimension"],
     size_y=data["dimensions"]["yDimension"],
     size_z=data["dimensions"]["zDimension"],
     ordered_items=cast(Dict[str, TipSpot], ordered_items),
     model=data["metadata"]["displayName"],
+    with_tips=with_tips,
   )
-  if with_tips:
-    tr.fill()
-  else:
-    tr.empty()
-  return tr
 
 
 def load_ot_tube_rack(

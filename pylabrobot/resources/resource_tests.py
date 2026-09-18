@@ -4,7 +4,7 @@ import re
 import unittest
 import unittest.mock
 from collections import OrderedDict
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from pylabrobot.legacy.centrifuge.centrifuge import Centrifuge, Loader
 from pylabrobot.legacy.centrifuge.chatterbox import (
@@ -19,11 +19,12 @@ from pylabrobot.resources import resource as resource_module
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
-from pylabrobot.resources.errors import ResourceNotFoundError
+from pylabrobot.resources.errors import NoLocationError, ResourceNotFoundError
 from pylabrobot.resources.plate_adapter import PlateAdapter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.tip import Tip
+from pylabrobot.utils.linalg import matrix_multiply_3x3, matrix_vector_multiply_3x3
 
 
 def _make_test_deck() -> Deck:
@@ -331,6 +332,166 @@ class TestResource(unittest.TestCase):
     self.assertAlmostEqual(c.get_absolute_size_x(), 20)
     self.assertAlmostEqual(c.get_absolute_size_y(), 10)
 
+  def test_rotate_to_goes_to_an_angle_where_rotate_moves_by_one(self):
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+    parent.assign_child_resource(bar, location=Coordinate.zero())
+
+    bar.rotate_to(z=30)
+    bar.rotate_to(z=30)
+    self.assertEqual(bar.rotation.z, 30)
+
+    bar.rotate(z=30)
+    self.assertEqual(bar.rotation.z, 60)
+
+  def test_rotate_to_sets_one_axis_normalized_and_leaves_the_others(self):
+    for axis in ("x", "y", "z"):
+      for start in ((0, 0, 15), (90, 0, 90), (15, 90, 200)):
+        parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+        parent.location = Coordinate.zero()
+        bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+        parent.assign_child_resource(bar, location=Coordinate.zero())
+        bar.rotate(x=start[0], y=start[1], z=start[2])
+        was = {name: getattr(bar.rotation, name) for name in ("x", "y", "z")}
+
+        bar.rotate_to(
+          x=390.0 if axis == "x" else None,
+          y=390.0 if axis == "y" else None,
+          z=390.0 if axis == "z" else None,
+        )
+
+        for name in ("x", "y", "z"):
+          expected = 30.0 if name == axis else was[name]
+          self.assertAlmostEqual(getattr(bar.rotation, name), expected, places=9)
+
+  def test_a_pivot_inside_a_turned_parent_still_holds(self):
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+    parent.assign_child_resource(bar, location=Coordinate(30, 40, 0))
+    parent.rotate(z=90)
+    far_end = Coordinate(100, 0, 0)
+
+    def where() -> Coordinate:
+      carried = matrix_vector_multiply_3x3(
+        bar.get_absolute_rotation().get_rotation_matrix(), far_end.vector()
+      )
+      return bar.get_absolute_location() + Coordinate(*carried)
+
+    before = where()
+    bar.rotate_to(z=90, pivot_coordinate=far_end)
+    self.assertEqual(where(), before)
+
+  def test_a_pivot_holds_about_every_axis(self):
+    for turn in ("rotate", "rotate_to"):
+      for axis in ("x", "y", "z"):
+        for angle in (30.0, 90.0, 200.0):
+          parent = Resource("parent", size_x=500, size_y=500, size_z=500)
+          parent.location = Coordinate.zero()
+          bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+          parent.assign_child_resource(bar, location=Coordinate(7, 11, 13))
+          joint = Coordinate(100, 5, 5)
+
+          def where(bar: Resource = bar, joint: Coordinate = joint) -> Coordinate:
+            carried = matrix_vector_multiply_3x3(
+              bar.get_absolute_rotation().get_rotation_matrix(), joint.vector()
+            )
+            return bar.get_absolute_location() + Coordinate(*carried)
+
+          before = where()
+          x = angle if axis == "x" else None
+          y = angle if axis == "y" else None
+          z = angle if axis == "z" else None
+          if turn == "rotate":
+            bar.rotate(x=x or 0.0, y=y or 0.0, z=z or 0.0, pivot_coordinate=joint)
+          else:
+            bar.rotate_to(x=x, y=y, z=z, pivot_coordinate=joint)
+
+          after = where()
+          for was, now in zip((before.x, before.y, before.z), (after.x, after.y, after.z)):
+            self.assertAlmostEqual(was, now, places=9)
+          # Holding the pivot still is not enough: the turn has to have happened.
+          reached = (bar.rotation.x, bar.rotation.y, bar.rotation.z)
+          self.assertAlmostEqual(reached["xyz".index(axis)], angle % 360, places=9)
+          self.assertEqual(sum(1 for turned in reached if turned != 0), 1)
+
+  def test_a_pivot_turns_by_an_amount_and_goes_to_an_angle(self):
+    """`rotate` carries the pivot on each turn; `rotate_to` holds it where a repeat changes nothing."""
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    plate = Resource("plate", size_x=100, size_y=50, size_z=10)
+    parent.assign_child_resource(plate, location=Coordinate(200, 300, 0))
+    centre = Coordinate(50, 25, 0)
+
+    plate.rotate(z=90, pivot_coordinate=centre)
+    self.assertEqual(plate.rotation.z, 90)
+    self.assertEqual(plate.location, Coordinate(275, 275, 0))
+
+    plate.rotate(z=90, pivot_coordinate=centre)
+    self.assertEqual(plate.rotation.z, 180)
+    # The centre is still at (250, 325, 0), so the corner the location names has swung again.
+    self.assertEqual(plate.location, Coordinate(300, 350, 0))
+
+    where = plate.location
+    plate.rotate_to(z=180, pivot_coordinate=centre)
+    self.assertEqual((plate.rotation.z, plate.location), (180, where))
+
+  def test_a_pivot_needs_a_location_to_be_held_by(self):
+    """A pivot is held by moving `location`, so one with none cannot honour the request."""
+    joint = Coordinate(50, 5, 5)
+    with self.assertRaises(NoLocationError):
+      Resource("loose", size_x=100, size_y=10, size_z=10).rotate(z=90, pivot_coordinate=joint)
+    with self.assertRaises(NoLocationError):
+      Resource("loose", size_x=100, size_y=10, size_z=10).rotate_to(z=90, pivot_coordinate=joint)
+
+    # Without a pivot an unplaced resource turns about its origin, as it always has.
+    loose = Resource("loose", size_x=100, size_y=10, size_z=10)
+    loose.rotate(z=90)
+    self.assertEqual(loose.rotation.z, 90)
+
+  def test_a_pivot_holds_under_an_unlocated_parent_that_a_rotated_ancestor_carries(self):
+    """`location` is read in absolute axes from where the location chain stops, not in a parent's."""
+    grandparent = Resource("grandparent", size_x=500, size_y=500, size_z=10)
+    grandparent.location = Coordinate.zero()
+    grandparent.rotate(z=30)
+    parent = Resource("parent", size_x=300, size_y=300, size_z=10)
+    grandparent.assign_child_resource(parent, location=None)
+    plate = Resource("plate", size_x=100, size_y=50, size_z=10)
+    parent.assign_child_resource(plate, location=Coordinate(200, 300, 0))
+    centre = Coordinate(50, 25, 0)
+
+    def where() -> Coordinate:
+      carried = matrix_vector_multiply_3x3(
+        plate.get_absolute_rotation().get_rotation_matrix(), centre.vector()
+      )
+      return plate.get_absolute_location() + Coordinate(*carried)
+
+    before = where()
+    plate.rotate(z=90, pivot_coordinate=centre)
+    after = where()
+    for was, now in zip((before.x, before.y, before.z), (after.x, after.y, after.z)):
+      self.assertAlmostEqual(was, now, places=3)
+
+  def test_rotated_carries_the_pivot_and_leaves_the_original(self):
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    plate = Resource("plate", size_x=100, size_y=50, size_z=10)
+    parent.assign_child_resource(plate, location=Coordinate(200, 300, 0))
+
+    turned = plate.rotated(z=90, pivot_coordinate=Coordinate(50, 25, 0))
+
+    self.assertEqual(turned.location, Coordinate(275, 275, 0))
+    self.assertEqual(plate.location, Coordinate(200, 300, 0))
+    self.assertEqual(plate.rotation.z, 0)
+
+  def test_rotated_works_on_a_subclass_overriding_rotate_without_a_pivot(self):
+    class OldStyle(Resource):
+      def rotate(self, x: float = 0, y: float = 0, z: float = 0):  # type: ignore[override]
+        super().rotate(x=x, y=y, z=z)
+
+    self.assertEqual(OldStyle("old", size_x=10, size_y=10, size_z=10).rotated(z=90).rotation.z, 90)
+
   def test_rotation180(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
     r.location = Coordinate.zero()
@@ -378,6 +539,103 @@ class TestResource(unittest.TestCase):
     self.assertAlmostEqual(r.get_absolute_size_x(), 200)
     self.assertAlmostEqual(r.get_absolute_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(20, 10, 10))
+
+  def test_absolute_location_through_a_rotated_chain(self):
+    parent = Resource("parent", size_x=200, size_y=100, size_z=100, rotation=Rotation(z=90))
+    parent.location = Coordinate(10, 20, 0)
+    child = Resource("child", size_x=20, size_y=20, size_z=20, rotation=Rotation(z=90))
+    parent.assign_child_resource(child, location=Coordinate(30, 0, 0))
+    grandchild = Resource("grandchild", size_x=10, size_y=10, size_z=10)
+    child.assign_child_resource(grandchild, location=Coordinate(5, 0, 0))
+
+    # Each level turns what it carries, so the child's 30 mm along its parent's x lands 30 mm
+    # along the deck's y, and the grandchild's 5 mm comes back on itself through two turns.
+    self.assertEqual(parent.get_absolute_location(), Coordinate(10, 20, 0))
+    self.assertEqual(child.get_absolute_location(), Coordinate(10, 50, 0))
+    self.assertEqual(grandchild.get_absolute_location(), Coordinate(5, 50, 0))
+    self.assertEqual(grandchild.get_absolute_location(x="c", y="c", z="c"), Coordinate(0, 45, 5))
+    self.assertEqual(grandchild.get_absolute_location(x="r", y="b", z="t"), Coordinate(-5, 40, 10))
+
+  def test_absolute_location_matches_level_by_level_composition(self):
+    """Walking the chain must give what composing one level at a time gives."""
+
+    def level_by_level(resource: Resource, x="l", y="f", z="b") -> Coordinate:
+      turned_anchor = Coordinate(
+        *matrix_vector_multiply_3x3(
+          resource.get_absolute_rotation().get_rotation_matrix(),
+          resource.get_anchor(x=x, y=y, z=z).vector(),
+        )
+      )
+      here = cast(Coordinate, resource.location)
+      parent = resource.parent
+      if parent is None or parent.location is None:
+        return here + turned_anchor
+      turned_location = Coordinate(
+        *matrix_vector_multiply_3x3(
+          parent.get_absolute_rotation().get_rotation_matrix(), here.vector()
+        )
+      )
+      return level_by_level(parent) + turned_location + turned_anchor
+
+    for angles in ((0, 0, 0), (0, 0, 90), (0, 0, 37.5), (0, 0, 270)):
+      for hangs_from_a_placeless_parent in (False, True):
+        with self.subTest(angles=angles, hung=hangs_from_a_placeless_parent):
+          top = Resource("top", size_x=200, size_y=100, size_z=100, rotation=Rotation(*angles))
+          top.location = Coordinate(11, 22, 33)
+          if hangs_from_a_placeless_parent:
+            # A resource whose parent carries no location is where the walk stops, but the
+            # rotation still comes from above it.
+            placeless = Resource("placeless", size_x=1, size_y=1, size_z=1, rotation=Rotation(z=90))
+            top.parent = placeless
+            placeless.children.append(top)
+          node = top
+          for level in range(3):
+            child = Resource(
+              f"level_{level}", size_x=20, size_y=10, size_z=5, rotation=Rotation(*angles)
+            )
+            node.assign_child_resource(child, location=Coordinate(7, -3, 2))
+            node = child
+          for anchors in (("l", "f", "b"), ("c", "c", "c"), ("r", "b", "t")):
+            self.assertEqual(node.get_absolute_location(*anchors), level_by_level(node, *anchors))
+
+  def test_rotate_composes_around_fixed_axes(self):
+    resource = Resource("resource", size_x=10, size_y=10, size_z=10, rotation=Rotation(z=90))
+    expected = matrix_multiply_3x3(
+      Rotation(x=90).get_rotation_matrix(),
+      resource.rotation.get_rotation_matrix(),
+    )
+
+    resource.rotate(x=90)
+
+    actual = resource.rotation.get_rotation_matrix()
+    for actual_row, expected_row in zip(actual, expected):
+      for actual_value, expected_value in zip(actual_row, expected_row):
+        self.assertAlmostEqual(actual_value, expected_value)
+
+  def test_rotate_keeps_angles_normalized(self):
+    resource = Resource("resource", size_x=10, size_y=10, size_z=10)
+    rotation = resource.rotation
+
+    resource.rotate(z=270)
+    self.assertIs(resource.rotation, rotation)
+    self.assertEqual(resource.rotation.z, 270)
+
+    resource.rotate(z=90)
+    self.assertEqual(resource.rotation.z, 0)
+
+  def test_absolute_rotation_composes_parent_and_child(self):
+    parent = Resource("parent", size_x=10, size_y=10, size_z=10, rotation=Rotation(x=90))
+    child = Resource("child", size_x=5, size_y=5, size_z=5, rotation=Rotation(z=90))
+    parent.assign_child_resource(child, location=Coordinate.zero())
+    expected = matrix_multiply_3x3(
+      parent.rotation.get_rotation_matrix(),
+      child.rotation.get_rotation_matrix(),
+    )
+
+    actual = child.get_absolute_rotation().get_rotation_matrix()
+    for actual_row, expected_row in zip(actual, expected):
+      for actual_value, expected_value in zip(actual_row, expected_row):
+        self.assertAlmostEqual(actual_value, expected_value)
 
 
 class TestResourceCallback(unittest.TestCase):

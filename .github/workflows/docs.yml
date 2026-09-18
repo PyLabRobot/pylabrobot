@@ -30,13 +30,18 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Graphviz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
       - name: Install dependencies
         run: pip install -e '.[dev]'
 
       - name: Check documentation
         run: |
           rm -rf docs/build docs/_autosummary
-          make docs-check
+          make docs
 
   deploy_docs:
     name: Build and deploy documentation
@@ -54,6 +59,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install Graphviz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
 
       - name: Install dependencies
         run: pip install -e '.[dev]'

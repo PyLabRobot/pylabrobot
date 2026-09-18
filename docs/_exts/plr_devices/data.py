@@ -26,6 +26,7 @@ KINDS = (
   "fan",
   "flow cytometer",
   "heater shaker",
+  "imager",
   "liquid handler",
   "microscope",
   "peeler",

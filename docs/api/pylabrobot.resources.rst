@@ -18,7 +18,9 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     ItemizedResource
     utils.create_equally_spaced_2d
     Lid
+    LinkBody
     Liquid
+    MechanicalGripper
     PetriDish
     Plate
     PlateCarrier

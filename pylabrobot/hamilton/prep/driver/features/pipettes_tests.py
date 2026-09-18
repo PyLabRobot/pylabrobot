@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import functools
 from typing import Any, List
-
-
 from unittest.mock import AsyncMock
 
 import pytest

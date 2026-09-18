@@ -107,7 +107,8 @@ class HamiltonSTARDeck(HamiltonDeck):
           for i in range(8)
         ]
         for i, ts in enumerate(tip_spots):
-          ts.location = Coordinate(x=0, y=7 * 9 - 9 * i, z=23.1)  # A1 == index 0, topmost tip
+          # Collar support height; A1 == index 0, topmost tip.
+          ts.location = Coordinate(x=0, y=7 * 9 - 9 * i, z=75.0)
 
         teaching_tip_rack = TipRack(
           name="teaching_tip_rack",

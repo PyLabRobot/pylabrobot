@@ -23,7 +23,8 @@ sila = ["zeroconf>=0.131.0", "grpcio"]
 cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm]"]
+odyssey = ["Pillow"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
 test = [
   "pytest",
 ]
@@ -54,7 +55,12 @@ namespaces = false
 exclude = ["tools*", "docs*"]
 
 [tool.setuptools.package-data]
-pylabrobot = ["visualizer/*", "visualizer/img/*", "version.txt"]
+pylabrobot = [
+  "visualizer/*",
+  "visualizer/img/*",
+  "version.txt",
+  "hamilton/star/driver/recordings/*.json",
+]
 
 [tool.ruff]
 line-length = 100

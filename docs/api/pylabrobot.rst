@@ -32,6 +32,7 @@ Manufacturers
     pylabrobot.inheco
     pylabrobot.kbioscience
     pylabrobot.kbiosystems
+    pylabrobot.li_cor
     pylabrobot.mettler_toledo
     pylabrobot.micronic
     pylabrobot.molecular_devices

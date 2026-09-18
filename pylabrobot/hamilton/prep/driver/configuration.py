@@ -12,7 +12,6 @@ from typing import Any, Dict, Optional, Tuple, Union
 from .features.pipettes import PipettesConfiguration
 from .prep_commands import DeckBounds, DeckSiteInfo, WasteSiteInfo
 
-
 # The JSON walk is the STAR's: it is written against dataclass field types, and nothing in it is
 # particular to that device.
 

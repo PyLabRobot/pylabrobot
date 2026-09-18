@@ -23,7 +23,6 @@ import os
 from typing import Any, Dict, List, Optional, Set, Tuple, cast, get_type_hints
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
-from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.introspection import (
   GetEnumsCommand,
@@ -44,6 +43,7 @@ from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, Struct, wire_type_of
 from pylabrobot.io.socket import Socket
+from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.deck import Deck
 
 from . import prep_commands as PrepCmd
