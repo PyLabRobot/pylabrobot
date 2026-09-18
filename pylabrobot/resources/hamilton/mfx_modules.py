@@ -14,7 +14,7 @@ def hamilton_mfx_tiprackholder_standard(name: str) -> EmbeddedTipRackHolder:
   module's opening and is centred over it, as in a tip carrier's site.
   """
 
-  top = 114.7 - 18.2  # this fork's carrier sites
+  top = 114.7 - 18.2  # above the carrier's own height
 
   return EmbeddedTipRackHolder(
     name=name,
