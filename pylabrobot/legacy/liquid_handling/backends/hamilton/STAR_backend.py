@@ -13059,7 +13059,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Check if search_end_position is allowed
     if search_end_position < STARBackend.MINIMUM_CHANNEL_Z_POSITION:
-      raise ValueError(f"search_end_position must be at least 99.98 mm but is {search_end_position} mm")
+      raise ValueError(
+        f"search_end_position must be at least 99.98 mm but is {search_end_position} mm"
+      )
 
     # Correct for tip length + fitting depth (low level command is in head space, we are in tip space)
     search_end_position_head_space = (
@@ -13462,7 +13464,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Check if search_end_position is allowed
     if search_end_position < STARBackend.MINIMUM_CHANNEL_Z_POSITION:
-      raise ValueError(f"search_end_position must be at least 99.98 mm but is {search_end_position} mm")
+      raise ValueError(
+        f"search_end_position must be at least 99.98 mm but is {search_end_position} mm"
+      )
 
     # Correct for tip length + fitting depth (low level command is in head space, we are in tip space)
     search_end_position_head_space = (
