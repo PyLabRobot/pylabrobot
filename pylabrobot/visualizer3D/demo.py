@@ -32,7 +32,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_1000uL_filter,
   hamilton_mfx_carrier_L5_base,
   hamilton_mfx_module_tiprackholder_ntr,
-  hamilton_mfx_module_tiprackholder_standard,
+  hamilton_mfx_tiprackholder_standard,
   hamilton_tip_carrier_L5_ntr_a00,
 )
 from pylabrobot.resources.plate import Plate
@@ -95,8 +95,8 @@ def build_facility() -> Facility:
     0: hamilton_mfx_module_tiprackholder_ntr(name="mfx_ntr4_0"),
     1: hamilton_mfx_module_tiprackholder_ntr(name="mfx_ntr4_1"),
     2: hamilton_mfx_module_tiprackholder_ntr(name="mfx_ntr4_2"),
-    3: hamilton_mfx_module_tiprackholder_standard(name="mfx_tiprack_holder_3"),
-    4: hamilton_mfx_module_tiprackholder_standard(name="mfx_tiprack_holder_4"),
+    3: hamilton_mfx_tiprackholder_standard(name="mfx_tiprack_holder_3"),
+    4: hamilton_mfx_tiprackholder_standard(name="mfx_tiprack_holder_4"),
   }
   mfx_carrier = hamilton_mfx_carrier_L5_base(name="mfx_carrier", modules=modules)
   modules[0].assign_child_resource(hamilton_96_tiprack_10uL_NTR(name="mfx_ntr_10uL"))

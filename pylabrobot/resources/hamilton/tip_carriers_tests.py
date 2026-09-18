@@ -4,17 +4,24 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
+  TIP_CAR_480BC_A00,
   STARDeck,
   TIP_CAR_72_4mlTF_C00,
   TIP_CAR_96BC_5mlT_A00,
   hamilton_24_tiprack_4000uL_filter,
   hamilton_24_tiprack_5000uL,
+  hamilton_96_tiprack_10uL,
   hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
+  hamilton_96_tiprack_300uL,
   hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
+  hamilton_96_tiprack_raised_core_i,
+  hamilton_96_tiprack_raised_core_ii,
   hamilton_mfx_carrier_L5_base,
   hamilton_mfx_module_tiprackholder_ntr,
+  hamilton_mfx_tiprackholder_standard,
+  hamilton_tip_10uL,
   hamilton_tip_carrier_L5_ntr_a00,
 )
 from pylabrobot.resources.resource_stack import ResourceStack
@@ -49,6 +56,41 @@ class StandardTipCarrierTests(unittest.TestCase):
         carrier[0] = rack = hamilton_96_tiprack_1000uL(name="rack").rotated(z=rotation)
         deck.assign_child_resource(carrier, track=1)
         for spot, expected in (("A1", a1), ("H12", h12)):
+          actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
+          for axis in ("x", "y", "z"):
+            self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
+
+  def test_tip_spot_positions_on_mfx_tip_module(self):
+    for rack_fn, slot, a1 in [
+      (hamilton_96_tiprack_10uL, 0, Coordinate(770.5, 146.0, 216.2)),
+      (hamilton_96_tiprack_300uL, 4, Coordinate(770.5, 530.0, 216.2)),
+    ]:
+      with self.subTest(rack=rack_fn.__name__):
+        deck = STARDeck()
+        module = hamilton_mfx_tiprackholder_standard("module")
+        deck.assign_child_resource(
+          hamilton_mfx_carrier_L5_base("mfx_carrier", modules={slot: module}), track=30
+        )
+        module.assign_child_resource(rack := rack_fn("rack"))
+        for spot, expected in (("A1", a1), ("H12", a1 + Coordinate(99.0, -63.0, 0.0))):
+          actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
+          for axis in ("x", "y", "z"):
+            self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
+
+  def test_raised_tip_rack_positions_on_star_deck(self):
+    for rack_fn, a1_z in [
+      (hamilton_96_tiprack_raised_core_ii, 230.95),
+      (hamilton_96_tiprack_raised_core_i, 227.45),
+    ]:
+      with self.subTest(rack=rack_fn.__name__):
+        deck = STARDeck()
+        carrier = TIP_CAR_480BC_A00("carrier")
+        carrier[0] = rack = rack_fn("rack", make_tip=hamilton_tip_10uL)
+        deck.assign_child_resource(carrier, track=22)
+        for spot, expected in (
+          ("A1", Coordinate(590.4, 145.8, a1_z)),
+          ("H12", Coordinate(689.4, 82.8, a1_z)),
+        ):
           actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
           for axis in ("x", "y", "z"):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
@@ -113,14 +155,14 @@ class NestedTipCarrierTests(unittest.TestCase):
     from pylabrobot.resources.hamilton import (
       TIP_CAR_480_A00,
       hamilton_96_tiprack_1000uL_filter,
-      hamilton_mfx_module_tiprackholder_standard,
+      hamilton_mfx_tiprackholder_standard,
     )
 
     deck = STARDeck()
     carrier = TIP_CAR_480_A00("tip_carrier")
     carrier[0] = on_carrier = hamilton_96_tiprack_1000uL_filter("on_carrier")
     deck.assign_child_resource(carrier, track=1)
-    module = hamilton_mfx_module_tiprackholder_standard("module")
+    module = hamilton_mfx_tiprackholder_standard("module")
     mfx = hamilton_mfx_carrier_L5_base("mfx", modules={0: module})
     module.assign_child_resource(on_module := hamilton_96_tiprack_1000uL_filter("on_module"))
     deck.assign_child_resource(mfx, location=Coordinate(932.5, 63, 100))

@@ -708,7 +708,7 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
       hamilton_96_tiprack_300uL_filter_slim,
       hamilton_96_tiprack_1000uL_filter,
       hamilton_mfx_carrier_L5_base,
-      hamilton_mfx_module_tiprackholder_standard,
+      hamilton_mfx_tiprackholder_standard,
     )
 
     # rack, MFX slot, tip definition (without its index), pick-up tp, drop tp/tz (stop disc, ti1)
@@ -725,7 +725,7 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
         pipettes, _, sent = await channels_over_a_rack()
         deck = pipettes._driver.deck
         assert deck is not None
-        module = hamilton_mfx_module_tiprackholder_standard("tip_module")
+        module = hamilton_mfx_tiprackholder_standard("tip_module")
         deck.assign_child_resource(
           hamilton_mfx_carrier_L5_base("mfx_carrier", modules={slot: module}),
           location=Coordinate(752.5, 63, 100),

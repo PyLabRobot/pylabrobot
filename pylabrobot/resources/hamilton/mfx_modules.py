@@ -4,31 +4,38 @@ from pylabrobot.resources.carrier import Coordinate, PlateHolder
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
 
-# -- Tip storage -----------------------------------------------------------------------------
 
-
-def hamilton_mfx_module_tiprackholder_standard(name: str) -> EmbeddedTipRackHolder:
+def hamilton_mfx_tiprackholder_standard(name: str) -> EmbeddedTipRackHolder:
   """Hamilton cat. no.: 188160
   Hamilton name: 'MFX_TIP_module'
-  Module to position a high-, standard- or low volume framed tip rack (not a 384 tip rack).
+  Module to position a high-, standard- or low volume tip rack (but not a 384 tip rack).
 
-  A framed rack sinks into it by its skirt and is centred over its opening, as in a tip carrier's
-  site.
+  Takes an `EmbeddedTipRack` - Hamilton calls these 'framed' tip racks - which sinks into the
+  module's opening and is centred over it, as in a tip carrier's site.
   """
 
-  # The rack stands on the module's top: Hamilton's Base for Tip Module BC (188160), 114.7 above the
-  # carrier's base, less the carrier.
-  top = 114.7 - 18.2  # 96.5 mm
+  top = 114.7 - 18.2  # this fork's carrier sites
 
   return EmbeddedTipRackHolder(
     name=name,
     size_x=135.0,
     size_y=94.0,
     size_z=top,
-    # Only the height: the holder centres a framed rack in X and Y and sinks it by its skirt.
+    # Only the height: the holder centres a framed rack in X and Y and sinks it into its opening.
     child_location=Coordinate(x=0.0, y=0.0, z=top),
-    model=hamilton_mfx_module_tiprackholder_standard.__name__,
+    model=hamilton_mfx_tiprackholder_standard.__name__,
   )
+
+
+def MFX_TIP_module(name: str) -> EmbeddedTipRackHolder:
+  """Deprecated: use `hamilton_mfx_tiprackholder_standard`."""
+  warnings.warn(
+    "MFX_TIP_module is deprecated and will be removed in the future. "
+    "Use 'hamilton_mfx_tiprackholder_standard' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_mfx_tiprackholder_standard(name=name)
 
 
 def hamilton_mfx_module_tiprackholder_ntr(name: str) -> ResourceHolder:
@@ -138,27 +145,3 @@ def MFX_DWP_rackbased_module(name: str) -> PlateHolder:
     stacklevel=2,
   )
   return hamilton_mfx_plateholder_DWP_flat(name)
-
-
-def MFX_TIP_module(name: str) -> ResourceHolder:
-  """Deprecated: use `hamilton_mfx_module_tiprackholder_standard`.
-
-  Hamilton cat. no.: 188160. Places a rack's bottom on the module's top, so a framed rack stands its
-  sinking depth (6 mm) higher than it does on the device.
-  """
-  warnings.warn(
-    "MFX_TIP_module is deprecated and will be removed in the future.\n"
-    "Use 'hamilton_mfx_module_tiprackholder_standard' instead, which sinks a framed "
-    "tip rack into the module as the device holds it.",
-    DeprecationWarning,
-    stacklevel=2,
-  )
-  return ResourceHolder(
-    name=name,
-    size_x=135.0,
-    size_y=94.0,
-    size_z=214.8 - 18.2 - 100,
-    # probe height - carrier_height - deck_height
-    child_location=Coordinate(6.2, 5.0, 214.8 - 18.2 - 100),
-    model="MFX_TIP_module",
-  )

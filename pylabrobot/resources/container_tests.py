@@ -1,8 +1,8 @@
 import json
 import unittest
 
-from pylabrobot.utils.liquid_handling.errors import ChannelsDoNotFitError
 from pylabrobot.serializer import serialize
+from pylabrobot.utils.liquid_handling.errors import ChannelsDoNotFitError
 
 from .container import Container
 from .coordinate import Coordinate

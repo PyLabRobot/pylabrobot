@@ -1,7 +1,9 @@
 import unittest
 
 from pylabrobot.resources.hamilton.mfx_carriers import hamilton_mfx_carrier_L5_base
-from pylabrobot.resources.hamilton.mfx_modules import hamilton_mfx_module_tiprackholder_standard
+from pylabrobot.resources.hamilton.mfx_modules import (
+  hamilton_mfx_tiprackholder_standard,
+)
 
 from .carrier import (
   Carrier,
@@ -395,11 +397,11 @@ class CarrierTests(unittest.TestCase):
 
 class MFXCarrierTests(unittest.TestCase):
   def test_init(self):
-    MFX_TIP_module_1 = hamilton_mfx_module_tiprackholder_standard(name="MFX_TIP_module_1")
-    MFX_TIP_module_2 = hamilton_mfx_module_tiprackholder_standard(name="MFX_TIP_module_2")
-    MFX_TIP_module_3 = hamilton_mfx_module_tiprackholder_standard(name="MFX_TIP_module_3")
-    MFX_TIP_module_4 = hamilton_mfx_module_tiprackholder_standard(name="MFX_TIP_module_4")
-    MFX_TIP_module_5 = hamilton_mfx_module_tiprackholder_standard(name="MFX_TIP_module_5")
+    MFX_TIP_module_1 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_1")
+    MFX_TIP_module_2 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_2")
+    MFX_TIP_module_3 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_3")
+    MFX_TIP_module_4 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_4")
+    MFX_TIP_module_5 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_5")
 
     mfx_carrier = hamilton_mfx_carrier_L5_base(
       name="mfx_tip_carrier_1",

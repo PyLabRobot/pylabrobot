@@ -42,7 +42,7 @@ from pylabrobot.resources import (
   hamilton_96_tiprack_1000uL_filter,
   hamilton_mfx_carrier_L5_base,
   hamilton_mfx_module_tiprackholder_ntr,
-  hamilton_mfx_module_tiprackholder_standard,
+  hamilton_mfx_tiprackholder_standard,
   hamilton_tip_carrier_L5_ntr_a00,
   no_tip_tracking,
   no_volume_tracking,
@@ -2538,7 +2538,7 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
   async def test_framed_tip_racks_on_mfx_tip_module_ground_truth(self):
     self.deck.unassign_child_resource(self.ntr_carrier)
     modules: dict[int, ResourceHolder] = {
-      slot: hamilton_mfx_module_tiprackholder_standard(f"tip_module_{slot}") for slot in (0, 1, 4)
+      slot: hamilton_mfx_tiprackholder_standard(f"tip_module_{slot}") for slot in (0, 1, 4)
     }
     self.deck.assign_child_resource(
       hamilton_mfx_carrier_L5_base("tip_module_carrier", modules=modules),
