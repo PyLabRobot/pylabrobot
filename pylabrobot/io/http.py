@@ -122,11 +122,32 @@ class HTTP:
     self.headers = dict(headers or {})
     self.timeout = timeout
     self._executor: Optional[ThreadPoolExecutor] = None
-    self._request_lock = asyncio.Lock()
+    # Built by `setup`, not here. An asyncio primitive binds to a loop when it is constructed, and
+    # a transport is built in ordinary synchronous code - where on Python 3.9 there may be no loop
+    # to bind to, and on any version there may be a different one than the requests will run in.
+    # Nothing needs it before `setup`, which is also where the executor comes from.
+    self._request_lock: Optional[asyncio.Lock] = None
+
+  def _require_lock(self) -> asyncio.Lock:
+    """The lock that orders requests on this transport.
+
+    Returns:
+      The lock, which `setup` built.
+
+    Raises:
+      RuntimeError: If the transport was never set up, which is also what leaves it without one.
+    """
+    if self._request_lock is None:
+      raise RuntimeError(
+        f"HTTP transport for '{self.human_readable_device_name}' is not set up; call setup() first"
+      )
+    return self._request_lock
 
   async def setup(self) -> None:
     if self._executor is None:
       self._executor = ThreadPoolExecutor(max_workers=1)
+    if self._request_lock is None:
+      self._request_lock = asyncio.Lock()
 
   async def stop(self) -> None:
     if self._executor is not None:
@@ -181,7 +202,7 @@ class HTTP:
       request_json or "",
     )
 
-    async with self._request_lock:
+    async with self._require_lock():
       loop = asyncio.get_running_loop()
       response = await loop.run_in_executor(
         self._executor,
@@ -247,7 +268,7 @@ class HTTP:
         f"HTTP transport for '{self.human_readable_device_name}' is not set up; call setup() first"
       )
     method = method.upper()
-    async with self._request_lock:
+    async with self._require_lock():
       loop = asyncio.get_running_loop()
       response = await loop.run_in_executor(
         self._executor,
