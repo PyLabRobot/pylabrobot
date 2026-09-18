@@ -1,4 +1,4 @@
-"""Hamilton Prep CoRe gripper and PrepGripperArm frontend helper."""
+"""Hamilton Prep CoRe gripper and CoreGripperArm frontend helper."""
 
 from __future__ import annotations
 
@@ -9,29 +9,39 @@ from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.resource_state import place_resource
 
-from . import prep_commands as PrepCmd
+from .. import prep_commands as PrepCmd
 
 if TYPE_CHECKING:
-  from .channels import PrepChannels
-  from .client import PrepClient
+  from ..master import PrepDriver
+  from .pipettes import Pipettes
 
 logger = logging.getLogger(__name__)
 
 
-class PrepGripper:
+class CoreGrippers:
   """CoRe gripper for Prep — translates plate/tool ops to PrepCmd firmware commands.
 
   Tool management (pick_up_tool / drop_tool) is handled by the
-  :meth:`Prep.core_grippers` context manager.
+  :meth:`PrepDriver.mounted_core_grippers` context manager.
   """
 
-  def __init__(self, *, client: "PrepClient", channels: "PrepChannels") -> None:
-    self._client = client
-    self._channels = channels
+  def __init__(self, driver: "PrepDriver") -> None:
+    """
+    Args:
+      driver: the driver to send commands through, whose pipettes carry the grippers.
+    """
+    self._driver = driver
 
   @property
-  def client(self) -> "PrepClient":
-    return self._client
+  def _channels(self) -> "Pipettes":
+    """The pipetting channels that carry the grippers.
+
+    Raises:
+      RuntimeError: If the driver has no pipettes yet.
+    """
+    if self._driver.pipettes is None:
+      raise RuntimeError("no pipettes to carry the grippers; have you called `prep.setup()`?")
+    return self._driver.pipettes
 
   async def pick_up_at_location(
     self,
@@ -71,7 +81,7 @@ class PrepGripper:
     )
     grip_distance = clearance_y + squeeze_mm
 
-    await self._client.execute(
+    await self._driver.send_command(
       PrepCmd.PrepPickUpPlate(
         plate_top_center=plate_top_center,
         plate=plate_dims,
@@ -105,7 +115,7 @@ class PrepGripper:
       y_position=location.y,
       z_position=location.z,
     )
-    await self._client.execute(
+    await self._driver.send_command(
       PrepCmd.PrepDropPlate(
         plate_top_center=plate_top_center,
         clearance_y=clearance_y,
@@ -131,7 +141,7 @@ class PrepGripper:
       y_position=location.y,
       z_position=location.z,
     )
-    await self._client.execute(
+    await self._driver.send_command(
       PrepCmd.PrepMovePlate(
         plate_top_center=plate_top_center,
         acceleration_scale_x=acceleration_scale_x,
@@ -140,7 +150,7 @@ class PrepGripper:
 
   async def release_plate(self) -> None:
     """Open the CoRe gripper and release whatever is held (PrepReleasePlate, cmd=21)."""
-    await self._client.execute(PrepCmd.PrepReleasePlate())
+    await self._driver.send_command(PrepCmd.PrepReleasePlate())
 
   async def pick_up_tool(
     self,
@@ -167,13 +177,14 @@ class PrepGripper:
       tip_definition = PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
     if pre_position:
       traverse_h = self._channels._resolve_traverse_height()
-      await self._channels.move_to_position(
-        x=tool_position_x,
-        y=[rear_channel_position_y, front_channel_position_y],
-        z=traverse_h,
+      await self._channels.move_to_location(
+        [
+          Coordinate(tool_position_x, rear_channel_position_y, traverse_h),
+          Coordinate(tool_position_x, front_channel_position_y, traverse_h),
+        ],
         use_channels=[0, 1],
       )
-    await self._client.execute(
+    await self._driver.send_command(
       PrepCmd.PrepPickUpTool(
         tip_definition=tip_definition,
         tool_position_x=tool_position_x,
@@ -185,17 +196,17 @@ class PrepGripper:
         tool_y_radius=tool_y_radius,
       )
     )
-    await self._channels.move_channels_to_safe_z()
+    await self._channels.move_to_safe_z()
 
   async def drop_tool(self, *, move_to_safe_z_first: bool = True) -> None:
     """Drop CoRe gripper tool (PrepDropTool, cmd=16)."""
     if move_to_safe_z_first:
-      await self._channels.move_channels_to_safe_z()
-    await self._client.execute(PrepCmd.PrepDropTool())
+      await self._channels.move_to_safe_z()
+    await self._driver.send_command(PrepCmd.PrepDropTool())
 
 
-class PrepGripperArm:
-  """Resource-aware helper over :class:`PrepGripper` pose commands.
+class CoreGripperArm:
+  """Resource-aware helper over :class:`CoreGrippers` pose commands.
 
   Resource path: ``pick_up_resource`` / ``drop_resource`` resolve geometry from the
   resource tree (with optional ``offset``) and reassign the held resource on drop.
@@ -207,7 +218,7 @@ class PrepGripperArm:
 
   def __init__(
     self,
-    backend: PrepGripper,
+    backend: CoreGrippers,
     reference_resource: Resource,
     grip_axis: Literal["x", "y"] = "y",
   ) -> None:

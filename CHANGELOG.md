@@ -30,6 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Command serialization on `HamiltonTCPClient`: one command is in flight at a time. The lock spans write through terminal response and is released before the response is decoded, because error enrichment sends further commands through the same path (#1195).
 - `ObjectRegistry.clear()` (`pylabrobot.hamilton.transport.tcp.introspection`), used to drop path and address mappings that are scoped to a single connected session (#1195).
 
+- Background reader task on `pylabrobot.hamilton.transport.tcp.HamiltonTCPClient` that owns the socket for the session, so `on_event` subscribers receive events between commands and a response arriving with no command waiting is dropped and logged instead of being handed to the next command (#1195).
+- Command serialization on `HamiltonTCPClient`: one command is in flight at a time. The lock spans write through terminal response and is released before the response is decoded, because error enrichment sends further commands through the same path (#1195).
+- `ObjectRegistry.clear()` (`pylabrobot.hamilton.transport.tcp.introspection`), used to drop path and address mappings that are scoped to a single connected session (#1195).
+
 ### Fixed
 
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).

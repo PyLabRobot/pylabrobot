@@ -1,13 +1,12 @@
 """Hamilton Prep liquid handler."""
 
-from pylabrobot.hamilton.prep.calibration import PrepCalibration
-from pylabrobot.hamilton.prep.chatterbox import PrepChatterboxClient
-from pylabrobot.hamilton.prep.client import PrepClient
-from pylabrobot.hamilton.prep.prep import Prep
+from pylabrobot.hamilton.prep.device import Prep, PrepDevice
+from pylabrobot.hamilton.prep.driver.master import PrepDriver
+from pylabrobot.hamilton.prep.driver.simulator import PrepSimulationDriver
 
 __all__ = [
   "Prep",
-  "PrepCalibration",
-  "PrepChatterboxClient",
-  "PrepClient",
+  "PrepDevice",
+  "PrepDriver",
+  "PrepSimulationDriver",
 ]
