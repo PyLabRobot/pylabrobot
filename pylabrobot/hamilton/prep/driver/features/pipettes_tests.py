@@ -2033,7 +2033,7 @@ def test_probing_four_edges_comes_at_each_from_outside_and_lifts_between_them():
 
     pipettes.probe_y_using_clld = record_y  # type: ignore[method-assign, assignment]
     pipettes.probe_x_using_clld = record_x  # type: ignore[method-assign, assignment]
-    found = await p.pipettes.probe_edges_using_clld(0, target, repeats=1)
+    found = await p.pipettes.probe_edges_using_clld(0, target, repeats=1, allow_without_tip=True)
 
     assert list(found) == ["back", "front", "right", "left"]
     assert all(len(measurements) == 1 for measurements in found.values())
@@ -2045,6 +2045,93 @@ def test_probing_four_edges_comes_at_each_from_outside_and_lifts_between_them():
       ("x", "right", 138.0, 59.0),
     ]
     assert (await p.pipettes.request_locations())[0].z == pytest.approx(167.5)  # left at Z safety
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probing_four_edges_corrects_for_what_is_doing_the_touching():
+  """The diameters reach both probes, which halve whichever of them is on the channel."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+    seen: list = []
+
+    async def record(channel, direction, **kwargs):
+      seen.append(
+        (kwargs["tip_bottom_diameter"], kwargs["stop_disc_diameter"], kwargs["allow_without_tip"])
+      )
+      return None
+
+    pipettes.probe_y_using_clld = record  # type: ignore[method-assign, assignment]
+    pipettes.probe_x_using_clld = record  # type: ignore[method-assign, assignment]
+    await pipettes.probe_edges_using_clld(
+      0,
+      Coordinate(150.0, 200.0, 60.0),
+      repeats=1,
+      tip_bottom_diameter=3.5,
+      stop_disc_diameter=9.0,
+      allow_without_tip=True,
+    )
+
+    assert seen == [(3.5, 9.0, True)] * 4  # every edge, X and Y alike
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probing_four_edges_refuses_a_bare_channel_before_it_moves():
+  """The same refusal the searches make, made before the channel has gone anywhere."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    before = await p.pipettes.request_locations()
+    sent: list = []
+    send = p.send_command
+
+    async def recording(command, **kwargs):
+      sent.append(command)
+      return await send(command, **kwargs)
+
+    p.send_command = recording  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="no tip on channel 0"):
+      await p.pipettes.probe_edges_using_clld(0, Coordinate(150.0, 200.0, 60.0))
+    assert not any(isinstance(c, PrepCmd.PrepMoveToPosition) for c in sent)
+    assert await p.pipettes.request_locations() == before
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probing_four_edges_with_a_tip_on_measures_with_the_tip():
+  """A tip on the channel is what touches, so the default refusal never comes up and it is halved."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+    shaft = pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="tip"))
+
+    halved: list = []
+    probe_y = pipettes.probe_y_using_clld
+
+    async def record_y(channel, direction, **kwargs):
+      halved.append(kwargs["tip_bottom_diameter"])
+      return await probe_y(channel, direction, **kwargs)
+
+    pipettes.probe_y_using_clld = record_y  # type: ignore[method-assign, assignment]
+    found = await pipettes.probe_edges_using_clld(0, Coordinate(150.0, 200.0, 60.0), repeats=1)
+
+    assert list(found) == ["back", "front", "right", "left"]  # ran, with no allow_without_tip
+    assert halved == [1.2, 1.2]  # the tip bottom, not the stop disc
     await p.stop()
 
   _run(_t())

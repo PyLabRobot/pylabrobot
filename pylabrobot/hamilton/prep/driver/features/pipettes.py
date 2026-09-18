@@ -2180,6 +2180,38 @@ class Pipettes:
   # never exactly where it was sent, so an exact comparison sends every probe travelling again.
   AT_SEARCH_START = 0.1
 
+  async def _diameter_that_probes(
+    self,
+    channel_idx: int,
+    allow_without_tip: bool,
+    tip_bottom_diameter: float,
+    stop_disc_diameter: float,
+  ) -> float:
+    """What the channel would meet a surface with, in mm, refusing a bare channel unless allowed.
+
+    A probe answers where the surface is, not where the channel stopped, so it has to know what did
+    the touching: the tip on the channel, or the stop disc it would touch with bare.
+
+    Args:
+      channel_idx: the probing channel.
+      allow_without_tip: whether a channel with no tip on it may probe.
+      tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
+      stop_disc_diameter: diameter of the stop disc (tip mounting shaft) in mm, when none is.
+
+    Returns:
+      The diameter of whichever of the two is on the channel, in mm.
+
+    Raises:
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
+    """
+    tips = await self.sense_tip_presence()
+    has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
+    if not has_tip and not allow_without_tip:
+      raise RuntimeError(
+        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+      )
+    return tip_bottom_diameter if has_tip else stop_disc_diameter
+
   async def probe_x_using_clld(
     self,
     channel_idx: int,
@@ -2218,13 +2250,9 @@ class Pipettes:
         the X range is unknown, or the channel has no cLLD objects.
     """
     # Tip: required unless allow_without_tip; what touches is the tip, or the stop disc
-    tips = await self.sense_tip_presence()
-    has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
-    if not has_tip and not allow_without_tip:
-      raise RuntimeError(
-        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
-      )
-    diameter = tip_bottom_diameter if has_tip else stop_disc_diameter
+    diameter = await self._diameter_that_probes(
+      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+    )
 
     # Arguments
     if not 0 <= channel_idx < self.num_channels:
@@ -2400,13 +2428,9 @@ class Pipettes:
         window is unknown, or it has no Y axis.
     """
     # Tip: required unless allow_without_tip; what touches is the tip, or the stop disc
-    tips = await self.sense_tip_presence()
-    has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
-    if not has_tip and not allow_without_tip:
-      raise RuntimeError(
-        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
-      )
-    diameter = tip_bottom_diameter if has_tip else stop_disc_diameter
+    diameter = await self._diameter_that_probes(
+      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+    )
 
     # Arguments
     if not 0 <= channel_idx < self.num_channels:
@@ -2542,6 +2566,9 @@ class Pipettes:
     below_the_top: float = 1.0,
     between_edges: float = 20.0,
     speed: float = 5.0,
+    tip_bottom_diameter: float = 1.2,
+    stop_disc_diameter: float = 7.0,
+    allow_without_tip: bool = False,
   ) -> Dict[str, List[Optional[float]]]:
     """Find the four edges of something on the deck, with the channel's cLLD.
 
@@ -2560,11 +2587,22 @@ class Pipettes:
       below_the_top: how far below the target's top to probe, in mm.
       between_edges: how far above the top to lift between edges, in mm.
       speed: search speed for the Y searches, in mm/s.
+      tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
+      stop_disc_diameter: diameter of the stop disc (tip mounting shaft) in mm, when none is.
+      allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
       What each search found, keyed "back", "front", "right" and "left", each list as long as
       `repeats`, with None where nothing was detected.
+
+    Raises:
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
     """
+    # Asked here rather than at the first search, which would refuse it once the channel had moved.
+    await self._diameter_that_probes(
+      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+    )
+
     reach = self.configuration.channels[channel_idx].x_range
     rightmost = (
       target.x + side_approach if reach is None else min(target.x + side_approach, reach[1])
@@ -2579,7 +2617,9 @@ class Pipettes:
         direction,
         search_end_position=target.y,
         speed=speed,
-        allow_without_tip=True,
+        tip_bottom_diameter=tip_bottom_diameter,
+        stop_disc_diameter=stop_disc_diameter,
+        allow_without_tip=allow_without_tip,
       )
 
     def x_search(direction: Literal["left", "right"]) -> Callable[[], Awaitable[Optional[float]]]:
@@ -2588,7 +2628,9 @@ class Pipettes:
         channel_idx,
         direction,
         search_end_position=target.x + (1.0 if direction == "left" else -1.0),
-        allow_without_tip=True,
+        tip_bottom_diameter=tip_bottom_diameter,
+        stop_disc_diameter=stop_disc_diameter,
+        allow_without_tip=allow_without_tip,
       )
 
     def with_room_for_the_search(y_start: float) -> Dict[int, float]:
