@@ -1451,6 +1451,22 @@ class HamiltonIntrospection:
     table = await self.ensure_method_table(addr)
     return [m for m in table if m.interface_id == interface_id]
 
+  async def get_method_by_name(self, address: Union[Address, str], name: str) -> MethodInfo:
+    """Resolve one named method on an object using the session's cached method table.
+
+    Args:
+      address: Object address or firmware-tree path.
+      name: Exact firmware method name.
+
+    Raises:
+      RuntimeError: The name is absent or appears in more than one interface.
+    """
+    methods = await self.ensure_method_table(address)
+    matches = [method for method in methods if method.name == name]
+    if len(matches) != 1:
+      raise RuntimeError(f"Expected one {name!r} method on {address}, found {len(matches)}.")
+    return matches[0]
+
   async def ensure_structs_enums(self, address: Union[Address, str], interface_id: int) -> None:
     """Run GetStructs/GetEnums for one HO interface and cache under ``(address, interface_id)``."""
     self._executor.require_active()
