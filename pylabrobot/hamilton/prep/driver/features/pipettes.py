@@ -52,6 +52,7 @@ from pylabrobot.hamilton.transport.tcp.messages import HoiParamsParser, parse_in
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources import Container, Coordinate, Tip
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
@@ -68,7 +69,6 @@ from pylabrobot.resources.resource_state import (
 from pylabrobot.resources.tip_rack import TipSpot, tip_origin
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well
-from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 
 from .. import prep_commands as PrepCmd
 from ..prep_commands import PIPETTOR_OBJECT_PATH

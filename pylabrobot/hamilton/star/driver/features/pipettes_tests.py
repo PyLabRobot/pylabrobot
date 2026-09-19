@@ -6,10 +6,10 @@ from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes, PipettesConfiguration
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import STARDeck
-from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 
 
 async def channels(width: float, positions: List[float]) -> Tuple[Pipettes, List[str]]:

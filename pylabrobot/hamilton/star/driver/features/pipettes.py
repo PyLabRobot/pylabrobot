@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Seque
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import channels_that_faulted
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
+from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipDropMethod, TipPickupMethod
@@ -17,7 +18,6 @@ from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMounting
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipSpot, tip_origin
-from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.features.x_arm import XArm

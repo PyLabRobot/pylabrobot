@@ -19,6 +19,7 @@ from pylabrobot.hamilton.prep.driver.simulator import (
   SIMULATED_Z_DRIVE_OFFSETS,
 )
 from pylabrobot.hamilton.transport.tcp.packets import Address
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.errors import HasTipError, NoTipError
@@ -33,7 +34,6 @@ from pylabrobot.resources.hamilton import (
 from pylabrobot.resources.hamilton.core_gripper_tools import hamilton_core_gripper_tool
 from pylabrobot.resources.tip_tracking import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
-from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 
 
 def _run(coro):
