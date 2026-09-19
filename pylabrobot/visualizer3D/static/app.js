@@ -399,6 +399,9 @@ function meshKey(index) {
 // off, because everything that decides what is drawn runs again on every view change, and each of
 // those would otherwise put the box back over the model it was standing in for.
 function modelIsDrawn(modelIndex) {
+  // Geometry that has just arrived has not been asked whether it is big enough to be worth
+  // drawing: that is decided per view, and the view has not changed just because a file loaded.
+  detailScale = null;
   const entry = meshes.find((m) => m.modelIndex === modelIndex);
   if (!entry) return;
   entry.modelDrawn = true;
@@ -1289,6 +1292,17 @@ function updateDetail() {
   const labelsLegible = GRID_LABEL_MM / perPixel >= LABEL_MIN_PX;
   for (const label of gridLabels) {
     if (label.visible !== labelsLegible) label.visible = labelsLegible;
+  }
+
+  // A model is geometry, and geometry is what the renderer spends its frame on: a tip rack two
+  // pixels across was still drawing its ninety-six tips, one draw call each. The rule that decides
+  // whether a box is worth drawing decides this too - and a part that travels is exempt, because
+  // what it is doing is the thing being watched.
+  for (const root of meshRoots) {
+    const index = root.userData.index;
+    const [sx, sy] = sizeOf(modelOf(index));
+    const visible = travels(index) || Math.max(sx, sy) / perPixel >= DETAIL_MIN_PX;
+    if (root.visible !== visible) root.visible = visible;
   }
 
   const drawn = new Set();
@@ -3394,6 +3408,34 @@ function atBoundary(surface) {
     for (let i = 0; i < frames; i++) renderer.render(view, camera);
     const ms = (performance.now() - t) / frames;
     return { frames, msPerFrame: +ms.toFixed(3), fps: Math.round(1000 / ms), calls, triangles };
+  },
+  // What the renderer is actually asked to draw, by kind: one line per group, a draw call each
+  // unless it is instanced. Answering "where do the draw calls come from" without guessing.
+  audit: () => {
+    const kinds = {};
+    view.traverse((o) => {
+      if (!o.visible || !(o.isMesh || o.isLine || o.isPoints || o.isSprite)) return;
+      for (let p = o.parent; p; p = p.parent) if (!p.visible) return;
+      const drawn = o.material?.visible !== false;
+      const kind = o.isInstancedMesh
+        ? "instanced mesh"
+        : o.isLine
+          ? "line"
+          : o.isSprite
+            ? "sprite"
+            : o.isPoints
+              ? "points"
+              : "mesh";
+      const index = o.geometry?.index?.count ?? o.geometry?.attributes?.position?.count ?? 0;
+      kinds[kind] ??= { objects: 0, drawn: 0, triangles: 0 };
+      const row = kinds[kind];
+      row.objects += 1;
+      if (drawn) {
+        row.drawn += 1;
+        row.triangles += Math.round((index / 3) * (o.isInstancedMesh ? o.count : 1));
+      }
+    });
+    return kinds;
   },
   sceneObjects: () => {
     let n = 0;
