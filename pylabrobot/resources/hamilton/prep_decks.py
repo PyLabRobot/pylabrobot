@@ -53,7 +53,8 @@ def hamilton_prep_plateholder(name: str) -> PlateHolder:
 
 
 class PrepDeck(Deck):
-  """Hamilton PREP deck: labware spots, waste block, liquid waste container, teaching needle, and waste positions.
+  """Hamilton PREP deck: labware spots, waste block, liquid waste container, teaching needle, CoRe
+  gripper holder, and waste positions.
 
   Geometry aligns with the prep_tcp / MLPrep DeckConfiguration teaching site and waste
   sites used by :class:`~pylabrobot.hamilton.prep.driver.features.pipettes.Pipettes`
@@ -76,7 +77,7 @@ class PrepDeck(Deck):
     with_calibration_block: bool = True,
     with_waste_block: bool = True,
     with_waste_positions: bool = True,
-    with_core_grippers: bool = False,
+    with_core_grippers: bool = True,
   ):
     """A Prep deck of the given size, carrying the parts a Prep has.
 
