@@ -1,7 +1,7 @@
 """Prep calibration: MLPrepCalibration commands and session workflows.
 
 Firmware-path resolution is JIT: each ``PrepCommand`` subclass declares its own
-``firmware_path``, and :meth:`PrepClient.execute` resolves it via the
+``firmware_path``, and :meth:`PrepDriver.send_command` resolves it via the
 introspection registry (cache-hot after the first call).
 """
 
@@ -23,21 +23,19 @@ from typing import (
 
 from pylabrobot.resources.tip_rack import TipSpot
 
-from . import prep_commands as PrepCmd
+from .. import prep_commands as PrepCmd
 
 if TYPE_CHECKING:
-  from .client import PrepClient
-  from .info import PrepInstrumentInfo
+  from pylabrobot.resources.deck import Deck
+
+  from ..configuration import DeviceConfiguration
+  from ..master import PrepDriver
 
 logger = logging.getLogger(__name__)
 
 _TCalibResult = TypeVar("_TCalibResult")
 
 # Same mapping as Prep channels for TipPositionParameters / channel indices.
-_CHANNEL_INDEX = {
-  0: PrepCmd.ChannelIndex.RearChannel,
-  1: PrepCmd.ChannelIndex.FrontChannel,
-}
 
 
 @dataclass(frozen=True)
@@ -62,35 +60,75 @@ class CalibrationCommandReport:
     )
 
 
-class PrepCalibration:
+class Calibration:
   """Calibration façade: firmware MLPrepCalibration object + DeckConfiguration site defs."""
 
-  def __init__(self, *, driver: "PrepClient", info: "PrepInstrumentInfo") -> None:
+  def __init__(self, driver: "PrepDriver") -> None:
+    """
+    Args:
+      driver: the driver to send commands through.
+    """
     self._driver = driver
-    self._info = info
     self._calibration_session_active: bool = False
 
   @property
-  def client(self) -> "PrepClient":
-    """Alias for code that uses ``client.execute`` (driver is the TCP client)."""
-    return self._driver
+  def deck(self) -> Optional["Deck"]:
+    """The deck positions are measured from: the driver's."""
+    return self._driver.deck
+
+  def _channel_enum(self, channel: int) -> int:
+    """The firmware's ChannelIndex for a channel: the pipettes' order, or the legacy one before discovery.
+
+    Raises:
+      ValueError: If there is no such channel.
+    """
+    pipettes = self._driver.pipettes
+    order = (
+      pipettes.channel_order if pipettes is not None else tuple(PrepCmd.channel_order_legacy_prep)
+    )
+    if not 0 <= channel < len(order):
+      raise ValueError(f"channel {channel} does not exist; the channels are 0 to {len(order) - 1}")
+    return order[channel]
 
   @property
   def num_channels(self) -> int:
-    n = self._info.config.num_channels
+    n = self._configuration.num_channels
     if n is None:
-      raise RuntimeError("Instrument config has no num_channels (finish Prep.setup first).")
+      raise RuntimeError("Instrument config has no num_channels (finish PrepDriver.setup first).")
     return n
 
   @property
-  def has_mph(self) -> bool:
-    h = self._info.config.has_mph
+  def head8_installed(self) -> bool:
+    h = self._configuration.head8_installed
     if h is None:
-      raise RuntimeError("Instrument config has no has_mph (finish Prep.setup first).")
+      raise RuntimeError(
+        "Instrument config has no head8_installed (finish PrepDriver.setup first)."
+      )
     return h
 
   def _set_calibration_session_active(self, active: bool) -> None:
     self._calibration_session_active = active
+
+  @property
+  def _configuration(self) -> "DeviceConfiguration":
+    """The device's configuration, as the driver read it at setup.
+
+    Raises:
+      RuntimeError: If there is no driver, or it has not read one yet.
+    """
+    if self._driver is None or self._driver.configuration is None:
+      raise RuntimeError("no configuration read; have you called `prep.setup()`?")
+    return self._driver.configuration
+
+  def _require_deck(self) -> "Deck":
+    """The deck positions are measured from, which is what the firmware counts from.
+
+    Raises:
+      RuntimeError: If this was given no deck.
+    """
+    if self.deck is None:
+      raise RuntimeError("no deck to measure positions from; pass one to the driver")
+    return self.deck
 
   def calibration_session(
     self,
@@ -99,9 +137,9 @@ class PrepCalibration:
     report_after_command: bool = True,
     report_scope: Literal["related", "full"] = "related",
     session_read_timeout: Optional[float] = None,
-  ) -> PrepCalibrationSession:
+  ) -> CalibrationSession:
     """Create a managed calibration session bound to this façade."""
-    return PrepCalibrationSession(
+    return CalibrationSession(
       self,
       float_tol=float_tol,
       report_after_command=report_after_command,
@@ -109,9 +147,9 @@ class PrepCalibration:
       session_read_timeout=session_read_timeout,
     )
 
-  async def get_calibration_site_definitions(self) -> Tuple[PrepCmd.CalibrationSiteInfo, ...]:
+  async def request_calibration_site_definitions(self) -> Tuple[PrepCmd.CalibrationSiteInfo, ...]:
     """Return calibration site definitions from DeckConfiguration (GetCalibrationSiteDefinitions, cmd=3)."""
-    result = await self._driver.execute(PrepCmd.PrepGetCalibrationSiteDefinitions())
+    result = await self._driver.send_command(PrepCmd.PrepGetCalibrationSiteDefinitions())
     if result is None or not result.sites:
       return ()
     return tuple(
@@ -130,31 +168,31 @@ class PrepCalibration:
 
   async def begin_calibration(self) -> None:
     """Enter calibration mode (BeginCalibration, cmd=1)."""
-    await self._driver.execute(PrepCmd.PrepBeginCalibration())
+    await self._driver.send_command(PrepCmd.PrepBeginCalibration())
 
   async def cancel_calibration(self) -> None:
     """Cancel an active calibration session (CancelCalibration, cmd=2)."""
-    await self._driver.execute(PrepCmd.PrepCancelCalibration())
+    await self._driver.send_command(PrepCmd.PrepCancelCalibration())
 
   async def end_calibration(self, date_time: Optional[PrepCmd.HoiDateTime] = None) -> None:
     """End calibration and store results with timestamp (EndCalibration, cmd=3)."""
     if date_time is None:
       date_time = PrepCmd.HoiDateTime.now()
-    await self._driver.execute(PrepCmd.PrepEndCalibration(date_time=date_time))
+    await self._driver.send_command(PrepCmd.PrepEndCalibration(date_time=date_time))
 
   async def reset_calibration(self, store: bool = False) -> None:
     """Reset calibration data (ResetCalibration, cmd=4)."""
-    await self._driver.execute(PrepCmd.PrepResetCalibration(store=store))
+    await self._driver.send_command(PrepCmd.PrepResetCalibration(store=store))
 
-  async def calibration_initialize(self) -> None:
+  async def initialize_calibration(self) -> None:
     """Initialize calibration hardware (CalibrationInitialize, cmd=5)."""
-    await self._driver.execute(PrepCmd.PrepCalibrationInitialize())
+    await self._driver.send_command(PrepCmd.PrepCalibrationInitialize())
 
-  async def read_calibration_values(
+  async def request_calibration_values(
     self, read_timeout: Optional[float] = None
   ) -> PrepCmd.CalibrationValues:
     """Read calibration values (GetCalibrationValues, cmd=16)."""
-    result = await self._driver.execute(
+    result = await self._driver.send_command(
       PrepCmd.PrepGetCalibrationValues(),
       read_timeout=read_timeout,
     )
@@ -186,12 +224,12 @@ class PrepCalibration:
     )
 
 
-class PrepCalibrationSession:
+class CalibrationSession:
   """Context manager for stateful Prep calibration workflows."""
 
   def __init__(
     self,
-    cal: PrepCalibration,
+    cal: Calibration,
     *,
     float_tol: float = 1e-6,
     report_after_command: bool = True,
@@ -271,7 +309,7 @@ class PrepCalibrationSession:
     *,
     read_timeout: Optional[float] = None,
   ) -> PrepCmd.CalibrationValues:
-    return await self._cal.read_calibration_values(read_timeout=read_timeout)
+    return await self._cal.request_calibration_values(read_timeout=read_timeout)
 
   async def _run_with_report(
     self,
@@ -306,20 +344,20 @@ class PrepCalibrationSession:
     self._log_report(report)
     return report
 
-  async def __aenter__(self) -> PrepCalibrationSession:
+  async def __aenter__(self) -> CalibrationSession:
     await self.start()
     return self
 
-  async def start(self) -> PrepCalibrationSession:
+  async def start(self) -> CalibrationSession:
     """Start calibration mode and capture baseline snapshot."""
     if self._started:
       return self
     if self._ended:
       raise RuntimeError("Calibration session is already ended; create a new session.")
     if self._cal._calibration_session_active:
-      raise RuntimeError("A calibration session is already active on this PrepCalibration.")
+      raise RuntimeError("A calibration session is already active on this Calibration.")
     await self._cal.begin_calibration()
-    await self._cal.calibration_initialize()
+    await self._cal.initialize_calibration()
     self._cal._set_calibration_session_active(True)
     try:
       snapshot = await self._get_calibration_values(read_timeout=self.session_read_timeout)
@@ -421,7 +459,7 @@ class PrepCalibrationSession:
     self._ensure_started()
 
     async def _op(timeout: Optional[float]) -> float:
-      result = await self._cal.client.execute(
+      result = await self._cal._driver.send_command(
         PrepCmd.PrepCalibrateXAxis(
           site_index=site_index,
           channel=int(channel),
@@ -447,7 +485,7 @@ class PrepCalibrationSession:
     self._ensure_started()
 
     async def _op(timeout: Optional[float]) -> float:
-      result = await self._cal.client.execute(
+      result = await self._cal._driver.send_command(
         PrepCmd.PrepCalibrateYAxis(
           site_index=site_index,
           channel=int(channel),
@@ -473,7 +511,7 @@ class PrepCalibrationSession:
     self._ensure_started()
 
     async def _op(timeout: Optional[float]) -> float:
-      result = await self._cal.client.execute(
+      result = await self._cal._driver.send_command(
         PrepCmd.PrepCalibrateZAxis(
           site_index=site_index,
           channel=int(channel),
@@ -501,7 +539,8 @@ class PrepCalibrationSession:
 
     async def _op(timeout: Optional[float]) -> Tuple[int, ...]:
       channels = use_channels if use_channels is not None else list(range(len(tip_spots)))
-      assert len(tip_spots) == len(channels)
+      if len(tip_spots) != len(channels):
+        raise ValueError(f"{len(tip_spots)} tip spots given for {len(channels)} channels")
 
       indexed_spots = {ch: spot for ch, spot in zip(channels, tip_spots)}
       tip_positions: List[PrepCmd.TipPositionParameters] = []
@@ -509,17 +548,17 @@ class PrepCalibrationSession:
         if ch not in indexed_spots:
           continue
         spot = indexed_spots[ch]
-        loc = spot.get_absolute_location("c", "c", "t")
+        loc = spot.get_location_wrt(self._cal._require_deck(), "c", "c", "t")
         tip_positions.append(
           PrepCmd.TipPositionParameters.for_op(
-            _CHANNEL_INDEX[ch],
+            self._cal._channel_enum(ch),
             loc,
             spot.get_tip(),
             z_seek_offset=z_seek_offset,
           )
         )
 
-      result = await self._cal.client.execute(
+      result = await self._cal._driver.send_command(
         PrepCmd.PrepCalibrateSqueezeTips(
           channels=tip_positions,
         ),
@@ -545,7 +584,7 @@ class PrepCalibrationSession:
     self._ensure_started()
 
     async def _op(timeout: Optional[float]) -> Tuple[int, ...]:
-      if not self._cal.has_mph:
+      if not self._cal.head8_installed:
         raise RuntimeError(
           "Instrument does not have an 8MPH head. Cannot use calibrate_squeeze_tips_mph."
         )
@@ -554,7 +593,7 @@ class PrepCalibrationSession:
         raise ValueError("calibrate_squeeze_tips_mph: tip_spot list is empty")
 
       ref_spot = spots[0]
-      loc = ref_spot.get_absolute_location("c", "c", "t")
+      loc = ref_spot.get_location_wrt(self._cal._require_deck(), "c", "c", "t")
       tip_position = PrepCmd.TipPositionParameters.for_op(
         PrepCmd.ChannelIndex.MPHChannel,
         loc,
@@ -562,7 +601,7 @@ class PrepCalibrationSession:
         z_seek_offset=z_seek_offset,
       )
 
-      result = await self._cal.client.execute(
+      result = await self._cal._driver.send_command(
         PrepCmd.PrepCalibrateSqueezeTips(
           channels=[tip_position],
         ),
@@ -582,6 +621,6 @@ class PrepCalibrationSession:
 
 __all__ = [
   "CalibrationCommandReport",
-  "PrepCalibration",
-  "PrepCalibrationSession",
+  "Calibration",
+  "CalibrationSession",
 ]

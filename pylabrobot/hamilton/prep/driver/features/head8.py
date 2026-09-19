@@ -1,4 +1,4 @@
-"""PrepHead8 — 8MPH head for the Hamilton Prep.
+"""Head8 — 8MPH head for the Hamilton Prep.
 
 The 8MPH is a ganged head: a single X/Y/Z gantry and a single dispenser piston
 drive all 8 probes together. Individual sleeves are mechanically coupled — partial
@@ -28,6 +28,7 @@ from pylabrobot.hamilton.liquid_class_resolver import (
   corrected_volumes_for_ops,
   resolve_hamilton_liquid_classes,
 )
+from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
 from pylabrobot.resources import Container, Coordinate, Tip, Trash
@@ -47,34 +48,36 @@ from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.tip_tracker import TipTracker
 from pylabrobot.resources.well import Well
 
-from . import prep_commands as PrepCmd
-from .channels import (
-  LLDMode,
+from .. import prep_commands as PrepCmd
+from ..prep_commands import MPH_OBJECT_PATH
+from .pipettes import (
+  PipetteChannel,
+  Pipettes,
   _absolute_z_from_well,
   _build_container_segments,
   _effective_radius,
-  _LldDefaults,
 )
-from .channels import (
+from .pipettes import (
   default_lld_params as _default_lld_params_fn,
 )
-from .channels import (
+from .pipettes import (
   lld_for_well as _lld_for_well_fn,
 )
-from .channels import (
+from .pipettes import (
   lld_seek_timeout as _lld_seek_timeout,
 )
-from .channels import (
+from .pipettes import (
   patch_common_with_cone as _patch_common_with_cone_fn,
 )
-from .channels import (
+from .pipettes import (
   resolve_command_version as _resolve_command_version_fn,
 )
-from .client import MPH_OBJECT_PATH
 
 if TYPE_CHECKING:
-  from .client import PrepClient
-  from .info import PrepInstrumentInfo
+  from pylabrobot.resources.deck import Deck
+
+  from ..configuration import DeviceConfiguration
+  from ..master import PrepDriver
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +88,7 @@ _V2_MPH_CMD_IDS: frozenset = frozenset({29, 30, 31, 32, 33, 34})
 _PROBE_POS_TOLERANCE_MM: float = 1.0  # max deviation from expected 9mm pitch before raising
 
 
-class PrepHead8:
+class Head8:
   """8-channel Multi-Pipetting Head for the Hamilton Prep.
 
   All 8 probes must participate in every operation. Partial channel selection
@@ -94,59 +97,38 @@ class PrepHead8:
   grip force.
   """
 
-  # Command dispatch tables: (effective_lld, is_tadm, use_v2) → command class
-  _ASPIRATE_CMD = {
-    (True, True, True): PrepCmd.MphAspirateWithLldTadm2,
-    (True, True, False): PrepCmd.MphAspirateWithLldTadm,
-    (True, False, True): PrepCmd.MphAspirateWithLld2,
-    (True, False, False): PrepCmd.MphAspirateWithLld,
-    (False, True, True): PrepCmd.MphAspirateTadm2,
-    (False, True, False): PrepCmd.MphAspirateTadm,
-    (False, False, True): PrepCmd.MphAspirateNoLldMonitoring2,
-    (False, False, False): PrepCmd.MphAspirateNoLldMonitoring,
-  }
-
-  # Command dispatch tables: (effective_lld, use_v2) → command class
-  _DISPENSE_CMD = {
-    (True, True): PrepCmd.MphDispenseWithLld2,
-    (True, False): PrepCmd.MphDispenseWithLld,
-    (False, True): PrepCmd.MphDispenseNoLld2,
-    (False, False): PrepCmd.MphDispenseNoLld,
-  }
-
   def __init__(
     self,
+    driver: "PrepDriver",
     *,
-    client: "PrepClient",
-    info: "PrepInstrumentInfo",
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ) -> None:
-    self._client = client
-    self._info = info
+    """
+    Args:
+      driver: the driver to send commands through.
+      default_traverse_height: the height to travel at when a command names none, in mm.
+      use_v1_aspirate_dispense: whether to aspirate and dispense with the v1 commands.
+    """
+    self._driver = driver
     self._user_traverse_height = default_traverse_height
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
-    self.channels: list = []  # populated by build_prep_channels after construction
+    self.channels: List[PipetteChannel] = []  # built by discover
     self._supports_v2_pipetting: Optional[bool] = None
     self.head: dict[int, TipTracker] = {
       i: TipTracker(thing=f"Head8 channel {i}") for i in range(NUM_PROBES)
     }
 
-  # ---------------------------------------------------------------------------
-  # Setup / V2 probing
-  # ---------------------------------------------------------------------------
-
-  async def _probe_v2_support(self) -> bool:
-    """Return True if the MPH firmware exposes V2 aspirate/dispense (cmds 29-34)."""
-    dest = await self._client.resolve_path(MPH_OBJECT_PATH)
-    methods = await self._client.introspection.methods_for_interface(dest, interface_id=1)
-    iface1_ids = {m.method_id for m in methods}
-    return _V2_MPH_CMD_IDS.issubset(iface1_ids)
+  @property
+  def deck(self) -> Optional["Deck"]:
+    """The deck positions are measured from: the driver's."""
+    return self._driver.deck
 
   async def _on_setup(self) -> None:
+    await self.discover()
     if self._use_v1_aspirate_dispense:
       self._supports_v2_pipetting = False
-      logger.info("MPH V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
+      logger.debug("MPH V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
     else:
       try:
         supported = await self._probe_v2_support()
@@ -156,19 +138,170 @@ class PrepHead8:
       if not supported:
         raise RuntimeError(
           "V2 aspirate/dispense commands (cmd 29-34) are not supported by this MPH firmware. "
-          "Pass use_v1_aspirate_dispense=True to PrepHead8 to use v1 commands instead."
+          "Pass use_v1_aspirate_dispense=True to Head8 to use v1 commands instead."
         )
       self._supports_v2_pipetting = True
-      logger.info("MPH V2 aspirate/dispense support: True")
+      logger.debug("MPH V2 aspirate/dispense support: True")
 
   async def _on_stop(self) -> None:
     self._supports_v2_pipetting = None
     for tracker in self.head.values():
       tracker.clear()
 
+  # -- session / discovery -------------------------------------------------------------------------
+
+  @property
+  def _configuration(self) -> "DeviceConfiguration":
+    """The device's configuration, as the driver read it at setup.
+
+    Raises:
+      RuntimeError: If there is no driver, or it has not read one yet.
+    """
+    if self._driver is None or self._driver.configuration is None:
+      raise RuntimeError("no configuration read; have you called `prep.setup()`?")
+    return self._driver.configuration
+
+  def _require_deck(self) -> "Deck":
+    """The deck positions are measured from, which is what the firmware counts from.
+
+    Raises:
+      RuntimeError: If this was given no deck.
+    """
+    if self.deck is None:
+      raise RuntimeError("no deck to measure positions from; pass one to the driver")
+    return self.deck
+
+  async def discover(self) -> None:
+    """Find the 8MPH channels in the firmware tree (``MPH Channel Root``) and build `channels`."""
+    drive_map = await self._driver.request_channel_drives(root_name="MPH Channel Root")
+
+    def _drive_addr(seq: List[Address], i: int) -> Optional[Address]:
+      return seq[i] if i < len(seq) else None
+
+    self.channels = [
+      PipetteChannel(
+        index=i,
+        driver=self._driver,
+        sleeve_sensor=_drive_addr(drive_map.sleeve_sensor_addrs, i),
+        zdrive=_drive_addr(drive_map.zdrive_addrs, i),
+        node_info=_drive_addr(drive_map.node_info_addrs, i),
+      )
+      for i in range(NUM_PROBES)
+    ]
+
+  async def _probe_v2_support(self) -> bool:
+    """Return True if the MPH firmware exposes V2 aspirate/dispense (cmds 29-34)."""
+    dest = await self._driver.resolve_path(MPH_OBJECT_PATH)
+    methods = await self._driver.request_interface_methods(dest, interface_id=1)
+    iface1_ids = {m.method_id for m in methods}
+    return _V2_MPH_CMD_IDS.issubset(iface1_ids)
+
+  def _resolve_command_version(self, override: Optional[Literal["v1", "v2"]] = None) -> bool:
+    return _resolve_command_version_fn(
+      self._supports_v2_pipetting,
+      self._use_v1_aspirate_dispense,
+      override,
+      v2_error_hint=(
+        "v2 aspirate/dispense commands (cmd 29-34) are not supported by this firmware. "
+        "Use command_version='v1' or pass use_v1_aspirate_dispense=True to Head8."
+      ),
+    )
+
+  # ----------------------------------------
+  # Movement
+  # ----------------------------------------
+
+  def _resolve_traverse_height(self, final_z: Optional[float] = None) -> float:
+    if final_z is not None:
+      return final_z
+    if self._user_traverse_height is not None:
+      return self._user_traverse_height
+    height: Optional[float] = self._configuration.default_traverse_height
+    if height is None:
+      raise RuntimeError("No traverse height available; set default_traverse_height")
+    return height
+
+  # -- tips ----------------------------------------------------------------------------------------
+
+  async def sense_tip_presence(self) -> List[Optional[bool]]:
+    """Sense whether tips are present on the 8MPH head via the sleeve sensor (GetTipPresent).
+
+    The 8MPH is a single ganged controller — the firmware tree exposes one sleeve
+    sensor node (on the probe-0 / channel-0 entry). The result is broadcast across
+    all 8 positions since the head picks up and drops all probes together.
+
+    Returns:
+      8-element list. True=tips detected, False=no tips, None=sensor unavailable.
+    """
+    if not self.channels:
+      raise RuntimeError("MPH channels not populated; call discover first.")
+
+    addr = self.channels[0].sleeve_sensor
+    if addr is None:
+      return [None] * NUM_PROBES
+
+    # By name: the method's ids are not the same on every firmware version.
+    raw = await self._driver.request_by_name(addr, "GetTipPresent")
+    if raw is None or len(raw) < 8:
+      result = False
+    else:
+      val = _struct.unpack_from("<I", raw, 4)[0]
+      result = bool(val)
+    return [result] * NUM_PROBES
+
+  # -- xyz position --------------------------------------------------------------------------------
+
+  async def move_to_position(
+    self,
+    x: float,
+    y: float,
+    z: float,
+    *,
+    via_lane: bool = False,
+  ) -> None:
+    """Move the ganged 8-channel head to absolute deck ``(x, y, z)`` (mm).
+
+    Sends :class:`~prep_commands.MphMoveToPosition` or
+    :class:`~prep_commands.MphMoveToPositionViaLane` on ``MLPrepRoot.MphRoot.MPH``.
+    One pose for the whole head — unlike independent-channel ``move_to_position``,
+    there are no per-channel ``y``/``z`` lists.
+
+    Args:
+      x: Gantry X.
+      y: Gantry Y at the probe-0 (row A) reference.
+      z: Z height (e.g. traverse).
+      via_lane: Use lane-aware move when True.
+    """
+    if via_lane:
+      await self._driver.send_command(
+        PrepCmd.MphMoveToPositionViaLane(x_position=x, y_position=y, z_position=z)
+      )
+    else:
+      await self._driver.send_command(
+        PrepCmd.MphMoveToPosition(x_position=x, y_position=y, z_position=z)
+      )
+
+  # ----------------------------------------
+  # Tips and liquid handling
+  # ----------------------------------------
+
+  # -- tip pickup / drop ---------------------------------------------------------------------------
+
   def get_mounted_tips(self) -> List[Optional[Tip]]:
     """Tips currently mounted on the 8MPH (``None`` if empty)."""
     return [self.head[i].get_tip() if self.head[i].has_tip else None for i in range(NUM_PROBES)]
+
+  def _require_mounted_tips(self) -> List[Tip]:
+    tips: List[Tip] = []
+    for i in range(NUM_PROBES):
+      tracker = self.head[i]
+      if not tracker.has_tip:
+        raise RuntimeError("No tips mounted on head8; call pick_up_tips first.")
+      tips.append(tracker.get_tip())
+    return tips
+
+  def _require_mounted_tip(self) -> Tip:
+    return self._require_mounted_tips()[0]
 
   async def _finalize_head8_command(
     self,
@@ -195,30 +328,187 @@ class PrepHead8:
     if error is not None:
       raise error
 
-  # ---------------------------------------------------------------------------
-  # Internal helpers
-  # ---------------------------------------------------------------------------
+  async def pick_up_tips(
+    self,
+    tip_spots: Sequence[TipSpot],
+    use_channels: Optional[Sequence[int]] = None,
+    *,
+    offset: Coordinate = Coordinate.zero(),
+    final_z: Optional[float] = None,
+    seek_speed: float = 15.0,
+    z_seek_offset: Optional[float] = None,
+    enable_tadm: bool = False,
+    dispenser_volume: float = 0.0,
+    dispenser_speed: float = 250.0,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    pre_position: bool = True,
+  ) -> None:
+    tip_spots = list(tip_spots)
+    use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
+    self._require_all_channels(use_channels, "pick_up_tips")
+    if len(tip_spots) != NUM_PROBES:
+      raise ValueError(f"pick_up_tips requires {NUM_PROBES} tip spots, got {len(tip_spots)}")
+    resolved_final_z = self._resolve_traverse_height(final_z)
 
-  def _resolve_command_version(self, override: Optional[Literal["v1", "v2"]] = None) -> bool:
-    return _resolve_command_version_fn(
-      self._supports_v2_pipetting,
-      self._use_v1_aspirate_dispense,
-      override,
-      v2_error_hint=(
-        "v2 aspirate/dispense commands (cmd 29-34) are not supported by this firmware. "
-        "Use command_version='v1' or pass use_v1_aspirate_dispense=True to PrepHead8."
-      ),
+    tips = [s.get_tip() for s in tip_spots]
+    ref_spot = tip_spots[0]
+    tip = tips[0]
+    rack = ref_spot.parent
+    logger.info(
+      "[Prep MPH] pick_up_tips: rack=%s, tip_spots=%s",
+      rack.name if rack is not None else ref_spot.name,
+      [s.name.rsplit("_", 1)[-1] for s in tip_spots],
+    )
+    loc = ref_spot.get_location_wrt(self._require_deck(), "c", "c", "t") + offset
+
+    if pre_position:
+      traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
+      await self.move_to_position(loc.x, loc.y, traverse_h)
+
+    tip_position = PrepCmd.TipPositionParameters.for_op(
+      PrepCmd.ChannelIndex.MPHChannel, loc, tip, z_seek_offset=z_seek_offset
+    )
+    tip_definition = PrepCmd.TipPickupParameters(
+      default_values=False,
+      volume=tip.maximal_volume,
+      length=tip.total_tip_length - tip.fitting_depth,
+      tip_type=PrepCmd.TipTypes.StandardVolume,
+      has_filter=tip.has_filter,
+      is_needle=False,
+      is_tool=False,
+    )
+    tip_intents = [
+      TipPickupIntent(
+        channel=ch,
+        tip_spot=spot,
+        tip=t,
+        channel_tracker=self.head[ch],
+      )
+      for ch, spot, t in zip(use_channels, tip_spots, tips)
+    ]
+    queue_tip_pickups(tip_intents)
+
+    async def _send() -> None:
+      await self._driver.send_command(
+        PrepCmd.MphPickupTips(
+          tip_position=tip_position,
+          final_z=resolved_final_z,
+          seek_speed=seek_speed,
+          tip_definition=tip_definition,
+          enable_tadm=enable_tadm,
+          dispenser_volume=dispenser_volume,
+          dispenser_speed=dispenser_speed,
+          tip_mask=_FULL_TIP_MASK,
+        )
+      )
+
+    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
+
+  async def drop_tips(
+    self,
+    destinations: Sequence[Union[TipSpot, Trash]],
+    use_channels: Optional[Sequence[int]] = None,
+    *,
+    offset: Coordinate = Coordinate.zero(),
+    final_z: Optional[float] = None,
+    seek_speed: float = 15.0,
+    z_seek_offset: Optional[float] = None,
+    tip_roll_off_distance: float = 0.0,
+  ) -> None:
+    destinations = list(destinations)
+    use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
+    self._require_all_channels(use_channels, "drop_tips")
+    if len(destinations) != NUM_PROBES:
+      raise ValueError(f"drop_tips requires {NUM_PROBES} destinations, got {len(destinations)}")
+    tip = self._require_mounted_tip()
+    resolved_final_z = self._resolve_traverse_height(final_z)
+
+    ref_spot = destinations[0]
+    is_trash = isinstance(ref_spot, Trash)
+    dest = ref_spot if is_trash else ref_spot.parent
+    logger.info(
+      "[Prep MPH] drop_tips: dest=%s, resources=%s",
+      dest.name if dest is not None else ref_spot.name,
+      [s.name.rsplit("_", 1)[-1] for s in destinations],
     )
 
-  def _resolve_traverse_height(self, final_z: Optional[float] = None) -> float:
-    if final_z is not None:
-      return final_z
-    if self._user_traverse_height is not None:
-      return self._user_traverse_height
-    height: Optional[float] = self._info.config.default_traverse_height
-    if height is None:
-      raise RuntimeError("No traverse height available; set default_traverse_height")
-    return height
+    loc = ref_spot.get_location_wrt(self._require_deck(), "c", "c", "t")
+    if not is_trash:
+      loc = loc + offset
+    drop_type = PrepCmd.TipDropType.Stall if is_trash else PrepCmd.TipDropType.FixedHeight
+
+    tip_position = PrepCmd.TipDropParameters.for_op(
+      PrepCmd.ChannelIndex.MPHChannel,
+      loc,
+      tip,
+      z_seek_offset=z_seek_offset,
+      drop_type=drop_type,
+    )
+    roll_off = 3.0 if (is_trash and tip_roll_off_distance == 0.0) else tip_roll_off_distance
+    mounted = self._require_mounted_tips()
+    tip_intents = [
+      TipDropIntent(
+        channel=ch,
+        destination=dest,
+        tip=mounted[ch],
+        channel_tracker=self.head[ch],
+      )
+      for ch, dest in zip(use_channels, destinations)
+    ]
+    queue_tip_drops(tip_intents)
+
+    async def _send() -> None:
+      await self._driver.send_command(
+        PrepCmd.MphDropTips(
+          tip_position=tip_position,
+          final_z=resolved_final_z,
+          seek_speed=seek_speed,
+          tip_roll_off_distance=roll_off,
+        )
+      )
+
+    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
+
+  # -- shared LLD / TADM resolution helpers --------------------------------------------------------
+
+  def _resolve_effective_lld(
+    self,
+    lld_mode: Optional[Pipettes.LLDMode],
+    lld: Optional[PrepCmd.LldParameters],
+    *,
+    allowed_modes: Optional[frozenset] = None,
+  ) -> bool:
+    """Determine whether LLD is active for this MPH pipetting call.
+
+    Unlike the PIP backend (which takes a per-channel list), the MPH accepts a
+    single LLDMode because the ganged head operates as one unit.
+    """
+    if lld_mode is not None:
+      if lld_mode != Pipettes.LLDMode.OFF:
+        if allowed_modes is not None and lld_mode not in allowed_modes:
+          raise ValueError(
+            f"Dispense does not support {lld_mode.name} LLD — only CAPACITIVE or OFF. "
+            "Pressure-based LLD requires aspiration (plunger movement)."
+          )
+        return True
+      return False
+    return lld is not None
+
+  # -- shared channel resolution -------------------------------------------------------------------
+
+  def _require_all_channels(self, use_channels: List[int], op: str) -> None:
+    """Raise ValueError unless use_channels is exactly [0..7].
+
+    The 8MPH is a ganged head — all 8 probes must participate in every operation.
+    Partial channel selection produces insufficient tip grip force (physical
+    constraint confirmed via firmware/hardware inspection).
+    """
+    if list(use_channels) != list(range(NUM_PROBES)):
+      raise ValueError(
+        f"Head8.{op}: the 8MPH is a fully-ganged head — all {NUM_PROBES} "
+        f"channels must participate. Received use_channels={use_channels}. "
+        "Partial tip pickup/drop/aspirate/dispense is not physically supported."
+      )
 
   def _resolve_probe_positions(self, wells) -> List[float]:
     """Compute expected probe Y positions and validate actual well Ys match.
@@ -269,46 +559,7 @@ class PrepHead8:
         f"(minimum {min_span:.1f} mm required)."
       )
 
-  def _require_all_channels(self, use_channels: List[int], op: str) -> None:
-    """Raise ValueError unless use_channels is exactly [0..7].
-
-    The 8MPH is a ganged head — all 8 probes must participate in every operation.
-    Partial channel selection produces insufficient tip grip force (physical
-    constraint confirmed via firmware/hardware inspection).
-    """
-    if list(use_channels) != list(range(NUM_PROBES)):
-      raise ValueError(
-        f"PrepHead8.{op}: the 8MPH is a fully-ganged head — all {NUM_PROBES} "
-        f"channels must participate. Received use_channels={use_channels}. "
-        "Partial tip pickup/drop/aspirate/dispense is not physically supported."
-      )
-
-  def _resolve_effective_lld(
-    self,
-    lld_mode: Optional[LLDMode],
-    lld: Optional[PrepCmd.LldParameters],
-    *,
-    allowed_modes: Optional[frozenset] = None,
-  ) -> bool:
-    """Determine whether LLD is active for this MPH pipetting call.
-
-    Unlike the PIP backend (which takes a per-channel list), the MPH accepts a
-    single LLDMode because the ganged head operates as one unit.
-    """
-    if lld_mode is not None:
-      if lld_mode != LLDMode.OFF:
-        if allowed_modes is not None and lld_mode not in allowed_modes:
-          raise ValueError(
-            f"Dispense does not support {lld_mode.name} LLD — only CAPACITIVE or OFF. "
-            "Pressure-based LLD requires aspiration (plunger movement)."
-          )
-        return True
-      return False
-    return lld is not None
-
-  # ---------------------------------------------------------------------------
-  # Aspirate assembly helpers
-  # ---------------------------------------------------------------------------
+  # -- aspirate: assemble --------------------------------------------------------------------------
 
   def _assemble_aspirate_v2(
     self,
@@ -331,7 +582,7 @@ class PrepHead8:
     effective_lld: bool,
     is_tadm: bool,
     lld_params: PrepCmd.LldParameters,
-    lld_defaults: _LldDefaults,
+    lld_defaults: Pipettes._LldDefaults,
     tadm: PrepCmd.TadmParameters,
   ) -> Union[
     PrepCmd.AspirateParametersLldAndTadm2,
@@ -436,7 +687,7 @@ class PrepHead8:
     effective_lld: bool,
     is_tadm: bool,
     lld_params: PrepCmd.LldParameters,
-    lld_defaults: _LldDefaults,
+    lld_defaults: Pipettes._LldDefaults,
     tadm: PrepCmd.TadmParameters,
   ) -> Union[
     PrepCmd.AspirateParametersLldAndTadm,
@@ -517,9 +768,19 @@ class PrepHead8:
         aspirate_monitoring=PrepCmd.AspirateMonitoringParameters.default(),
       )
 
-  # ---------------------------------------------------------------------------
-  # Dispense assembly helpers
-  # ---------------------------------------------------------------------------
+  # Command dispatch tables: (effective_lld, is_tadm, use_v2) → command class
+  _ASPIRATE_CMD = {
+    (True, True, True): PrepCmd.MphAspirateWithLldTadm2,
+    (True, True, False): PrepCmd.MphAspirateWithLldTadm,
+    (True, False, True): PrepCmd.MphAspirateWithLld2,
+    (True, False, False): PrepCmd.MphAspirateWithLld,
+    (False, True, True): PrepCmd.MphAspirateTadm2,
+    (False, True, False): PrepCmd.MphAspirateTadm,
+    (False, False, True): PrepCmd.MphAspirateNoLldMonitoring2,
+    (False, False, False): PrepCmd.MphAspirateNoLldMonitoring,
+  }
+
+  # -- dispense: assemble --------------------------------------------------------------------------
 
   def _assemble_dispense_v2(
     self,
@@ -541,7 +802,7 @@ class PrepHead8:
     segments: List[PrepCmd.SegmentDescriptor],
     effective_lld: bool,
     lld_params: PrepCmd.LldParameters,
-    lld_defaults: _LldDefaults,
+    lld_defaults: Pipettes._LldDefaults,
   ) -> Union[PrepCmd.DispenseParametersLld2, PrepCmd.DispenseParametersNoLld2]:
     dispense = PrepCmd.DispenseParameters(
       default_values=False,
@@ -612,7 +873,7 @@ class PrepHead8:
     segments: List[PrepCmd.SegmentDescriptor],
     effective_lld: bool,
     lld_params: PrepCmd.LldParameters,
-    lld_defaults: _LldDefaults,
+    lld_defaults: Pipettes._LldDefaults,
   ) -> Union[PrepCmd.DispenseParametersLld, PrepCmd.DispenseParametersNoLld]:
     dispense = PrepCmd.DispenseParameters(
       default_values=False,
@@ -662,198 +923,17 @@ class PrepHead8:
         tadm=tadm,
       )
 
-  # ---------------------------------------------------------------------------
-  # MPH gantry (IMph MoveToPosition)
-  # ---------------------------------------------------------------------------
+  # Command dispatch tables: (effective_lld, use_v2) → command class
+  _DISPENSE_CMD = {
+    (True, True): PrepCmd.MphDispenseWithLld2,
+    (True, False): PrepCmd.MphDispenseWithLld,
+    (False, True): PrepCmd.MphDispenseNoLld2,
+    (False, False): PrepCmd.MphDispenseNoLld,
+  }
 
-  async def move_to_position(
-    self,
-    x: float,
-    y: float,
-    z: float,
-    *,
-    via_lane: bool = False,
-  ) -> None:
-    """Move the ganged 8-channel head to absolute deck ``(x, y, z)`` (mm).
+  # -- aspirate / dispense orchestrators -----------------------------------------------------------
 
-    Sends :class:`~prep_commands.MphMoveToPosition` or
-    :class:`~prep_commands.MphMoveToPositionViaLane` on ``MLPrepRoot.MphRoot.MPH``.
-    One pose for the whole head — unlike independent-channel ``move_to_position``,
-    there are no per-channel ``y``/``z`` lists.
-
-    Args:
-      x: Gantry X.
-      y: Gantry Y at the probe-0 (row A) reference.
-      z: Z height (e.g. traverse).
-      via_lane: Use lane-aware move when True.
-    """
-    if via_lane:
-      await self._client.execute(
-        PrepCmd.MphMoveToPositionViaLane(x_position=x, y_position=y, z_position=z)
-      )
-    else:
-      await self._client.execute(
-        PrepCmd.MphMoveToPosition(x_position=x, y_position=y, z_position=z)
-      )
-
-  # ---------------------------------------------------------------------------
-  # Tip / aspirate / dispense
-  # ---------------------------------------------------------------------------
-
-  def _require_mounted_tips(self) -> List[Tip]:
-    tips: List[Tip] = []
-    for i in range(NUM_PROBES):
-      tracker = self.head[i]
-      if not tracker.has_tip:
-        raise RuntimeError("No tips mounted on head8; call pick_up_tips8 first.")
-      tips.append(tracker.get_tip())
-    return tips
-
-  def _require_mounted_tip(self) -> Tip:
-    return self._require_mounted_tips()[0]
-
-  async def pick_up_tips8(
-    self,
-    tip_spots: Sequence[TipSpot],
-    use_channels: Optional[Sequence[int]] = None,
-    *,
-    offset: Coordinate = Coordinate.zero(),
-    final_z: Optional[float] = None,
-    seek_speed: float = 15.0,
-    z_seek_offset: Optional[float] = None,
-    enable_tadm: bool = False,
-    dispenser_volume: float = 0.0,
-    dispenser_speed: float = 250.0,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    pre_position: bool = True,
-  ) -> None:
-    tip_spots = list(tip_spots)
-    use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
-    self._require_all_channels(use_channels, "pick_up_tips8")
-    if len(tip_spots) != NUM_PROBES:
-      raise ValueError(f"pick_up_tips8 requires {NUM_PROBES} tip spots, got {len(tip_spots)}")
-    resolved_final_z = self._resolve_traverse_height(final_z)
-
-    tips = [s.get_tip() for s in tip_spots]
-    ref_spot = tip_spots[0]
-    tip = tips[0]
-    rack = ref_spot.parent
-    logger.info(
-      "[Prep MPH] pick_up_tips: rack=%s, tip_spots=%s",
-      rack.name if rack is not None else ref_spot.name,
-      [s.name.rsplit("_", 1)[-1] for s in tip_spots],
-    )
-    loc = ref_spot.get_absolute_location("c", "c", "t") + offset
-
-    if pre_position:
-      traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
-      await self.move_to_position(loc.x, loc.y, traverse_h)
-
-    tip_position = PrepCmd.TipPositionParameters.for_op(
-      PrepCmd.ChannelIndex.MPHChannel, loc, tip, z_seek_offset=z_seek_offset
-    )
-    tip_definition = PrepCmd.TipPickupParameters(
-      default_values=False,
-      volume=tip.maximal_volume,
-      length=tip.total_tip_length - tip.fitting_depth,
-      tip_type=PrepCmd.TipTypes.StandardVolume,
-      has_filter=tip.has_filter,
-      is_needle=False,
-      is_tool=False,
-    )
-    tip_intents = [
-      TipPickupIntent(
-        channel=ch,
-        tip_spot=spot,
-        tip=t,
-        channel_tracker=self.head[ch],
-      )
-      for ch, spot, t in zip(use_channels, tip_spots, tips)
-    ]
-    queue_tip_pickups(tip_intents)
-
-    async def _send() -> None:
-      await self._client.execute(
-        PrepCmd.MphPickupTips(
-          tip_position=tip_position,
-          final_z=resolved_final_z,
-          seek_speed=seek_speed,
-          tip_definition=tip_definition,
-          enable_tadm=enable_tadm,
-          dispenser_volume=dispenser_volume,
-          dispenser_speed=dispenser_speed,
-          tip_mask=_FULL_TIP_MASK,
-        )
-      )
-
-    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
-
-  async def drop_tips8(
-    self,
-    destinations: Sequence[Union[TipSpot, Trash]],
-    use_channels: Optional[Sequence[int]] = None,
-    *,
-    offset: Coordinate = Coordinate.zero(),
-    final_z: Optional[float] = None,
-    seek_speed: float = 15.0,
-    z_seek_offset: Optional[float] = None,
-    tip_roll_off_distance: float = 0.0,
-  ) -> None:
-    destinations = list(destinations)
-    use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
-    self._require_all_channels(use_channels, "drop_tips8")
-    if len(destinations) != NUM_PROBES:
-      raise ValueError(f"drop_tips8 requires {NUM_PROBES} destinations, got {len(destinations)}")
-    tip = self._require_mounted_tip()
-    resolved_final_z = self._resolve_traverse_height(final_z)
-
-    ref_spot = destinations[0]
-    is_trash = isinstance(ref_spot, Trash)
-    dest = ref_spot if is_trash else ref_spot.parent
-    logger.info(
-      "[Prep MPH] drop_tips: dest=%s, resources=%s",
-      dest.name if dest is not None else ref_spot.name,
-      [s.name.rsplit("_", 1)[-1] for s in destinations],
-    )
-
-    loc = ref_spot.get_absolute_location("c", "c", "t")
-    if not is_trash:
-      loc = loc + offset
-    drop_type = PrepCmd.TipDropType.Stall if is_trash else PrepCmd.TipDropType.FixedHeight
-
-    tip_position = PrepCmd.TipDropParameters.for_op(
-      PrepCmd.ChannelIndex.MPHChannel,
-      loc,
-      tip,
-      z_seek_offset=z_seek_offset,
-      drop_type=drop_type,
-    )
-    roll_off = 3.0 if (is_trash and tip_roll_off_distance == 0.0) else tip_roll_off_distance
-    mounted = self._require_mounted_tips()
-    tip_intents = [
-      TipDropIntent(
-        channel=ch,
-        destination=dest,
-        tip=mounted[ch],
-        channel_tracker=self.head[ch],
-      )
-      for ch, dest in zip(use_channels, destinations)
-    ]
-    queue_tip_drops(tip_intents)
-
-    async def _send() -> None:
-      await self._client.execute(
-        PrepCmd.MphDropTips(
-          tip_position=tip_position,
-          final_z=resolved_final_z,
-          seek_speed=seek_speed,
-          tip_roll_off_distance=roll_off,
-        )
-      )
-
-    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
-
-  async def aspirate8(
+  async def aspirate(
     self,
     wells: Optional[Sequence[Well]] = None,
     *,
@@ -873,7 +953,7 @@ class PrepHead8:
     z_liquid_exit_speed: Optional[float] = None,
     prewet_volume: Optional[float] = None,
     z_bottom_search_offset: Optional[float] = None,
-    lld_mode: Optional[LLDMode] = None,
+    lld_mode: Optional[Pipettes.LLDMode] = None,
     lld: Optional[PrepCmd.LldParameters] = None,
     p_lld: Optional[PrepCmd.PLldParameters] = None,
     c_lld: Optional[PrepCmd.CLldParameters] = None,
@@ -889,9 +969,9 @@ class PrepHead8:
   ) -> None:
     del offset  # geometry uses well/container absolute locations
     use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
-    self._require_all_channels(use_channels, "aspirate8")
+    self._require_all_channels(use_channels, "aspirate")
     if (wells is None) == (container is None):
-      raise ValueError("aspirate8 requires exactly one of wells= or container=")
+      raise ValueError("aspirate requires exactly one of wells= or container=")
     tip = self._require_mounted_tip()
 
     explicit: Optional[List[Optional[HamiltonLiquidClass]]]
@@ -923,9 +1003,9 @@ class PrepHead8:
       self._validate_container_span(container)
       resource_name = container.parent.name if container.parent is not None else container.name
       op_targets: Union[str, List[str]] = container.name
-      loc = container.get_absolute_location("c", "c", "cavity_bottom")
+      loc = container.get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       ref_x, ref_y = loc.x, loc.y + 3.5 * PROBE_PITCH_MM
-      wg = _absolute_z_from_well(container, liquid_height)
+      wg = _absolute_z_from_well(container, self._require_deck(), liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(container) if auto_container_geometry else []
       )
@@ -933,15 +1013,15 @@ class PrepHead8:
     else:
       wells_list = list(wells)  # type: ignore[arg-type]
       if len(wells_list) != NUM_PROBES:
-        raise ValueError(f"aspirate8 requires {NUM_PROBES} wells, got {len(wells_list)}")
+        raise ValueError(f"aspirate requires {NUM_PROBES} wells, got {len(wells_list)}")
       self._resolve_probe_positions(wells_list)
       resource_name = (
         wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
       )
       op_targets = [w.name.rsplit("_", 1)[-1] for w in wells_list]
-      ref_loc = wells_list[0].get_absolute_location("c", "c", "cavity_bottom")
+      ref_loc = wells_list[0].get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       ref_x, ref_y = ref_loc.x, ref_loc.y
-      wg = _absolute_z_from_well(wells_list[0], liquid_height)
+      wg = _absolute_z_from_well(wells_list[0], self._require_deck(), liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(wells_list[0]) if auto_container_geometry else []
       )
@@ -1059,14 +1139,14 @@ class PrepHead8:
     queue_volume_transfers(volume_intents)
 
     async def _send() -> None:
-      await self._client.execute(
+      await self._driver.send_command(
         cmd_cls(aspirate_parameters=[param_struct]),  # type: ignore[arg-type]
         read_timeout=resolved_read_timeout if effective_lld else None,
       )
 
     await self._finalize_head8_command(use_channels, volume_intents=volume_intents, send=_send)
 
-  async def dispense8(
+  async def dispense(
     self,
     wells: Optional[Sequence[Well]] = None,
     *,
@@ -1087,7 +1167,7 @@ class PrepHead8:
     stop_back_volume: Optional[float] = None,
     cutoff_speed: Optional[float] = None,
     z_bottom_search_offset: Optional[float] = None,
-    lld_mode: Optional[LLDMode] = None,
+    lld_mode: Optional[Pipettes.LLDMode] = None,
     lld: Optional[PrepCmd.LldParameters] = None,
     c_lld: Optional[PrepCmd.CLldParameters] = None,
     container_segments: Optional[List[PrepCmd.SegmentDescriptor]] = None,
@@ -1102,9 +1182,9 @@ class PrepHead8:
     del offset
     del blow_out_air_volume  # dispense blowout not on Prep dispense wire path today
     use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
-    self._require_all_channels(use_channels, "dispense8")
+    self._require_all_channels(use_channels, "dispense")
     if (wells is None) == (container is None):
-      raise ValueError("dispense8 requires exactly one of wells= or container=")
+      raise ValueError("dispense requires exactly one of wells= or container=")
     tip = self._require_mounted_tip()
 
     explicit: Optional[List[Optional[HamiltonLiquidClass]]]
@@ -1136,9 +1216,9 @@ class PrepHead8:
       self._validate_container_span(container)
       resource_name = container.parent.name if container.parent is not None else container.name
       op_targets: Union[str, List[str]] = container.name
-      loc = container.get_absolute_location("c", "c", "cavity_bottom")
+      loc = container.get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       ref_x, ref_y = loc.x, loc.y + 3.5 * PROBE_PITCH_MM
-      wg = _absolute_z_from_well(container, liquid_height)
+      wg = _absolute_z_from_well(container, self._require_deck(), liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(container) if auto_container_geometry else []
       )
@@ -1146,15 +1226,15 @@ class PrepHead8:
     else:
       wells_list = list(wells)  # type: ignore[arg-type]
       if len(wells_list) != NUM_PROBES:
-        raise ValueError(f"dispense8 requires {NUM_PROBES} wells, got {len(wells_list)}")
+        raise ValueError(f"dispense requires {NUM_PROBES} wells, got {len(wells_list)}")
       self._resolve_probe_positions(wells_list)
       resource_name = (
         wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
       )
       op_targets = [w.name.rsplit("_", 1)[-1] for w in wells_list]
-      ref_loc = wells_list[0].get_absolute_location("c", "c", "cavity_bottom")
+      ref_loc = wells_list[0].get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       ref_x, ref_y = ref_loc.x, ref_loc.y
-      wg = _absolute_z_from_well(wells_list[0], liquid_height)
+      wg = _absolute_z_from_well(wells_list[0], self._require_deck(), liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(wells_list[0]) if auto_container_geometry else []
       )
@@ -1204,7 +1284,7 @@ class PrepHead8:
     )
 
     tube_radius = _effective_radius(ref_resource)
-    _DISPENSE_ALLOWED_LLD = frozenset({LLDMode.CAPACITIVE})
+    _DISPENSE_ALLOWED_LLD = frozenset({Pipettes.LLDMode.CAPACITIVE})
     effective_lld = self._resolve_effective_lld(lld_mode, lld, allowed_modes=_DISPENSE_ALLOWED_LLD)
     use_v2 = self._resolve_command_version(command_version)
 
@@ -1267,38 +1347,9 @@ class PrepHead8:
     queue_volume_transfers(volume_intents)
 
     async def _send() -> None:
-      await self._client.execute(
+      await self._driver.send_command(
         cmd_cls(dispense_parameters=[param_struct]),  # type: ignore[arg-type]
         read_timeout=resolved_read_timeout if effective_lld else None,
       )
 
     await self._finalize_head8_command(use_channels, volume_intents=volume_intents, send=_send)
-
-  # ---------------------------------------------------------------------------
-  # Tip presence sensing
-  # ---------------------------------------------------------------------------
-
-  async def request_tip_presence(self) -> List[Optional[bool]]:
-    """Sense whether tips are present on the 8MPH head via the sleeve sensor (cmd=15).
-
-    The 8MPH is a single ganged controller — the firmware tree exposes one sleeve
-    sensor node (on the probe-0 / channel-0 entry). The result is broadcast across
-    all 8 positions since the head picks up and drops all probes together.
-
-    Returns:
-      8-element list. True=tips detected, False=no tips, None=sensor unavailable.
-    """
-    if not self.channels:
-      raise RuntimeError("MPH channels not populated; call build_prep_channels first.")
-
-    addr = self.channels[0].sleeve_sensor
-    if addr is None:
-      return [None] * NUM_PROBES
-
-    raw = await self._client.execute(PrepCmd.PrepProbeRequest(dest=addr, command_id=15))
-    if raw is None or len(raw) < 8:
-      result = False
-    else:
-      val = _struct.unpack_from("<I", raw, 4)[0]
-      result = bool(val)
-    return [result] * NUM_PROBES

@@ -549,3 +549,11 @@ PREP_ERROR_CODES: Dict[Tuple[int, int, int, int, int], str] = {
   ): "Unable to command an Individual Channel from this interface, please use the Pipettor interface.",
   (0x0001, 0x0001, 0x1100, 1, 0x0F06): "The MPH head is not installed.",
 }
+
+
+class PrepMethodNotFoundError(RuntimeError):
+  """The firmware has no method of the name asked for on that object.
+
+  Which methods a Prep exposes, and at which ids, differs between firmware versions, so a method
+  looked up by name can be missing on one instrument and present on another.
+  """
