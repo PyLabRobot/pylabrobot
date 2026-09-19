@@ -1319,10 +1319,16 @@ function updateDetail() {
     const visible = Math.max(sx, sy) / perPixel >= DETAIL_MIN_PX;
     if (entry.mesh.visible !== visible) entry.mesh.visible = visible;
     // The box stands in for the model again as soon as the model is too small to be worth
-    // drawing, and steps back out of the way when it is not.
+    // drawing, and steps back out of the way when it is not. Standing in, it is drawn as solidly
+    // as the model was, so what a resource looks like does not change as it crosses the threshold.
     if (entry.modelDrawn) {
       const fills = !geometryOf.has(entry.modelIndex);
       if (entry.mesh.material.visible !== fills) entry.mesh.material.visible = fills;
+      if (entry.standsIn !== fills) {
+        entry.standsIn = fills;
+        entry.mesh.material.opacity = boxOpacity(entry);
+        entry.mesh.material.needsUpdate = true;
+      }
     }
     for (const overlay of entry.overlays ?? []) {
       if (overlay.visible !== visible) overlay.visible = visible;
@@ -1410,12 +1416,32 @@ function keepsWalls(entry) {
 
 // How see-through a resource is drawn, whatever the angle it is seen from. A part that travels is
 // the see-through one, because drawn solid it hides whatever it happens to be above.
-function OPACITY_OF(isSpace, moves, isTipRack, isShell) {
+function OPACITY_OF(isSpace, moves, isTipRack, isShell, standsIn) {
   if (isSpace) return SPACE_OPACITY;
   if (moves) return MOVING_OPACITY;
   if (isTipRack) return TIP_RACK_OPACITY;
+  // A box that is holding the place of a model is no longer a statement about extent: it is the
+  // picture of the thing, and it is drawn as solidly as the model would have been. A tip at
+  // BOX_OPACITY over a white rack composites to about #a3a3a3, which is the colour of an empty
+  // spot - so a full rack and a spent one looked alike everywhere the model was too small to draw.
+  if (standsIn) return 1;
   if (isShell) return SHELL_OPACITY;
   return BOX_OPACITY;
+}
+
+/** How see-through this model's box is drawn, given what it is and whether it stands in for a
+ * model. Read by the mode change and by the rule that hands the box back and forth with the
+ * model, so the two cannot disagree about it. */
+function boxOpacity(entry) {
+  return OPACITY_OF(
+    GROUND.has(entry.model.category),
+    MOVING_PARTS.has(entry.model.category),
+    // A tip rack is read by which of its positions still hold a tip, so it is drawn see-through at
+    // its own opacity rather than at the shell's - both in a plan view and in a free one.
+    entry.model.category === "tip_rack",
+    entry.holdsEnclosure,
+    entry.standsIn === true,
+  );
 }
 
 function setRenderMode(plan) {
@@ -1426,10 +1452,6 @@ function setRenderMode(plan) {
     const material = entry.mesh.material.userData.lit ?? entry.mesh.material;
     if (entry.mesh.material !== material) entry.mesh.material = material;
     const isShell = entry.holdsEnclosure;
-    // A tip rack is read by which of its positions still hold a tip, so it is drawn see-through at
-    // its own opacity rather than at the shell's - both in a plan view and in a free one.
-    const isTipRack = entry.model.category === "tip_rack";
-    const moves = MOVING_PARTS.has(entry.model.category);
     // Ground: the space things stand in, and the surface they stand on. Neither is a thing to look
     // at, and drawing either solid hides what it carries - a deck drawn opaque is a sheet the same
     // colour as the plates on it. Both stay barely there in every mode: enough to see where the
@@ -1440,7 +1462,7 @@ function setRenderMode(plan) {
     const rides = entry.instances.some((i) => travels(i));
 
     material.transparent = true;
-    material.opacity = OPACITY_OF(isSpace, moves, isTipRack, isShell);
+    material.opacity = boxOpacity(entry);
     material.side = isShell || isSpace ? THREE.BackSide : THREE.FrontSide;
     // Ground stays out of the depth buffer in either view - a wash over the picture, not a surface
     // anything is behind.
@@ -2005,6 +2027,8 @@ function buildMeshes() {
       overlays: /** @type {any[]} */ ([]),
       // Set once this model's declared .glb has arrived and been placed.
       modelDrawn: false,
+      // Whether the box is currently holding the place of a model too small to be worth drawing.
+      standsIn: false,
       holdsEnclosure: false,
       enclosedModels: /** @type {any[]} */ ([]),
     });

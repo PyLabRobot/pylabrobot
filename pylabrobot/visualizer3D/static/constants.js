@@ -21,6 +21,10 @@ export const RESOURCE_COLORS = {
   well: 0xbcc7cf,
   tip_rack: 0x9b6690, // mid: the rack sitting in it
   tip_spot: 0x6b4f66, // the spot's rim
+  // Not of the rack's family: a tip is the charcoal its own file is modelled in, so a spot with one
+  // in it is dark against the spot's light rim whether the model or the box is being drawn. Made
+  // any lighter it reads the same as an empty spot, and a full rack and a spent one look alike.
+  tip: 0x333333,
   tube_rack: 0x122d42,
   tube: 0xbcc7cf,
   trough: 0x756793,
@@ -119,8 +123,9 @@ export const ARM_OPACITY = 0.575;
 export const SHELL_OPACITY = 0.5;
 // A resource with no model of its own is drawn as its bounding box. Slightly see-through, because
 // a box is a statement about extent rather than a picture of the thing: what it contains, and
-// what stands behind it, should still read through it. A resource whose model file has arrived has
-// its box hidden entirely, so this never applies to it.
+// what stands behind it, should still read through it. A resource whose model is being drawn has
+// its box hidden entirely; one whose model is too small to be worth drawing has its box back, and
+// that box is the picture, so it is drawn solid rather than at this.
 export const BOX_OPACITY = 0.4;
 // A part that travels over the deck, drawn see-through wherever it is. Solid it would hide
 // whatever it happens to be above, which is the one thing you need to see under an arm.
