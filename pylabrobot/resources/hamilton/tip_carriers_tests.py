@@ -77,6 +77,20 @@ class StandardTipCarrierTests(unittest.TestCase):
           for axis in ("x", "y", "z"):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
+  def test_ntr_module_centres_its_rack_over_the_carrier_slot(self):
+    """The module is 134 mm across in a 135 mm slot, which centres it, so it is modelled as the
+    slot: a rack centred on the module is then centred on the slot."""
+    deck = STARDeck()
+    module = hamilton_mfx_module_tiprackholder_ntr("module")
+    deck.assign_child_resource(
+      hamilton_mfx_carrier_L5_base("mfx_carrier", modules={0: module}), track=30
+    )
+    module.assign_child_resource(rack := hamilton_96_tiprack_50uL_NTR("rack"))
+    slot = module.get_absolute_location()
+    self.assertAlmostEqual(rack.get_absolute_location().x - slot.x, (135.0 - rack.get_size_x()) / 2)
+    self.assertAlmostEqual(rack.get_absolute_location().y - slot.y, (94.0 - rack.get_size_y()) / 2)
+    self.assertAlmostEqual(rack.get_absolute_location().z - slot.z, 10.8)
+
   def test_raised_tip_rack_positions_on_star_deck(self):
     for rack_fn, a1_z in [
       (hamilton_96_tiprack_raised_core_ii, 230.95),
