@@ -63,12 +63,19 @@ Flex
 
 .. currentmodule:: pylabrobot.opentrons.flex
 
+Use ``Flex(deck, host=find_flex_ip())`` to discover a Flex on the local network,
+then call ``connect()`` to check health without starting a run or moving hardware.
+Discovery requires the ``opentrons`` installation extra and uses live mDNS
+advertisements. If multiple robots are present, select one with
+``find_flex_ip(name="My Flex")``. Missing or ambiguous results raise an error.
+
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
     Flex
+    find_flex_ip
 
 Heads
 -----

@@ -11,6 +11,7 @@ from pylabrobot.opentrons.flex import (
   FlexHead1,
   FlexHead8,
   FlexHead96,
+  find_flex_ip,
 )
 from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP, ReplayTransport
 from pylabrobot.opentrons.ot2 import OT2, OT2_8ChannelPipette, OT2SingleChannelPipette
@@ -37,4 +38,5 @@ __all__ = [
   "OpentronsRun",
   "ReplayTransport",
   "RobotInfo",
+  "find_flex_ip",
 ]
