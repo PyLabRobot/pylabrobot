@@ -3191,6 +3191,27 @@ class PrepGetPositions(PrepStatusRequest["PrepGetPositions.Response"]):
 
 
 @dataclass(frozen=True)
+class PrepGetTipDefinitionHeld(PrepStatusRequest["PrepGetTipDefinitionHeld.Response"]):
+  """GetTipDefinitionHeld (cmd=13, dest=Pipettor): the definition of the tip the pipettor holds."""
+
+  command_id = 13
+  firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
+
+  @dataclass(frozen=True)
+  class Response:
+    value: Annotated[TipDefinition, Struct()]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetTipDefinitionHeld.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
 class PrepMoveYAbsolute(PrepCommand[None]):
   """Move channels along Y (cmd=10, dest=ChannelXYZCoordinator)."""
 
