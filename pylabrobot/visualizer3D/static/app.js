@@ -1126,6 +1126,44 @@ let originMarker = null;
 
 const AXIS_COLORS = { x: 0xdc3545, y: 0x198754, z: 0x1a4b8c };
 
+// ---------------------------------------------------------------- origin markers (trial)
+
+// A small magenta sphere on every resource's origin, for checking where a resource is measured
+// from. Off until the toolbar button turns it on.
+//
+// One InstancedMesh, not a mesh each: measured on a 316-resource Prep, instancing costs one draw
+// call and 0.9% of a frame, where a mesh per resource cost 215 draw calls and 37%.
+const ORIGIN_DOT_RADIUS = 1.0; // mm
+const ORIGIN_DOT_COLOR = 0xff00ff;
+let originDots = null;
+let showOriginDots = false;
+
+function buildOriginDots() {
+  if (originDots) {
+    view.remove(originDots);
+    originDots.geometry.dispose();
+    originDots.material.dispose();
+    originDots = null;
+  }
+  if (!showOriginDots || !world) return;
+  const count = world.names.length;
+  const mesh = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(ORIGIN_DOT_RADIUS, 8, 6),
+    new THREE.MeshBasicMaterial({ color: ORIGIN_DOT_COLOR }),
+    count,
+  );
+  mesh.frustumCulled = false;
+  const at = new THREE.Vector3();
+  const matrix = new THREE.Matrix4();
+  for (let i = 0; i < count; i++) {
+    at.setFromMatrixPosition(world.matrices[i]);
+    mesh.setMatrixAt(i, matrix.makeTranslation(at.x, at.y, at.z));
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  originDots = mesh;
+  view.add(originDots);
+}
+
 function buildOrigin() {
   if (originMarker) view.remove(originMarker);
   const length = 1; // unit sized; scaled to a constant screen size in updateOrigin()
@@ -3302,6 +3340,23 @@ function atBoundary(surface) {
     min: hoverBox.box.min.toArray().map((v) => +v.toFixed(1)),
     max: hoverBox.box.max.toArray().map((v) => +v.toFixed(1)),
   }),
+  // What the toolbar's origins button does, for a test that has no pointer.
+  origins: (on = true) => setOriginDots(on),
+  // Renders `frames` frames back to back and reports what each one cost. The viewer only draws
+  // when something changes, so the cost of a frame is otherwise not observable from outside.
+  benchmark: (frames = 120) => {
+    // The counters run on until they are reset, so one frame is measured on its own.
+    renderer.render(view, camera); // warm up
+    renderer.info.reset?.();
+    renderer.render(view, camera);
+    const info = renderer.info.render;
+    const calls = info.drawCalls ?? info.calls ?? 0;
+    const triangles = info.triangles;
+    const t = performance.now();
+    for (let i = 0; i < frames; i++) renderer.render(view, camera);
+    const ms = (performance.now() - t) / frames;
+    return { frames, msPerFrame: +ms.toFixed(3), fps: Math.round(1000 / ms), calls, triangles };
+  },
   sceneObjects: () => {
     let n = 0;
     view.traverse(() => n++);
@@ -3499,6 +3554,28 @@ function setTool(tool) {
   openPanel = tool === "coords" ? "coords" : openPanel === "coords" ? null : openPanel;
   refreshToolUI();
 }
+
+// The origins button is not a tool: it changes what is drawn, not what a click means.
+const originsButton = document.getElementById("toolbar-origins-btn");
+
+function setOriginDots(on) {
+  showOriginDots = on;
+  originsButton.classList.toggle("active", on);
+  const t = performance.now();
+  buildOriginDots();
+  return {
+    on,
+    dots: on ? (world?.names.length ?? 0) : 0,
+    buildMs: +(performance.now() - t).toFixed(1),
+  };
+}
+
+// The click is the edge, as it is for every other button: a frame is asked for where the press
+// comes into the page, not where the scene changes. `plrViewer.origins` asks through `atBoundary`.
+originsButton.addEventListener("click", () => {
+  setOriginDots(!showOriginDots);
+  invalidate();
+});
 
 toolButtons.cursor.addEventListener("click", () => setTool("cursor"));
 toolButtons.coords.addEventListener("click", () => setTool("coords"));
@@ -3725,6 +3802,7 @@ function connect() {
       buildReferenceMarks();
       buildDeclaredMeshes();
       buildOrigin();
+      buildOriginDots();
       timings.meshesMs = performance.now() - _tBuild;
       const _tTree = performance.now();
       buildTree();
