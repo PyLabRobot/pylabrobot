@@ -1185,7 +1185,7 @@ class PrepDriver:
     if not isinstance(self.deck, PrepDeck) or self.configuration is None:
       return
     c = self.configuration
-    spot = self.deck.teaching_tip_spot
+    spot = self.deck.teaching_needle_spot
     if spot is not None:
       footprint = (spot.get_absolute_size_x(), spot.get_absolute_size_y())
       site = next((s for s in c.deck_sites if (s.length, s.width) == footprint), None)

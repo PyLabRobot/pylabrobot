@@ -129,29 +129,29 @@ class HamiltonDeckTests(unittest.TestCase):
       deck.summary(),
       textwrap.dedent(
         """
-    Rail  Resource                               Type                  Coordinates (mm)
-    =================================================================================================
-    (-6)  ├── STARlet_trash_core96               Trash                 (-58.200, 106.000, 216.400)
+    Rail  Resource                                Type                  Coordinates (mm)
+    ==================================================================================================
+    (-6)  ├── STARlet_trash_core96                Trash                 (-58.200, 106.000, 216.400)
           │
-    (1)   ├── tip_carrier                        TipCarrier            (100.000, 063.000, 100.000)
-          │   ├── tip_rack_01                    EmbeddedTipRack       (106.200, 073.000, 208.950)
-          │   ├── tip_rack_02                    EmbeddedTipRack       (106.200, 169.000, 208.950)
+    (1)   ├── tip_carrier                         TipCarrier            (100.000, 063.000, 100.000)
+          │   ├── tip_rack_01                     EmbeddedTipRack       (106.200, 073.000, 208.950)
+          │   ├── tip_rack_02                     EmbeddedTipRack       (106.200, 169.000, 208.950)
           │   ├── <empty>
-          │   ├── tip_rack_04                    EmbeddedTipRack       (106.200, 361.000, 208.950)
-          │   ├── <empty>
-          │
-    (21)  ├── plate carrier                      PlateCarrier          (550.000, 063.000, 100.000)
-          │   ├── aspiration plate               Plate                 (554.000, 071.500, 183.120)
-          │   ├── <empty>
-          │   ├── dispense plate                 Plate                 (554.000, 263.500, 183.120)
-          │   ├── <empty>
+          │   ├── tip_rack_04                     EmbeddedTipRack       (106.200, 361.000, 208.950)
           │   ├── <empty>
           │
-    (31)  ├── STARlet_waste_block                Resource              (775.000, 115.000, 100.000)
-          │   ├── STARlet_teaching_tip_rack      TipRack               (780.900, 461.100, 100.000)
-          │   ├── STARlet_core_gripper_holder    HamiltonCoreGrippers  (778.000, 085.500, 200.500)
+    (21)  ├── plate carrier                       PlateCarrier          (550.000, 063.000, 100.000)
+          │   ├── aspiration plate                Plate                 (554.000, 071.500, 183.120)
+          │   ├── <empty>
+          │   ├── dispense plate                  Plate                 (554.000, 263.500, 183.120)
+          │   ├── <empty>
+          │   ├── <empty>
           │
-    (32)  ├── STARlet_trash                      Trash                 (800.000, 190.600, 137.100)
+    (31)  ├── STARlet_waste_block                 Resource              (775.000, 115.000, 100.000)
+          │   ├── STARlet_teaching_needle_rack    TipRack               (780.900, 461.100, 100.000)
+          │   ├── STARlet_core_gripper_holder     HamiltonCoreGrippers  (778.000, 085.500, 200.500)
+          │
+    (32)  ├── STARlet_trash                       Trash                 (800.000, 190.600, 137.100)
     """[1:]
       ),
     )
@@ -176,7 +176,7 @@ class HamiltonDeckTests(unittest.TestCase):
 
     self.assertEqual(len(tip_racks), 6)  # 5 added 300 uL racks + the built-in teaching rack
     self.assertEqual(len(matches), 5)
-    self.assertNotIn(deck.teaching_tip_rack, matches)
+    self.assertNotIn(deck.teaching_needle_rack, matches)
 
   def test_get_trash_area96_survives_serialization_round_trip(self):
     """`serialize()` encodes the 96 trash as a child and sets `with_trash96=False`, so the
@@ -251,7 +251,7 @@ class HamiltonDeckTests(unittest.TestCase):
         deck.waste_block,
         deck.trash,
         deck.trash96,
-        deck.teaching_tip_rack,
+        deck.teaching_needle_rack,
         deck.core_gripper_holder,
       ):
         assert resource is not None

@@ -744,7 +744,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_teaching_needle_pickup_and_return(self):
     """Teaching needles retain their pickup and return heights in the integrated holder."""
-    rack = self.deck.teaching_tip_rack
+    rack = self.deck.teaching_needle_rack
     assert rack is not None
     await self.lh.pick_up_tips(rack.get_all_items(), use_channels=list(range(8)))
     pickup = next(

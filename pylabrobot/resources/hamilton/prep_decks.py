@@ -173,18 +173,24 @@ class PrepDeck(Deck):
 
     # The teaching needle, the one STAR decks carry. On the deck, X and Y (284.76, 214.29) are
     # PRPAA1087's 6 x 6 mm deck site (DeckConfiguration); the driver moves it to the connected
-    # device's at setup. Z is not measured.
-    teaching_tip_spot = TipSpot(
-      name=f"{prefix}_teaching_tip",
+    # device's at setup. Z is where the needle's collar rests, as every tip spot's is: the height
+    # the device takes it from and puts it back at, leaving its body from 23.85 to 83.75.
+    teaching_needle_spot = TipSpot(
+      name=f"{prefix}_teaching_needle",
       size_x=6.0,
       size_y=6.0,
       make_tip=hamilton_teaching_needle_300uL,
       size_z=0.0,
-      category="teaching_tip",
+      category="teaching_needle",
     )
     waste_block.assign_child_resource(
-      teaching_tip_spot,
-      location=Coordinate(x=4.46, y=217.29, z=23.85),
+      teaching_needle_spot,
+      location=Coordinate(x=4.46, y=217.29, z=75.75),
+    )
+    # The needle stands in it, as the needles stand in a STAR deck's rack: it is part of the deck,
+    # not something a run puts there.
+    teaching_needle_spot.tracker.add_tip(
+      teaching_needle_spot.make_tip(), origin=teaching_needle_spot, commit=True
     )
 
     if with_core_grippers:
@@ -238,10 +244,10 @@ class PrepDeck(Deck):
     return None if block is None else _built(block.children, "liquid_waste_container", Trough)
 
   @property
-  def teaching_tip_spot(self) -> Optional[TipSpot]:
+  def teaching_needle_spot(self) -> Optional[TipSpot]:
     """Where the teaching needle stands, or None if this deck carries none."""
     block = self.waste_block
-    return None if block is None else _built(block.children, "teaching_tip", TipSpot)
+    return None if block is None else _built(block.children, "teaching_needle", TipSpot)
 
   @property
   def core_gripper_holder(self) -> Optional[HamiltonCoreGrippers]:

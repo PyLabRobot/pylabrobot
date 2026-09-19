@@ -94,7 +94,7 @@ def test_setup_places_the_teaching_needle_and_waste_positions_where_the_device_r
 
   async def _run() -> None:
     deck = PrepDeck()
-    needle = deck.teaching_tip_spot
+    needle = deck.teaching_needle_spot
     waste = deck.waste_positions["waste_front"]
     assert needle is not None and needle.location is not None
     height = needle.location.z

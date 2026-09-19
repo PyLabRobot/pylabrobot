@@ -95,7 +95,7 @@ Sometimes called "reagent carriers" in Hamilton jargon.
 
 ### Teaching needles
 
-Closed-tip steel probes for labware teaching, not liquid handling. They are modelled as zero-capacity tools (`nominal_volume=0`, `maximal_volume=0`) so any attempted aspirate raises. The integrated teaching rack on every STAR and STARlet deck - `deck.teaching_tip_rack`, named after the device that owns it - is built from `hamilton_teaching_needle_300uL`.
+Closed-tip steel probes for labware teaching, not liquid handling. They are modelled as zero-capacity tools (`nominal_volume=0`, `maximal_volume=0`) so any attempted aspirate raises. The integrated teaching needle rack on every STAR and STARlet deck - `deck.teaching_needle_rack`, named after the device that owns it - is built from `hamilton_teaching_needle_300uL`.
 
 | Description | Image | PLR definition |
 | - | - | - |
