@@ -4029,6 +4029,18 @@ function drawFrame() {
   renderPending = false;
   lastRenderAt = performance.now();
 
+  // What the camera can see decides what is worth drawing, so it is decided before the frame is
+  // drawn rather than after it. Asked afterwards, every frame drew what the frame before it had
+  // worked out, and the last frame of a move - the one left on screen - never drew its own answer
+  // at all: a zoom settled with the detail of where it started, a window resize changed nothing
+  // until the camera next moved, and a view turned to a plan kept the colours of the angle it came
+  // from. Nothing here asks for another frame; they are worked out for this one.
+  updateGrid();
+  updateDetail();
+  updateEdgeMode();
+  updateOrigin();
+  updateScaleBar();
+
   renderer.render(view, camera);
   if (viewHelper) {
     // The helper renders a second pass into a corner of the same canvas. Without turning auto-clear
@@ -4038,11 +4050,7 @@ function drawFrame() {
     renderer.autoClear = true;
   }
   gif.tick();
-  updateGrid();
-  updateDetail();
-  updateEdgeMode();
-  updateOrigin();
-  updateScaleBar();
+  // Read after the draw, because it is the draw it reports.
   updateStats();
 }
 
