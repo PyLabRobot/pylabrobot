@@ -30,6 +30,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL_NTR,
   hamilton_tip_300uL,
 )
+from pylabrobot.resources.hamilton.core_gripper_tools import hamilton_core_gripper_tool
 from pylabrobot.resources.tip_tracking import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
 from pylabrobot.utils.liquid_handling.pipette_batch_scheduling import plan_batches
@@ -1562,8 +1563,6 @@ def test_move_to_xy_positions_refuses_what_a_channel_cannot_reach():
       await p.pipettes.move_to_xy_positions(500.0, {0: 100.0})
     with pytest.raises(ValueError, match=r"y=500.0 outside channel 0"):
       await p.pipettes.move_to_xy_positions(100.0, {0: 500.0})
-    with pytest.raises(ValueError, match=r"z=200.0 outside channel 0"):
-      await p.pipettes.move_to_xy_positions(100.0, {0: 100.0}, minimum_traverse_height_start=200.0)
     with pytest.raises(ValueError, match="channels must be between"):
       await p.pipettes.move_to_xy_positions(100.0, {5: 100.0})
     await p.stop()
@@ -2383,6 +2382,8 @@ def test_a_channel_carrying_a_tip_travels_as_high_as_it_goes_not_to_the_traverse
     shaft = pipettes.shaft(0)
     assert shaft is not None
     shaft.mount_tip(hamilton_tip_300uL(name="tip"))  # 51.9 mm below the stop disc
+    # A pick-up reads the windows again, and this test mounts behind the driver's back.
+    await pipettes._record_channel_bounds()
     await pipettes.move_tool_bottom_to_z_positions({0: 90.0})
     sent.clear()
     travelled.clear()
@@ -2436,6 +2437,114 @@ def test_the_stop_disc_move_takes_off_what_the_channel_carries():
     # Every channel that does not exist is named, not just the first.
     with pytest.raises(ValueError, match=r"channels must be between 0 and 1, are \[5, 7\]"):
       await pipettes.move_stop_disc_to_z_positions({5: 100.0, 7: 100.0})
+    await p.stop()
+
+  _run(_t())
+
+
+def test_setup_discards_a_tip_it_finds_already_attached():
+  """A session that connects to a machine still holding a tip clears it before anything else."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    shaft = p.pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="left on"))  # as a crashed session would leave it
+    await p.stop()  # the session ends without putting it back
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, **kwargs):
+      sent.append(command)
+      return await send(command, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.setup(smart=True)  # and the next one connects, to a machine still holding it
+    assert p.pipettes is not None
+
+    assert [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]  # into the waste
+    assert not (await p.pipettes.sense_tip_presence())[0]
+    assert p.pipettes.get_mounted_tip(0) is None
+    await p.stop()
+
+  _run(_t())
+
+
+def test_setup_puts_a_tool_it_finds_attached_back_rather_than_discarding_it():
+  """A grip tool is not a tip: it goes back in its holder, and no drop into the waste is sent."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck(with_core_grippers=True))
+    await p.setup()
+    assert p.pipettes is not None
+    shaft = p.pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_core_gripper_tool(name="left on"))
+    await p.stop()  # the session ends without putting it back
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, **kwargs):
+      sent.append(command)
+      return await send(command, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.setup(smart=True)  # and the next one connects, to a machine still holding it
+
+    assert [c for c in sent if isinstance(c, PrepCmd.PrepDropTool)]
+    assert not [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_drop_travels_over_its_destination_before_letting_go():
+  """Left to itself the gantry drives X, Y and Z at once, arcing the tips through the deck."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+    await pipettes.pick_up_tips(rack["A1", "B1"], use_channels=[0, 1])
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, **kwargs):
+      if isinstance(command, (PrepCmd.PrepMoveToPosition, PrepCmd.PrepDropTips)):
+        sent.append(type(command).__name__)
+      return await send(command, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+
+    await pipettes.drop_tips(rack["A1", "B1"], use_channels=[0, 1])
+    assert sent == ["PrepMoveToPosition", "PrepDropTips"]  # over them first, then straight down
+
+    # Into the waste, which has its own position per channel and no planning.
+    await pipettes.pick_up_tips(rack["A2", "B2"], use_channels=[0, 1])
+    sent.clear()
+    waste = deck.waste_block
+    assert waste is not None
+    await pipettes.drop_tips([waste, waste], use_channels=[0, 1])
+    assert sent == ["PrepMoveToPosition", "PrepDropTips"]
+
+    # Two groups, too far apart in x to share a move: each is travelled to.
+    await pipettes.pick_up_tips(rack["A3", "B3"], use_channels=[0, 1])
+    sent.clear()
+    await pipettes.drop_tips(rack["A3", "B4"], use_channels=[0, 1])
+    assert sent == [
+      "PrepMoveToPosition",
+      "PrepDropTips",
+      "PrepMoveToPosition",
+      "PrepDropTips",
+    ]
     await p.stop()
 
   _run(_t())

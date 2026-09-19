@@ -19,7 +19,7 @@ import functools
 import logging
 import math
 import struct as _struct
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from typing import (
   TYPE_CHECKING,
@@ -1386,6 +1386,19 @@ class Pipettes:
       return self.default_minimum_traverse_height
     return minimum_traverse_height_end
 
+  async def _record_channel_bounds(self) -> None:
+    """Read each channel's window from the device and record it on the configuration.
+
+    The device reports the window for whatever is attached, so it is read again whenever that
+    changes.
+    """
+    for index, bounds in enumerate(await self.request_channel_bounds()):
+      if index < len(self.configuration.channels):
+        channel = self.configuration.channels[index]
+        channel.x_range = (bounds["x_min"], bounds["x_max"])
+        channel.y_range = (bounds["y_min"], bounds["y_max"])
+        channel.z_range = (bounds["z_min"], bounds["z_max"])
+
   async def request_channel_bounds(self) -> List[ChannelBounds]:
     """Request per-channel movement bounds from the firmware (cmd=10).
 
@@ -1548,6 +1561,27 @@ class Pipettes:
       )
     else:
       await self._driver.send_command(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+
+  async def request_attached_tip_information(self, channel: int) -> Optional[PrepCmd.TipDefinition]:
+    """Read the tip definition the device holds for a pipette, as sent when it was picked up.
+
+    The pipettor holds one definition for the machine, so every carrying pipette answers with it.
+
+    Args:
+      channel: which pipette, 0-indexed from the back.
+
+    Returns:
+      The definition of what it carries - id, volume, length below the stop disc, tip type, filter,
+      needle, tool, label - or None when it carries nothing.
+
+    Raises:
+      ValueError: If the channel does not exist.
+    """
+    if not 0 <= channel < self.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
+    if not (await self.sense_tip_presence())[channel]:
+      return None
+    return (await self._driver.send_command(PrepCmd.PrepGetTipDefinitionHeld())).value
 
   async def request_tip_overhangs(self) -> Dict[int, Optional[float]]:
     """Read how far the tip on each channel stands below its stop disc, in mm.
@@ -2181,9 +2215,6 @@ class Pipettes:
     if make_space:
       final_y = self._make_space(final_y, named=channels)
 
-    # A channel carrying something cannot lift its tool bottom to the traverse height: what it holds
-    # hangs below its stop disc, and the Z drive stops at the top of its own travel.
-    overhangs = await self.request_tip_overhangs()
     ceilings = {}
     for channel in range(len(standing)):
       window = (
@@ -2191,14 +2222,14 @@ class Pipettes:
         if channel < len(self.configuration.channels)
         else None
       )
-      top = traverse if window is None else window[1] - (overhangs.get(channel) or 0.0)
-      ceilings[channel] = min(traverse, top)
+      # The device reports each channel's Z window for whatever is attached to it, so a channel
+      # carrying something travels as high as it goes rather than to the traverse height.
+      ceilings[channel] = traverse if window is None else min(traverse, window[1])
 
     moving = sorted(final_y) if make_space else channels
     for channel in moving:
       self._check_reachable(channel, "x", x)
       self._check_reachable(channel, "y", final_y[channel])
-      self._check_reachable(channel, "z", traverse)
     self._check_y_spacing(final_y, named=channels, make_space_available=not make_space)
 
     arm = None if self._driver is None else self._driver.x_arm
@@ -2945,8 +2976,7 @@ class Pipettes:
       if channel_idx < len(self.configuration.channels)
       else None
     )
-    overhang = (await self.request_tip_overhangs())[channel_idx] or 0.0
-    reach_z = None if window is None else (window[0] - overhang, window[1] - overhang)
+    reach_z = window
     if search_end_position is None:
       if reach_z is None:
         raise RuntimeError(
@@ -3117,9 +3147,8 @@ class Pipettes:
       raise RuntimeError(f"channel {channel_idx}'s Z range has not been read")
     # From where the channel stands, not from the traverse height: a caller that brought it down to
     # a surface meant it to seek from there, and lifting it first undoes that approach.
-    # The window is the stop disc's and these heights are the tip bottom's, so what the channel
-    # carries moves the range down with it.
-    reach = (window[0] - extension, window[1] - extension)
+    # The device reports this window for whatever is attached, so it is already the tip bottom's.
+    reach = window
     start = round(here.z, 2) if search_start_position is None else search_start_position
     floor = reach[0] if search_end_position is None else search_end_position
     final = start if minimum_traverse_height_end is None else minimum_traverse_height_end
@@ -3270,6 +3299,8 @@ class Pipettes:
       dispenser_volume: air to hold in the dispenser while picking up, in ul.
       dispenser_speed: how fast to move that air, in ul/s.
       enable_tadm: whether to record the pressure through the pick-up.
+      minimum_traverse_height_start: the height to travel over the destinations at, in mm.
+        `minimum_traverse_height_end` when None.
       minimum_traverse_height_end: the height to leave the channels at, in mm.
         `default_minimum_traverse_height` when None.
 
@@ -3389,6 +3420,9 @@ class Pipettes:
       for ch, tip in zip(use_channels, tips):
         if picked_up[ch]:
           self._mount_tip(ch, tip)
+      # What a channel carries moves its Z window, and the device answers the new one.
+      with suppress(Exception):  # in a finally: never mask what went wrong above
+        await self._record_channel_bounds()
 
   async def pick_up_tips(
     self,
@@ -3491,6 +3525,7 @@ class Pipettes:
     seek_speed: float = 15.0,
     drop_type: PrepCmd.TipDropType = PrepCmd.TipDropType.FixedHeight,
     tip_roll_off_distance: float = 0.0,
+    minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
   ):
     """Drop tips into spots the channels can all reach at once, or into the waste.
@@ -3564,7 +3599,7 @@ class Pipettes:
       ch: (dest, tip, off)
       for ch, dest, tip, off in zip(use_channels, destinations, tips, offsets_list)
     }
-    tip_positions: List[PrepCmd.TipDropParameters] = []
+    locations: Dict[int, Coordinate] = {}
     for ch in range(self.num_channels):
       if ch not in indexed:
         continue
@@ -3582,13 +3617,36 @@ class Pipettes:
             "Use a deck with waste_rear, waste_front (and waste_mph if using MPH)."
           )
         loc = waste.get_location_wrt(self.deck, "c", "c", "t")
+        # The device's waste position is where the tip's end goes, down its chute, while a drop is
+        # sent the height the collar rests at - the tip's length above that end.
+        loc = Coordinate(loc.x, loc.y, loc.z + tip.total_tip_length - tip.collar_height)
       else:
         loc = dest.get_location_wrt(self._require_deck(), "c", "c", "t") + off
-      tip_positions.append(
-        PrepCmd.TipDropParameters.for_op(
-          self.channel_enum(ch), loc, tip, z_seek_offset=z_seek_offset, drop_type=resolved_drop_type
-        )
+      locations[ch] = loc
+
+    # Over the destinations first, so the drop itself is straight down. Left to itself the gantry
+    # drives X, Y and Z at once, which arcs whatever is on the channels through the deck.
+    traverse_h = (
+      resolved_end if minimum_traverse_height_start is None else minimum_traverse_height_start
+    )
+    await self.move_to_xy_positions(
+      locations[use_channels[0]].x,
+      {ch: locations[ch].y for ch in use_channels},
+      make_space=True,
+      minimum_traverse_height_start=traverse_h,
+    )
+
+    tip_positions = [
+      PrepCmd.TipDropParameters.for_op(
+        self.channel_enum(ch),
+        locations[ch],
+        indexed[ch][1],
+        z_seek_offset=z_seek_offset,
+        drop_type=resolved_drop_type,
       )
+      for ch in range(self.num_channels)
+      if ch in indexed
+    ]
 
     # Nothing is dropped with liquid in it, two into one spot, or into a spot that is taken
     for ch, tip in zip(use_channels, tips):
@@ -3626,6 +3684,9 @@ class Pipettes:
         released = self._release_tip(ch)
         if released is not None and isinstance(dest, TipSpot) and dest.tracks_tips:
           dest.assign_tip(released)
+      # What a channel carries moves its Z window, and the device answers the new one.
+      with suppress(Exception):  # in a finally: never mask what went wrong above
+        await self._record_channel_bounds()
 
   async def drop_tips(
     self,
@@ -3636,6 +3697,8 @@ class Pipettes:
     seek_speed: float = 15.0,
     drop_type: PrepCmd.TipDropType = PrepCmd.TipDropType.FixedHeight,
     tip_roll_off_distance: float = 0.0,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_tolerance: float = 0.1,
   ):
@@ -3656,6 +3719,10 @@ class Pipettes:
       drop_type: how the tip is let go. Stalled off over the waste, whatever this says elsewhere.
       tip_roll_off_distance: how far the tip is rolled off as it is released, in mm. 3 mm over the
         waste when it is 0.
+      minimum_traverse_height_start: the height to travel to the first group at, in mm.
+        `minimum_traverse_height_end` when None.
+      minimum_traverse_height_during: the height to travel between groups at, in mm.
+        `minimum_traverse_height_start` when None.
       minimum_traverse_height_end: the height to leave the channels at, in mm.
         `default_minimum_traverse_height` when None.
       x_tolerance: how far apart in x two spots may be and still be dropped into together, in mm.
@@ -3691,6 +3758,7 @@ class Pipettes:
         seek_speed,
         drop_type,
         tip_roll_off_distance,
+        minimum_traverse_height_start,
         minimum_traverse_height_end,
       )
       return
@@ -3704,7 +3772,12 @@ class Pipettes:
       x_tolerance=x_tolerance,
       resource_offsets=offsets_list,
     )
-    for batch in batches:
+    between = (
+      minimum_traverse_height_start
+      if minimum_traverse_height_during is None
+      else minimum_traverse_height_during
+    )
+    for reached, batch in enumerate(batches):
       await self.drop_tips_in_one_move(
         [destinations[i] for i in batch.indices],
         list(batch.channels),
@@ -3713,6 +3786,7 @@ class Pipettes:
         seek_speed,
         drop_type,
         tip_roll_off_distance,
+        minimum_traverse_height_start if reached == 0 else between,
         minimum_traverse_height_end,
       )
 

@@ -292,15 +292,16 @@ def test_the_tool_commands_are_the_frames_the_device_answered():
 
     sent = [type(c).__name__ for c in captured if not isinstance(c, PrepCmd.PrepGetPositions)]
     assert sent == [
-      "PrepGetTipDefinitionHeld",  # what the channels carry, so the travel knows how high they go
       "PrepGetXSpeedScale",  # the travel's speed, set for the move and put back
       "PrepSetXSpeedScale",
       "PrepMoveToPosition",  # over the tools, at the traverse height
       "PrepSetXSpeedScale",
       "PrepPickUpTool",
       "PrepMoveZUpToSafe",  # picked up, and back to Z safety
+      "PrepGetChannelBounds",  # the tools move the channels' Z windows, so they are read again
       "PrepMoveZUpToSafe",  # and again before letting go
       "PrepDropTool",
+      "PrepGetChannelBounds",
     ]
 
     (pickup,) = [c for c in captured if isinstance(c, PrepCmd.PrepPickUpTool)]

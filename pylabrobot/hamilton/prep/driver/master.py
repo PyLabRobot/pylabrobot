@@ -36,6 +36,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.hamilton.prep_decks import PrepDeck
+from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 
@@ -47,7 +48,7 @@ from .features.core_grippers import CoreGripperArm, CoreGrippers
 from .features.head8 import Head8
 from .features.lights import Lights
 from .features.method import MethodLifecycle
-from .features.pipettes import Pipettes
+from .features.pipettes import TIP_FITTING_DEPTH, Pipettes, channels_named
 from .features.x_arm import XArm
 from .prep_commands import (
   _UNRESOLVED,
@@ -412,6 +413,24 @@ class PrepDriver:
         logger.debug("[PHASE 4] Feature resources")
         self._place_reported_sites()
         await self._create_capability_resources()
+
+      if any(tips):
+        try:
+          await self._return_or_discard_attached(tips)
+        except Exception:
+          # Setup still has to finish: the caller needs a driver to look at the device with.
+          logger.warning("could not clear what was attached at setup", exc_info=True)
+        # The device reports each channel's window for whatever is attached to it, so the windows
+        # recorded at discovery are that thing's. Read them again now the channels are clear.
+        still = await self.pipettes.sense_tip_presence()
+        carrying = [channel for channel, held in enumerate(still) if held]
+        if carrying:
+          logger.warning(
+            "%s still carries something, so the windows recorded are its, not an empty channel's",
+            channels_named(carrying),
+          )
+        else:
+          await self.pipettes._record_channel_bounds()
       self._setup_finished = True
     except Exception:
       # The deck said the device was working; it is not, and the link is about to go.
@@ -1176,6 +1195,62 @@ class PrepDriver:
   # ----------------------------------------
   # Resource model
   # ----------------------------------------
+
+  async def _return_or_discard_attached(self, tips: List[bool]) -> None:
+    """Put back or discard whatever the device was already holding when this session connected.
+
+    A tool goes back in its holder; anything else goes into the waste. What it was is read from the
+    firmware, which keeps it across a restart while the model knows nothing.
+
+    Args:
+      tips: whether each pipette senses something on it.
+    """
+    if self.pipettes is None:
+      return
+    carrying = [channel for channel, held in enumerate(tips) if held]
+    attached = await self.pipettes.request_attached_tip_information(carrying[0])
+    if attached is None:
+      return
+    logger.warning(
+      "the Prep was initialized with something already attached to %s: the firmware holds it as "
+      "%r, id %d, %.1f mm below the stop disc, %.1f uL, needle=%s, tool=%s",
+      channels_named(carrying),
+      attached.label,
+      attached.id,
+      attached.length,
+      attached.volume,
+      attached.is_needle,
+      attached.is_tool,
+    )
+    if attached.is_tool:
+      if self.core_grippers is None:
+        logger.warning("it is a tool, but there is nothing here to put it back with")
+        return
+      logger.warning("it is a tool, so it goes back in its holder rather than into the waste")
+      await self.core_grippers.drop_tool()
+      return
+    waste = self.deck.waste_block if isinstance(self.deck, PrepDeck) else None
+    if waste is None:
+      logger.warning("this deck has no waste, so it stays on: take it off before running anything")
+      return
+    logger.warning("discarding it into the waste")
+    # The model holds nothing at setup and a drop needs it to, so it adopts what the firmware
+    # describes. The definition gives how far the tip reaches below the stop disc, not its fitting
+    # depth, which is 8 mm for every Hamilton tip but the 5 mL family's 10.
+    found = HamiltonTip(
+      name=f"attached at setup ({attached.label})",
+      has_filter=attached.has_filter,
+      total_tip_length=attached.length + TIP_FITTING_DEPTH,
+      maximal_volume=attached.volume,
+      nominal_volume=attached.volume,
+      tip_size=TipSize.STANDARD_VOLUME,
+      pickup_method=TipPickupMethod.OUT_OF_RACK,
+    )
+    for channel in carrying:
+      # A model that already knows keeps what it has; a fresh one adopts what the firmware describes.
+      if self.pipettes.get_mounted_tip(channel) is None:
+        self.pipettes._mount_tip(channel, found)
+    await self.pipettes.drop_tips([waste] * len(carrying), use_channels=carrying)
 
   def _place_reported_sites(self) -> None:
     """Move the teaching needle and the waste positions to where the device reports them.

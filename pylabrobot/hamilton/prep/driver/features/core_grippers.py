@@ -197,12 +197,15 @@ class CoreGrippers:
       # Down at the tools is where a pick-up leaves the channels, whether it worked or not, and the
       # next lateral move would drag them through the holder.
       await self._channels.move_to_safe_z()
+      # The tools move each channel's Z window, and the device answers the new one.
+      await self._channels._record_channel_bounds()
 
   async def drop_tool(self, *, move_to_safe_z_first: bool = True) -> None:
     """Drop CoRe gripper tool (PrepDropTool, cmd=16)."""
     if move_to_safe_z_first:
       await self._channels.move_to_safe_z()
     await self._driver.send_command(PrepCmd.PrepDropTool())
+    await self._channels._record_channel_bounds()
 
 
 class CoreGripperArm:

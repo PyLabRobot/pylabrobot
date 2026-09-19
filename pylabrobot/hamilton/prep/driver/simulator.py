@@ -45,6 +45,7 @@ from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, S
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.tip import Tip
 
 from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration
@@ -666,6 +667,15 @@ class SimulatedPipettes(_Simulated, Pipettes):
         c = declared[channel]
         if c.x_range is None or c.y_range is None or c.z_range is None:
           continue
+        # The device answers the Z window for whatever is attached: measured on PRPAA1087 with the
+        # teaching needle on channel 0, which answered -33.87..115.60 while channel 1 kept 18.03..167.50.
+        shaft = self.shaft(channel)
+        mounted = shaft.tip if shaft is not None and shaft.has_tip() else None
+        below = 0.0
+        if isinstance(mounted, Tip):
+          below = mounted.total_tip_length - mounted.fitting_depth
+        elif mounted is not None:
+          below = float(PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS.length)
         bounds.append(
           PrepCmd.ChannelBoundsParameters(
             channel=PrepCmd.channel_order_legacy_prep[channel],
@@ -673,8 +683,8 @@ class SimulatedPipettes(_Simulated, Pipettes):
             x_max=c.x_range[1],
             y_min=c.y_range[0],
             y_max=c.y_range[1],
-            z_min=c.z_range[0],
-            z_max=c.z_range[1],
+            z_min=c.z_range[0] - below,
+            z_max=c.z_range[1] - below,
           )
         )
       return PrepCmd.PrepGetChannelBounds.Response(bounds=bounds), "the declared channel ranges"
@@ -769,18 +779,46 @@ class SimulatedPipettes(_Simulated, Pipettes):
     ):
       # The tip the first channel holding one holds, as the definition it was picked up with. The
       # id and label are PRPAA1087's own answers, empty and holding.
-      tip = next((t for t in self.get_mounted_tips() if t is not None), None)
-      held = PrepCmd.TipDefinition(
-        default_values=tip is None,
-        id=0 if tip is None else 255,
-        volume=0.0 if tip is None else tip.maximal_volume,
-        length=0.0 if tip is None else tip.total_tip_length - tip.fitting_depth,
-        tip_type=0 if tip is None else int(PrepCmd.TipTypes.StandardVolume),
-        has_filter=False if tip is None else tip.has_filter,
-        is_needle=tip is not None and tip.maximal_volume == 0,
-        is_tool=False,
-        label="No Tip" if tip is None else "Pipettor Custom",
-      )
+      shafts = (self.shaft(channel) for channel in range(self.num_channels))
+      mounted = next((s.tip for s in shafts if s is not None and s.has_tip()), None)
+      if mounted is None:
+        held = PrepCmd.TipDefinition(
+          default_values=True,
+          id=0,
+          volume=0.0,
+          length=0.0,
+          tip_type=0,
+          has_filter=False,
+          is_needle=False,
+          is_tool=False,
+          label="No Tip",
+        )
+      elif isinstance(mounted, Tip):
+        held = PrepCmd.TipDefinition(
+          default_values=False,
+          id=255,
+          volume=mounted.maximal_volume,
+          length=mounted.total_tip_length - mounted.fitting_depth,
+          tip_type=int(PrepCmd.TipTypes.StandardVolume),
+          has_filter=mounted.has_filter,
+          is_needle=mounted.maximal_volume == 0,
+          is_tool=False,
+          label="Pipettor Custom",
+        )
+      else:
+        # A tool is a HeadTool that is not a Tip, and a tool pick-up sends this definition.
+        tool = PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
+        held = PrepCmd.TipDefinition(
+          default_values=False,
+          id=255,
+          volume=tool.volume,
+          length=tool.length,
+          tip_type=int(tool.tip_type),
+          has_filter=tool.has_filter,
+          is_needle=False,
+          is_tool=True,
+          label="Pipettor Custom",
+        )
       return HoiParams().add(held, Struct()), "the channels' mounting shafts"
 
     if isinstance(request, PrepCmd.PrepProbeRequest):
@@ -794,7 +832,9 @@ class SimulatedPipettes(_Simulated, Pipettes):
           return None
         return HoiParams().add(version, Str), f"channel {owner}'s declared firmware"
       if method == "GetTipPresent":
-        present = self.get_mounted_tip(owner) is not None
+        # The sleeve senses what sits in the collar, which is a tool as much as a tip.
+        shaft = self.shaft(owner)
+        present = shaft is not None and shaft.has_tip()
         return HoiParams().add(int(present), U32), f"channel {owner}'s mounting shaft"
 
     return None
