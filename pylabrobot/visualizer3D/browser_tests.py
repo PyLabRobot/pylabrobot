@@ -153,6 +153,20 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
       # worked out again. Forgetting that is what left a 96-head standing still while its arm swept.
       self.assertEqual(await self.world_x(browser, "rider"), 720)
 
+  @staticmethod
+  async def settled_model_count(browser, quiet: float = 0.4, limit: float = 10.0):
+    """How many models are drawn, once no more of them are arriving."""
+    await browser.settle("window.plrViewer?.models().length")
+    deadline = asyncio.get_running_loop().time() + limit
+    last = -1
+    while asyncio.get_running_loop().time() < deadline:
+      count = int(await browser.evaluate("window.plrViewer.models().length"))
+      if count == last:
+        return count
+      last = count
+      await asyncio.sleep(quiet)
+    return last
+
   async def test_a_tree_that_changes_shape_keeps_the_models_it_had(self):
     """A scene arrives whole whenever the tree changes shape. Rebuilding the geometry for it took
     every model off screen and put the boxes back until the files had been fetched and parsed
@@ -165,7 +179,11 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
     # Its own devtools port: the browser the test before it drove may still be letting go of one.
     async with Browser(CDP_PORT + 1) as browser:
       await browser.open(f"http://127.0.0.1:{self.viewer.fs_port}/")
-      drawn = int(await browser.settle("window.plrViewer?.models().length"))
+      # Not the first model to arrive: the files are fetched and parsed in parallel and the count
+      # climbs as they land, so a baseline taken at the first is a baseline taken too early - and
+      # how early depends on how big the files are and how fast the machine is, which is a test
+      # that passes or fails for reasons that have nothing to do with what it is checking.
+      drawn = int(await self.settled_model_count(browser))
 
       # Watch while the tree changes shape under it: the rack goes somewhere else, which is a
       # reparent, which sends a whole scene.
