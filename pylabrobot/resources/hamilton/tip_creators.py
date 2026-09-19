@@ -7,8 +7,9 @@ See the TT command.
 
 import enum
 import warnings
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip
 
 
@@ -21,6 +22,26 @@ class TipSize(enum.Enum):
   HIGH_VOLUME = 3  # i.e. tip_collar_size_z == 10 mm
   CORE_384_HEAD_TIP = 4  # TODO: identify tip_collar_size_z
   XL = 5  # TODO: identify tip_collar_size_z
+
+
+# Outer diameter of a tip, by its size. Every tip for the 1000 uL channel has the CO-RE collar, which
+# measures 8.2 mm on the 300 uL tip, the 300 uL teaching needle and the CO-RE gripper tool.
+# The XL (4 mL and 5 mL) diameter is an assumption: exactly double the 1000 uL channel's tips.
+# TODO: measure the XL tips and replace the assumed 16.4 mm.
+TIP_DIAMETER: Dict[TipSize, float] = {
+  TipSize.LOW_VOLUME: 8.2,
+  TipSize.STANDARD_VOLUME: 8.2,
+  TipSize.HIGH_VOLUME: 8.2,
+  TipSize.XL: 16.4,
+}
+
+# Height of a tip's collar, by its size - the band the channel's CO-RE latches hold.
+# TODO: measure the XL (4 mL and 5 mL) tips and the 384-head tip, which state no collar height.
+COLLAR_HEIGHT: Dict[TipSize, float] = {
+  TipSize.LOW_VOLUME: 6.0,
+  TipSize.STANDARD_VOLUME: 8.0,
+  TipSize.HIGH_VOLUME: 10.0,
+}
 
 
 class TipPickupMethod(enum.Enum):
@@ -50,9 +71,16 @@ class HamiltonTip(Tip):
     nominal_volume: Optional[float] = None,
     name: Optional[str] = None,
     collar_height: Optional[float] = None,
+    size_x: Optional[float] = None,
+    size_y: Optional[float] = None,
+    size_z: Optional[float] = None,
+    category: str = "tip",
+    model: Optional[str] = None,
+    pick_up_location: Optional[Coordinate] = None,
   ):
     if isinstance(tip_size, str):
       tip_size = TipSize[tip_size]
+    diameter = TIP_DIAMETER.get(tip_size, 0)
     if isinstance(pickup_method, str):
       pickup_method = TipPickupMethod[pickup_method]
 
@@ -73,8 +101,14 @@ class HamiltonTip(Tip):
       nominal_volume=nominal_volume,
       maximal_volume=maximal_volume,
       fitting_depth=fitting_depth,
-      collar_height=collar_height,
+      collar_height=COLLAR_HEIGHT.get(tip_size) if collar_height is None else collar_height,
       name=name,
+      size_x=diameter if size_x is None else size_x,
+      size_y=diameter if size_y is None else size_y,
+      size_z=size_z,
+      category=category,
+      model=model,
+      pick_up_location=pick_up_location,
     )
 
     self.pickup_method = pickup_method
@@ -278,7 +312,6 @@ def hamilton_tip_10uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=15,
     tip_size=TipSize.LOW_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=6.0,
   )
 
 
@@ -297,7 +330,6 @@ def hamilton_tip_10uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=10,
     tip_size=TipSize.LOW_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=6.0,
   )
 
 
@@ -319,7 +351,6 @@ def hamilton_tip_50uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=65,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
   )
 
 
@@ -336,7 +367,6 @@ def hamilton_tip_50uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=60,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
   )
 
 
@@ -345,6 +375,8 @@ def hamilton_tip_300uL(name: Optional[str] = None) -> HamiltonTip:
 
   Variants:
     - Hamilton cat. no.: 235937 - black/conductive, framed EmbeddedTipRack, sterile
+    - Hamilton cat. no.: 235950 - black/conductive, nested StandingTipRack, non-sterile
+    - Hamilton cat. no.: 235985 - black/conductive, nested StandingTipRack, sterile
     - Hamilton cat. no.: 235965 - transparent, nested StandingTipRack, non-sterile
     - Hamilton cat. no.: 235931 - steel (single tip)
   """
@@ -356,7 +388,7 @@ def hamilton_tip_300uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=400,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
+    model="hamilton_tip_300uL",
   )
 
 
@@ -375,7 +407,6 @@ def hamilton_tip_300uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
   )
 
 
@@ -390,7 +421,6 @@ def hamilton_tip_300uL_filter_slim(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=345,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=10.0,
   )
 
 
@@ -404,7 +434,6 @@ def hamilton_tip_300uL_filter_ultrawide(name: Optional[str] = None) -> HamiltonT
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=8.0,
   )
 
 
@@ -424,7 +453,7 @@ def hamilton_tip_1000uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=1250,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=10.0,
+    model="hamilton_tip_1000uL",
   )
 
 
@@ -441,7 +470,6 @@ def hamilton_tip_1000uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=10.0,
   )
 
 
@@ -458,7 +486,6 @@ def hamilton_tip_1000uL_filter_wide(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=10.0,
   )
 
 
@@ -475,7 +502,6 @@ def hamilton_tip_1000uL_filter_ultrawide(name: Optional[str] = None) -> Hamilton
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
-    collar_height=10.0,
   )
 
 
