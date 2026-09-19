@@ -1,9 +1,10 @@
 import datetime
 import json
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from pylabrobot.utils.configuration_json import _restore, to_jsonable
+from pylabrobot.hamilton.star.driver.configuration import _restore
+from pylabrobot.serializer import serialize
 
 
 @dataclass
@@ -23,7 +24,7 @@ class _Outer:
 
 
 def _through_json(value):
-  return json.loads(json.dumps(to_jsonable(value)))
+  return json.loads(json.dumps(serialize(asdict(value))))
 
 
 def test_a_nested_dataclass_comes_back_as_it_was_written():

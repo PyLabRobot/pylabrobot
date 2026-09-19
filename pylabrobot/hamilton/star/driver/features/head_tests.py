@@ -11,7 +11,7 @@ from pylabrobot.hamilton.star.driver.features.head96 import Head96, Head96Config
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.hamilton import STARDeck
-from pylabrobot.utils.configuration_json import to_jsonable
+from pylabrobot.serializer import serialize
 
 # The 96-head on the device this package ships a recording of.
 RECORDED_HEAD96 = cast(
@@ -33,10 +33,11 @@ def declaring(**parts: object) -> str:
   """
   tree = json.loads(pathlib.Path(RECORDING_STAR).read_text())
   for name, part in parts.items():
+    assert dataclasses.is_dataclass(part) and not isinstance(part, type)
     if name == "device":
-      tree["device"] = to_jsonable(part)
+      tree["device"] = serialize(dataclasses.asdict(part))
     else:
-      tree["arms"]["left"][name] = to_jsonable(part)
+      tree["arms"]["left"][name] = serialize(dataclasses.asdict(part))
   written = pathlib.Path(tempfile.mkdtemp()) / "declared.json"
   written.write_text(json.dumps(tree))
   return str(written)

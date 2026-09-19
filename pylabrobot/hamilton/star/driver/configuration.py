@@ -1,7 +1,9 @@
+import dataclasses
 import datetime
 import json
+import typing
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from pylabrobot.hamilton.star.driver.features.autoload import AutoloadConfiguration
 from pylabrobot.hamilton.star.driver.features.head96 import Head96Configuration
@@ -9,7 +11,6 @@ from pylabrobot.hamilton.star.driver.features.head384 import Head384Configuratio
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAPConfiguration
 from pylabrobot.hamilton.star.driver.features.pipettes import PipettesConfiguration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArmConfiguration
-from pylabrobot.utils.configuration_json import _restore
 
 
 @dataclass
@@ -136,6 +137,50 @@ class DeviceConfiguration:
   """Left arm minimal Y position [mm] (yu). Default: 6.0."""
   right_arm_min_y_position: float = 6.0
   """Right arm minimal Y position [mm] (yx). Default: 6.0."""
+
+
+def _restore(hint: Any, value: Any) -> Any:
+  """One value, back in the type its field is declared to hold.
+
+  Args:
+    hint: the declared type.
+    value: the value as JSON held it.
+
+  Returns:
+    The value in the declared type.
+  """
+  if value is None:
+    return None
+
+  origin = typing.get_origin(hint)
+  args = typing.get_args(hint)
+
+  if origin is Union:  # Optional[X] is Union[X, None]; the None case returned above.
+    declared = [arg for arg in args if arg is not type(None)]
+    return _restore(declared[0], value) if len(declared) == 1 else value
+  if origin is tuple:
+    # Fixed-length tuples name a type per position; `Tuple[X, ...]` names one for all of them.
+    if len(args) == 2 and args[1] is Ellipsis:
+      return tuple(_restore(args[0], item) for item in value)
+    return tuple(_restore(arg, item) for arg, item in zip(args, value))
+  if origin is list:
+    return [_restore(args[0], item) for item in value]
+  if origin is dict:
+    key_hint, value_hint = args
+    return {_restore(key_hint, key): _restore(value_hint, item) for key, item in value.items()}
+  if hint is int and isinstance(value, str):
+    # A dict keyed by int: JSON wrote the key as text, and the field says what it was.
+    return int(value)
+  if hint is datetime.date:
+    return datetime.date.fromisoformat(value)
+  if dataclasses.is_dataclass(hint) and isinstance(hint, type):
+    # A nested configuration: rebuilt field by field against what its own class declares. Names the
+    # class does not have are left out, so a file written by a driver that has since dropped a
+    # field still loads.
+    field_types = typing.get_type_hints(hint)
+    named = {field.name for field in dataclasses.fields(hint)}
+    return hint(**{n: _restore(field_types[n], v) for n, v in value.items() if n in named})
+  return value
 
 
 # What each name in a saved configuration is, so reading one back knows what to build. A feature an
