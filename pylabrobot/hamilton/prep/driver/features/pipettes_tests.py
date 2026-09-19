@@ -25,7 +25,9 @@ from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton import (
   PrepDeck,
   STARLetDeck,
+  hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
+  hamilton_96_tiprack_300uL_NTR,
   hamilton_tip_300uL,
 )
 from pylabrobot.resources.tip_tracking import set_tip_tracking
@@ -588,8 +590,8 @@ def test_probe_y_using_clld_refuses_searches_it_cannot_make():
     probe = functools.partial(p.pipettes.probe_y_using_clld, allow_without_tip=True)
     for call, message in (
       (
-        lambda: probe(1, "backward", search_end_position=295.0),
-        "outside the range channel 1 may search",
+        lambda: probe(1, "backward", search_end_position=380.0),  # past its own window
+        "outside the range channel 1 may reach",
       ),
       (lambda: probe(1, "backward", search_end_position=150.0), "cannot end at"),
       (lambda: probe(1, "sideways"), "direction"),  # type: ignore[arg-type]
@@ -2132,6 +2134,213 @@ def test_probing_four_edges_with_a_tip_on_measures_with_the_tip():
 
     assert list(found) == ["back", "front", "right", "left"]  # ran, with no allow_without_tip
     assert halved == [1.2, 1.2]  # the tip bottom, not the stop disc
+    await p.stop()
+
+  _run(_t())
+
+
+def test_tips_are_taken_where_their_collars_rest_not_where_their_bottoms_are():
+  """Ground truth, from the instrument: this rack's tips were cLLD-probed with their tops at 67.13.
+
+  A tip spot is the hole a tip hangs in, so the height the device is sent is the spot itself. The
+  Prep took tips from this rack at 59.65 before the rack was remodelled, with the rack's own dz then
+  a guess; re-derived from the recorded 184.0 it comes to 59.5, which is 0.37 above the collars as
+  probed (67.13 less the 8 mm the channel reaches into them).
+  """
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, **kwargs):
+      sent.append(command)
+      return await send(command, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+
+    await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    (pick,) = [c for c in sent if isinstance(c, PrepCmd.PrepPickUpTips)]
+    (at,) = pick.tip_positions
+    spot = rack.get_item("A1")
+    assert at.z_position == spot.get_location_wrt(deck).z == 59.5
+    assert at.z_seek == 72.5  # a collar and 5 mm above, clear of the tips' tops
+    probed = 67.131 - 8.0  # where the collars were found, less the fitting depth
+    assert at.z_position - probed == pytest.approx(0.37, abs=0.01)
+
+    await p.pipettes.drop_tips(rack["A1"], use_channels=[0])
+    (drop,) = [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]
+    (back,) = drop.tip_positions
+    assert (back.z_position, back.z_seek) == (59.5, 69.5)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_height_tips_are_taken_at_does_not_depend_on_how_long_they_are():
+  """Three racks of one body, three tip lengths: the collars rest in the same hole, so one height.
+
+  The STAR's recorded pick-ups say the same - one rack, four tip types, tz2164 every time - and it
+  is the property the old Prep formula broke, by adding the tip's length to the spot.
+  """
+
+  async def _t():
+    lengths, heights = set(), set()
+    for rack_fn in (
+      hamilton_96_tiprack_10uL_NTR,
+      hamilton_96_tiprack_50uL_NTR,
+      hamilton_96_tiprack_300uL_NTR,
+    ):
+      deck = PrepDeck()
+      rack = deck[1] = rack_fn(name="tips", with_tips=True)
+      p = PrepSimulationDriver(deck=deck)
+      await p.setup()
+      assert p.pipettes is not None
+      sent: list = []
+      send = p.send_command
+
+      async def record(command, _send=send, _sent=sent, **kwargs):
+        _sent.append(command)
+        return await _send(command, **kwargs)
+
+      p.send_command = record  # type: ignore[method-assign]
+      await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+      (pick,) = [c for c in sent if isinstance(c, PrepCmd.PrepPickUpTips)]
+      lengths.add(rack.get_item("A1").make_tip().total_tip_length)
+      heights.add(pick.tip_positions[0].z_position)
+      await p.stop()
+
+    assert len(lengths) == 3
+    assert heights == {59.5}
+
+  _run(_t())
+
+
+def test_the_teaching_needle_is_taken_where_the_device_takes_it():
+  """Ground truth: 75.75 to pick up and to drop, the heights every run of the needle has used."""
+
+  async def _t():
+    deck = PrepDeck()
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    needle = deck.teaching_needle_spot
+    assert needle is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, **kwargs):
+      sent.append(command)
+      return await send(command, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+
+    await p.pipettes.pick_up_tips([needle], use_channels=[0])
+    (pick,) = [c for c in sent if isinstance(c, PrepCmd.PrepPickUpTips)]
+    assert (pick.tip_positions[0].z_position, pick.tip_positions[0].z_seek) == (75.75, 88.75)
+
+    await p.pipettes.drop_tips([needle], use_channels=[0])
+    (drop,) = [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]
+    assert (drop.tip_positions[0].z_position, drop.tip_positions[0].z_seek) == (75.75, 85.75)
+
+    # And the needle stands where it stood: its body from the block's hole to 8 mm proud of its top.
+    body = needle.make_tip()
+    assert needle.get_location_wrt(deck).z - (body.total_tip_length - body.collar_height) == 23.85
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_neighbour_in_the_way_of_a_named_search_end_stands_aside():
+  """It alone goes to Z safety and moves just clear; the probing channel stays where it was put."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 290.0, 1: 275.56})
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 90.0})
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    # Channel 1 sits 9 mm in front of 275.56, so the search would otherwise floor at 284.56.
+    await p.pipettes.probe_y_using_clld(
+      0, "forward", search_end_position=275.577, allow_without_tip=True
+    )
+
+    (raised,) = [c for c in sent if isinstance(c, PrepCmd.PrepMoveZUpToSafe)]
+    assert list(raised.channels) == [p.pipettes.channel_enum(1)]  # only channel 1
+    standing = await p.pipettes.request_locations()
+    assert round(standing[1].y, 2) == 266.48  # just clear of the end, and no further
+    assert round(standing[0].z, 2) == 90.0  # the probing channel was not lifted
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_neighbour_already_clear_of_the_search_is_left_alone():
+  """Room it already has is room enough: nothing is raised and nothing is moved."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 290.0, 1: 200.0})
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.probe_y_using_clld(
+      0, "forward", search_end_position=280.0, allow_without_tip=True
+    )
+
+    assert not [c for c in sent if isinstance(c, PrepCmd.PrepMoveZUpToSafe)]
+    standing = await p.pipettes.request_locations()
+    assert round(standing[1].y, 2) == 200.0
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_neighbour_that_cannot_stand_clear_refuses_the_search():
+  """It would have to leave its own Y window to make the room, so the search is refused instead."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 290.0, 1: 281.0})
+    # A channel that cannot go far forward. This unit's two windows are offset by the spacing
+    # itself, so no end channel 0 can reach leaves channel 1 nowhere to stand; the spacing is held
+    # at 9 mm here so that a hemmed-in channel can be given one.
+    p.pipettes._min_spacing_between = lambda i, j: 9.0  # type: ignore[method-assign]
+    p.pipettes.configuration.channels[1].y_range = (270.0, 376.0)
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    with pytest.raises(ValueError, match=r"y=255.9 outside channel 1 range"):
+      await p.pipettes.probe_y_using_clld(
+        0, "forward", search_end_position=265.0, allow_without_tip=True
+      )
+    assert not [c for c in sent if isinstance(c, PrepCmd.PrepMoveZUpToSafe)]
     await p.stop()
 
   _run(_t())

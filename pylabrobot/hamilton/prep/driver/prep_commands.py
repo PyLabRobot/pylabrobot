@@ -1619,12 +1619,13 @@ class TipPositionParameters:
   ) -> TipPositionParameters:
     """Build from an op location and tip (pickup).
 
-    z_seek default: z_position + fitting_depth + 5mm guard (tip-type-aware,
-    comparable to Nimbus/Vantage). z_seek_offset: additive mm on top of
-    computed default (None = 0).
+    A tip spot is the hole its tip hangs in, so `loc` is where the collar rests and where the
+    channel ends up - the same height whatever the tip's length. The seek starts a collar height
+    and 5 mm above it, clear of the tips' tops; z_seek_offset adds to that (None = 0).
     """
-    z = loc.z + tip.total_tip_length - tip.fitting_depth
-    z_seek = z + tip.fitting_depth + 5.0 + (z_seek_offset or 0.0)
+    collar = tip.collar_height if tip.has_collar_height else 0.0
+    z = loc.z
+    z_seek = loc.z + collar + 5.0 + (z_seek_offset or 0.0)
     return cls(
       default_values=False,
       channel=channel,
@@ -1668,14 +1669,13 @@ class TipDropParameters:
   ) -> TipDropParameters:
     """Build from an op location and tip (drop).
 
-    z_position uses (total_tip_length - fitting_depth) so the tip bottom lands
-    at the spot surface (consistent with STAR and with pickup).
-    z_seek default: loc.z + total_tip_length + 5mm so tip bottom clears adjacent tips during
-    lateral approach. z_seek_offset: additive mm on top of computed default
-    (None = 0).
+    The tip is let go a fitting depth below where its collar comes to rest, so that it is off the
+    channel by the time the collar is seated. The seek starts a collar height and 2 mm above the
+    spot, clear of the tips standing in the rack; z_seek_offset adds to that (None = 0).
     """
-    z = loc.z + (tip.total_tip_length - tip.fitting_depth)
-    z_seek = loc.z + tip.total_tip_length + 2.0 + (z_seek_offset or 0.0)
+    collar = tip.collar_height if tip.has_collar_height else 0.0
+    z = loc.z + collar - tip.fitting_depth
+    z_seek = loc.z + collar + 2.0 + (z_seek_offset or 0.0)
     return cls(
       default_values=False,
       channel=channel,

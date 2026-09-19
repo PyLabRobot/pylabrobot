@@ -1661,6 +1661,10 @@ class Pipettes:
   ) -> None:
     """Move channels along Y together.
 
+    A channel the caller names goes where it is sent, at the height it stands at. A channel shoved
+    aside to make that possible is not one the caller is watching, so it goes up to Z safety first
+    rather than travelling through whatever it was standing in.
+
     Args:
       ys: target y in mm, keyed by channel, 0-indexed from the back.
       make_space: whether channels not named may move to keep the minimum spacing.
@@ -1688,6 +1692,12 @@ class Pipettes:
     for channel, y in targets.items():
       self._check_reachable(channel, "y", y)
     self._check_y_spacing(targets, named=ys, make_space_available=not make_space)
+
+    shoved = [
+      channel for channel, y in targets.items() if channel not in ys and y != positions[channel].y
+    ]
+    if shoved:
+      await self.move_to_safe_z(shoved)
 
     try:
       await self._unchecked_fw_move_y_absolute(targets, speed)
@@ -2456,6 +2466,7 @@ class Pipettes:
       )
       await self.move_tool_bottom_to_z_positions({channel_idx: standing.z})
       positions = await self.request_locations()
+
     here = positions[channel_idx]
 
     # Search range: the Y window, and the neighbours at their minimum spacing
@@ -2467,6 +2478,36 @@ class Pipettes:
     if window is None:
       raise RuntimeError(f"channel {channel_idx}'s Y window has not been read")
     low, high = window
+
+    # An end the caller named is one they mean: the neighbour standing in the way of it steps aside,
+    # rather than the search being refused for room the caller cannot see. Checked against the
+    # channel's own window first, so nothing moves for a search it could never make.
+    if search_end_position is not None:
+      if not low <= search_end_position <= high:
+        raise ValueError(
+          f"search_end_position={search_end_position} is outside the range channel {channel_idx} "
+          f"may reach, [{low:.2f}, {high:.2f}]"
+        )
+      if (search_end_position >= here.y) if forward else (search_end_position <= here.y):
+        raise ValueError(
+          f"a {direction} search from y={here.y:.2f} cannot end at y={search_end_position:.2f} mm"
+        )
+      # A tenth of a millimetre past the spacing: a device never stops exactly where it is sent,
+      # and a neighbour a thousandth short of clear floors the search just above its end.
+      targets = {other: at.y for other, at in enumerate(positions)}
+      targets[channel_idx] = search_end_position
+      aside = {
+        other: y - self.AT_SEARCH_START if other > channel_idx else y + self.AT_SEARCH_START
+        for other, y in self._make_space(targets, named=[channel_idx]).items()
+        if other != channel_idx and y != positions[other].y
+      }
+      if aside:
+        for other, y in aside.items():
+          self._check_reachable(other, "y", y)  # refused before anything is raised or moved
+        await self.move_to_safe_z(list(aside))
+        await self.move_to_y_positions(aside)
+        positions = await self.request_locations()
+
     if channel_idx > 0:
       high = min(
         high, positions[channel_idx - 1].y - self._min_spacing_between(channel_idx - 1, channel_idx)
