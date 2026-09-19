@@ -1549,6 +1549,44 @@ class Pipettes:
     else:
       await self._driver.send_command(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
 
+  async def request_tip_overhangs(self) -> Dict[int, Optional[float]]:
+    """Read how far the tip on each channel stands below its stop disc, in mm.
+
+    Returns:
+      Each channel's overhang in mm, None where it holds nothing, keyed by channel, 0-indexed from
+      the back.
+    """
+    # One definition for the pipettor: it answers a zero length, labelled "No Tip", when the machine
+    # holds nothing at all, and the sensors say which channels are carrying when it holds something.
+    attached_tip_info = (await self._driver.send_command(PrepCmd.PrepGetTipDefinitionHeld())).value
+    if not attached_tip_info.length:
+      return {channel: None for channel in range(self.num_channels)}
+    presence = await self.sense_tip_presence()
+    return {
+      channel: attached_tip_info.length if presence[channel] else None
+      for channel in range(self.num_channels)
+    }
+
+  async def request_tip_overhang(self, channel: int) -> float:
+    """Read how far the tip on one channel stands below its stop disc, in mm.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      Its overhang in mm.
+
+    Raises:
+      ValueError: If the channel does not exist.
+      RuntimeError: If the channel carries nothing, so there is no overhang.
+    """
+    if not 0 <= channel < self.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
+    overhang = (await self.request_tip_overhangs())[channel]
+    if overhang is None:
+      raise RuntimeError(f"channel {channel} reports no tip, so there is no overhang to measure")
+    return overhang
+
   # -- dispensing drives ---------------------------------------------------------------------------
 
   async def dispensing_drives_request_uL_positions(self) -> Dict[int, float]:
@@ -2092,6 +2130,20 @@ class Pipettes:
     final_y.update(ys)
     if make_space:
       final_y = self._make_space(final_y, named=channels)
+
+    # A channel carrying something cannot lift its tool bottom to the traverse height: what it holds
+    # hangs below its stop disc, and the Z drive stops at the top of its own travel.
+    overhangs = await self.request_tip_overhangs()
+    ceilings = {}
+    for channel in range(len(standing)):
+      window = (
+        self.configuration.channels[channel].z_range
+        if channel < len(self.configuration.channels)
+        else None
+      )
+      top = traverse if window is None else window[1] - (overhangs.get(channel) or 0.0)
+      ceilings[channel] = min(traverse, top)
+
     moving = sorted(final_y) if make_space else channels
     for channel in moving:
       self._check_reachable(channel, "x", x)
@@ -2111,8 +2163,13 @@ class Pipettes:
 
     restore_x: Optional[int] = None
     try:
-      # Every channel rides the gantry, so a channel that is low travels low: all are raised.
-      below = {channel: traverse for channel, at in enumerate(standing) if at.z < traverse}
+      # Every channel rides the gantry, so a channel that is low travels low: all are raised, each
+      # as high as it goes.
+      below = {
+        channel: ceilings[channel]
+        for channel, at in enumerate(standing)
+        if at.z < ceilings[channel]
+      }
       if below:
         await self.move_tool_bottom_to_z_positions(
           below, speed=z_speed, acceleration=z_acceleration
