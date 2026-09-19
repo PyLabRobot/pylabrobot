@@ -179,12 +179,24 @@ class TestContainer(unittest.TestCase):
     self.assertEqual(
       serialized["no_go_zones"],
       [
-        (
+        [
           {"type": "Coordinate", "x": 0, "y": 44, "z": 0},
           {"type": "Coordinate", "x": 10, "y": 46, "z": 10},
-        )
+        ]
       ],
     )
+
+  def test_no_go_zones_deserialize(self):
+    zones = [(Coordinate(0, 44, 0), Coordinate(10, 46, 10))]
+    c = Container(name="c", size_x=10, size_y=90, size_z=10, no_go_zones=zones)
+    deserialized = Container.deserialize(c.serialize())
+    self.assertEqual(deserialized.no_go_zones, zones)
+    self.assertEqual(deserialized, c)
+
+  def test_no_go_zones_copy(self):
+    zones = [(Coordinate(0, 44, 0), Coordinate(10, 46, 10))]
+    c = Container(name="c", size_x=10, size_y=90, size_z=10, no_go_zones=zones)
+    self.assertEqual(c.copy().no_go_zones, zones)
 
   def test_no_go_zones_multiple(self):
     zones = [
