@@ -764,19 +764,22 @@ class SimulatedPipettes(_Simulated, Pipettes):
         value=self._declared().z_drive_acceleration
       ), "the declared Z drive acceleration"
 
-    if isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipDefinitionHeld":
-      # The tip the first channel holding one holds, as the definition it was picked up with.
+    if isinstance(request, PrepCmd.PrepGetTipDefinitionHeld) or (
+      isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipDefinitionHeld"
+    ):
+      # The tip the first channel holding one holds, as the definition it was picked up with. The
+      # id and label are PRPAA1087's own answers, empty and holding.
       tip = next((t for t in self.get_mounted_tips() if t is not None), None)
       held = PrepCmd.TipDefinition(
-        default_values=False,
-        id=0 if tip is None else 1,
+        default_values=tip is None,
+        id=0 if tip is None else 255,
         volume=0.0 if tip is None else tip.maximal_volume,
         length=0.0 if tip is None else tip.total_tip_length - tip.fitting_depth,
         tip_type=0 if tip is None else int(PrepCmd.TipTypes.StandardVolume),
         has_filter=False if tip is None else tip.has_filter,
-        is_needle=False,
+        is_needle=tip is not None and tip.maximal_volume == 0,
         is_tool=False,
-        label="No Tip" if tip is None else "simulated",
+        label="No Tip" if tip is None else "Pipettor Custom",
       )
       return HoiParams().add(held, Struct()), "the channels' mounting shafts"
 

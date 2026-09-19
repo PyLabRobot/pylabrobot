@@ -2344,3 +2344,98 @@ def test_a_neighbour_that_cannot_stand_clear_refuses_the_search():
     await p.stop()
 
   _run(_t())
+
+
+def test_a_channel_carrying_a_tip_travels_as_high_as_it_goes_not_to_the_traverse_height():
+  """The tool bottom cannot reach the traverse height with a tip on: what it holds hangs below it.
+
+  PRPAA1087 answers 0x0011 GenericInvalidParameter for a tool bottom of 167.5 while a 51.9 mm
+  needle is on, because the drive would have to reach 219.4.
+  """
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+    sent: list = []
+    travelled: list = []
+    send = p.send_command
+
+    async def record(command, **kwargs):
+      if isinstance(command, PrepCmd.PrepMoveZAbsolute):
+        # to 0.01 mm: the device's tip lengths come back as float32, so 51.9 is 51.900001525878906
+        sent.append({int(c.channel): round(c.z_position, 2) for c in command.channels})
+      if isinstance(command, PrepCmd.PrepMoveToPosition):
+        travelled.append(
+          {int(a.channel): round(a.z_position, 2) for a in command.move_parameters.axis_parameters}
+        )
+      return await send(command, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+
+    await pipettes.move_to_y_positions({0: 250.0, 1: 200.0})
+    await pipettes.move_tool_bottom_to_z_positions({0: 90.0, 1: 90.0})
+    sent.clear()
+    await pipettes.move_to_xy_positions(150.0, {0: 250.0})
+    assert sent == [{2: 167.5, 1: 167.5}]  # nothing held, so both go to the traverse height
+
+    shaft = pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="tip"))  # 51.9 mm below the stop disc
+    await pipettes.move_tool_bottom_to_z_positions({0: 90.0})
+    sent.clear()
+    travelled.clear()
+    await pipettes.move_to_xy_positions(100.0, {0: 250.0})
+    assert sent == [{2: 115.6, 1: 167.5}]  # 167.5 - 51.9 for the carrying channel, alone
+    # The raise and the travel carry their heights separately, so both are held here. The raise
+    # covers every channel below its ceiling; the travel carries only the ones moving.
+    assert travelled == [{2: 115.6}]
+
+    sent.clear()
+    await pipettes.move_to_xy_positions(150.0, {0: 250.0})
+    assert sent == []  # already at its ceiling, so it is not asked to move at all
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_stop_disc_move_takes_off_what_the_channel_carries():
+  """The firmware positions the tool bottom, so a stop-disc target is sent an overhang lower."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, **kwargs):
+      if isinstance(command, PrepCmd.PrepMoveZAbsolute):
+        sent.append({int(c.channel): round(c.z_position, 2) for c in command.channels})
+      return await send(command, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+
+    # Carrying nothing, the stop disc and the tool bottom are the same point.
+    await pipettes.move_stop_disc_to_z_positions({0: 150.0})
+    assert sent == [{2: 150.0, 1: 167.5}]
+
+    shaft = pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="tip"))  # 51.9 mm below the stop disc
+    sent.clear()
+    await pipettes.move_stop_disc_to_z_positions({0: 150.0})
+    assert sent == [{2: 98.1, 1: 167.5}]  # 150 - 51.9
+
+    sent.clear()
+    await pipettes.move_stop_disc_to_z_position(0, 140.0)
+    assert sent == [{2: 88.1, 1: 167.5}]  # the singular is the plural with one channel
+
+    # Every channel that does not exist is named, not just the first.
+    with pytest.raises(ValueError, match=r"channels must be between 0 and 1, are \[5, 7\]"):
+      await pipettes.move_stop_disc_to_z_positions({5: 100.0, 7: 100.0})
+    await p.stop()
+
+  _run(_t())

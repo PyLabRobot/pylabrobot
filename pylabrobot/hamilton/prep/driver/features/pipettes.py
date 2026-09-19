@@ -2032,6 +2032,56 @@ class Pipettes:
     """
     await self.move_tool_bottom_to_z_positions({channel: z}, speed=speed, acceleration=acceleration)
 
+  async def move_stop_disc_to_z_positions(
+    self,
+    zs: Dict[int, float],
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+  ) -> None:
+    """Move the stop disc of channels along Z together.
+
+    Args:
+      zs: target stop-disc z in mm, keyed by channel, 0-indexed from the back.
+      speed: speed in mm/s. Defaults to `default_z_speed`.
+      acceleration: Z drive acceleration in mm/s2 for this move, then restored. None leaves it.
+
+    Raises:
+      ValueError: If a channel does not exist or cannot reach its z, or `speed` or `acceleration` is
+        not above 0.
+    """
+    # The firmware positions the tool bottom, so what a channel carries comes off each height.
+    overhangs = await self.request_tip_overhangs()
+    out_of_range = sorted(channel for channel in zs if channel not in overhangs)
+    if out_of_range:
+      raise ValueError(
+        f"channels must be between 0 and {self.num_channels - 1}, are {out_of_range}"
+      )
+    targets = {}
+    for channel, z in zs.items():
+      overhang = overhangs[channel]
+      targets[channel] = z if overhang is None else z - overhang
+    await self.move_tool_bottom_to_z_positions(targets, speed=speed, acceleration=acceleration)
+
+  async def move_stop_disc_to_z_position(
+    self,
+    channel: int,
+    z: float,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+  ) -> None:
+    """Move the stop disc of one channel along Z.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      z: target stop-disc z in mm.
+      speed: speed in mm/s. Defaults to `default_z_speed`.
+      acceleration: Z drive acceleration in mm/s2 for this move, then restored. None leaves it.
+
+    Raises:
+      ValueError: As `move_stop_disc_to_z_positions`.
+    """
+    await self.move_stop_disc_to_z_positions({channel: z}, speed=speed, acceleration=acceleration)
+
   async def move_to_safe_z(self, channels: Optional[List[int]] = None) -> None:
     """Move the given channels' Z axes up to safe (traverse) height (cmd=28).
 
@@ -2184,7 +2234,7 @@ class Pipettes:
 
       # A floor, not a height: a channel standing above it travels where it stands, and only what
       # is below it is brought up. Sending the floor to every channel would drive the high ones down.
-      heights = {channel: max(traverse, standing[channel].z) for channel in moving}
+      heights = {channel: max(ceilings[channel], standing[channel].z) for channel in moving}
       await self._unchecked_fw_move_to_position(
         x,
         moving,
