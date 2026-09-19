@@ -23,15 +23,17 @@ logger = logging.getLogger(__name__)
 class XArmConfiguration:
   """How the arm is modelled.
 
-  Measured on the arm rather than read off the device: the Prep reports no size for it.
+  Measured on the arm rather than read off the device: the Prep reports no size for it. X and Z are
+  the model's own, which is the measured part; the back shuttle reaches left of that width and below
+  that height, as it does on the arm.
   """
 
-  size_x: float = 66.0
-  """How wide the arm is, in mm."""
+  size_x: float = 66.5
+  """How wide the arm is, in mm: from the body's left face to the right face of its cable duct."""
   size_y: float = 532.0
   """How deep the arm is, in mm. Its back is flush with the back of the device."""
-  size_z: float = 69.0
-  """How tall the arm is, in mm."""
+  size_z: float = 70.0
+  """How tall the arm is, in mm, from the underside of its body to its top."""
   ride_height: float = 248.5
   """How high the arm rides, in mm on the deck, measured to the underside of its body. Measured on
   the arm: what the channels report is how far they travel, not where the arm sits."""
