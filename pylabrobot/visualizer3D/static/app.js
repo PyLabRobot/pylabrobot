@@ -1276,6 +1276,10 @@ function buildOrigin() {
 // thousand of them read as grey haze. Its parent is still drawn, so nothing vanishes without
 // something in its place.
 const DETAIL_MIN_PX = 2;
+// And below this a model is not worth its geometry: the box it stood in for says the same thing
+// at a fraction of the cost, and one box is drawn with all the others in a single call. Between
+// the two a resource is still there, drawn as a box; below the smaller one it is not drawn at all.
+const MODEL_MIN_PX = 12;
 // Below this a rail number is a smudge rather than a number. Nothing is lost by not drawing it, and
 // at facility scale it is most of what the renderer is being asked to do.
 const LABEL_MIN_PX = 7;
@@ -1298,11 +1302,13 @@ function updateDetail() {
   // pixels across was still drawing its ninety-six tips, one draw call each. The rule that decides
   // whether a box is worth drawing decides this too - and a part that travels is exempt, because
   // what it is doing is the thing being watched.
+  const geometryOf = new Set();
   for (const root of meshRoots) {
     const index = root.userData.index;
     const [sx, sy] = sizeOf(modelOf(index));
-    const visible = travels(index) || Math.max(sx, sy) / perPixel >= DETAIL_MIN_PX;
+    const visible = travels(index) || Math.max(sx, sy) / perPixel >= MODEL_MIN_PX;
     if (root.visible !== visible) root.visible = visible;
+    if (visible) geometryOf.add(world.modelOf[index]);
   }
 
   const drawn = new Set();
@@ -1310,6 +1316,12 @@ function updateDetail() {
     const [sx, sy] = sizeOf(entry.model);
     const visible = Math.max(sx, sy) / perPixel >= DETAIL_MIN_PX;
     if (entry.mesh.visible !== visible) entry.mesh.visible = visible;
+    // The box stands in for the model again as soon as the model is too small to be worth
+    // drawing, and steps back out of the way when it is not.
+    if (entry.modelDrawn) {
+      const fills = !geometryOf.has(entry.modelIndex);
+      if (entry.mesh.material.visible !== fills) entry.mesh.material.visible = fills;
+    }
     for (const overlay of entry.overlays ?? []) {
       if (overlay.visible !== visible) overlay.visible = visible;
     }
