@@ -18,12 +18,12 @@ from pylabrobot.hamilton.star.device import (
 from pylabrobot.hamilton.star.driver.configuration import (
   DeviceConfiguration,
   read_configuration,
-  to_jsonable,
 )
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck
 from pylabrobot.resources.hamilton.hamilton_decks import STAR_NUM_TRACKS, STARLET_NUM_TRACKS
+from pylabrobot.serializer import serialize
 
 # The device this package ships a recording of, read through the one reader there is: tests need a
 # device to start from, and this is the one they stand in for.
@@ -44,10 +44,11 @@ def declaring(**parts: object) -> str:
   """
   tree = json.loads(pathlib.Path(RECORDING_STAR).read_text())
   for name, part in parts.items():
+    assert dataclasses.is_dataclass(part) and not isinstance(part, type)
     if name == "device":
-      tree["device"] = to_jsonable(part)
+      tree["device"] = serialize(dataclasses.asdict(part))
     else:
-      tree["arms"]["left"][name] = to_jsonable(part)
+      tree["arms"]["left"][name] = serialize(dataclasses.asdict(part))
   written = pathlib.Path(tempfile.mkdtemp()) / "declared.json"
   written.write_text(json.dumps(tree))
   return str(written)
