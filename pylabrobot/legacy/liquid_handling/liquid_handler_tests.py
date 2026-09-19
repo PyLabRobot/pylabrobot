@@ -1117,22 +1117,22 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         ops=[
           Drop(
             self.deck.get_trash_area(),
-            tip=tips[0],
+            tip=tips[3],
             offset=offsets[0],
           ),
           Drop(
             self.deck.get_trash_area(),
-            tip=tips[1],
+            tip=tips[2],
             offset=offsets[1],
           ),
           Drop(
             self.deck.get_trash_area(),
-            tip=tips[2],
+            tip=tips[1],
             offset=offsets[2],
           ),
           Drop(
             self.deck.get_trash_area(),
-            tip=tips[3],
+            tip=tips[0],
             offset=offsets[3],
           ),
         ],

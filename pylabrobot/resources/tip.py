@@ -87,5 +87,33 @@ class Tip(HeadTool):
       "maximal_volume": self.maximal_volume,
     }
 
+  # A tip compares by what it is, not by which one it is, as it did before it was a resource.
+  # `kind()` answers the same question for every head tool; this stays until the two are settled.
+
+  def __hash__(self):
+    return hash(
+      (
+        self.has_filter,
+        self.total_tip_length,
+        self.nominal_volume,
+        self.maximal_volume,
+        self.fitting_depth,
+        self._collar_height,
+      )
+    )
+
+  def __eq__(self, other: object) -> bool:
+    if not isinstance(other, Tip):
+      return NotImplemented
+
+    return (
+      self.has_filter == other.has_filter
+      and self.total_tip_length == other.total_tip_length
+      and self.nominal_volume == other.nominal_volume
+      and self.maximal_volume == other.maximal_volume
+      and self.fitting_depth == other.fitting_depth
+      and self._collar_height == other._collar_height
+    )
+
 
 TipCreator = Callable[[str], Tip]
