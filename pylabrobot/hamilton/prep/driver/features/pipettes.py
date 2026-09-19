@@ -2394,7 +2394,7 @@ class Pipettes:
       allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
-      Surface x position in mm, rounded to 0.1 mm, or None when nothing was detected.
+      Surface x position in mm, rounded to 0.01 mm, or None when nothing was detected.
 
     Raises:
       ValueError: If an argument is out of range or `search_end_position` is not ahead of the arm.
@@ -2457,7 +2457,7 @@ class Pipettes:
     )
     surface = detected_x - diameter / 2 if left else detected_x + diameter / 2
 
-    return round(surface, 1)
+    return round(surface, 2)
 
   async def _search_x_using_clld(
     self,
@@ -2571,7 +2571,7 @@ class Pipettes:
       allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
-      Surface y position in mm, rounded to 0.1 mm, or None when nothing was detected.
+      Surface y position in mm, rounded to 0.01 mm, or None when nothing was detected.
 
     Raises:
       ValueError: If an argument is out of range, or `search_end_position` is not ahead of the
@@ -2697,7 +2697,7 @@ class Pipettes:
     )
     await self.move_to_y_positions({channel_idx: back_off}, speed=speed)
     surface = detected_y - diameter / 2 if forward else detected_y + diameter / 2
-    return round(surface, 1)
+    return round(surface, 2)
 
   async def _probe_one_edge(
     self,
@@ -2903,7 +2903,7 @@ class Pipettes:
       allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
-      Detected height in mm, or None.
+      Detected height in mm, rounded to 0.01 mm, or None.
 
     Raises:
       ValueError: If an argument is out of range.
@@ -2995,7 +2995,7 @@ class Pipettes:
     )
     if result is None or not result.detected:
       return None
-    return float(result.position)
+    return round(float(result.position), 2)
 
   async def _unchecked_fw_z_axis_seek_obstacle(
     self,
@@ -3071,7 +3071,7 @@ class Pipettes:
         drive as it is (125 on PRPAA1087). Below 40 the drive cannot lift the channel again: 30 stalled it.
 
     Returns:
-      Height where the channel met the obstacle in mm, or None.
+      Height where the channel met the obstacle in mm, rounded to 0.01 mm, or None.
 
     Raises:
       ValueError: If an argument is out of range.
@@ -3168,7 +3168,7 @@ class Pipettes:
         surface,
       )
       return None
-    return surface
+    return round(surface, 2)
 
   # -- shutdown / serialization --------------------------------------------------------------------
 
