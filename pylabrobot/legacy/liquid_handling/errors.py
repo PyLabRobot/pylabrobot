@@ -1,6 +1,6 @@
 """Errors raised by the legacy liquid handler.
 
-`ChannelsDoNotFitError` moved to `pylabrobot.utils.liquid_handling.errors`: it is raised by the
+`ChannelsDoNotFitError` moved to `pylabrobot.lib.liquid_handling.errors`: it is raised by the
 channel planning every multi-channel pipette device shares. It is still forwarded from here, as the
 very same class, but warns.
 """
@@ -9,7 +9,7 @@ import warnings
 from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:  # the name this module forwards, for type checkers and IDEs
-  from pylabrobot.utils.liquid_handling.errors import ChannelsDoNotFitError  # noqa: F401
+  from pylabrobot.lib.liquid_handling.errors import ChannelsDoNotFitError  # noqa: F401
 
 
 class NoChannelError(Exception):
@@ -42,12 +42,12 @@ def __getattr__(name: str) -> Any:
   if name == "ChannelsDoNotFitError":
     warnings.warn(
       "pylabrobot.legacy.liquid_handling.errors.ChannelsDoNotFitError is deprecated and will be "
-      "removed in the future. It moved to pylabrobot.utils.liquid_handling.errors; update your "
-      "import to `from pylabrobot.utils.liquid_handling.errors import ChannelsDoNotFitError`.",
+      "removed in the future. It moved to pylabrobot.lib.liquid_handling.errors; update your "
+      "import to `from pylabrobot.lib.liquid_handling.errors import ChannelsDoNotFitError`.",
       DeprecationWarning,
       stacklevel=2,
     )
-    from pylabrobot.utils.liquid_handling import errors
+    from pylabrobot.lib.liquid_handling import errors
 
     return errors.ChannelsDoNotFitError
   raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

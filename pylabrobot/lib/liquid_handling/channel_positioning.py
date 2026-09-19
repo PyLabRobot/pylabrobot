@@ -3,10 +3,10 @@ import math
 import warnings
 from typing import Dict, List, Optional, Tuple
 
+from pylabrobot.lib.liquid_handling.errors import ChannelsDoNotFitError
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
-from pylabrobot.utils.liquid_handling.errors import ChannelsDoNotFitError
 
 logger = logging.getLogger(__name__)
 

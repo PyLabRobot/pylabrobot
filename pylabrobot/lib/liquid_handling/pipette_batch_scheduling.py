@@ -14,6 +14,8 @@ Hence the enumerate-then-partition pipeline rather than 2-ary graph coloring. In
 for n <= ~16 channels; planning is O(2^n * n^2) in the worst case, with the branch-and-
 bound partition solver typically fast on the structured instances this module sees.
 
+Example::
+
     batches = plan_batches(
       use_channels=[0, 1, 2, 5, 6, 7],
       containers=[w0, w1, w2, w5, w6, w7],
@@ -31,12 +33,12 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Collection, Dict, FrozenSet, List, Optional, Tuple
 
+from pylabrobot.lib.liquid_handling.channel_positioning import (
+  compute_nonconsecutive_channel_offsets,
+)
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
-from pylabrobot.utils.liquid_handling.channel_positioning import (
-  compute_nonconsecutive_channel_offsets,
-)
 
 logger = logging.getLogger(__name__)
 
