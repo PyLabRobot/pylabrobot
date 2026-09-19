@@ -9,7 +9,7 @@ from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import STARDeck
-from pylabrobot.utils.liquid_handling.pipette_batch_scheduling import plan_batches
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 
 
 async def channels(width: float, positions: List[float]) -> Tuple[Pipettes, List[str]]:
@@ -170,7 +170,7 @@ class TestPositionInZDirection(unittest.IsolatedAsyncioTestCase):
 
 
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
-  """A v1 device plans with `pylabrobot.utils.liquid_handling`, from its own minimum channel spacing."""
+  """A v1 device plans with `pylabrobot.lib.liquid_handling`, from its own minimum channel spacing."""
 
   async def test_one_column_is_one_move_and_two_columns_are_two(self):
     """Four wells down one column fit one X/Y move at the channels' spacing; spread across columns they do not."""

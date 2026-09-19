@@ -98,20 +98,10 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
 from pylabrobot.legacy.liquid_handling.backends.hamilton.common import fill_in_defaults
-from pylabrobot.legacy.liquid_handling.channel_positioning import (
-  get_tight_single_resource_liquid_op_offsets,
-  get_wide_single_resource_liquid_op_offsets,
-)
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
-)
-from pylabrobot.legacy.liquid_handling.pipette_batch_scheduling import (
-  ChannelBatch,
-  log_batches,
-  plan_batches,
-  validate_channel_selections,
 )
 from pylabrobot.legacy.liquid_handling.standard import (
   Drop,
@@ -130,6 +120,16 @@ from pylabrobot.legacy.liquid_handling.standard import (
   ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,
+)
+from pylabrobot.lib.liquid_handling.channel_positioning import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
+)
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import (
+  ChannelBatch,
+  log_batches,
+  plan_batches,
+  validate_channel_selections,
 )
 from pylabrobot.resources import (
   Carrier,

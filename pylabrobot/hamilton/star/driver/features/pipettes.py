@@ -17,7 +17,7 @@ from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMounting
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipSpot, tip_origin
-from pylabrobot.utils.liquid_handling.channel_positioning import compute_channel_offsets
+from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.features.x_arm import XArm

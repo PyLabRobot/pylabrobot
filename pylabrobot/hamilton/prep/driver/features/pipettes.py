@@ -68,7 +68,7 @@ from pylabrobot.resources.resource_state import (
 from pylabrobot.resources.tip_rack import TipSpot, tip_origin
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well
-from pylabrobot.utils.liquid_handling.pipette_batch_scheduling import plan_batches
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 
 from .. import prep_commands as PrepCmd
 from ..prep_commands import PIPETTOR_OBJECT_PATH

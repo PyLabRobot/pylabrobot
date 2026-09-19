@@ -33,7 +33,7 @@ from pylabrobot.resources.hamilton import (
 from pylabrobot.resources.hamilton.core_gripper_tools import hamilton_core_gripper_tool
 from pylabrobot.resources.tip_tracking import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
-from pylabrobot.utils.liquid_handling.pipette_batch_scheduling import plan_batches
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 
 
 def _run(coro):
@@ -1454,7 +1454,7 @@ def test_default_y_windows_are_not_applied_on_a_device_with_an_8_channel_head():
 
 
 def test_batches_are_planned_from_the_channels_minimum_spacing():
-  """A v1 device plans with `pylabrobot.utils.liquid_handling`: its minimum channel spacing is the planner's input.
+  """A v1 device plans with `pylabrobot.lib.liquid_handling`: its minimum channel spacing is the planner's input.
 
   Two wells one row apart in the same column fit one X/Y move at the Prep's spacing; two wells in different
   columns need two.
