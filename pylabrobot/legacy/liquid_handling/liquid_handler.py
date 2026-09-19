@@ -26,9 +26,6 @@ from typing import (
 )
 
 from pylabrobot.events import ResourceReference, evented_operation, resource_reference
-from pylabrobot.legacy.liquid_handling.channel_positioning import (
-  compute_channel_offsets,
-)
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.strictness import (
   Strictness,
@@ -37,6 +34,9 @@ from pylabrobot.legacy.liquid_handling.strictness import (
 from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading import PlateReader
 from pylabrobot.legacy.tilting.tilter import Tilter
+from pylabrobot.lib.liquid_handling.channel_positioning import (
+  compute_channel_offsets,
+)
 from pylabrobot.resources import (
   Container,
   Coordinate,
