@@ -19,7 +19,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_raised_core_i,
   hamilton_96_tiprack_raised_core_ii,
   hamilton_mfx_carrier_L5_base,
-  hamilton_mfx_module_tiprackholder_ntr,
+  hamilton_mfx_resourceholder_ntr,
   hamilton_mfx_tiprackholder_standard,
   hamilton_tip_10uL,
   hamilton_tip_carrier_L5_ntr_a00,
@@ -81,7 +81,7 @@ class StandardTipCarrierTests(unittest.TestCase):
     """The module is 134 mm across in a 135 mm slot, which centres it, so it is modelled as the
     slot: a rack centred on the module is then centred on the slot."""
     deck = STARDeck()
-    module = hamilton_mfx_module_tiprackholder_ntr("module")
+    module = hamilton_mfx_resourceholder_ntr("module")
     deck.assign_child_resource(
       hamilton_mfx_carrier_L5_base("mfx_carrier", modules={0: module}), track=30
     )
@@ -152,7 +152,7 @@ class NestedTipCarrierTests(unittest.TestCase):
     ):
       with self.subTest(rack=rack_fn.__name__):
         deck = STARDeck()
-        module = hamilton_mfx_module_tiprackholder_ntr("module")
+        module = hamilton_mfx_resourceholder_ntr("module")
         carrier = hamilton_mfx_carrier_L5_base("carrier", modules={3: module})
         module.assign_child_resource(rack := rack_fn("rack"))
         deck.assign_child_resource(carrier, location=Coordinate(932.5, 63, 100))
@@ -222,7 +222,7 @@ class NestedTipCarrierTests(unittest.TestCase):
   def test_a_stack_of_nested_tip_racks_on_both_holders(self):
     # Each rack in a nest stands its 16 mm stacking height above the one below, so the top rack's
     # A1 is at 184.0 + 16 per rack below it. Derived: no capture has picked up from a nest.
-    module = hamilton_mfx_module_tiprackholder_ntr("module")
+    module = hamilton_mfx_resourceholder_ntr("module")
     mfx = hamilton_mfx_carrier_L5_base("mfx", modules={3: module})
     ntr_carrier = hamilton_tip_carrier_L5_ntr_a00("ntr_carrier")
     for holder, carrier, location, racks, a1 in [

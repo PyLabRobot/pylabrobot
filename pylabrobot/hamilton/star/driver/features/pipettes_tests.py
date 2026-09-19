@@ -575,7 +575,7 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
       hamilton_96_tiprack_50uL_NTR,
       hamilton_96_tiprack_300uL_NTR,
       hamilton_mfx_carrier_L5_base,
-      hamilton_mfx_module_tiprackholder_ntr,
+      hamilton_mfx_resourceholder_ntr,
       hamilton_tip_carrier_L5_ntr_a00,
     )
 
@@ -597,7 +597,7 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
           pipettes, _, sent = await channels_over_a_rack()
           deck = pipettes._driver.deck
           assert deck is not None
-          module = hamilton_mfx_module_tiprackholder_ntr("ntr4_module")
+          module = hamilton_mfx_resourceholder_ntr("ntr4_module")
           deck.assign_child_resource(
             hamilton_mfx_carrier_L5_base("mfx_carrier", modules={3: module}),
             location=Coordinate(932.5, 63, 100),

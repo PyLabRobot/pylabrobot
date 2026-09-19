@@ -41,7 +41,7 @@ from pylabrobot.resources import (
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
   hamilton_mfx_carrier_L5_base,
-  hamilton_mfx_module_tiprackholder_ntr,
+  hamilton_mfx_resourceholder_ntr,
   hamilton_mfx_tiprackholder_standard,
   hamilton_tip_carrier_L5_ntr_a00,
   no_tip_tracking,
@@ -2422,7 +2422,7 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
     self.backend._core_parked = True
     self.backend._iswap_parked = True
     self.deck = STARDeck()
-    self.module = hamilton_mfx_module_tiprackholder_ntr("ntr4_module")
+    self.module = hamilton_mfx_resourceholder_ntr("ntr4_module")
     self.deck.assign_child_resource(
       hamilton_mfx_carrier_L5_base("mfx_carrier", modules={3: self.module}),
       location=Coordinate(932.5, 63, 100),

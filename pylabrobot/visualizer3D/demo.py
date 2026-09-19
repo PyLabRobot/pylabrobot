@@ -31,7 +31,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
   hamilton_mfx_carrier_L5_base,
-  hamilton_mfx_module_tiprackholder_ntr,
+  hamilton_mfx_resourceholder_ntr,
   hamilton_mfx_tiprackholder_standard,
   hamilton_tip_carrier_L5_ntr_a00,
 )
@@ -92,9 +92,9 @@ def build_facility() -> Facility:
   # The same nested racks on MFX NTR4 modules, and two MFX tip modules holding framed racks: the
   # last six tracks, up to the waste block.
   modules = {
-    0: hamilton_mfx_module_tiprackholder_ntr(name="mfx_ntr4_0"),
-    1: hamilton_mfx_module_tiprackholder_ntr(name="mfx_ntr4_1"),
-    2: hamilton_mfx_module_tiprackholder_ntr(name="mfx_ntr4_2"),
+    0: hamilton_mfx_resourceholder_ntr(name="mfx_ntr4_0"),
+    1: hamilton_mfx_resourceholder_ntr(name="mfx_ntr4_1"),
+    2: hamilton_mfx_resourceholder_ntr(name="mfx_ntr4_2"),
     3: hamilton_mfx_tiprackholder_standard(name="mfx_tiprack_holder_3"),
     4: hamilton_mfx_tiprackholder_standard(name="mfx_tiprack_holder_4"),
   }
