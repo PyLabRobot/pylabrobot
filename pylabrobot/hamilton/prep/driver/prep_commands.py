@@ -3212,6 +3212,40 @@ class PrepGetTipDefinitionHeld(PrepStatusRequest["PrepGetTipDefinitionHeld.Respo
 
 
 @dataclass(frozen=True)
+class ChannelDispenserVolumeParameters:
+  default_values: PaddedBool
+  channel: WEnum
+  volume: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool).add(self.channel, WEnum).add(self.volume, F32)
+    )
+
+
+@dataclass(frozen=True)
+class PrepGetCurrentDispenserVolume(PrepStatusRequest["PrepGetCurrentDispenserVolume.Response"]):
+  """GetCurrentDispenserVolume (cmd=24, dest=Pipettor): each channel's dispensing drive, in uL."""
+
+  command_id = 24
+  firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
+
+  @dataclass(frozen=True)
+  class Response:
+    volumes: Annotated[list[ChannelDispenserVolumeParameters], StructArray()]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetCurrentDispenserVolume.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
 class PrepMoveYAbsolute(PrepCommand[None]):
   """Move channels along Y (cmd=10, dest=ChannelXYZCoordinator)."""
 

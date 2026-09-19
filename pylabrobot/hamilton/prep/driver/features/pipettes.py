@@ -762,7 +762,7 @@ class Pipettes:
   class LLDMode(enum.Enum):
     """Liquid level detection mode.
 
-    Same numbering as STARBackend.LLDMode for cross-backend compatibility.
+    Same numbering as the STAR's LLDMode, so the two read the same.
     CAPACITIVE (value=1) is named GAMMA on the STAR — CAPACITIVE is the correct term.
     The Prep firmware uses separate command variants for LLD vs no-LLD, so all
     channels in a single aspirate/dispense call must use the same mode category
@@ -1548,6 +1548,41 @@ class Pipettes:
       )
     else:
       await self._driver.send_command(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+
+  # -- dispensing drives ---------------------------------------------------------------------------
+
+  async def dispensing_drives_request_uL_positions(self) -> Dict[int, float]:
+    """Read where every channel's dispensing drive stands, in uL.
+
+    Returns:
+      Each channel's dispensing drive position in uL, keyed by channel, 0-indexed from the back.
+    """
+    response = await self._driver.send_command(PrepCmd.PrepGetCurrentDispenserVolume())
+    return {
+      channel: entry.volume
+      for entry in response.volumes
+      if (channel := self.channel_of(entry.channel)) is not None
+    }
+
+  async def dispensing_drive_request_uL_position(self, channel: int) -> float:
+    """Read where one channel's dispensing drive stands, in uL.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      Its dispensing drive position in uL.
+
+    Raises:
+      ValueError: If the channel does not exist.
+      RuntimeError: If the device answered nothing for it.
+    """
+    if not 0 <= channel < self.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
+    volumes = await self.dispensing_drives_request_uL_positions()
+    if channel not in volumes:
+      raise RuntimeError(f"the device reported no dispensing drive volume for channel {channel}")
+    return volumes[channel]
 
   # -- x position ----------------------------------------------------------------------------------
 
@@ -3198,7 +3233,7 @@ class Pipettes:
       length=tip0.total_tip_length - tip0.fitting_depth,
       tip_type=PrepCmd.TipTypes.StandardVolume,
       has_filter=tip0.has_filter,
-      is_needle=False,
+      is_needle=tip0.maximal_volume == 0,  # a needle is closed: it holds no liquid
       is_tool=False,
     )
 
@@ -3423,7 +3458,7 @@ class Pipettes:
       if all_trash:
         if self.deck is None:
           raise ValueError(
-            "Cannot drop tips to waste: backend has no deck (assign a deck before drop_tips)."
+            "Cannot drop tips to waste: the driver has no deck (assign one before drop_tips)."
           )
         waste_name = _CHANNEL_TO_WASTE_NAME.get(ch, "waste_mph")
         waste = getattr(self.deck, "waste_positions", {}).get(waste_name)
