@@ -22,7 +22,9 @@ from typing import Any, Optional
 import websockets
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton import hamilton_96_tiprack_50uL_NTR
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.visualizer3D.facility import Facility
 from pylabrobot.visualizer3D.server import Viewer3D
 
@@ -150,6 +152,44 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
       # The rider never moved in the model: it follows because its parent's world transform was
       # worked out again. Forgetting that is what left a 96-head standing still while its arm swept.
       self.assertEqual(await self.world_x(browser, "rider"), 720)
+
+  async def test_a_tree_that_changes_shape_keeps_the_models_it_had(self):
+    """A scene arrives whole whenever the tree changes shape. Rebuilding the geometry for it took
+    every model off screen and put the boxes back until the files had been fetched and parsed
+    again, which is a flash of boxes on every pick-up, drop and move."""
+    holder = ResourceHolder(name="holder", size_x=150, size_y=100, size_z=10)
+    self.facility.assign_child_resource(holder, location=Coordinate(700, 500, 0))
+    rack = hamilton_96_tiprack_50uL_NTR(name="rack")
+    holder.assign_child_resource(rack)
+
+    # Its own devtools port: the browser the test before it drove may still be letting go of one.
+    async with Browser(CDP_PORT + 1) as browser:
+      await browser.open(f"http://127.0.0.1:{self.viewer.fs_port}/")
+      drawn = int(await browser.settle("window.plrViewer?.models().length"))
+
+      # Watch while the tree changes shape under it: the rack goes somewhere else, which is a
+      # reparent, which sends a whole scene.
+      await browser.evaluate(
+        "window.__seen = [];"
+        "window.__watch = setInterval(() => window.__seen.push(window.plrViewer.models().length), 20);"
+        "true"
+      )
+      # Off one and onto the other in the same breath, which is what moving a resource is - and
+      # what the server coalesces into one scene.
+      holder.unassign_child_resource(rack)
+      self.carrier.assign_child_resource(rack, location=Coordinate(10, 10, 50))
+      # The carrier stands at x 100, so the rack on it lands at 110.
+      await browser.settle("window.plrViewer.worldOf('rack')[0] === 110")
+      await asyncio.sleep(1.0)
+      seen = await browser.evaluate("clearInterval(window.__watch); window.__seen")
+
+      self.assertGreater(len(seen), 10, "nothing was sampled while the scene was rebuilt")
+      self.assertEqual(min(seen), drawn, f"the models went away and came back: {seen}")
+      self.assertEqual(
+        int(await browser.evaluate("window.plrViewer.models().length")),
+        drawn,
+        "the models did not survive the rebuild",
+      )
 
 
 if __name__ == "__main__":

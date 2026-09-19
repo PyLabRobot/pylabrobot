@@ -388,27 +388,86 @@ dracoLoader.setDecoderConfig({ type: "wasm" });
 gltfLoader.setDRACOLoader(dracoLoader);
 let meshRoots = [];
 
-function clearDeclaredMeshes() {
-  for (const root of meshRoots) view.remove(root);
-  meshRoots = [];
+// What identifies a drawn model across rebuilds: the resource it belongs to and the file it was
+// drawn from. A scene arrives whole whenever the tree changes shape, and most of what it describes
+// is what was already on screen.
+function meshKey(index) {
+  return `${world.names[index]}\n${modelOf(index).mesh?.url}`;
+}
+
+// A model that is on screen puts its box away. Recorded on the entry rather than only switched
+// off, because everything that decides what is drawn runs again on every view change, and each of
+// those would otherwise put the box back over the model it was standing in for.
+function modelIsDrawn(modelIndex) {
+  const entry = meshes.find((m) => m.modelIndex === modelIndex);
+  if (!entry) return;
+  entry.modelDrawn = true;
+  entry.mesh.material.visible = false;
+  for (const i of entry.instances) drawnFromFile.add(i);
+  // A part that travels is drawn twice over: once as the open frame `buildArms` extrudes for it,
+  // and now as itself. The frame and the stroke around it were standing in for geometry nobody
+  // had, so they go the way the box does. The reference line stays: it marks where the drive
+  // reports this part to be, which is not a fact about the shape and is the one thing the geometry
+  // cannot say for itself.
+  for (const arm of arms) {
+    if (!entry.instances.includes(arm.index)) continue;
+    arm.frame.visible = false;
+    arm.outline.visible = false;
+  }
+  // The view is not going to change just because a file finished loading, so the border has to be
+  // faded here as well as in the rule that keeps it faded.
+  setRenderMode(planView ?? false);
+}
+
+// Put a model that is already on screen where the new scene says it is. Its geometry, its
+// materials and its joints are the same objects; what changed is which instance it belongs to and
+// the transform that places it.
+function replaceInScene(root, index) {
+  root.userData.index = index;
+  root.matrix.copy(world.matrices[index]);
+  root.matrixWorldNeedsUpdate = true;
+  root.traverse((o) => {
+    if (o.isMesh) o.userData.declaredBy = index;
+  });
+  applyJoints(index);
 }
 
 // glTF says metres and Y-up; a resource that means something else says so in its declaration.
 const MESH_UNITS = { mm: 1, cm: 10, m: 1000 };
 
 function buildDeclaredMeshes() {
-  clearDeclaredMeshes();
+  // What is on screen already, by the resource and file it was drawn for. A tree that changes
+  // shape - a tip picked up, a plate moved - sends a whole scene, and rebuilding the geometry for
+  // it would take every model off screen and put the boxes back until the files had been fetched
+  // and parsed again. That flash is what this is here to stop.
+  const onScreen = new Map();
+  for (const root of meshRoots) onScreen.set(root.userData.key, root);
+  meshRoots = [];
 
   // One load per distinct model, however many instances stand on it. A file of several hundred
   // thousand triangles is expensive to fetch and parse, and cloning shares both geometry and
   // materials, so the cost is paid once no matter how many arms are in the facility.
   const byModel = new Map();
+  const kept = new Set();
   for (let index = 0; index < world.names.length; index++) {
     const declared = modelOf(index).mesh;
     if (!declared?.url) continue;
-    if (!byModel.has(world.modelOf[index])) byModel.set(world.modelOf[index], []);
-    byModel.get(world.modelOf[index]).push(index);
+    const modelIndex = world.modelOf[index];
+    const root = onScreen.get(meshKey(index));
+    if (root !== undefined) {
+      onScreen.delete(meshKey(index));
+      replaceInScene(root, index);
+      meshRoots.push(root);
+      kept.add(modelIndex);
+      continue;
+    }
+    if (!byModel.has(modelIndex)) byModel.set(modelIndex, []);
+    byModel.get(modelIndex).push(index);
   }
+  // Whatever is left belongs to a resource this scene does not have, or to one that now declares a
+  // different file.
+  for (const root of onScreen.values()) view.remove(root);
+  for (const modelIndex of kept) modelIsDrawn(modelIndex);
 
   for (const [modelIndex, instances] of byModel) {
     const declared = world.models[modelIndex].mesh;
@@ -480,35 +539,14 @@ function buildDeclaredMeshes() {
           root.userData.joints = joints;
           root.userData.scale = scale;
           root.userData.index = index;
+          root.userData.key = meshKey(index);
 
           view.add(root);
           meshRoots.push(root);
           applyJoints(index);
         });
 
-        // The box that stood in for it is not needed once the real geometry is here. Recorded on
-        // the entry rather than only switched off, because everything that decides what is drawn
-        // runs again on every view change, and each of those would otherwise put the box back over
-        // the model it was standing in for.
-        const entry = meshes.find((m) => m.modelIndex === modelIndex);
-        if (entry) {
-          entry.modelDrawn = true;
-          entry.mesh.material.visible = false;
-          for (const i of entry.instances) drawnFromFile.add(i);
-          // A part that travels is drawn twice over: once as the open frame `buildArms` extrudes
-          // for it, and now as itself. The frame and the stroke around it were standing in for
-          // geometry nobody had, so they go the way the box does. The reference line stays: it
-          // marks where the drive reports this part to be, which is not a fact about the shape
-          // and is the one thing the geometry cannot say for itself.
-          for (const arm of arms) {
-            if (!entry.instances.includes(arm.index)) continue;
-            arm.frame.visible = false;
-            arm.outline.visible = false;
-          }
-          // The view is not going to change just because a file finished loading, so the border
-          // has to be faded here as well as in the rule that keeps it faded.
-          setRenderMode(planView ?? false);
-        }
+        modelIsDrawn(modelIndex);
       },
       undefined,
       (error) => console.warn(`could not load the mesh declared by ${names[0]}`, error),
