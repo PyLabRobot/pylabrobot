@@ -94,6 +94,10 @@ export function structureEdgeStyle(depth) {
 export const LIQUID = 0xf39c12;
 export const VESSEL_EMPTY = 0xffffff; // nothing in it reads as white, as it does on a plan
 export const VESSEL_RIM = 0x5c666e;
+// Looking straight down, a tip is a circle and the only thing worth reading off it is whether the
+// spot it stands in is still filled. The existing visualizer answers that with a green disc, and
+// this is that visualizer's own green, so a deck of racks reads the same in both.
+export const TIP_PLAN_FILL = 0x40cda1;
 // How thick a container's wall is drawn, in mm, measured OUTWARDS from the cavity. A resource's box
 // is what it holds, so its material stands outside that box - nothing is drawn within the extent
 // the resource declares. Nobody reports a wall thickness, so this is a drawing convention rather

@@ -59,6 +59,7 @@ import {
   SHELL_OPACITY,
   SPACE_OPACITY,
   structureEdgeStyle,
+  TIP_PLAN_FILL,
   TIP_RACK_OPACITY,
   TREE_HIDDEN,
   VESSEL_EMPTY,
@@ -1330,8 +1331,10 @@ function updateDetail() {
         entry.mesh.material.needsUpdate = true;
       }
     }
+    entry.detailVisible = visible;
     for (const overlay of entry.overlays ?? []) {
-      if (overlay.visible !== visible) overlay.visible = visible;
+      const wanted = visible && (!overlay.userData.planOnly || planView === true);
+      if (overlay.visible !== wanted) overlay.visible = wanted;
     }
     if (visible) drawn.add(entry.modelIndex);
   }
@@ -1495,6 +1498,9 @@ function setRenderMode(plan) {
     entry.mesh.renderOrder = layer;
     for (const overlay of entry.overlays ?? []) {
       if (overlay.userData.lit) overlay.material = overlay.userData.lit;
+      // A mode change is not a zoom, so the rule that culls small things may not run again before
+      // the next frame: a plan-only overlay is switched here too, and by the same two tests.
+      if (overlay.userData.planOnly) overlay.visible = plan && entry.detailVisible !== false;
       // From above a vessel has to show its own contents, and depth would stop it: a tip hangs
       // below the spot that holds it, and liquid sits below the cavity it fills. So in a plan they
       // are painted in their own resource's layer, which is as far as they can reach. From any
@@ -2180,6 +2186,7 @@ function buildMeshes() {
     if (model.category === "tip" && model.has_filter && Number.isFinite(model.collar_height)) {
       overlays.push(buildFilterDiscs(modelIndex, instances, model, sx, sy, sz));
     }
+    if (model.category === "tip") overlays.push(buildPlanDiscs(instances, sx, sy, sz));
     const entry = meshes[meshes.length - 1];
     entry.overlays = overlays;
     entry.isVessel = isVessel;
@@ -2214,6 +2221,43 @@ function buildFilterDiscs(modelIndex, instances, model, sx, sy, sz) {
   disc.userData.flat = flatVariant(disc.material);
   view.add(disc);
   filterDiscsOf.set(modelIndex, { mesh: disc, placed, z, cx: sx / 2, cy: sy / 2 });
+  return disc;
+}
+
+/**
+ * The green disc that says a spot is filled, lying across the top of every tip of one model.
+ *
+ * From directly above a tip is a circle, and the only thing worth reading off it is that something
+ * is standing there - which is what the existing visualizer says with a green circle. Said with a
+ * disc rather than by colouring the tip, it is unlit, so the colour lands on the value asked for
+ * rather than on whatever the lighting makes of it; and it is one instanced mesh however many tips
+ * there are, so a rack of them costs one draw. A tip is only a resource while it is in its spot, so
+ * there is one of these for every tip still standing and none for a spot that has been used.
+ */
+function buildPlanDiscs(instances, sx, sy, sz) {
+  const disc = new THREE.InstancedMesh(
+    DISC,
+    // Flagged transparent although it is fully opaque, for the reason the cavity above is: three
+    // draws every transparent object after every opaque one whatever the render order says, and
+    // the spot's own rim is in that pass. Left opaque, this was painted first and the rim it is
+    // meant to fill then covered it, which is a green disc nobody ever saw.
+    new THREE.MeshBasicMaterial({ color: TIP_PLAN_FILL, transparent: true, opacity: 1 }),
+    instances.length,
+  );
+  disc.frustumCulled = false;
+  // A plan view alone. The mode change and the rule that culls small things share the switch.
+  disc.userData.planOnly = true;
+  disc.visible = false;
+  instances.forEach((globalIndex, slot) => {
+    // Level with the top of the tip, which is the first thing the eye meets looking down at it.
+    const at = [sx, sy, 1, sx / 2, sy / 2, sz];
+    placeInstance(disc, slot, world.matrices[globalIndex], ...at);
+    remember(globalIndex, disc, slot, at);
+  });
+  disc.instanceMatrix.needsUpdate = true;
+  disc.userData.lit = disc.material;
+  disc.userData.flat = flatVariant(disc.material);
+  view.add(disc);
   return disc;
 }
 
