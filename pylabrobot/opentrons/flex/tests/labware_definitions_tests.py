@@ -41,7 +41,7 @@ from pylabrobot.resources import (
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import hamilton_1_trough_60mL_Vb
-from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_200ul
+from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_200ul, set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 from pylabrobot.resources.rotation import Rotation
@@ -661,10 +661,10 @@ class TestUnbuildableLabwareGuard(unittest.TestCase):
       gripper = flex.gripper
       assert gripper is not None
       asyncio.run(gripper.move_labware(rack, "C2"))
-      self.assertIn(rack.name, flex._stub_labware)
+      self.assertIn(id(rack), flex._stub_labware)
 
       asyncio.run(flex.labware_moved_off_deck(rack))
-      self.assertNotIn(rack.name, flex._stub_labware)
+      self.assertNotIn(id(rack), flex._stub_labware)
     finally:
       asyncio.run(flex.stop())
 
@@ -737,7 +737,7 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       flex.deck.assign_child_at_slot(plate, "C1")
       asyncio.run(flex._ensure_labware_loaded(plate))
       asyncio.run(flex.labware_moved_off_deck(plate))
-      self.assertNotIn(plate.name, flex._defined_labware)
+      self.assertIsNone(flex._require_labware().definition(plate))
 
       flex.deck.assign_child_at_slot(plate, "D2")
       asyncio.run(flex._ensure_labware_loaded(plate))
@@ -760,9 +760,10 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       asyncio.run(flex._ensure_labware_loaded(plate))
       self.assertEqual(len(transport.labware_definitions), 1)
 
+      asyncio.run(flex.disconnect())
       asyncio.run(flex.setup())  # new run
-      self.assertEqual(flex._loaded_labware, {})
-      self.assertEqual(flex._defined_labware, {})
+      self.assertFalse(flex._require_labware().is_loaded(plate))
+      self.assertIsNone(flex._require_labware().definition(plate))
 
       asyncio.run(flex._ensure_labware_loaded(plate))
       self.assertEqual(len(transport.labware_definitions), 2)
@@ -781,13 +782,13 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
 
       with self.assertRaises(RuntimeError):
         asyncio.run(flex._ensure_labware_loaded(plate))
-      self.assertNotIn(plate.name, flex._defined_labware)
-      self.assertNotIn(plate.name, flex._loaded_labware)
+      self.assertIsNone(flex._require_labware().definition(plate))
+      self.assertFalse(flex._require_labware().is_loaded(plate))
 
       asyncio.run(flex._ensure_labware_loaded(plate))
       self.assertEqual(len(transport.labware_definitions), 1)
       self.assertEqual(len(_load_labware_commands(transport)), 1)
-      self.assertIn(plate.name, flex._loaded_labware)
+      self.assertTrue(flex._require_labware().is_loaded(plate))
     finally:
       asyncio.run(flex.stop())
 
@@ -802,14 +803,14 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
 
       with self.assertRaises(RuntimeError):
         asyncio.run(flex._ensure_labware_loaded(plate))
-      self.assertNotIn(plate.name, flex._loaded_labware)
+      self.assertFalse(flex._require_labware().is_loaded(plate))
 
       asyncio.run(flex._ensure_labware_loaded(plate))
       # The upload succeeded the first time, so the retry re-loads without a
       # duplicate upload.
       self.assertEqual(len(transport.labware_definitions), 1)
       self.assertEqual(len(_load_labware_commands(transport)), 2)
-      self.assertIn(plate.name, flex._loaded_labware)
+      self.assertTrue(flex._require_labware().is_loaded(plate))
     finally:
       asyncio.run(flex.stop())
 
@@ -840,7 +841,7 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
     asyncio.run(flex.setup())
     try:
       plate = _plate()
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(plate, "C1")
       asyncio.run(flex._ensure_labware_loaded(plate))
 
@@ -861,13 +862,13 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
     asyncio.run(flex.setup())
     try:
       rack = _tip_rack()
-      rack.ot_load_name = "opentrons_flex_96_tiprack_50ul"  # type: ignore[attr-defined]
+      set_opentrons_labware(rack, "opentrons_flex_96_tiprack_50ul")
       flex.deck.assign_child_at_slot(rack, "C1")
       asyncio.run(flex._ensure_labware_loaded(rack))
 
       pinned = _plate(name="pinned plate")
-      pinned.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
-      pinned.ot_version = 4  # type: ignore[attr-defined]
+      set_opentrons_labware(pinned, "corning_96_wellplate_360ul_flat")
+      pinned.metadata["opentrons_labware"]["version"] = 4
       flex.deck.assign_child_at_slot(pinned, "C2")
       asyncio.run(flex._ensure_labware_loaded(pinned))
 

@@ -1,10 +1,15 @@
 import unittest
 from unittest.mock import AsyncMock
 
-from pylabrobot.opentrons.labware import LabwareRegistry, build_tip_rack_definition
+from pylabrobot.opentrons.labware import (
+  LabwareRegistry,
+  build_tip_rack_definition,
+  declared_labware_identity,
+)
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import LabwareIdentity
-from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_20ul
+from pylabrobot.resources import Resource
+from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_20ul, set_opentrons_labware
 
 
 class LabwareRegistryTests(unittest.IsolatedAsyncioTestCase):
@@ -13,6 +18,14 @@ class LabwareRegistryTests(unittest.IsolatedAsyncioTestCase):
     self.registry = LabwareRegistry(self.protocol_run)
     self.rack = opentrons_96_filtertiprack_20ul("rack")
     self.identity = LabwareIdentity("opentrons", "opentrons_96_filtertiprack_20ul", 1)
+
+  async def test_confirmed_move_updates_binding_and_removal_forgets_it(self):
+    await self.registry.load(self.rack, "1", self.identity)
+    self.registry.record_location(self.rack, "5")
+    await self.registry.load(self.rack, "5", self.identity)
+    self.protocol_run.load_labware.assert_awaited_once()
+    self.registry.remove(self.rack)
+    self.assertFalse(self.registry.is_loaded(self.rack))
 
   async def test_lookup_does_not_load_or_allocate_missing_labware(self) -> None:
     self.assertFalse(self.registry.is_loaded(self.rack))
@@ -57,6 +70,12 @@ class LabwareRegistryTests(unittest.IsolatedAsyncioTestCase):
 
 
 class LabwareConversionTests(unittest.TestCase):
+  def test_declared_identity_survives_resource_serialization(self):
+    resource = Resource("custom", 10, 10, 10)
+    set_opentrons_labware(resource, "my_plate", namespace="my_lab", version=2)
+    restored = Resource.deserialize(resource.serialize())
+    self.assertEqual(declared_labware_identity(restored), LabwareIdentity("my_lab", "my_plate", 2))
+
   def test_definition_building_does_not_change_the_resource_or_its_tips(self) -> None:
     rack = opentrons_96_filtertiprack_20ul("rack")
     tip = rack.get_item("A1").get_tip()

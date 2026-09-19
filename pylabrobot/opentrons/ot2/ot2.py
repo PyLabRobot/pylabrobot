@@ -1,6 +1,5 @@
 """OT-2 lifecycle, deck ownership, and physical pipette discovery."""
 
-import asyncio
 import math
 import uuid
 from typing import List, Optional, Tuple, Union
@@ -10,8 +9,10 @@ from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
 from pylabrobot.opentrons.labware import (
   LabwareRegistry,
   build_tip_rack_definition,
+  declared_labware_identity,
   official_tip_rack_identity,
 )
+from pylabrobot.opentrons.operations import OperationLock
 from pylabrobot.opentrons.ot2.pipette import (
   _PIPETTE_SPECS,
   OT2_8ChannelPipette,
@@ -79,7 +80,7 @@ class OT2:
     self._labware: Optional[LabwareRegistry] = None
     self.left_pipette: Optional[Union[OT2SingleChannelPipette, OT2_8ChannelPipette]] = None
     self.right_pipette: Optional[Union[OT2SingleChannelPipette, OT2_8ChannelPipette]] = None
-    self._operation_lock = asyncio.Lock()
+    self._operation_lock = OperationLock()
 
   @property
   def pipettes(self) -> List[Union[OT2SingleChannelPipette, OT2_8ChannelPipette]]:
@@ -210,7 +211,7 @@ class OT2:
     if registry.is_loaded(tip_rack):
       identity = registry.get(tip_rack).identity
     else:
-      identity = official_tip_rack_identity(tip_rack)
+      identity = declared_labware_identity(tip_rack) or official_tip_rack_identity(tip_rack)
       if identity is None:
         identity = LabwareIdentity("pylabrobot", uuid.uuid4().hex, 1)
         definition = build_tip_rack_definition(tip_rack, tip, identity.load_name)

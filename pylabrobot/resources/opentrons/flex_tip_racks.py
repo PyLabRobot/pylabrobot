@@ -4,18 +4,19 @@ Geometry here is **nominal**, not authoritative: a standard 96-position SBS
 grid (127.76 x 85.48 mm footprint, 9 mm pitch) used only so PLR has named
 ``TipSpot``/``Tip`` objects to hang tip- and volume-tracking state on. The
 *real* labware definition lives on the Flex robot itself — when a rack is
-loaded, PLR sends the robot its Opentrons load name (``ot_load_name``) and
+loaded, PLR sends the robot its Opentrons load name (stored in resource metadata) and
 the robot resolves the authoritative geometry. Do not treat the coordinates
 built here as measured/precise; they exist for addressing and tracking only.
 
 Each factory function returns a PLR TipRack with:
 - Standard TipSpots with TipTrackers for tip tracking and management
 - Tips with VolumeTrackers for liquid volume tracking
-- ``ot_load_name`` attribute for loading into the Flex robot's labware system
+- Opentrons identity metadata for loading into the Flex robot's labware system
 """
 
 from __future__ import annotations
 
+from pylabrobot.resources.opentrons.labware import set_opentrons_labware
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -48,8 +49,8 @@ def _make_flex_tip_rack(
 ) -> TipRack:
   """Create a PLR TipRack with a nominal 96-position grid.
 
-  Returns a standard PLR TipRack with an extra ``ot_load_name``
-  attribute identifying the Opentrons labware definition for the Flex robot.
+  Returns a standard PLR TipRack with explicit Opentrons identity
+  metadata identifying the Opentrons labware definition for the Flex robot.
   The grid geometry is nominal (see module docstring) — the Flex robot owns
   the authoritative definition, loaded by ``ot_load_name``.
   """
@@ -86,7 +87,7 @@ def _make_flex_tip_rack(
 
   # Flex-specific: Opentrons labware load name for JIT loading. The robot
   # resolves the real geometry from this name; PLR's grid above is nominal.
-  rack.ot_load_name = ot_load_name  # type: ignore[attr-defined]
+  set_opentrons_labware(rack, ot_load_name)
 
   return rack
 

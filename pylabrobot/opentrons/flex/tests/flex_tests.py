@@ -6,6 +6,8 @@ composes the matching head onto the right attribute (``left``/``right``/
 ``head96``).
 """
 
+from pylabrobot.opentrons.flex.tests.liquid_test_utils import pipetting_location
+
 import asyncio
 import unittest
 from typing import List, Tuple
@@ -14,9 +16,12 @@ from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
+from pylabrobot.opentrons.labware import declared_labware_identity
+from pylabrobot.opentrons.types import LabwareIdentity
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import TooLittleLiquidError
+from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
@@ -338,7 +343,7 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -351,9 +356,9 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate(plate, column=2, volume=50))
 
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
+      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A3")
+      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
 
       column_2 = set(wells[16:24])
       for well in wells:
@@ -388,16 +393,19 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       asyncio.run(head.pick_up_tips(rack, column=0))
+      for tip in head.get_mounted_tips():
+        if tip is not None:
+          tip.tracker.set_volume(30)
       asyncio.run(head.dispense(plate, column=5, volume=30))
 
-      dispense_cmds = [c for c in transport.commands if c["commandType"] == "dispense"]
+      dispense_cmds = [c for c in transport.commands if c["commandType"] == "dispenseInPlace"]
       self.assertEqual(len(dispense_cmds), 1)
-      self.assertEqual(dispense_cmds[0]["params"]["wellName"], "A6")
+      self.assertNotIn("wellName", dispense_cmds[0]["params"])
 
       wells = plate.get_all_items()
       column_5 = set(wells[40:48])
@@ -454,7 +462,7 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       trash = flex.deck.get_trash_area()
@@ -462,6 +470,9 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
       asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
       self.assertIsNotNone(head.get_mounted_tips()[7])
 
+      for tip in head.get_mounted_tips():
+        if tip is not None:
+          tip.tracker.set_volume(20)
       asyncio.run(head.dispense_single(plate, well="B3", volume=20))
       target = plate.get_item("B3")
       self.assertAlmostEqual(target.tracker.volume, 20.0)
@@ -489,14 +500,7 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
 
 
 class TestFlexHead8PrepareToAspirate(unittest.TestCase):
-  """Priming a well-addressed aspirate is the robot's job, never the driver's.
-
-  The robot moves to the well TOP, primes there in open air and then descends,
-  which is the only way to prime safely: the plunger travels several uL worth,
-  so priming with the tip already in the liquid would draw an unmeasured slug
-  of the well into the tip. A prepareToAspirate the driver sends first sets the
-  robot's ready flag and so skips that safe handling. `prepare_to_aspirate` is
-  the caller's escape hatch for the in-place ops, which name no well."""
+  """The driver primes at traversal height before entering the well."""
 
   def setUp(self):
     set_tip_tracking(True)
@@ -510,14 +514,14 @@ class TestFlexHead8PrepareToAspirate(unittest.TestCase):
     flex, transport, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     for well in plate.get_all_items():
       well.tracker.set_volume(100.0)
     return flex, transport, head, rack, plate
 
-  def test_no_prepare_is_sent_around_a_transfer_loop(self):
+  def test_prepare_is_sent_before_each_aspiration(self):
     flex, transport, head, rack, plate = self._bench()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))
@@ -526,14 +530,14 @@ class TestFlexHead8PrepareToAspirate(unittest.TestCase):
       asyncio.run(head.aspirate(plate, column=1, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      self.assertEqual(cmd_types.count("aspirate"), 2)
-      self.assertNotIn("prepareToAspirate", cmd_types)
+      self.assertEqual(cmd_types.count("aspirateInPlace"), 2)
+      self.assertIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
   def test_a_well_addressed_aspirate_still_works_with_the_plunger_pushed_past_bottom(self):
     """The whole reason the driver can stay out of it: after a blow-out the
-    robot primes the aspirate itself rather than refusing it."""
+    driver primes above the target before the in-place aspiration."""
     flex, transport, head, rack, plate = self._bench()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))
@@ -541,8 +545,8 @@ class TestFlexHead8PrepareToAspirate(unittest.TestCase):
       asyncio.run(head.aspirate(plate, column=0, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      self.assertEqual(cmd_types.count("aspirate"), 1)
-      self.assertNotIn("prepareToAspirate", cmd_types)
+      self.assertEqual(cmd_types.count("aspirateInPlace"), 1)
+      self.assertIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
@@ -595,7 +599,7 @@ class TestFlexHead8PickupOrigin(unittest.TestCase):
       try:
         rack = flex_96_tiprack_50ul(name="rack")
         plate = cor_96_wellplate_360uL_Fb(name="plate")
-        plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+        set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
         flex.deck.assign_child_at_slot(rack, "C1")
         flex.deck.assign_child_at_slot(plate, "C2")
         for well in plate.get_all_items():
@@ -604,8 +608,8 @@ class TestFlexHead8PickupOrigin(unittest.TestCase):
         asyncio.run(head.pick_up_tips(rack, column=0))
         asyncio.run(head.aspirate(plate, column=0, volume=10, offset=Coordinate(x=0, y=0, z=1)))
 
-        aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
-        self.assertEqual(aspirate_cmds[0]["params"]["wellLocation"]["origin"], "bottom")
+        [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
+        self.assertEqual(pipetting_location(transport, plate.get_item("A1"))["offset"]["z"], 2.0)
       finally:
         asyncio.run(flex.stop())
     finally:
@@ -630,7 +634,7 @@ class TestFlexHead8TransactionalTrackers(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -640,7 +644,7 @@ class TestFlexHead8TransactionalTrackers(unittest.TestCase):
       with self.assertRaises(TooLittleLiquidError):
         asyncio.run(head.aspirate(plate, column=0, volume=50))
 
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
+      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
       self.assertEqual(len(aspirate_cmds), 0, "no aspirate wire command may be sent")
 
       for well in plate.get_all_items()[0:8]:
@@ -742,16 +746,19 @@ class TestFlexHead8SingleOpFlowRateAndNoneSkip(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
+      for tip in head.get_mounted_tips():
+        if tip is not None:
+          tip.tracker.set_volume(20)
       asyncio.run(head.dispense_single(plate, well="A1", volume=20, flow_rate=99.0))
       asyncio.run(head.aspirate_single(plate, well="A1", volume=20, flow_rate=88.0))
 
-      dispense_cmd = next(c for c in transport.commands if c["commandType"] == "dispense")
-      aspirate_cmd = next(c for c in transport.commands if c["commandType"] == "aspirate")
+      dispense_cmd = next(c for c in transport.commands if c["commandType"] == "dispenseInPlace")
+      aspirate_cmd = next(c for c in transport.commands if c["commandType"] == "aspirateInPlace")
       self.assertEqual(dispense_cmd["params"]["flowRate"], 99.0)
       self.assertEqual(aspirate_cmd["params"]["flowRate"], 88.0)
     finally:
@@ -762,7 +769,7 @@ class TestFlexHead8SingleOpFlowRateAndNoneSkip(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -973,7 +980,7 @@ class TestFlexHead1Ops(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -991,10 +998,10 @@ class TestFlexHead1Ops(unittest.TestCase):
       asyncio.run(head.aspirate(target_well, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      aspirate_indices = [i for i, t in enumerate(cmd_types) if t == "aspirate"]
+      aspirate_indices = [i for i, t in enumerate(cmd_types) if t == "aspirateInPlace"]
       self.assertEqual(len(aspirate_indices), 1)
-      self.assertNotIn("prepareToAspirate", cmd_types, "the robot primes for a named well")
-      self.assertEqual(transport.commands[aspirate_indices[0]]["params"]["wellName"], "B3")
+      self.assertIn("prepareToAspirate", cmd_types, "the driver primes before descent")
+      self.assertNotIn("wellName", transport.commands[aspirate_indices[0]]["params"])
 
       # Exactly 1 Well tracked -- every other well on the plate is untouched.
       for well in plate.get_all_items():
@@ -1111,7 +1118,7 @@ class TestFlexHead96Ops(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack96")
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       for well in plate.get_all_items():
@@ -1121,10 +1128,10 @@ class TestFlexHead96Ops(unittest.TestCase):
       asyncio.run(head.aspirate(plate, volume=50))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
+      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A1")
-      self.assertNotIn("prepareToAspirate", cmd_types, "the robot primes for a named well")
+      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
+      self.assertIn("prepareToAspirate", cmd_types, "the driver primes before descent")
 
       wells = plate.get_all_items()
       self.assertEqual(len(wells), 96)
@@ -1138,16 +1145,19 @@ class TestFlexHead96Ops(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack96")
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       asyncio.run(head.pick_up_tips(rack))
+      for tip in head.get_mounted_tips():
+        if tip is not None:
+          tip.tracker.set_volume(30)
       asyncio.run(head.dispense(plate, volume=30))
 
-      dispense_cmds = [c for c in transport.commands if c["commandType"] == "dispense"]
+      dispense_cmds = [c for c in transport.commands if c["commandType"] == "dispenseInPlace"]
       self.assertEqual(len(dispense_cmds), 1)
-      self.assertEqual(dispense_cmds[0]["params"]["wellName"], "A1")
+      self.assertNotIn("wellName", dispense_cmds[0]["params"])
       for well in plate.get_all_items():
         self.assertAlmostEqual(well.tracker.volume, 30.0, msg=well.name)
 
@@ -1224,48 +1234,50 @@ class DeclaredIdentityTests(unittest.TestCase):
 
   def test_a_declared_load_name_is_what_the_resource_loads_by(self):
     plate = cor_96_wellplate_360uL_Fb(name="anything at all")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
-    load_name, version = Flex._ot_declared_identity(plate)
-    self.assertEqual(load_name, "corning_96_wellplate_360ul_flat")
-    self.assertEqual(version, 1)
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
+    identity = declared_labware_identity(plate)
+    assert identity is not None
+    self.assertEqual(identity.load_name, "corning_96_wellplate_360ul_flat")
+    self.assertEqual(identity.version, 1)
 
   def test_the_revision_is_the_resource_s_to_declare_too(self):
     # Revision 1 is the only one every robot holds, so a caller who wants a
     # later one (for its gripper grip height) has to say so.
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
-    plate.ot_version = 2  # type: ignore[attr-defined]
-    self.assertEqual(Flex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2))
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
+    plate.metadata["opentrons_labware"]["version"] = 2
+    self.assertEqual(
+      declared_labware_identity(plate),
+      LabwareIdentity("opentrons", "corning_96_wellplate_360ul_flat", 2),
+    )
 
   def test_a_declared_name_is_passed_through_rather_than_checked_against_a_list(self):
     # The robot resolves against its own shipped definitions AND a lab's own
     # uploads, so any list here would be wrong for somebody's robot.
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "a_lab_uploaded_this_one_themselves"  # type: ignore[attr-defined]
-    load_name, version = Flex._ot_declared_identity(plate)
-    self.assertEqual(load_name, "a_lab_uploaded_this_one_themselves")
-    self.assertEqual(version, 1)
+    set_opentrons_labware(plate, "a_lab_uploaded_this_one_themselves")
+    identity = declared_labware_identity(plate)
+    assert identity is not None
+    self.assertEqual(identity.load_name, "a_lab_uploaded_this_one_themselves")
+    self.assertEqual(identity.version, 1)
 
   def test_a_resource_declaring_nothing_asks_for_a_synthesized_definition(self):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    with self.assertRaises(OpentronsError):
-      Flex._ot_declared_identity(plate)
+    self.assertIsNone(declared_labware_identity(plate))
 
   def test_the_model_never_decides_the_load_name(self):
     # A PLR model is not an Opentrons load name, and sending one that merely
     # looks like a load name would load the wrong labware. Declaring is the rule.
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     plate.model = "corning_96_wellplate_360ul_flat"
-    with self.assertRaises(OpentronsError):
-      Flex._ot_declared_identity(plate)
+    self.assertIsNone(declared_labware_identity(plate))
 
   def test_the_instance_name_never_decides_the_load_name(self):
     # It is a user-chosen label, so naming a plate after a tip rack must not
     # load a tip rack.
     plate = cor_96_wellplate_360uL_Fb(name="flex_96_tiprack_50ul")
     plate.model = None
-    with self.assertRaises(OpentronsError):
-      Flex._ot_declared_identity(plate)
+    self.assertIsNone(declared_labware_identity(plate))
 
 
 if __name__ == "__main__":

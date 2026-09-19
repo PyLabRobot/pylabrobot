@@ -10,15 +10,12 @@ device module does not have to reach into the optional gripper module (or the
 heads) for them.
 """
 
-from typing import Dict, FrozenSet, List, Optional, Tuple
+from typing import FrozenSet, Optional
 
 from pylabrobot.opentrons.flex.errors import OpentronsError
-
-# ChatterboxHTTP's offline /health version: deliberately not a version string,
-# so a caller gating on robot software can tell offline from any real robot.
-# The offline simulator imports this sentinel from here rather than the reverse,
-# keeping the product module free of any dependency on the simulator.
-OFFLINE_API_VERSION = "dry-run"
+from pylabrobot.opentrons.run import slot_wire_location  # noqa: F401
+from pylabrobot.opentrons.version import OFFLINE_API_VERSION, version_at_least
+from pylabrobot.opentrons.version import version_tuple as _version_tuple
 
 # Shared by the heads and the gripper so the notice reads identically
 # everywhere; each module logs it through its own logger.
@@ -53,41 +50,6 @@ ROBOT_AXES: FrozenSet[str] = frozenset(
 _ROBOT_COMMANDS_MIN_VERSION = "8.2.0"
 
 
-def slot_wire_location(slot: str) -> Dict[str, str]:
-  """The ``loadLabware``/``moveLabware`` location for a Flex slot name."""
-  if slot in STAGING_SLOT_NAMES:
-    return {"addressableAreaName": slot}
-  return {"slotName": slot}
-
-
-def _version_tuple(version: str) -> Tuple[int, ...]:
-  """Parse a dotted robot-software version into comparable integers.
-
-  Comparing these as strings puts "10.0.0" below "7.1.0", so the version gate
-  compares numerically. Each dotted segment contributes its leading integer
-  ("0-beta" -> 0); a segment with no leading digit stops the parse, and short
-  results pad with zeros so "8.2" compares equal to "8.2.0".
-
-  Raises:
-    ValueError: If the version has no leading numeric segment at all.
-  """
-  parts: List[int] = []
-  for part in version.split("."):
-    digits = ""
-    for char in part:
-      if not char.isdigit():
-        break
-      digits += char
-    if digits == "":
-      break
-    parts.append(int(digits))
-  if not parts:
-    raise ValueError(f"unparseable version string: {version!r}")
-  while len(parts) < 3:
-    parts.append(0)
-  return tuple(parts)
-
-
 def _require_robot_commands(command: str, api_version: Optional[str]) -> None:
   """Raise unless the robot's software supports the robot/* command family.
 
@@ -118,9 +80,9 @@ def _require_robot_commands(command: str, api_version: Optional[str]) -> None:
       f"{command} is gated on robot software {_ROBOT_COMMANDS_MIN_VERSION} or newer, but this "
       f"robot reports the unrecognized version {api_version!r}.",
     ) from None
-  if version == (0, 0, 0) and "dev" in api_version:
+  if not any(version) and "dev" in api_version:
     return
-  if version < _version_tuple(_ROBOT_COMMANDS_MIN_VERSION):
+  if not version_at_least(api_version, _ROBOT_COMMANDS_MIN_VERSION):
     raise OpentronsError(
       "Robot software too old",
       f"{command} requires Opentrons robot software {_ROBOT_COMMANDS_MIN_VERSION} or newer, "

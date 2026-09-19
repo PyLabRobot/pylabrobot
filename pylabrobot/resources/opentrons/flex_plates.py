@@ -4,7 +4,7 @@ Geometry here is **nominal**, not authoritative: a standard 96-position SBS
 grid (127.76 x 85.48 mm footprint, 9 mm pitch) used only so PLR has named
 ``Well`` objects to hang volume-tracking state on. The *real* labware
 definition lives on the Flex robot itself — when a plate is loaded, PLR sends
-the robot its Opentrons load name (``ot_load_name``) and the robot resolves
+the robot its Opentrons load name (stored in resource metadata) and the robot resolves
 the authoritative geometry. Do not treat the coordinates built here as
 measured/precise; they exist for addressing and tracking only.
 
@@ -16,6 +16,7 @@ is a convenience wrapper for the plate used in the hello-world notebook.
 
 from __future__ import annotations
 
+from pylabrobot.resources.opentrons.labware import set_opentrons_labware
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -52,13 +53,13 @@ def flex_plate(
     load_name: the Opentrons labware load name (e.g.
       ``"corning_96_wellplate_360ul_flat"``) sent to the Flex robot when this
       plate is loaded — the robot resolves the authoritative geometry from
-      this name. Stored on the returned ``Plate`` as ``ot_load_name``.
+      this name. Stored on the returned ``Plate`` in ``metadata["opentrons_labware"]``.
     name: the PLR resource name for this plate instance.
     num_wells: number of wells; only the standard 96-well SBS grid (8 rows x
       12 columns) is supported today.
     well_volume: nominal per-well max volume (uL), used for volume tracking.
     version: which revision of that definition to load. Stored as
-      ``ot_version``. Revision 1 is the one every definition has, and the only
+      the identity metadata. Revision 1 is the one every definition has, and the only
       one safe to assume, but for much of Opentrons' catalogue it predates the
       Flex and states no gripper grip height, so the robot grips at the plate's
       mid-height. A later revision usually fixes that and leaves the well
@@ -67,7 +68,7 @@ def flex_plate(
 
   Returns:
     A PLR ``Plate`` with a nominal 96-well grid (see module docstring) and
-    ``ot_load_name`` set to ``load_name``.
+    its Opentrons identity stored in metadata.
   """
   if num_wells != 96:
     raise ValueError(
@@ -99,8 +100,7 @@ def flex_plate(
 
   # Flex-specific: Opentrons labware load name for JIT loading. The robot
   # resolves the real geometry from this name; PLR's grid above is nominal.
-  plate.ot_load_name = load_name  # type: ignore[attr-defined]
-  plate.ot_version = version  # type: ignore[attr-defined]
+  set_opentrons_labware(plate, load_name, version=version)
 
   return plate
 

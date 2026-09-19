@@ -24,6 +24,7 @@ from pylabrobot.opentrons.flex.flex_wire import (
   _require_robot_commands,
   slot_wire_location,
 )
+from pylabrobot.opentrons.operations import OperationLock, instrument_operation
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:
@@ -68,8 +69,21 @@ class FlexGripper:
 
   def __init__(self, flex: "Flex", gripper_model: str) -> None:
     self.flex = flex
+    self._run = flex._require_run()
     self.gripper_model = gripper_model
     self._untested_hardware_warned: Set[str] = set()
+
+  @property
+  def _operation_lock(self) -> OperationLock:
+    """Share the device lock across heads, gripper, and lifecycle methods."""
+    return self.flex._operation_lock
+
+  def _require_active(self) -> None:
+    """Refuse an instrument retained from an earlier control session."""
+    if self.flex._require_run() is not self._run:
+      raise RuntimeError(
+        "This instrument belongs to an earlier Flex run; use the current instrument"
+      )
 
   def _warn_untested_hardware(self, op: str) -> None:
     """Log a one-time notice when an op has no real-hardware verification.
@@ -82,6 +96,7 @@ class FlexGripper:
     self._untested_hardware_warned.add(op)
     logger.warning(UNTESTED_HARDWARE_WARNING, type(self).__name__, op)
 
+  @instrument_operation
   async def move_labware(
     self,
     resource: Resource,
@@ -104,7 +119,7 @@ class FlexGripper:
         grab (mm), baked into the grip height of a custom definition
         pylabrobot uploads. It therefore applies ONLY to labware pylabrobot
         uploads a definition for: a resource resolving to an official
-        Opentrons load name (``ot_load_name`` set, a standard tip-rack name,
+        Opentrons load name (identity metadata set, a standard tip-rack name,
         or a name starting with ``opentrons_``) loads the catalogue definition
         instead, whose grip height is the vendor's to state -- and when that
         definition states none, the robot grips at the labware's mid-height
@@ -120,7 +135,7 @@ class FlexGripper:
     """
     self._warn_untested_hardware("move_labware")
     deck = self.flex.deck
-    name = getattr(resource, "name", str(resource))
+    name = resource.name
 
     from_slot = deck.get_slot(resource)
     if from_slot is None:
@@ -135,7 +150,7 @@ class FlexGripper:
     except ValueError as e:
       raise OpentronsError("Invalid destination slot", str(e)) from e
     if occupant is not None:
-      occupant_name = getattr(occupant, "name", str(occupant))
+      occupant_name = occupant.name
       raise OpentronsError(
         "Destination slot occupied",
         f"Slot {to_slot} is already occupied by '{occupant_name}'.",
@@ -156,8 +171,10 @@ class FlexGripper:
 
     deck.unassign_child_at_slot(from_slot)
     deck.assign_child_at_slot(resource, to_slot)
+    self.flex._require_labware().record_location(resource, to_slot)
     logger.info("Gripper moved '%s' from %s to %s", name, from_slot, to_slot)
 
+  @instrument_operation
   async def ungrip(self) -> None:
     """Open the gripper jaw (homing it) to release any held labware.
 
@@ -170,6 +187,7 @@ class FlexGripper:
 
   # --- robot/*: direct gripper motion and jaw control ---
 
+  @instrument_operation
   async def move_to(self, x: float, y: float, z: float, speed: Optional[float] = None) -> None:
     """Move the gripper to an absolute deck-frame position, in mm.
 
@@ -189,6 +207,7 @@ class FlexGripper:
       params["speed"] = speed
     await self.flex._execute_command("robot/moveTo", params)
 
+  @instrument_operation
   async def grip(self, force: Optional[float] = None) -> None:
     """Close the gripper jaw around whatever sits between its paddles.
 
@@ -214,6 +233,7 @@ class FlexGripper:
       params["force"] = force
     await self.flex._execute_command("robot/closeGripperJaw", params)
 
+  @instrument_operation
   async def open_jaw(self) -> None:
     """Open the gripper jaw -- the robot opens by HOMING the jaw to fully open.
 

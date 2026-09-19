@@ -432,6 +432,8 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
 
   def test_an_op_outside_the_gripper_s_verified_set_still_warns(self):
     flex, _transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    self.addCleanup(lambda: asyncio.run(flex.stop()))
     gripper = FlexGripper(flex, gripper_model="gripperV1")
 
     with self.assertLogs("pylabrobot.opentrons.flex.flex_gripper", level="WARNING") as logged:
@@ -440,32 +442,33 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     self.assertIn("an_op_added_later", logged.output[0])
 
   def test_each_unverified_head_op_warns_not_just_the_first(self):
-    # A run touching several unverified ops has to name them all: one flag per
-    # instance made a whole run's worth of unverified ops look like a single op.
+    """Unverified operations warn once each, including after verified operations."""
     flex, head = self._flex_head8()
     try:
       with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING") as log_ctx:
-        asyncio.run(head.position())
-        asyncio.run(head.move_relative("z", -1.0))
-        asyncio.run(head.position())  # repeat stays quiet
+        head._warn_untested_hardware("another_op_added_later")
+        head._warn_untested_hardware("an_op_added_later")
+        head._warn_untested_hardware("another_op_added_later")
       self.assertEqual(len(log_ctx.output), 2)
-      self.assertTrue(any("FlexHead8.position" in msg for msg in log_ctx.output))
-      self.assertTrue(any("FlexHead8.move_relative" in msg for msg in log_ctx.output))
+      self.assertTrue(any("FlexHead8.another_op_added_later" in msg for msg in log_ctx.output))
+      self.assertTrue(any("FlexHead8.an_op_added_later" in msg for msg in log_ctx.output))
       self.assertTrue(any("not yet verified" in msg.lower() for msg in log_ctx.output))
     finally:
       asyncio.run(flex.stop())
 
-  def test_base_motion_ops_warn_on_a_head_that_never_ran_them(self):
-    """A base-class op warns unless THIS head's verified set names it.
-
-    The bench drives the motion verbs on the left mount's single channel only,
-    so they stay unverified on the 8-channel head even though the p50 ran them.
-    """
+  def test_head8_verified_motion_and_priming_do_not_warn(self):
+    """Hardware-tested motion and priming no longer emit the unverified notice."""
     flex, head = self._flex_head8()
     try:
-      with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING") as log_ctx:
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "D1")
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      with self.assertNoLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
         asyncio.run(head.position())
-      self.assertTrue(any("FlexHead8.position" in msg for msg in log_ctx.output))
+        asyncio.run(head.move_to(x=100, y=100, z=109))
+        asyncio.run(head.move_relative("z", 1))
+        asyncio.run(head.prepare_to_aspirate())
+        asyncio.run(head.move_to_addressable_area("movableTrashA3", stay_at_max_height=True))
     finally:
       asyncio.run(flex.stop())
 

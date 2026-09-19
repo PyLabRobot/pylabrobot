@@ -25,6 +25,7 @@ from pylabrobot.resources import (
   set_tip_tracking,
   set_volume_tracking,
 )
+from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
@@ -39,7 +40,7 @@ def _make_trough(name: str = "trough") -> Container:
     material_z_thickness=1.0,
     max_volume=195000.0,
   )
-  trough.ot_load_name = "nest_1_reservoir_195ml"  # type: ignore[attr-defined]
+  set_opentrons_labware(trough, "nest_1_reservoir_195ml")
   return trough
 
 
@@ -54,7 +55,7 @@ def _flex_head8() -> Tuple[Flex, ChatterboxHTTP, FlexHead8]:
 
 def _plate_on(flex: Flex, slot: str = "C2"):
   plate = cor_96_wellplate_360uL_Fb(name="plate")
-  plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+  set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
   flex.deck.assign_child_at_slot(plate, slot)
   return plate
 
@@ -95,9 +96,9 @@ class TestUnifiedAspirateColumn(unittest.TestCase):
 
       asyncio.run(head.aspirate(plate.column(2), volume=50))
 
-      aspirate_cmds = _commands_of(transport, "aspirate")
+      aspirate_cmds = _commands_of(transport, "aspirateInPlace")
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A3")
+      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
 
       # No configureNozzleLayout may be emitted by the aspirate itself: the
       # engine refuses a reconfiguration while tips are attached.
@@ -141,9 +142,9 @@ class TestUnifiedAspirateSingleWell(unittest.TestCase):
 
       asyncio.run(head.aspirate(target, volume=20))
 
-      aspirate_cmds = _commands_of(transport, "aspirate")
+      aspirate_cmds = _commands_of(transport, "aspirateInPlace")
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "B3")
+      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
 
       new_cmds = [c["commandType"] for c in transport.commands[commands_before:]]
       self.assertNotIn("configureNozzleLayout", new_cmds)
@@ -183,9 +184,9 @@ class TestUnifiedAspirateContainer(unittest.TestCase):
 
       asyncio.run(head.aspirate(trough, volume=10))
 
-      aspirate_cmds = _commands_of(transport, "aspirate")
+      aspirate_cmds = _commands_of(transport, "aspirateInPlace")
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A1")
+      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
 
       new_cmds = [c["commandType"] for c in transport.commands[commands_before:]]
       self.assertNotIn("configureNozzleLayout", new_cmds)
@@ -240,9 +241,9 @@ class TestUnifiedUseChannelsValidation(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate(plate.column(2), volume=20, use_channels=list(range(8))))
 
-      aspirate_cmds = _commands_of(transport, "aspirate")
+      aspirate_cmds = _commands_of(transport, "aspirateInPlace")
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A3")
+      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
     finally:
       asyncio.run(flex.stop())
 
@@ -380,7 +381,9 @@ class TestSingleNozzleLiquidClearance(unittest.TestCase):
       with self.assertRaises((ValueError, OpentronsError)):
         asyncio.run(head.aspirate(plate.get_item("A1"), volume=20))
 
-      self.assertEqual(len(_commands_of(transport, "aspirate")), 0, "no aspirate may be sent")
+      self.assertEqual(
+        len(_commands_of(transport, "aspirateInPlace")), 0, "no aspirate may be sent"
+      )
     finally:
       asyncio.run(flex.stop())
 
@@ -395,7 +398,7 @@ class TestSingleNozzleLiquidClearance(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack.get_item("A1"), use_channels=[7]))
       asyncio.run(head.aspirate(plate.get_item("A1"), volume=20))
 
-      self.assertEqual(len(_commands_of(transport, "aspirate")), 1)
+      self.assertEqual(len(_commands_of(transport, "aspirateInPlace")), 1)
     finally:
       asyncio.run(flex.stop())
 

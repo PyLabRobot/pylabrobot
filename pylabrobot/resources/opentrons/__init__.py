@@ -1,3 +1,5 @@
+from pylabrobot.resources.opentrons.labware import set_opentrons_labware
+
 from .deck import OTDeck
 from .flex_deck import FlexDeck
 from .flex_plates import corning_96_wellplate_360ul_flat, flex_plate

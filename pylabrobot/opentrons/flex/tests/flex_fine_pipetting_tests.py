@@ -21,6 +21,8 @@ no well and move no tracker; the two tip-presence commands
 a mismatch); ``configure_for_volume``; and the ``unsafe_*`` recovery pair.
 """
 
+from pylabrobot.opentrons.flex.tests.liquid_test_utils import pipetting_location
+
 import asyncio
 import unittest
 from typing import Any, Dict, Optional
@@ -38,6 +40,7 @@ from pylabrobot.resources import (
   set_volume_tracking,
 )
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
@@ -47,7 +50,7 @@ class TestBlowOut(unittest.TestCase):
 
   It leaves the plunger past its dispense bottom, but the driver sends no
   prepareToAspirate to fix that: a following well-addressed aspirate names a
-  well, so the robot primes at the well top and descends by itself."""
+  well, so the driver primes in air before descent."""
 
   def setUp(self):
     set_tip_tracking(True)
@@ -90,12 +93,12 @@ class TestBlowOut(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_head8_next_aspirate_after_blow_out_sends_no_prepare(self):
+  def test_head8_next_aspirate_after_blow_out_primes_before_descent(self):
     flex, transport, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       for well in plate.get_all_items():
@@ -107,17 +110,17 @@ class TestBlowOut(unittest.TestCase):
       asyncio.run(head.aspirate(plate, column=1, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      self.assertEqual(cmd_types.count("aspirate"), 2)
-      self.assertNotIn("prepareToAspirate", cmd_types)
+      self.assertEqual(cmd_types.count("aspirateInPlace"), 2)
+      self.assertIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
-  def test_head1_blow_out_then_aspirate_sends_no_prepare(self):
+  def test_head1_blow_out_then_aspirate_primes_before_descent(self):
     flex, transport, head = _flex_head1()
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       well = plate.get_item("B3")
@@ -137,17 +140,17 @@ class TestBlowOut(unittest.TestCase):
         {"pipetteId": head.pipette_id, "flowRate": 478.0},
       )
       cmd_types = [c["commandType"] for c in transport.commands]
-      self.assertEqual(cmd_types.count("aspirate"), 2)
-      self.assertNotIn("prepareToAspirate", cmd_types)
+      self.assertEqual(cmd_types.count("aspirateInPlace"), 2)
+      self.assertIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
-  def test_head96_blow_out_then_aspirate_sends_no_prepare(self):
+  def test_head96_blow_out_then_aspirate_primes_before_descent(self):
     flex, transport, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack96")
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       for well in plate.get_all_items():
@@ -162,8 +165,8 @@ class TestBlowOut(unittest.TestCase):
       self.assertEqual(len(blow_cmds), 1)
       self.assertEqual(blow_cmds[0]["params"]["pipetteId"], head.pipette_id)
       cmd_types = [c["commandType"] for c in transport.commands]
-      self.assertEqual(cmd_types.count("aspirate"), 2)
-      self.assertNotIn("prepareToAspirate", cmd_types)
+      self.assertEqual(cmd_types.count("aspirateInPlace"), 2)
+      self.assertIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
@@ -187,7 +190,7 @@ class TestTouchTipHead1(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -211,7 +214,7 @@ class TestTouchTipHead1(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -231,7 +234,7 @@ class TestTouchTipHead1(unittest.TestCase):
     flex, transport, head = _flex_head1()
     try:
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       n_before = len(transport.commands)
@@ -260,7 +263,7 @@ class TestTouchTipHead8(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -278,7 +281,7 @@ class TestTouchTipHead8(unittest.TestCase):
     flex, transport, head = _flex_head8()
     try:
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       n_before = len(transport.commands)
@@ -308,7 +311,7 @@ class TestTouchTipHead96(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack96")
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -342,7 +345,7 @@ class TestTouchTipHead96(unittest.TestCase):
     flex, transport, head = _flex_head96()
     try:
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       n_before = len(transport.commands)
@@ -372,7 +375,7 @@ class TestLiquidProbeHead1(unittest.TestCase):
     flex, transport, head = _flex_head1(**transport_kwargs)
     rack = flex_96_tiprack_50ul(name="rack1")
     plate = cor_96_wellplate_360uL_Fb(name="plate1")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     return flex, transport, head, rack, plate
@@ -497,7 +500,7 @@ class TestLiquidProbeHead1(unittest.TestCase):
       assert isinstance(head, FlexHead1)
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -538,7 +541,7 @@ class TestLiquidProbeHead1(unittest.TestCase):
       assert isinstance(head, FlexHead1)
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -567,7 +570,7 @@ class TestLiquidProbeHead8(unittest.TestCase):
     flex, transport, head = _flex_head8(**transport_kwargs)
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     return flex, transport, head, rack, plate
@@ -627,7 +630,7 @@ class TestHead8ColumnValidation(unittest.TestCase):
     flex, transport, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     return flex, transport, head, rack, plate
@@ -709,9 +712,9 @@ class TestHead8ColumnValidation(unittest.TestCase):
 
       asyncio.run(head.aspirate(plate_384, column=3, volume=10))
 
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
+      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "B2")
+      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
       # Only the 8 wells the nozzles actually reach lose liquid.
       touched = ["B2", "D2", "F2", "H2", "J2", "L2", "N2", "P2"]
       for name in touched:
@@ -775,7 +778,7 @@ class TestWellPositionOffsets(unittest.TestCase):
     flex, transport, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     for well in plate.get_all_items():
@@ -783,10 +786,10 @@ class TestWellPositionOffsets(unittest.TestCase):
     asyncio.run(head.pick_up_tips(rack, column=0))
     return flex, transport, head, plate
 
-  def _aspirate_well_location(self, transport: ChatterboxHTTP) -> dict:
-    aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
+  def _aspirate_well_location(self, transport: ChatterboxHTTP, plate) -> dict:
+    aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
     self.assertEqual(len(aspirate_cmds), 1)
-    well_location: dict = aspirate_cmds[0]["params"]["wellLocation"]
+    well_location = pipetting_location(transport, plate.get_item("A1"))
     return well_location
 
   def test_lateral_offset_on_a_plate_column_keeps_the_bottom_clearance(self):
@@ -794,7 +797,7 @@ class TestWellPositionOffsets(unittest.TestCase):
     try:
       asyncio.run(head.aspirate(plate, column=0, volume=10, offset=Coordinate(x=1, y=2)))
       self.assertEqual(
-        self._aspirate_well_location(transport),
+        self._aspirate_well_location(transport, plate),
         {"origin": "bottom", "offset": {"x": 1, "y": 2, "z": 1.0}},
       )
     finally:
@@ -805,7 +808,7 @@ class TestWellPositionOffsets(unittest.TestCase):
     try:
       asyncio.run(head.aspirate(plate, column=0, volume=10, offset=Coordinate.zero()))
       self.assertEqual(
-        self._aspirate_well_location(transport),
+        self._aspirate_well_location(transport, plate),
         {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
     finally:
@@ -820,7 +823,7 @@ class TestWellPositionOffsets(unittest.TestCase):
         head.aspirate(plate, column=0, volume=10, offset=Coordinate(x=2, z=0.5), liquid_height=3)
       )
       self.assertEqual(
-        self._aspirate_well_location(transport),
+        self._aspirate_well_location(transport, plate),
         {"origin": "bottom", "offset": {"x": 2, "y": 0, "z": 3.5}},
       )
     finally:
@@ -836,7 +839,7 @@ class TestWellPositionOffsets(unittest.TestCase):
       asyncio.run(head.touch_tip(plate, column=0, offset=Coordinate(x=1)))
       touch_cmds = [c for c in transport.commands if c["commandType"] == "touchTip"]
       self.assertEqual(
-        self._aspirate_well_location(transport),
+        self._aspirate_well_location(transport, plate),
         {"origin": "bottom", "offset": {"x": 1, "y": 0, "z": 1.0}},
       )
       self.assertEqual(
@@ -1000,7 +1003,7 @@ class TestSingleNozzleLayout(unittest.TestCase):
   def test_reconfiguring_the_layout_while_a_tip_is_mounted_is_refused(self):
     flex, transport, head, rack = self._bench()
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(plate, "C2")
     try:
       asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
@@ -1451,9 +1454,9 @@ class TestTipPresenceCommands(unittest.TestCase):
 
       # Each state is asserted while it actually holds: the robot fails the
       # command on a mismatch, so a bare pair would be checking a lie.
-      asyncio.run(head.verify_tip_presence("absent"))
+      asyncio.run(head.verify_tip_presence(False))
       asyncio.run(head.pick_up_tips(rack, column=0))
-      asyncio.run(head.verify_tip_presence("present"))
+      asyncio.run(head.verify_tip_presence(True))
 
       verify_cmds = [c for c in transport.commands if c["commandType"] == "verifyTipPresence"]
       self.assertEqual(
@@ -1471,10 +1474,10 @@ class TestTipPresenceCommands(unittest.TestCase):
     # asserting, so it is refused with the rest.
     flex, transport, head = _flex_head8()
     try:
-      for state in ("unknown", "Present", "", "yes"):
+      for state in ("present", "absent", "unknown", "", 0, 1, None):
         n_before = len(transport.commands)
-        with self.assertRaises(ValueError):
-          asyncio.run(head.verify_tip_presence(state))
+        with self.assertRaises(TypeError):
+          asyncio.run(head.verify_tip_presence(state))  # type: ignore[arg-type]
         self.assertEqual(len(transport.commands), n_before, "rejection must not reach the wire")
     finally:
       asyncio.run(flex.stop())

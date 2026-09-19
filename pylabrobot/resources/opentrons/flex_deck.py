@@ -82,6 +82,7 @@ _DECK_SIZE_Y = 582.0
 # Conservative estimate — measured at 51.3mm on real hardware
 # (tip at bottom of flat well plate, A1 nozzle to deck surface).
 _DEFAULT_CLEARANCE_Z = 50.0
+_MIN_NOZZLE_CLEARANCE = 20.0
 
 
 class FlexDeck(Deck):
@@ -310,25 +311,30 @@ class FlexDeck(Deck):
     primary_nozzle: str = "H1",
     operation_z: Optional[float] = None,
   ) -> None:
-    """Check that adjacent slots are clear for single-nozzle operations.
+    """Apply the partial-layout clearance guard to a single mounted tip."""
+    self.check_partial_nozzle_clearance(slot, primary_nozzle, 1, operation_z)
 
-    When an 8-channel pipette uses a single nozzle, the 7 inactive
-    nozzles extend ~63mm into the adjacent slot's airspace. Two rules:
+  def check_partial_nozzle_clearance(
+    self,
+    slot: str,
+    primary_nozzle: str,
+    mounted_count: int,
+    operation_z: Optional[float] = None,
+  ) -> None:
+    """Conservatively reserve the adjacent slot behind unused nozzles.
 
-    1. TipRack in adjacent slot → always blocked (inactive nozzles
-       would physically engage tips).
-    2. Other labware → blocked if taller than the operation Z
-       (the height the nozzle descends to).
-
-    Args:
-        slot: Deck slot where the operation happens.
-        primary_nozzle: "H1" (front) or "A1" (rear).
-        operation_z: The Z height the nozzle descends to (mm).
-            If None, uses the default conservative threshold.
-
-    Raises:
-        ValueError: If a collision risk is detected.
+    Front-anchored layouts reserve the rear slot; rear-anchored layouts
+    reserve the front slot. This slot-level guard blocks adjacent tip racks
+    and tall labware without claiming a precise head collision mesh.
+    At least 20 mm of vertical clearance is required.
+    ``operation_z`` is the absolute height of the unused nozzle ends.
+    Pipetting supplies tip-end Z plus the effective mounted tip length;
+    callers without this geometry retain the conservative pickup fallback.
     """
+    if not 1 <= mounted_count < 8:
+      raise ValueError("Partial layouts require between one and seven mounted tips")
+    if primary_nozzle not in ("A1", "H1"):
+      raise ValueError(f"Unsupported partial primary nozzle: {primary_nozzle}")
     from pylabrobot.resources.tip_rack import TipRack
 
     slot = self._validate_slot(slot)
@@ -356,32 +362,31 @@ class FlexDeck(Deck):
       return  # Slot empty, safe
 
     direction = "behind" if primary_nozzle == "H1" else "in front of"
-    name = getattr(resource, "name", str(resource))
+    name = resource.name
 
     # Rule 1: TipRack always blocked — nozzles would grab tips
-    if isinstance(resource, TipRack):
+    if operation_z is None and isinstance(resource, TipRack):
       raise ValueError(
-        f"Collision risk: single-nozzle operation at {slot} "
-        f"with nozzle {primary_nozzle} — the 7 inactive nozzles "
+        f"Collision risk: partial-tip operation at {slot} "
+        f"with nozzle {primary_nozzle} — the {8 - mounted_count} unused nozzles "
         f"extend into slot {danger_slot}, which contains tip rack "
         f"'{name}'. Inactive nozzles would engage tips. "
         f"Move the tip rack or use a different nozzle direction."
       )
 
     # Rule 2: Other labware — check against operation Z
-    if hasattr(resource, "get_size_z"):
-      resource_z = resource.get_size_z()
-    else:
-      resource_z = getattr(resource, "_size_z", 0) or getattr(resource, "size_z", 0)
+    resource_z = resource.get_absolute_location().z + resource.get_absolute_size_z()
 
     clearance_z = operation_z if operation_z is not None else _DEFAULT_CLEARANCE_Z
 
-    if resource_z > clearance_z:
+    gap = clearance_z - resource_z
+    if gap < _MIN_NOZZLE_CLEARANCE:
       raise ValueError(
-        f"Collision risk: single-nozzle operation at {slot} "
-        f"with nozzle {primary_nozzle} — the 7 inactive nozzles "
+        f"Collision risk: partial-tip operation at {slot} "
+        f"with nozzle {primary_nozzle} — the {8 - mounted_count} unused nozzles "
         f"extend into slot {danger_slot} at Z={clearance_z:.0f}mm, "
         f"which contains '{name}' (height {resource_z:.0f}mm). "
+        f"Clearance is {gap:.1f}mm; at least {_MIN_NOZZLE_CLEARANCE:.0f}mm is required. "
         f"Move '{name}' to a different slot, or use a slot with "
         f"no tall labware {direction} it."
       )
@@ -421,7 +426,7 @@ class FlexDeck(Deck):
         if slot_id.endswith("4"):
           return "(staging)"
         return "Empty"
-      name = getattr(resource, "name", str(resource))
+      name = resource.name
       if len(name) > 8:
         name = name[:6] + ".."
       return name

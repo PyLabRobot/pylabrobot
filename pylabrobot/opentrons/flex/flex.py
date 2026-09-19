@@ -4,6 +4,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
 
 from pylabrobot.io.http import HTTP
 from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
+from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
@@ -11,24 +12,27 @@ from pylabrobot.opentrons.flex.flex_run import COMMAND_POLL_HEADROOM, FlexRun, P
 from pylabrobot.opentrons.flex.flex_wire import (
   ROBOT_AXES,
   _require_robot_commands,
-  slot_wire_location,
 )
-from pylabrobot.opentrons.flex.labware_definitions import (
+from pylabrobot.opentrons.labware import LabwareRegistry, declared_labware_identity
+from pylabrobot.opentrons.labware_definitions import (
   build_container_definition,
   build_movable_labware_definition,
   build_plate_definition,
   build_tip_rack_definition,
+)
+from pylabrobot.opentrons.operations import OperationLock, serialized
+from pylabrobot.opentrons.types import (
+  InstrumentInfo,
+  LabwareIdentity,
+  ModuleInfo,
+  RobotInfo,
+  RunInfo,
 )
 from pylabrobot.resources import Container, Plate, Resource, TipRack
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.trash import Trash
 
 logger = logging.getLogger(__name__)
-
-_OT_NAMESPACE = "opentrons"
-
-# Every definition has a revision 1, so it is the only version safe to assume.
-_OT_VERSION = 1
 
 # Discovered pipette channel count -> matching head class.
 _CHANNELS_TO_HEAD: Dict[int, Type[_FlexHead]] = {
@@ -49,7 +53,7 @@ def _not_pipettable_error(resource: Resource) -> OpentronsError:
     "Cannot build an Opentrons labware definition",
     f"'{resource.name}' ({type(resource).__name__}) has no Opentrons load name, and a "
     "definition can only be built from the geometry of a Plate, TipRack, or Container. "
-    "Set resource.ot_load_name to an official Opentrons load name. The gripper can still "
+    "Use set_opentrons_labware(resource, load_name) to choose an official definition. The gripper can still "
     "move it -- only pipetting needs real well geometry.",
   )
 
@@ -113,9 +117,9 @@ class Flex:
 
   def __init__(
     self,
-    deck: FlexDeck,
     host: str,
     port: int = 31950,
+    deck: Optional[FlexDeck] = None,
     io: Optional[HTTP] = None,
     command_timeout: float = 30.0,
     command_poll_interval: float = 0.05,
@@ -142,39 +146,63 @@ class Flex:
       timeout=command_timeout,
     )
     self._api = OpentronsAPI(self.io)
+    self._operation_lock = OperationLock()
     self._connected = False
     self._run: Optional[FlexRun] = None
     self.run_id: Optional[str] = None
     self.api_version: Optional[str] = None
     self.robot_model: Optional[str] = None
 
-    self.deck = deck
-    self._loaded_labware: Dict[str, str] = {}
-    # resource.name -> (namespace, load_name, version) of an uploaded custom definition.
-    self._defined_labware: Dict[str, Tuple[str, str, int]] = {}
+    self.deck = deck or FlexDeck()
+    self._labware: Optional[LabwareRegistry] = None
     # Names loaded under the non-pipettable movable stub. Tracked separately so
     # a pipetting op refuses them even on a load-cache hit.
-    self._stub_labware: Set[str] = set()
+    self._stub_labware: Set[int] = set()
     self.left: Optional[_FlexHead] = None
     self.right: Optional[_FlexHead] = None
     self.head96: Optional[_FlexHead] = None
     self.gripper: Optional[FlexGripper] = None
     self._heads: List[_FlexHead] = []
 
-  def attach_deck(self, deck: FlexDeck) -> None:
-    """Swap in a new deck, so a caller can describe the deck without rebuilding
-    the robot (and losing the link and the run with it).
+  @property
+  def traversal_height(self) -> float:
+    """Minimum tip/nozzle Z for travel, above the tallest modeled labware.
 
-    Clears the labware caches: their ids describe the deck being replaced, and
-    serving one for the new deck would address the wrong slot.
+    Includes the deck's tip-rack clearance floor. Describe all physical
+    obstacles in the deck model so taller labware raises this height.
     """
+    return traversal_z(self.deck)
+
+  @property
+  def software_version(self) -> Optional[str]:
+    """Robot software version read at connection time."""
+    return self.api_version
+
+  @property
+  def left_pipette(self) -> Optional[_FlexHead]:
+    """Pipette on the left mount, also available as ``left``."""
+    return self.left
+
+  @property
+  def right_pipette(self) -> Optional[_FlexHead]:
+    """Pipette on the right mount, also available as ``right``."""
+    return self.right
+
+  @property
+  def pipettes(self) -> List[_FlexHead]:
+    """Mounted pipettes in discovery order, including a 96-channel head."""
+    return list(self._heads)
+
+  def attach_deck(self, deck: FlexDeck) -> None:
+    """Replace the deck before setup or after stopping the active run."""
+    if self._run is not None:
+      raise RuntimeError("Stop the active run before replacing its deck")
     self.deck = deck
-    self._loaded_labware.clear()
-    self._defined_labware.clear()
     self._stub_labware.clear()
 
   # --- Lifecycle ---
 
+  @serialized
   async def setup(self, skip_home: bool = False) -> None:
     """Bring the robot fully up, PyLabRobot's usual one-call lifecycle entry.
 
@@ -182,16 +210,29 @@ class Flex:
     the robot without moving it, hand it back without homing it) can take them
     one at a time.
     """
-    await self.connect()
-    await self.create_run()
-    if not skip_home:
-      await self.home()
-    await self.initialize()
+    if self._run is not None:
+      raise RuntimeError("The Flex is already set up")
+    try:
+      await self.connect()
+      await self.create_run()
+      if not skip_home:
+        await self.home()
+      await self.initialize()
+    except BaseException:
+      await self.disconnect()
+      raise
 
+  @serialized
   async def connect(self) -> None:
     """Open the link and confirm the robot answers. Starts no run, moves nothing."""
+    if self._connected:
+      return
     await self.io.setup()
-    health = await self._api.get_health()
+    try:
+      health = await self._api.get_health()
+    except BaseException:
+      await self.io.stop()
+      raise
     self.api_version = health.software_version
     self.robot_model = health.model
     self._connected = True
@@ -204,6 +245,7 @@ class Flex:
       self.robot_model,
     )
 
+  @serialized
   async def create_run(self) -> None:
     """Start a control session.
 
@@ -216,6 +258,8 @@ class Flex:
     labwareIds and uploaded definitions are both run-scoped server-side, so a
     new run must not serve cached identities from a previous one.
     """
+    if not self._connected:
+      raise RuntimeError("The Flex is not connected")
     await self._cancel_run()
     receipt = await self._api.create_run()
     self.run_id = receipt.id
@@ -226,15 +270,17 @@ class Flex:
       command_timeout=self.command_timeout,
       command_poll_interval=self.command_poll_interval,
     )
-    self._loaded_labware.clear()
-    self._defined_labware.clear()
+    if self._run is not None:
+      self._labware = LabwareRegistry(self._run, server_assigned_ids=True)
     self._stub_labware.clear()
     logger.info("Created run %s", self.run_id)
 
+  @serialized
   async def initialize(self) -> None:
     """Discover what is mounted and compose the heads. Moves nothing."""
     await self._model_setup()
 
+  @serialized
   async def cancel_run(self) -> None:
     """End the control session, handing the robot back to its own touchscreen.
 
@@ -243,6 +289,7 @@ class Flex:
     """
     await self._cancel_run()
 
+  @serialized
   async def disconnect(self) -> None:
     """Drop the link, moving nothing. Cancels an open run first."""
     await self._cancel_run()
@@ -252,18 +299,27 @@ class Flex:
 
   async def _cancel_run(self) -> None:
     """Cancel the current run. Safe to call if no run is active."""
-    if self.run_id is not None:
-      try:
-        await self._api.stop_run(self.run_id)
-      except Exception:
-        logger.warning("cancel run %s failed; continuing to release", self.run_id, exc_info=True)
+    if self._run is not None:
+      await self._run.stop()
     self._run = None
+    self._labware = None
     self.run_id = None
+    self.left = self.right = self.head96 = None
+    self.gripper = None
+    self._heads.clear()
 
+  def _require_run(self) -> FlexRun:
+    """Return the active run or reject commands outside a control session."""
+    if self._run is None or not self._run.active:
+      raise RuntimeError("The Flex is not set up")
+    return self._run
+
+  @serialized
   async def home(self) -> Dict[str, Any]:
     """Home all axes. The gantry moves to the rear-left-top."""
     return await self._execute_command("home", {})
 
+  @serialized
   async def stop(self) -> None:
     """Park the gantry and release the robot, dropping any mounted tips first."""
     # Drop any mounted tips to the trash BEFORE parking/disconnecting, so the
@@ -302,7 +358,7 @@ class Flex:
     command_type: str,
     params: Optional[Dict[str, Any]] = None,
     wait: bool = True,
-    timeout: float = 30.0,
+    timeout: Optional[float] = None,
   ) -> Dict[str, Any]:
     """Run a command in the current run, returning the completed command dict.
 
@@ -313,14 +369,21 @@ class Flex:
     """
     if self._run is None:
       raise OpentronsError("No active run", "Call setup() or create_run() first.")
-    return await self._run.execute(command_type, params or {}, wait=wait, timeout=timeout)
+    command = await self._run.execute(command_type, params or {}, wait=wait, timeout=timeout)
+    return {
+      "id": command.id,
+      "status": command.status,
+      "result": command.result,
+      "error": command.error,
+    }
 
+  @serialized
   async def send_command(
     self,
     command_type: str,
     params: Optional[Dict[str, Any]] = None,
     wait: bool = True,
-    timeout: float = 30.0,
+    timeout: Optional[float] = None,
   ) -> Dict[str, Any]:
     """Send any robot command by name, for the parts of the robot this class does not wrap.
 
@@ -332,42 +395,57 @@ class Flex:
     """
     return await self._execute_command(command_type, params or {}, wait=wait, timeout=timeout)
 
-  async def _get_instruments(self) -> Dict[str, Any]:
-    """Query mounted instruments (pipettes, gripper) off the Flex /instruments endpoint."""
-    return await self.io.request("GET", "/instruments")
+  @serialized
+  async def get_health(self) -> RobotInfo:
+    """Read fresh robot health without creating a run."""
+    if not self._connected:
+      raise RuntimeError("The Flex is not connected")
+    return await self._api.get_health()
 
-  def _parse_pipettes(self, instruments_data: Dict[str, Any]) -> List[PipetteInfo]:
-    """Parse the /instruments response into PipetteInfo objects.
+  @serialized
+  async def get_instruments(self) -> Tuple[InstrumentInfo, ...]:
+    """Read physical instruments before setup, without loading them into a run."""
+    if not self._connected:
+      raise RuntimeError("The Flex is not connected")
+    return await self._api.get_instruments()
 
-    Uses actual data from the API (channels, min_volume, max_volume) rather
-    than guessing from pipette names.
-    """
+  @serialized
+  async def get_runs(self) -> Tuple[RunInfo, ...]:
+    """Read server runs without selecting or stopping them."""
+    if not self._connected:
+      raise RuntimeError("The Flex is not connected")
+    return await self._api.get_runs()
+
+  @serialized
+  async def list_connected_modules(self) -> Tuple[ModuleInfo, ...]:
+    """Read module identities without loading them into a run."""
+    if not self._connected:
+      raise RuntimeError("The Flex is not connected")
+    return await self._api.get_connected_modules()
+
+  def _parse_pipettes(self, instruments: Tuple[InstrumentInfo, ...]) -> List[PipetteInfo]:
+    """Select the validated pipette specifications from discovery."""
     pipettes = []
-    for instrument in instruments_data.get("data", []):
-      if instrument.get("instrumentType") != "pipette":
+    for instrument in instruments:
+      if instrument.instrument_type != "pipette":
         continue
-      pip_data = instrument.get("data", {})
+      assert instrument.channels is not None
+      assert instrument.minimum_volume is not None and instrument.maximum_volume is not None
       pipettes.append(
         PipetteInfo(
-          mount=instrument.get("mount", "unknown"),
-          pipette_name=instrument.get("instrumentName", "unknown"),
-          pipette_model=instrument.get("instrumentModel", "unknown"),
-          pipette_id="",  # set by _load_pipette() later
-          channels=pip_data.get("channels", 1),
-          min_volume=pip_data.get("min_volume", 1.0),
-          max_volume=pip_data.get("max_volume", 1000.0),
+          instrument.mount,
+          instrument.name,
+          instrument.model,
+          "",
+          instrument.channels,
+          instrument.minimum_volume,
+          instrument.maximum_volume,
         )
       )
     return pipettes
 
   async def _load_pipette(self, pipette_name: str, mount: str) -> str:
-    """Load a pipette into the current run, returning its run-scoped pipette ID.
-
-    Goes through ``_execute_command`` like every other command, so a load
-    failure (e.g. an unrecognized pipette during discovery) raises the same
-    ``OpentronsCommandError`` shape as the rest of the driver rather than the
-    package-level variant ``OpentronsRun.load_pipette`` would raise.
-    """
+    """Load a pipette through the shared run executor and return its run-scoped ID."""
     result = await self._execute_command(
       "loadPipette", {"pipetteName": pipette_name, "mount": mount}
     )
@@ -385,7 +463,7 @@ class Flex:
     self.gripper = None
     self._heads.clear()
 
-    instruments_data = await self._get_instruments()
+    instruments_data = await self.get_instruments()
     pipettes = self._parse_pipettes(instruments_data)
 
     if not pipettes:
@@ -427,108 +505,58 @@ class Flex:
       self.gripper = FlexGripper(self, gripper_model)
       logger.info("Discovered gripper on the extension mount (model: %s)", gripper_model)
 
-  def _parse_gripper(self, instruments_data: Dict[str, Any]) -> Optional[str]:
-    """Parse the /instruments response for a mounted gripper.
-
-    Returns the gripper's model string, or ``None`` when none is mounted.
-    Separate from ``_parse_pipettes``, which filters to
-    ``instrumentType == 'pipette'`` and knows nothing about grippers.
-    """
-    for instrument in instruments_data.get("data", []):
-      if instrument.get("instrumentType") == "gripper":
-        return cast(str, instrument.get("instrumentModel", "unknown"))
-    return None
+  def _parse_gripper(self, instruments: Tuple[InstrumentInfo, ...]) -> Optional[str]:
+    """Return the discovered gripper model, if one is installed."""
+    return next((i.model for i in instruments if i.instrument_type == "gripper"), None)
 
   # --- Deck-scoped labware loading ---
 
   async def _ensure_labware_loaded(
     self,
     resource: Resource,
-    *,
     allow_stub: bool = False,
     grip_distance_from_top: Optional[float] = None,
   ) -> str:
-    """Load labware into the Flex run if not already loaded.
-
-    ``allow_stub`` opts into the non-pipettable movable stub definition for a
-    resource no real definition can be built from (a lid, an adapter, a tube
-    rack). Only the gripper passes it: the stub's single fake well is
-    somewhere to grip, not somewhere to pipette, and a zero-depth well at the
-    labware's own bottom would put a tip on the deck. Every other caller gets
-    an ``OpentronsError`` for such a resource, before any wire command --
-    including when the gripper already loaded it earlier in the run.
-
-    ``grip_distance_from_top`` feeds an uploaded custom definition's grip
-    height and is honored on the FIRST load only; a cache hit (already
-    loaded, or definition already uploaded) reuses the stored identity
-    unchanged, and labware resolving to an official Opentrons load name
-    ignores it entirely (the robot's own definition owns the grip height).
-    Every discard is logged.
-    """
-    name = getattr(resource, "name", str(resource))
-    if not allow_stub and name in self._stub_labware:
+    """Resolve and bind a resource once per run, validating its current slot."""
+    registry = self._require_labware()
+    name = resource.name
+    if id(resource) in self._stub_labware and not allow_stub:
       raise _not_pipettable_error(resource)
-    if name in self._loaded_labware:
-      _warn_grip_distance_discarded(
-        name,
-        grip_distance_from_top,
-        "it is already loaded in this run, and the grip height rides the definition it "
-        "was loaded with",
-      )
-      return self._loaded_labware[name]
-
     slot = self.deck.get_slot(resource)
     if slot is None:
-      raise OpentronsError(
-        "Resource not on deck",
-        f"'{name}' is not on a deck slot. Use deck.assign_child_at_slot(resource, slot='C1').",
+      raise OpentronsError("Resource not on deck", f"'{name}' is not on a deck slot.")
+    identity = declared_labware_identity(resource)
+    if registry.is_loaded(resource):
+      binding = registry.get(resource)
+      await registry.load(resource, slot, identity or binding.identity)
+      _warn_grip_distance_discarded(
+        name, grip_distance_from_top, "it is already loaded in this run"
       )
-
-    try:
-      load_name, version = self._ot_declared_identity(resource)
-    except OpentronsError:
-      # No official Opentrons definition: build one from the resource's PLR
-      # geometry, upload it, and load by the uploaded definition's identity.
+      return binding.labware_id
+    if identity is None:
       namespace, load_name, version = await self._define_custom_labware(
         resource, grip_distance_from_top, allow_stub
       )
+      identity = LabwareIdentity(namespace, load_name, version)
     else:
-      namespace = _OT_NAMESPACE
       _warn_grip_distance_discarded(
         name,
         grip_distance_from_top,
-        f"it loads the robot's own definition for '{load_name}', whose grip height is "
-        "the vendor's to state (the robot grips at mid-height when it states none)",
+        f"it loads the robot's own definition for '{identity.load_name}', whose grip height is defined there",
       )
-    # The robot assigns the id. Proposing one here would only make the
-    # request body differ run to run, which is what breaks a replayed capture.
-    result = await self._execute_command(
-      "loadLabware",
-      {
-        "loadName": load_name,
-        "location": slot_wire_location(slot),
-        "namespace": namespace,
-        "version": version,
-        "displayName": name,
-      },
-    )
-    labware_id = result.get("result", {}).get("labwareId")
-    if not isinstance(labware_id, str):
-      raise OpentronsError(
-        "Labware load returned no id",
-        f"loadLabware for '{name}' succeeded but reported no labwareId to address it by.",
-      )
+    await registry.load(resource, slot, identity)
+    binding = registry.get(resource)
+    logger.info("Loaded labware '%s' at slot %s -> ID: %s", name, slot, binding.labware_id)
+    return binding.labware_id
 
-    self._loaded_labware[name] = labware_id
-    logger.info(
-      "Loaded labware '%s' at slot %s -> ID: %s (OT: %s)",
-      name,
-      slot,
-      labware_id,
-      load_name,
-    )
-    return labware_id
+  def _require_labware(self) -> LabwareRegistry:
+    """Return the active run's resource bindings."""
+    self._require_run()
+    if self._labware is None:
+      raise RuntimeError("The Flex labware registry is unavailable")
+    return self._labware
 
+  @serialized
   async def sync_tips_to_robot(self, tip_rack: TipRack) -> None:
     """Make the robot's tip-rack model agree with PyLabRobot's.
 
@@ -570,6 +598,7 @@ class Flex:
       len(empty),
     )
 
+  @serialized
   async def labware_moved_off_deck(self, resource: Resource) -> None:
     """Tell the robot an EXTERNAL agent (human or lab transporter) removed labware.
 
@@ -582,24 +611,25 @@ class Flex:
     and re-uploads its definition -- a different same-named resource must not
     inherit the departed labware's geometry.
     """
-    name = getattr(resource, "name", str(resource))
-    if name in self._loaded_labware:
+    name = resource.name
+    registry = self._require_labware()
+    if registry.is_loaded(resource):
       await self._execute_command(
         "moveLabware",
         {
-          "labwareId": self._loaded_labware[name],
+          "labwareId": registry.get(resource).labware_id,
           "newLocation": "offDeck",
           "strategy": "manualMoveWithoutPause",
         },
       )
-      del self._loaded_labware[name]
-    self._defined_labware.pop(name, None)
-    self._stub_labware.discard(name)
+    registry.remove(resource)
+    self._stub_labware.discard(id(resource))
     slot = self.deck.get_slot(resource)
     if slot is not None:
       self.deck.unassign_child_at_slot(slot)
     logger.info("Labware '%s' marked moved off-deck", name)
 
+  @serialized
   async def reload_labware(self, resource: Resource) -> None:
     """Re-read the labware's position after a human moved it in its own slot.
 
@@ -612,6 +642,7 @@ class Flex:
 
   # --- Robot-level commands: axis motion, status surfaces, run log ---
 
+  @serialized
   async def move_axes_to(
     self,
     axis_map: Dict[str, float],
@@ -633,6 +664,7 @@ class Flex:
     params = _axis_motion_params(axis_map, speed, critical_point)
     return _reported_axis_position(await self._execute_command("robot/moveAxesTo", params))
 
+  @serialized
   async def move_axes_relative(
     self, axis_map: Dict[str, float], speed: Optional[float] = None
   ) -> Dict[str, float]:
@@ -646,6 +678,7 @@ class Flex:
     params = _axis_motion_params(axis_map, speed)
     return _reported_axis_position(await self._execute_command("robot/moveAxesRelative", params))
 
+  @serialized
   async def retract_axis(self, axis: str) -> None:
     """Retract ``axis`` to its home position, clearing the deck below it.
 
@@ -656,6 +689,7 @@ class Flex:
     _validate_axes([axis])
     await self._execute_command("retractAxis", {"axis": axis})
 
+  @serialized
   async def set_status_bar(self, animation: str) -> None:
     """Play a built-in light-bar animation: "idle", "confirm", "updating", "disco" or "off".
 
@@ -664,14 +698,17 @@ class Flex:
     """
     await self._execute_command("setStatusBar", {"animation": animation})
 
+  @serialized
   async def set_rail_lights(self, on: bool) -> None:
     """Turn the deck rail lights on or off."""
     await self._execute_command("setRailLights", {"on": on})
 
+  @serialized
   async def add_comment(self, message: str) -> None:
     """Record ``message`` in the run's command log; the robot does nothing else with it."""
     await self._execute_command("comment", {"message": message})
 
+  @serialized
   async def wait_for_duration(self, seconds: float) -> None:
     """Hold the run for ``seconds`` before the next command runs."""
     # The command only completes once the robot finishes waiting, so the poll
@@ -679,43 +716,6 @@ class Flex:
     await self._execute_command(
       "waitForDuration", {"seconds": seconds}, timeout=seconds + COMMAND_POLL_HEADROOM
     )
-
-  @staticmethod
-  def _ot_declared_identity(resource: Resource) -> Tuple[str, int]:
-    """The load name and version to load a resource by, if it declares one.
-
-    Declaring ``ot_load_name`` is the whole rule: a resource that does one is
-    loaded by name, and a resource that does not gets a definition built from
-    its own geometry and uploaded. Whether the robot can actually resolve a
-    declared name is the ROBOT's to answer, not ours. It looks in the
-    definitions its own software shipped with AND in the custom labware a lab
-    has added to it, so no list on this side can be right for every robot. A
-    name it cannot resolve fails the ``loadLabware``, which surfaces where a
-    caller expects it: at the point the labware goes onto the deck.
-
-    ``ot_version`` picks the revision, and which revisions a robot holds is the
-    robot's business too, so this defaults to 1 rather than guessing higher.
-    Revision 1 is the one every definition has. It is also the OLDEST, and for
-    much of Opentrons' own catalogue it predates the Flex and states no gripper
-    grip height, so the robot grips at the labware's mid-height rather than
-    where the vendor says. A later revision usually fixes that while leaving the
-    well geometry alone, which is why the resources PyLabRobot ships for those
-    plates declare one. Naming a revision the robot does not hold fails the
-    load, so raising the default here would break older robots to grip better on
-    newer ones.
-    """
-    declared = getattr(resource, "ot_load_name", None)
-    if declared is None:
-      raise OpentronsError(
-        "No Opentrons load name declared",
-        f"'{resource.name}' carries no ot_load_name, so there is no name to load it by.",
-      )
-
-    load_name = cast(str, declared)
-    version = getattr(resource, "ot_version", None)
-    if version is None:
-      version = _OT_VERSION
-    return load_name, cast(int, version)
 
   async def _define_custom_labware(
     self,
@@ -733,31 +733,18 @@ class Flex:
     re-upload -- which also means ``grip_distance_from_top`` only shapes the
     FIRST upload.
     """
-    name = resource.name
-    if name in self._defined_labware:
+    registry = self._require_labware()
+    identity = registry.definition(resource)
+    if identity is not None:
       _warn_grip_distance_discarded(
-        name,
-        grip_distance_from_top,
-        "its custom definition was already uploaded in this run, with the grip height it "
-        "carried then",
+        resource.name, grip_distance_from_top, "its custom definition was already uploaded"
       )
-      return self._defined_labware[name]
-
+      return identity.namespace, identity.load_name, identity.version
     definition = self._build_labware_definition(resource, grip_distance_from_top, allow_stub)
-    if self._run is None:
-      raise OpentronsError("No active run", "Call setup() or create_run() first.")
-    identity = await self._api.define_labware(self._run.id, definition)
-    self._defined_labware[name] = (identity.namespace, identity.load_name, identity.version)
+    identity = await registry.define(resource, definition)
     if not _has_pipettable_geometry(resource):
-      self._stub_labware.add(name)
-    logger.info(
-      "Uploaded custom labware definition for '%s': %s/%s/%s",
-      name,
-      identity.namespace,
-      identity.load_name,
-      identity.version,
-    )
-    return self._defined_labware[name]
+      self._stub_labware.add(id(resource))
+    return identity.namespace, identity.load_name, identity.version
 
   @staticmethod
   def _build_labware_definition(

@@ -1,4 +1,6 @@
 from pylabrobot.opentrons.api import OpentronsAPI
+from pylabrobot.opentrons.chatterbox import ChatterboxHTTP, ReplayTransport
+from pylabrobot.opentrons.discovery import find_ot2_ip
 from pylabrobot.opentrons.errors import (
   OpentronsCommandError,
   OpentronsCommandTimeout,
@@ -13,10 +15,9 @@ from pylabrobot.opentrons.flex import (
   FlexHead96,
   find_flex_ip,
 )
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP, ReplayTransport
 from pylabrobot.opentrons.ot2 import OT2, OT2_8ChannelPipette, OT2SingleChannelPipette
 from pylabrobot.opentrons.run import OpentronsRun
-from pylabrobot.opentrons.types import ModuleInfo, MountedPipette, RobotInfo
+from pylabrobot.opentrons.types import InstrumentInfo, ModuleInfo, MountedPipette, RobotInfo
 
 __all__ = [
   "ChatterboxHTTP",
@@ -25,6 +26,7 @@ __all__ = [
   "FlexHead1",
   "FlexHead8",
   "FlexHead96",
+  "InstrumentInfo",
   "ModuleInfo",
   "MountedPipette",
   "OT2",
@@ -39,4 +41,5 @@ __all__ = [
   "ReplayTransport",
   "RobotInfo",
   "find_flex_ip",
+  "find_ot2_ip",
 ]

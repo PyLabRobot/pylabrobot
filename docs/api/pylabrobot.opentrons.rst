@@ -37,6 +37,10 @@ even for partial pickups.
 
 ``OpentronsAPI`` contains the named HTTP endpoints and response parsing.
 ``OpentronsRun`` provides command primitives and waits for their completion.
+OT-2 and Flex share run execution, command errors, labware bindings, liquid
+transactions, and an operation lock. ``ChatterboxHTTP`` simulates either device
+without opening a connection.
+
 Both use the device's ``pylabrobot.io.HTTP`` transport. Pipette operations own
 resource tracking and retraction to traversal height.
 
@@ -53,6 +57,10 @@ resource tracking and retraction to traversal height.
     RobotInfo
     MountedPipette
     ModuleInfo
+    InstrumentInfo
+    find_ot2_ip
+    ChatterboxHTTP
+    ReplayTransport
     OpentronsError
     OpentronsCommandError
     OpentronsCommandTimeout
@@ -63,11 +71,31 @@ Flex
 
 .. currentmodule:: pylabrobot.opentrons.flex
 
-Use ``Flex(deck, host=find_flex_ip())`` to discover a Flex on the local network,
+Use ``Flex(host=find_flex_ip(), deck=deck)`` to discover a Flex on the local network,
 then call ``connect()`` to check health without starting a run or moving hardware.
 Discovery requires the ``opentrons`` installation extra and uses live mDNS
 advertisements. If multiple robots are present, select one with
 ``find_flex_ip(name="My Flex")``. Missing or ambiguous results raise an error.
+
+Flex ``aspirate`` and ``dispense`` use PLR resource coordinates, coordinate moves,
+and in-place plunger commands. They do not load the target labware on the robot.
+Use resources with accurate well locations and ``material_z_thickness``; the
+name-only ``flex_plate`` factory has no cavity-floor geometry and cannot be used
+for these operations. ``liquid_height`` is measured from the cavity floor, defaults
+to 1 mm, and ``offset`` is added to it. Aspiration primes above the target at
+traversal height before descending vertically.
+
+Successful Flex tip pickup/drop and well/container aspirate/dispense operations
+finish with a Z-only lift to at least ``flex.traversal_height``. This height is
+computed from the modeled deck plus clearance, with a tip-rack minimum. A head
+already above it is never lowered. In-place operations and explicit positioning
+leave the head where requested. If the lift fails, the completed operation's
+bookkeeping is retained and the error is propagated.
+
+Use ``left_pipette``, ``right_pipette``, and ``software_version`` for the same
+naming as OT-2. Labware factories store their server identity in serializable
+metadata; use ``pylabrobot.resources.opentrons.set_opentrons_labware`` to choose
+a definition for another resource.
 
 .. autosummary::
   :toctree: _autosummary

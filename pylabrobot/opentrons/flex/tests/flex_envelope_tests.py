@@ -16,6 +16,7 @@ from pylabrobot.opentrons.flex.envelope import FLEX_ENVELOPE
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb
+from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 
 
@@ -56,7 +57,7 @@ class TestUnconditionalTiprackFloor(unittest.TestCase):
   def test_short_labware_does_not_lower_the_floor(self):
     deck = FlexDeck()
     plate = cor_96_wellplate_360uL_Fb(name="plate")  # ~14 mm tall, well below a rack
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     deck.assign_child_at_slot(plate, "C2")
     self.assertAlmostEqual(traversal_z(deck), 109.0)
 
@@ -69,7 +70,7 @@ class TestComputedTraversalPlane(unittest.TestCase):
     flex, transport, head = _flex_head8()
     try:
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       expected = traversal_z(flex.deck)
@@ -97,7 +98,7 @@ class TestTrashDropArcsHighEnough(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       trash = flex.deck.get_trash_area()
@@ -115,7 +116,7 @@ class TestTrashDropArcsHighEnough(unittest.TestCase):
 
 class TestBetweenSlotArcGuard(unittest.TestCase):
   """A pipetting move that crosses to a different slot is prefixed with a safe
-  high moveToWell (>= the tip-rack floor); a move within the same labware is not."""
+  coordinate move (>= the tip-rack floor), including moves within a plate."""
 
   def setUp(self):
     from pylabrobot.resources import set_tip_tracking, set_volume_tracking
@@ -136,42 +137,44 @@ class TestBetweenSlotArcGuard(unittest.TestCase):
     flex, transport, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     for w in plate.get_all_items():
       w.tracker.set_volume(100.0)
     return flex, transport, head, rack, plate
 
-  def _move_to_wells(self, transport):
-    return [c for c in transport.commands if c["commandType"] == "moveToWell"]
+  def _coordinate_moves(self, transport):
+    return [c for c in transport.commands if c["commandType"] == "moveToCoordinates"]
 
   def test_crossing_to_a_new_slot_arcs_high_first(self):
     flex, transport, head, rack, plate = self._setup()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))  # over the rack (C1)
-      before = len(self._move_to_wells(transport))
+      before = len(self._coordinate_moves(transport))
       asyncio.run(head.aspirate(plate.column(0), volume=50))  # -> plate (C2), a new slot
 
-      moves = self._move_to_wells(transport)
+      moves = self._coordinate_moves(transport)
       self.assertEqual(
         len(moves), before + 1, "one safe move should precede the cross-slot aspirate"
       )
       self.assertAlmostEqual(moves[-1]["params"]["minimumZHeight"], traversal_z(flex.deck))
-      # the safe move comes immediately before the aspirate
+      # Vertical descent immediately precedes aspiration.
       types = [c["commandType"] for c in transport.commands]
-      self.assertEqual(types[types.index("aspirate") - 1], "moveToWell")
+      self.assertEqual(types[types.index("aspirateInPlace") - 1], "moveRelative")
     finally:
       asyncio.run(flex.stop())
 
-  def test_moving_within_the_same_labware_does_not_arc_high(self):
+  def test_moving_within_the_same_labware_also_arcs_high(self):
     flex, transport, head, rack, plate = self._setup()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate(plate.column(0), volume=50))  # cross-slot -> one safe move
-      n = len(self._move_to_wells(transport))
-      asyncio.run(head.dispense(plate.column(1), volume=50))  # same plate -> no new safe move
-      self.assertEqual(len(self._move_to_wells(transport)), n, "within-slot move must not arc high")
+      n = len(self._coordinate_moves(transport))
+      asyncio.run(head.dispense(plate.column(1), volume=50))  # same plate -> safe coordinate move
+      self.assertEqual(
+        len(self._coordinate_moves(transport)), n + 1, "within-slot move must also arc high"
+      )
     finally:
       asyncio.run(flex.stop())
 

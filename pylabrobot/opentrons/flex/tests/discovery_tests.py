@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from pylabrobot.io.mdns import MDNSService
-from pylabrobot.opentrons import find_flex_ip
+from pylabrobot.opentrons import find_flex_ip, find_ot2_ip
 
 
 class FlexDiscoveryTests(unittest.TestCase):
@@ -12,10 +12,18 @@ class FlexDiscoveryTests(unittest.TestCase):
 
   def setUp(self) -> None:
     """Replace network discovery with advertisements."""
-    patcher = patch("pylabrobot.opentrons.flex.discovery.discover_mdns")
+    patcher = patch("pylabrobot.opentrons.discovery.discover_mdns")
     self.discover = patcher.start()
     self.addCleanup(patcher.stop)
     self.flex = MDNSService("Studio45", "192.0.2.1", 31950, {b"robotModel": b"OT-3 Standard"})
+
+  def test_ot2_uses_shared_discovery_with_its_own_model_filter(self):
+    self.discover.return_value = [
+      self.flex,
+      MDNSService("OT2", "192.0.2.3", 31950, {b"robotModel": b"OT-2"}),
+    ]
+    self.assertEqual(find_ot2_ip(), "192.0.2.3")
+    self.assertEqual(find_flex_ip(), "192.0.2.1")
 
   def test_filters_other_devices(self) -> None:
     """Ignore printers, OT-2s, wrong ports, and missing or malformed models."""

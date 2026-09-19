@@ -17,6 +17,7 @@ from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.resources import Resource, cor_96_wellplate_360uL_Fb
+from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.plate import Plate
 
@@ -39,7 +40,7 @@ def _flex_with_gripper(**transport_kwargs) -> Tuple[Flex, ChatterboxHTTP]:
 
 def _plate(name: str = "plate") -> Plate:
   plate = cor_96_wellplate_360uL_Fb(name=name)
-  plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+  set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
   return plate
 
 
@@ -103,7 +104,7 @@ class TestMoveLabware(unittest.TestCase):
 
       move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
       self.assertEqual(len(move_cmds), 1)
-      labware_id = flex._loaded_labware["plate"]
+      labware_id = flex._require_labware().get(plate).labware_id
       self.assertEqual(
         move_cmds[0]["params"],
         {
@@ -361,7 +362,7 @@ class TestLabwareMovedOffDeck(unittest.TestCase):
           "strategy": "manualMoveWithoutPause",
         },
       )
-      self.assertNotIn("plate", flex._loaded_labware)
+      self.assertFalse(flex._require_labware().is_loaded(plate))
       self.assertIsNone(flex.deck.get_slot(plate))
       self.assertIsNone(flex.deck.get_resource_at_slot("C1"))
     finally:

@@ -2,13 +2,14 @@
 
 import math
 import uuid
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, cast
+from dataclasses import dataclass, replace
+from typing import Any, Dict, Optional, Tuple
 
-from pylabrobot import utils
+from pylabrobot.opentrons.labware_definitions import (
+  build_tip_rack_definition as build_custom_tip_rack_definition,
+)
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import LabwareIdentity
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack
@@ -31,70 +32,37 @@ def official_tip_rack_identity(tip_rack: TipRack) -> Optional[LabwareIdentity]:
   return LabwareIdentity("opentrons", load_name, 1) if load_name is not None else None
 
 
+def declared_labware_identity(resource: Resource) -> Optional[LabwareIdentity]:
+  """Read the explicit, serialized identity chosen for a resource."""
+  metadata = resource.metadata.get("opentrons_labware")
+  if metadata is None:
+    return None
+  if not isinstance(metadata, dict):
+    raise ValueError("opentrons_labware metadata must be an object")
+  namespace, load_name, version = (
+    metadata.get(key) for key in ("namespace", "load_name", "version")
+  )
+  if (
+    not isinstance(namespace, str)
+    or not namespace
+    or not isinstance(load_name, str)
+    or not load_name
+  ):
+    raise ValueError("Opentrons labware namespace and load_name must be non-empty strings")
+  if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+    raise ValueError("Opentrons labware version must be a positive integer")
+  return LabwareIdentity(namespace, load_name, version)
+
+
 def build_tip_rack_definition(tip_rack: TipRack, tip: Tip, load_name: str) -> Dict[str, Any]:
-  """Build a definition from PLR geometry without loading or modifying the rack."""
-  tip_spots = tip_rack.get_all_items()
-  well_names = {spot.name: tip_rack.get_child_identifier(spot) for spot in tip_spots}
-  definition = {
-    "schemaVersion": 2,
-    "version": 1,
-    "namespace": "pylabrobot",
-    "metadata": {
-      "displayName": load_name,
-      "displayCategory": "tipRack",
-      "displayVolumeUnits": "µL",
-    },
-    "brand": {"brand": "unknown"},
-    "parameters": {
-      "format": (
-        "96Standard"
-        if (tip_rack.num_items_x, tip_rack.num_items_y) == (12, 8)
-        else "384Standard"
-        if (tip_rack.num_items_x, tip_rack.num_items_y) == (24, 16)
-        else "irregular"
-      ),
-      "isTiprack": True,
-      "tipLength": tip.total_tip_length,
-      "tipOverlap": tip.fitting_depth,
-      "loadName": load_name,
-      "isMagneticModuleCompatible": False,
-    },
-    "ordering": utils.reshape_2d(
-      [well_names[tip_spot.name] for tip_spot in tip_spots],
-      (tip_rack.num_items_x, tip_rack.num_items_y),
-    ),
-    "cornerOffsetFromSlot": {
-      "x": 0,
-      "y": 0,
-      "z": 0,
-    },
-    "dimensions": {
-      "xDimension": tip_rack.get_absolute_size_x(),
-      "yDimension": tip_rack.get_absolute_size_y(),
-      "zDimension": tip_rack.get_absolute_size_z(),
-    },
-    "wells": {
-      well_names[child.name]: {
-        "depth": tip.total_tip_length,
-        "x": cast(Coordinate, child.location).x + child.get_absolute_size_x() / 2,
-        "y": cast(Coordinate, child.location).y + child.get_absolute_size_y() / 2,
-        "z": cast(Coordinate, child.location).z,
-        "shape": "circular",
-        "diameter": math.hypot(
-          child.get_absolute_size_x(),
-          child.get_absolute_size_y(),
-        ),
-        "totalLiquidVolume": tip.maximal_volume,
-      }
-      for child in tip_rack.children
-    },
-    "groups": [
-      {
-        "wells": [well_names[tip_spot.name] for tip_spot in tip_spots],
-        "metadata": {},
-      }
-    ],
-  }
+  """Build an OT-2 rack definition with its existing tip-spot diameter convention."""
+  definition = build_custom_tip_rack_definition(tip_rack, tip=tip, load_name=load_name)
+  definition["metadata"]["displayName"] = load_name
+  definition["groups"][0]["metadata"] = {}
+  for spot in tip_rack.get_all_items():
+    definition["wells"][tip_rack.get_child_identifier(spot)]["diameter"] = math.hypot(
+      spot.get_absolute_size_x(), spot.get_absolute_size_y()
+    )
   return definition
 
 
@@ -111,9 +79,11 @@ class LabwareBinding:
 class LabwareRegistry:
   """Record successful labware loads independently of the device's deck model."""
 
-  def __init__(self, run: OpentronsRun) -> None:
+  def __init__(self, run: OpentronsRun, server_assigned_ids: bool = False) -> None:
     self._run = run
     self._bindings: Dict[int, LabwareBinding] = {}
+    self._definitions: Dict[int, Tuple[Resource, LabwareIdentity]] = {}
+    self._server_assigned_ids = server_assigned_ids
 
   def is_loaded(self, resource: Resource) -> bool:
     return id(resource) in self._bindings
@@ -149,7 +119,34 @@ class LabwareRegistry:
       return
 
     if definition is not None:
-      identity = await self._run.define_labware(definition)
-    labware_id = uuid.uuid4().hex
-    await self._run.load_labware(identity, slot, labware_id, resource.name)
+      identity = await self.define(resource, definition)
+    if self._server_assigned_ids:
+      labware_id = await self._run.load_labware(identity, slot, None, resource.name)
+    else:
+      labware_id = uuid.uuid4().hex
+      await self._run.load_labware(identity, slot, labware_id, resource.name)
     self._bindings[id(resource)] = LabwareBinding(resource, labware_id, slot, identity)
+
+  async def define(self, resource: Resource, definition: Dict[str, Any]) -> LabwareIdentity:
+    """Upload a resource definition once per run, retaining its server identity."""
+    self._run._require_active()
+    cached = self.definition(resource)
+    if cached is not None:
+      return cached
+    identity = await self._run.define_labware(definition)
+    self._definitions[id(resource)] = (resource, identity)
+    return identity
+
+  def definition(self, resource: Resource) -> Optional[LabwareIdentity]:
+    """Return a previously uploaded definition without communicating."""
+    cached = self._definitions.get(id(resource))
+    return cached[1] if cached is not None else None
+
+  def record_location(self, resource: Resource, slot: str) -> None:
+    """Update a binding after a confirmed server-side move."""
+    self._bindings[id(resource)] = replace(self.get(resource), slot=slot)
+
+  def remove(self, resource: Resource) -> None:
+    """Forget a resource after its confirmed departure from the run's deck."""
+    self._bindings.pop(id(resource), None)
+    self._definitions.pop(id(resource), None)
