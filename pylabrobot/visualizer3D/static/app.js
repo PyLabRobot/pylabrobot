@@ -1279,7 +1279,9 @@ const DETAIL_MIN_PX = 2;
 // And below this a model is not worth its geometry: the box it stood in for says the same thing
 // at a fraction of the cost, and one box is drawn with all the others in a single call. Between
 // the two a resource is still there, drawn as a box; below the smaller one it is not drawn at all.
-const MODEL_MIN_PX = 12;
+// Eight pixels is where an 8.2 mm tip lands with the camera about a metre off an 840 px tall
+// canvas: far enough out that a deck being worked on is still made of things, not boxes.
+const MODEL_MIN_PX = 8;
 // Below this a rail number is a smudge rather than a number. Nothing is lost by not drawing it, and
 // at facility scale it is most of what the renderer is being asked to do.
 const LABEL_MIN_PX = 7;
