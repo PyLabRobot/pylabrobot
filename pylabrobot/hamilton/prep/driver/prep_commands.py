@@ -22,10 +22,10 @@ from pylabrobot.hamilton.transport.tcp.protocol import HamiltonProtocol, Hoi2Act
 from pylabrobot.hamilton.transport.tcp.wire_types import (
   F32,
   F64,
-  BoolArray,
   I16,
   U16,
   U32,
+  BoolArray,
   EnumArray,
   HcResultEntry,
   I16Array,

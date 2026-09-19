@@ -44,10 +44,10 @@ from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.resources.carrier import Carrier
 from pylabrobot.resources.hamilton.core_gripper_tools import HamiltonCoreGripperTool
-from pylabrobot.resources.hamilton.tip_creators import TipDropMethod, TipPickupMethod
 from pylabrobot.resources.hamilton.hamilton_decks import (
   HamiltonDeck,
 )
+from pylabrobot.resources.hamilton.tip_creators import TipDropMethod, TipPickupMethod
 from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 
 logger = logging.getLogger(__name__)

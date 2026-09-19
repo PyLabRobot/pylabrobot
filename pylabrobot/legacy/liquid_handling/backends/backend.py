@@ -22,8 +22,8 @@ from pylabrobot.legacy.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.legacy.machines.backend import MachineBackend
-from pylabrobot.resources import Deck, Tip
 from pylabrobot.legacy.tip_tracker import TipTracker
+from pylabrobot.resources import Deck, Tip
 
 
 class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
