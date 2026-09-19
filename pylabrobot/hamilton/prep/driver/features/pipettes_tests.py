@@ -872,16 +872,16 @@ def test_probe_z_using_ztouch_seeks_the_tip_bottom_and_can_end_at_z_safety():
     probe = functools.partial(
       p.pipettes.probe_z_using_ztouch,
       1,
-      search_start_position=160.0,
-      search_end_position=100.0,
-      minimum_traverse_height_end=150.0,
+      search_start_position=100.0,
+      search_end_position=70.0,  # above the spot below it, so the seek touches nothing
+      minimum_traverse_height_end=90.0,
     )
     assert await probe() is None
     assert await probe(tip_len=70.0, move_channels_to_safe_pos_after=True) is None
     seeks = [c for c in sent if isinstance(c, PrepCmd.PrepZAxisSeekObstacle)]
     stop_disc_offset = drive - (here + 51.9)
-    assert seeks[0].start_position == pytest.approx(160.0 + 51.9 + stop_disc_offset)
-    assert seeks[1].start_position == pytest.approx(160.0 + 62.0 + stop_disc_offset)
+    assert seeks[0].start_position == pytest.approx(100.0 + 51.9 + stop_disc_offset)
+    assert seeks[1].start_position == pytest.approx(100.0 + 62.0 + stop_disc_offset)
     assert _index(sent[sent.index(seeks[1]) :], PrepCmd.PrepMoveZUpToSafe) > 0
     with pytest.raises(ValueError, match="tip_len must be between 20 and 120"):
       await probe(tip_len=10.0)

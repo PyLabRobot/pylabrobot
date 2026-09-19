@@ -2938,12 +2938,16 @@ class Pipettes:
     minimum_traverse_height_end = (
       search_start_position if minimum_traverse_height_end is None else minimum_traverse_height_end
     )
+    # The Z window is the stop disc's and these heights are the tip bottom's, so what the channel
+    # carries moves the range down with it.
+    window = (
+      self.configuration.channels[channel_idx].z_range
+      if channel_idx < len(self.configuration.channels)
+      else None
+    )
+    overhang = (await self.request_tip_overhangs())[channel_idx] or 0.0
+    reach_z = None if window is None else (window[0] - overhang, window[1] - overhang)
     if search_end_position is None:
-      reach_z = (
-        self.configuration.channels[channel_idx].z_range
-        if channel_idx < len(self.configuration.channels)
-        else None
-      )
       if reach_z is None:
         raise RuntimeError(
           f"channel {channel_idx}'s Z range has not been read; pass search_end_position"
@@ -2956,15 +2960,15 @@ class Pipettes:
         f"search_end_position={search_end_position} is above search_start_position={search_start_position}"
       )
     if channel_idx < len(self.configuration.channels):
-      reach = self.configuration.channels[channel_idx]
-      for name, value, window in (
-        ("search_start_position", search_start_position, reach.z_range),
-        ("search_end_position", search_end_position, reach.z_range),
-        ("minimum_traverse_height_end", minimum_traverse_height_end, reach.z_range),
+      for name, value in (
+        ("search_start_position", search_start_position),
+        ("search_end_position", search_end_position),
+        ("minimum_traverse_height_end", minimum_traverse_height_end),
       ):
-        if window is not None and not window[0] <= value <= window[1]:
+        if reach_z is not None and not reach_z[0] <= value <= reach_z[1]:
           raise ValueError(
-            f"{name}={value} outside channel {channel_idx} range [{window[0]:.1f}, {window[1]:.1f}]"
+            f"{name}={value} outside channel {channel_idx} range "
+            f"[{reach_z[0]:.1f}, {reach_z[1]:.1f}]"
           )
 
     seek = PrepCmd.LLDChannelSeekParameters(
@@ -3113,17 +3117,20 @@ class Pipettes:
       raise RuntimeError(f"channel {channel_idx}'s Z range has not been read")
     # From where the channel stands, not from the traverse height: a caller that brought it down to
     # a surface meant it to seek from there, and lifting it first undoes that approach.
+    # The window is the stop disc's and these heights are the tip bottom's, so what the channel
+    # carries moves the range down with it.
+    reach = (window[0] - extension, window[1] - extension)
     start = round(here.z, 2) if search_start_position is None else search_start_position
-    floor = window[0] if search_end_position is None else search_end_position
+    floor = reach[0] if search_end_position is None else search_end_position
     final = start if minimum_traverse_height_end is None else minimum_traverse_height_end
     for name, value in (
       ("search_start_position", start),
       ("search_end_position", floor),
       ("minimum_traverse_height_end", final),
     ):
-      if not window[0] <= value <= window[1]:
+      if not reach[0] <= value <= reach[1]:
         raise ValueError(
-          f"{name}={value} outside channel {channel_idx} range [{window[0]:.1f}, {window[1]:.1f}]"
+          f"{name}={value} outside channel {channel_idx} range [{reach[0]:.1f}, {reach[1]:.1f}]"
         )
     if floor >= start:
       raise ValueError(f"search_end_position={floor} must be below search_start_position={start}")
