@@ -98,20 +98,10 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
 from pylabrobot.legacy.liquid_handling.backends.hamilton.common import fill_in_defaults
-from pylabrobot.legacy.liquid_handling.channel_positioning import (
-  get_tight_single_resource_liquid_op_offsets,
-  get_wide_single_resource_liquid_op_offsets,
-)
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
-)
-from pylabrobot.legacy.liquid_handling.pipette_batch_scheduling import (
-  ChannelBatch,
-  log_batches,
-  plan_batches,
-  validate_channel_selections,
 )
 from pylabrobot.legacy.liquid_handling.standard import (
   Drop,
@@ -157,6 +147,16 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.tip_tracker import does_tip_tracking
 from pylabrobot.resources.trash import Trash
+from pylabrobot.utils.liquid_handling.channel_positioning import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
+)
+from pylabrobot.utils.liquid_handling.pipette_batch_scheduling import (
+  ChannelBatch,
+  log_batches,
+  plan_batches,
+  validate_channel_selections,
+)
 
 # The name SubsystemError had before it moved here, kept so existing code still catches it.
 SlaveError = SubsystemError
