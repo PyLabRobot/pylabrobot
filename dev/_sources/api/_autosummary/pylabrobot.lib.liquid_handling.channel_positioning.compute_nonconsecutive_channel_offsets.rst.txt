@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.channel\_positioning.compute\_nonconsecutive\_channel\_offsets
+==============================================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.channel_positioning
+
+.. autofunction:: compute_nonconsecutive_channel_offsets

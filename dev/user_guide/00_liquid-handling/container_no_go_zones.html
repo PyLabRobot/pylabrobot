@@ -813,7 +813,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.container</span><span class="w"> </span><span class="kn">import</span> <span class="n">Container</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.coordinate</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coordinate</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.channel_positioning</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.lib.liquid_handling.channel_positioning</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_get_compartments</span><span class="p">,</span>
     <span class="n">compute_channel_offsets</span><span class="p">,</span>
     <span class="n">MIN_SPACING_EDGE</span><span class="p">,</span>
@@ -829,7 +829,7 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_draw_container_axis</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">container</span><span class="p">,</span> <span class="n">n_ch</span><span class="p">,</span> <span class="n">spread</span><span class="o">=</span><span class="s2">"wide"</span><span class="p">,</span> <span class="n">channel_spacings</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Draw a single container cross-section with channels on the given axis."""</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChannelsDoNotFitError</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.lib.liquid_handling.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChannelsDoNotFitError</span>
 
     <span class="n">size_y</span> <span class="o">=</span> <span class="n">container</span><span class="o">.</span><span class="n">get_absolute_size_y</span><span class="p">()</span>
     <span class="n">size_x</span> <span class="o">=</span> <span class="n">container</span><span class="o">.</span><span class="n">get_absolute_size_x</span><span class="p">()</span>
@@ -1141,7 +1141,7 @@ Compartments: [(2.0, 28.0), (34.0, 63.0), (69.0, 98.0)]
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># A narrow container where compartments are smaller than the default 9mm channel spacing.</span>
 <span class="c1"># 1 channel per compartment still works - the channel is simply centered.</span>
 <span class="c1"># 2 channels in one compartment would fail (needs 9mm, only 4mm available).</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChannelsDoNotFitError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.lib.liquid_handling.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChannelsDoNotFitError</span>
 
 <span class="n">tiny</span> <span class="o">=</span> <span class="n">Container</span><span class="p">(</span>
     <span class="n">name</span><span class="o">=</span><span class="s2">"tiny_container"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>

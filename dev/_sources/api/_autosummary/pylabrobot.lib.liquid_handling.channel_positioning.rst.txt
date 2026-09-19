@@ -1,0 +1,35 @@
+﻿:orphan:
+
+pylabrobot.lib.liquid\_handling.channel\_positioning
+====================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.channel_positioning
+
+.. automodule:: pylabrobot.lib.liquid_handling.channel_positioning
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      compute_channel_offsets
+      compute_nonconsecutive_channel_offsets
+      get_tight_single_resource_liquid_op_offsets
+      get_wide_single_resource_liquid_op_offsets
+      required_spacing_between
+   
+   
+
+   
+   
+   
+
+   
+   
+   

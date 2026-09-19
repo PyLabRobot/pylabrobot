@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.errors.ChannelsDoNotFitError
+============================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.errors
+
+.. autoexception:: ChannelsDoNotFitError

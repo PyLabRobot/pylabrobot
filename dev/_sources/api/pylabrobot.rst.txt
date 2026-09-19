@@ -11,6 +11,7 @@ Subpackages
 
     pylabrobot.config
     pylabrobot.generic
+    pylabrobot.lib.liquid_handling
     pylabrobot.resources
     pylabrobot.utils
 

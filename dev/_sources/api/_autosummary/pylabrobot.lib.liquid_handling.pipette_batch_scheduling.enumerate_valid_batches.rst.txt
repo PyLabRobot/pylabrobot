@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.pipette\_batch\_scheduling.enumerate\_valid\_batches
+====================================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.pipette_batch_scheduling
+
+.. autofunction:: enumerate_valid_batches

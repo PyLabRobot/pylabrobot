@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.pipette\_batch\_scheduling.validate\_channel\_selections
+========================================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.pipette_batch_scheduling
+
+.. autofunction:: validate_channel_selections

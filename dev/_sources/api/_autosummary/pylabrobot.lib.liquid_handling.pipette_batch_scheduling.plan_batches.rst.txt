@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.pipette\_batch\_scheduling.plan\_batches
+========================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.pipette_batch_scheduling
+
+.. autofunction:: plan_batches
