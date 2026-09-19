@@ -10,7 +10,7 @@ from typing import Optional
 
 import websockets
 
-from pylabrobot.resources import set_volume_tracking
+from pylabrobot.resources import does_volume_tracking, set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.visualizer3D.facility import Facility
@@ -22,6 +22,9 @@ FS_PORT, WS_PORT = 8731, 8732
 
 class StateChannelTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
+    # Volume tracking is global, so remember what it was and put it back: leaving it on breaks
+    # every other suite that aspirates from a well it never filled.
+    self._volume_tracking = does_volume_tracking()
     set_volume_tracking(True)
     self.facility = Facility(name="facility", size_x=1000, size_y=1000, size_z=500)
     self.plate = cor_96_wellplate_360uL_Fb(name="plate")
@@ -33,6 +36,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
 
   async def asyncTearDown(self):
     await self.viewer.stop()
+    set_volume_tracking(self._volume_tracking)
 
   async def connect(self):
     """Open a client and take the scene and the snapshot it is greeted with."""
