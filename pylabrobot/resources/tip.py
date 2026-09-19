@@ -6,6 +6,7 @@ from typing import Callable, Optional
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.volume_tracker import VolumeTracker
+from pylabrobot.resources.well import CrossSectionType
 
 
 class Tip(HeadTool):
@@ -38,13 +39,22 @@ class Tip(HeadTool):
     category: str = "tip",
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
+    cross_section_type: str = CrossSectionType.CIRCLE.value,
   ):
     """Initialize a tip.
 
     Args:
       size_z: accepted so that a serialized tip deserializes. A tip's `size_z` is its length, so
         this must equal `total_tip_length` when given.
+      cross_section_type: its shape across, as `serialize` writes it. Always a circle; taken so a
+        serialized tip deserializes.
+
+    Raises:
+      ValueError: If `size_z` is not the tip's length, or the cross section is not a circle.
     """
+
+    if cross_section_type != CrossSectionType.CIRCLE.value:
+      raise ValueError(f"a tip is round, not {cross_section_type!r}")
 
     if size_z is not None and size_z != total_tip_length:
       raise ValueError(
@@ -79,12 +89,14 @@ class Tip(HeadTool):
     self.tracker = VolumeTracker(thing=name or "tip_tracker", max_volume=self.maximal_volume)
 
   def serialize(self) -> dict:
+    """What its size does not say: what it holds, and that it is round rather than a box."""
     return {
       **super().serialize(),
       "total_tip_length": self.total_tip_length,
       "has_filter": self.has_filter,
       "nominal_volume": self.nominal_volume,
       "maximal_volume": self.maximal_volume,
+      "cross_section_type": CrossSectionType.CIRCLE.value,
     }
 
 

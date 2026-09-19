@@ -11,6 +11,7 @@ from typing import Dict, Optional, Union
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip
+from pylabrobot.resources.well import CrossSectionType
 
 
 class TipSize(enum.Enum):
@@ -77,6 +78,7 @@ class HamiltonTip(Tip):
     category: str = "tip",
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
+    cross_section_type: str = CrossSectionType.CIRCLE.value,
   ):
     if isinstance(tip_size, str):
       tip_size = TipSize[tip_size]
@@ -109,6 +111,7 @@ class HamiltonTip(Tip):
       category=category,
       model=model,
       pick_up_location=pick_up_location,
+      cross_section_type=cross_section_type,
     )
 
     self.pickup_method = pickup_method

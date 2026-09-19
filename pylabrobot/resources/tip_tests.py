@@ -30,6 +30,7 @@ class TipTests(unittest.TestCase):
         "fitting_depth": 1.0,
         "collar_height": None,
         "pick_up_location": {"x": 0.0, "y": 0.0, "z": 10.0, "type": "Coordinate"},
+        "cross_section_type": "circle",
       },
     )
 
@@ -63,6 +64,7 @@ class TipTests(unittest.TestCase):
         "tip_size": "HIGH_VOLUME",
         "collar_height": 10.0,
         "pick_up_location": {"x": 4.1, "y": 4.1, "z": 10.0, "type": "Coordinate"},
+        "cross_section_type": "circle",
       },
     )
 
