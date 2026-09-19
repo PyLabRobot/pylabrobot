@@ -388,6 +388,14 @@ dracoLoader.setDecoderPath("./vendor/draco/");
 dracoLoader.setDecoderConfig({ type: "wasm" });
 gltfLoader.setDRACOLoader(dracoLoader);
 let meshRoots = [];
+// A model drawn for many resources at once: one instanced mesh per mesh in its file, however many
+// resources stand on it. A clone apiece is a draw call apiece, and a rack of tips is ninety-six of
+// them. Each entry is { modelIndex, instances, meshes }.
+let modelMeshes = [];
+// Every file that has been fetched and parsed, by url. A tree that changes shape sends a whole
+// scene, and an instanced mesh cannot be resized - so the meshes are built again, from this,
+// without going back to the network.
+const parsedByUrl = new Map();
 
 // What identifies a drawn model across rebuilds: the resource it belongs to and the file it was
 // drawn from. A scene arrives whole whenever the tree changes shape, and most of what it describes
@@ -447,6 +455,11 @@ function buildDeclaredMeshes() {
   const onScreen = new Map();
   for (const root of meshRoots) onScreen.set(root.userData.key, root);
   meshRoots = [];
+  // An instanced mesh holds a fixed number of instances, so a scene with a different number of
+  // them needs new ones. The file behind it is already parsed, so they are built again in this
+  // same turn and nothing is ever off screen.
+  for (const built of modelMeshes) for (const mesh of built.meshes) view.remove(mesh);
+  modelMeshes = [];
 
   // One load per distinct model, however many instances stand on it. A file of several hundred
   // thousand triangles is expensive to fetch and parse, and cloning shares both geometry and
@@ -478,84 +491,148 @@ function buildDeclaredMeshes() {
     const scale = MESH_UNITS[declared.units] ?? 1;
     const names = instances.map((i) => world.names[i]);
 
-    gltfLoader.load(
-      declared.url,
-      (gltf) => {
-        // The scene may have been rebuilt while this was in flight. Placing it then would leave
-        // objects nothing owns, positioned by transforms that no longer apply.
-        if (!world || names.some((n, k) => world.indexOfName.get(n) !== instances[k])) return;
+    const place = (gltf) => {
+      // The scene may have been rebuilt while this was in flight. Placing it then would leave
+      // objects nothing owns, positioned by transforms that no longer apply.
+      if (!world || names.some((n, k) => world.indexOfName.get(n) !== instances[k])) return;
+      parsedByUrl.set(declared.url, gltf);
 
-        fitFilterDiscs(modelIndex, gltf.scene, scale, declared.up ?? "Y");
+      fitFilterDiscs(modelIndex, gltf.scene, scale, declared.up ?? "Y");
 
-        instances.forEach((index, k) => {
-          const scene = k === 0 ? gltf.scene : gltf.scene.clone(true);
-          scene.scale.setScalar(scale);
-          // Y-up is glTF's default; a Z-up file is already in our own convention.
-          if ((declared.up ?? "Y") === "Y") scene.rotation.x = Math.PI / 2;
+      // What rides something that travels keeps a copy of its own: it is drawn see-through and
+      // in a layer of its own while it is being carried, and instances of one model share a
+      // material, so a tip on a channel cannot be told from a tip in a rack through one. There
+      // are never many of them - a head has eight channels, not ninety-six.
+      const riding = instances.filter((index) => travels(index));
+      const standing = instances.filter((index) => !travels(index));
+      if (standing.length > 0) {
+        buildInstancedModel(modelIndex, standing, gltf, scale, declared.up ?? "Y");
+      }
 
-          const root = new THREE.Group();
-          root.add(scene);
-          root.matrixAutoUpdate = false;
-          root.matrix.copy(world.matrices[index]);
-          root.matrixWorldNeedsUpdate = true;
-          root.traverse((o) => {
-            o.frustumCulled = false;
-            if (o.isMesh) {
-              o.userData.declaredBy = index;
-              // The same unlit twin the boxes keep. A model has more shape to lose than a box
-              // does, but in a plan view what is wanted from it is its outline and its colour,
-              // and shading it from above gives neither.
-              o.userData.lit = o.material;
-              o.userData.flat = flatVariant(o.material);
-              // What the file said, kept before a plan view changes it. A travelling part is put
-              // into the same pass as the content below it, which means writing over its material's
-              // own flags - and a material asked afterwards what it was modelled as would answer
-              // with whatever the plan view just gave it.
-              o.userData.asModelled = {
-                transparent: o.material.transparent,
-                opacity: o.material.opacity,
-                depthWrite: o.material.depthWrite,
-                glazed: o.material.transparent && o.material.opacity <= GLAZED_MAX_OPACITY,
-              };
-            }
-          });
+      riding.forEach((index) => {
+        const scene = gltf.scene.clone(true);
+        scene.scale.setScalar(scale);
+        // Y-up is glTF's default; a Z-up file is already in our own convention.
+        if ((declared.up ?? "Y") === "Y") scene.rotation.x = Math.PI / 2;
 
-          // A rigged file names the parts that move. The declaration says which node answers to
-          // which joint, so the viewer drives what it is told and holds no knowledge of any arm's
-          // geometry. Each node's rest transform is kept, because a joint value is a displacement
-          // from where the file was authored, not an absolute pose.
-          const joints = new Map();
-          for (const [key, spec] of Object.entries(declared.joints ?? {})) {
-            const node = scene.getObjectByName(spec.node);
-            if (!node) {
-              console.warn(
-                `${world.names[index]} declares joint ${key} on node ${spec.node}, which the file does not have`,
-              );
-              continue;
-            }
-            joints.set(key, {
-              node,
-              spec,
-              restPosition: node.position.clone(),
-              restQuaternion: node.quaternion.clone(),
-            });
+        const root = new THREE.Group();
+        root.add(scene);
+        root.matrixAutoUpdate = false;
+        root.matrix.copy(world.matrices[index]);
+        root.matrixWorldNeedsUpdate = true;
+        root.traverse((o) => {
+          o.frustumCulled = false;
+          if (o.isMesh) {
+            o.userData.declaredBy = index;
+            // The same unlit twin the boxes keep. A model has more shape to lose than a box
+            // does, but in a plan view what is wanted from it is its outline and its colour,
+            // and shading it from above gives neither.
+            o.userData.lit = o.material;
+            o.userData.flat = flatVariant(o.material);
+            // What the file said, kept before a plan view changes it. A travelling part is put
+            // into the same pass as the content below it, which means writing over its material's
+            // own flags - and a material asked afterwards what it was modelled as would answer
+            // with whatever the plan view just gave it.
+            o.userData.asModelled = {
+              transparent: o.material.transparent,
+              opacity: o.material.opacity,
+              depthWrite: o.material.depthWrite,
+              glazed: o.material.transparent && o.material.opacity <= GLAZED_MAX_OPACITY,
+            };
           }
-          root.userData.joints = joints;
-          root.userData.scale = scale;
-          root.userData.index = index;
-          root.userData.key = meshKey(index);
-
-          view.add(root);
-          meshRoots.push(root);
-          applyJoints(index);
         });
 
-        modelIsDrawn(modelIndex);
-      },
-      undefined,
-      (error) => console.warn(`could not load the mesh declared by ${names[0]}`, error),
+        // A rigged file names the parts that move. The declaration says which node answers to
+        // which joint, so the viewer drives what it is told and holds no knowledge of any arm's
+        // geometry. Each node's rest transform is kept, because a joint value is a displacement
+        // from where the file was authored, not an absolute pose.
+        const joints = new Map();
+        for (const [key, spec] of Object.entries(declared.joints ?? {})) {
+          const node = scene.getObjectByName(spec.node);
+          if (!node) {
+            console.warn(
+              `${world.names[index]} declares joint ${key} on node ${spec.node}, which the file does not have`,
+            );
+            continue;
+          }
+          joints.set(key, {
+            node,
+            spec,
+            restPosition: node.position.clone(),
+            restQuaternion: node.quaternion.clone(),
+          });
+        }
+        root.userData.joints = joints;
+        root.userData.scale = scale;
+        root.userData.index = index;
+        root.userData.key = meshKey(index);
+
+        view.add(root);
+        meshRoots.push(root);
+        applyJoints(index);
+      });
+
+      modelIsDrawn(modelIndex);
+    };
+
+    const parsed = parsedByUrl.get(declared.url);
+    if (parsed !== undefined) {
+      place(parsed);
+      continue;
+    }
+    gltfLoader.load(declared.url, place, undefined, (error) =>
+      console.warn(`could not load the mesh declared by ${names[0]}`, error),
     );
   }
+}
+
+/**
+ * Draw one model for every resource standing on it, in one instanced mesh per mesh in its file.
+ *
+ * A cloned model is a draw call apiece: a tip carrier's five racks came to 1,544 of the 1,962 draws
+ * a close view cost, for geometry that is the same tip ninety-six times over. Instanced, a model
+ * costs one draw however many resources it is drawn for, and the geometry and the materials are
+ * the ones the file was parsed into - shared, as the clones shared them.
+ *
+ * Each instance is registered the way a box's own parts are, so a resource that moves or is
+ * switched off takes its geometry with it without this knowing anything about either.
+ */
+function buildInstancedModel(modelIndex, instances, gltf, scale, up) {
+  const carrier = new THREE.Group();
+  const scene = gltf.scene.clone(true);
+  scene.scale.setScalar(scale);
+  // Y-up is glTF's default; a Z-up file is already in our own convention.
+  if (up === "Y") scene.rotation.x = Math.PI / 2;
+  carrier.add(scene);
+  carrier.updateMatrixWorld(true);
+
+  const meshes = [];
+  scene.traverse((o) => {
+    if (!o.isMesh) return;
+    // Where this mesh sits inside the file, with the file's units and its up-axis already in it.
+    const local = o.matrixWorld.clone();
+    const mesh = new THREE.InstancedMesh(o.geometry, o.material, instances.length);
+    mesh.frustumCulled = false;
+    mesh.userData.instances = instances;
+    mesh.userData.lit = o.material;
+    mesh.userData.flat = flatVariant(o.material);
+    mesh.userData.asModelled = {
+      transparent: o.material.transparent,
+      opacity: o.material.opacity,
+      depthWrite: o.material.depthWrite,
+      color: o.material.color.getHex(),
+      glazed: o.material.transparent && o.material.opacity <= GLAZED_MAX_OPACITY,
+    };
+    instances.forEach((index, slot) => {
+      placeInstance(mesh, slot, world.matrices[index], local);
+      remember(index, mesh, slot, [local]);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    view.add(mesh);
+    meshes.push(mesh);
+  });
+  modelMeshes.push({ modelIndex, instances, meshes });
+  return meshes;
 }
 
 // Move a resource's mesh to the joint values it publishes.
@@ -1313,6 +1390,14 @@ function updateDetail() {
     if (root.visible !== visible) root.visible = visible;
     if (visible) geometryOf.add(world.modelOf[index]);
   }
+  // Every resource drawn from one instanced mesh is the same model at the same size, and none of
+  // them travels - what travels keeps a clone of its own - so one answer covers the lot.
+  for (const built of modelMeshes) {
+    const [sx, sy] = sizeOf(world.models[built.modelIndex]);
+    const visible = Math.max(sx, sy) / perPixel >= MODEL_MIN_PX;
+    for (const mesh of built.meshes) if (mesh.visible !== visible) mesh.visible = visible;
+    if (visible) geometryOf.add(built.modelIndex);
+  }
 
   const drawn = new Set();
   for (const entry of meshes) {
@@ -1518,27 +1603,29 @@ function setRenderMode(plan) {
     surface.material = surface.userData.lit;
   }
 
-  for (const root of meshRoots) {
-    root.traverse((o) => {
-      if (!o.isMesh) return;
-      if (o.userData.lit) o.material = o.userData.lit;
-      const modelled = o.userData.asModelled;
-      const rides = travels(o.userData.declaredBy);
-      // Glazing comes out of an axis view. A part that travels keeps whatever it was modelled with,
-      // see-through included: it is drawn that way so the deck under it can be read.
-      o.material.visible = !(plan && modelled?.glazed && !rides);
-      if (!modelled) return;
-      // A part held over the deck is drawn see-through, as its box is, so that what it is above
-      // still reads through it. It does not write depth for the same reason; it still tests, so
-      // the machine's own structure above it covers it as it should.
-      const lifted = plan && rides;
-      o.material.transparent = lifted ? true : modelled.transparent;
-      o.material.opacity = lifted ? Math.min(modelled.opacity, MOVING_OPACITY) : modelled.opacity;
-      o.material.depthWrite = lifted ? true : modelled.depthWrite;
-      o.material.depthTest = true;
-      o.renderOrder = lifted ? CARRIED_LAYER : 0;
-      o.material.needsUpdate = true;
-    });
+  // A mesh out of a model file, whether it was cloned for one resource or instanced for many.
+  const fromFile = [];
+  for (const root of meshRoots) root.traverse((o) => o.isMesh && fromFile.push(o));
+  for (const built of modelMeshes) for (const mesh of built.meshes) fromFile.push(mesh);
+  for (const o of fromFile) {
+    if (o.userData.lit) o.material = o.userData.lit;
+    const modelled = o.userData.asModelled;
+    // An instanced mesh holds only what stands still; a clone is drawn for one resource.
+    const rides = o.userData.declaredBy !== undefined && travels(o.userData.declaredBy);
+    // Glazing comes out of an axis view. A part that travels keeps whatever it was modelled with,
+    // see-through included: it is drawn that way so the deck under it can be read.
+    o.material.visible = !(plan && modelled?.glazed && !rides);
+    if (!modelled) return;
+    // A part held over the deck is drawn see-through, as its box is, so that what it is above
+    // still reads through it. It does not write depth for the same reason; it still tests, so
+    // the machine's own structure above it covers it as it should.
+    const lifted = plan && rides;
+    o.material.transparent = lifted ? true : modelled.transparent;
+    o.material.opacity = lifted ? Math.min(modelled.opacity, MOVING_OPACITY) : modelled.opacity;
+    o.material.depthWrite = lifted ? true : modelled.depthWrite;
+    o.material.depthTest = true;
+    o.renderOrder = lifted ? CARRIED_LAYER : 0;
+    o.material.needsUpdate = true;
   }
 
   for (const mark of gridMarks) {
@@ -1903,6 +1990,12 @@ function boxMatrix(matrix, sx, sy, sz, ox, oy, oz) {
 }
 
 function placeInstance(mesh, slot, matrix, sx, sy, sz, ox, oy, oz) {
+  // A mesh out of a model file sits at a transform of its own inside that file, which is not a
+  // scale and an offset. Given one, it is applied to the resource's own matrix as it stands.
+  if (sx?.isMatrix4) {
+    mesh.setMatrixAt(slot, tmpMatrix.multiplyMatrices(matrix, sx));
+    return;
+  }
   mesh.setMatrixAt(slot, boxMatrix(matrix, sx, sy, sz, ox, oy, oz));
 }
 
@@ -3394,22 +3487,26 @@ function atBoundary(surface) {
   // The models that arrived as files, and what is being done with each. A box that is not drawn
   // and a model that is not either leaves nothing on screen, and from outside the page the two
   // are indistinguishable - so the model has to be able to say so itself.
-  models: () =>
-    meshRoots.map((root) => {
-      const drawn = [];
-      root.traverse((o) => {
-        if (o.isMesh) {
-          drawn.push({
-            visible: o.visible && o.material.visible,
-            order: o.renderOrder,
-            depthTest: o.material.depthTest,
-            transparent: o.material.transparent,
-            opacity: o.material.opacity,
-          });
-        }
-      });
-      return { name: world?.names[root.userData.index], parts: drawn };
-    }),
+  models: () => {
+    const drawnBy = (o) => ({
+      visible: o.visible && o.material.visible,
+      order: o.renderOrder,
+      depthTest: o.material.depthTest,
+      transparent: o.material.transparent,
+      opacity: o.material.opacity,
+    });
+    // One entry per resource drawn from a file, whichever way it is drawn.
+    const listed = meshRoots.map((root) => {
+      const parts = [];
+      root.traverse((o) => o.isMesh && parts.push(drawnBy(o)));
+      return { name: world?.names[root.userData.index], parts };
+    });
+    for (const built of modelMeshes) {
+      const parts = built.meshes.map(drawnBy);
+      for (const index of built.instances) listed.push({ name: world?.names[index], parts });
+    }
+    return listed;
+  },
   detail: () =>
     meshes.map((e) => ({
       type: e.model.type,
