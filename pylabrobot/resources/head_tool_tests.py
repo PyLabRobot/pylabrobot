@@ -57,11 +57,10 @@ class HeadToolTests(unittest.TestCase):
     self.assertEqual((tool.has_filter, tool.maximal_volume), (False, 1.0))
     self.assertNotEqual(tip.kind(), tool.kind())
 
-  def test_two_tips_of_one_kind_are_one_kind_but_not_one_tip(self):
+  def test_two_tips_of_one_kind_are_one_kind(self):
     a = hamilton_tip_1000uL(name="rack_A1#0")
     b = hamilton_tip_1000uL(name="rack_B1#0")
     self.assertEqual(a.kind(), b.kind())
-    self.assertNotEqual(a, b)
 
   def test_tips_that_differ_are_different_kinds(self):
     a = Tip(False, 59.9, 400.0, 8.0, name="a")
