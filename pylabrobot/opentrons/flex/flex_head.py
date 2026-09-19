@@ -1313,13 +1313,12 @@ class FlexHead8(_FlexHead):
   (``_ensure_all_mode``).
 
   Verified on real 8-channel Flex hardware (Opentrons Flex, robot-server
-  API 8.8) by the ``docs/user_guide/opentrons/flex/hello-world.ipynb`` and
-  ``use_channels_smoke.ipynb`` runs: setup and homing; tip pickup in
+  API 8.8): setup and homing; tip pickup in
   full-column (ALL), single-nozzle (SINGLE, H1), and partial-column (QUADRANT,
   front four) layouts, and tip drop in the full-column and single-nozzle
   layouts, confirmed against the hardware tip-presence sensor; and
   aspirate/dispense into a plate in the full-column and single-nozzle layouts.
-  ``_HARDWARE_VERIFIED_OPS`` is the full record: the notebook runs above cover
+  ``_HARDWARE_VERIFIED_OPS`` is the full record: these checks cover
   the tip and plate ops, and a Cheshire Labs bench session on the same head
   covers the container, in-place, probe and recovery ops. What is left -- the
   motion surface (``move_to``, ``move_relative``, ``position``,

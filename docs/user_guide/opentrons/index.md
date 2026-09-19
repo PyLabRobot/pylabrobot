@@ -5,5 +5,4 @@
 
 ot2/hello-world
 flex/hello-world
-flex/use_channels_smoke
 ```
