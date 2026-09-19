@@ -1,7 +1,7 @@
 .. currentmodule:: pylabrobot.lib.liquid_handling
 
 pylabrobot.lib.liquid_handling package
-====================================
+======================================
 
 Shared channel positioning and pipette batch planning for liquid-handling devices.
 
