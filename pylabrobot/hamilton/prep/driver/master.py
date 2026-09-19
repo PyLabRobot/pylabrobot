@@ -285,6 +285,9 @@ class PrepDriver:
     # What the device reports about itself, read by `discover`. None until setup has run.
     self.configuration: Optional[DeviceConfiguration] = None
     self._core_gripper_arm: Optional[CoreGripperArm] = None
+    # Where each tool the channels are carrying came from, so it goes back there when it is
+    # dropped. A tool is a resource: while the channels hold it, it is theirs.
+    self._parked_tools: List[Tuple[HeadTool, Optional[Resource], Optional[Coordinate]]] = []
     self.pipettes: Optional[Pipettes] = None
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
@@ -1317,6 +1320,16 @@ class PrepDriver:
       tool_seek=engage + 10.0,
     )
 
+    # A tool the channels have taken is on them, not in the holder: it rides where they ride, as a
+    # tip does. Channel 0 takes the rear tool and channel 1 the front, which is the order the
+    # command sends them in.
+    self._parked_tools = [(tool, tool.parent, tool.location) for tool in tools]
+    rear_first = sorted(tools, key=lambda tool: tool.get_location_wrt(self.deck, y="c").y)
+    for channel, tool in zip((0, 1), reversed(rear_first)):
+      shaft = self.pipettes.shaft(channel)
+      if shaft is not None:
+        shaft.mount_tip(tool)
+
     self._core_gripper_arm = CoreGripperArm(
       backend=self.core_grippers, reference_resource=self.deck, grip_axis="y"
     )
@@ -1329,6 +1342,16 @@ class PrepDriver:
       await self._core_gripper_arm.backend.drop_tool()
     finally:
       self._core_gripper_arm = None
+      self._park_core_gripper_tools()
+
+  def _park_core_gripper_tools(self) -> None:
+    """Put the tools back where they were picked up from, once the device has let go of them."""
+    for tool, holder, location in self._parked_tools:
+      if tool.parent is not None:
+        tool.parent.unassign_child_resource(tool)
+      if holder is not None:
+        holder.assign_child_resource(tool, location=location)
+    self._parked_tools = []
 
   @asynccontextmanager
   async def mounted_core_grippers(self) -> AsyncIterator[CoreGripperArm]:

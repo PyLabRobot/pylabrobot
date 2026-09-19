@@ -182,13 +182,14 @@ def test_picking_the_tools_up_sends_where_the_deck_holds_them():
     assert p.core_grippers is not None
     captured = _record_send(p)
 
-    await p.pick_up_core_grippers()
-
+    # Read where the tools stand before they are taken: once they are, they are on the channels.
     holder = p.core_gripper_holder
     assert isinstance(holder, HamiltonCoreGrippers)
     at = holder.get_location_wrt(deck, x="c")
     tools = [child for child in holder.children if isinstance(child, HeadTool)]
     engage = min(tool.get_location_wrt(deck, z="t").z - tool.fitting_depth for tool in tools)
+
+    await p.pick_up_core_grippers()
 
     (pickup,) = [c for c in captured if isinstance(c, PrepCmd.PrepPickUpTool)]
     assert pickup.tool_position_x == at.x
@@ -226,13 +227,15 @@ def test_the_tools_are_picked_up_where_they_stand_not_where_the_holder_sits():
     p = PrepSimulationDriver(deck=deck)
     await p.setup()
     captured = _record_send(p)
-    await p.pick_up_core_grippers()
-
-    (pickup,) = [c for c in captured if isinstance(c, PrepCmd.PrepPickUpTool)]
+    # Where they stand is read before they are taken: a taken tool is on the channel, not here.
     holder = p.core_gripper_holder
     assert holder is not None
     tools = [child for child in holder.children if isinstance(child, HeadTool)]
     engage = min(tool.get_location_wrt(deck, z="t").z - tool.fitting_depth for tool in tools)
+
+    await p.pick_up_core_grippers()
+
+    (pickup,) = [c for c in captured if isinstance(c, PrepCmd.PrepPickUpTool)]
     assert pickup.tool_position_z == engage
     assert pickup.tool_seek == engage + 10.0
     assert engage > holder.get_location_wrt(deck).z  # the holder's base is not where they are
@@ -308,5 +311,38 @@ def test_the_tool_commands_are_the_frames_the_device_answered():
     assert (
       drop.build_parameters().build().hex() == ""
     )  # it takes none: the tools go back where they came from
+
+  asyncio.run(_run())
+
+
+def test_the_tools_ride_on_the_channels_that_took_them():
+  """A tool the channels have taken is theirs while they hold it, as a tip is, and goes back to
+  the holder when it is dropped. Otherwise the model - and the viewer reading it - has the tools
+  sitting in the holder while the channels carry them across the deck."""
+
+  async def _run():
+    p = PrepSimulationDriver(deck=PrepDeck(with_core_grippers=True))
+    await p.setup()
+    holder = p.core_gripper_holder
+    assert holder is not None
+    front, back = (t for t in holder.children if isinstance(t, HeadTool))
+    parked = {tool.name: tool.get_location_wrt(p.deck) for tool in (front, back)}
+
+    await p.pick_up_core_grippers()
+
+    # Channel 0 takes the rear tool and channel 1 the front, which is the order they are sent in.
+    assert p.pipettes is not None
+    assert back.parent is p.pipettes.shaft(0)
+    assert front.parent is p.pipettes.shaft(1)
+    assert [c for c in holder.children if isinstance(c, HeadTool)] == []
+    # They ride where the channels ride, which is not where they were parked.
+    for tool in (front, back):
+      assert tool.get_location_wrt(p.deck).z > parked[tool.name].z
+
+    await p.return_core_grippers()
+
+    assert {t.name for t in holder.children} == {front.name, back.name}
+    for tool in (front, back):
+      assert tool.get_location_wrt(p.deck) == parked[tool.name]
 
   asyncio.run(_run())
