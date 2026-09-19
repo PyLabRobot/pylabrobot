@@ -455,7 +455,7 @@ class Head8:
       length=tip.total_tip_length - tip.fitting_depth,
       tip_type=PrepCmd.TipTypes.StandardVolume,
       has_filter=tip.has_filter,
-      is_needle=False,
+      is_needle=tip.maximal_volume == 0,  # a needle is closed: it holds no liquid
       is_tool=False,
     )
 
@@ -587,7 +587,7 @@ class Head8:
   ) -> bool:
     """Determine whether LLD is active for this MPH pipetting call.
 
-    Unlike the PIP backend (which takes a per-channel list), the MPH accepts a
+    Unlike the pipetting channels (which take a per-channel list), the MPH accepts a
     single LLDMode because the ganged head operates as one unit.
     """
     if lld_mode is not None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any, List
 from unittest.mock import AsyncMock
 
@@ -30,10 +31,11 @@ def _record_send(prep: PrepDriver) -> list[Any]:
 
 
 def _make_arm(deck: PrepDeck) -> CoreGripperArm:
-  backend = CoreGrippers(AsyncMock())
-  backend.pick_up_at_location = AsyncMock()  # type: ignore[method-assign]
-  backend.drop_at_location = AsyncMock()  # type: ignore[method-assign]
-  return CoreGripperArm(backend=backend, reference_resource=deck, grip_axis="y")
+  grippers = CoreGrippers(AsyncMock())
+  grippers.pick_up_at_location = AsyncMock()  # type: ignore[method-assign]
+  grippers.drop_at_location = AsyncMock()  # type: ignore[method-assign]
+  driver = SimpleNamespace(core_grippers=grippers, deck=deck)
+  return CoreGripperArm(driver, grip_axis="y")  # type: ignore[arg-type]
 
 
 def test_drop_resource_releases_over_the_destination_at_the_grip_height():
@@ -44,10 +46,10 @@ def test_drop_resource_releases_over_the_destination_at_the_grip_height():
   arm = _make_arm(deck)
   picked: List[Coordinate] = []
   dropped: List[Coordinate] = []
-  arm.backend.pick_up_at_location = AsyncMock(  # type: ignore[method-assign]
+  arm.grippers.pick_up_at_location = AsyncMock(  # type: ignore[method-assign]
     side_effect=lambda location, *args, **kwargs: picked.append(location)
   )
-  arm.backend.drop_at_location = AsyncMock(  # type: ignore[method-assign]
+  arm.grippers.drop_at_location = AsyncMock(  # type: ignore[method-assign]
     side_effect=lambda location, *args, **kwargs: dropped.append(location)
   )
   offset = Coordinate(0.5, -0.25, 1.0)
@@ -105,7 +107,7 @@ def test_drop_resource_reassigns_holder():
     assert plate.parent is dest
     assert dest.resource is plate
     assert deck[4].resource is None
-    arm.backend.drop_at_location.assert_awaited_once()  # type: ignore[attr-defined]
+    arm.grippers.drop_at_location.assert_awaited_once()  # type: ignore[attr-defined]
     with pytest.raises(RuntimeError, match="Not holding anything"):
       await arm.drop_resource(deck[4])
 
@@ -121,8 +123,8 @@ def test_pick_up_resource_width_override():
   async def _run() -> None:
     await arm.pick_up_resource(plate, resource_width=80.5)
     await arm.drop_resource(deck[2])
-    pick = arm.backend.pick_up_at_location.await_args  # type: ignore[attr-defined]
-    drop = arm.backend.drop_at_location.await_args  # type: ignore[attr-defined]
+    pick = arm.grippers.pick_up_at_location.await_args  # type: ignore[attr-defined]
+    drop = arm.grippers.drop_at_location.await_args  # type: ignore[attr-defined]
     assert pick.args[1] == 80.5 and drop.args[1] == 80.5
 
   asyncio.run(_run())
@@ -142,7 +144,7 @@ def test_pick_up_at_location_enables_drop_at_location():
       plate_top_z_offset=5.0,
     )
     await arm.drop_at_location(place)
-    args = arm.backend.drop_at_location.await_args  # type: ignore[attr-defined]
+    args = arm.grippers.drop_at_location.await_args  # type: ignore[attr-defined]
     assert (args.args[0], args.args[1]) == (place, 85.0)
     with pytest.raises(RuntimeError, match="Not holding anything"):
       await arm.drop_at_location(place)
@@ -344,5 +346,35 @@ def test_the_tools_ride_on_the_channels_that_took_them():
     assert {t.name for t in holder.children} == {front.name, back.name}
     for tool in (front, back):
       assert tool.get_location_wrt(p.deck) == parked[tool.name]
+
+  asyncio.run(_run())
+
+
+def test_a_drop_the_device_refuses_leaves_the_tools_on_the_channels():
+  """The model says what the device did: if it did not let go, the channels are still holding the
+  tools, and saying otherwise sends the next move somewhere with two tools it does not expect."""
+
+  async def _run():
+    p = PrepSimulationDriver(deck=PrepDeck(with_core_grippers=True))
+    await p.setup()
+    holder = p.core_gripper_holder
+    assert holder is not None
+    tools = [child for child in holder.children if isinstance(child, HeadTool)]
+
+    await p.pick_up_core_grippers()
+    held = [tool.parent for tool in tools]
+
+    async def refuse(move_to_safe_z_first: bool = True) -> None:
+      raise RuntimeError("error 51: the tool did not let go")
+
+    assert p._core_gripper_arm is not None
+    p._core_gripper_arm.grippers.drop_tool = refuse  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError):
+      await p.return_core_grippers()
+
+    assert [tool.parent for tool in tools] == held
+    assert p.core_grippers_mounted
+    assert [c for c in holder.children if isinstance(c, HeadTool)] == []
+    await p.stop()
 
   asyncio.run(_run())

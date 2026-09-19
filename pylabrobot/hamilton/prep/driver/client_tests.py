@@ -133,7 +133,7 @@ def test_mounted_core_grippers_picks_up_the_tools_and_returns_them():
     await p.setup()
     async with p.mounted_core_grippers() as arm:
       assert p.core_grippers_mounted
-      assert arm.backend is p.core_grippers
+      assert arm.grippers is p.core_grippers
     assert not p.core_grippers_mounted
     await p.stop()
 

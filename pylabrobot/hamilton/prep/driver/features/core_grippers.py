@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Literal, Optional
 
 from pylabrobot.resources import Coordinate, Resource
+from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.resource_state import place_resource
 
@@ -217,16 +218,32 @@ class CoreGripperArm:
 
   def __init__(
     self,
-    backend: CoreGrippers,
-    reference_resource: Resource,
+    driver: "PrepDriver",
     grip_axis: Literal["x", "y"] = "y",
   ) -> None:
-    self.backend = backend
-    self._reference_resource = reference_resource
+    """
+    Args:
+      driver: the driver whose grippers this arm drives, and whose deck it measures against.
+      grip_axis: which way the tools close on what they take.
+    """
+    self._driver = driver
     self._grip_axis = grip_axis
     self._pickup_distance_from_bottom: Optional[float] = None
     self._holding_resource_width: Optional[float] = None
     self._held_resource: Optional[Resource] = None
+
+  @property
+  def grippers(self) -> CoreGrippers:
+    """The gripper feature this arm drives."""
+    grippers = self._driver.core_grippers
+    if grippers is None:
+      raise RuntimeError("the driver has no CO-RE grippers")
+    return grippers
+
+  @property
+  def _deck(self) -> Deck:
+    """The deck positions are measured from, as the driver has it now."""
+    return self._driver.deck
 
   def _resolve_pickup_distance(
     self, resource: Resource, pickup_distance_from_bottom: Optional[float]
@@ -254,8 +271,8 @@ class CoreGripperArm:
     pickup_distance_from_bottom: float,
   ) -> Coordinate:
     center = resource.center().rotated(resource.get_absolute_rotation())
-    if resource.is_in_subtree_of(self._reference_resource):
-      loc = resource.get_location_wrt(self._reference_resource, "l", "f", "b") + center + offset
+    if resource.is_in_subtree_of(self._deck):
+      loc = resource.get_location_wrt(self._deck, "l", "f", "b") + center + offset
     else:
       loc = center + offset
     return Coordinate(loc.x, loc.y, loc.z + pickup_distance_from_bottom)
@@ -272,7 +289,7 @@ class CoreGripperArm:
     else:
       child = Coordinate.zero()
     center = held.center().rotated(held.get_absolute_rotation())
-    plate_lfb = destination.get_location_wrt(self._reference_resource, "l", "f", "b") + child
+    plate_lfb = destination.get_location_wrt(self._deck, "l", "f", "b") + child
     loc = plate_lfb + center + offset
     return Coordinate(loc.x, loc.y, loc.z + pdfb)
 
@@ -311,7 +328,7 @@ class CoreGripperArm:
       plate_top_z_offset = resource.get_absolute_size_z() - pdfb
 
     location = self._pickup_location(resource, offset, pdfb)
-    await self.backend.pick_up_at_location(
+    await self.grippers.pick_up_at_location(
       location,
       resource_width,
       resource_length=resource_length,
@@ -342,7 +359,7 @@ class CoreGripperArm:
     Sets held width so ``drop_at_location`` works. Does not set a held
     :class:`Resource`; use ``drop_resource`` only after ``pick_up_resource``.
     """
-    await self.backend.pick_up_at_location(
+    await self.grippers.pick_up_at_location(
       location,
       resource_width,
       resource_length=resource_length,
@@ -378,7 +395,7 @@ class CoreGripperArm:
     held = self._held_resource
     destination.check_can_drop_resource_here(held)
     location = self._drop_location(destination, offset)
-    await self.backend.drop_at_location(
+    await self.grippers.drop_at_location(
       location,
       self._holding_resource_width,
       clearance_y=clearance_y,
@@ -396,7 +413,7 @@ class CoreGripperArm:
   ) -> None:
     if self._holding_resource_width is None:
       raise RuntimeError("Not holding anything")
-    await self.backend.drop_at_location(
+    await self.grippers.drop_at_location(
       location,
       self._holding_resource_width,
       clearance_y=clearance_y,
@@ -410,4 +427,4 @@ class CoreGripperArm:
     *,
     acceleration_scale_x: int = 1,
   ) -> None:
-    await self.backend.move_to_location(location, acceleration_scale_x=acceleration_scale_x)
+    await self.grippers.move_to_location(location, acceleration_scale_x=acceleration_scale_x)

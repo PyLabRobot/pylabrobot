@@ -1330,19 +1330,20 @@ class PrepDriver:
       if shaft is not None:
         shaft.mount_tip(tool)
 
-    self._core_gripper_arm = CoreGripperArm(
-      backend=self.core_grippers, reference_resource=self.deck, grip_axis="y"
-    )
+    self._core_gripper_arm = CoreGripperArm(self, grip_axis="y")
     return self._core_gripper_arm
 
   async def return_core_grippers(self) -> None:
+    """Put the tools back in their holder, if the device lets go of them.
+
+    A drop that fails leaves the channels holding the tools, so the model says so: they are parked
+    once the device has confirmed it, not whatever happened.
+    """
     if self._core_gripper_arm is None:
       return
-    try:
-      await self._core_gripper_arm.backend.drop_tool()
-    finally:
-      self._core_gripper_arm = None
-      self._park_core_gripper_tools()
+    await self._core_gripper_arm.grippers.drop_tool()
+    self._core_gripper_arm = None
+    self._park_core_gripper_tools()
 
   def _park_core_gripper_tools(self) -> None:
     """Put the tools back where they were picked up from, once the device has let go of them."""
