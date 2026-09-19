@@ -62,6 +62,22 @@
     "oem": "https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge"
   },
   {
+    "id": "biotek-405-ts",
+    "vendor": "Agilent (BioTek)",
+    "name": "405 TS",
+    "kind": "plate washer",
+    "capabilities": [
+      "plate washing"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.agilent.biotek.lhc.Washer405TS",
+    "api_version": "v1",
+    "code_slug": "agilent/biotek/lhc",
+    "doc_slug": "agilent/405ts/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/automated-liquid-dispensing-handling/automated-microplate-washers-dispensers/biotek-405-ts-microplate-washer-1623261"
+  },
+  {
     "id": "biotek-cytation-1",
     "vendor": "Agilent (BioTek)",
     "name": "Cytation 1",
@@ -118,11 +134,45 @@
       "dispensing"
     ],
     "status": "mostly",
-    "api": "pylabrobot.agilent.biotek.el406.EL406",
+    "api": "pylabrobot.agilent.biotek.lhc.EL406",
     "api_version": "v1",
-    "code_slug": "agilent/biotek/el406",
+    "code_slug": "agilent/biotek/lhc",
+    "doc_slug": "agilent/el406/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.agilent.com/en/product/cell-analysis/microplate-automation-detection/microplate-washers-dispensers/biotek-el406-washer-dispenser-1623255"
+  },
+  {
+    "id": "biotek-multiflo",
+    "vendor": "Agilent (BioTek)",
+    "name": "MultiFlo",
+    "kind": "bulk dispenser",
+    "capabilities": [
+      "dispensing"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.agilent.biotek.lhc.MultiFlo",
+    "api_version": "v1",
+    "code_slug": "agilent/biotek/lhc",
+    "doc_slug": "agilent/multiflo/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/automated-liquid-dispensing-handling/automated-microplate-dispensers/biotek-multiflo-microplate-dispenser-1623263"
+  },
+  {
+    "id": "biotek-multiflo-fx",
+    "vendor": "Agilent (BioTek)",
+    "name": "MultiFlo FX",
+    "kind": "bulk dispenser",
+    "capabilities": [
+      "dispensing",
+      "plate washing"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.agilent.biotek.lhc.MultiFloFX",
+    "api_version": "v1",
+    "code_slug": "agilent/biotek/lhc",
+    "doc_slug": "agilent/multiflofx/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/automated-liquid-dispensing-handling/automated-microplate-dispensers/biotek-multiflo-fx-multi-mode-dispenser-1623264"
   },
   {
     "id": "biotek-synergy-h1",

@@ -1,6 +1,13 @@
 # Default owners
 * @PyLabRobot/core-team
 
+# Agilent BioTek washers and dispensers
+/docs/user_guide/agilent/405ts/ @stefanmaak
+/docs/user_guide/agilent/el406/ @stefanmaak
+/docs/user_guide/agilent/multiflo/ @stefanmaak
+/docs/user_guide/agilent/multiflofx/ @stefanmaak
+/pylabrobot/agilent/biotek/lhc/ @stefanmaak
+
 # BMG CLARIOstar
 /docs/user_guide/bmg_labtech/clariostar/ @BioCam
 /pylabrobot/legacy/plate_reading/bmg_labtech/ @BioCam
