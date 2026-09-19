@@ -99,7 +99,10 @@ class TipMountingShaft(Resource):
   def mount_tip(self, tip: HeadTool) -> None:
     """Take a tip onto this shaft, once the device has confirmed the pickup.
 
-    The tip is centred on the shaft, its pick-up location `fitting_depth` above the shaft's end.
+    What is placed on the shaft's axis is the tool's pick-up location, `fitting_depth` above the
+    shaft's end - not the tool's origin. A resource is placed by its origin, so the offset between
+    the two is taken off, turned by however the tool is turned: a CO-RE grip tool parked facing the
+    other way is picked up by the same point on it, and a tip, which is never turned, is unaffected.
 
     Args:
       tip: the tip that was collected. It is reparented here.
@@ -109,10 +112,11 @@ class TipMountingShaft(Resource):
     """
     if self.has_tip():
       raise RuntimeError(f"{self.name} is already carrying {self.children[0].name}")
+    grip = tip.pick_up_location.rotated(tip.rotation)
     location = Coordinate(
-      x=self.get_size_x() / 2 - tip.pick_up_location.x,
-      y=self.get_size_y() / 2 - tip.pick_up_location.y,
-      z=tip.fitting_depth - tip.pick_up_location.z,
+      x=self.get_size_x() / 2 - grip.x,
+      y=self.get_size_y() / 2 - grip.y,
+      z=tip.fitting_depth - grip.z,
     )
     move_tool(tip, lambda: self.assign_child_resource(tip, location=location))
 
