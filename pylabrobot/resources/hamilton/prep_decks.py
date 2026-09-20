@@ -31,8 +31,8 @@ PREP_SPOT_PITCH_Y = 95.0
 PREP_CALIBRATION_BLOCK_LOCATION = Coordinate(133.75, 185.25, 0.0)
 
 
-def hamilton_prep_plateholder(name: str) -> ResourceHolder:
-  """A PREP deck's plate holder: four corner clips around an insert pedestal, as measured.
+def hamilton_prep_resourceholder(name: str) -> ResourceHolder:
+  """A PREP deck's labware spot: four corner clips around an insert pedestal, as measured.
 
   What stands here is centred between the clips, on the moat around the pedestal: the pedestal's
   top is 4.5 mm above the deck and the moat is a millimetre below that, probed on PRPAA1087 at
@@ -54,7 +54,7 @@ def hamilton_prep_plateholder(name: str) -> ResourceHolder:
       y=(size_y - 85.48) / 2,
       z=3.5,
     ),
-    model="hamilton_prep_plateholder",
+    model="hamilton_prep_resourceholder",
   )
 
 
@@ -105,7 +105,7 @@ class PrepDeck(Deck):
         for row in range(4):
           x = column * PREP_SPOT_PITCH_X
           y = row * PREP_SPOT_PITCH_Y
-          spot = hamilton_prep_plateholder(name=f"{prefix}_spot_{column}_{row}")
+          spot = hamilton_prep_resourceholder(name=f"{prefix}_spot_{column}_{row}")
           self.assign_child_resource(spot, location=Coordinate(x, y, 0))
 
     if with_calibration_block:

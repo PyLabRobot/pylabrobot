@@ -68,7 +68,7 @@ def hamilton_96_tiprack_ntr(
     size_y=85.48,
     size_z=55.0,  # the top face, where the collars rest
     model=hamilton_96_tiprack_ntr.__name__,
-    # Venus' StackHt. TODO: measure a nest on the instrument.
+    # The stacking height Hamilton's software reports. TODO: measure a nest on the instrument.
     stacking_z_height=16.0,
     ordered_items=create_ordered_items_2d(
       TipSpot,
