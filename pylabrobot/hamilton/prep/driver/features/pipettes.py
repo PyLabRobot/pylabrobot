@@ -3071,10 +3071,8 @@ class Pipettes:
     }
 
   # ----------------------------------------
-  # Tips and liquid handling
+  # Tip handling
   # ----------------------------------------
-
-  # -- tip pickup / drop ---------------------------------------------------------------------------
 
   def shaft(self, channel: int) -> Optional[TipMountingShaft]:
     """The mounting shaft modelling a channel, or None while nothing models it."""
@@ -3699,6 +3697,10 @@ class Pipettes:
     if n is not None and channel >= n:
       return False
     return True
+
+  # ----------------------------------------
+  # Liquid handling
+  # ----------------------------------------
 
   # -- v1/v2 aspirate/dispense dispatch helpers ----------------------------------------------------
 
