@@ -117,7 +117,7 @@ class StandardTipCarrierTests(unittest.TestCase):
     ]:
       with self.subTest(carrier=carrier_fn.__name__):
         carrier = carrier_fn("carrier")
-        carrier[0] = rack = rack_fn("rack")
+        carrier[0] = rack = rack_fn("rack", with_tips=False)
         self.assertEqual(rack.location, Coordinate.zero())
 
 
@@ -202,5 +202,8 @@ class NestedTipCarrierTests(unittest.TestCase):
     ]:
       with self.subTest(rack=rack_fn.__name__):
         rack = rack_fn("rack")
-        tip = rack.get_item("A1").get_tip()
-        self.assertAlmostEqual(tip.get_location_wrt(rack).z, tip_end, delta=0.15)
+        spot = rack.get_item("A1")
+        tip = spot.get_tip()
+        self.assertAlmostEqual(
+          spot.get_location_wrt(rack).z + tip.collar_height - tip.get_size_z(), tip_end, delta=0.15
+        )

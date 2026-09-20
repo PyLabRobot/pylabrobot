@@ -1,7 +1,7 @@
 """Pipetting channels, and the rigid grids some devices carry them in."""
 
 from collections import OrderedDict
-from typing import Any, Dict, List, Literal, Mapping, Optional, cast, get_args
+from typing import Any, Dict, Literal, Mapping, Optional, cast, get_args
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.head_tool import HeadTool
@@ -92,10 +92,6 @@ class TipMountingShaft(Resource):
     """Whether this shaft is carrying a tip."""
     return len(self.children) > 0
 
-  def comparable_children(self) -> List[Resource]:
-    """Everything but the tool it is carrying, which is state."""
-    return [child for child in self.children if not isinstance(child, HeadTool)]
-
   def mount_tip(self, tip: HeadTool) -> None:
     """Take a tip onto this shaft, once the device has confirmed the pickup.
 
@@ -109,10 +105,11 @@ class TipMountingShaft(Resource):
     """
     if self.has_tip():
       raise RuntimeError(f"{self.name} is already carrying {self.children[0].name}")
+    pick_up_location = tip.pick_up_location or tip.get_anchor("c", "c", "t")
     location = Coordinate(
-      x=self.get_size_x() / 2 - tip.pick_up_location.x,
-      y=self.get_size_y() / 2 - tip.pick_up_location.y,
-      z=tip.fitting_depth - tip.pick_up_location.z,
+      x=self.get_size_x() / 2 - pick_up_location.x,
+      y=self.get_size_y() / 2 - pick_up_location.y,
+      z=tip.fitting_depth - pick_up_location.z,
     )
     self.assign_child_resource(tip, location=location)
 

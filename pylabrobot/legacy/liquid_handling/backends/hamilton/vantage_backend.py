@@ -535,7 +535,7 @@ class VantageBackend(HamiltonLiquidHandler):
       ):
         # Tip rack spots specify the collar support height; discard uses the tip end.
         tip = cast(HamiltonTip, op.tip)
-        z -= tip.total_tip_length - tip.collar_height
+        z -= tip.get_size_z() - tip.collar_height
       tip_end_positions.append(z)
     max_z = max(tip_end_positions)
 

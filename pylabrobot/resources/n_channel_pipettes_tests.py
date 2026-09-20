@@ -33,14 +33,14 @@ class ShaftHoldsItsTip(unittest.TestCase):
       Coordinate(
         (self.shaft.get_size_x() - self.tip.get_size_x()) / 2,
         (self.shaft.get_size_y() - self.tip.get_size_y()) / 2,
-        self.tip.fitting_depth - self.tip.total_tip_length,
+        self.tip.fitting_depth - self.tip.get_size_z(),
       ),
     )
 
   def test_the_tip_bottom_is_what_reaches_below_the_channel(self):
     """Part of the tip is up inside the channel, so it does not reach its whole length down."""
     self.shaft.mount_tip(self.tip)
-    self.assertEqual(self.shaft.tip_bottom().z, self.tip.fitting_depth - self.tip.total_tip_length)
+    self.assertEqual(self.shaft.tip_bottom().z, self.tip.fitting_depth - self.tip.get_size_z())
     self.shaft.release_tip()
     self.assertEqual(self.shaft.tip_bottom(), Coordinate.zero())
 
@@ -57,10 +57,10 @@ class ShaftHoldsItsTip(unittest.TestCase):
       ),
     )
 
-  def test_an_empty_shaft_equals_one_carrying_a_tip(self):
+  def test_an_empty_shaft_differs_from_one_carrying_a_tip(self):
     other = TipMountingShaft(name="shaft", tip_pickup_mode="core")
     self.shaft.mount_tip(self.tip)
-    self.assertEqual(self.shaft, other)
+    self.assertNotEqual(self.shaft, other)
 
 
 if __name__ == "__main__":

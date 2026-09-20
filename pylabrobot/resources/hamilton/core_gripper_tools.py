@@ -18,7 +18,7 @@ class HamiltonCoreGripperTool(HeadTool):
 
   def __init__(
     self,
-    name: Optional[str],
+    name: str,
     size_x: float,
     size_y: float,
     size_z: float,
@@ -41,12 +41,12 @@ class HamiltonCoreGripperTool(HeadTool):
       size_y=size_y,
       size_z=size_z,
       fitting_depth=fitting_depth,
-      collar_height=collar_height,
       category=category,
       model=model,
       pick_up_location=pick_up_location,
     )
     self._total_length = total_length
+    self.collar_height = collar_height
     # What the machine has to be told about this tool, in the same tip type table a tip goes in:
     # a grip tool holds no liquid, but the table demands at least 1.0 uL, and the value plays no
     # part in picking the tool up.
@@ -59,14 +59,24 @@ class HamiltonCoreGripperTool(HeadTool):
   def total_length(self) -> float:
     return self._total_length
 
+  def __eq__(self, other: object) -> bool:
+    """Compare resource geometry and the grip line and collar height."""
+    return (
+      isinstance(other, HamiltonCoreGripperTool)
+      and super().__eq__(other)
+      and self.total_length == other.total_length
+      and self.collar_height == other.collar_height
+    )
+
   def serialize(self) -> dict:
     return {
       **super().serialize(),
       "total_length": self.total_length,
+      "collar_height": self.collar_height,
     }
 
 
-def hamilton_core_gripper_tool(name: Optional[str] = None) -> HamiltonCoreGripperTool:
+def hamilton_core_gripper_tool(name: str) -> HamiltonCoreGripperTool:
   """Hamilton CO-RE grip tool, for 1000 uL channels.
 
   Hamilton cat. no.: 186100 (firmware tip type 14)

@@ -21,15 +21,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Resource.rotate`, `rotate_to` and `rotated` take an optional `pivot_coordinate`: a point in the resource's own frame that stays where it is, so a resource can turn about its centre, an edge, or any other point rather than only about its origin. `location` carries by however far the turn moved that point. Raises `NoLocationError` when the resource has no location, since there is nothing to carry. (#1249)
 - `LinkBody` (`pylabrobot.resources.LinkBody`): one rigid member of a manipulator, an ordinary resource whose origin is a corner and which carries its `proximal_joint` and `distal_joint` as coordinates within it. The link is the line between the two joints and `length` is the distance, `None` on a member that ends the chain. A member turns about its proximal joint rather than its origin. (#1249)
 - `MechanicalGripper` (`pylabrobot.resources.MechanicalGripper`): a `LinkBody` that ends the chain, holding what it takes between two fingers. Its far end is a `tool_center_point` rather than a joint, it is sized to its body because `jaw_width` moves the fingers, and the jaws straddle the grip centre. (#1249)
-- `HeadTool` (`pylabrobot.resources.head_tool.HeadTool`): a resource a channel carries, with `fitting_depth`, `collar_height`, `pick_up_location` and `kind()`, which is equal for tools a backend can use interchangeably.
 - `HamiltonCoreGripperTool` and `hamilton_core_gripper_tool`: the CO-RE grip tool as a `HeadTool`, with its 30 mm grip line as `total_length`.
 - `StandingTipRack`: a tip rack that stands on its own rather than sinking into a holder, with an optional `stacking_z_height`. Standing tip racks nest in a z-growing `ResourceStack`, as plates do.
 - `hamilton_96_tiprack_10uL_NTR` and `hamilton_96_tiprack_300uL_NTR`, built on `hamilton_96_tiprack_ntr` like `hamilton_96_tiprack_50uL_NTR`, and `hamilton_mfx_module_tiprackholder_ntr`, the MFX module for NTR stacks (191425).
 
 ### Changed
 
-- `Tip` is a `HeadTool` resource. A tip is a child of the `TipSpot` or mounting shaft that holds it, tips compare by name (use `kind()` to compare types), and a serialized tip includes its size and `pick_up_location`.
-- `HamiltonTip` takes its diameter and `collar_height` from `tip_size` when they are not given.
 - `hamilton_96_tiprack_standard`: tip spots are the 7.2 mm holes, with the same centres.
 - `hamilton_96_tiprack_50uL_NTR` is a `StandingTipRack` on an SLAS footprint with its tip spots where the collars rest, 55 mm above its base (was 13.5). `hamilton_tip_carrier_L5_ntr_a00` centres it on its sites, and the Vantage discard takes the tip end from it as from an embedded rack.
 - `LiquidHandler` refuses to pick up tips from, or drop tips to, a tip rack with a lid or another rack on top of it.
