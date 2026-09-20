@@ -47,7 +47,7 @@ def hamilton_prep_plateholder(name: str) -> PlateHolder:
       y=(size_y - 85.48) / 2,
       z=4.5,  # the pedestal's top. TODO: probe it
     ),
-    pedestal_size_z=0,  # a plate rests on the pedestal's rim. TODO: probe a seated plate
+    pedestal_size_z=-1.0,
     model="hamilton_prep_plateholder",
   )
 
