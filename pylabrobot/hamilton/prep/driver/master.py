@@ -543,6 +543,7 @@ class PrepDriver:
         low = await self.features_below_safe_z()
         if low:
           logger.warning("not everything is at Z safety: %s", "; ".join(low))
+      await self.park_device()
     except Exception:
       logger.warning(
         "could not bring the device to a safe state; closing the link anyway", exc_info=True
@@ -1445,7 +1446,7 @@ class PrepDriver:
   # Park and spread
   # ----------------------------------------
 
-  async def park(self) -> None:
+  async def park_device(self) -> None:
     await self.send_command(PrepCmd.PrepPark())
 
   async def spread(self) -> None:

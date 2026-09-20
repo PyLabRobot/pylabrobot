@@ -71,7 +71,7 @@ def test_prep_device_motion_method_and_power_commands():
     deck = STARLetDeck()
     p = PrepSimulationDriver(deck=deck)
     await p.setup()
-    await p.park()
+    await p.park_device()
     await p.spread()
     assert p.method is not None
     await p.method.begin(automatic_pause=False)
