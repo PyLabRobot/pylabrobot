@@ -2040,6 +2040,16 @@ function buildMeshes() {
   for (const entry of meshes) {
     view.remove(entry.mesh);
     entry.mesh.dispose();
+    // An overlay is its own object in the view: a vessel's floor, its walls and its cavity, a
+    // tip's filter disc, the green disc that says a spot is filled. Taking the box out and leaving
+    // those behind does not leave them alone, it puts them out of reach - both rules that show and
+    // hide an overlay walk `meshes`, so one dropped from that list keeps whatever it was last told
+    // for the life of the page. A scene rebuilt while a plan view was up kept its green discs, and
+    // they then showed from every angle.
+    for (const overlay of entry.overlays ?? []) {
+      view.remove(overlay);
+      overlay.dispose?.();
+    }
   }
   for (const line of edgeOf.values()) view.remove(line);
   edgeMaterials.clear();
