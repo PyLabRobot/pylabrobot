@@ -3,7 +3,7 @@
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from pylabrobot.resources.carrier import PlateHolder, ResourceHolder
+from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck, _built
 from pylabrobot.resources.hamilton.core_grippers import (
@@ -31,13 +31,20 @@ PREP_SPOT_PITCH_Y = 95.0
 PREP_CALIBRATION_BLOCK_LOCATION = Coordinate(133.75, 185.25, 0.0)
 
 
-def hamilton_prep_plateholder(name: str) -> PlateHolder:
+def hamilton_prep_plateholder(name: str) -> ResourceHolder:
   """A PREP deck's plate holder: four corner clips around an insert pedestal, as measured.
 
-  What stands here is centred between the clips, on the pedestal 4.5 mm above the deck.
+  What stands here is centred between the clips, on the moat around the pedestal: the pedestal's
+  top is 4.5 mm above the deck and the moat is a millimetre below that, probed on PRPAA1087 at
+  0.89, 0.94, 0.82 and 0.79 across the four spots.
+
+  Everything the Prep carries reaches the moat floor - a tip rack's tray and a plate with a
+  millimetre or more under its wells alike - so the seat is that floor rather than the pedestal.
+  A plate whose wells sit flush with its own base would come to rest on the pedestal instead, a
+  millimetre higher than this puts it.
   """
   size_x, size_y = 133.5, 91.5
-  return PlateHolder(
+  return ResourceHolder(
     name=name,
     size_x=size_x,
     size_y=size_y,
@@ -45,9 +52,8 @@ def hamilton_prep_plateholder(name: str) -> PlateHolder:
     child_location=Coordinate(
       x=(size_x - 127.76) / 2,
       y=(size_y - 85.48) / 2,
-      z=4.5,  # the pedestal's top. TODO: probe it
+      z=3.5,
     ),
-    pedestal_size_z=-1.0,
     model="hamilton_prep_plateholder",
   )
 
