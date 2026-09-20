@@ -2,6 +2,7 @@
 
 import pytest
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import PrepDeck
 from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.trough import Trough
@@ -105,3 +106,22 @@ def test_a_deck_built_without_its_parts_carries_none_of_them():
   assert deck.waste_block is None and deck.calibration_block is None
   assert deck.teaching_needle_spot is None and deck.liquid_waste_container is None
   assert deck.core_gripper_holder is None
+
+
+def test_the_holders_stand_where_they_were_probed_and_the_waste_block_does_not_move():
+  """The OBJ-derived parts sit at their measured places; what the device anchors is untouched."""
+  deck = PrepDeck()
+  first, last = deck[0].get_location_wrt(deck, "c", "c"), deck[7].get_location_wrt(deck, "c", "c")
+  assert (first.x, first.y) == pytest.approx((62.55, 44.23))
+  assert (last.x, last.y) == pytest.approx((202.55, 329.23))
+
+  block = deck.calibration_block
+  assert block is not None
+  top = block.get_location_wrt(deck, "c", "c", "t")
+  assert (top.x, top.y, top.z) == pytest.approx((132.55, 186.73, 22.0))
+
+  waste_block = deck.waste_block
+  assert waste_block is not None
+  assert waste_block.get_location_wrt(deck) == Coordinate(282.25, -4.25, 0.0)
+  tool = deck.get_resource("Prep_core_gripper_tool_back").get_location_wrt(deck, "c", "c")
+  assert (tool.x, tool.y) == pytest.approx((290.0, 275.577))

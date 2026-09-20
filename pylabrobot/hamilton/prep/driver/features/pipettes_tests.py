@@ -1769,7 +1769,7 @@ def test_spots_at_different_x_are_picked_up_in_as_many_moves_as_it_takes():
     p.send_command = record  # type: ignore[method-assign]
     await p.pipettes.pick_up_tips(rack["A1", "A2"], use_channels=[0, 1])
     assert len(sent) == 2  # one x each
-    assert [x for picked in sent for _, x in picked] == [17.25, 26.25]
+    assert [x for picked in sent for _, x in picked] == [13.05, 22.05]
     assert [tip is not None for tip in p.pipettes.get_mounted_tips()] == [True, True]
 
     sent.clear()

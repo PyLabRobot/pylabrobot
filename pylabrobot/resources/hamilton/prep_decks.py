@@ -21,14 +21,14 @@ from pylabrobot.resources.trough import Trough
 # 2026-09-13, so the top of that travel is the top of the deck.
 PREP_DECK_SIZE_Z = 167.5
 
-# The plate holders' grid, measured off the deck. TODO: probe the deck's own origin; the first
-# holder still sits at the deck's (0, 0).
+# The plate holders' grid, probed on PRPAA1087 on 2026-09-20.
+PREP_FIRST_SLOT_LOCATION = Coordinate(-4.20, -1.52, 0.0)
 PREP_SPOT_PITCH_X = 140.0
 PREP_SPOT_PITCH_Y = 95.0
 
 # The steel block between the two columns, measured off the deck: a 6 x 6 mm top 22 mm up, flaring
 # to 8.49 mm below 14 mm. Placed by that top's left front corner, from this deck's origin.
-PREP_CALIBRATION_BLOCK_LOCATION = Coordinate(133.75, 185.25, 0.0)
+PREP_CALIBRATION_BLOCK_LOCATION = Coordinate(129.55, 183.73, 0.0)
 
 
 def hamilton_prep_resourceholder(name: str) -> ResourceHolder:
@@ -103,8 +103,8 @@ class PrepDeck(Deck):
     if with_spots:
       for column in range(2):
         for row in range(4):
-          x = column * PREP_SPOT_PITCH_X
-          y = row * PREP_SPOT_PITCH_Y
+          x = PREP_FIRST_SLOT_LOCATION.x + column * PREP_SPOT_PITCH_X
+          y = PREP_FIRST_SLOT_LOCATION.y + row * PREP_SPOT_PITCH_Y
           spot = hamilton_prep_resourceholder(name=f"{prefix}_spot_{column}_{row}")
           self.assign_child_resource(spot, location=Coordinate(x, y, 0))
 

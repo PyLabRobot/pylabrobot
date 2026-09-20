@@ -25,7 +25,8 @@ PREP_SIZE_Y = 575.0
 PREP_SIZE_Z = 575.0
 
 # Where the deck sits inside the device, from the device's left front bottom corner to the deck's.
-PREP_DECK_LOCATION = Coordinate(25.0, 86.5, 50.0)
+# It also places Prep.glb, so it moves with PREP_FIRST_SLOT_LOCATION.
+PREP_DECK_LOCATION = Coordinate(29.20, 88.02, 50.0)
 
 
 class PrepDevice(Resource):
