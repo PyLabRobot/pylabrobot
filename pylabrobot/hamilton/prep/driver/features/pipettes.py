@@ -4771,3 +4771,153 @@ class Pipettes:
       round((found["front"] + found["back"]) / 2, 2),
       top,
     )
+
+  async def probe_deck_corner_z_offsets(
+    self,
+    channel_idx: int = 1,
+    n_replicates: int = 3,
+    search_start_position: float = 30.0,
+    xs: Tuple[float, float] = (30.0, 235.0),
+    ys: Tuple[float, float] = (-2.5, 375.0),
+  ) -> Dict[str, float]:
+    """Probe the deck's height at its four corners with the channel's ztouch.
+
+    Args:
+      channel_idx: the probing channel, 0-indexed from the back.
+      n_replicates: how many searches per corner.
+      search_start_position: where each search starts, in mm.
+      xs: the two gantry positions to probe at, in mm.
+      ys: the two channel positions to probe at, in mm.
+
+    Returns:
+      What each corner answered, keyed "x,y", in deck mm.
+
+    Raises:
+      RuntimeError: If a corner was not found.
+    """
+    await self.move_to_safe_z()
+    corners: Dict[str, float] = {}
+    for x in xs:
+      for y in ys:
+        await self.move_to_xy_positions(x=x, ys={channel_idx: y}, make_space=True)
+
+        heights: List[float] = []
+        start = search_start_position
+        for _ in range(n_replicates):
+          height = await self.probe_z_using_ztouch(
+            channel_idx=channel_idx, search_start_position=start
+          )
+          if height is not None:
+            heights.append(height)
+            start = height + 5
+        if not heights:
+          raise RuntimeError(f"the deck was not found at ({x}, {y})")
+        corners[f"{x},{y}"] = round(sum(heights) / len(heights), 2)
+    await self.move_to_safe_z()
+    return corners
+
+  async def probe_all_resourceholder_edges(
+    self,
+    channel_idx: int = 0,
+    n_replicates: int = 3,
+    hole_x: float = 112.0,
+    hole_y: float = 77.0,
+    probe_z: float = -2.0,
+    margin: float = 4.5,
+  ) -> Dict[str, Dict[str, List[Optional[float]]]]:
+    """Probe the four walls of every resource holder's aperture with the channel's cLLD.
+
+    WARNING: the X/Y cLLD probing of the Prep is not as reliable as the STAR's. Only run this while
+    you are at the device and can trigger the sensor by touching the channel with a finger, in case
+    the conductive material is not recognised and the channel does not stop.
+
+    The channel drops into each aperture and searches outward to each wall, starting a third of the
+    way out and stepping back 5 mm from the wall just found for the repeats.
+
+    Args:
+      channel_idx: the probing channel, 0-indexed from the back.
+      n_replicates: how many searches per edge.
+      hole_x: how wide the aperture is drawn, in mm.
+      hole_y: how deep it is drawn, in mm.
+      probe_z: the height to search at, below the deck plane, in mm.
+      margin: how far past an expected wall a search may travel, in mm.
+
+    Returns:
+      What each search found, by holder name, then keyed "front", "back", "left" and "right", each
+      list as long as `n_replicates`, with None where nothing was detected.
+
+    Raises:
+      RuntimeError: If there is no deck, or it carries no resource holders.
+    """
+    if self.deck is None:
+      raise RuntimeError("no deck to measure from; have you called `prep.setup()`?")
+    holders = getattr(self.deck, "spots", None)
+    if not holders:
+      raise RuntimeError("this deck carries no resource holders")
+
+    x_offset, y_offset = hole_x / 2.4, hole_y / 3
+    found: Dict[str, Dict[str, List[Optional[float]]]] = {}
+    for holder in holders:
+      centre = holder.get_location_wrt(self.deck, "c", "c", "t")
+      await self.move_to_safe_z()
+
+      edges: Dict[str, List[Optional[float]]] = {}
+      for edge, direction, axis, start_x, start_y, end_position in (
+        ("front", "forward", "y", centre.x, centre.y - y_offset, centre.y - hole_y / 2 - margin),
+        ("back", "backward", "y", centre.x, centre.y + y_offset, centre.y + hole_y / 2 + margin),
+        ("left", "left", "x", centre.x - x_offset, centre.y, centre.x - hole_x / 2 - margin),
+        ("right", "right", "x", centre.x + x_offset, centre.y, centre.x + hole_x / 2 + margin),
+      ):
+        await self.move_to_xy_positions(x=start_x, ys={channel_idx: start_y}, make_space=True)
+        await self.move_tool_bottom_to_z_positions({channel_idx: probe_z})
+
+        search_from = start_y if axis == "y" else start_x
+        step = 5 if direction in ("forward", "left") else -5  # back into the hole
+
+        measurements: List[Optional[float]] = []
+        search_start = search_from
+        for _ in range(n_replicates):
+          if axis == "y":
+            surface = await self.probe_y_using_clld(
+              channel_idx=channel_idx,
+              direction=cast(Literal["forward", "backward"], direction),
+              search_start_position=search_start,
+              search_end_position=end_position,
+              minimum_traverse_height_start=probe_z,
+              speed=5,
+            )
+          else:
+            surface = await self.probe_x_using_clld(
+              channel_idx=channel_idx,
+              direction=cast(Literal["left", "right"], direction),
+              search_start_position=search_start,
+              search_end_position=end_position,
+              minimum_traverse_height_start=probe_z,
+            )
+          measurements.append(surface)
+          search_start = search_from if surface is None else surface + step
+        edges[edge] = measurements
+
+      await self.move_to_safe_z()
+      found[holder.name] = edges
+
+      if any(None in edge for edge in edges.values()):
+        logger.warning("%s: missed an edge - %s", holder.name, edges)
+        continue
+      means = {
+        edge: sum(cast(List[float], surfaces)) / len(surfaces) for edge, surfaces in edges.items()
+      }
+      cx, cy = (means["left"] + means["right"]) / 2, (means["front"] + means["back"]) / 2
+      logger.info(
+        "%s: centre (%.2f, %.2f)  model (%.2f, %.2f)  dx %+.2f  dy %+.2f  span %.2f x %.2f",
+        holder.name,
+        cx,
+        cy,
+        centre.x,
+        centre.y,
+        cx - centre.x,
+        cy - centre.y,
+        means["right"] - means["left"],
+        means["back"] - means["front"],
+      )
+    return found
