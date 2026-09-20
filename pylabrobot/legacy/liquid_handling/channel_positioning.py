@@ -1,4 +1,4 @@
-"""Deprecated: moved to `pylabrobot.utils.liquid_handling.channel_positioning`.
+"""Deprecated: moved to `pylabrobot.lib.liquid_handling.channel_positioning`.
 
 Where a device's channels go inside a container is shared by every
 multi-channel pipette device, not the legacy liquid handler's alone.
@@ -11,7 +11,7 @@ import warnings
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # the names this module forwards, for type checkers and IDEs
-  from pylabrobot.utils.liquid_handling.channel_positioning import (  # noqa: F401
+  from pylabrobot.lib.liquid_handling.channel_positioning import (  # noqa: F401
     GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
     MIN_SPACING_BETWEEN_CHANNELS,
     MIN_SPACING_EDGE,
@@ -38,14 +38,14 @@ def __getattr__(name: str) -> Any:
   if name in _MOVED:
     warnings.warn(
       f"pylabrobot.legacy.liquid_handling.channel_positioning.{name} is deprecated and will be "
-      f"removed in the future. It moved to pylabrobot.utils.liquid_handling.channel_positioning; "
-      f"update your import to `from pylabrobot.utils.liquid_handling.channel_positioning import {name}`.",
+      f"removed in the future. It moved to pylabrobot.lib.liquid_handling.channel_positioning; "
+      f"update your import to `from pylabrobot.lib.liquid_handling.channel_positioning import {name}`.",
       DeprecationWarning,
       stacklevel=2,
     )
     import importlib
 
     return getattr(
-      importlib.import_module("pylabrobot.utils.liquid_handling.channel_positioning"), name
+      importlib.import_module("pylabrobot.lib.liquid_handling.channel_positioning"), name
     )
   raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

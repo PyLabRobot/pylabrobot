@@ -15,6 +15,9 @@ from pylabrobot.legacy.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
+from pylabrobot.lib.liquid_handling.channel_positioning import (
+  get_tight_single_resource_liquid_op_offsets,
+)
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
@@ -54,9 +57,6 @@ from pylabrobot.resources.volume_tracker import (
 )
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import serialize
-from pylabrobot.utils.liquid_handling.channel_positioning import (
-  get_tight_single_resource_liquid_op_offsets,
-)
 
 from .liquid_handler import LiquidHandler
 from .standard import (
