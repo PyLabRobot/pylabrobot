@@ -519,13 +519,15 @@ class PrepDriver:
     if not self._setup_finished:
       return
     try:
-      if self._core_gripper_arm is not None:
-        logger.warning(
-          "PrepDriver.stop() called with CoRe grippers still mounted. stop() raises the channels to Z "
-          "safety but does not return the tools. Call `await prep.return_core_grippers()` first if you "
-          "want them returned."
-        )
-        self._core_gripper_arm = None
+      # As at setup: a tool goes back in its holder, anything else into the waste.
+      if self.pipettes is not None:
+        try:
+          tips = await self.pipettes.sense_tip_presence()
+          if any(tips):
+            await self._return_or_discard_attached(tips)
+        except Exception:
+          # The link closes either way.
+          logger.warning("could not clear what was attached before stopping", exc_info=True)
       if skip_raise_to_z_safety:
         low = await self.features_below_safe_z()
         logger.warning(
@@ -1228,6 +1230,8 @@ class PrepDriver:
         return
       logger.warning("it is a tool, so it goes back in its holder rather than into the waste")
       await self.core_grippers.drop_tool()
+      self._park_core_gripper_tools()
+      self._core_gripper_arm = None
       return
     waste = self.deck.waste_block if isinstance(self.deck, PrepDeck) else None
     if waste is None:

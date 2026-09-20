@@ -1172,6 +1172,25 @@ def test_x_arm_move_raises_lowered_channels_up_to_the_height_it_is_given():
   _run(_t())
 
 
+def test_x_arm_move_raises_a_channel_only_as_high_as_what_it_carries_allows():
+  """A channel carrying something travels at its own ceiling, not at the traverse height."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.x_arm is not None and p.pipettes is not None
+    traverse = p.pipettes.default_minimum_traverse_height
+    # What the device answers for a channel holding the 51.9 mm teaching needle.
+    p.pipettes.configuration.channels[1].z_range = (-33.9, 115.6)
+
+    await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 100.0), use_channels=1)
+    await p.x_arm.move_to_x_position(200.0)
+    assert [at.z for at in await p.pipettes.request_locations()] == [traverse, 115.6]
+    await p.stop()
+
+  _run(_t())
+
+
 def test_move_to_x_position_is_the_arms_axis_move():
   """The channels' X move is the arm's: one axis, no gantry move carrying Y and Z with it."""
 
@@ -1964,6 +1983,82 @@ def test_an_x_probe_given_a_start_travels_there_first_and_keeps_the_height_it_wa
   _run(_t())
 
 
+def test_an_x_probe_travels_to_its_start_at_the_height_it_is_given():
+  """A caller that knows the lateral path is clear keeps the arm down on the way to the start."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_location(
+      Coordinate(150.0, 200.0, 90.0), use_channels=0, make_space=True
+    )
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      if isinstance(command, (PrepCmd.PrepXAxisMoveAbsolute, PrepCmd.PrepMoveZAbsolute)):
+        sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.probe_x_using_clld(
+      0,
+      "left",
+      search_start_position=200.0,
+      search_end_position=190.0,
+      minimum_traverse_height_start=90.0,
+      allow_without_tip=True,
+    )
+    # Straight across at the height it was standing at: nothing raised it first.
+    assert sent[0] == "PrepXAxisMoveAbsolute"
+    standing = (await p.pipettes.request_locations())[0]
+    assert round(standing.z, 1) == 90.0
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_y_probe_travels_to_its_start_in_y_alone_when_no_raise_is_wanted():
+  """A height at or below where the channel stands makes the step Y alone: no gantry move, no Z."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 340.0, 1: 320.0})
+    await p.pipettes.move_tool_bottom_to_z_positions({1: 80.0})
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      if isinstance(
+        command,
+        (PrepCmd.PrepMoveToPosition, PrepCmd.PrepMoveZAbsolute, PrepCmd.PrepMoveYAbsolute),
+      ):
+        sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.probe_y_using_clld(
+      1,
+      "forward",
+      search_start_position=300.0,
+      search_end_position=290.0,
+      minimum_traverse_height_start=80.0,
+      allow_without_tip=True,
+    )
+    assert sent[0] == "PrepMoveYAbsolute"
+    assert "PrepMoveToPosition" not in sent and "PrepMoveZAbsolute" not in sent
+    standing = (await p.pipettes.request_locations())[1]
+    assert round(standing.z, 1) == 80.0
+    await p.stop()
+
+  _run(_t())
+
+
 def test_a_y_probe_given_a_start_moves_there_first_and_makes_room_for_it():
   """As the X probe travels to its start, this one moves in Y, its neighbour giving way."""
 
@@ -2034,7 +2129,9 @@ def test_probing_four_edges_comes_at_each_from_outside_and_lifts_between_them():
 
     pipettes.probe_y_using_clld = record_y  # type: ignore[method-assign, assignment]
     pipettes.probe_x_using_clld = record_x  # type: ignore[method-assign, assignment]
-    found = await p.pipettes.probe_edges_using_clld(0, target, repeats=1, allow_without_tip=True)
+    found = await p.pipettes.probe_edges_using_clld(
+      0, target, n_replicates=1, allow_without_tip=True
+    )
 
     assert list(found) == ["back", "front", "right", "left"]
     assert all(len(measurements) == 1 for measurements in found.values())
@@ -2072,7 +2169,7 @@ def test_probing_four_edges_corrects_for_what_is_doing_the_touching():
     await pipettes.probe_edges_using_clld(
       0,
       Coordinate(150.0, 200.0, 60.0),
-      repeats=1,
+      n_replicates=1,
       tip_bottom_diameter=3.5,
       stop_disc_diameter=9.0,
       allow_without_tip=True,
@@ -2129,7 +2226,7 @@ def test_probing_four_edges_with_a_tip_on_measures_with_the_tip():
       return await probe_y(channel, direction, **kwargs)
 
     pipettes.probe_y_using_clld = record_y  # type: ignore[method-assign, assignment]
-    found = await pipettes.probe_edges_using_clld(0, Coordinate(150.0, 200.0, 60.0), repeats=1)
+    found = await pipettes.probe_edges_using_clld(0, Coordinate(150.0, 200.0, 60.0), n_replicates=1)
 
     assert list(found) == ["back", "front", "right", "left"]  # ran, with no allow_without_tip
     assert halved == [1.2, 1.2]  # the tip bottom, not the stop disc
@@ -2457,8 +2554,9 @@ def test_setup_discards_a_tip_it_finds_already_attached():
     assert p.pipettes is not None
     shaft = p.pipettes.shaft(0)
     assert shaft is not None
-    shaft.mount_tip(hamilton_tip_300uL(name="left on"))  # as a crashed session would leave it
-    await p.stop()  # the session ends without putting it back
+    await p.stop()
+    # A crash leaves a tip on without stop() running, which would have cleared it.
+    shaft.mount_tip(hamilton_tip_300uL(name="left on"))
 
     sent: list = []
     send = p.send_command

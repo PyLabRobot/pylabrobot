@@ -2401,6 +2401,7 @@ class Pipettes:
     direction: Literal["left", "right"],
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
     sensitivity: Optional[int] = None,
     detect_mode: int = 2,
     post_detection_distance: float = 2.0,
@@ -2414,9 +2415,12 @@ class Pipettes:
       channel_idx: detecting channel, 0-indexed from the back.
       direction: "left" (decreasing x) or "right" (increasing x).
       search_start_position: where to search from in mm. The arm travels there first unless it is
-        already there, raising every channel below `default_minimum_traverse_height` on the way and
+        already there, raising every channel below `minimum_traverse_height_start` on the way and
         putting this one back down to where it stood. Searches from where the arm is when None.
       search_end_position: search end in mm. Defaults to the end of the channels' X range.
+      minimum_traverse_height_start: height to raise every low channel to before travelling to
+        `search_start_position`, in mm. `default_minimum_traverse_height` when None. A lower value
+        asserts the lateral path is clear, which the driver cannot check.
       sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
       detect_mode: cLLD detect mode.
       post_detection_dist: back-off after a detection in mm.
@@ -2462,10 +2466,13 @@ class Pipettes:
     if search_start_position is not None:
       self._check_reachable(channel_idx, "x", search_start_position)
       if abs(search_start_position - standing.x) > self.AT_SEARCH_START:
-        # There first, the way any travel goes: up to the traverse height, across, and back down to
-        # the height the caller had the channel at, so the search itself is X alone. An arm already
-        # at the start is left alone: nothing is gained by sending it where it stands.
-        await arm.move_to_x_position(search_start_position)
+        # There first, the way any travel goes: up, across, and back down to the height the caller
+        # had the channel at, so the search itself is X alone. An arm already at the start is left
+        # alone. The outbound path is unknown, so it raises unless the caller says otherwise; the
+        # back-off below needs no such height because it retraces the line just searched.
+        await arm.move_to_x_position(
+          search_start_position, minimum_traverse_height_start=minimum_traverse_height_start
+        )
         await self.move_tool_bottom_to_z_positions({channel_idx: standing.z})
         standing = (await self.request_locations())[channel_idx]
     here = standing.x
@@ -2575,6 +2582,7 @@ class Pipettes:
     direction: Literal["forward", "backward"],
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
     speed: float = 10.0,
     sensitivity: Optional[int] = None,
     detect_mode: int = 2,
@@ -2589,10 +2597,13 @@ class Pipettes:
       channel_idx: which channel, 0-indexed from the back.
       direction: "forward" (decreasing y) or "backward" (increasing y).
       search_start_position: where to search from in mm. The channel travels there first unless it
-        is already there, raising every channel below `default_minimum_traverse_height` on the way,
+        is already there, raising every channel below `minimum_traverse_height_start` on the way,
         making room for it, and coming back down to where it stood. Searches from where the channel
         stands when None.
       search_end_position: search end in mm. Defaults to as far as the channel may go.
+      minimum_traverse_height_start: height to raise every low channel to before travelling to
+        `search_start_position`, in mm. `default_minimum_traverse_height` when None. A lower value
+        asserts the lateral path is clear, which the driver cannot check.
       speed: search speed in mm/s.
       sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
       detect_mode: cLLD detect mode.
@@ -2630,14 +2641,21 @@ class Pipettes:
       search_start_position is not None
       and abs(search_start_position - positions[channel_idx].y) > self.AT_SEARCH_START
     ):
-      # There first, the way the X probe travels to its start: up to the traverse height, across -
-      # with the neighbours moved aside as far as the spacing needs - and back down to the height
-      # the caller had the channel at. A channel already at the start is left alone.
+      # There first, the way the X probe travels to its start: up, across - with the neighbours
+      # moved aside as far as the spacing needs - and back down to the height the caller had the
+      # channel at. A channel already at the start is left alone. The outbound path is unknown, so
+      # it raises unless the caller says otherwise.
       standing = positions[channel_idx]
-      await self.move_to_xy_positions(
-        standing.x, {channel_idx: search_start_position}, make_space=True
-      )
-      await self.move_tool_bottom_to_z_positions({channel_idx: standing.z})
+      if minimum_traverse_height_start is not None and minimum_traverse_height_start <= standing.z:
+        await self.move_to_y_positions({channel_idx: search_start_position}, make_space=True)
+      else:
+        await self.move_to_xy_positions(
+          standing.x,
+          {channel_idx: search_start_position},
+          minimum_traverse_height_start=minimum_traverse_height_start,
+          make_space=True,
+        )
+        await self.move_tool_bottom_to_z_positions({channel_idx: standing.z})
       positions = await self.request_locations()
 
     here = positions[channel_idx]
@@ -2737,10 +2755,10 @@ class Pipettes:
     ys: Dict[int, float],
     traverse_height: float,
     probing_height: float,
-    repeats: int,
+    n_replicates: int,
     search: Callable[[], Awaitable[Optional[float]]],
   ) -> List[Optional[float]]:
-    """Approach one edge and search it `repeats` times, returning what each search found.
+    """Approach one edge and search it `n_replicates` times, returning what each search found.
 
     Args:
       channel_idx: the probing channel.
@@ -2749,7 +2767,7 @@ class Pipettes:
         clear of where that search ends.
       traverse_height: the height to travel at, in mm.
       probing_height: the height to search at, in mm.
-      repeats: how many searches.
+      n_replicates: how many searches.
       search: the search itself.
 
     A search that detects nothing leaves the channel at the end of it, so the approach is made
@@ -2762,7 +2780,7 @@ class Pipettes:
 
     await approach()
     found: List[Optional[float]] = []
-    for _ in range(repeats):
+    for _ in range(n_replicates):
       surface = await search()
       found.append(surface)
       if surface is None:
@@ -2773,7 +2791,7 @@ class Pipettes:
     self,
     channel_idx: int,
     target: Coordinate,
-    repeats: int = 2,
+    n_replicates: int = 2,
     back_approach: float = 15.0,
     front_approach: float = 9.0,
     side_approach: float = 12.0,
@@ -2794,7 +2812,7 @@ class Pipettes:
       channel_idx: the probing channel, 0-indexed from the back. Only a channel whose cLLD detects
         answers anything; another sweeps and finds nothing.
       target: the centre of what is being probed, and its top, in deck mm.
-      repeats: how many times to search each edge.
+      n_replicates: how many times to search each edge.
       back_approach: how far behind the centre the backward-facing search starts, in mm.
       front_approach: how far in front of it the forward-facing search starts, in mm.
       side_approach: how far to either side the X searches start, in mm.
@@ -2807,7 +2825,7 @@ class Pipettes:
 
     Returns:
       What each search found, keyed "back", "front", "right" and "left", each list as long as
-      `repeats`, with None where nothing was detected.
+      `n_replicates`, with None where nothing was detected.
 
     Raises:
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
@@ -2883,7 +2901,7 @@ class Pipettes:
         ys,
         traverse_height=target.z,
         probing_height=target.z - below_the_top,
-        repeats=repeats,
+        n_replicates=n_replicates,
         search=search,
       )
       await self.move_tool_bottom_to_z_positions({channel_idx: target.z + between_edges})

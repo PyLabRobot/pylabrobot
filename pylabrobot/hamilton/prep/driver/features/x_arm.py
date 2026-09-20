@@ -303,11 +303,18 @@ class XArm:
       if minimum_traverse_height_start is None
       else minimum_traverse_height_start
     )
-    below = {
-      channel: traverse
-      for channel, at in enumerate(await pipettes.request_locations())
-      if at.z < traverse
-    }
+    below = {}
+    for index, at in enumerate(await pipettes.request_locations()):
+      window = (
+        pipettes.configuration.channels[index].z_range
+        if index < len(pipettes.configuration.channels)
+        else None
+      )
+      # The device reports each channel's Z window for whatever is attached to it, so a channel
+      # carrying something travels as high as it goes rather than to the traverse height.
+      ceiling = traverse if window is None else min(traverse, window[1])
+      if at.z < ceiling:
+        below[index] = ceiling
     if below:
       await pipettes.move_tool_bottom_to_z_positions(
         below, speed=z_speed, acceleration=z_acceleration
