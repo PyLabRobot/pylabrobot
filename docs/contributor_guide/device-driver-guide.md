@@ -27,11 +27,9 @@ Keep it small and idiomatic to PyLabRobot.
 ### Share nothing between device drivers
 
 Each driver stands alone: one device's package never imports another's. What more than one device needs goes in
-`pylabrobot.utils`, which imports no device and nothing from `pylabrobot.legacy`:
+`pylabrobot.lib`, which imports no device and nothing from `pylabrobot.legacy`:
 
-- **`pylabrobot.utils.configuration_json`** writes a driver's configuration dataclasses to JSON and reads them back
-  against their declared field types.
-- **`pylabrobot.utils.liquid_handling`** plans pipetting for any multi-channel pipette device: where channels go
+- **`pylabrobot.lib.liquid_handling`** plans pipetting for any multi-channel pipette device: where channels go
   inside a container (`channel_positioning.compute_channel_offsets`) and which channels can reach their targets in
   one X/Y move (`pipette_batch_scheduling.plan_batches`). It is pure and synchronous. The device supplies its
   per-channel minimum spacing and executes the plan with its own moves; `hamilton/prep/driver/features/pipettes_tests.py` and
