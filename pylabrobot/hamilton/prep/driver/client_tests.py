@@ -127,13 +127,15 @@ def test_prep_method_run_context_manager_aborts_on_exception():
   asyncio.run(_run())
 
 
-def test_mounted_core_grippers_picks_up_the_tools_and_returns_them():
+def test_mounted_picks_up_the_tools_and_returns_them():
   async def _run() -> None:
     p = PrepSimulationDriver(deck=PrepDeck(with_core_grippers=True))
     await p.setup()
-    async with p.mounted_core_grippers() as arm:
+    assert p.core_grippers is not None
+    assert p.core_grippers is not None
+    async with p.core_grippers.mounted() as grippers:
       assert p.core_grippers_mounted
-      assert arm.grippers is p.core_grippers
+      assert grippers is p.core_grippers
     assert not p.core_grippers_mounted
     await p.stop()
 

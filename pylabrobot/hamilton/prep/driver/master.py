@@ -37,14 +37,13 @@ from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.hamilton.prep_decks import PrepDeck
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMethod, TipSize
-from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 
 from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration, read_configuration, to_jsonable
 from .errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from .features.calibration import Calibration
-from .features.core_grippers import CoreGripperArm, CoreGrippers
+from .features.core_grippers import CoreGrippers
 from .features.head8 import Head8
 from .features.lights import Lights
 from .features.method import MethodLifecycle
@@ -285,10 +284,8 @@ class PrepDriver:
     self.deck = deck
     # What the device reports about itself, read by `discover`. None until setup has run.
     self.configuration: Optional[DeviceConfiguration] = None
-    self._core_gripper_arm: Optional[CoreGripperArm] = None
     # Where each tool the channels are carrying came from, so it goes back there when it is
     # dropped. A tool is a resource: while the channels hold it, it is theirs.
-    self._parked_tools: List[Tuple[HeadTool, Optional[Resource], Optional[Coordinate]]] = []
     self.pipettes: Optional[Pipettes] = None
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
@@ -1230,9 +1227,8 @@ class PrepDriver:
         logger.warning("it is a tool, but there is nothing here to put it back with")
         return
       logger.warning("it is a tool, so it goes back in its holder rather than into the waste")
-      await self.core_grippers.drop_tool()
-      self._park_core_gripper_tools()
-      self._core_gripper_arm = None
+      # Nothing parked to put back: only a tool on a channel to let go of.
+      await self.core_grippers.drop_tools()
       return
     waste = self.deck.waste_block if isinstance(self.deck, PrepDeck) else None
     if waste is None:
@@ -1350,16 +1346,6 @@ class PrepDriver:
   # ----------------------------------------
 
   @property
-  def core_gripper_arm(self) -> CoreGripperArm:
-    """The mounted CoRe gripper arm. Raises if grippers are not currently picked up."""
-    if self._core_gripper_arm is None:
-      raise RuntimeError(
-        "CoRe grippers not mounted. Call `await prep.pick_up_core_grippers()` first, "
-        "or use `async with prep.mounted_core_grippers() as arm:`."
-      )
-    return self._core_gripper_arm
-
-  @property
   def core_gripper_holder(self) -> Optional[HamiltonCoreGrippers]:
     """The holder this Prep's deck parks its CO-RE grip tools in, by type, or None."""
     if self.deck is None:
@@ -1370,77 +1356,8 @@ class PrepDriver:
 
   @property
   def core_grippers_mounted(self) -> bool:
-    return self._core_gripper_arm is not None
-
-  async def pick_up_core_grippers(self) -> CoreGripperArm:
-    """Pick up the CoRe gripper tools and return the mounted arm."""
-    if self._core_gripper_arm is not None:
-      raise RuntimeError("CoRe grippers already mounted")
-    if self.pipettes is None or self.core_grippers is None:
-      raise RuntimeError("PrepDriver.setup() has not run.")
-
-    mount = self.core_gripper_holder
-    if mount is None:
-      raise TypeError("the deck carries no CO-RE gripper holder")
-
-    tools = [child for child in mount.children if isinstance(child, HeadTool)]
-    if not tools:
-      raise TypeError("the holder carries no CO-RE grip tools to pick up")
-
-    # How far down the channel goes: onto the tools where they stand, and into them as far as they
-    # take a channel. The holder's own base is 25 mm below that, and their tops 8 mm above it -
-    # a channel stopped at either does not seat the tool, and the device answers that none is held.
-    loc = mount.get_location_wrt(self.deck, x="c")
-    engage = min(tool.get_location_wrt(self.deck, z="t").z - tool.fitting_depth for tool in tools)
-    await self.core_grippers.pick_up_tool(
-      tool_position_x=loc.x,
-      tool_position_z=engage,
-      front_channel_position_y=loc.y + mount.front_channel_y_center,
-      rear_channel_position_y=loc.y + mount.back_channel_y_center,
-      tool_seek=engage + 10.0,
-    )
-
-    # A tool the channels have taken is on them, not in the holder: it rides where they ride, as a
-    # tip does. Channel 0 takes the rear tool and channel 1 the front, which is the order the
-    # command sends them in.
-    self._parked_tools = [(tool, tool.parent, tool.location) for tool in tools]
-    rear_first = sorted(tools, key=lambda tool: tool.get_location_wrt(self.deck, y="c").y)
-    for channel, tool in zip((0, 1), reversed(rear_first)):
-      shaft = self.pipettes.shaft(channel)
-      if shaft is not None:
-        shaft.mount_tip(tool)
-
-    self._core_gripper_arm = CoreGripperArm(self, grip_axis="y")
-    return self._core_gripper_arm
-
-  async def return_core_grippers(self) -> None:
-    """Put the tools back in their holder, if the device lets go of them.
-
-    A drop that fails leaves the channels holding the tools, so the model says so: they are parked
-    once the device has confirmed it, not whatever happened.
-    """
-    if self._core_gripper_arm is None:
-      return
-    await self._core_gripper_arm.grippers.drop_tool()
-    self._core_gripper_arm = None
-    self._park_core_gripper_tools()
-
-  def _park_core_gripper_tools(self) -> None:
-    """Put the tools back where they were picked up from, once the device has let go of them."""
-    for tool, holder, location in self._parked_tools:
-      if tool.parent is not None:
-        tool.parent.unassign_child_resource(tool)
-      if holder is not None:
-        holder.assign_child_resource(tool, location=location)
-    self._parked_tools = []
-
-  @asynccontextmanager
-  async def mounted_core_grippers(self) -> AsyncIterator[CoreGripperArm]:
-    arm = await self.pick_up_core_grippers()
-    try:
-      yield arm
-    finally:
-      await self.return_core_grippers()
+    """Whether the CoRe gripper tools are on the channels."""
+    return self.core_grippers is not None and self.core_grippers.tools_mounted
 
   # ----------------------------------------
   # Park and spread
