@@ -1,10 +1,10 @@
 import contextlib
 import sys
-from typing import TYPE_CHECKING, Callable, Optional, cast
+from typing import TYPE_CHECKING, Callable, Optional
 
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.tip import Tip
-from pylabrobot.serializer import SerializableMixin, deserialize
+from pylabrobot.serializer import SerializableMixin
 
 if TYPE_CHECKING:
   from pylabrobot.resources.tip_rack import TipSpot
@@ -141,8 +141,10 @@ class TipTracker(SerializableMixin):
   def load_state(self, state: dict) -> None:
     """Load a saved tip tracker state."""
 
-    self._tip = cast(Optional[Tip], deserialize(state.get("tip")))
-    self._pending_tip = cast(Optional[Tip], deserialize(state.get("pending_tip")))
+    tip_data = state.get("tip")
+    pending_tip_data = state.get("pending_tip")
+    self._tip = Tip.deserialize(tip_data) if tip_data is not None else None
+    self._pending_tip = Tip.deserialize(pending_tip_data) if pending_tip_data is not None else None
 
   def get_tip_origin(self) -> Optional["TipSpot"]:
     """Get the origin of the current tip, if known."""

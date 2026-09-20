@@ -1097,7 +1097,13 @@ class TestResourceMetadata(unittest.TestCase):
         size_x=10,
         size_y=10,
         make_tip=lambda name: Tip(
-          name=name, has_filter=False, maximal_volume=10, fitting_depth=1, total_tip_length=10
+          name=name,
+          has_filter=False,
+          maximal_volume=10,
+          fitting_depth=1,
+          total_tip_length=10,
+          diameter=6.0,
+          size_z=10,
         ),
         metadata=meta,
       ),

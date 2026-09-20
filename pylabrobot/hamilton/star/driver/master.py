@@ -162,7 +162,7 @@ class STARDriver:
     self.firmware: Dict[str, str] = {}
     # Which table index each tip type was written to. The table is volatile, so this is
     # rebuilt per session as tips are first used.
-    self._tip_type_indices: Dict[int, int] = {}
+    self._tip_type_indices: Dict[str, int] = {}
 
     # Subsystems. Each reads what it needs off `configuration`, so they are usable once setup has
     # run and raise a clear error before that. Each arm appears only if setup finds one installed.
@@ -1044,10 +1044,12 @@ class STARDriver:
       Its index in the device's tip type table.
 
     Raises:
-      ValueError: If the table is full.
+      ValueError: If the tip model is undefined or the table is full.
     """
-    tip_hash = hash(tip)
-    if tip_hash not in self._tip_type_indices:
+    model = tip.model
+    if model is None:
+      raise ValueError("Tip model must be defined to assign a tip type index.")
+    if model not in self._tip_type_indices:
       index = len(self._tip_type_indices) + 1
       if index > 99:
         raise ValueError("the tip type table is full: 99 tip types have already been defined.")
@@ -1062,8 +1064,8 @@ class STARDriver:
         tip_size=tip.tip_size,
         pickup_method=tip.pickup_method,
       )
-      self._tip_type_indices[tip_hash] = index
-    return self._tip_type_indices[tip_hash]
+      self._tip_type_indices[model] = index
+    return self._tip_type_indices[model]
 
   # ----------------------------------------
   # Discovery and initialization

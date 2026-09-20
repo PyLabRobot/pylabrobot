@@ -66,6 +66,9 @@ def load_ot_tip_rack(
       def make_tip(name: str) -> Tip:
         return Tip(
           name=name,
+          diameter=diameter,
+          size_z=data["parameters"]["tipLength"],
+          model=data["parameters"]["loadName"],
           total_tip_length=data["parameters"]["tipLength"],
           has_filter="Filter" in data["metadata"]["displayName"],
           maximal_volume=well_data["totalLiquidVolume"],

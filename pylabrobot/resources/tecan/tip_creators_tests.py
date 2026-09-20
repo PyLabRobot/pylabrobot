@@ -13,7 +13,7 @@ class TecanTipCreatorTests(unittest.TestCase):
 
     with redirect_stdout(stdout):
       with self.assertWarnsRegex(UserWarning, "total_tip_length <= 0"):
-        DiTi_10ul_LiHa_tip(name="tip")
+        DiTi_10ul_LiHa_tip(name="tip", diameter=6.0)
 
     self.assertNotIn("total_tip_length <= 0", stdout.getvalue())
 

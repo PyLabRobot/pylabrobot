@@ -163,6 +163,8 @@ class TestNimbusTipType(unittest.TestCase):
       total_tip_length=50.0,
       maximal_volume=300.0,
       fitting_depth=8.0,
+      diameter=6.0,
+      size_z=50.0,
     )
     with self.assertRaises(ValueError) as ctx:
       _get_tip_type_from_tip(tip)

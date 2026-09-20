@@ -63,7 +63,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
 
     # deck setup
     self.tr_carrier = DiTi_SBS_3_Pos_MCA96(name="tip_rack_carrier")
-    self.tr_carrier[0] = self.tr = DiTi_100ul_Te_MO(name="tip_rack")
+    self.tr_carrier[0] = self.tr = DiTi_100ul_Te_MO(name="tip_rack", tip_diameter=6.0)
     self.deck.assign_child_resource(self.tr_carrier, rails=10)
 
     self.plate_carrier = MP_3Pos_PCR(name="plate_carrier")

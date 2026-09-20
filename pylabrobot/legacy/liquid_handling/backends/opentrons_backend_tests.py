@@ -288,6 +288,8 @@ class OpentronsSharedHelperTests(unittest.TestCase):
       maximal_volume=20,
       fitting_depth=8.25,
       name="test_tip_20",
+      diameter=6.0,
+      size_z=39.2,
     )
     self.tip_300 = Tip(
       has_filter=False,
@@ -295,6 +297,8 @@ class OpentronsSharedHelperTests(unittest.TestCase):
       maximal_volume=300,
       fitting_depth=8.0,
       name="test_tip_300",
+      diameter=6.0,
+      size_z=51.0,
     )
 
   # -- _get_pickup_pipette --
