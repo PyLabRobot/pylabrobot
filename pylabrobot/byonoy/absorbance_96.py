@@ -131,7 +131,7 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
   def __init__(self, name: str = "byonoy_absorbance_96") -> None:
     # Drawn with the parking unit's housing, which is the same part, until the detection unit is
     # modelled on its own.
-    ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base", model="byonoy_a96a_parking_unit")
+    ByonoyAbsorbanceBaseUnit.__init__(self, name=name, model="byonoy_a96a_parking_unit")
     ByonoyDriver.__init__(
       self, pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96"
     )
@@ -340,7 +340,7 @@ def byonoy_a96a_parking_unit(name: str) -> ByonoyAbsorbanceBaseUnit:
 
 def byonoy_a96a(name: str, assign: bool = True) -> Tuple[ByonoyAbsorbance96, Resource]:
   """Create a full Byonoy A96A setup (reader + illumination unit)."""
-  reader = byonoy_a96a_detection_unit(name=name + "_reader")
+  reader = byonoy_a96a_detection_unit(name=name)
   illumination_unit = byonoy_a96a_illumination_unit(name=name + "_illumination_unit")
   if assign:
     reader.illumination_unit_holder.assign_child_resource(illumination_unit)
