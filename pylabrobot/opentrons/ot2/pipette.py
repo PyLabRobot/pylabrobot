@@ -240,7 +240,7 @@ class _OT2Pipette(ABC):
   def _check_tip_pickup(self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate) -> None:
     """Check the pickup target before loading labware or changing tip trackers."""
     self._validate_position(
-      self._tip_command_location(tip_spots[0], offset + Coordinate(z=tip.total_tip_length))
+      self._tip_command_location(tip_spots[0], offset + Coordinate(z=tip.get_size_z()))
     )
 
   async def _pick_up_tips(
@@ -259,7 +259,9 @@ class _OT2Pipette(ABC):
       tip = tips[0]
       if not self.can_use_tip(tip):
         raise ValueError(f"{self.name} cannot use a {tip.maximal_volume:g} µL-capacity tip")
-      if any(other != tip for other in tips):
+      if any(other.model is None for other in tips):
+        raise ValueError("Tip models must be defined for comparison.")
+      if any(other.model != tip.model for other in tips):
         raise ValueError("All nozzles must use the same tip type")
       offset = offset or Coordinate.zero()
       _require_finite_coordinate("offset", offset)
@@ -276,7 +278,7 @@ class _OT2Pipette(ABC):
           self.pipette_id,
           binding.labware_id,
           rack.get_child_identifier(tip_spots[0]),
-          offset + Coordinate(z=tip.total_tip_length),
+          offset + Coordinate(z=tip.get_size_z()),
         )
       except BaseException:
         for tracker in tracked:
@@ -731,7 +733,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     super()._check_tip_pickup(tip_spots, tip, offset)
     self._check_head8_pickup(tip_spots)
     primary = tip_spots[0].get_location_wrt(self.robot.deck, "c", "c", "b") + offset
-    nozzle_z = primary.z + tip.total_tip_length - tip.fitting_depth
+    nozzle_z = primary.z + tip.get_size_z() - tip.fitting_depth
     x_min, x_max = primary.x - 5, primary.x + 5
     channel_offsets = self.robot.geometry.channel_y_offsets()
     y_min = primary.y + channel_offsets[-1] - channel_offsets[0] - 5

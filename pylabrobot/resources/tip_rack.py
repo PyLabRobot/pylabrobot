@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from abc import ABCMeta
 from collections import OrderedDict
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
@@ -8,7 +7,6 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
-from pylabrobot.serializer import deserialize
 
 from .itemized_resource import ItemizedResource
 from .resource import Resource
@@ -71,21 +69,7 @@ class TipSpot(Resource):
   def make_tip(self) -> Tip:
     """Create a new tip instance for this spot and assign it a unique name."""
 
-    # use introspection to see if _make_tip_func has a name parameter
-    if "name" in self._make_tip_func.__code__.co_varnames:
-      tip = self._make_tip_func(self._get_next_tip_name())
-    else:
-      warnings.warn(
-        "The make_tip function should accept a 'name' parameter to assign unique names to tips.",
-        DeprecationWarning,
-      )
-      tip = self._make_tip_func()  # type: ignore # ignore type check for deprecated behavior
-      if getattr(tip, "name", None) is None:
-        tip.name = self._get_next_tip_name()
-        if hasattr(tip, "tracker"):
-          tip.tracker.thing = tip.name
-
-    return tip
+    return self._make_tip_func(self._get_next_tip_name())
 
   def get_tip(self) -> Tip:
     """Get a tip from the tip spot."""
@@ -119,7 +103,7 @@ class TipSpot(Resource):
 
     def make_tip(name: str) -> Tip:
       tip_data_with_name = {**tip_data, "name": name}
-      return cast(Tip, deserialize(tip_data_with_name, allow_marshal=allow_marshal))
+      return Tip.deserialize(tip_data_with_name, allow_marshal=allow_marshal)
 
     return cls(
       name=data["name"],

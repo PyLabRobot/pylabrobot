@@ -114,5 +114,5 @@ class StandardTipCarrierTests(unittest.TestCase):
     ]:
       with self.subTest(carrier=carrier_fn.__name__):
         carrier = carrier_fn("carrier")
-        carrier[0] = rack = rack_fn("rack")
+        carrier[0] = rack = rack_fn("rack", with_tips=False)
         self.assertEqual(rack.location, Coordinate.zero())

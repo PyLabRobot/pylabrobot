@@ -87,7 +87,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self._reading_thread: Optional[threading.Thread] = None
     self._reading_thread_stop = threading.Event()
     self._waiting_tasks: List[HamiltonTask] = []
-    self._tth2tti: dict[int, int] = {}  # hash to tip type index
+    self._tip_type_indices: dict[str, int] = {}  # model to tip type index
 
   def __setattr__(self, name: str, value: Any) -> None:
     if name == "allow_firmware_planning":
@@ -117,7 +117,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
       )
     self._waiting_tasks.clear()
-    self._tth2tti.clear()
+    self._tip_type_indices.clear()
     await self.io.stop()
 
   def serialize(self) -> dict:
@@ -432,17 +432,19 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     If the tip has previously been defined, used that index. Otherwise, define a new tip type.
     """
 
-    tip_type_hash = hash(tip)
+    model = tip.model
+    if model is None:
+      raise ValueError("Tip model must be defined to assign a tip type index.")
 
-    if tip_type_hash not in self._tth2tti:
-      ttti = len(self._tth2tti) + 1
+    if model not in self._tip_type_indices:
+      ttti = len(self._tip_type_indices) + 1
       if ttti > 99:
         raise ValueError("Too many tip types defined.")
 
       await self.define_tip_needle(
         tip_type_table_index=ttti,
         has_filter=tip.has_filter,
-        tip_length=round((tip.total_tip_length - tip.fitting_depth) * 10),  # in 0.1mm
+        tip_length=round((tip.get_size_z() - tip.fitting_depth) * 10),  # in 0.1mm
         # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register
         # the same way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to
         # satisfy the tv >= 1 requirement). tv does not affect pickup (that is tl/tg).
@@ -450,22 +452,26 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         tip_size=tip.tip_size,
         pickup_method=tip.pickup_method,
       )
-      self._tth2tti[tip_type_hash] = ttti
+      self._tip_type_indices[model] = ttti
 
-    return self._tth2tti[tip_type_hash]
+    return self._tip_type_indices[model]
 
   def _get_hamilton_tip(self, tip_spots: List[TipSpot]) -> HamiltonTip:
     """Get the single tip type for all tip spots. If it does not exist or is not a HamiltonTip,
     raise an error."""
-    tips = set(tip_spot.get_tip() for tip_spot in tip_spots)
-    if len(tips) > 1:
-      raise ValueError("Cannot mix tips with different tip types.")
+    tips: List[HamiltonTip] = []
+    for tip_spot in tip_spots:
+      tip = tip_spot.get_tip()
+      if not isinstance(tip, HamiltonTip):
+        raise ValueError(f"Tip {tip} is not a HamiltonTip.")
+      if tip.model is None:
+        raise ValueError("Tip models must be defined for comparison.")
+      tips.append(tip)
     if len(tips) == 0:
       raise ValueError("No tips specified.")
-    tip = tips.pop()
-    if not isinstance(tip, HamiltonTip):
-      raise ValueError(f"Tip {tip} is not a HamiltonTip.")
-    return tip
+    if len({tip.model for tip in tips}) > 1:
+      raise ValueError("Cannot mix tips with different tip types.")
+    return tips[0]
 
   async def send_raw_command(
     self,

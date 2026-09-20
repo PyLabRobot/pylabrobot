@@ -1,6 +1,8 @@
 import unittest
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton import HamiltonTip, hamilton_tip_300uL
+from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
@@ -13,7 +15,14 @@ class SimpleTipRack(TipRack):
       name="A1",
       size_x=1.0,
       size_y=1.0,
-      make_tip=lambda name: Tip(False, 10.0, 10.0, 1.0, name=name),
+      make_tip=lambda name: Tip(
+        name=name,
+        has_filter=False,
+        maximal_volume=10.0,
+        fitting_depth=1.0,
+        diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
+        size_z=10.0,
+      ),
     )
     spot.location = Coordinate(0.0, 0.0, 0.0)
     ordered_items = {"A1": spot}
@@ -48,3 +57,19 @@ class TipRackNamingTests(unittest.TestCase):
     spot = rack.get_item("A1")
     tip = spot.tracker.get_tip()
     self.assertIsNotNone(tip.name)
+
+  def test_deserialize_prototype_with_resource_state(self):
+    """A restored spot constructs named tips from a resource prototype."""
+    spot = TipSpot("spot", 9, 9, make_tip=hamilton_tip_300uL)
+    data = spot.serialize()
+    data["prototype_tip"]["rotation"] = {"type": "Rotation", "x": 0, "y": 0, "z": 90}
+    data["prototype_tip"]["metadata"] = {"batch": "example"}
+    data["prototype_tip"]["location"] = Coordinate(1, 2, 3).serialize()
+
+    restored = TipSpot.deserialize(data)
+    first, second = restored.make_tip(), restored.make_tip()
+    self.assertIsInstance(first, HamiltonTip)
+    self.assertNotEqual(first.name, second.name)
+    self.assertEqual(first.rotation.z, 90)
+    self.assertEqual(first.metadata, {"batch": "example"})
+    self.assertIsNone(first.location)

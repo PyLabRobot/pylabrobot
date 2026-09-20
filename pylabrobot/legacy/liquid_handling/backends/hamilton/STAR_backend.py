@@ -1474,10 +1474,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     tip_spots = [op.resource for op in ops]
-    tips = set(cast(HamiltonTip, tip_spot.get_tip()) for tip_spot in tip_spots)
-    if len(tips) > 1:
-      raise ValueError("Cannot mix tips with different tip types.")
-    ttti = await self.get_or_assign_tip_type_index(tips.pop())
+    ttti = await self.get_or_assign_tip_type_index(self._get_hamilton_tip(tip_spots))
 
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     collar_heights = {op.tip.collar_height for op in ops}
@@ -13608,7 +13605,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if tip_len is None:
       # currently a bug, will be fixed in the future
       # reverted to previous implementation
-      # tip_len = self.head[channel_idx].get_tip().total_tip_length
+      # tip_len = self.head[channel_idx].get_tip().get_size_z()
       tip_len = await self.request_tip_len_on_channel(channel_idx)
 
     if start_pos_search is None:
