@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.deregister\_state\_update\_callback
+================================================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. automethod:: Tip.deregister_state_update_callback

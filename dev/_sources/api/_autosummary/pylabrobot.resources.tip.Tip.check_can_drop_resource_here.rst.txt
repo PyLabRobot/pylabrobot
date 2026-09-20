@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.check\_can\_drop\_resource\_here
+=============================================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. automethod:: Tip.check_can_drop_resource_here

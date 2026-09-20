@@ -16,6 +16,8 @@ pylabrobot.resources.tip.Tip
       :toctree: .
    
       ~Tip.collar_height
+      ~Tip.location
+      ~Tip.name
    
    
 
@@ -27,6 +29,56 @@ pylabrobot.resources.tip.Tip
       :toctree: .
    
       ~Tip.__init__
+      ~Tip.assign_child_by_anchor
+      ~Tip.assign_child_resource
+      ~Tip.at
+      ~Tip.center
+      ~Tip.centers
+      ~Tip.check_can_drop_resource_here
+      ~Tip.copy
+      ~Tip.deregister_did_assign_resource_callback
+      ~Tip.deregister_did_unassign_resource_callback
+      ~Tip.deregister_state_update_callback
+      ~Tip.deregister_will_assign_resource_callback
+      ~Tip.deregister_will_unassign_resource_callback
+      ~Tip.deserialize
+      ~Tip.find_resource
+      ~Tip.find_resources
+      ~Tip.get_absolute_location
+      ~Tip.get_absolute_rotation
+      ~Tip.get_absolute_size_x
+      ~Tip.get_absolute_size_y
+      ~Tip.get_absolute_size_z
+      ~Tip.get_all_children
+      ~Tip.get_anchor
+      ~Tip.get_highest_known_point
+      ~Tip.get_location_wrt
+      ~Tip.get_resource
+      ~Tip.get_root
+      ~Tip.get_size_x
+      ~Tip.get_size_y
+      ~Tip.get_size_z
+      ~Tip.has_resource
+      ~Tip.is_in_subtree_of
+      ~Tip.load_all_state
+      ~Tip.load_from_json_file
+      ~Tip.load_state
+      ~Tip.load_state_from_file
+      ~Tip.named
+      ~Tip.register_did_assign_resource_callback
+      ~Tip.register_did_unassign_resource_callback
+      ~Tip.register_state_update_callback
+      ~Tip.register_will_assign_resource_callback
+      ~Tip.register_will_unassign_resource_callback
+      ~Tip.rotate
+      ~Tip.rotate_to
+      ~Tip.rotated
+      ~Tip.save
+      ~Tip.save_state_to_file
       ~Tip.serialize
+      ~Tip.serialize_all_state
+      ~Tip.serialize_state
+      ~Tip.unassign
+      ~Tip.unassign_child_resource
    
    

@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.find\_resources
+============================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. automethod:: Tip.find_resources

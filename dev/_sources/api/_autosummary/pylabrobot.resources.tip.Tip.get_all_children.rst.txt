@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.get\_all\_children
+===============================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. automethod:: Tip.get_all_children

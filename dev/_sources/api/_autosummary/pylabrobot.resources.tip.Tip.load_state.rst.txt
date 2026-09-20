@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.load\_state
+========================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. automethod:: Tip.load_state
