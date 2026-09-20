@@ -2,6 +2,7 @@ import unittest
 
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.hamilton import HamiltonTip, hamilton_tip_300uL
+from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_tracker import (
   HasTipError,
@@ -20,7 +21,7 @@ class TestTipTracker(unittest.TestCase):
       maximal_volume=10,
       fitting_depth=10,
       name="test_tip",
-      diameter=6.0,
+      diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
       size_z=10,
     )
 

@@ -26,7 +26,7 @@ class TipTests(unittest.TestCase):
       has_filter=False,
       maximal_volume=10.0,
       fitting_depth=1.0,
-      diameter=6.0,
+      diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
       size_z=10.0,
     )
     self.assertEqual(
@@ -34,7 +34,7 @@ class TipTests(unittest.TestCase):
       {
         "type": "Tip",
         "name": "test_tip",
-        "diameter": 6.0,
+        "diameter": TIP_DIAMETER[TipSize.STANDARD_VOLUME],
         "size_z": 10.0,
         "pick_up_location": None,
         "has_filter": False,
@@ -51,10 +51,10 @@ class TipTests(unittest.TestCase):
       has_filter=False,
       maximal_volume=10.0,
       fitting_depth=1.0,
-      diameter=6.0,
+      diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
       size_z=10.0,
     )
-    self.assertEqual(Tip.deserialize(serialize(tip)), tip)
+    self.assertEqual(Tip.deserialize(tip.serialize()), tip)
 
   def test_serialize_subclass(self):
     tip = HamiltonTip(
@@ -100,7 +100,7 @@ class TipTests(unittest.TestCase):
       has_filter=False,
       maximal_volume=400.0,
       fitting_depth=1.0,
-      diameter=6.0,
+      diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
       size_z=10.0,
     )
     self.assertEqual(tip.nominal_volume, 400.0)
@@ -123,7 +123,6 @@ class TipTests(unittest.TestCase):
     """Catalog tips retain their model across instances and use their size class's diameter."""
     for factory, size in (
       (hamilton_tip_300uL, TipSize.STANDARD_VOLUME),
-      (hamilton_tip_5000uL, TipSize.XL),
       (imcs_tip_300uL, TipSize.STANDARD_VOLUME),
       (imcs_tip_1000uL, TipSize.HIGH_VOLUME),
     ):
@@ -137,7 +136,7 @@ class TipTests(unittest.TestCase):
 
   def test_equality_includes_tool_and_tip_fields(self):
     """Matching resource geometry alone does not make different tips equal."""
-    tip = Tip("tip", 6, 50, False, 300, 8, collar_height=4)
+    tip = Tip("tip", TIP_DIAMETER[TipSize.STANDARD_VOLUME], 50, False, 300, 8, collar_height=4)
     data = tip.serialize()
     for changes in (
       {"name": "other"},
@@ -157,7 +156,7 @@ class TipTests(unittest.TestCase):
     self.assertNotEqual(hamilton_tip_300uL("tip"), hamilton_tip_300uL_filter("tip"))
 
   def test_equality_includes_vendor_fields(self):
-    """Hamilton size and pickup method, and Tecan type, participate in equality."""
+    """Hamilton size and pickup method participate in equality."""
     tip = hamilton_tip_300uL("tip")
     for changes in (
       {"tip_size": TipSize.HIGH_VOLUME.name},
@@ -166,7 +165,11 @@ class TipTests(unittest.TestCase):
       with self.subTest(changes=changes):
         other = Tip.deserialize({**tip.serialize(), **changes})
         self.assertNotEqual(tip, other)
-    tecan_tip = DiTi_100ul_Te_MO_tip("tip", diameter=6)
+
+  @unittest.skip("Tecan tip diameter has not been measured.")
+  def test_equality_includes_tecan_tip_type(self):
+    """Tecan tip type participates in equality."""
+    tecan_tip = DiTi_100ul_Te_MO_tip("tip")
     other = Tip.deserialize({**tecan_tip.serialize(), "tip_type": TipType.STANDARD.name})
     self.assertNotEqual(tecan_tip, other)
 
@@ -174,26 +177,48 @@ class TipTests(unittest.TestCase):
     """Tools and tips cannot be used as dictionary keys or set members."""
     resources = (
       HeadTool("tool", 6, 6, 50, fitting_depth=8),
-      Tip("tip", 6, 50, False, 300, 8),
+      Tip("tip", TIP_DIAMETER[TipSize.STANDARD_VOLUME], 50, False, 300, 8),
       hamilton_tip_300uL("hamilton_tip"),
-      DiTi_100ul_Te_MO_tip("tecan_tip", diameter=6),
     )
     for resource in resources:
       with self.subTest(resource=resource.name), self.assertRaises(TypeError):
         hash(resource)
 
+  @unittest.skip("Tecan tip diameter has not been measured.")
+  def test_tecan_tip_is_unhashable(self):
+    """Tecan tips cannot be used as dictionary keys or set members."""
+    tip = DiTi_100ul_Te_MO_tip("tip")
+    with self.assertRaises(TypeError):
+      hash(tip)
+
   def test_tool_and_tip_round_trips(self):
     """Both serializers preserve model, geometry, pickup location, and tip-specific fields."""
     tool = HeadTool("tool", 10, 12, 30, fitting_depth=4, model="tool_model")
-    tip = Tip("tip", 6, 50, False, 300, 8, collar_height=4, model="tip_model")
+    tip = Tip(
+      "tip",
+      TIP_DIAMETER[TipSize.STANDARD_VOLUME],
+      50,
+      False,
+      300,
+      8,
+      collar_height=4,
+      model="tip_model",
+    )
     hamilton_tip = hamilton_tip_300uL("hamilton_tip")
-    tecan_tip = DiTi_100ul_Te_MO_tip("tecan_tip", diameter=6)
-    for resource in (tool, tip, hamilton_tip, tecan_tip):
+    for resource in (tool, tip, hamilton_tip):
       with self.subTest(resource=resource.name):
         resource.pick_up_location = Coordinate(3, 3, 30)
         data = resource.serialize()
         for restored in (HeadTool.deserialize(data), Resource.deserialize(data)):
           self.assertEqual(restored.serialize(), data)
+
+  @unittest.skip("Tecan tip diameter has not been measured.")
+  def test_tecan_tip_round_trip(self):
+    """The resource serializer preserves Tecan tip properties."""
+    tip = DiTi_100ul_Te_MO_tip("tecan_tip")
+    tip.pick_up_location = Coordinate(3, 3, 30)
+    data = tip.serialize()
+    self.assertEqual(Tip.deserialize(data).serialize(), data)
 
   def test_tip_resource_state_round_trip(self):
     """The resource deserializer restores tip state and placement through its parent."""
@@ -222,24 +247,23 @@ class TipTests(unittest.TestCase):
       hamilton_tip_300uL()  # type: ignore[call-arg]
     with self.assertRaisesRegex(TypeError, "name must be a string"):
       hamilton_tip_300uL(None)  # type: ignore[arg-type]
+
+  @unittest.skip("Tecan tip diameter has not been measured.")
+  def test_tecan_tip_name_is_required(self):
+    """A Tecan tip cannot have a None name."""
     with self.assertRaisesRegex(TypeError, "name must be a string"):
-      DiTi_100ul_Te_MO_tip(None, diameter=6)  # type: ignore[arg-type]
+      DiTi_100ul_Te_MO_tip(None)  # type: ignore[arg-type]
 
-  def test_missing_diameter_must_be_supplied(self):
-    """Unmeasured Tecan and Hamilton size classes require an explicit diameter."""
-    with self.assertRaises(TypeError):
-      DiTi_100ul_Te_MO_tip("tip")  # type: ignore[call-arg]
-    with self.assertRaisesRegex(ValueError, "diameter is required"):
+  def test_unknown_diameter_raises(self):
+    """Incomplete tip definitions cannot substitute arbitrary diameters."""
+    with self.assertRaisesRegex(NotImplementedError, "Tip diameter is not defined"):
+      DiTi_100ul_Te_MO_tip("tip")
+    with self.assertRaisesRegex(NotImplementedError, "Tip diameter is not defined"):
       HamiltonTip("tip", False, 30, 10, TipSize.CORE_384_HEAD_TIP, TipPickupMethod.OUT_OF_RACK)
-    tip = HamiltonTip(
-      "tip", False, 30, 10, TipSize.CORE_384_HEAD_TIP, TipPickupMethod.OUT_OF_RACK, diameter=4
-    )
-    self.assertEqual(tip.get_size_x(), 4)
+    with self.assertRaisesRegex(NotImplementedError, "Tip diameter is not defined"):
+      hamilton_tip_5000uL("tip")
 
-  def test_tecan_rack_binds_diameter_and_names_each_tip(self):
-    """A rack binds the caller's diameter while TipSpot supplies each name."""
-    rack = DiTi_100ul_Te_MO("rack", tip_diameter=6)
-    tips = [spot.get_tip() for spot in rack.get_all_items()]
-    self.assertEqual(len({tip.name for tip in tips}), 96)
-    self.assertTrue(all(tip.get_size_x() == 6 for tip in tips))
-    self.assertTrue(all(tip.model == DiTi_100ul_Te_MO_tip.__name__ for tip in tips))
+  def test_incomplete_tecan_rack_raises(self):
+    """A catalog rack cannot construct tips with an unknown diameter."""
+    with self.assertRaisesRegex(NotImplementedError, "Tip diameter is not defined"):
+      DiTi_100ul_Te_MO("rack")

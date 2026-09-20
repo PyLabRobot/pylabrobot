@@ -23,7 +23,7 @@ class TecanTip(Tip):
   def __init__(
     self,
     name: str,
-    diameter: float,
+    diameter: Optional[float],
     has_filter: bool,
     size_z: float,
     maximal_volume: float,
@@ -36,6 +36,8 @@ class TecanTip(Tip):
     pick_up_location: Optional[Coordinate] = None,
   ):
     """Initialize a Tecan tip with its name and firmware tip characteristics."""
+    if diameter is None:
+      raise NotImplementedError(f"Tip diameter is not defined for {model or name}.")
     if isinstance(tip_type, str):
       tip_type = TipType[tip_type]
     if size_z <= 0:
@@ -70,10 +72,10 @@ class TecanTip(Tip):
     return {**data, "tip_type": self.tip_type.name}
 
 
-def standard_fixed_tip(name: str, diameter: float) -> TecanTip:
+def standard_fixed_tip(name: str) -> TecanTip:
   """Default standard fixed tip"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=standard_fixed_tip.__name__,
     name=name,
     has_filter=False,
@@ -83,10 +85,10 @@ def standard_fixed_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_100ul_Te_MO_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_100ul_Te_MO_tip(name: str) -> TecanTip:
   """Tip for DiTi_100ul_Te_MO"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_100ul_Te_MO_tip.__name__,
     name=name,
     has_filter=False,
@@ -96,10 +98,10 @@ def DiTi_100ul_Te_MO_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_Te_MO_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_Te_MO_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_Te_MO"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_Te_MO_tip.__name__,
     name=name,
     has_filter=False,
@@ -109,10 +111,10 @@ def DiTi_50ul_Te_MO_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_Te_MO_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_Te_MO_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_Te_MO"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_Te_MO_tip.__name__,
     name=name,
     has_filter=False,
@@ -122,10 +124,10 @@ def DiTi_200ul_Te_MO_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_100ul_Filter_Te_MO_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_100ul_Filter_Te_MO_tip(name: str) -> TecanTip:
   """Tip for DiTi_100ul_Filter_Te_MO"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_100ul_Filter_Te_MO_tip.__name__,
     name=name,
     has_filter=False,
@@ -135,10 +137,10 @@ def DiTi_100ul_Filter_Te_MO_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_Filter_Te_MO_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_Filter_Te_MO_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_Filter_Te_MO"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_Filter_Te_MO_tip.__name__,
     name=name,
     has_filter=False,
@@ -148,10 +150,10 @@ def DiTi_200ul_Filter_Te_MO_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def Adapter_96_DiTi_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def Adapter_96_DiTi_MCA384_tip(name: str) -> TecanTip:
   """Tip for Adapter_96_DiTi_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=Adapter_96_DiTi_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -161,10 +163,10 @@ def Adapter_96_DiTi_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def Adapter_DiTi_Combo_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def Adapter_DiTi_Combo_MCA384_tip(name: str) -> TecanTip:
   """Tip for Adapter_DiTi_Combo_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=Adapter_DiTi_Combo_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -174,10 +176,10 @@ def Adapter_DiTi_Combo_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def Adapter_DiTi_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def Adapter_DiTi_MCA384_tip(name: str) -> TecanTip:
   """Tip for Adapter_DiTi_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=Adapter_DiTi_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -187,10 +189,10 @@ def Adapter_DiTi_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_100ul_Filter_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_100ul_Filter_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_100ul_Filter_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_100ul_Filter_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -200,10 +202,10 @@ def DiTi_100ul_Filter_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_100ul_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_100ul_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_100ul_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_100ul_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -213,10 +215,10 @@ def DiTi_100ul_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_Filter_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_Filter_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_Filter_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_Filter_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -226,10 +228,10 @@ def DiTi_200ul_Filter_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -239,10 +241,10 @@ def DiTi_200ul_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -252,10 +254,10 @@ def DiTi_50ul_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def Base_Nested_DiTi_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def Base_Nested_DiTi_MCA96_tip(name: str) -> TecanTip:
   """Tip for Base_Nested_DiTi_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=Base_Nested_DiTi_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -265,10 +267,10 @@ def Base_Nested_DiTi_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_100ul_Nested_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_100ul_Nested_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_100ul_Nested_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_100ul_Nested_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -278,10 +280,10 @@ def DiTi_100ul_Nested_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_100ul_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_100ul_SBS_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_100ul_SBS_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_100ul_SBS_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -291,10 +293,10 @@ def DiTi_100ul_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_SBS_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_SBS_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_SBS_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -304,10 +306,10 @@ def DiTi_200ul_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_SBS_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_SBS_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_SBS_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -317,10 +319,10 @@ def DiTi_50ul_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_Nested_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_Nested_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_Nested_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_Nested_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -330,10 +332,10 @@ def DiTi_50ul_Nested_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def Adapter_96_DiTi_1to1_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def Adapter_96_DiTi_1to1_MCA384_tip(name: str) -> TecanTip:
   """Tip for Adapter_96_DiTi_1to1_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=Adapter_96_DiTi_1to1_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -343,10 +345,10 @@ def Adapter_96_DiTi_1to1_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_Nested_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_Nested_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_Nested_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_Nested_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -356,10 +358,10 @@ def DiTi_200ul_Nested_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_w_b_filter_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_w_b_filter_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_w_b_filter_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_w_b_filter_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -369,10 +371,10 @@ def DiTi_200ul_w_b_filter_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_wide_bore_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_wide_bore_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_wide_bore_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_wide_bore_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -382,10 +384,10 @@ def DiTi_200ul_wide_bore_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def Adapter_96_DiTi_4to1_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def Adapter_96_DiTi_4to1_MCA384_tip(name: str) -> TecanTip:
   """Tip for Adapter_96_DiTi_4to1_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=Adapter_96_DiTi_4to1_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -395,10 +397,10 @@ def Adapter_96_DiTi_4to1_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_500ul_Filter_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_500ul_Filter_SBS_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_500ul_Filter_SBS_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_500ul_Filter_SBS_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -408,10 +410,10 @@ def DiTi_500ul_Filter_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_500ul_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_500ul_SBS_MCA96_tip(name: str) -> TecanTip:
   """Tip for DiTi_500ul_SBS_MCA96"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_500ul_SBS_MCA96_tip.__name__,
     name=name,
     has_filter=False,
@@ -421,10 +423,10 @@ def DiTi_500ul_SBS_MCA96_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_Nested_Waste_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_Nested_Waste_MCA384_tip(name: str) -> TecanTip:
   """Tip for DiTi_Nested_Waste_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_Nested_Waste_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -434,10 +436,10 @@ def DiTi_Nested_Waste_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_1000ul_SBS_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_1000ul_SBS_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_1000ul_SBS_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_1000ul_SBS_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -447,10 +449,10 @@ def DiTi_1000ul_SBS_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_SBS_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_SBS_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_SBS_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_SBS_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -460,10 +462,10 @@ def DiTi_200ul_SBS_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_SBS_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_SBS_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_SBS_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_SBS_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -473,10 +475,10 @@ def DiTi_50ul_SBS_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_5000ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_5000ul_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_5000ul_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_5000ul_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -486,10 +488,10 @@ def DiTi_5000ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_5000ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_5000ul_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_5000ul_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_5000ul_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -499,10 +501,10 @@ def DiTi_5000ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_125ul_Filter_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_125ul_Filter_MCA384_tip(name: str) -> TecanTip:
   """Tip for DiTi_125ul_Filter_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_125ul_Filter_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -512,10 +514,10 @@ def DiTi_125ul_Filter_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_125ul_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_125ul_MCA384_tip(name: str) -> TecanTip:
   """Tip for DiTi_125ul_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_125ul_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -525,10 +527,10 @@ def DiTi_125ul_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_15ul_Filter_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_15ul_Filter_MCA384_tip(name: str) -> TecanTip:
   """Tip for DiTi_15ul_Filter_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_15ul_Filter_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -538,10 +540,10 @@ def DiTi_15ul_Filter_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_15ul_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_15ul_MCA384_tip(name: str) -> TecanTip:
   """Tip for DiTi_15ul_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_15ul_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -551,10 +553,10 @@ def DiTi_15ul_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_Filter_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_Filter_MCA384_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_Filter_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_Filter_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -564,10 +566,10 @@ def DiTi_50ul_Filter_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_MCA384_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_MCA384_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_MCA384"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_MCA384_tip.__name__,
     name=name,
     has_filter=False,
@@ -577,10 +579,10 @@ def DiTi_50ul_MCA384_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_1000ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_1000ul_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_1000ul_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_1000ul_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -590,10 +592,10 @@ def DiTi_1000ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_1000ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_1000ul_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_1000ul_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_1000ul_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -603,10 +605,10 @@ def DiTi_1000ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_10ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_10ul_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_10ul_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_10ul_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -616,10 +618,10 @@ def DiTi_10ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_10ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_10ul_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_10ul_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_10ul_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -629,10 +631,10 @@ def DiTi_10ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -642,10 +644,10 @@ def DiTi_200ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -655,10 +657,10 @@ def DiTi_200ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -668,10 +670,10 @@ def DiTi_50ul_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -681,10 +683,10 @@ def DiTi_50ul_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_350ul_Nested_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_350ul_Nested_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_350ul_Nested_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_350ul_Nested_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -694,10 +696,10 @@ def DiTi_350ul_Nested_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_10ul_Filter_LiHa_L_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_10ul_Filter_LiHa_L_tip(name: str) -> TecanTip:
   """Tip for DiTi_10ul_Filter_LiHa_L"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_10ul_Filter_LiHa_L_tip.__name__,
     name=name,
     has_filter=False,
@@ -707,10 +709,10 @@ def DiTi_10ul_Filter_LiHa_L_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_10ul_Filter_Nested_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_10ul_Filter_Nested_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_10ul_Filter_Nested_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_10ul_Filter_Nested_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -720,10 +722,10 @@ def DiTi_10ul_Filter_Nested_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_10ul_LiHa_L_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_10ul_LiHa_L_tip(name: str) -> TecanTip:
   """Tip for DiTi_10ul_LiHa_L"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_10ul_LiHa_L_tip.__name__,
     name=name,
     has_filter=False,
@@ -733,10 +735,10 @@ def DiTi_10ul_LiHa_L_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_10ul_Nested_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_10ul_Nested_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_10ul_Nested_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_10ul_Nested_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -746,10 +748,10 @@ def DiTi_10ul_Nested_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_10ul_SBS_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_10ul_SBS_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_10ul_SBS_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_10ul_SBS_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -759,10 +761,10 @@ def DiTi_10ul_SBS_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_10ul_SBS_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_10ul_SBS_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_10ul_SBS_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_10ul_SBS_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -772,10 +774,10 @@ def DiTi_10ul_SBS_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_1000ul_W_B_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_1000ul_W_B_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_1000ul_W_B_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_1000ul_W_B_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -785,10 +787,10 @@ def DiTi_1000ul_W_B_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_1000ul_CL_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_1000ul_CL_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_1000ul_CL_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_1000ul_CL_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -798,10 +800,10 @@ def DiTi_1000ul_CL_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_1000ul_CL_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_1000ul_CL_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_1000ul_CL_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_1000ul_CL_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -811,10 +813,10 @@ def DiTi_1000ul_CL_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_CL_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_CL_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_CL_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_CL_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -824,10 +826,10 @@ def DiTi_200ul_CL_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_200ul_CL_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_200ul_CL_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_200ul_CL_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_200ul_CL_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -837,10 +839,10 @@ def DiTi_200ul_CL_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_CL_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_CL_Filter_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_CL_Filter_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_CL_Filter_LiHa_tip.__name__,
     name=name,
     has_filter=False,
@@ -850,10 +852,10 @@ def DiTi_50ul_CL_Filter_LiHa_tip(name: str, diameter: float) -> TecanTip:
   )
 
 
-def DiTi_50ul_CL_LiHa_tip(name: str, diameter: float) -> TecanTip:
+def DiTi_50ul_CL_LiHa_tip(name: str) -> TecanTip:
   """Tip for DiTi_50ul_CL_LiHa"""
   return TecanTip(
-    diameter=diameter,
+    diameter=None,
     model=DiTi_50ul_CL_LiHa_tip.__name__,
     name=name,
     has_filter=False,

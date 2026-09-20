@@ -2,6 +2,7 @@ import datetime
 import json
 import math
 
+from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
 from pylabrobot.serializer import (
   deserialize,
   serialize,
@@ -68,7 +69,7 @@ def test_deserialize_calls_custom_deserialize_method():
       has_filter=False,
       maximal_volume=300,
       fitting_depth=8,
-      diameter=6.0,
+      diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
       size_z=50,
     )
 

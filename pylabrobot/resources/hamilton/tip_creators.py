@@ -24,13 +24,10 @@ class TipSize(enum.Enum):
   XL = 5  # TODO: identify tip_collar_size_z
 
 
-# The XL diameter is assumed to be twice the measured 8.2 mm CO-RE collar.
-# TODO: measure the XL tips to confirm their diameter.
 TIP_DIAMETER = {
   TipSize.LOW_VOLUME: 8.2,
   TipSize.STANDARD_VOLUME: 8.2,
   TipSize.HIGH_VOLUME: 8.2,
-  TipSize.XL: 16.4,
 }
 
 
@@ -71,7 +68,7 @@ class HamiltonTip(Tip):
       tip_size = TipSize[tip_size]
     if diameter is None:
       if tip_size not in TIP_DIAMETER:
-        raise ValueError(f"diameter is required for tip size {tip_size.name}.")
+        raise NotImplementedError(f"Tip diameter is not defined for {model or tip_size.name}.")
       diameter = TIP_DIAMETER[tip_size]
     if isinstance(pickup_method, str):
       pickup_method = TipPickupMethod[pickup_method]

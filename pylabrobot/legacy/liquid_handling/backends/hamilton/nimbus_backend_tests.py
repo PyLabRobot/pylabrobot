@@ -47,6 +47,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
+from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER
 from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
 from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
 
@@ -162,7 +163,7 @@ class TestNimbusTipType(unittest.TestCase):
       has_filter=False,
       maximal_volume=300.0,
       fitting_depth=8.0,
-      diameter=6.0,
+      diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
       size_z=50.0,
     )
     with self.assertRaises(ValueError) as ctx:

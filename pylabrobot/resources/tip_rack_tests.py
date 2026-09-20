@@ -2,6 +2,7 @@ import unittest
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import HamiltonTip, hamilton_tip_300uL
+from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
@@ -19,7 +20,7 @@ class SimpleTipRack(TipRack):
         has_filter=False,
         maximal_volume=10.0,
         fitting_depth=1.0,
-        diameter=6.0,
+        diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
         size_z=10.0,
       ),
     )
