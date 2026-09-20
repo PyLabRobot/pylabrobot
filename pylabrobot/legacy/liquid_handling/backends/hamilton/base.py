@@ -444,7 +444,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       await self.define_tip_needle(
         tip_type_table_index=ttti,
         has_filter=tip.has_filter,
-        tip_length=round((tip.total_tip_length - tip.fitting_depth) * 10),  # in 0.1mm
+        tip_length=round((tip.get_size_z() - tip.fitting_depth) * 10),  # in 0.1mm
         # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register
         # the same way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to
         # satisfy the tv >= 1 requirement). tv does not affect pickup (that is tl/tg).

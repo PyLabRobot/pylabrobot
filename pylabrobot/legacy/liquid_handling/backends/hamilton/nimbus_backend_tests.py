@@ -69,7 +69,7 @@ class TestNimbusTipType(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=50.0,
+      size_z=50.0,
       maximal_volume=10.0,
       tip_size=TipSize.LOW_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -80,7 +80,7 @@ class TestNimbusTipType(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=True,
-      total_tip_length=50.0,
+      size_z=50.0,
       maximal_volume=10.0,
       tip_size=TipSize.LOW_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -91,7 +91,7 @@ class TestNimbusTipType(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=50.0,
+      size_z=50.0,
       maximal_volume=50.0,
       tip_size=TipSize.STANDARD_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -102,7 +102,7 @@ class TestNimbusTipType(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=True,
-      total_tip_length=50.0,
+      size_z=50.0,
       maximal_volume=50.0,
       tip_size=TipSize.STANDARD_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -113,7 +113,7 @@ class TestNimbusTipType(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=59.9,
+      size_z=59.9,
       maximal_volume=300.0,
       tip_size=TipSize.STANDARD_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -124,7 +124,7 @@ class TestNimbusTipType(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=True,
-      total_tip_length=59.9,
+      size_z=59.9,
       maximal_volume=300.0,
       tip_size=TipSize.STANDARD_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -135,7 +135,7 @@ class TestNimbusTipType(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=95.1,
+      size_z=95.1,
       maximal_volume=1000.0,
       tip_size=TipSize.HIGH_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -146,7 +146,7 @@ class TestNimbusTipType(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=True,
-      total_tip_length=95.1,
+      size_z=95.1,
       maximal_volume=1000.0,
       tip_size=TipSize.HIGH_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -160,7 +160,6 @@ class TestNimbusTipType(unittest.TestCase):
     tip = Tip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=50.0,
       maximal_volume=300.0,
       fitting_depth=8.0,
       diameter=6.0,
@@ -710,7 +709,7 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.tip = HamiltonTip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=59.9,
+      size_z=59.9,
       maximal_volume=300.0,
       tip_size=TipSize.STANDARD_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,

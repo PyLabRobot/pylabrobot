@@ -47,10 +47,6 @@ class HeadTool(Resource):
       and self.pick_up_location == other.pick_up_location
     )
 
-  def __hash__(self) -> int:
-    """Hash by the immutable resource name, which equal tools must share."""
-    return hash(self.name)
-
   def serialize(self) -> dict:
     """Serialize the tool's resource fields, fitting depth, and pickup location."""
     return {

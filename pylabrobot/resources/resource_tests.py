@@ -1101,7 +1101,6 @@ class TestResourceMetadata(unittest.TestCase):
           has_filter=False,
           maximal_volume=10,
           fitting_depth=1,
-          total_tip_length=10,
           diameter=6.0,
           size_z=10,
         ),

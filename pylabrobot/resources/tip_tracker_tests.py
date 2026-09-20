@@ -17,7 +17,6 @@ class TestTipTracker(unittest.TestCase):
     super().setUp()
     self.tip = Tip(
       has_filter=False,
-      total_tip_length=10,
       maximal_volume=10,
       fitting_depth=10,
       name="test_tip",

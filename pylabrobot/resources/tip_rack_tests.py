@@ -17,7 +17,6 @@ class SimpleTipRack(TipRack):
       make_tip=lambda name: Tip(
         name=name,
         has_filter=False,
-        total_tip_length=10.0,
         maximal_volume=10.0,
         fitting_depth=1.0,
         diameter=6.0,

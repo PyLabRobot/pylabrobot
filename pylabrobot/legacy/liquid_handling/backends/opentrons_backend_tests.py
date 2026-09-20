@@ -284,7 +284,6 @@ class OpentronsSharedHelperTests(unittest.TestCase):
     self.tip_spot = self.tip_rack.get_item("A1")
     self.tip_20 = Tip(
       has_filter=True,
-      total_tip_length=39.2,
       maximal_volume=20,
       fitting_depth=8.25,
       name="test_tip_20",
@@ -293,7 +292,6 @@ class OpentronsSharedHelperTests(unittest.TestCase):
     )
     self.tip_300 = Tip(
       has_filter=False,
-      total_tip_length=51.0,
       maximal_volume=300,
       fitting_depth=8.0,
       name="test_tip_300",

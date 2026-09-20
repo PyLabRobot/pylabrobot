@@ -15,7 +15,7 @@ def imcs_tip_1000uL(name: str) -> HamiltonTip:
     model=imcs_tip_1000uL.__name__,
     diameter=TIP_DIAMETER[TipSize.HIGH_VOLUME],
     has_filter=True,
-    total_tip_length=95.1 - 14,  # - 14
+    size_z=95.1 - 14,  # - 14
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
     # requires "full_blowout" pickup method from STARBackend.pick_up_tips96. Not available on pip channels.
@@ -64,7 +64,7 @@ def imcs_tip_300uL(name: str) -> HamiltonTip:
     model=imcs_tip_300uL.__name__,
     diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
     has_filter=True,
-    total_tip_length=59.9 - 6,  # - 6
+    size_z=59.9 - 6,  # - 6
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
     # requires "full_blowout" pickup method from STARBackend.pick_up_tips96. Not available on pip channels.

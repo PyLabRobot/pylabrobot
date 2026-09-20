@@ -55,7 +55,7 @@ class HamiltonTip(Tip):
     self,
     name: str,
     has_filter: bool,
-    total_tip_length: float,
+    size_z: float,
     maximal_volume: float,
     tip_size: Union[TipSize, str],  # union for deserialization, will probably refactor
     pickup_method: Union[TipPickupMethod, str],  # union for deserialization, will probably refactor
@@ -89,8 +89,7 @@ class HamiltonTip(Tip):
 
     super().__init__(
       diameter=diameter,
-      size_z=total_tip_length,
-      total_tip_length=total_tip_length,
+      size_z=size_z,
       has_filter=has_filter,
       nominal_volume=nominal_volume,
       maximal_volume=maximal_volume,
@@ -114,8 +113,6 @@ class HamiltonTip(Tip):
       and self.pickup_method == other.pickup_method
     )
 
-  __hash__ = Tip.__hash__
-
   def __repr__(self) -> str:
     return (
       f"HamiltonTip(name={self.name!r}, "
@@ -124,7 +121,7 @@ class HamiltonTip(Tip):
       f"nominal_volume={self.nominal_volume}, "
       f"maximal_volume={self.maximal_volume}, "
       f"fitting_depth={self.fitting_depth}, "
-      f"total_tip_length={self.total_tip_length}, "
+      f"size_z={self.get_size_z()}, "
       f"collar_height={self._collar_height}, "
       f"pickup_method={self.pickup_method.name})"
     )
@@ -133,7 +130,6 @@ class HamiltonTip(Tip):
     """Serialize a Hamilton tip, omitting dimensions inferred by its constructor."""
     super_serialized = super().serialize()
     super_serialized.pop("fitting_depth", None)  # inferred from tip size
-    super_serialized.pop("size_z")  # inferred from total_tip_length
     return {
       **super_serialized,
       "pickup_method": self.pickup_method.name,
@@ -311,7 +307,7 @@ def hamilton_tip_10uL(name: str) -> HamiltonTip:
     model=hamilton_tip_10uL.__name__,
     name=name,
     has_filter=False,
-    total_tip_length=29.9,
+    size_z=29.9,
     nominal_volume=10,
     maximal_volume=15,
     tip_size=TipSize.LOW_VOLUME,
@@ -331,7 +327,7 @@ def hamilton_tip_10uL_filter(name: str) -> HamiltonTip:
     model=hamilton_tip_10uL_filter.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=29.9,
+    size_z=29.9,
     nominal_volume=10,
     maximal_volume=10,
     tip_size=TipSize.LOW_VOLUME,
@@ -354,7 +350,7 @@ def hamilton_tip_50uL(name: str) -> HamiltonTip:
     model=hamilton_tip_50uL.__name__,
     name=name,
     has_filter=False,
-    total_tip_length=50.4,
+    size_z=50.4,
     nominal_volume=50,
     maximal_volume=65,
     tip_size=TipSize.STANDARD_VOLUME,
@@ -372,7 +368,7 @@ def hamilton_tip_50uL_filter(name: str) -> HamiltonTip:
     model=hamilton_tip_50uL_filter.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=50.4,
+    size_z=50.4,
     nominal_volume=50,
     maximal_volume=60,
     tip_size=TipSize.STANDARD_VOLUME,
@@ -393,7 +389,7 @@ def hamilton_tip_300uL(name: str) -> HamiltonTip:
     model=hamilton_tip_300uL.__name__,
     name=name,
     has_filter=False,
-    total_tip_length=59.9,
+    size_z=59.9,
     nominal_volume=300,
     maximal_volume=400,
     tip_size=TipSize.STANDARD_VOLUME,
@@ -413,7 +409,7 @@ def hamilton_tip_300uL_filter(name: str) -> HamiltonTip:
     model=hamilton_tip_300uL_filter.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=59.9,
+    size_z=59.9,
     nominal_volume=300,
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
@@ -429,7 +425,7 @@ def hamilton_tip_300uL_filter_slim(name: str) -> HamiltonTip:
     model=hamilton_tip_300uL_filter_slim.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=95.0,
+    size_z=95.0,
     nominal_volume=300,
     maximal_volume=345,
     tip_size=TipSize.HIGH_VOLUME,
@@ -444,7 +440,7 @@ def hamilton_tip_300uL_filter_ultrawide(name: str) -> HamiltonTip:
     model=hamilton_tip_300uL_filter_ultrawide.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=51.9,
+    size_z=51.9,
     nominal_volume=300,
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
@@ -465,7 +461,7 @@ def hamilton_tip_1000uL(name: str) -> HamiltonTip:
     model=hamilton_tip_1000uL.__name__,
     name=name,
     has_filter=False,
-    total_tip_length=95.1,
+    size_z=95.1,
     nominal_volume=1000,
     maximal_volume=1250,
     tip_size=TipSize.HIGH_VOLUME,
@@ -483,7 +479,7 @@ def hamilton_tip_1000uL_filter(name: str) -> HamiltonTip:
     model=hamilton_tip_1000uL_filter.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=95.1,
+    size_z=95.1,
     nominal_volume=1000,
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
@@ -501,7 +497,7 @@ def hamilton_tip_1000uL_filter_wide(name: str) -> HamiltonTip:
     model=hamilton_tip_1000uL_filter_wide.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=91.95,
+    size_z=91.95,
     nominal_volume=1000,
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
@@ -519,7 +515,7 @@ def hamilton_tip_1000uL_filter_ultrawide(name: str) -> HamiltonTip:
     model=hamilton_tip_1000uL_filter_ultrawide.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=80.0,
+    size_z=80.0,
     nominal_volume=1000,
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
@@ -534,7 +530,7 @@ def hamilton_tip_4000uL_filter(name: str) -> HamiltonTip:
     model=hamilton_tip_4000uL_filter.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=116,
+    size_z=116,
     nominal_volume=4000,
     maximal_volume=4367,
     tip_size=TipSize.XL,
@@ -548,7 +544,7 @@ def hamilton_tip_5000uL(name: str) -> HamiltonTip:
     model=hamilton_tip_5000uL.__name__,
     name=name,
     has_filter=False,
-    total_tip_length=116,
+    size_z=116,
     nominal_volume=5000,
     maximal_volume=5420,
     tip_size=TipSize.XL,
@@ -562,7 +558,7 @@ def hamilton_tip_5000uL_filter(name: str) -> HamiltonTip:
     model=hamilton_tip_5000uL_filter.__name__,
     name=name,
     has_filter=True,
-    total_tip_length=116,
+    size_z=116,
     nominal_volume=5000,
     maximal_volume=5420,
     tip_size=TipSize.XL,
@@ -585,7 +581,7 @@ def hamilton_teaching_needle_300uL(name: str) -> HamiltonTip:
     model=hamilton_teaching_needle_300uL.__name__,
     name=name,
     has_filter=False,
-    total_tip_length=59.9,
+    size_z=59.9,
     nominal_volume=0,
     maximal_volume=0,
     tip_size=TipSize.STANDARD_VOLUME,
@@ -606,7 +602,7 @@ def hamilton_teaching_needle_5000uL(name: str) -> HamiltonTip:
     model=hamilton_teaching_needle_5000uL.__name__,
     name=name,
     has_filter=False,
-    total_tip_length=116,
+    size_z=116,
     nominal_volume=0,
     maximal_volume=0,
     tip_size=TipSize.XL,

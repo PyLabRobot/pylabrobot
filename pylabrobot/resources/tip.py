@@ -12,7 +12,7 @@ class Tip(HeadTool):
 
   Attributes:
     has_filter: whether the tip type has a filter
-    total_tip_length: total length of the tip, in mm
+    size_z: total length of the tip, in mm
     nominal_volume: rated working volume of the tip (what it is sold and named as), in uL.
       Defaults to maximal_volume when not given.
     maximal_volume: physical brim-full capacity of the tip, in uL
@@ -26,7 +26,6 @@ class Tip(HeadTool):
     diameter: float,
     size_z: float,
     has_filter: bool,
-    total_tip_length: float,
     maximal_volume: float,
     fitting_depth: float,
     nominal_volume: Optional[float] = None,
@@ -47,7 +46,6 @@ class Tip(HeadTool):
       pick_up_location=pick_up_location,
     )
     self.has_filter = has_filter
-    self.total_tip_length = total_tip_length
     self.maximal_volume = maximal_volume
     self._collar_height = collar_height
     self.nominal_volume = nominal_volume if nominal_volume is not None else maximal_volume
@@ -59,13 +57,10 @@ class Tip(HeadTool):
       isinstance(other, Tip)
       and super().__eq__(other)
       and self.has_filter == other.has_filter
-      and self.total_tip_length == other.total_tip_length
       and self.nominal_volume == other.nominal_volume
       and self.maximal_volume == other.maximal_volume
       and self._collar_height == other._collar_height
     )
-
-  __hash__ = HeadTool.__hash__
 
   def serialize(self) -> dict:
     """Serialize the tip's resource fields and liquid handling properties."""
@@ -75,7 +70,6 @@ class Tip(HeadTool):
     return {
       **data,
       "diameter": diameter,
-      "total_tip_length": self.total_tip_length,
       "has_filter": self.has_filter,
       "nominal_volume": self.nominal_volume,
       "maximal_volume": self.maximal_volume,

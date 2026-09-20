@@ -13605,7 +13605,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if tip_len is None:
       # currently a bug, will be fixed in the future
       # reverted to previous implementation
-      # tip_len = self.head[channel_idx].get_tip().total_tip_length
+      # tip_len = self.head[channel_idx].get_tip().get_size_z()
       tip_len = await self.request_tip_len_on_channel(channel_idx)
 
     if start_pos_search is None:

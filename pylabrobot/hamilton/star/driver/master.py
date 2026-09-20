@@ -1056,7 +1056,7 @@ class STARDriver:
       await self.define_tip_needle(
         tip_type_table_index=index,
         has_filter=tip.has_filter,
-        tip_length=tip.total_tip_length - tip.fitting_depth,
+        tip_length=tip.get_size_z() - tip.fitting_depth,
         # Floored at 1.0 uL so a teaching or probe needle with no capacity registers the way the
         # firmware's own non-pipetting tools do. It does not affect pickup, which goes by length
         # and collar.

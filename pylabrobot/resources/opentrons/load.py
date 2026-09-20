@@ -69,7 +69,6 @@ def load_ot_tip_rack(
           diameter=diameter,
           size_z=data["parameters"]["tipLength"],
           model=data["parameters"]["loadName"],
-          total_tip_length=data["parameters"]["tipLength"],
           has_filter="Filter" in data["metadata"]["displayName"],
           maximal_volume=well_data["totalLiquidVolume"],
           fitting_depth=data["parameters"]["tipOverlap"],

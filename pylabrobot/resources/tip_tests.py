@@ -24,7 +24,6 @@ class TipTests(unittest.TestCase):
     tip = Tip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=10.0,
       maximal_volume=10.0,
       fitting_depth=1.0,
       diameter=6.0,
@@ -39,7 +38,6 @@ class TipTests(unittest.TestCase):
         "size_z": 10.0,
         "pick_up_location": None,
         "has_filter": False,
-        "total_tip_length": 10.0,
         "nominal_volume": 10.0,
         "maximal_volume": 10.0,
         "fitting_depth": 1.0,
@@ -51,7 +49,6 @@ class TipTests(unittest.TestCase):
     tip = Tip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=10.0,
       maximal_volume=10.0,
       fitting_depth=1.0,
       diameter=6.0,
@@ -63,7 +60,7 @@ class TipTests(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=10.0,
+      size_z=10.0,
       maximal_volume=10.0,
       tip_size=TipSize.HIGH_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -76,7 +73,7 @@ class TipTests(unittest.TestCase):
         "diameter": 8.2,
         "pick_up_location": None,
         "has_filter": False,
-        "total_tip_length": 10.0,
+        "size_z": 10.0,
         "nominal_volume": 10.0,
         "maximal_volume": 10.0,
         "pickup_method": "OUT_OF_RACK",
@@ -89,7 +86,7 @@ class TipTests(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=10.0,
+      size_z=10.0,
       maximal_volume=10.0,
       tip_size=TipSize.HIGH_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -101,7 +98,6 @@ class TipTests(unittest.TestCase):
     tip = Tip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=10.0,
       maximal_volume=400.0,
       fitting_depth=1.0,
       diameter=6.0,
@@ -114,7 +110,7 @@ class TipTests(unittest.TestCase):
     tip = HamiltonTip(
       name="test_tip",
       has_filter=False,
-      total_tip_length=10.0,
+      size_z=10.0,
       maximal_volume=400.0,
       tip_size=TipSize.HIGH_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -138,11 +134,10 @@ class TipTests(unittest.TestCase):
         self.assertNotEqual(first, second)
         self.assertEqual(first.get_size_x(), TIP_DIAMETER[size])
         self.assertEqual(first.get_size_y(), TIP_DIAMETER[size])
-        self.assertEqual(first.get_size_z(), first.total_tip_length)
 
   def test_equality_includes_tool_and_tip_fields(self):
     """Matching resource geometry alone does not make different tips equal."""
-    tip = Tip("tip", 6, 50, False, 50, 300, 8, collar_height=4)
+    tip = Tip("tip", 6, 50, False, 300, 8, collar_height=4)
     data = tip.serialize()
     for changes in (
       {"name": "other"},
@@ -150,7 +145,7 @@ class TipTests(unittest.TestCase):
       {"fitting_depth": 9},
       {"pick_up_location": Coordinate(3, 3, 50).serialize()},
       {"has_filter": True},
-      {"total_tip_length": 51},
+      {"size_z": 51},
       {"nominal_volume": 250},
       {"maximal_volume": 350},
       {"collar_height": 5},
@@ -175,29 +170,22 @@ class TipTests(unittest.TestCase):
     other = Tip.deserialize({**tecan_tip.serialize(), "tip_type": TipType.STANDARD.name})
     self.assertNotEqual(tecan_tip, other)
 
-  def test_equal_tools_have_equal_hashes(self):
-    """Equal numeric values and a round trip must preserve dictionary and set lookup."""
+  def test_tools_are_unhashable(self):
+    """Tools and tips cannot be used as dictionary keys or set members."""
     resources = (
       HeadTool("tool", 6, 6, 50, fitting_depth=8),
-      Tip("tip", 6, 50, False, 50, 300, 8),
+      Tip("tip", 6, 50, False, 300, 8),
       hamilton_tip_300uL("hamilton_tip"),
       DiTi_100ul_Te_MO_tip("tecan_tip", diameter=6),
     )
     for resource in resources:
-      with self.subTest(resource=resource.name):
-        copy = HeadTool.deserialize(resource.serialize())
-        if isinstance(copy, Tip):
-          copy.maximal_volume = float(copy.maximal_volume)
-          copy.total_tip_length = float(copy.total_tip_length)
-        self.assertEqual(resource, copy)
-        self.assertEqual(hash(resource), hash(copy))
-        self.assertEqual(len({resource, copy}), 1)
-        self.assertEqual({resource: "value"}[copy], "value")
+      with self.subTest(resource=resource.name), self.assertRaises(TypeError):
+        hash(resource)
 
   def test_tool_and_tip_round_trips(self):
     """Both serializers preserve model, geometry, pickup location, and tip-specific fields."""
     tool = HeadTool("tool", 10, 12, 30, fitting_depth=4, model="tool_model")
-    tip = Tip("tip", 6, 50, False, 50, 300, 8, collar_height=4, model="tip_model")
+    tip = Tip("tip", 6, 50, False, 300, 8, collar_height=4, model="tip_model")
     hamilton_tip = hamilton_tip_300uL("hamilton_tip")
     tecan_tip = DiTi_100ul_Te_MO_tip("tecan_tip", diameter=6)
     for resource in (tool, tip, hamilton_tip, tecan_tip):
