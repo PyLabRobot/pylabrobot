@@ -10,13 +10,13 @@ import pytest
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.legacy.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
-from pylabrobot.legacy.liquid_handling.channel_positioning import (
-  get_tight_single_resource_liquid_op_offsets,
-)
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.strictness import (
   Strictness,
   set_strictness,
+)
+from pylabrobot.lib.liquid_handling.channel_positioning import (
+  get_tight_single_resource_liquid_op_offsets,
 )
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,

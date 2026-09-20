@@ -21,7 +21,6 @@ from pylabrobot.hamilton.protocol.text.router import ReplyRouter
 from pylabrobot.hamilton.star.driver.configuration import (
   DeviceConfiguration,
   read_configuration,
-  to_jsonable,
 )
 from pylabrobot.hamilton.star.driver.errors import (
   STAR_MODULE_ID_LENGTH,
@@ -53,6 +52,7 @@ from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMet
 from pylabrobot.resources.manipulator import LinkBody
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 from pylabrobot.resources.resource import Resource
+from pylabrobot.serializer import serialize
 
 logger = logging.getLogger(__name__)
 
@@ -1497,10 +1497,13 @@ class STARDriver:
     if self.configuration is None:
       raise RuntimeError("nothing has been read off this device; call `setup` first")
 
-    saved: Dict[str, Any] = {"device": to_jsonable(self.configuration), "arms": {}}
+    saved: Dict[str, Any] = {
+      "device": serialize(dataclasses.asdict(self.configuration)),
+      "arms": {},
+    }
     for arm in self.arms:
       carried = {
-        name: to_jsonable(feature.configuration)
+        name: serialize(dataclasses.asdict(feature.configuration))
         for name, feature in (
           ("pipettes", arm.pipettes),
           ("head96", arm.head96),
@@ -1512,7 +1515,7 @@ class STARDriver:
       if carried:
         saved["arms"][arm.side] = carried
     if self.autoload is not None:
-      saved["autoload"] = to_jsonable(self.autoload.configuration)
+      saved["autoload"] = serialize(dataclasses.asdict(self.autoload.configuration))
     return saved
 
   def save_configuration(self, path: str, indent: Optional[int] = 2) -> None:

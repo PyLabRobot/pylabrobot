@@ -139,36 +139,6 @@ class DeviceConfiguration:
   """Right arm minimal Y position [mm] (yx). Default: 6.0."""
 
 
-# -- reading and writing these as JSON ------------------------------------------------------------
-# JSON loses three things these configurations rely on: a tuple comes back a list, a dict key comes
-# back a string, and a date comes back its own text. What each field is declared to be is enough to
-# put all three back, so writing is `dataclasses.fields` and reading is the same walk against the
-# declared types.
-
-
-def to_jsonable(value: Any) -> Any:
-  """The value as JSON holds it.
-
-  Args:
-    value: what to convert - a configuration, or anything one holds.
-
-  Returns:
-    The same value in types `json.dump` accepts.
-  """
-  if dataclasses.is_dataclass(value) and not isinstance(value, type):
-    return {
-      field.name: to_jsonable(getattr(value, field.name)) for field in dataclasses.fields(value)
-    }
-  if isinstance(value, datetime.date):
-    return value.isoformat()
-  if isinstance(value, (list, tuple)):
-    return [to_jsonable(item) for item in value]
-  if isinstance(value, dict):
-    # Keys are written as text because JSON has no other kind. What they were is on the field.
-    return {str(key): to_jsonable(item) for key, item in value.items()}
-  return value
-
-
 def _restore(hint: Any, value: Any) -> Any:
   """One value, back in the type its field is declared to hold.
 

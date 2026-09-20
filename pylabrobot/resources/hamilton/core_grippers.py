@@ -85,7 +85,7 @@ def hamilton_core_gripper_1000ul_5ml_on_waste() -> HamiltonCoreGrippers:
     name="core_grippers",
     size_x=39,  # from venus
     size_y=61,  # from venus
-    size_z=24,  # from venus
+    size_z=19.5,  # measured
     back_channel_y_center=18 + 21.5,
     front_channel_y_center=0 + 21.5,
     model=hamilton_core_gripper_1000ul_5ml_on_waste.__name__,
