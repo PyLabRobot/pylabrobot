@@ -2139,12 +2139,18 @@ def test_probing_four_edges_with_a_tip_on_measures_with_the_tip():
 
 
 def test_tips_are_taken_where_their_collars_rest_not_where_their_bottoms_are():
-  """Ground truth, from the instrument: this rack's tips were cLLD-probed with their tops at 67.13.
+  """Ground truth, from the instrument: the top face of this rack, where the collars rest, probed
+  at 58.22, 58.24, 58.27 and 58.42 across PRPAA1087's four spots.
 
-  A tip spot is the hole a tip hangs in, so the height the device is sent is the spot itself. The
-  Prep took tips from this rack at 59.65 before the rack was remodelled, with the rack's own dz then
-  a guess; re-derived from the recorded 184.0 it comes to 59.5, which is 0.37 above the collars as
-  probed (67.13 less the 8 mm the channel reaches into them).
+  A tip spot is the hole a tip hangs in, so the height the device is sent is the spot itself. A
+  spot seats what stands on it on the moat floor, 3.5, and the rack is 55.0 to its top face, which
+  puts the collars at 58.5 - within 0.28 of every one of those probes.
+
+  An earlier measurement of this same rack disagrees, and is left recorded here because it has not
+  been explained: its tips were cLLD-probed with their tops at 67.13, putting the collars at 59.13.
+  That is 0.84 above today's figure, and 0.84 is the height of the pedestal a nested rack does not
+  sit on - so one of the two was taken with the rack seated differently. Re-probing the tip tops
+  would say which: 66.5 if it sits where this test now says, 67.13 if it sits on the pedestal.
   """
 
   async def _t():
@@ -2166,15 +2172,15 @@ def test_tips_are_taken_where_their_collars_rest_not_where_their_bottoms_are():
     (pick,) = [c for c in sent if isinstance(c, PrepCmd.PrepPickUpTips)]
     (at,) = pick.tip_positions
     spot = rack.get_item("A1")
-    assert at.z_position == spot.get_location_wrt(deck).z == 59.5
-    assert at.z_seek == 72.5  # a collar and 5 mm above, clear of the tips' tops
-    probed = 67.131 - 8.0  # where the collars were found, less the fitting depth
-    assert at.z_position - probed == pytest.approx(0.37, abs=0.01)
+    assert at.z_position == spot.get_location_wrt(deck).z == 58.5
+    assert at.z_seek == 71.5  # a collar and 5 mm above, clear of the tips' tops
+    probed = [58.22, 58.24, 58.27, 58.42]  # the rack's top face on each of the four spots
+    assert all(abs(at.z_position - z) <= 0.3 for z in probed)
 
     await p.pipettes.drop_tips(rack["A1"], use_channels=[0])
     (drop,) = [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]
     (back,) = drop.tip_positions
-    assert (back.z_position, back.z_seek) == (59.5, 69.5)
+    assert (back.z_position, back.z_seek) == (58.5, 68.5)
     await p.stop()
 
   _run(_t())
@@ -2214,7 +2220,7 @@ def test_the_height_tips_are_taken_at_does_not_depend_on_how_long_they_are():
       await p.stop()
 
     assert len(lengths) == 3
-    assert heights == {59.5}
+    assert heights == {58.5}
 
   _run(_t())
 
