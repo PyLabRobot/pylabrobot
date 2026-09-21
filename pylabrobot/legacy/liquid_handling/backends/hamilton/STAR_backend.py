@@ -144,12 +144,10 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.barcode import Barcode, Barcode1DSymbology
 from pylabrobot.resources.hamilton import (
-  HamiltonCoreGripperTool,
   HamiltonTip,
   TipDropMethod,
   TipPickupMethod,
   TipSize,
-  hamilton_core_gripper_tool,
 )
 from pylabrobot.resources.hamilton.hamilton_decks import (
   HamiltonCoreGrippers,
@@ -6162,13 +6160,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     front_channel: int,
     front_offset: Optional[Coordinate] = None,
     back_offset: Optional[Coordinate] = None,
-    tool: Optional[HamiltonCoreGripperTool] = None,
   ):
-    """Get CoRe gripper tool from wasteblock mount.
-
-    Args:
-      tool: the grip tools on the mount. Defaults to the 1000 uL channel's CO-RE grip tool.
-    """
+    """Pick up the CO-RE gripper tools stored on the deck's wasteblock mount."""
 
     if not 0 < front_channel < self.num_channels:
       raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
@@ -6192,9 +6185,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
 
-    ttti = await self.get_or_assign_tip_type_index(
-      tool or hamilton_core_gripper_tool(name="core_gripper_tool")
-    )
+    core_grippers = self.deck.get_resource("core_grippers")
+    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    front_tool, back_tool = core_grippers.front_tool, core_grippers.back_tool
+    if front_tool.model != back_tool.model:
+      raise ValueError("CO-RE gripper tools must have the same model.")
+    ttti = await self.get_or_assign_tip_type_index(front_tool)
 
     command_output = await self.send_command(
       module="C0",

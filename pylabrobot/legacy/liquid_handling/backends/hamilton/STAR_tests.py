@@ -48,7 +48,12 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
-from pylabrobot.resources.hamilton import STARDeck, STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.resources.hamilton import (
+  STARDeck,
+  STARLetDeck,
+  hamilton_96_tiprack_300uL_filter,
+  hamilton_core_gripper_tool,
+)
 
 from .STAR_backend import (
   CommandSyntaxError,
@@ -670,6 +675,20 @@ class STARCommandCatcher(STARBackend):
 
   async def stop(self):
     self.stop_finished = True
+
+
+class TestSTARCoreGripperRegistration(unittest.IsolatedAsyncioTestCase):
+  """Register a gripper without liquid handling fields on the resource."""
+
+  async def test_gripper_registration_supplies_firmware_filter_and_volume(self):
+    backend = STARCommandCatcher()
+    tool = hamilton_core_gripper_tool("gripper")
+    self.assertEqual(await backend.get_or_assign_tip_type_index(tool), 14)
+    self.assertEqual(backend.commands, [])
+
+    backend._tip_type_indices.clear()
+    self.assertEqual(await backend.get_or_assign_tip_type_index(tool), 1)
+    self.assertEqual(backend.commands, ["C0TTid0001tt01tf0tl0240tv00010tg0tu0"])
 
 
 class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):

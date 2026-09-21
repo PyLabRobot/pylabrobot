@@ -47,11 +47,6 @@ class HamiltonCoreGripperTool(HeadTool):
     )
     self._total_length = total_length
     self.collar_height = collar_height
-    # What the machine has to be told about this tool, in the same tip type table a tip goes in:
-    # a grip tool holds no liquid, but the table demands at least 1.0 uL, and the value plays no
-    # part in picking the tool up.
-    self.has_filter = False
-    self.maximal_volume = 1.0
     self.tip_size = TipSize.UNDEFINED
     self.pickup_method = TipPickupMethod.OUT_OF_RACK
 
@@ -82,7 +77,7 @@ def hamilton_core_gripper_tool(name: str) -> HamiltonCoreGripperTool:
   Hamilton cat. no.: 186100 (firmware tip type 14)
 
   36 x 8.346 x 32 mm, lying along x with its pins pointing +y. Its grip line is 30 mm below its top,
-  as in the firmware's tip table. The collar is the standard 8 mm CO-RE collar; its opening is off
+  as in the firmware's tip table. The collar is 10 mm tall; its opening is off
   centre in y, at 4.25.
   """
   return HamiltonCoreGripperTool(
@@ -92,7 +87,7 @@ def hamilton_core_gripper_tool(name: str) -> HamiltonCoreGripperTool:
     size_z=32.0,
     total_length=30.0,
     fitting_depth=8.0,
-    collar_height=8.0,
+    collar_height=10.0,
     model=hamilton_core_gripper_tool.__name__,
     pick_up_location=Coordinate(x=18.0, y=4.25, z=32.0),
   )

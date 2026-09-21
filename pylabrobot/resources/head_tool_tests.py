@@ -3,7 +3,6 @@ import unittest
 from pylabrobot.resources.hamilton import (
   HamiltonCoreGripperTool,
   hamilton_core_gripper_tool,
-  hamilton_tip_1000uL,
 )
 from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.serializer import serialize
@@ -11,15 +10,6 @@ from pylabrobot.serializer import serialize
 
 class HeadToolTests(unittest.TestCase):
   """Tests for the head tools a channel can carry."""
-
-  def test_a_grip_tool_states_what_a_tip_states(self):
-    """A machine is told about a grip tool through the same fields as a tip, so it states them."""
-    tip = hamilton_tip_1000uL(name="tip")
-    tool = hamilton_core_gripper_tool(name="tool")
-    self.assertEqual(tip.has_filter, False)
-    self.assertEqual((tool.has_filter, tool.maximal_volume), (False, 1.0))
-    self.assertIsNotNone(tool.model)
-    self.assertNotEqual(tip.model, tool.model)
 
   def test_tool_name_is_required_and_immutable(self):
     with self.assertRaises(TypeError):
@@ -42,7 +32,7 @@ class HeadToolTests(unittest.TestCase):
         "model": "hamilton_core_gripper_tool",
         "total_length": 30.0,
         "fitting_depth": 8.0,
-        "collar_height": 8.0,
+        "collar_height": 10.0,
         "pick_up_location": {"x": 18.0, "y": 4.25, "z": 32.0, "type": "Coordinate"},
       },
     )
