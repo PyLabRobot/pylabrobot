@@ -412,6 +412,9 @@ class SimulatedPipettes(_Simulated, Pipettes):
     self._clld_on: Set[int] = set()
     self._clld_detected: Dict[int, bool] = {}
     self._z_drive_pwm: Dict[int, int] = {}
+    # The pipettor's record of a plate held: set by a finished pick-up whatever the jaws closed on,
+    # cleared by a drop or a release.
+    self._plate_held = False
 
   def _touchable(self) -> List[Tuple[Resource, Coordinate, Coordinate]]:
     """The deck's resources a channel can touch.
@@ -576,6 +579,15 @@ class SimulatedPipettes(_Simulated, Pipettes):
   async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
     channels = range(self.device.simulated_configuration.num_channels or 0)
     index_of = {int(enum): index for index, enum in enumerate(PrepCmd.channel_order_legacy_prep)}
+
+    if isinstance(request, PrepCmd.PrepGetPlateHeld):
+      return PrepCmd.PrepGetPlateHeld.Response(value=self._plate_held), "the pipettor's record"
+    if isinstance(request, PrepCmd.PrepPickUpPlate):
+      self._plate_held = True
+      return None
+    if isinstance(request, (PrepCmd.PrepDropPlate, PrepCmd.PrepReleasePlate)):
+      self._plate_held = False
+      return None
 
     if isinstance(request, PrepCmd.PrepGetPositions):
       positions = []

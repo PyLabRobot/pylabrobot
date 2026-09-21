@@ -3090,6 +3090,31 @@ class PrepReleasePlate(PrepCommand[None]):
     return None
 
 
+@dataclass(frozen=True)
+class PrepGetPlateHeld(PrepStatusRequest["PrepGetPlateHeld.Response"]):
+  """GetPlateHeld (cmd=22, dest=Pipettor): whether the pipettor records a plate held.
+
+  Set by a finished pick-up and cleared by a drop or a release, and kept across a power cycle. Not a
+  sensor: a pick-up that closed on nothing sets it too.
+  """
+
+  command_id = 22
+  firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
+
+  @dataclass(frozen=True)
+  class Response:
+    value: PaddedBool
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetPlateHeld.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
 # CORE gripper tool definition for PrepPickUpTool (struct); matches instrument id=11.
 CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS = TipPickupParameters(
   default_values=False,
