@@ -1303,7 +1303,7 @@ class PrepDriver:
     if attached is None:
       return
     logger.warning(
-      "the Prep was initialized with something already attached to %s: the firmware holds it as "
+      "something is still attached to %s: the firmware holds it as "
       "%r, id %d, %.1f mm below the stop disc, %.1f uL, needle=%s, tool=%s",
       channels_named(carrying),
       attached.label,
