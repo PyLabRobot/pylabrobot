@@ -540,11 +540,13 @@ class PrepDriver:
     if not self._setup_finished:
       return
     try:
+      # A plate in the jaws goes back first: parking spreads the channels and would tear it out.
+      holding = await self._return_held_resource()
       # As at setup: a tool goes back in its holder, anything else into the waste.
       if self.pipettes is not None:
         try:
           tips = await self.pipettes.sense_tip_presence()
-          if any(tips):
+          if any(tips) and not holding:
             await self._return_or_discard_attached(tips)
         except Exception:
           # The link closes either way.
@@ -564,7 +566,13 @@ class PrepDriver:
         low = await self.features_below_safe_z()
         if low:
           logger.warning("not everything is at Z safety: %s", "; ".join(low))
-      await self.park_device()
+      if holding:
+        logger.error(
+          "not parking: the device records a plate gripped, and parking spreads the channels. "
+          "They are left where they stand; put the plate down before moving them apart."
+        )
+      else:
+        await self.park_device()
     except Exception:
       logger.warning(
         "could not bring the device to a safe state; closing the link anyway", exc_info=True
@@ -1031,6 +1039,30 @@ class PrepDriver:
       )
     if await self._request_plate_held():
       raise RuntimeError("the device still records a plate gripped after the grippers opened")
+
+  async def _return_held_resource(self) -> bool:
+    """Put back what the grippers hold, if this session knows where from. Whether one is still held.
+
+    A record that cannot be read counts as held.
+    """
+    try:
+      if not await self._request_plate_held():
+        return False
+      grippers = self.core_grippers
+      if grippers is not None and grippers._taken_from is not None:
+        held = grippers._held_resource
+        logger.warning(
+          "the grippers hold %s: putting it back before stopping",
+          "a resource" if held is None else held.name,
+        )
+        try:
+          await grippers.return_resource()
+        except Exception:
+          logger.error("could not put back what the grippers hold", exc_info=True)
+      return await self._request_plate_held()
+    except Exception:
+      logger.error("could not read whether a plate is held; treating it as held", exc_info=True)
+      return True
 
   async def _request_plate_held(self) -> bool:
     """Whether the device records a plate gripped (PrepGetPlateHeld): its record, not a sensor."""
