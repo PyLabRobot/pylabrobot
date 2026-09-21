@@ -62,7 +62,7 @@ class CoreGrippers:
     self._taken_from: Optional[Tuple[Resource, Optional[Coordinate]]] = None
     self._tools_mounted = False
     self._parked_tools: List[Tuple[HeadTool, Optional[Resource], Optional[Coordinate]]] = []
-    self._x_acceleration_set = False
+    self._x_profile_set = False
     self._z_acceleration_set = False
 
   # -- what carries them ---------------------------------------------------------------------------
@@ -187,34 +187,42 @@ class CoreGrippers:
   # Movement
   # ----------------------------------------
 
-  # -- Memory of Speed & Acceleration --------------------------------------------------------
+  # -- Memory of Speed & Acceleration --------------------------------------------------------------
 
-  # ---- x -----------------------------------------------------------------------------------
+  # ---- x -----------------------------------------------------------------------------------------
 
   @asynccontextmanager
-  async def _temporary_x_axis_acceleration(
-    self, *, holding: Optional[bool] = None
+  async def _temporary_x_axis_profile(
+    self,
+    x_speed: Optional[float] = None,
+    x_acceleration: Optional[float] = None,
+    *,
+    holding: Optional[bool] = None,
   ) -> AsyncIterator[None]:
-    """The X axis at `default_x_acceleration_with_resource_held` while a resource is held.
+    """The X axis at `x_speed` and `x_acceleration` for the enclosed moves, then back to what it was.
 
     Exists so only the outermost call sets it: a carry inside a drop would otherwise read, set and
     restore the axis a second time.
 
     Args:
+      x_speed: in mm/s. None leaves the axis's speed.
+      x_acceleration: in mm/s2. None is `default_x_acceleration_with_resource_held` while a
+        resource is held, and leaves the axis's acceleration otherwise.
       holding: whether a resource is held for the enclosed moves. None asks the grippers.
     """
     if holding is None:
       holding = self._holding_resource_width is not None
-    acceleration = self.default_x_acceleration_with_resource_held if holding else None
-    if acceleration is None or self._x_acceleration_set:
+    if x_acceleration is None and holding:
+      x_acceleration = self.default_x_acceleration_with_resource_held
+    if (x_speed is None and x_acceleration is None) or self._x_profile_set:
       yield
       return
-    self._x_acceleration_set = True
+    self._x_profile_set = True
     try:
-      async with self._x_arm._temporary_x_axis_profile(acceleration=acceleration):
+      async with self._x_arm._temporary_x_axis_profile(speed=x_speed, acceleration=x_acceleration):
         yield
     finally:
-      self._x_acceleration_set = False
+      self._x_profile_set = False
 
   async def _raise_to_traverse(self, minimum_traverse_height_end: Optional[float]) -> None:
     """Leave the channels where they can travel.
@@ -230,7 +238,7 @@ class CoreGrippers:
       {channel: minimum_traverse_height_end for channel in range(self._pipettes.num_channels)}
     )
 
-  # ---- z -----------------------------------------------------------------------------------
+  # ---- z -----------------------------------------------------------------------------------------
 
   async def _set_z_acceleration(self, z_acceleration: float) -> None:
     """Set every Z drive's acceleration, in mm/s2."""
@@ -268,7 +276,7 @@ class CoreGrippers:
       self._z_acceleration_set = False
       await self._restore_z_acceleration()
 
-  # -- the gantry the tools ride -------------------------------------------------------------
+  # -- the gantry the tools ride -------------------------------------------------------------------
 
   async def move_to_x_position(
     self,
@@ -375,6 +383,8 @@ class CoreGrippers:
     y: Optional[float] = None,
     *,
     acceleration_scale_x: int = 1,
+    x_speed: Optional[float] = None,
+    x_acceleration: Optional[float] = None,
   ) -> None:
     """Carry the held resource across the deck, at the height it is already at (PrepMovePlate).
 
@@ -384,6 +394,9 @@ class CoreGrippers:
       x: where to take its centre, in mm. None keeps it where it is in x.
       y: where to take its centre, in mm. None keeps it where it is in y.
       acceleration_scale_x: X-axis acceleration scale.
+      x_speed: the X axis's speed for the carry, in mm/s, then restored. None leaves it.
+      x_acceleration: the X axis's acceleration for the carry, in mm/s2, then restored. None is
+        `default_x_acceleration_with_resource_held`.
 
     Raises:
       ValueError: If neither x nor y is given.
@@ -404,11 +417,10 @@ class CoreGrippers:
     back, front = locations[self._back_channel], locations[self._front_channel]
     x = back.x if x is None else x
     y = (back.y + front.y) / 2 if y is None else y
-    async with self._temporary_z_drive_acceleration():
-      async with self._temporary_x_axis_acceleration():
-        await self._unchecked_fw_move_resource(
-          self._plate_top(Coordinate(x, y, back.z)), acceleration_scale_x=acceleration_scale_x
-        )
+    async with self._temporary_x_axis_profile(x_speed, x_acceleration):
+      await self._unchecked_fw_move_resource(
+        self._plate_top(Coordinate(x, y, back.z)), acceleration_scale_x=acceleration_scale_x
+      )
     self._plate_top_center = Coordinate(x, y, back.z + self._plate_top_z_offset)
 
   # ----------------------------------------
@@ -619,7 +631,7 @@ class CoreGrippers:
     loc = plate_lfb + center + offset
     return Coordinate(loc.x, loc.y, loc.z + held.get_absolute_size_z() - from_top)
 
-  # -- at a grip point ------------------------------------------------------------------------------
+  # -- at a grip point -----------------------------------------------------------------------------
 
   async def _pick_up_at(
     self,
@@ -635,6 +647,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    x_acceleration: Optional[float] = None,
   ) -> None:
     """Pick up a plate at a grip point; `pick_up_resource` sets what it holds.
 
@@ -653,6 +666,8 @@ class CoreGrippers:
         None goes to Z safety.
       z_acceleration: the Z drives' acceleration from the grip on, in mm/s2, then restored. None
         is `default_z_acceleration_with_resource_held`.
+      x_acceleration: the X axis's acceleration from the grip on, in mm/s2, then restored. None is
+        `default_x_acceleration_with_resource_held`.
     """
     self._require_mounted()
     await self._raise_to_traverse(minimum_traverse_height_start)
@@ -682,7 +697,7 @@ class CoreGrippers:
 
     # The firmware lifts it as part of the pick-up.
     async with self._temporary_z_drive_acceleration(z_acceleration, holding=True):
-      async with self._temporary_x_axis_acceleration(holding=True):
+      async with self._temporary_x_axis_profile(x_acceleration=x_acceleration, holding=True):
         await self._driver.send_command(
           PrepCmd.PrepPickUpPlate(
             plate_top_center=plate_top_center,
@@ -710,6 +725,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    x_acceleration: Optional[float] = None,
   ) -> None:
     """Let go of the held plate at a grip point.
 
@@ -723,12 +739,14 @@ class CoreGrippers:
         None goes to Z safety.
       z_acceleration: the Z drives' acceleration until it is let go, in mm/s2, then restored. None
         is `default_z_acceleration_with_resource_held`.
+      x_acceleration: the X axis's acceleration until it is let go, in mm/s2, then restored. None is
+        `default_x_acceleration_with_resource_held`.
     """
     if self._holding_resource_width is None:
       raise RuntimeError("Not holding anything")
     # The firmware lowers it as part of letting go.
     async with self._temporary_z_drive_acceleration(z_acceleration):
-      async with self._temporary_x_axis_acceleration():
+      async with self._temporary_x_axis_profile(x_acceleration=x_acceleration):
         await self._raise_to_traverse(minimum_traverse_height_start)
         # Carried over the destination first, so letting go is straight down: left to itself the
         # firmware dives across the deck with the plate.
@@ -768,6 +786,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    x_acceleration: Optional[float] = None,
   ) -> None:
     """Grip a resource where the tree has it.
 
@@ -798,6 +817,7 @@ class CoreGrippers:
       minimum_traverse_height_start=minimum_traverse_height_start,
       minimum_traverse_height_end=minimum_traverse_height_end,
       z_acceleration=z_acceleration,
+      x_acceleration=x_acceleration,
     )
     self._pickup_distance_from_top = from_top
     self._holding_resource_width = resource_width
@@ -816,6 +836,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    x_acceleration: Optional[float] = None,
   ) -> None:
     """Put the held resource down; the tree follows once it is down.
 
@@ -865,6 +886,7 @@ class CoreGrippers:
       minimum_traverse_height_start=minimum_traverse_height_start,
       minimum_traverse_height_end=minimum_traverse_height_end,
       z_acceleration=z_acceleration,
+      x_acceleration=x_acceleration,
     )
     place_resource(held, destination, location=child)
 
@@ -877,6 +899,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    x_acceleration: Optional[float] = None,
   ) -> None:
     """Put the held resource back where :meth:`pick_up_resource` took it from.
 
@@ -895,6 +918,7 @@ class CoreGrippers:
       "minimum_traverse_height_start": minimum_traverse_height_start,
       "minimum_traverse_height_end": minimum_traverse_height_end,
       "z_acceleration": z_acceleration,
+      "x_acceleration": x_acceleration,
     }
     parent, location = self._taken_from
     if isinstance(parent, ResourceHolder):

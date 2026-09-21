@@ -924,3 +924,31 @@ def test_a_held_resource_moves_at_its_x_acceleration_set_once_per_stretch():
     ]
 
   asyncio.run(_run())
+
+
+def test_a_held_move_hands_the_x_speed_and_acceleration_it_is_given_to_the_x_axis():
+  """A carry forwards both; a grip and a return forward the acceleration; each once per stretch."""
+  deck = PrepDeck(with_core_grippers=True)
+  plate = deck[0] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+  grippers, commands = _make_grippers(deck, stub_pick_and_drop=False)
+  x_arm: Any = grippers._driver.x_arm
+  profiles: List[Tuple[Optional[float], Optional[float]]] = []
+
+  @asynccontextmanager
+  async def profile(speed: Optional[float] = None, acceleration: Optional[float] = None):
+    profiles.append((speed, acceleration))
+    yield
+
+  x_arm._temporary_x_axis_profile = profile
+
+  async def _run() -> None:
+    await grippers.pick_up_resource(plate, x_acceleration=500.0)
+    assert profiles == [(None, 500.0)]
+    await grippers.move_resource_to_xy_position(x=150.0, x_speed=200.0, x_acceleration=700.0)
+    assert profiles[-1] == (200.0, 700.0)
+    await grippers.move_resource_to_xy_position(x=100.0)
+    assert len(profiles) == 2  # nothing named, and no default: the axis is left alone
+    await grippers.return_resource(x_acceleration=600.0)
+    assert profiles[2:] == [(None, 600.0)]  # once for the whole drop, the carry inside it included
+
+  asyncio.run(_run())
