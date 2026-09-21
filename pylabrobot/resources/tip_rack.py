@@ -285,6 +285,13 @@ class NestedTipRack(TipRack):
 
     self.stacking_z_height = stacking_z_height
 
+  def serialize(self) -> dict:
+    """Serialize the nested tip rack, including its stacking height."""
+    return {
+      **super().serialize(),
+      "stacking_z_height": self.stacking_z_height,
+    }
+
   def __repr__(self) -> str:
     return (
       f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
