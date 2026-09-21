@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Optional, Tuple
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, AsyncIterator, List, Optional, Tuple, cast
 
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import HasTipError
+from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
+from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:
@@ -56,6 +59,8 @@ class CoreGrippers:
     self._front_channel: Optional[int] = None
     # x, rear y, front y, seek z and end z of the pick-up the channels hold the tools from, in mm.
     self._tools_taken_from: Optional[Tuple[float, float, float, float, float]] = None
+    # Each mounted tool, the holder it came from and where in it, to put it back in the model.
+    self._parked_tools: List[Tuple[HeadTool, Optional[Resource], Optional[Coordinate]]] = []
 
   # -- what carries them ---------------------------------------------------------------------------
 
@@ -209,7 +214,6 @@ class CoreGrippers:
     *,
     tool_seek: Optional[float] = None,
     minimum_traverse_height_start: Optional[float] = None,
-    back_channel: Optional[int] = None,
     front_channel: Optional[int] = None,
   ) -> None:
     """Pick up the tools (`C0 ZT`) as tip type 14; to safe Z only if it fails.
@@ -222,31 +226,24 @@ class CoreGrippers:
       tool_seek: where the pick-up begins, in mm. `tool_position_z + 10` when None.
       minimum_traverse_height_start: how high the channels travel first, in mm.
         `default_minimum_traverse_height` when None.
-      back_channel: 0-indexed. `front_channel - 1` when None.
-      front_channel: 0-indexed. `back_channel + 1`, or the front-most, when None.
+      front_channel: 0-indexed; the back tool goes on `front_channel - 1`. The front-most when None.
 
     Raises:
       RuntimeError: If the channels already hold tools, or the iSWAP is not parked.
       HasTipError: If either channel carries something.
-      ValueError: If a position, height or channel pair is out of range.
+      ValueError: If a position, height or the front channel is out of range.
     """
     pipettes = self._pipettes
     if self._tools_taken_from is not None:
       raise RuntimeError("the channels already hold the tools; `drop_tools()` first")
-    if back_channel is None and front_channel is None:
-      front_channel = pipettes.num_channels - 1
     if front_channel is None:
-      assert back_channel is not None
-      front_channel = back_channel + 1
-    if back_channel is None:
-      back_channel = front_channel - 1
-    for channel in (back_channel, front_channel):
-      pipettes._require_channel(channel)
-    if front_channel != back_channel + 1:
+      front_channel = pipettes.num_channels - 1
+    pipettes._require_channel(front_channel)
+    if front_channel == 0:
       raise ValueError(
-        f"the tools go on two adjacent channels, back then front; got {back_channel} and "
-        f"{front_channel}"
+        "front_channel must be 1 or more: the back tool goes on the channel behind it"
       )
+    back_channel = front_channel - 1
 
     if tool_seek is None:
       tool_seek = tool_position_z + 10.0
@@ -348,6 +345,120 @@ class CoreGrippers:
     await pipettes.move_to_safe_z()
     self._tools_taken_from = None
     self._back_channel = self._front_channel = None
+
+  # -- mounting ------------------------------------------------------------------------------------
+
+  async def request_tool_attached(self, channel: int) -> bool:
+    """Whether the device senses something on `channel` (`C0 RT`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Raises:
+      ValueError: If the channel does not exist.
+    """
+    self._pipettes._require_channel(channel)
+    return bool((await self._pipettes.sense_tip_presence())[channel])
+
+  def _holder(self) -> HamiltonCoreGrippers:
+    """The CO-RE gripper holder the deck carries.
+
+    Raises:
+      TypeError: If the deck carries none.
+    """
+    for resource in self._deck.get_all_children():
+      if isinstance(resource, HamiltonCoreGrippers):
+        return resource
+    raise TypeError("the deck carries no CO-RE gripper holder")
+
+  def _park_tools(self) -> None:
+    """Put the tools back in the holder in the model, where they were taken from."""
+    for tool, holder, location in self._parked_tools:
+      if tool.parent is not None:
+        tool.parent.unassign_child_resource(tool)
+      if holder is not None:
+        holder.assign_child_resource(tool, location=location)
+    self._parked_tools = []
+
+  async def pick_up_tools(self, front_channel: Optional[int] = None) -> None:
+    """Take the tools out of the deck's holder and onto two channels.
+
+    Args:
+      front_channel: as `pick_up_tools_at_location` takes it.
+
+    Raises:
+      RuntimeError: If already mounted, or a channel senses nothing once the pick-up has run.
+      TypeError: If the deck carries no holder, or the holder no tools.
+    """
+    if self._tools_mounted:
+      raise RuntimeError("the CoRe gripper tools are already mounted")
+    holder = self._holder()
+    tools = [child for child in holder.children if isinstance(child, HeadTool)]
+    if not tools:
+      raise TypeError("the holder carries no CO-RE grip tools to pick up")
+
+    # As legacy: the holder's centre x, its channel y centres, and a 10 mm window below the tops.
+    deck = self._deck
+    loc = holder.get_location_wrt(deck, x="c")
+    top = max(tool.get_location_wrt(deck, z="t").z for tool in tools)
+    await self.pick_up_tools_at_location(
+      tool_position_x=loc.x,
+      tool_position_z=top - 10.0,
+      front_channel_position_y=loc.y + holder.front_channel_y_center,
+      rear_channel_position_y=loc.y + holder.back_channel_y_center,
+      tool_seek=top,
+      front_channel=front_channel,
+    )
+    pair = (cast(int, self._back_channel), cast(int, self._front_channel))
+
+    # A taken tool rides where the channel rides, as a tip does. The back channel takes the rear tool.
+    self._parked_tools = [(tool, tool.parent, tool.location) for tool in tools]
+    rear_first = sorted(tools, key=lambda tool: tool.get_location_wrt(deck, y="c").y)
+    taken = []
+    for channel, tool in zip(pair, reversed(rear_first)):
+      shaft = self._pipettes.shaft(channel)
+      if shaft is not None:
+        shaft.mount_tip(tool)
+        taken.append(channel)
+    await self._pipettes._record_where_they_stopped("z")
+
+    # The command returning is not the tools being on: asked of the device, once per mount.
+    presence = await self._pipettes.sense_tip_presence()
+    missing = [channel for channel in taken if not presence[channel]]
+    if missing:
+      self._park_tools()
+      await self._pipettes._record_where_they_stopped("z")
+      raise RuntimeError(
+        f"the pick-up ran, but {'channel' if len(missing) == 1 else 'channels'} "
+        f"{', '.join(str(c) for c in missing)} sense nothing. The tools are back in their holder "
+        "in the model; check the device before running anything."
+      )
+    self._tools_mounted = True
+
+  async def return_tools(self) -> None:
+    """Put the tools back in their holder, if mounted.
+
+    A drop that fails leaves the channels holding them, and the model says so.
+    """
+    if not self._tools_mounted:
+      return
+    await self.drop_tools()
+    self._tools_mounted = False
+    self._park_tools()
+    await self._pipettes._record_where_they_stopped("z")
+
+  @asynccontextmanager
+  async def mounted(self, front_channel: Optional[int] = None) -> AsyncIterator["CoreGrippers"]:
+    """The tools on for as long as the block runs, and returned on the way out.
+
+    Args:
+      front_channel: as `pick_up_tools` takes it.
+    """
+    await self.pick_up_tools(front_channel=front_channel)
+    try:
+      yield self
+    finally:
+      await self.return_tools()
 
   # ----------------------------------------
   # Resources

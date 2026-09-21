@@ -120,13 +120,11 @@ class TestPickUpAndDropTools(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.safe_z_moves(), [])
 
   async def test_a_named_pair(self):
-    await self.grippers.pick_up_tools_at_location(
-      1337.5, 225.0, 107.0, 125.0, back_channel=4, front_channel=5
-    )
+    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0, front_channel=5)
     self.assertIn("pa05pb06", self.tool_commands()[0])
 
   async def test_refused_before_anything_is_sent(self):
-    for kwargs in ({"back_channel": 3, "front_channel": 5}, {"front_channel": 8}):
+    for kwargs in ({"front_channel": 0}, {"front_channel": 8}):
       with self.assertRaises(ValueError):
         await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0, **kwargs)
     with self.assertRaises(ValueError):
@@ -255,3 +253,77 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.check(gripper_y_margin=40, enable_recovery=False)
     self.assertEqual(self.sent, [])
+
+
+class TestMounting(unittest.IsolatedAsyncioTestCase):
+  """The tools out of the deck's holder and onto two channels, and back, as the model sees it."""
+
+  async def asyncSetUp(self):
+    self.star = STAR(simulation=True)
+    await self.star.setup()
+    assert self.star.core_grippers is not None
+    self.grippers = self.star.core_grippers
+    self.holder = self.grippers._holder()
+    self.parked = {tool.name: tool.location for tool in self.holder.children}
+    self.sent: List[str] = []
+    answer = self.grippers._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      if command in ("ZT", "ZS"):
+        wire = {k: v for k, v in kwargs.items() if len(k) == 2}
+        self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      return await answer(module=module, command=command, **kwargs)
+
+    self.grippers._driver.send_command = recorded  # type: ignore[assignment]
+
+  def on(self, channel: int) -> str:
+    shaft = self.grippers._pipettes.shaft(channel)
+    assert shaft is not None and shaft.tip is not None
+    return shaft.tip.name
+
+  async def test_pick_up_takes_them_from_the_holder_as_legacy(self):
+    await self.grippers.pick_up_tools()
+    self.assertEqual(self.sent, ["C0ZTxs13375xd0ya1250yb1070pa07pb08tp2350tz2250th2800tt14"])
+    self.assertTrue(self.on(6).endswith("_back") and self.on(7).endswith("_front"))
+    self.assertTrue(self.grippers.tools_mounted)
+    self.assertEqual(self.holder.children, [])
+    self.grippers._require_mounted()
+
+  async def test_a_named_pair(self):
+    await self.grippers.pick_up_tools(front_channel=5)
+    self.assertIn("pa05pb06", self.sent[0])
+    self.assertTrue(self.on(4).endswith("_back") and self.on(5).endswith("_front"))
+
+  async def test_return_puts_them_back_where_they_were(self):
+    await self.grippers.pick_up_tools()
+    self.sent.clear()
+    await self.grippers.return_tools()
+    self.assertEqual(self.sent, ["C0ZSxs13375xd0ya1250yb1070tp2150tz2050th2800te2800"])
+    self.assertEqual({tool.name: tool.location for tool in self.holder.children}, self.parked)
+    self.assertFalse(self.grippers.tools_mounted)
+    await self.grippers.return_tools()
+    self.assertEqual(len(self.sent), 1)
+
+  async def test_mounted_returns_them_when_the_block_raises(self):
+    with self.assertRaises(RuntimeError):
+      async with self.grippers.mounted():
+        raise RuntimeError("the block")
+    self.assertFalse(self.grippers.tools_mounted)
+    self.assertEqual({tool.name: tool.location for tool in self.holder.children}, self.parked)
+
+  async def test_an_empty_holder_is_refused(self):
+    for tool in list(self.holder.children):
+      self.holder.unassign_child_resource(tool)
+    with self.assertRaises(TypeError):
+      await self.grippers.pick_up_tools()
+    self.assertEqual(self.sent, [])
+
+  async def test_a_channel_sensing_nothing_puts_them_back_in_the_model(self):
+    async def nothing() -> List[int]:
+      return [0] * 8
+
+    self.grippers._pipettes.sense_tip_presence = nothing  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError):
+      await self.grippers.pick_up_tools()
+    self.assertFalse(self.grippers.tools_mounted)
+    self.assertEqual({tool.name: tool.location for tool in self.holder.children}, self.parked)
