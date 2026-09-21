@@ -451,6 +451,13 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     if model is None:
       raise ValueError("Tool model must be defined to assign a tip type index.")
 
+    if isinstance(tool, HamiltonCoreGripperTool):
+      # CO-RE grippers use an existing firmware definition (entry 14 for the standard tool).
+      # Their Z reference is the grip line, so do not register them using a tip's body length.
+      # TODO: define the CO-RE gripper tools in firmware ourselves.
+      assert model in self._tip_type_indices, f"No firmware definition for CO-RE gripper {model}."
+      return self._tip_type_indices[model]
+
     if model not in self._tip_type_indices:
       taken = set(self._tip_type_indices.values())
       ttti = next((i for i in range(1, 100) if i not in taken), None)
@@ -459,15 +466,13 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
       await self.define_tip_needle(
         tip_type_table_index=ttti,
-        has_filter=tool.has_filter if isinstance(tool, HamiltonTip) else False,
+        has_filter=tool.has_filter,
         # in 0.1 mm: how far the tool reaches below the channel
         tip_length=round((tool.get_size_z() - tool.fitting_depth) * 10),
         # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register the same
         # way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to satisfy the
         # tv >= 1 requirement). tv does not affect pickup (that is tl/tg).
-        maximum_tip_volume=(
-          max(round(tool.maximal_volume * 10), 10) if isinstance(tool, HamiltonTip) else 10
-        ),
+        maximum_tip_volume=max(round(tool.maximal_volume * 10), 10),
         tip_size=tool.tip_size,
         pickup_method=tool.pickup_method,
       )

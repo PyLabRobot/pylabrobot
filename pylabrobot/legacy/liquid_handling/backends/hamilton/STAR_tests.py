@@ -678,17 +678,18 @@ class STARCommandCatcher(STARBackend):
 
 
 class TestSTARCoreGripperRegistration(unittest.IsolatedAsyncioTestCase):
-  """Register a gripper without liquid handling fields on the resource."""
+  """Grippers require an existing firmware definition."""
 
-  async def test_gripper_registration_supplies_firmware_filter_and_volume(self):
+  async def test_gripper_uses_existing_definition_and_refuses_registration(self):
     backend = STARCommandCatcher()
     tool = hamilton_core_gripper_tool("gripper")
     self.assertEqual(await backend.get_or_assign_tip_type_index(tool), 14)
     self.assertEqual(backend.commands, [])
 
     backend._tip_type_indices.clear()
-    self.assertEqual(await backend.get_or_assign_tip_type_index(tool), 1)
-    self.assertEqual(backend.commands, ["C0TTid0001tt01tf0tl0240tv00010tg0tu0"])
+    with self.assertRaisesRegex(AssertionError, "No firmware definition for CO-RE gripper"):
+      await backend.get_or_assign_tip_type_index(tool)
+    self.assertEqual(backend.commands, [])
 
 
 class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
