@@ -94,12 +94,35 @@ class CoreGrippers:
       raise RuntimeError("the CoRe grippers are placed from the deck; this driver was given none")
     return self._driver.deck
 
+  def _holder(self) -> HamiltonCoreGrippers:
+    """The CO-RE gripper holder the deck carries.
+
+    Raises:
+      TypeError: If the deck carries none.
+    """
+    for resource in self._deck.get_all_children():
+      if isinstance(resource, HamiltonCoreGrippers):
+        return resource
+    raise TypeError("the deck carries no CO-RE gripper holder")
+
   # -- state ---------------------------------------------------------------------------------------
 
   @property
   def tools_mounted(self) -> bool:
     """Whether the tools are on the channels."""
     return self._tools_mounted
+
+  async def request_tool_attached(self, channel: int) -> bool:
+    """Whether the device senses something on `channel` (`C0 RT`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Raises:
+      ValueError: If the channel does not exist.
+    """
+    self._pipettes._require_channel(channel)
+    return bool((await self._pipettes.sense_tip_presence())[channel])
 
   def _require_mounted(self) -> None:
     """Raise unless the tools are on the channels.
@@ -113,6 +136,45 @@ class CoreGrippers:
         "`await star.core_grippers.pick_up_tools()` first, or use "
         "`async with star.core_grippers.mounted():`."
       )
+
+  # ----------------------------------------
+  # Movement
+  # ----------------------------------------
+
+  # -- with a resource held ------------------------------------------------------------------------
+
+  async def _unchecked_fw_move_resource(
+    self,
+    x_position: int,
+    x_acceleration_index: int,
+    y_position: int,
+    z_position: int,
+    z_speed: int,
+    minimum_traverse_height_start: int,
+  ):
+    """Send the held plate's move as it is given, in tenths of a millimetre. `C0 ZM`.
+
+    Args:
+      x_position: the plate centre's x; negative sends `xd1`.
+      x_acceleration_index: 1 to 5.
+      y_position: the plate centre's y.
+      z_position: the plate's height.
+      z_speed: in tenths of a mm/s.
+      minimum_traverse_height_start: how high the channels travel first.
+    """
+    return await self._driver.send_command(
+      module="C0",
+      command="ZM",
+      subsystem=_FirmwareLock.CHANNELS,
+      read_timeout=120,
+      xs=f"{abs(x_position):05}",
+      xd=int(x_position < 0),
+      xg=f"{x_acceleration_index}",
+      yj=f"{y_position:04}",
+      zj=f"{z_position:04}",
+      zy=f"{z_speed:04}",
+      th=f"{minimum_traverse_height_start:04}",
+    )
 
   # ----------------------------------------
   # Tools
@@ -350,29 +412,6 @@ class CoreGrippers:
 
   # -- mounting ------------------------------------------------------------------------------------
 
-  async def request_tool_attached(self, channel: int) -> bool:
-    """Whether the device senses something on `channel` (`C0 RT`).
-
-    Args:
-      channel: which channel, 0-indexed from the back.
-
-    Raises:
-      ValueError: If the channel does not exist.
-    """
-    self._pipettes._require_channel(channel)
-    return bool((await self._pipettes.sense_tip_presence())[channel])
-
-  def _holder(self) -> HamiltonCoreGrippers:
-    """The CO-RE gripper holder the deck carries.
-
-    Raises:
-      TypeError: If the deck carries none.
-    """
-    for resource in self._deck.get_all_children():
-      if isinstance(resource, HamiltonCoreGrippers):
-        return resource
-    raise TypeError("the deck carries no CO-RE gripper holder")
-
   def _park_tools(self) -> None:
     """Put the tools back in the holder in the model, where they were taken from."""
     for tool, holder, location in self._parked_tools:
@@ -552,39 +591,6 @@ class CoreGrippers:
     )
     return await self._driver.send_command(
       module="C0", command="ZR", subsystem=_FirmwareLock.CHANNELS, read_timeout=120, **parameters
-    )
-
-  async def _unchecked_fw_move_resource(
-    self,
-    x_position: int,
-    x_acceleration_index: int,
-    y_position: int,
-    z_position: int,
-    z_speed: int,
-    minimum_traverse_height_start: int,
-  ):
-    """Send the held plate's move as it is given, in tenths of a millimetre. `C0 ZM`.
-
-    Args:
-      x_position: the plate centre's x; negative sends `xd1`.
-      x_acceleration_index: 1 to 5.
-      y_position: the plate centre's y.
-      z_position: the plate's height.
-      z_speed: in tenths of a mm/s.
-      minimum_traverse_height_start: how high the channels travel first.
-    """
-    return await self._driver.send_command(
-      module="C0",
-      command="ZM",
-      subsystem=_FirmwareLock.CHANNELS,
-      read_timeout=120,
-      xs=f"{abs(x_position):05}",
-      xd=int(x_position < 0),
-      xg=f"{x_acceleration_index}",
-      yj=f"{y_position:04}",
-      zj=f"{z_position:04}",
-      zy=f"{z_speed:04}",
-      th=f"{minimum_traverse_height_start:04}",
     )
 
   async def _unchecked_fw_release_plate(self):
