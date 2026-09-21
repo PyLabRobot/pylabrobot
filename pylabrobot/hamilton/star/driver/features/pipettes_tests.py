@@ -169,6 +169,43 @@ class TestPositionInZDirection(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(reached), len(pipettes.configuration.channels))
 
 
+class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
+  """A channel's stored Z speed and acceleration: read with `Px RA`, written with `Px AA`."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+
+    async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      return {"zr": 75} if command == "RA" else None
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_request(self):
+    self.assertEqual(await self.pipettes.request_drive_parameter(0, "zr"), 804.6)
+    self.assertEqual(self.sent, ["P1RArazr"])
+
+  async def test_set(self):
+    await self.pipettes.set_drive_parameter(1, "zr", 800.0)
+    self.assertEqual(self.sent, ["P2AAzr075"])
+
+  async def test_refused_sends_nothing(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes.set_drive_parameter(0, "yv", 100.0)
+    with self.assertRaises(ValueError):
+      await self.pipettes.set_drive_parameter(0, "zr", 2000.0)
+    with self.assertRaises(ValueError):
+      await self.pipettes.request_drive_parameter(0, "yv")
+    self.assertEqual(self.sent, [])
+
+  async def test_restore_only_what_changed(self):
+    await self.pipettes._restore_drive_parameter(0, "zr", 800.0, 804.6)
+    self.assertEqual(self.sent, [])
+    await self.pipettes._restore_drive_parameter(0, "zr", 150.0, 804.6)
+    self.assertEqual(self.sent, ["P1AAzr075"])
+
+
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
   """A v1 device plans with `pylabrobot.lib.liquid_handling`, from its own minimum channel spacing."""
 

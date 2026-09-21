@@ -5,6 +5,7 @@ import os
 from typing import Optional
 
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
+from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.star.driver.features.cover import FrontCover
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.features.head384 import Head384
@@ -322,6 +323,11 @@ class STARDevice(Resource):
   def iswap(self) -> Optional[iSWAP]:
     """The iSWAP, on a device that has one."""
     return self.driver.iswap
+
+  @property
+  def core_grippers(self) -> Optional[CoreGrippers]:
+    """The CoRe grippers, on a device whose channels can carry them."""
+    return self.driver.core_grippers
 
   @property
   def autoload(self) -> Optional[Autoload]:

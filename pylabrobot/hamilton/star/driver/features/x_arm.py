@@ -11,6 +11,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:
+  from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
   from pylabrobot.hamilton.star.driver.features.head96 import Head96
   from pylabrobot.hamilton.star.driver.features.head384 import Head384
   from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
@@ -236,6 +237,7 @@ class XArm:
     self.head96: Optional["Head96"] = None
     self.head384: Optional["Head384"] = None
     self.iswap: Optional["iSWAP"] = None
+    self.core_grippers: Optional["CoreGrippers"] = None
     self.side = side
     if configuration is not None:
       self.configuration = configuration

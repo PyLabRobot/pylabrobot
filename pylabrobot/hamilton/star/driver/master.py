@@ -27,6 +27,7 @@ from pylabrobot.hamilton.star.driver.errors import (
   check_fw_string_error,
 )
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
+from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.star.driver.features.cover import FrontCover
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.features.head384 import Head384
@@ -739,6 +740,12 @@ class STARDriver:
     return arm.iswap if arm is not None else None
 
   @property
+  def core_grippers(self) -> Optional[CoreGrippers]:
+    """The CoRe grippers, on a device with one arm."""
+    arm = self._require_one_arm("core_grippers")
+    return arm.core_grippers if arm is not None else None
+
+  @property
   def x_arm(self) -> XArm:
     """The device's X-arm, on a device that has only one.
 
@@ -1165,6 +1172,8 @@ class STARDriver:
         arm.head384 = Head384(self)
       if a.iswap_installed and arm.iswap is None:
         arm.iswap = iSWAP(self)
+      if arm.pipettes is not None and self._num_channels >= 2 and arm.core_grippers is None:
+        arm.core_grippers = CoreGrippers(self)
     if self.configuration.autoload_installed and self.autoload is None:
       self.autoload = Autoload(self)
     if self.configuration.main_front_cover_monitoring_installed and self.front_cover is None:

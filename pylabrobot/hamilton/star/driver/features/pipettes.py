@@ -5,7 +5,18 @@ import datetime
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, cast
+from typing import (
+  TYPE_CHECKING,
+  Any,
+  Dict,
+  Iterable,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+  cast,
+)
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import channels_that_faulted
@@ -112,6 +123,8 @@ class PipettesConfiguration:
   increments per second squared, unlike the positions and speeds beside it."""
   z_drive_current_limit_range: Tuple[int, int] = (0, 7)
   z_drive_current_limit_default: int = 3
+  drive_parameters: Dict[str, int] = field(default_factory=lambda: {"zv": 5, "zr": 3})
+  """The stored drive parameters a channel reads and writes, and their widths on the wire."""
 
   z_range: Tuple[float, float] = (99.98, 334.7)
   """The Z window the channels reach, in mm, lowest first.
@@ -747,6 +760,88 @@ class Pipettes:
       high = device.pip_maximal_y_position
     if not low <= value <= high:
       raise ValueError(f"{axis} must be between {low} and {high} mm, is {value}")
+
+  # -- Memory of Speed & Acceleration --------------------------------------------------------------
+
+  # ---- z -----------------------------------------------------------------------------------------
+
+  def _require_drive_parameter(self, parameter: str) -> int:
+    """The wire width of a channel's stored drive parameter.
+
+    Args:
+      parameter: `zv` for Z speed, `zr` for Z acceleration.
+
+    Returns:
+      Its digits on the wire.
+
+    Raises:
+      ValueError: If it is neither.
+    """
+    widths = self.configuration.drive_parameters
+    if parameter not in widths:
+      raise ValueError(f"unknown drive parameter {parameter!r}, expected one of {tuple(widths)}")
+    return widths[parameter]
+
+  def _drive_parameter_to_increments(self, parameter: str, value: float) -> int:
+    """A stored drive parameter in what the drive counts in, from mm/s or mm/s2."""
+    c = self.configuration
+    if parameter == "zv":
+      return c.z_drive_mm_to_increments(value)
+    return c.z_drive_acceleration_mm_to_increments(value)
+
+  async def request_drive_parameter(self, channel: int, parameter: str) -> float:
+    """Request a channel's stored drive parameter (`Px RA`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      parameter: `zv` for Z speed, `zr` for Z acceleration.
+
+    Returns:
+      The value in mm/s or mm/s2.
+
+    Raises:
+      ValueError: If the channel or parameter does not exist.
+    """
+    self._require_channel(channel)
+    width = self._require_drive_parameter(parameter)
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel), command="RA", ra=parameter, fmt=f"{parameter}{'#' * width}"
+    )
+    increments = cast(int, resp[parameter])
+    c = self.configuration
+    if parameter == "zv":
+      return c.z_drive_increments_to_mm(increments)
+    return c.z_drive_acceleration_increments_to_mm(increments)
+
+  async def set_drive_parameter(self, channel: int, parameter: str, value: float) -> None:
+    """Write a channel's stored drive parameter (`Px AA`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      parameter: `zv` for Z speed, `zr` for Z acceleration.
+      value: in mm/s or mm/s2.
+
+    Raises:
+      ValueError: If the channel, parameter or value is out of range.
+    """
+    self._require_channel(channel)
+    width = self._require_drive_parameter(parameter)
+    c = self.configuration
+    low, high = c.z_speed_range if parameter == "zv" else c.z_acceleration_range
+    if not low <= value <= high:
+      raise ValueError(f"{parameter} must be between {low} and {high}, is {value}")
+    increments = self._drive_parameter_to_increments(parameter, value)
+    written: Dict[str, Any] = {parameter: f"{increments:0{width}}"}
+    await self._driver.send_command(module=self.channel_id(channel), command="AA", **written)
+
+  async def _restore_drive_parameter(
+    self, channel: int, parameter: str, written: float, was: float
+  ) -> None:
+    """Write `was` back unless it and `written` are the same increment."""
+    if self._drive_parameter_to_increments(
+      parameter, written
+    ) != self._drive_parameter_to_increments(parameter, was):
+      await self.set_drive_parameter(channel, parameter, was)
 
   # -- x position --------------------------------------------------------------------------------
 
