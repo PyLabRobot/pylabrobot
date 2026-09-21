@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from abc import ABCMeta
 from collections import OrderedDict
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
@@ -10,9 +9,7 @@ from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
 
 from .itemized_resource import ItemizedResource
-from .lid import Lid
 from .resource import Resource
-from .resource_stack import ResourceStack
 
 
 class TipSpot(Resource):
@@ -185,17 +182,6 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})"
     )
 
-  @property
-  def _available(self) -> bool:
-    """Whether nothing, a lid or another rack in its stack, sits on top of this rack."""
-    # A rack's spots are assigned when it is made; anything put on the rack comes after them.
-    if len(self.children) > 0 and isinstance(self.children[-1], Lid):
-      return False
-    stack = self.parent
-    return not (
-      isinstance(stack, ResourceStack) and stack.direction == "z" and stack.children[-1] is not self
-    )
-
   @staticmethod
   def _occupied_func(item: TipSpot):
     return "V" if item.has_tip() else "-"
@@ -268,6 +254,59 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     return [ts.get_tip() for ts in self.get_all_items()]
 
 
+class NestedTipRack(TipRack):
+  """A nested tip rack."""
+
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    stacking_z_height: float,
+    ordered_items: Optional[Dict[str, TipSpot]] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
+    category: str = "tip_rack",
+    model: Optional[str] = None,
+    with_tips: bool = True,
+  ):
+    # Call the superclass constructor
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      ordered_items=ordered_items,
+      ordering=ordering,
+      category=category,
+      model=model,
+      with_tips=with_tips,
+    )
+
+    self.stacking_z_height = stacking_z_height
+
+  def __repr__(self) -> str:
+    return (
+      f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
+      f"size_y={self._size_y}, size_z={self._size_z}, "
+      f"stacking_z_height={self.stacking_z_height}, location={self.location})"
+    )
+
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True,
+  ):
+    if isinstance(resource, NestedTipRack):
+      location = location or Coordinate(0, 0, self.stacking_z_height)
+    else:
+      assert location is not None, (
+        "Location must be specified if " + "resource is not a NestedTipRack."
+      )
+    return super().assign_child_resource(resource, location=location, reassign=reassign)
+
+
 class EmbeddedTipRack(TipRack):
   """The EmbeddedTipRack - this is what some might call a "standard" TipRack; they cannot stand on their own, they require an EmbeddedTipRackHolder at all times to be functional.
 
@@ -314,98 +353,6 @@ class EmbeddedTipRack(TipRack):
 
 
 class StandingTipRack(TipRack):
-  """A tip rack that stands on its own rather than sinking into a holder.
+  """It's defining geometric characteristic is that it is completely self-sufficient and does not require a separate TipHolder to embed into."""
 
-  Racks that nest are stacked in a z-growing :class:`~pylabrobot.resources.ResourceStack`.
-
-  Attributes:
-    stacking_z_height: how far a nested rack stands above the one below it, in mm, or None if the
-      rack does not nest.
-  """
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    ordered_items: Optional[Dict[str, TipSpot]] = None,
-    ordering: Optional[OrderedDict[str, str]] = None,
-    category: str = "tip_rack",
-    model: Optional[str] = None,
-    with_tips: bool = True,
-    metadata: Optional[Mapping[str, Any]] = None,
-    stacking_z_height: Optional[float] = None,
-  ):
-    super().__init__(
-      name,
-      size_x,
-      size_y,
-      size_z,
-      ordered_items=ordered_items,
-      ordering=ordering,
-      category=category,
-      model=model,
-      with_tips=with_tips,
-      metadata=metadata,
-    )
-    self.stacking_z_height = stacking_z_height
-
-  def __repr__(self) -> str:
-    return (
-      f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
-      f"size_y={self._size_y}, size_z={self._size_z}, "
-      f"stacking_z_height={self.stacking_z_height}, location={self.location})"
-    )
-
-  def serialize(self) -> dict:
-    return {**super().serialize(), "stacking_z_height": self.stacking_z_height}
-
-
-class NestedTipRack(StandingTipRack):
-  """Deprecated. Use :class:`StandingTipRack` with a `stacking_z_height` instead."""
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    stacking_z_height: float,
-    ordered_items: Optional[Dict[str, TipSpot]] = None,
-    ordering: Optional[OrderedDict[str, str]] = None,
-    category: str = "tip_rack",
-    model: Optional[str] = None,
-    with_tips: bool = True,
-    metadata: Optional[Mapping[str, Any]] = None,
-  ):
-    warnings.warn(
-      "NestedTipRack is deprecated, use StandingTipRack with a stacking_z_height instead",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      ordered_items=ordered_items,
-      ordering=ordering,
-      category=category,
-      model=model,
-      with_tips=with_tips,
-      metadata=metadata,
-      stacking_z_height=stacking_z_height,
-    )
-
-  def assign_child_resource(
-    self,
-    resource: Resource,
-    location: Optional[Coordinate] = None,
-    reassign: bool = True,
-  ):
-    if isinstance(resource, NestedTipRack):
-      location = location or Coordinate(0, 0, cast(float, self.stacking_z_height))
-    else:
-      assert location is not None, "Location must be specified if resource is not a NestedTipRack."
-    return super().assign_child_resource(resource, location=location, reassign=reassign)
+  # TODO

@@ -145,22 +145,6 @@ class TestSimulation(unittest.IsolatedAsyncioTestCase):
       STARSimulationDriver()
 
 
-class TestTipTypeTable(unittest.IsolatedAsyncioTestCase):
-  async def test_tips_of_one_kind_share_one_index(self):
-    from unittest.mock import AsyncMock
-
-    from pylabrobot.resources.hamilton import hamilton_tip_10uL, hamilton_tip_300uL
-
-    driver = master.STARDriver.__new__(master.STARDriver)
-    driver._tip_type_indices = {}
-    driver.define_tip_needle = AsyncMock()  # type: ignore[method-assign]
-    a = await driver.get_or_assign_tip_type_index(hamilton_tip_300uL(name="rack_A1#0"))
-    b = await driver.get_or_assign_tip_type_index(hamilton_tip_300uL(name="rack_B1#0"))
-    c = await driver.get_or_assign_tip_type_index(hamilton_tip_10uL(name="rack_C1#0"))
-    self.assertEqual((a, b, c), (1, 1, 2))
-    self.assertEqual(driver.define_tip_needle.await_count, 2)
-
-
 def keys_no_field_reads(saved: dict, configuration: object) -> List[str]:
   """What a saved configuration holds that reading it back leaves out, nested ones included.
 

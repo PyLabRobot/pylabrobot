@@ -15,28 +15,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - In-process `MicroSpinMockServer` (`pylabrobot.centrifuge.highres.mock_server`) that faithfully emulates the MicroSpin's wire protocol -- including the firmware's "`status` blocks until the spindle has stopped" semantics and the low-G spin-down-detection hang -- usable as a Python async context manager or runnable as a script (`python -m pylabrobot.centrifuge.highres.mock_server`) for `nc`/`telnet` debugging.
 - `MicroSpinBackend.reset()` recovery helper that issues `abort` -> `clearbuttonabort` -> `status`, using the last as the gate that genuinely confirms the rotor has stopped.
 - User guide notebook for the MicroSpin (`docs/user_guide/01_material-handling/centrifuge/highres_microspin.ipynb`).
-- `Plate`: optional `stacking_z_height` parameter -- the per-plate vertical pitch when plates are stacked directly on top of each other (`size_z` minus the nesting overlap), mirroring `StandingTipRack.stacking_z_height`. Because it is a physical dimension, plates that differ in it no longer compare equal; `Plate` also now serializes `stacking_z_height` and the pre-existing `plate_type` so both round-trip through `deserialize`/`copy`. (#1110)
+- `Plate`: optional `stacking_z_height` parameter -- the per-plate vertical pitch when plates are stacked directly on top of each other (`size_z` minus the nesting overlap), mirroring `NestedTipRack.stacking_z_height`. Because it is a physical dimension, plates that differ in it no longer compare equal; `Plate` also now serializes `stacking_z_height` and the pre-existing `plate_type` so both round-trip through `deserialize`/`copy`. (#1110)
 - `ResourceStack`: bare plates stacked in the z direction now nest into one another by their `stacking_z_height` (a stack of `N` identical plates is `size_z + (N - 1) * stacking_z_height` tall, for both `get_size_z()` and child placement). Plates without a `stacking_z_height`, and plates wearing a lid, do not nest, so existing behaviour is unchanged. (#1112)
 - `Resource.rotate_to(x=, y=, z=)`: set the rotation about each axis, where `rotate` turns by an amount. Axes left as `None` keep the angle they had, and each is normalised to `[0, 360)`. (#1249)
 - `Resource.rotate`, `rotate_to` and `rotated` take an optional `pivot_coordinate`: a point in the resource's own frame that stays where it is, so a resource can turn about its centre, an edge, or any other point rather than only about its origin. `location` carries by however far the turn moved that point. Raises `NoLocationError` when the resource has no location, since there is nothing to carry. (#1249)
 - `LinkBody` (`pylabrobot.resources.LinkBody`): one rigid member of a manipulator, an ordinary resource whose origin is a corner and which carries its `proximal_joint` and `distal_joint` as coordinates within it. The link is the line between the two joints and `length` is the distance, `None` on a member that ends the chain. A member turns about its proximal joint rather than its origin. (#1249)
 - `MechanicalGripper` (`pylabrobot.resources.MechanicalGripper`): a `LinkBody` that ends the chain, holding what it takes between two fingers. Its far end is a `tool_center_point` rather than a joint, it is sized to its body because `jaw_width` moves the fingers, and the jaws straddle the grip centre. (#1249)
-- `HamiltonCoreGripperTool` and `hamilton_core_gripper_tool`: the CO-RE grip tool as a `HeadTool`, with its 30 mm grip line as `total_length`.
-- `StandingTipRack`: a tip rack that stands on its own rather than sinking into a holder, with an optional `stacking_z_height`. Standing tip racks nest in a z-growing `ResourceStack`, as plates do.
-- `hamilton_96_tiprack_10uL_NTR` and `hamilton_96_tiprack_300uL_NTR`, built on `hamilton_96_tiprack_ntr` like `hamilton_96_tiprack_50uL_NTR`, and `hamilton_mfx_module_tiprackholder_ntr`, the MFX module for NTR stacks (191425).
 
 ### Changed
 
-- `hamilton_96_tiprack_standard`: tip spots are the 7.2 mm holes, with the same centres.
-- `hamilton_96_tiprack_50uL_NTR` is a `StandingTipRack` on an SLAS footprint with its tip spots where the collars rest, 55 mm above its base (was 13.5). `hamilton_tip_carrier_L5_ntr_a00` centres it on its sites, and the Vantage discard takes the tip end from it as from an embedded rack.
-- `LiquidHandler` refuses to pick up tips from, or drop tips to, a tip rack with a lid or another rack on top of it.
 - `HamiltonDeck` and `HamiltonSTARDeck`: `num_tracks` replaces `num_rails` and `track=` replaces `rails=`; the old names are deprecated but keep working, as do decks saved with `num_rails`. A STAR deck counts two fewer tracks than it counted rails (STARlet 30, STAR 54) at the same positions, so a count passed positionally to `HamiltonSTARDeck` is now read as tracks.
-
-### Deprecated
-
-- `NestedTipRack`: use `StandingTipRack` with a `stacking_z_height`.
-- `hamilton_tiprack_standard`: renamed `hamilton_96_tiprack_standard`, like `hamilton_96_tiprack_ntr`; the old name still works and warns.
-- `TIP_CAR_NTR_A00`: renamed `hamilton_tip_carrier_L5_ntr_a00`, following the `hamilton_<kind>_carrier_<...>` naming; the old name still works and warns.
 
 ### Fixed
 

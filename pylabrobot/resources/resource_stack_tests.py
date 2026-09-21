@@ -2,9 +2,7 @@
 
 import unittest
 
-from pylabrobot.resources import Coordinate, Lid, Plate, Resource, StandingTipRack, TipSpot
-from pylabrobot.resources.hamilton import hamilton_tip_50uL
-from pylabrobot.resources.utils import create_ordered_items_2d
+from pylabrobot.resources import Coordinate, Lid, Plate, Resource
 
 from .resource_stack import ResourceStack
 
@@ -171,39 +169,3 @@ class ResourceStackPlateNestingTests(unittest.TestCase):
     stack.assign_child_resource(self._plate("upper", stacking_z_height=4))
     # lower occupies size_z + lid overhang = 10 + (3 - 1) = 12; upper sits on top at full height.
     self.assertEqual(stack.get_top_item().get_absolute_location(), Coordinate(0, 0, 12))
-
-
-class ResourceStackTipRackNestingTests(unittest.TestCase):
-  """Standing tip racks with a `stacking_z_height` nest into one another in a z-stack, as plates do."""
-
-  def _rack(self, name, stacking_z_height=None):
-    return StandingTipRack(
-      name,
-      size_x=10,
-      size_y=10,
-      size_z=55,
-      ordered_items=create_ordered_items_2d(
-        TipSpot,
-        num_items_x=1,
-        num_items_y=1,
-        dx=1,
-        dy=1,
-        dz=55,
-        item_dx=9,
-        item_dy=9,
-        size_x=7.2,
-        size_y=7.2,
-        make_tip=hamilton_tip_50uL,
-        name_prefix=name,
-      ),
-      with_tips=False,
-      stacking_z_height=stacking_z_height,
-    )
-
-  def test_without_stacking_z_height_no_nesting(self):
-    stack = ResourceStack("s", "z")
-    stack.location = Coordinate.zero()
-    stack.assign_child_resource(self._rack("r1"))
-    stack.assign_child_resource(self._rack("r2"))
-    self.assertEqual(stack.get_size_z(), 110)
-    self.assertEqual(stack.get_top_item().get_absolute_location(), Coordinate(0, 0, 55))
