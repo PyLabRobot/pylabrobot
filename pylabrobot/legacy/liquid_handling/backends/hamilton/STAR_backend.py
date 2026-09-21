@@ -6161,7 +6161,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     front_offset: Optional[Coordinate] = None,
     back_offset: Optional[Coordinate] = None,
   ):
-    """Get CoRe gripper tool from wasteblock mount."""
+    """Pick up the CO-RE gripper tools stored on the deck's wasteblock mount."""
 
     if not 0 < front_channel < self.num_channels:
       raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
@@ -6185,6 +6185,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
 
+    core_grippers = self.deck.get_resource("core_grippers")
+    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    front_tool, back_tool = core_grippers.front_tool, core_grippers.back_tool
+    if front_tool.model != back_tool.model:
+      raise ValueError("CO-RE gripper tools must have the same model.")
+    ttti = await self.get_or_assign_tip_type_index(front_tool)
+
     command_output = await self.send_command(
       module="C0",
       command="ZT",
@@ -6197,7 +6204,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tp=f"{round(begin_z_coord * 10):04}",
       tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
-      tt="14",
+      tt=f"{ttti:02}",
     )
     self._core_parked = False
     return command_output
