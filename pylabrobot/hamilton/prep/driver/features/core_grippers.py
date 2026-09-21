@@ -542,11 +542,14 @@ class CoreGrippers:
       if shaft is not None:
         shaft.mount_tip(tool)
         taken.append(channel)
+    # Read once the tools are on the model: Z is reported at their jaws.
+    await self._pipettes._record_where_they_stopped()
 
     # The command returning is not the tools being on: asked of the device, once per mount.
     missing = [channel for channel in taken if not await self.request_tool_attached(channel)]
     if missing:
       self._park_tools()
+      await self._pipettes._record_where_they_stopped()
       raise RuntimeError(
         f"the pick-up ran, but {'channel' if len(missing) == 1 else 'channels'} "
         f"{', '.join(str(c) for c in missing)} report no tool on them. The tools are back in "
@@ -565,6 +568,8 @@ class CoreGrippers:
     self._tools_mounted = False
     self._clear_held_state()
     self._park_tools()
+    # Read once the tools are off the model: Z is reported at the shafts' ends again.
+    await self._pipettes._record_where_they_stopped()
 
   @asynccontextmanager
   async def mounted(self) -> AsyncIterator["CoreGrippers"]:

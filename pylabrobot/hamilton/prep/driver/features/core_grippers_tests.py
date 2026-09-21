@@ -1005,3 +1005,80 @@ def test_every_firmware_move_records_where_the_channels_stopped_even_when_refuse
       order = asyncio.run(run(kind, refused))
       at = order.index(kind.__name__)
       assert order[at + 1] == "record", (kind.__name__, refused, order)
+
+
+def test_with_the_tools_on_z_is_at_their_jaws_and_the_shafts_stay_at_z_safety():
+  """As the device reports it: Z safety reads 144.6 with the tools on, 167.5 without."""
+
+  async def _run():
+    p = PrepSimulationDriver(deck=PrepDeck(with_core_grippers=True))
+    await p.setup()
+    assert p.core_grippers is not None and p.pipettes is not None
+    pipettes = p.pipettes
+
+    def shaft_end_z(channel: int) -> float:
+      resource = pipettes.resources[channel]
+      assert pipettes.deck is not None
+      return resource.get_location_wrt(pipettes.deck).z + pipettes._reference_anchor(resource).z
+
+    await p.core_grippers.pick_up_tools()
+    assert [c.z for c in await pipettes.request_locations()] == pytest.approx([144.6, 144.6])
+    assert [shaft_end_z(0), shaft_end_z(1)] == pytest.approx([167.5, 167.5])
+    await p.core_grippers.return_tools()
+    await pipettes.move_to_safe_z()
+    assert [c.z for c in await pipettes.request_locations()] == pytest.approx([167.5, 167.5])
+    assert [shaft_end_z(0), shaft_end_z(1)] == pytest.approx([167.5, 167.5])
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_the_simulator_moves_the_grippers_where_the_device_did():
+  """Tools on, a grip, a carry, a return, tools home: each ends where PRPAA1087 reported it.
+
+  To 0.01 mm, the precision positions are read to, as the device reports them.
+  """
+
+  async def _run():
+    deck = PrepDeck(with_core_grippers=True)
+    plate = deck[0] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    grippers, pipettes = p.core_grippers, p.pipettes
+    assert grippers is not None and pipettes is not None
+
+    async def jaws() -> Tuple[float, float, float, float]:
+      back, front = (await pipettes.request_locations())[:2]
+      assert back.x == pytest.approx(front.x) and back.z == pytest.approx(front.z)
+      return back.x, back.y, front.y, back.z
+
+    width = plate.get_absolute_size_y()
+    centre = plate.get_absolute_location(x="c", y="c")
+    closed = width + JAW_OPEN_EXTRA - 2 * 4.5  # grip_distance: clearance 2.5 + squeeze 2.0
+    opened = closed + 2 * (3.0 + 4.5)  # a drop opens by its clearance and the grip distance
+
+    await grippers.pick_up_tools()
+    assert await jaws() == pytest.approx(
+      (290.0, 275.5, 257.5, 144.6), abs=0.01
+    )  # at the holder, Z safety
+    await grippers.pick_up_resource(plate)
+    x, back_y, front_y, z = await jaws()
+    assert (x, back_y - front_y, (back_y + front_y) / 2, z) == pytest.approx(
+      (centre.x, closed, centre.y, 144.6), abs=0.01
+    )
+    await grippers.move_resource_to_xy_position(x=80.0, y=230.0)
+    assert await jaws() == pytest.approx(
+      (80.0, 230.0 + closed / 2, 230.0 - closed / 2, 144.6), abs=0.01
+    )
+    await grippers.return_resource()
+    x, back_y, front_y, z = await jaws()
+    assert (x, back_y - front_y, (back_y + front_y) / 2, z) == pytest.approx(
+      (centre.x, opened, centre.y, 144.6), abs=0.01
+    )
+    await grippers.return_tools()
+    assert await jaws() == pytest.approx(
+      (290.0, 275.5, 257.5, 167.5), abs=0.01
+    )  # home, shafts at traverse
+    await p.stop()
+
+  asyncio.run(_run())

@@ -50,6 +50,7 @@ from pylabrobot.resources.tip import Tip
 from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration
 from .errors import PREP_ERROR_CODES
+from .features.core_grippers import JAW_OPEN_EXTRA
 from .features.lights import Lights
 from .features.pipettes import Pipettes, PipettesConfiguration
 from .features.x_arm import XArm
@@ -415,6 +416,11 @@ class SimulatedPipettes(_Simulated, Pipettes):
     # The pipettor's record of a plate held: set by a finished pick-up whatever the jaws closed on,
     # cleared by a drop or a release.
     self._plate_held = False
+    # What a grip leaves for the carry and the let-go: how far below the plate's top the jaws hold it,
+    # and how far past the clearance they closed. And where the tools were taken from, which is where
+    # the firmware takes them back to.
+    self._grip: Optional[Tuple[float, float]] = None
+    self._tools_from: Optional[Tuple[float, float, float]] = None
 
   def _touchable(self) -> List[Tuple[Resource, Coordinate, Coordinate]]:
     """The deck's resources a channel can touch.
@@ -582,10 +588,55 @@ class SimulatedPipettes(_Simulated, Pipettes):
 
     if isinstance(request, PrepCmd.PrepGetPlateHeld):
       return PrepCmd.PrepGetPlateHeld.Response(value=self._plate_held), "the pipettor's record"
+
+    # The CoRe gripper tools ride the two front-most channels. Where each command leaves them is what
+    # PRPAA1087 reported after it (bct_re core_grippers/data): Z at the jaws once the tools are on.
+    back, front = len(channels) - 2, len(channels) - 1
+    if isinstance(request, PrepCmd.PrepPickUpTool):
+      # Left in the tools with the shafts' ends at the seek height; the tools go on the model after.
+      self._tools_from = (
+        request.tool_position_x,
+        request.rear_channel_position_y,
+        request.front_channel_position_y,
+      )
+      self._move(back, request.tool_position_x, request.rear_channel_position_y, request.tool_seek)
+      self._move(front, None, request.front_channel_position_y, request.tool_seek)
+      return None
+    if isinstance(request, PrepCmd.PrepDropTool):
+      # Taken home from anywhere, the shafts' ends at the traverse height; the tools come off the model
+      # after.
+      height = self.device.simulated_default_minimum_traverse_height
+      if self._tools_from is not None and height is not None:
+        x, rear_y, front_y = self._tools_from
+        self._move(back, x, rear_y, height - self._mounted_length(back))
+        self._move(front, None, front_y, height - self._mounted_length(front))
+      self._tools_from = None
+      return None
     if isinstance(request, PrepCmd.PrepPickUpPlate):
+      # Down to the grip height, jaws closed on the plate; the firmware does not lift it.
+      plate_top = request.plate_top_center
+      half = (request.plate.width + JAW_OPEN_EXTRA - 2 * request.grip_distance) / 2
+      self._grip = (plate_top.z_position - request.grip_height, request.grip_distance)
+      self._move(back, plate_top.x_position, plate_top.y_position + half, request.grip_height)
+      self._move(front, None, plate_top.y_position - half, request.grip_height)
       self._plate_held = True
       return None
-    if isinstance(request, (PrepCmd.PrepDropPlate, PrepCmd.PrepReleasePlate)):
+    if isinstance(request, (PrepCmd.PrepMovePlate, PrepCmd.PrepDropPlate)):
+      # Both jaws to the plate's top less the grip's offset, keeping their spacing; a drop then opens
+      # them by the clearance and how far they closed.
+      plate_top = request.plate_top_center
+      half = (self._modelled_location(back)[1] - self._modelled_location(front)[1]) / 2
+      z = None if self._grip is None else plate_top.z_position - self._grip[0]
+      if isinstance(request, PrepCmd.PrepDropPlate):
+        half += request.clearance_y + (0.0 if self._grip is None else self._grip[1])
+        self._grip = None
+        self._plate_held = False
+      self._move(back, plate_top.x_position, plate_top.y_position + half, z)
+      self._move(front, None, plate_top.y_position - half, z)
+      return None
+    if isinstance(request, PrepCmd.PrepReleasePlate):
+      # What the jaws do is unmeasured: they are left where they are.
+      self._grip = None
       self._plate_held = False
       return None
 
@@ -629,11 +680,12 @@ class SimulatedPipettes(_Simulated, Pipettes):
       return None
 
     if isinstance(request, PrepCmd.PrepMoveZUpToSafe):
+      # The shaft's end goes to the traverse height; what it carries reaches below that.
       height = self.device.simulated_default_minimum_traverse_height
       for enum in request.channels:
         raised = index_of.get(int(enum))
         if raised is not None and height is not None:
-          self._move(raised, None, None, height)
+          self._move(raised, None, None, height - self._mounted_length(raised))
       return None
 
     if isinstance(request, PrepCmd.PrepZSeekLldPosition):
@@ -681,13 +733,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
           continue
         # The device answers the Z window for whatever is attached: measured on PRPAA1087 with the
         # teaching needle on channel 0, which answered -33.87..115.60 while channel 1 kept 18.03..167.50.
-        shaft = self.shaft(channel)
-        mounted = shaft.tip if shaft is not None and shaft.has_tip() else None
-        below = 0.0
-        if isinstance(mounted, Tip):
-          below = mounted.total_tip_length - mounted.fitting_depth
-        elif mounted is not None:
-          below = float(PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS.length)
+        below = self._mounted_length(channel)
         bounds.append(
           PrepCmd.ChannelBoundsParameters(
             channel=PrepCmd.channel_order_legacy_prep[channel],

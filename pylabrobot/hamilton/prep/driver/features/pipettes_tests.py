@@ -2652,3 +2652,42 @@ def test_a_drop_travels_over_its_destination_before_letting_go():
     await p.stop()
 
   _run(_t())
+
+
+def _shaft_end_z(p: PrepSimulationDriver, channel: int) -> float:
+  """Where the model has the end of a channel's shaft, in mm on the deck."""
+  assert p.pipettes is not None and p.pipettes.deck is not None
+  resource = p.pipettes.resources[channel]
+  return resource.get_location_wrt(p.pipettes.deck).z + p.pipettes._reference_anchor(resource).z
+
+
+def test_z_is_where_the_device_reports_it_at_the_bottom_of_what_a_channel_carries():
+  """A reported Z is the tip's bottom when there is one: the shaft ends that much higher."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_300uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+
+    pipettes.update_location_by_reference_point(0, z=100.0)
+    assert _shaft_end_z(p, 0) == pytest.approx(100.0)
+
+    await pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    tip = pipettes.get_mounted_tip(0)
+    assert tip is not None
+    below = tip.total_tip_length - tip.fitting_depth
+    pipettes.update_location_by_reference_point(0, z=100.0)
+    assert _shaft_end_z(p, 0) == pytest.approx(100.0 + below)
+    point = pipettes.get_reference_point_location(0)
+    assert point is not None and point.z == pytest.approx(100.0)
+    assert (await pipettes.request_locations())[0].z == pytest.approx(100.0)
+
+    await pipettes.drop_tips(rack["A1"], use_channels=[0])
+    pipettes.update_location_by_reference_point(0, z=100.0)
+    assert _shaft_end_z(p, 0) == pytest.approx(100.0)
+    await p.stop()
+
+  _run(_t())

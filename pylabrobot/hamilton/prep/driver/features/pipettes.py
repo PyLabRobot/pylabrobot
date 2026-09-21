@@ -1225,10 +1225,25 @@ class Pipettes:
       return anchor
     return Coordinate(anchor.x, anchor.y, shaft.location.z)
 
+  def _mounted_length(self, channel: int) -> float:
+    """How far below the end of a channel's shaft what the model has on it reaches, in mm.
+
+    The device reports and takes Z there: at a tip's bottom, at the gripper tools' jaws (the length
+    they were picked up with), and at the shaft's end when nothing is on it.
+    """
+    shaft = self.shaft(channel)
+    mounted = shaft.tip if shaft is not None and shaft.has_tip() else None
+    if isinstance(mounted, Tip):
+      return float(mounted.total_tip_length - mounted.fitting_depth)
+    if mounted is not None:
+      return float(PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS.length)
+    return 0.0
+
   def get_reference_point_location(self, channel: int) -> Optional[Coordinate]:
     """Where the model has a channel's reference point, in mm on the deck.
 
-    The inverse of `update_location_by_reference_point`.
+    The inverse of `update_location_by_reference_point`: Z is where the device reports it, the bottom
+    of what the channel carries.
 
     Args:
       channel: which channel, 0-indexed from the back.
@@ -1245,6 +1260,7 @@ class Pipettes:
       resource.location
       + resource.parent.get_location_wrt(self.deck)
       + self._reference_anchor(resource)
+      - Coordinate(0, 0, self._mounted_length(channel))
     )
 
   def update_location_by_reference_point(
@@ -1259,7 +1275,8 @@ class Pipettes:
     Args:
       channel: which channel, 0-indexed from the back.
       y: where it is now, in mm on the deck. Left as it was when None.
-      z: where the end of its shaft is now, in mm on the deck. Left as it was when None.
+      z: where the device reports it now, in mm on the deck: the bottom of what the channel carries,
+        the end of its shaft when it carries nothing. Left as it was when None.
     """
     if channel >= len(self.resources) or self.deck is None:
       return
@@ -1268,10 +1285,11 @@ class Pipettes:
       return
     here, on_the_arm = resource.location, resource.parent.get_location_wrt(self.deck)
     anchor = self._reference_anchor(resource)
+    shaft_z = None if z is None else z + self._mounted_length(channel)
     resource.location = Coordinate(
       here.x,
       here.y if y is None else y - on_the_arm.y - anchor.y,
-      here.z if z is None else z - on_the_arm.z - anchor.z,
+      here.z if shaft_z is None else shaft_z - on_the_arm.z - anchor.z,
     )
 
   @staticmethod
@@ -3299,6 +3317,8 @@ class Pipettes:
       # What a channel carries moves its Z window, and the device answers the new one.
       with suppress(Exception):  # in a finally: never mask what went wrong above
         await self._record_channel_bounds()
+      # Read once the tips are on the model: Z is reported at their bottom.
+      await self._record_where_they_stopped()
 
   async def pick_up_tips(
     self,
@@ -3563,6 +3583,8 @@ class Pipettes:
       # What a channel carries moves its Z window, and the device answers the new one.
       with suppress(Exception):  # in a finally: never mask what went wrong above
         await self._record_channel_bounds()
+      # Read once the tips are off the model: Z is reported at the shafts' ends again.
+      await self._record_where_they_stopped()
 
   async def drop_tips(
     self,
