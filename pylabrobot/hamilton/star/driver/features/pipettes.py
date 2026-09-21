@@ -115,12 +115,19 @@ class PipettesConfiguration:
   """The Z travel the drive counts in, in increments, lowest first. The floor is the deck
   surface, which is as low as a stop disc goes."""
 
+  # -- what a channel's own Y drive accepts --
+  y_drive_speed_range_increments: Tuple[int, int] = (20, 8_000)
+  y_drive_acceleration_level_range: Tuple[int, int] = (1, 4)
+  """Each level is `level * 5000` increments/s2: 231.5, 463.0, 694.5, 926.0 mm/s2."""
+
   # -- what a channel's own Z drive accepts, for the moves addressed to the channel itself --
   z_drive_speed_range_increments: Tuple[int, int] = (20, 15_000)
   z_drive_acceleration_range_increments: Tuple[int, int] = (5, 150)
   """Counted in thousands of increments per second squared, unlike the speeds beside it."""
   z_drive_current_limit_range: Tuple[int, int] = (0, 7)
-  drive_parameters: Dict[str, int] = field(default_factory=lambda: {"zv": 5, "zr": 3})
+  drive_parameters: Dict[str, int] = field(
+    default_factory=lambda: {"zv": 5, "zr": 3, "yv": 4, "yr": 1}
+  )
   """The stored drive parameters a channel reads and writes, and their widths on the wire."""
 
   z_range: Tuple[float, float] = (99.98, 334.7)
@@ -159,6 +166,12 @@ class PipettesConfiguration:
   def z_drive_acceleration_mm_to_increments(self, mm: float) -> int:
     """A Z-drive acceleration in increments, from mm/s2."""
     return round(mm / (self.z_drive_mm_per_increment * 1000))
+
+  @property
+  def y_speed_range(self) -> Tuple[float, float]:
+    """Y-drive speed window (mm/s)."""
+    low, high = self.y_drive_speed_range_increments
+    return (self.y_drive_increments_to_mm(low), self.y_drive_increments_to_mm(high))
 
   @property
   def z_speed_range(self) -> Tuple[float, float]:
@@ -249,6 +262,10 @@ class Pipettes:
   `configuration.channels`.
   """
 
+  # Y speed when the caller names none, in mm/s.
+  default_y_speed: float = 250.0
+  # Y acceleration level when the caller names none, 1 (gentlest) to 4.
+  default_y_acceleration_level: int = 3
   # Z speed when the caller names none, in mm/s.
   default_z_speed: float = 125.0
   # Z acceleration when the caller names none, in mm/s2.
@@ -766,6 +783,71 @@ class Pipettes:
 
   # -- Memory of Speed & Acceleration --------------------------------------------------------------
 
+  # ---- y -----------------------------------------------------------------------------------------
+
+  async def request_y_speed(self, channel: int) -> float:
+    """Request the Y speed a channel's drive holds (`Px RA yv`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The speed in mm/s.
+    """
+    return await self._request_drive_parameter(channel, "yv")
+
+  async def request_y_acceleration_level(self, channel: int) -> int:
+    """Request the Y acceleration level a channel's drive holds (`Px RA yr`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The level, 1 (gentlest) to 4.
+    """
+    return int(await self._request_drive_parameter(channel, "yr"))
+
+  async def _set_y_speed(self, channel: int, speed: float) -> None:
+    """Write the Y speed a channel's drive holds (`Px AA yv`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      speed: in mm/s.
+
+    Raises:
+      ValueError: If the channel or speed is out of range.
+    """
+    await self._set_drive_parameter(channel, "yv", speed)
+
+  async def _set_y_acceleration_level(self, channel: int, level: int) -> None:
+    """Write the Y acceleration level a channel's drive holds (`Px AA yr`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      level: 1 (gentlest) to 4.
+
+    Raises:
+      ValueError: If the channel or level is out of range.
+    """
+    await self._set_drive_parameter(channel, "yr", level)
+
+  @asynccontextmanager
+  async def _temporary_y_drive_profile(
+    self,
+    speed: Optional[float] = None,
+    acceleration_level: Optional[int] = None,
+    channels: Optional[List[int]] = None,
+  ) -> AsyncIterator[None]:
+    """Set the channels' Y speed and acceleration level for the enclosed block, then the defaults.
+
+    Args:
+      speed: in mm/s, or None to leave it.
+      acceleration_level: 1 (gentlest) to 4, or None to leave it.
+      channels: which channels, 0-indexed from the back. All of them when None.
+    """
+    async with self._temporary_drive_profile({"yv": speed, "yr": acceleration_level}, channels):
+      yield
+
   # ---- z -----------------------------------------------------------------------------------------
 
   async def request_z_speed(self, channel: int) -> float:
@@ -828,9 +910,29 @@ class Pipettes:
       acceleration: in mm/s2, or None to leave it.
       channels: which channels, 0-indexed from the back. All of them when None.
     """
+    async with self._temporary_drive_profile({"zv": speed, "zr": acceleration}, channels):
+      yield
+
+  # -- the raw register access these share --
+
+  @asynccontextmanager
+  async def _temporary_drive_profile(
+    self, values: Dict[str, Optional[float]], channels: Optional[List[int]]
+  ) -> AsyncIterator[None]:
+    """Set stored drive parameters for the enclosed block, then put back the defaults.
+
+    Args:
+      values: value per parameter; None leaves that parameter.
+      channels: which channels, 0-indexed from the back. All of them when None.
+    """
     channels = list(range(self.num_channels)) if channels is None else list(channels)
-    wanted = [(p, v) for p, v in (("zv", speed), ("zr", acceleration)) if v is not None]
-    defaults = {"zv": self.default_z_speed, "zr": self.default_z_acceleration}
+    wanted = [(p, v) for p, v in values.items() if v is not None]
+    defaults: Dict[str, float] = {
+      "yv": self.default_y_speed,
+      "yr": self.default_y_acceleration_level,
+      "zv": self.default_z_speed,
+      "zr": self.default_z_acceleration,
+    }
     written: List[Tuple[int, str]] = []
     try:
       for channel in channels:
@@ -847,19 +949,17 @@ class Pipettes:
             "could not put channel %s's %s back to %s", channel, parameter, defaults[parameter]
           )
 
-  # -- the raw register access these share --
-
   def _require_drive_parameter(self, parameter: str) -> int:
     """The wire width of a channel's stored drive parameter.
 
     Args:
-      parameter: `zv` for Z speed, `zr` for Z acceleration.
+      parameter: `yv`/`zv` for Y/Z speed, `yr` for Y acceleration level, `zr` for Z acceleration.
 
     Returns:
       Its digits on the wire.
 
     Raises:
-      ValueError: If it is neither.
+      ValueError: If it is none of these.
     """
     widths = self.configuration.drive_parameters
     if parameter not in widths:
@@ -867,15 +967,23 @@ class Pipettes:
     return widths[parameter]
 
   def _drive_parameter_to_increments(self, parameter: str, value: float) -> int:
-    """A stored drive parameter in what the drive counts in, from mm/s or mm/s2."""
+    """A stored drive parameter in what the drive counts in, from mm/s, mm/s2 or a level."""
     c = self.configuration
+    if parameter == "yv":
+      return c.y_drive_mm_to_increments(value)
+    if parameter == "yr":
+      return int(value)
     if parameter == "zv":
       return c.z_drive_mm_to_increments(value)
     return c.z_drive_acceleration_mm_to_increments(value)
 
   def _drive_parameter_to_mm(self, parameter: str, increments: int) -> float:
-    """A stored drive parameter in mm/s or mm/s2, from what the drive counts in."""
+    """A stored drive parameter in mm/s, mm/s2 or a level, from what the drive counts in."""
     c = self.configuration
+    if parameter == "yv":
+      return c.y_drive_increments_to_mm(increments)
+    if parameter == "yr":
+      return increments
     if parameter == "zv":
       return c.z_drive_increments_to_mm(increments)
     return c.z_drive_acceleration_increments_to_mm(increments)
@@ -885,10 +993,10 @@ class Pipettes:
 
     Args:
       channel: which channel, 0-indexed from the back.
-      parameter: `zv` for Z speed, `zr` for Z acceleration.
+      parameter: `yv`/`zv` for Y/Z speed, `yr` for Y acceleration level, `zr` for Z acceleration.
 
     Returns:
-      The value in mm/s or mm/s2.
+      The value in mm/s, mm/s2, or a level for `yr`.
 
     Raises:
       ValueError: If the channel or parameter does not exist.
@@ -905,8 +1013,8 @@ class Pipettes:
 
     Args:
       channel: which channel, 0-indexed from the back.
-      parameter: `zv` for Z speed, `zr` for Z acceleration.
-      value: in mm/s or mm/s2.
+      parameter: `yv`/`zv` for Y/Z speed, `yr` for Y acceleration level, `zr` for Z acceleration.
+      value: in mm/s, mm/s2, or a level for `yr`.
 
     Raises:
       ValueError: If the channel, parameter or value is out of range.
@@ -914,7 +1022,12 @@ class Pipettes:
     self._require_channel(channel)
     width = self._require_drive_parameter(parameter)
     c = self.configuration
-    low, high = c.z_speed_range if parameter == "zv" else c.z_acceleration_range
+    low, high = {
+      "yv": c.y_speed_range,
+      "yr": c.y_drive_acceleration_level_range,
+      "zv": c.z_speed_range,
+      "zr": c.z_acceleration_range,
+    }[parameter]
     if not low <= value <= high:
       raise ValueError(f"{parameter} must be between {low} and {high}, is {value}")
     increments = self._drive_parameter_to_increments(parameter, value)

@@ -170,7 +170,7 @@ class TestPositionInZDirection(unittest.IsolatedAsyncioTestCase):
 
 
 class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
-  """A channel's stored Z speed and acceleration: read with `Px RA`, written with `Px AA`."""
+  """A channel's stored Y/Z speed and acceleration: read with `Px RA`, written with `Px AA`."""
 
   async def asyncSetUp(self):
     self.pipettes = await simulated_channels()
@@ -178,7 +178,7 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
 
     async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
       self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
-      return {"zr": 75, "zv": 12000} if command == "RA" else None
+      return {"zr": 75, "zv": 12000, "yv": 6000, "yr": 4} if command == "RA" else None
 
     self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
 
@@ -194,7 +194,7 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
 
   async def test_refused_sends_nothing(self):
     with self.assertRaises(ValueError):
-      await self.pipettes._set_drive_parameter(0, "yv", 100.0)
+      await self.pipettes._set_drive_parameter(0, "xv", 100.0)
     with self.assertRaises(ValueError):
       await self.pipettes._set_z_acceleration(0, 2000.0)
     with self.assertRaises(ValueError):
@@ -213,6 +213,35 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
       async with self.pipettes._temporary_z_drive_profile(acceleration=150.0, channels=[7]):
         raise RuntimeError("the block")
     self.assertEqual(self.sent, ["P8AAzr014", "P8AAzr075"])
+
+  async def test_request_y(self):
+    self.assertEqual(await self.pipettes.request_y_speed(7), 277.81)
+    self.assertEqual(await self.pipettes.request_y_acceleration_level(7), 4)
+    self.assertEqual(self.sent, ["P8RArayv", "P8RArayr"])
+
+  async def test_set_y(self):
+    await self.pipettes._set_y_speed(7, 250.0)
+    await self.pipettes._set_y_acceleration_level(7, 1)
+    self.assertEqual(self.sent, ["P8AAyv5399", "P8AAyr1"])
+
+  async def test_refused_y_sends_nothing(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes._set_y_acceleration_level(7, 5)
+    with self.assertRaises(ValueError):
+      await self.pipettes._set_y_speed(7, 400.0)
+    self.assertEqual(self.sent, [])
+
+  async def test_y_profile_sets_then_puts_back_the_defaults(self):
+    async with self.pipettes._temporary_y_drive_profile(
+      speed=46.3, acceleration_level=1, channels=[7]
+    ):
+      self.assertEqual(self.sent, ["P8AAyv1000", "P8AAyr1"])
+    self.assertEqual(self.sent[2:], ["P8AAyv5399", "P8AAyr3"])
+
+  async def test_profile_touches_only_the_named_channels(self):
+    async with self.pipettes._temporary_y_drive_profile(acceleration_level=1, channels=[6, 7]):
+      pass
+    self.assertEqual(self.sent, ["P7AAyr1", "P8AAyr1", "P7AAyr3", "P8AAyr3"])
 
 
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
