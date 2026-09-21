@@ -1,10 +1,17 @@
+import os
+import tempfile
 import unittest
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.hamilton import HamiltonTip, hamilton_tip_300uL
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.hamilton import (
+  HamiltonTip,
+  hamilton_96_tiprack_50uL_NTR,
+  hamilton_tip_300uL,
+)
 from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipRack, TipSpot
+from pylabrobot.resources.tip_rack import NestedTipRack, TipRack, TipSpot
 
 
 class SimpleTipRack(TipRack):
@@ -73,3 +80,44 @@ class TipRackNamingTests(unittest.TestCase):
     self.assertEqual(first.rotation.z, 90)
     self.assertEqual(first.metadata, {"batch": "example"})
     self.assertIsNone(first.location)
+
+
+class NestedTipRackTests(unittest.TestCase):
+  """Tests for NestedTipRack."""
+
+  def test_deserialize_round_trip(self):
+    rack = hamilton_96_tiprack_50uL_NTR("rack")
+
+    restored = NestedTipRack.deserialize(rack.serialize())
+
+    self.assertEqual(restored.stacking_z_height, rack.stacking_z_height)
+    self.assertEqual(restored.model, rack.model)
+    self.assertEqual(restored.num_items, rack.num_items)
+
+  def test_copy_stacks_like_original(self):
+    rack = hamilton_96_tiprack_50uL_NTR("rack")
+    copied = rack.copy()
+
+    rack.assign_child_resource(hamilton_96_tiprack_50uL_NTR("stacked_on_rack"))
+    copied.assign_child_resource(hamilton_96_tiprack_50uL_NTR("stacked_on_copy"))
+
+    self.assertEqual(copied.stacking_z_height, rack.stacking_z_height)
+    self.assertEqual(
+      copied.get_resource("stacked_on_copy").location,
+      rack.get_resource("stacked_on_rack").location,
+    )
+
+  def test_save_and_load_deck(self):
+    deck = Deck(size_x=1000, size_y=1000, size_z=1000)
+    rack = hamilton_96_tiprack_50uL_NTR("rack")
+    deck.assign_child_resource(rack, location=Coordinate(100, 100, 0))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+      fn = os.path.join(tmp_dir, "deck.json")
+      deck.save(fn)
+      loaded = Deck.load_from_json_file(fn)
+
+    loaded_rack = loaded.get_resource("rack")
+    assert isinstance(loaded_rack, NestedTipRack)
+    self.assertEqual(loaded_rack.stacking_z_height, rack.stacking_z_height)
+    self.assertEqual(loaded_rack.location, rack.location)
