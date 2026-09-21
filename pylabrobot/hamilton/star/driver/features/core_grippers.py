@@ -209,7 +209,7 @@ class CoreGrippers:
     back_channel: Optional[int] = None,
     front_channel: Optional[int] = None,
   ) -> None:
-    """Pick up the tools (`C0 ZT`) as tip type 14, then raise every channel to safe Z.
+    """Pick up the tools (`C0 ZT`) as tip type 14; to safe Z only if it fails.
 
     Args:
       tool_position_x: the tools' x, in mm.
@@ -287,7 +287,7 @@ class CoreGrippers:
       raise
     finally:
       await pipettes._record_after_tip_command()
-    await pipettes.move_to_safe_z()
+    # No safe Z on success: ZT leaves the tools' lowest point at `th`, the traverse height.
     self._back_channel, self._front_channel = back_channel, front_channel
     self._tools_taken_from = (
       tool_position_x,

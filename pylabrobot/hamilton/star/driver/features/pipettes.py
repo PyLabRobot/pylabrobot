@@ -22,7 +22,7 @@ from typing import (
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import channels_that_faulted
-from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
+from pylabrobot.hamilton.star.driver.lock import CHANNEL_MODULE_LETTERS, _FirmwareLock
 from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
@@ -42,11 +42,6 @@ ChannelType = Literal["ML_STAR", "ML_STAR_RPC"]
 HeadType = Literal["ML_STAR", "ML_STAR_PLE", "ML_STAR_RPC"]
 StopDiscType = Literal["core_i", "core_ii"]
 PressureADC = Literal["Renesas_X9268", "Analog_Devices_AD5263"]
-
-
-# The letters a channel's module is addressed by, in order from the back. `channel_id` spells an
-# address with them and `channel_from_module` reads one back.
-CHANNEL_MODULE_LETTERS = "123456789ABCDEFG"
 
 
 @dataclass
@@ -1587,8 +1582,10 @@ class Pipettes:
     await self._driver.send_command(module="C0", command="ZA", subsystem=_FirmwareLock.CHANNELS)
 
     positions = await self.request_stop_disc_z_positions()
-    reached = list(positions.values())
-    if max(reached) - min(reached) > self.configuration.z_drive_increments_to_mm(1):
+    # Only the bare channels are compared: with a tip or tool on, the drive rises to its very top.
+    presence = await self.sense_tip_presence()
+    bare = [z for channel, z in positions.items() if not presence[channel]]
+    if bare and max(bare) - min(bare) > self.configuration.z_drive_increments_to_mm(1):
       logger.warning("the channels came to rest at different heights: %s", positions)
 
     return positions

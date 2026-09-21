@@ -115,7 +115,7 @@ class TestPickUpAndDropTools(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       self.tool_commands(), ["C0ZTxs13375xd0ya1250yb1070pa07pb08tp2350tz2250th2800tt14"]
     )
-    self.assertEqual(self.safe_z_moves(), ["C0ZA"])
+    self.assertEqual(self.safe_z_moves(), [])
 
   async def test_a_named_pair(self):
     await self.grippers.pick_up_tools_at_location(
