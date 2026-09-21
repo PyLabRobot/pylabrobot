@@ -30,7 +30,7 @@ class HeadToolTests(unittest.TestCase):
         "size_z": 32.0,
         "category": "core_gripper_tool",
         "model": "hamilton_core_gripper_tool",
-        "total_length": 30.0,
+        "grip_line_height": 2.0,
         "fitting_depth": 8.0,
         "collar_height": 10.0,
         "pick_up_location": {"x": 18.0, "y": 4.25, "z": 32.0, "type": "Coordinate"},

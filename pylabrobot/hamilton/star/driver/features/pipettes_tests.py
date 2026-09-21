@@ -195,12 +195,15 @@ class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
     overhang = await self.pipettes.request_tip_overhang(0)
     self.assertAlmostEqual(overhang, self.tip.get_size_z() - self.tip.fitting_depth, places=1)
 
-  async def test_the_grip_tool_reaches_to_its_grip_line_as_the_firmware_counts_it(self):
-    """The firmware counts the grip tool to its grip line, 30 mm, not to its 32 mm bottom."""
+  async def test_the_grip_tool_is_positioned_by_its_grip_line(self):
+    """The grip line sits 2 mm above the bottom of the 32 mm body."""
     from pylabrobot.resources.hamilton import hamilton_core_gripper_tool
 
     self.shaft.mount_tip(hamilton_core_gripper_tool(name="grip"))
-    self.assertAlmostEqual(await self.pipettes.request_tip_overhang(0), 30.0 - 8.0, places=1)
+    self.assertAlmostEqual(await self.pipettes.request_tip_overhang(0), 22.0, places=1)
+    await self.pipettes.move_tool_bottom_to_z_positions({0: 200.0})
+    self.assertAlmostEqual(await self.pipettes.request_stop_disc_z_position(0), 222.0, places=1)
+    self.assertAlmostEqual(await self.pipettes.request_tool_bottom_z_position(0), 200.0, places=1)
 
   async def test_moving_the_tip_end_puts_the_stop_disc_an_overhang_higher(self):
     self.shaft.mount_tip(self.tip)

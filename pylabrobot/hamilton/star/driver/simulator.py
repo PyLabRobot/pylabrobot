@@ -177,15 +177,15 @@ class SimulatedPipettes(_Simulated, Pipettes):
     return channel < len(mounted) and mounted[channel]
 
   def _below_stop_disc(self, channel: int) -> float:
-    """How far a channel's lowest point sits below its stop disc, in mm, as the firmware counts it.
+    """How far the tool's Z reference sits below its stop disc, in mm.
 
-    The firmware counts the CO-RE grip tool to its grip line, `total_length` below its top.
+    CO-RE grippers are measured at the grip line; tips are measured at their bottom.
     """
     shaft = self._shaft(channel)
     if shaft is None:
       return 0.0
     if isinstance(shaft.tip, HamiltonCoreGripperTool):
-      return shaft.tip.total_length - shaft.tip.fitting_depth
+      return -shaft.tip_bottom().z - shaft.tip.grip_line_height
     return -shaft.tip_bottom().z
 
   def _modelled_y(self, channel: int) -> float:

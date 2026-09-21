@@ -10,11 +10,7 @@ from pylabrobot.resources.head_tool import HeadTool
 
 
 class HamiltonCoreGripperTool(HeadTool):
-  """A CO-RE grip tool, picked up by a pair of channels to grip a plate.
-
-  `total_length` runs from the top of the tool to its grip line, the axis through its pins, which the
-  firmware's grip heights refer to.
-  """
+  """A CO-RE grip tool, picked up by a pair of channels to grip a plate."""
 
   def __init__(
     self,
@@ -22,7 +18,7 @@ class HamiltonCoreGripperTool(HeadTool):
     size_x: float,
     size_y: float,
     size_z: float,
-    total_length: float,
+    grip_line_height: float,
     fitting_depth: float,
     collar_height: Optional[float] = None,
     category: str = "core_gripper_tool",
@@ -32,7 +28,7 @@ class HamiltonCoreGripperTool(HeadTool):
     """Initialize a CO-RE gripper tool.
 
     Args:
-      total_length: distance from the top of the collar to the grip line, in mm.
+      grip_line_height: height of the axis through the gripping pins above the tool's bottom, in mm.
     """
 
     super().__init__(
@@ -45,28 +41,24 @@ class HamiltonCoreGripperTool(HeadTool):
       model=model,
       pick_up_location=pick_up_location,
     )
-    self._total_length = total_length
+    self.grip_line_height = grip_line_height
     self.collar_height = collar_height
     self.tip_size = TipSize.UNDEFINED
     self.pickup_method = TipPickupMethod.OUT_OF_RACK
 
-  @property
-  def total_length(self) -> float:
-    return self._total_length
-
   def __eq__(self, other: object) -> bool:
-    """Compare resource geometry and the grip line and collar height."""
+    """Compare resource geometry, grip line height, and collar height."""
     return (
       isinstance(other, HamiltonCoreGripperTool)
       and super().__eq__(other)
-      and self.total_length == other.total_length
+      and self.grip_line_height == other.grip_line_height
       and self.collar_height == other.collar_height
     )
 
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "total_length": self.total_length,
+      "grip_line_height": self.grip_line_height,
       "collar_height": self.collar_height,
     }
 
@@ -76,16 +68,15 @@ def hamilton_core_gripper_tool(name: str) -> HamiltonCoreGripperTool:
 
   Hamilton cat. no.: 186100 (firmware tip type 14)
 
-  36 x 8.346 x 32 mm, lying along x with its pins pointing +y. Its grip line is 30 mm below its top,
-  as in the firmware's tip table. The collar is 10 mm tall; its opening is off
-  centre in y, at 4.25.
+  36 x 8.346 x 32 mm, lying along x with its pins pointing +y. The grip line is 2 mm above
+  the tool's bottom. The collar is 10 mm tall; its opening is off centre in y, at 4.25.
   """
   return HamiltonCoreGripperTool(
     name=name,
     size_x=36.0,
     size_y=8.346,
     size_z=32.0,
-    total_length=30.0,
+    grip_line_height=2.0,
     fitting_depth=8.0,
     collar_height=10.0,
     model=hamilton_core_gripper_tool.__name__,
