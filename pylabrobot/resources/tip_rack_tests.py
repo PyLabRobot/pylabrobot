@@ -10,8 +10,11 @@ from pylabrobot.resources.hamilton import (
   hamilton_tip_300uL,
 )
 from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
+from pylabrobot.resources.lid import Lid
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.resource_stack import ResourceStack
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import NestedTipRack, TipRack, TipSpot
+from pylabrobot.resources.tip_rack import NestedTipRack, StandingTipRack, TipRack, TipSpot
 
 
 class SimpleTipRack(TipRack):
@@ -121,3 +124,51 @@ class NestedTipRackTests(unittest.TestCase):
     assert isinstance(loaded_rack, NestedTipRack)
     self.assertEqual(loaded_rack.stacking_z_height, rack.stacking_z_height)
     self.assertEqual(loaded_rack.location, rack.location)
+
+
+class TipRackLidTests(unittest.TestCase):
+  def _lid(self, name="lid"):
+    return Lid(name, size_x=10, size_y=10, size_z=10, nesting_z_height=2)
+
+  def test_a_lid_seats_on_the_top_face_and_covers_the_rack(self):
+    rack = StandingTipRack("rack", size_x=10, size_y=10, size_z=55, ordered_items={})
+    self.assertTrue(rack._available)
+    rack.lid = self._lid()
+    self.assertEqual(rack.lid.location, Coordinate(0, 0, 53))
+    self.assertFalse(rack._available)
+    with self.assertRaisesRegex(ValueError, "already has a lid"):
+      rack.lid = self._lid("lid_2")
+
+  def test_only_the_top_rack_of_a_stack_is_available(self):
+    lower = StandingTipRack("lower", size_x=10, size_y=10, size_z=55, ordered_items={})
+    upper = StandingTipRack("upper", size_x=10, size_y=10, size_z=55, ordered_items={})
+    stack = ResourceStack("stack", "z")
+    stack.assign_child_resource(lower)
+    stack.assign_child_resource(upper)
+    self.assertFalse(lower._available)
+    self.assertTrue(upper._available)
+
+  def test_a_nested_tip_rack_takes_a_lid(self):
+    rack = NestedTipRack(
+      "rack", size_x=10, size_y=10, size_z=20, stacking_z_height=12, ordered_items={}
+    )
+    rack.lid = self._lid()
+    self.assertEqual(rack.lid.location, Coordinate(0, 0, 18))
+
+
+class StandingTipRackTests(unittest.TestCase):
+  def test_serialize_round_trip(self):
+    rack = StandingTipRack(
+      "rack",
+      size_x=10,
+      size_y=10,
+      size_z=55,
+      ordered_items={},
+      stacking_z_height=16,
+      frame_height=3,
+    )
+    restored = Resource.deserialize(rack.serialize())
+    assert isinstance(restored, StandingTipRack)
+    self.assertEqual(restored.stacking_z_height, 16)
+    self.assertEqual(restored.frame_height, 3)
+    self.assertEqual(restored, rack)
