@@ -45,6 +45,7 @@ def _make_grippers(deck: PrepDeck, stub_pick_and_drop: bool = True) -> Tuple[Cor
     move_tool_bottom_to_z_positions=AsyncMock(),
     move_to_y_positions=AsyncMock(),
     move_to_xy_positions=AsyncMock(),
+    _record_where_they_stopped=AsyncMock(),
     # Where PRPAA1087 had the jaws once a plate was gripped and raised: centred on it, at Z safety.
     request_locations=AsyncMock(
       return_value=[Coordinate(62.55, 84.47, 144.6), Coordinate(62.55, 4.0, 144.6)]
@@ -82,6 +83,7 @@ def _make_grippers(deck: PrepDeck, stub_pick_and_drop: bool = True) -> Tuple[Cor
     move_tool_bottom_to_z_positions=pipettes.move_tool_bottom_to_z_positions,
     move_to_safe_z=pipettes.move_to_safe_z,
     request_locations=pipettes.request_locations,
+    record_where_they_stopped=pipettes._record_where_they_stopped,
     move_to_xy_positions=pipettes.move_to_xy_positions,
     order=order,
   )
@@ -952,3 +954,54 @@ def test_a_held_move_hands_the_x_speed_and_acceleration_it_is_given_to_the_x_axi
     assert profiles[2:] == [(None, 600.0)]  # once for the whole drop, the carry inside it included
 
   asyncio.run(_run())
+
+
+def test_every_firmware_move_records_where_the_channels_stopped_even_when_refused():
+  """The model follows the device: after each command that moves the channels, worked or not."""
+
+  async def run(kind: type, refused: bool) -> List[str]:
+    deck = PrepDeck(with_core_grippers=True)
+    plate = deck[0] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    grippers, commands = _make_grippers(deck, stub_pick_and_drop=False)
+    pipettes: Any = grippers._driver.pipettes
+    pipettes._resolve_traverse_height = lambda: 167.5
+    pipettes._record_channel_bounds = AsyncMock()
+    pipettes._record_where_they_stopped.side_effect = lambda: commands.order.append("record")
+    sent = commands.send_command.side_effect
+
+    async def send(command, **kwargs):
+      sent(command, **kwargs)
+      if refused and isinstance(command, kind):
+        raise RuntimeError("refused")
+
+    commands.send_command.side_effect = send
+    steps = {
+      PrepCmd.PrepPickUpTool: lambda: grippers.pick_up_tools_at_location(100.0, 50.0, 60.0, 90.0),
+      PrepCmd.PrepDropTool: lambda: grippers.drop_tools(move_to_safe_z_first=False),
+      PrepCmd.PrepPickUpPlate: lambda: grippers.pick_up_resource(plate),
+      PrepCmd.PrepMovePlate: lambda: grippers.move_resource_to_xy_position(x=150.0),
+      PrepCmd.PrepDropPlate: lambda: grippers.return_resource(),
+      PrepCmd.PrepReleasePlate: lambda: grippers.release_plate(),
+    }
+    if kind in (PrepCmd.PrepMovePlate, PrepCmd.PrepDropPlate, PrepCmd.PrepReleasePlate):
+      await grippers.pick_up_resource(plate)
+      commands.order.clear()
+    try:
+      await steps[kind]()
+    except RuntimeError as e:
+      assert refused and str(e) == "refused"
+    order: List[str] = commands.order
+    return order
+
+  for kind in (
+    PrepCmd.PrepPickUpTool,
+    PrepCmd.PrepDropTool,
+    PrepCmd.PrepPickUpPlate,
+    PrepCmd.PrepMovePlate,
+    PrepCmd.PrepDropPlate,
+    PrepCmd.PrepReleasePlate,
+  ):
+    for refused in (False, True):
+      order = asyncio.run(run(kind, refused))
+      at = order.index(kind.__name__)
+      assert order[at + 1] == "record", (kind.__name__, refused, order)

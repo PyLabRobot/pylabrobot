@@ -160,7 +160,7 @@ class CoreGrippers:
         "first."
       )
 
-  def _plate_top(self, grip: Coordinate) -> PrepCmd.XYZCoord:
+  def _compute_plate_top(self, grip: Coordinate) -> PrepCmd.XYZCoord:
     """The firmware's `plate_top_center` for a plate whose jaws are to be at `grip`.
 
     Move and drop are told the plate's top and put the jaws the pick-up's offset below it, so a grip
@@ -417,10 +417,14 @@ class CoreGrippers:
     back, front = locations[self._back_channel], locations[self._front_channel]
     x = back.x if x is None else x
     y = (back.y + front.y) / 2 if y is None else y
-    async with self._temporary_x_axis_profile(x_speed, x_acceleration):
-      await self._unchecked_fw_move_resource(
-        self._plate_top(Coordinate(x, y, back.z)), acceleration_scale_x=acceleration_scale_x
-      )
+    try:
+      async with self._temporary_x_axis_profile(x_speed, x_acceleration):
+        await self._unchecked_fw_move_resource(
+          self._compute_plate_top(Coordinate(x, y, back.z)),
+          acceleration_scale_x=acceleration_scale_x,
+        )
+    finally:
+      await self._pipettes._record_where_they_stopped()
     self._plate_top_center = Coordinate(x, y, back.z + self._plate_top_z_offset)
 
   # ----------------------------------------
@@ -470,6 +474,8 @@ class CoreGrippers:
       await self._pipettes.move_to_safe_z()
       await self._pipettes._record_channel_bounds()
       raise
+    finally:
+      await self._pipettes._record_where_they_stopped()
     await self._pipettes.move_to_safe_z()
     await self._pipettes._record_channel_bounds()
 
@@ -480,7 +486,10 @@ class CoreGrippers:
     """
     if move_to_safe_z_first:
       await self._pipettes.move_to_safe_z()
-    await self._driver.send_command(PrepCmd.PrepDropTool())
+    try:
+      await self._driver.send_command(PrepCmd.PrepDropTool())
+    finally:
+      await self._pipettes._record_where_they_stopped()
     await self._pipettes._record_channel_bounds()
 
   # -- mounting ------------------------------------------------------------------------------------
@@ -591,12 +600,12 @@ class CoreGrippers:
     )
     return 5.0
 
-  def _resource_width(self, resource: Resource) -> float:
+  def _compute_resource_width(self, resource: Resource) -> float:
     if self._grip_axis == "y":
       return resource.get_absolute_size_y()
     return resource.get_absolute_size_x()
 
-  def _pickup_location(
+  def _compute_pickup_location(
     self,
     resource: Resource,
     offset: Coordinate,
@@ -611,7 +620,7 @@ class CoreGrippers:
       loc.x, loc.y, loc.z + resource.get_absolute_size_z() - pickup_distance_from_top
     )
 
-  def _drop_location(
+  def _compute_drop_location(
     self, destination: Resource, offset: Coordinate, child: Optional[Coordinate] = None
   ) -> Coordinate:
     if self._held_resource is None or self._pickup_distance_from_top is None:
@@ -698,16 +707,19 @@ class CoreGrippers:
     # The firmware lifts it as part of the pick-up.
     async with self._temporary_z_drive_acceleration(z_acceleration, holding=True):
       async with self._temporary_x_axis_profile(x_acceleration=x_acceleration, holding=True):
-        await self._driver.send_command(
-          PrepCmd.PrepPickUpPlate(
-            plate_top_center=plate_top_center,
-            plate=plate_dims,
-            clearance_y=clearance_y,
-            grip_speed_y=grip_speed_y,
-            grip_distance=grip_distance,
-            grip_height=location.z,
+        try:
+          await self._driver.send_command(
+            PrepCmd.PrepPickUpPlate(
+              plate_top_center=plate_top_center,
+              plate=plate_dims,
+              clearance_y=clearance_y,
+              grip_speed_y=grip_speed_y,
+              grip_distance=grip_distance,
+              grip_height=location.z,
+            )
           )
-        )
+        finally:
+          await self._pipettes._record_where_they_stopped()
         await self._raise_to_traverse(minimum_traverse_height_end)
     self._plate_top_center = Coordinate(location.x, location.y, location.z + plate_top_z_offset)
     self._plate_top_z_offset = plate_top_z_offset
@@ -753,20 +765,26 @@ class CoreGrippers:
         await self.move_resource_to_xy_position(
           location.x, location.y, acceleration_scale_x=acceleration_scale_x
         )
-        plate_top_center = self._plate_top(location)
-        await self._driver.send_command(
-          PrepCmd.PrepDropPlate(
-            plate_top_center=plate_top_center,
-            clearance_y=clearance_y,
-            acceleration_scale_x=acceleration_scale_x,
+        plate_top_center = self._compute_plate_top(location)
+        try:
+          await self._driver.send_command(
+            PrepCmd.PrepDropPlate(
+              plate_top_center=plate_top_center,
+              clearance_y=clearance_y,
+              acceleration_scale_x=acceleration_scale_x,
+            )
           )
-        )
+        finally:
+          await self._pipettes._record_where_they_stopped()
     await self._raise_to_traverse(minimum_traverse_height_end)
     self._clear_held_state()
 
   async def release_plate(self) -> None:
     """Open the CoRe gripper and release whatever is held (PrepReleasePlate, cmd=21)."""
-    await self._driver.send_command(PrepCmd.PrepReleasePlate())
+    try:
+      await self._driver.send_command(PrepCmd.PrepReleasePlate())
+    finally:
+      await self._pipettes._record_where_they_stopped()
     self._clear_held_state()
 
   # -- by resource ---------------------------------------------------------------------------------
@@ -798,13 +816,13 @@ class CoreGrippers:
     source = (resource.parent, resource.location)
     from_top = self._resolve_pickup_distance(resource, pickup_distance_from_top)
     if resource_width is None:
-      resource_width = self._resource_width(resource)
+      resource_width = self._compute_resource_width(resource)
     if resource_length is None:
       resource_length = resource.get_absolute_size_x()
     if resource_height is None:
       resource_height = resource.get_absolute_size_z()
 
-    location = self._pickup_location(resource, offset, from_top)
+    location = self._compute_pickup_location(resource, offset, from_top)
     await self._pick_up_at(
       location,
       resource_width,
@@ -878,7 +896,7 @@ class CoreGrippers:
       )
     held = self._held_resource
     destination.check_can_drop_resource_here(held)
-    location = self._drop_location(destination, offset, child)
+    location = self._compute_drop_location(destination, offset, child)
     await self._drop_at(
       location,
       clearance_y=clearance_y,
