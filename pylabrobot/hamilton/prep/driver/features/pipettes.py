@@ -2542,12 +2542,12 @@ class Pipettes:
     channel = self.channels[channel_idx]
     offset = await arm.request_axis_offset()
     step = 0.1  # mm between status reads
-    # The steps are what the search is: a velocity above them only overshoots between reads, and one
+    # The steps are what the search is: a speed above them only overshoots between reads, and one
     # below them makes the search take longer than the surface is worth.
     speed = 5.0
     try:
       async with (
-        arm._temporary_x_axis_profile(velocity=speed),
+        arm._temporary_x_axis_profile(speed=speed),
         channel.clld_detection(detect_mode, sensitivity),
       ):
         x = here
@@ -2566,7 +2566,7 @@ class Pipettes:
     self,
     yaxis: Address,
     position: float,
-    velocity: float,
+    speed: float,
     detect_mode: int,
     sensitivity: int,
     read_timeout: Optional[float] = None,
@@ -2576,7 +2576,7 @@ class Pipettes:
     Args:
       yaxis: the channel's Y axis.
       position: search end in the channel's Y drive frame, in mm.
-      velocity: search speed in mm/s.
+      speed: search speed in mm/s.
       detect_mode: cLLD detect mode.
       sensitivity: cLLD sensitivity.
       read_timeout: answer timeout in seconds. Defaults to the link's.
@@ -2588,7 +2588,7 @@ class Pipettes:
       PrepCmd.PrepYAxisSeekCapacitiveLld(
         dest=yaxis,
         position=position,
-        velocity=velocity,
+        velocity=speed,
         detect_mode=detect_mode,
         sensitivity=sensitivity,
       ),
@@ -2746,7 +2746,7 @@ class Pipettes:
       result = await self._unchecked_fw_y_axis_seek_capacitive_lld(
         channel.yaxis,
         position=end + offset,
-        velocity=speed,
+        speed=speed,
         detect_mode=detect_mode,
         sensitivity=self.default_clld_sensitivity if sensitivity is None else sensitivity,
         read_timeout=abs(end - here.y) / speed + 30,
@@ -2910,7 +2910,7 @@ class Pipettes:
     start_position: float,
     end_position: float,
     final_position: float,
-    velocity: float,
+    speed: float,
     read_timeout: Optional[float] = None,
   ) -> PrepCmd.PrepZAxisSeekObstacle.Response:
     """Send `ZAxis.SeekObstacle` without checks.
@@ -2920,7 +2920,7 @@ class Pipettes:
       start_position: search start in the channel's Z drive frame, in mm.
       end_position: search end in the channel's Z drive frame, in mm.
       final_position: height to finish at in the channel's Z drive frame, in mm.
-      velocity: search speed in mm/s.
+      speed: search speed in mm/s.
       read_timeout: answer timeout in seconds. Defaults to the link's.
 
     Returns:
@@ -2932,7 +2932,7 @@ class Pipettes:
         start_position=start_position,
         end_position=end_position,
         final_position=final_position,
-        velocity=velocity,
+        velocity=speed,
       ),
       read_timeout=read_timeout,
     )
@@ -3055,7 +3055,7 @@ class Pipettes:
           start_position=start + extension + offset,
           end_position=floor + extension + offset,
           final_position=final + extension + offset,
-          velocity=speed,
+          speed=speed,
           read_timeout=(abs(here.z - start) + start - floor) / speed + 30,
         )
     finally:

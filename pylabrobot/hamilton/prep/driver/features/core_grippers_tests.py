@@ -894,7 +894,7 @@ def test_a_held_resource_moves_at_its_x_acceleration_set_once_per_stretch():
   x_arm: Any = grippers._driver.x_arm
 
   @asynccontextmanager
-  async def profile(velocity: Optional[float] = None, acceleration: Optional[float] = None):
+  async def profile(speed: Optional[float] = None, acceleration: Optional[float] = None):
     commands.order.append(f"x_acceleration={acceleration}")
     yield
     commands.order.append("x_acceleration restored")

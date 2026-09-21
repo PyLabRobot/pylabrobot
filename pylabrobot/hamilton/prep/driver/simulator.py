@@ -94,7 +94,7 @@ SIMULATED_Z_DRIVE_PWM = 125
 SIMULATED_CLLD_PROBE_DIAMETER = 7.0
 # The reported X less the X axis's own position, in mm, as on PRPAA1087 (V1.2.2).
 SIMULATED_X_AXIS_OFFSET = 0.193
-SIMULATED_X_VELOCITY = 400.0
+SIMULATED_X_SPEED = 400.0
 SIMULATED_X_ACCELERATION = 2250.0
 
 # The speed scales PRPAA1087 read, in percent. A simulated device keeps none.
@@ -863,9 +863,7 @@ class SimulatedXArm(_Simulated, XArm):
         value=x - SIMULATED_X_AXIS_OFFSET
       ), "where the model has the arm"
     if isinstance(request, PrepCmd.PrepXAxisGetVelocity):
-      return PrepCmd.PrepXAxisGetVelocity.Response(
-        value=SIMULATED_X_VELOCITY
-      ), "PRPAA1087's profile"
+      return PrepCmd.PrepXAxisGetVelocity.Response(value=SIMULATED_X_SPEED), "PRPAA1087's profile"
     if isinstance(request, PrepCmd.PrepXAxisGetAcceleration):
       return (
         PrepCmd.PrepXAxisGetAcceleration.Response(value=SIMULATED_X_ACCELERATION),

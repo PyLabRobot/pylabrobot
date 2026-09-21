@@ -49,9 +49,8 @@ class XArmConfiguration:
   )
   """How the viewer draws the arm: silver, and metallic."""
   speed_per_scale_percent: float = 6.0
-  """How fast the gantry may drive X per percent of MLPrep's X speed scale, in mm/s. Measured on
-  PRPAA1087 (V1.2.2): the X axis profile velocity is this times the scale, up to the top of
-  `speed_range`."""
+  """How fast the gantry may drive X per percent of MLPrep's X speed scale, in mm/s. Measured: the
+  X axis speed is this times the scale, up to the top of `speed_range`."""
   speed_range: Tuple[float, float] = (0.0, 400.0)
   """X speed window in mm/s: above the first, up to the second, the fastest the axis drives."""
 
@@ -184,15 +183,15 @@ class XArm:
     response = await self._driver.send_command(PrepCmd.PrepXAxisGetCommandedPosition())
     return float(response.value)
 
-  async def request_velocity(self) -> float:
-    """Request the X axis velocity.
+  async def request_speed(self) -> float:
+    """Request the speed the X axis drives at (`XAxis.GetVelocity`).
 
     Returns:
-      The velocity in mm/s.
+      The speed in mm/s.
     """
     return float((await self._driver.send_command(PrepCmd.PrepXAxisGetVelocity())).value)
 
-  # manage velocity and acceleration ----------------------------------------------
+  # manage speed and acceleration -------------------------------------------------
 
   async def request_acceleration(self) -> float:
     """Request the X axis acceleration.
@@ -202,13 +201,13 @@ class XArm:
     """
     return float((await self._driver.send_command(PrepCmd.PrepXAxisGetAcceleration())).value)
 
-  async def _unchecked_fw_set_velocity(self, velocity: float) -> None:
+  async def _unchecked_fw_set_speed(self, speed: float) -> None:
     """Send `XAxis.SetVelocity` without checks.
 
     Args:
-      velocity: velocity in mm/s.
+      speed: speed in mm/s.
     """
-    await self._driver.send_command(PrepCmd.PrepXAxisSetVelocity(value=velocity))
+    await self._driver.send_command(PrepCmd.PrepXAxisSetVelocity(value=speed))
 
   async def _unchecked_fw_set_acceleration(self, acceleration: float) -> None:
     """Send `XAxis.SetAcceleration` without checks.
@@ -220,30 +219,30 @@ class XArm:
 
   @asynccontextmanager
   async def _temporary_x_axis_profile(
-    self, velocity: Optional[float] = None, acceleration: Optional[float] = None
+    self, speed: Optional[float] = None, acceleration: Optional[float] = None
   ) -> AsyncIterator[None]:
-    """Set the X axis velocity and acceleration for the enclosed block, then restore each.
+    """Set the X axis speed and acceleration for the enclosed block, then restore each.
 
     A value that cannot be restored is logged, not raised.
 
     Args:
-      velocity: velocity in mm/s, or None to leave it.
+      speed: speed in mm/s, or None to leave it.
       acceleration: acceleration in mm/s2, or None to leave it.
     """
-    velocity_before = None if velocity is None else await self.request_velocity()
+    speed_before = None if speed is None else await self.request_speed()
     acceleration_before = None if acceleration is None else await self.request_acceleration()
     try:
-      if velocity is not None:
-        await self._unchecked_fw_set_velocity(velocity)
+      if speed is not None:
+        await self._unchecked_fw_set_speed(speed)
       if acceleration is not None:
         await self._unchecked_fw_set_acceleration(acceleration)
       yield
     finally:
-      if velocity_before is not None:
+      if speed_before is not None:
         try:
-          await self._unchecked_fw_set_velocity(velocity_before)
+          await self._unchecked_fw_set_speed(speed_before)
         except Exception:
-          logger.warning("could not restore the X axis velocity to %s", velocity_before)
+          logger.warning("could not restore the X axis speed to %s", speed_before)
       if acceleration_before is not None:
         try:
           await self._unchecked_fw_set_acceleration(acceleration_before)
@@ -321,7 +320,7 @@ class XArm:
       )
     offset = await self.request_axis_offset()
     try:
-      async with self._temporary_x_axis_profile(velocity=speed, acceleration=acceleration):
+      async with self._temporary_x_axis_profile(speed=speed, acceleration=acceleration):
         await self._unchecked_fw_move_absolute(x - offset)
         self.update_location_by_reference_point(x)
     finally:
@@ -390,7 +389,7 @@ class XArm:
         )
     offset = await self.request_axis_offset()
     try:
-      async with self._temporary_x_axis_profile(velocity=speed):
+      async with self._temporary_x_axis_profile(speed=speed):
         tripped = await self._unchecked_fw_seek_to_home_flag(
           distance, travel_limits_enable, trip_sense
         )

@@ -14,7 +14,7 @@ from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.prep.driver.simulator import (
   SIMULATED_X_AXIS_OFFSET,
-  SIMULATED_X_VELOCITY,
+  SIMULATED_X_SPEED,
   SIMULATED_Y_DRIVE_OFFSETS,
   SIMULATED_Z_DRIVE_OFFSETS,
 )
@@ -647,7 +647,7 @@ def test_probe_x_using_clld_steps_the_arm_with_detection_on_and_puts_everything_
     )
     assert sent[stop].dest == channel.calibration
     assert _last_before(sent, PrepCmd.PrepXAxisSetVelocity, steps[0]).value == 5.0
-    assert _last_after(sent, PrepCmd.PrepXAxisSetVelocity, steps[-1]).value == SIMULATED_X_VELOCITY
+    assert _last_after(sent, PrepCmd.PrepXAxisSetVelocity, steps[-1]).value == SIMULATED_X_SPEED
     assert await p.x_arm.request_position() == pytest.approx(here - 0.5)
     await p.stop()
 
