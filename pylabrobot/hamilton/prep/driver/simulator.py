@@ -16,9 +16,11 @@ no positions of its own. A read nothing here answers is refused with an exceptio
 a command that has not been simulated makes itself known.
 """
 
+import asyncio
 import dataclasses
 import json
 import logging
+import math
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple, cast, get_type_hints
 
@@ -97,6 +99,10 @@ SIMULATED_CLLD_PROBE_DIAMETER = 7.0
 SIMULATED_X_AXIS_OFFSET = 0.193
 SIMULATED_X_SPEED = 400.0
 SIMULATED_X_ACCELERATION = 2250.0
+# How fast a channel moves along Y and Z, in mm/s and mm/s2, as timed on PRPAA1087 (V1.2.2): what a
+# simulated move takes when the simulation keeps time.
+SIMULATED_Y_SPEED, SIMULATED_Y_ACCELERATION = 345.0, 950.0
+SIMULATED_Z_SPEED, SIMULATED_Z_ACCELERATION = 142.0, 800.0
 
 # The speed scales PRPAA1087 read, in percent. A simulated device keeps none.
 SIMULATED_SPEED_SCALE = 100
@@ -1080,6 +1086,7 @@ class PrepSimulationDriver(PrepDriver):
     firmware_tree_json: Optional[str] = None,
     initialized: bool = False,
     default_minimum_traverse_height: float = 167.5,
+    simulate_motion_time: bool = False,
   ):
     """
     Args:
@@ -1092,6 +1099,8 @@ class PrepSimulationDriver(PrepDriver):
         switched on does not.
       default_minimum_traverse_height: what the device answers `GetDefaultTraverseHeight` with, and where it
         raises channels to Z safety, in mm. Defaults to what PRPAA1087 (V1.2.2) reports.
+      simulate_motion_time: whether a command that moves the channels takes the time the device
+        would, so a viewer shows each step. Off, every command answers at once.
 
     Raises:
       ValueError: If the declared configuration holds no device.
@@ -1119,6 +1128,7 @@ class PrepSimulationDriver(PrepDriver):
     )
     self.initialized = initialized
     self.simulated_default_minimum_traverse_height = default_minimum_traverse_height
+    self.simulate_motion_time = simulate_motion_time
 
     # The features this device has, each answering for itself. Setup builds only the ones that are
     # not already there, so these stand in for the real ones throughout.
@@ -1151,14 +1161,49 @@ class PrepSimulationDriver(PrepDriver):
     """What the device would answer, asked of the feature the command is about.
 
     Each feature answers for its own model, so the logic stays where the model is; this only decides
-    who is asked, and answers what the device itself holds.
+    who is asked, and answers what the device itself holds. Keeping time, a move is recorded first
+    and then waited out, so whatever watches the model sees it for as long as the device takes.
     """
+    before = self._where_everything_is() if self.simulate_motion_time else None
+    answered = None
     for feature in (self.pipettes, self.x_arm):
       if isinstance(feature, _Simulated):
         answered = await feature.answer(request, path, method)
         if answered is not None:
-          return answered
-    return self._answer_for_device(request, path, method)
+          break
+    if answered is None:
+      answered = self._answer_for_device(request, path, method)
+    if before is not None:
+      seconds = self._motion_time(before, self._where_everything_is())
+      if seconds > 0:
+        await asyncio.sleep(seconds)
+    return answered
+
+  def _where_everything_is(self) -> List[Tuple[float, float, float]]:
+    """Where the model has each channel, as (x, y, z) in mm: x is the arm's."""
+    if not isinstance(self.pipettes, SimulatedPipettes):
+      return []
+    count = self.simulated_configuration.num_channels or 0
+    return [self.pipettes._modelled_location(channel) for channel in range(count)]
+
+  @staticmethod
+  def _travel_time(distance: float, speed: float, acceleration: float) -> float:
+    """How long a move of `distance` takes, speeding up and slowing down at `acceleration`."""
+    distance = abs(distance)
+    if distance * acceleration < speed * speed:  # never reaches cruise
+      return 2 * math.sqrt(distance / acceleration)
+    return distance / speed + speed / acceleration
+
+  def _motion_time(
+    self, before: List[Tuple[float, float, float]], after: List[Tuple[float, float, float]]
+  ) -> float:
+    """How long the device takes from `before` to `after`, the slowest axis setting the time."""
+    times = [0.0]
+    for (x0, y0, z0), (x1, y1, z1) in zip(before, after):
+      times.append(self._travel_time(x1 - x0, SIMULATED_X_SPEED, SIMULATED_X_ACCELERATION))
+      times.append(self._travel_time(y1 - y0, SIMULATED_Y_SPEED, SIMULATED_Y_ACCELERATION))
+      times.append(self._travel_time(z1 - z0, SIMULATED_Z_SPEED, SIMULATED_Z_ACCELERATION))
+    return max(times)
 
   def _answer_for_device(
     self, request: TCPCommand, path: str, method: str

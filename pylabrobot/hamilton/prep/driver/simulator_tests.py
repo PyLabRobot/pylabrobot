@@ -1,6 +1,7 @@
 """PrepSimulationDriver: answers from its recordings and its resource model, at the wire."""
 
 import asyncio
+import math
 
 import pytest
 
@@ -161,3 +162,39 @@ def test_the_arm_reference_line_spans_the_channels_combined_y_ranges():
     await p.stop()
 
   asyncio.run(_run())
+
+
+def test_a_simulation_that_keeps_time_waits_as_long_as_the_device_would_take(monkeypatch):
+  """Off, nothing waits; on, a move waits for its slowest axis, speeding up and slowing down."""
+  waited: list = []
+
+  async def fake_sleep(seconds: float) -> None:
+    waited.append(seconds)
+
+  monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+  def travel(distance: float, speed: float, acceleration: float) -> float:
+    if distance * acceleration < speed * speed:
+      return 2 * math.sqrt(distance / acceleration)
+    return distance / speed + speed / acceleration
+
+  async def _run(keep_time: bool) -> None:
+    p = PrepSimulationDriver(deck=PrepDeck(), simulate_motion_time=keep_time)
+    await p.setup()
+    assert p.pipettes is not None and p.x_arm is not None
+    waited.clear()
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 130.0})  # 37.5 mm down from 167.5
+    if keep_time:
+      assert max(waited) == pytest.approx(travel(37.5, 142.0, 800.0))
+    x = await p.x_arm.request_position()
+    assert x is not None
+    waited.clear()
+    await p.x_arm.move_to_x_position(x - 100.0, minimum_traverse_height_start=0)
+    if keep_time:
+      assert max(waited) == pytest.approx(travel(100.0, 400.0, 2250.0), abs=0.01)
+    else:
+      assert waited == []
+    await p.stop()
+
+  asyncio.run(_run(False))
+  asyncio.run(_run(True))
