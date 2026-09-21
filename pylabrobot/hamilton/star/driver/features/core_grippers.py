@@ -41,6 +41,8 @@ class CoreGrippers:
   default_grip_strength: int = 15
   # Z speed while a resource is held, in mm/s.
   default_z_speed_with_resource_held: float = 50.0
+  # Z acceleration while a resource is held, in mm/s2; 800 jolts a plate.
+  default_z_acceleration_with_resource_held: float = 150.0
   # Height the channels travel at and are left at around a tool command, in mm.
   default_minimum_traverse_height: float = 280.0
 
