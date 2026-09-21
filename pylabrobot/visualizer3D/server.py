@@ -202,6 +202,8 @@ class Viewer3D:
     # already watching an epoch their indices no longer match.
     self._scene_payload: Optional[Dict[str, Any]] = None
     self._scene_dirty = False
+    # A page left open from an earlier viewer retries its old token every second or so: said once.
+    self._refused_a_token = False
     # Who has moved since that scene was built. The scene places every resource where it stood at
     # build time and is handed out unchanged afterwards, so for anything that has moved since, the
     # placement a new client is given is out of date - and a part that moved once, before that
@@ -313,7 +315,14 @@ class Viewer3D:
     """
     offered = parse_qs(urlsplit(request.path).query).get("token", [""])[0]
     if not hmac.compare_digest(offered.encode(), self.token.encode()):
-      logger.warning("refused a websocket without this viewer's token")
+      if not self._refused_a_token:
+        logger.warning(
+          "refused a websocket without this viewer's token, likely a page left open from an "
+          "earlier viewer: close it. Repeats are logged at debug."
+        )
+        self._refused_a_token = True
+      else:
+        logger.debug("refused a websocket without this viewer's token")
       return connection.respond(403, "Forbidden\n")
     origin = request.headers.get("Origin")
     if origin is not None and not self._host_allowed(_hostname_of(origin)):
