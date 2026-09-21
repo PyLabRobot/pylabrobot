@@ -181,9 +181,10 @@ class TipRackLidTests(unittest.TestCase):
     self.assertTrue(upper._available_for_tip_handling)
 
   def test_a_nested_tip_rack_takes_a_lid(self):
-    rack = NestedTipRack(
-      "rack", size_x=10, size_y=10, size_z=20, stacking_z_height=12, ordered_items={}
-    )
+    with self.assertWarns(DeprecationWarning):
+      rack = NestedTipRack(
+        "rack", size_x=10, size_y=10, size_z=20, stacking_z_height=12, ordered_items={}
+      )
     rack.lid = self._lid()
     self.assertEqual(rack.lid.location, Coordinate(0, 0, 18))
 
@@ -203,4 +204,34 @@ class StandingTipRackTests(unittest.TestCase):
     assert isinstance(restored, StandingTipRack)
     self.assertEqual(restored.stacking_z_height, 16)
     self.assertEqual(restored.frame_height, 3)
+    self.assertEqual(restored, rack)
+
+
+class NestedTipRackDeprecationTests(unittest.TestCase):
+  def _rack(self, name):
+    with self.assertWarns(DeprecationWarning):
+      return NestedTipRack(
+        name,
+        size_x=10,
+        size_y=10,
+        size_z=55,
+        stacking_z_height=16,
+        ordered_items={},
+        frame_height=3,
+      )
+
+  def test_a_nested_tip_rack_is_a_standing_tip_rack_that_nests(self):
+    lower, upper = self._rack("lower"), self._rack("upper")
+    self.assertIsInstance(lower, StandingTipRack)
+    stack = ResourceStack("stack", "z")
+    stack.assign_child_resource(lower)
+    stack.assign_child_resource(upper)
+    self.assertEqual(upper.location, Coordinate(0, 0, 16))
+
+  def test_serialize_round_trip(self):
+    rack = self._rack("rack")
+    with self.assertWarns(DeprecationWarning):
+      restored = Resource.deserialize(rack.serialize())
+    assert isinstance(restored, NestedTipRack)
+    self.assertEqual((restored.stacking_z_height, restored.frame_height), (16, 3))
     self.assertEqual(restored, rack)
