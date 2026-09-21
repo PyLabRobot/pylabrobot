@@ -42,7 +42,7 @@ def _make_grippers(deck: PrepDeck, stub_pick_and_drop: bool = True) -> Tuple[Cor
     num_channels=2,
     move_to_safe_z=AsyncMock(),
     move_tool_bottom_to_z_positions=AsyncMock(),
-    move_to_y_position=AsyncMock(),
+    move_to_y_positions=AsyncMock(),
     move_to_xy_positions=AsyncMock(),
     # Where PRPAA1087 had the jaws once a plate was gripped and raised: centred on it, at Z safety.
     request_locations=AsyncMock(
@@ -487,11 +487,11 @@ def test_a_held_resource_moves_with_both_jaws_or_not_at_all():
   grippers, commands = _make_grippers(deck)
 
   async def _run() -> None:
-    await grippers.move_to_y_position(0, 150.0)  # nothing held: allowed
+    await grippers.move_to_y_positions([150.0, 60.0])  # nothing held: allowed
     await grippers.pick_up_resource(plate)
 
     for name, call in (
-      ("move_to_y_position", grippers.move_to_y_position(0, 150.0)),
+      ("move_to_y_positions", grippers.move_to_y_positions([150.0, 60.0])),
       ("move_to_xy_positions", grippers.move_to_xy_positions(200.0, {0: 150.0})),
     ):
       with pytest.raises(RuntimeError, match="move_resource_to_xy_position"):
@@ -623,7 +623,7 @@ def test_release_plate_leaves_nothing_held_and_nothing_to_return():
     await grippers.pick_up_resource(plate)
     await grippers.release_plate()
     assert grippers._holding_resource_width is None and grippers._held_resource is None
-    await grippers.move_to_y_position(0, 150.0)  # the guard is off once it is released
+    await grippers.move_to_y_positions([150.0, 60.0])  # the guard is off once it is released
     with pytest.raises(RuntimeError, match="nothing to return it to"):
       await grippers.return_resource()
 
@@ -845,5 +845,41 @@ def test_a_coordinate_puts_it_down_exactly_as_the_spot_it_names_would():
     # In the tree it joins the deck, with its centre-bottom where it was told.
     assert at_point.parent is deck_b
     assert at_point.get_location_wrt(deck_b, "c", "c", "b") == pytest.approx(ccb)
+
+  asyncio.run(_run())
+
+
+def test_the_grippers_ride_the_two_front_most_channels_and_move_the_rest_aside():
+  """channels[-2] carries the back tool and channels[-1] the front one, however many there are."""
+  deck = PrepDeck(with_core_grippers=True)
+  plate = deck[4] = cor_axy_96_wellplate_500uL_Ub("plate")
+  grippers, commands = _make_grippers(deck, stub_pick_and_drop=False)
+  pipettes: Any = grippers._driver.pipettes
+  pipettes.num_channels = 4
+  pipettes.request_locations.return_value = [
+    Coordinate(62.55, 300.0, 144.6),
+    Coordinate(62.55, 200.0, 144.6),
+    Coordinate(62.55, 84.47, 144.6),
+    Coordinate(62.55, 4.0, 144.6),
+  ]
+
+  async def _run() -> None:
+    assert (grippers._back_channel, grippers._front_channel) == (2, 3)
+    await grippers.move_to_y_positions([150.0, 60.0])
+    assert pipettes.move_to_y_positions.await_args.args[0] == {2: 150.0, 3: 60.0}
+    await grippers.pick_up_resource(plate)
+    approach = commands.move_to_xy_positions.await_args
+    assert set(approach.args[1]) == {2, 3} and approach.kwargs["make_space"] is True
+    await grippers.move_resource_to_xy_position(y=100.0)
+    moved = [
+      c
+      for c in commands.send_command.await_args_list
+      if type(c.args[0]).__name__ == "PrepMovePlate"
+    ]
+    top = moved[-1].args[0].plate_top_center
+    assert grippers._plate_top_z_offset is not None
+    assert (top.x_position, top.z_position) == pytest.approx(
+      (62.55, 144.6 + grippers._plate_top_z_offset)
+    )
 
   asyncio.run(_run())

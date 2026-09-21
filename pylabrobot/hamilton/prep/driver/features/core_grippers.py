@@ -95,6 +95,16 @@ class CoreGrippers:
       raise RuntimeError("no x-arm to carry the grippers; have you called `prep.setup()`?")
     return self._driver.x_arm
 
+  @property
+  def _back_channel(self) -> int:
+    """The channel that takes the back tool: channels[-2]."""
+    return self._pipettes.num_channels - 2
+
+  @property
+  def _front_channel(self) -> int:
+    """The channel that takes the front tool: channels[-1]."""
+    return self._pipettes.num_channels - 1
+
   # -- state ---------------------------------------------------------------------------------------
 
   @property
@@ -188,7 +198,7 @@ class CoreGrippers:
     await self._set_z_acceleration(self._pipettes.default_z_acceleration)
 
   @asynccontextmanager
-  async def _z_acceleration(
+  async def _temporary_z_drive_acceleration(
     self, z_acceleration: Optional[float] = None, *, holding: Optional[bool] = None
   ) -> AsyncIterator[None]:
     """The Z drives at `z_acceleration` for the enclosed moves, then back to the pipettes' default.
@@ -245,7 +255,7 @@ class CoreGrippers:
     Allowed while holding: both channels ride the one arm, so the jaws keep their spacing.
     `z_acceleration` None is `default_z_acceleration_with_resource_held` while holding.
     """
-    async with self._z_acceleration(z_acceleration):
+    async with self._temporary_z_drive_acceleration(z_acceleration):
       self._require_mounted()
       await self._x_arm.move_to_x_position(
         x,
@@ -256,12 +266,18 @@ class CoreGrippers:
         z_acceleration=None,
       )
 
-  async def move_to_y_position(self, channel: int, y: float, speed: Optional[float] = None) -> None:
-    """Move one tool along Y. See :meth:`Pipettes.move_to_y_position`."""
-    async with self._z_acceleration():
-      self._require_mounted()
-      self._refuse_while_holding()
-      await self._pipettes.move_to_y_position(channel, y, speed=speed)
+  async def move_to_y_positions(self, ys: List[float], speed: Optional[float] = None) -> None:
+    """Move the tools along Y together. See :meth:`Pipettes.move_to_y_positions`.
+
+    Args:
+      ys: target y of each tool in mm, from the back.
+      speed: speed in mm/s. `pipettes.default_y_speed` when None.
+    """
+    self._require_mounted()
+    self._refuse_while_holding()
+    await self._pipettes.move_to_y_positions(
+      dict(zip((self._back_channel, self._front_channel), ys)), speed=speed
+    )
 
   async def move_to_xy_positions(
     self,
@@ -280,7 +296,7 @@ class CoreGrippers:
 
     `z_acceleration` None leaves the drives at the pipettes' default.
     """
-    async with self._z_acceleration(z_acceleration):
+    async with self._temporary_z_drive_acceleration(z_acceleration):
       self._require_mounted()
       self._refuse_while_holding()
       await self._pipettes.move_to_xy_positions(
@@ -297,7 +313,7 @@ class CoreGrippers:
 
   async def move_to_safe_z(self, channels: Optional[List[int]] = None) -> None:
     """Raise the tools to Z safety. See :meth:`Pipettes.move_to_safe_z`."""
-    async with self._z_acceleration():
+    async with self._temporary_z_drive_acceleration():
       self._require_mounted()
       await self._pipettes.move_to_safe_z(channels)
 
@@ -315,7 +331,7 @@ class CoreGrippers:
       location: where the jaws are to hold it, as `_pick_up_at` takes it.
       acceleration_scale_x: X-axis acceleration scale.
     """
-    async with self._z_acceleration():
+    async with self._temporary_z_drive_acceleration():
       plate_top_center = self._plate_top(location)
       await self._driver.send_command(
         PrepCmd.PrepMovePlate(
@@ -355,14 +371,12 @@ class CoreGrippers:
       )
     # Where it is, asked of the device: the pick-up raises it, and the arm may move it in x. A
     # channel's z is where its jaw holds the plate, centred between the two.
-    jaw_0, jaw_1 = (await self._pipettes.request_locations())[:2]
-    x = jaw_0.x if x is None else x
-    y = (jaw_0.y + jaw_1.y) / 2 if y is None else y
-    await self.move_to_location(
-      Coordinate(x, y, jaw_0.z), acceleration_scale_x=acceleration_scale_x
-    )
-    self._plate_top_center = Coordinate(x, y, jaw_0.z + self._plate_top_z_offset)
-
+    locations = await self._pipettes.request_locations()
+    back, front = locations[self._back_channel], locations[self._front_channel]
+    x = back.x if x is None else x
+    y = (back.y + front.y) / 2 if y is None else y
+    await self.move_to_location(Coordinate(x, y, back.z), acceleration_scale_x=acceleration_scale_x)
+    self._plate_top_center = Coordinate(x, y, back.z + self._plate_top_z_offset)
 
   # ----------------------------------------
   # Tools
@@ -388,7 +402,8 @@ class CoreGrippers:
       tip_definition = PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
     await self._pipettes.move_to_xy_positions(
       tool_position_x,
-      {0: rear_channel_position_y, 1: front_channel_position_y},
+      {self._back_channel: rear_channel_position_y, self._front_channel: front_channel_position_y},
+      make_space=True,
       minimum_traverse_height_start=self._pipettes._resolve_traverse_height(),
     )
     try:
@@ -465,11 +480,11 @@ class CoreGrippers:
       tool_seek=engage + 10.0,
     )
 
-    # A taken tool rides where the channel rides, as a tip does. Channel 0 takes the rear tool.
+    # A taken tool rides where the channel rides, as a tip does. The back channel takes the rear tool.
     self._parked_tools = [(tool, tool.parent, tool.location) for tool in tools]
     rear_first = sorted(tools, key=lambda tool: tool.get_location_wrt(deck, y="c").y)
     taken = []
-    for channel, tool in zip((0, 1), reversed(rear_first)):
+    for channel, tool in zip((self._back_channel, self._front_channel), reversed(rear_first)):
       shaft = self._pipettes.shaft(channel)
       if shaft is not None:
         shaft.mount_tip(tool)
@@ -506,7 +521,6 @@ class CoreGrippers:
       yield self
     finally:
       await self.return_tools()
-
 
   # ----------------------------------------
   # Resources
@@ -615,7 +629,10 @@ class CoreGrippers:
     # up, and with the tools on the pipettes' traverse height is more than they reach.
     half = (resource_width + 2 * clearance_y + JAW_OPEN_EXTRA) / 2
     await self._pipettes.move_to_xy_positions(
-      location.x, {0: location.y + half, 1: location.y - half}, minimum_traverse_height_start=0
+      location.x,
+      {self._back_channel: location.y + half, self._front_channel: location.y - half},
+      make_space=True,
+      minimum_traverse_height_start=0,
     )
     plate_top_center = PrepCmd.XYZCoord(
       default_values=False,
@@ -632,7 +649,7 @@ class CoreGrippers:
     grip_distance = clearance_y + squeeze_mm
 
     # The firmware lifts it as part of the pick-up.
-    async with self._z_acceleration(z_acceleration, holding=True):
+    async with self._temporary_z_drive_acceleration(z_acceleration, holding=True):
       await self._driver.send_command(
         PrepCmd.PrepPickUpPlate(
           plate_top_center=plate_top_center,
@@ -677,7 +694,7 @@ class CoreGrippers:
     if self._holding_resource_width is None:
       raise RuntimeError("Not holding anything")
     # The firmware lowers it as part of letting go.
-    async with self._z_acceleration(z_acceleration):
+    async with self._temporary_z_drive_acceleration(z_acceleration):
       await self._raise_to_traverse(minimum_traverse_height_start)
       # Carried over the destination first, so letting go is straight down: left to itself the
       # firmware dives across the deck with the plate.

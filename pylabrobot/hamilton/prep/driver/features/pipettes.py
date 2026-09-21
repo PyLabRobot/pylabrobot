@@ -1999,7 +1999,7 @@ class Pipettes:
     targets.update(zs)
 
     try:
-      async with self._z_drive_acceleration(acceleration):
+      async with self._temporary_z_drive_acceleration(acceleration):
         await self._unchecked_fw_move_z_absolute(targets, speed)
     except Exception:
       # Only on the way out: a move that arrives is recorded from its targets below.
@@ -2009,7 +2009,9 @@ class Pipettes:
       self.update_location_by_reference_point(channel, z=z)
 
   @asynccontextmanager
-  async def _z_drive_acceleration(self, acceleration: Optional[float]) -> AsyncIterator[None]:
+  async def _temporary_z_drive_acceleration(
+    self, acceleration: Optional[float]
+  ) -> AsyncIterator[None]:
     """Set every channel's Z drive acceleration for the enclosed block, then `default_z_acceleration`.
 
     Args:
