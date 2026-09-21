@@ -6,13 +6,14 @@ import socket
 import unittest
 import urllib.error
 import urllib.request
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import websockets
 
 from pylabrobot.resources import does_volume_tracking, set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
+from pylabrobot.resources.resource import Resource
 from pylabrobot.visualizer3D.facility import Facility
 from pylabrobot.visualizer3D.server import Viewer3D
 
@@ -133,6 +134,32 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(moved["location"]["x"], 400)
     finally:
       await ws.close()
+
+  async def test_a_resource_moved_under_another_parent_is_not_drawn_under_its_old_one(self):
+    """Its new location waits for the rebuild: sent first, it would be read against the old parent."""
+    holder = Resource(name="holder", size_x=200, size_y=200, size_z=50)
+    self.facility.assign_child_resource(holder, location=Coordinate(500, 500, 0))
+    ws, _, _ = await self.connect()
+    try:
+      await self.next_scene(ws)  # the rebuild for the holder
+      self.plate.unassign()
+      holder.assign_child_resource(self.plate, location=Coordinate(5, 5, 50))
+      states = await self.next_scene(ws)
+      for state in states:
+        index = state["of"].get("plate")
+        self.assertTrue(index is None or "location" not in state["states"][index], state)
+    finally:
+      await ws.close()
+
+  async def next_scene(self, ws, timeout: float = 2.0):
+    """The state messages that arrive before the next scene, which is waited for."""
+    states: List[Dict[str, Any]] = []
+    while True:
+      message = json.loads(await asyncio.wait_for(ws.recv(), timeout))
+      if message["event"] == "scene":
+        return states
+      if message["event"] == "state":
+        states.append(message["data"])
 
 
 class AccessTests(unittest.IsolatedAsyncioTestCase):

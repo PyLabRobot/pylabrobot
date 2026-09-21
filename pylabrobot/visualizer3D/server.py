@@ -247,6 +247,15 @@ class Viewer3D:
   async def _flush(self) -> None:
     payload, self._pending = self._pending, {}
     self._flush_scheduled = False
+    if self._scene_dirty:
+      # The tree changed shape and a rebuild is on its way. A location is relative to a parent the
+      # client may not have yet - a resource just moved under another would be drawn at its new
+      # offset from its old parent until the rebuild lands - and the rebuild places everything
+      # where it is. What is not a location still goes now.
+      payload = {
+        name: {k: v for k, v in state.items() if k != "location"} for name, state in payload.items()
+      }
+      payload = {name: state for name, state in payload.items() if state}
     if payload:
       message = self._state_message(payload)
       # Everything in the batch may have been a change nobody could see.
