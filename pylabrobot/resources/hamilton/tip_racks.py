@@ -1,7 +1,7 @@
 from pylabrobot.resources.tip import TipCreator
 from pylabrobot.resources.tip_rack import (
   EmbeddedTipRack,
-  NestedTipRack,
+  StandingTipRack,
   TipRack,
   TipSpot,
 )
@@ -52,6 +52,38 @@ def hamilton_tiprack_standard(
     ),
     with_tips=with_tips,
     frame_height=10.0,
+  )
+
+
+def hamilton_96_tiprack_ntr(
+  name: str, make_tip: TipCreator, with_tips: bool = True
+) -> StandingTipRack:
+  """Nested tip rack (NTR) for Hamilton STAR systems: an SLAS footprint with SLAS tip positions."""
+  return StandingTipRack(
+    name=name,
+    size_x=127.76,
+    size_y=85.48,
+    size_z=55.0,  # the top face, where the collars rest
+    model=hamilton_96_tiprack_ntr.__name__,
+    # Not yet measured on the instrument.
+    stacking_z_height=16.0,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      # SLAS 96: A1's centre 14.38 mm from the left and 11.24 mm from the back; 7.2 mm holes.
+      dx=14.38 - 3.6,
+      dy=85.48 - 11.24 - 7 * 9.0 - 3.6,
+      # Collars rest on the top face: firmware z 184.0 with the rack base at 129.0.
+      dz=55.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=7.2,
+      size_y=7.2,
+      make_tip=make_tip,
+      name_prefix=name,
+    ),
+    with_tips=with_tips,
   )
 
 
@@ -137,6 +169,13 @@ def hamilton_96_tiprack_10uL(name: str, with_tips: bool = True) -> EmbeddedTipRa
   return hamilton_tiprack_standard(name=name, make_tip=hamilton_tip_10uL, with_tips=with_tips)
 
 
+def hamilton_96_tiprack_10uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
+  """Hamilton cat. no.: 235949 (non-sterile), 235971 (clear, non-sterile), 235983 (sterile)
+  Hamilton name: 'LT_L_NE_stack'
+  Nested Tip Rack with 96x 10ul Low Volume Tip"""
+  return hamilton_96_tiprack_ntr(name=name, make_tip=hamilton_tip_10uL, with_tips=with_tips)
+
+
 # # # # # # # # # # 50 ul Tips # # # # # # # # # #
 
 
@@ -156,35 +195,11 @@ def hamilton_96_tiprack_50uL(name: str, with_tips: bool = True) -> EmbeddedTipRa
   return hamilton_tiprack_standard(name=name, make_tip=hamilton_tip_50uL, with_tips=with_tips)
 
 
-def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> NestedTipRack:
+def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
   """Hamilton cat. no.: 235947 (non-sterile), 235964 (clear, non-sterile), 235987 (sterile)
-  Nested Tip Rack with 96x 50ul Tips
-  No filter
-  """
-  return NestedTipRack(
-    name=name,
-    size_x=127.76,
-    size_y=85.48,
-    size_z=56.0,  # Hamilton_96_tiprack_50ul_NTR + TIP_50ul_L.fitting_depth
-    model=hamilton_96_tiprack_50uL_NTR.__name__,
-    stacking_z_height=16.0,
-    ordered_items=create_ordered_items_2d(
-      TipSpot,
-      num_items_x=12,
-      num_items_y=8,
-      dx=9.45,
-      dy=7.55,
-      dz=56.0 - 40.5 - 2,
-      # top of Hamilton_96_tiprack_50ul_NTR - TIP_50ul_L.max_tip_length - "inbetween-space"(?)
-      item_dx=9.0,
-      item_dy=9.0,
-      size_x=8.15,
-      size_y=8.15,
-      make_tip=hamilton_tip_50uL,
-      name_prefix=name,
-    ),
-    with_tips=with_tips,
-  )
+  Hamilton name: 'TIP_50ul_L_NE_stack'
+  Nested Tip Rack with 96x 50ul Tip no filter"""
+  return hamilton_96_tiprack_ntr(name=name, make_tip=hamilton_tip_50uL, with_tips=with_tips)
 
 
 # # # # # # # # # # 300 ul Tips # # # # # # # # # #
@@ -204,6 +219,13 @@ def hamilton_96_tiprack_300uL(name: str, with_tips: bool = True) -> EmbeddedTipR
   Hamilton name: 'ST'
   Tip Rack with 96x 300ul Standard Volume Tip"""
   return hamilton_tiprack_standard(name=name, make_tip=hamilton_tip_300uL, with_tips=with_tips)
+
+
+def hamilton_96_tiprack_300uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
+  """Hamilton cat. no.: 235950 (non-sterile), 235965 (clear, non-sterile), 235985 (sterile)
+  Hamilton name: 'ST_L_NE_stack'
+  Nested Tip Rack with 96x 300ul Standard Volume Tip"""
+  return hamilton_96_tiprack_ntr(name=name, make_tip=hamilton_tip_300uL, with_tips=with_tips)
 
 
 def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> EmbeddedTipRack:

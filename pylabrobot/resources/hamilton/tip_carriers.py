@@ -1,5 +1,7 @@
 """ML Star tip carriers"""
 
+import warnings
+
 from pylabrobot.resources.carrier import (
   ResourceHolder,
   TipCarrier,
@@ -331,25 +333,46 @@ def TIP_CAR_96BC_5mlT_A00(name: str) -> TipCarrier:
   )
 
 
-def TIP_CAR_NTR_A00(name: str) -> TipCarrier:
-  """Carrier with 5 nestable tip rack positions"""
+def hamilton_tip_carrier_L5_ntr_a00(name: str) -> TipCarrier:
+  """Hamilton cat. no.: 182074
+  Hamilton name: 'TIP_CAR_NTR_A00'.
+  Carrier for 5 stacks of up to 4x 96 nested tip racks (NTR), landscape.
+  6 track(T) wide.
+  """
+  site_z = 29.0
   return TipCarrier(
     name=name,
     size_x=135.0,
     size_y=497.0,
-    size_z=130.0,
+    # 29 mm above its sites, as measured.
+    size_z=site_z + 29.0,
     sites=create_homogeneous_resources(
       klass=ResourceHolder,
       locations=[
-        Coordinate(6.2, 10.0, 29.0),
-        Coordinate(6.2, 106.0, 29.0),
-        Coordinate(6.2, 202.0, 29.0),
-        Coordinate(6.2, 298.0, 29.0),
-        Coordinate(6.2, 394.0, 29.0),
+        Coordinate(6.2, 10.0, site_z),
+        Coordinate(6.2, 106.0, site_z),
+        Coordinate(6.2, 202.0, site_z),
+        Coordinate(6.2, 298.0, site_z),
+        Coordinate(6.2, 394.0, site_z),
       ],
       resource_size_x=122.4,
       resource_size_y=82.6,
+      # A nested tip rack's SLAS footprint, 127.76 x 85.48, stands centred on the site.
+      child_location=Coordinate(x=(122.4 - 127.76) / 2, y=(82.6 - 85.48) / 2, z=0),
       name_prefix=name,
     ),
-    model="TIP_CAR_NTR_A00",
+    model=hamilton_tip_carrier_L5_ntr_a00.__name__,
   )
+
+
+# Deprecated names for backwards compatibility
+
+
+def TIP_CAR_NTR_A00(name: str) -> TipCarrier:
+  """Deprecated alias for `hamilton_tip_carrier_L5_ntr_a00`."""
+  warnings.warn(
+    "TIP_CAR_NTR_A00 is deprecated. Use 'hamilton_tip_carrier_L5_ntr_a00' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_tip_carrier_L5_ntr_a00(name)
