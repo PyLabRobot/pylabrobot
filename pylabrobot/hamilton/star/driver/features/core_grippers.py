@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, AsyncIterator, List, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple, cast
 
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
@@ -511,6 +511,86 @@ class CoreGrippers:
       yw=f"{grip_strength:02}",
       th=f"{minimum_traverse_height_start:04}",
       te=f"{minimum_z_position_end:04}",
+    )
+
+  async def _unchecked_fw_drop_resource(
+    self,
+    x_position: int,
+    y_position: int,
+    z_position: int,
+    press_on_distance: int,
+    z_speed: int,
+    open_gripper_position: int,
+    minimum_traverse_height_start: int,
+    minimum_z_position_end: int,
+    x_acceleration_index: Optional[int] = None,
+  ):
+    """Send the plate put-down as it is given, in tenths of a millimetre. `C0 ZR`.
+
+    Args:
+      x_position: the plate centre's x; negative sends `xd1`.
+      y_position: the plate centre's y.
+      z_position: the deposit height.
+      press_on_distance: how far past the deposit height to press, 0 to 999.
+      z_speed: in tenths of a mm/s.
+      open_gripper_position: the jaws' opening to let go.
+      minimum_traverse_height_start: how high the channels travel first.
+      minimum_z_position_end: where the channels are left.
+      x_acceleration_index: 1 to 5; not sent when None, as legacy.
+    """
+    parameters: Dict[str, Any] = {"xs": f"{abs(x_position):05}", "xd": int(x_position < 0)}
+    if x_acceleration_index is not None:
+      parameters["xg"] = f"{x_acceleration_index}"
+    parameters.update(
+      yj=f"{y_position:04}",
+      zj=f"{z_position:04}",
+      zi=f"{press_on_distance:03}",
+      zy=f"{z_speed:04}",
+      yo=f"{open_gripper_position:04}",
+      th=f"{minimum_traverse_height_start:04}",
+      te=f"{minimum_z_position_end:04}",
+    )
+    return await self._driver.send_command(
+      module="C0", command="ZR", subsystem=_FirmwareLock.CHANNELS, read_timeout=120, **parameters
+    )
+
+  async def _unchecked_fw_move_resource(
+    self,
+    x_position: int,
+    x_acceleration_index: int,
+    y_position: int,
+    z_position: int,
+    z_speed: int,
+    minimum_traverse_height_start: int,
+  ):
+    """Send the held plate's move as it is given, in tenths of a millimetre. `C0 ZM`.
+
+    Args:
+      x_position: the plate centre's x; negative sends `xd1`.
+      x_acceleration_index: 1 to 5.
+      y_position: the plate centre's y.
+      z_position: the plate's height.
+      z_speed: in tenths of a mm/s.
+      minimum_traverse_height_start: how high the channels travel first.
+    """
+    return await self._driver.send_command(
+      module="C0",
+      command="ZM",
+      subsystem=_FirmwareLock.CHANNELS,
+      read_timeout=120,
+      xs=f"{abs(x_position):05}",
+      xd=int(x_position < 0),
+      xg=f"{x_acceleration_index}",
+      yj=f"{y_position:04}",
+      zj=f"{z_position:04}",
+      zy=f"{z_speed:04}",
+      th=f"{minimum_traverse_height_start:04}",
+    )
+
+  async def _unchecked_fw_release_plate(self):
+    """Open the gripper and let go of whatever it holds. `C0 ZO`."""
+    return await self._driver.send_command(
+      module="C0", command="ZO", subsystem=_FirmwareLock.CHANNELS
     )
 
   # -- probing ------------------------------------------------------------------------------------

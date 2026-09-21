@@ -87,6 +87,25 @@ class TestToolFirmware(unittest.IsolatedAsyncioTestCase):
     await self.grippers._unchecked_fw_pick_up_tools(-120, 1250, 1070, 2350, 2250, 2800, 4, 5, 14)
     self.assertEqual(self.sent, ["C0ZTxs00120xd1ya1250yb1070pa05pb06tp2350tz2250th2800tt14"])
 
+  async def test_put_down_move_and_release_as_legacy(self):
+    await self.grippers._unchecked_fw_drop_resource(8204, 2102, 1954, 0, 500, 885, 2800, 2800)
+    await self.grippers._unchecked_fw_move_resource(8204, 4, 2102, 2500, 500, 2800)
+    await self.grippers._unchecked_fw_release_plate()
+    self.assertEqual(
+      self.sent,
+      [
+        "C0ZRxs08204xd0yj2102zj1954zi000zy0500yo0885th2800te2800",
+        "C0ZMxs08204xd0xg4yj2102zj2500zy0500th2800",
+        "C0ZO",
+      ],
+    )
+
+  async def test_put_down_with_an_x_acceleration(self):
+    await self.grippers._unchecked_fw_drop_resource(
+      8204, 2102, 1954, 0, 500, 885, 2800, 2800, x_acceleration_index=2
+    )
+    self.assertEqual(self.sent, ["C0ZRxs08204xd0xg2yj2102zj1954zi000zy0500yo0885th2800te2800"])
+
 
 class TestPickUpAndDropTools(unittest.IsolatedAsyncioTestCase):
   """The checked tool pick-up and drop: what they refuse, send and leave behind."""
