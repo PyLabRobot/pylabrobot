@@ -810,6 +810,7 @@ class Pipettes:
     # (rms 1.7 ms). `move_to_y_positions` sends the speed with `MoveYAbsolute`, in mm/s; `MoveToPosition`
     # carries none.
     self.default_y_speed: float = 276.0
+    # Measured only: no firmware command sets a Y acceleration, so nothing applies it.
     self.default_y_acceleration: float = 760.0
     # Z: 80 % of 142 mm/s, fitted from timed `MoveToPosition` moves of 2 to 30 mm (rms 4.5 ms).
     # `move_tool_bottom_to_z_positions` sends the speed with `MoveZAbsolute`, in mm/s;

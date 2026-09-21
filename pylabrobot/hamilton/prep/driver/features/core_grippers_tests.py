@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, List, Optional, Tuple
 from unittest.mock import AsyncMock
@@ -881,5 +882,45 @@ def test_the_grippers_ride_the_two_front_most_channels_and_move_the_rest_aside()
     assert (top.x_position, top.z_position) == pytest.approx(
       (62.55, 144.6 + grippers._plate_top_z_offset)
     )
+
+  asyncio.run(_run())
+
+
+def test_a_held_resource_moves_at_its_x_acceleration_set_once_per_stretch():
+  """Around the grip and the let-go, once even with a carry inside the drop; nothing when None."""
+  deck = PrepDeck(with_core_grippers=True)
+  plate = deck[0] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+  grippers, commands = _make_grippers(deck, stub_pick_and_drop=False)
+  x_arm: Any = grippers._driver.x_arm
+
+  @asynccontextmanager
+  async def profile(velocity: Optional[float] = None, acceleration: Optional[float] = None):
+    commands.order.append(f"x_acceleration={acceleration}")
+    yield
+    commands.order.append("x_acceleration restored")
+
+  x_arm._temporary_x_axis_profile = profile
+
+  async def _run() -> None:
+    await grippers.pick_up_resource(plate)
+    await grippers.return_resource()
+    assert not any(step.startswith("x_acceleration") for step in commands.order)
+
+    commands.order.clear()
+    grippers.default_x_acceleration_with_resource_held = 900.0
+    await grippers.pick_up_resource(plate)
+    await grippers.move_to_x_position(150.0)
+    assert x_arm.move_to_x_position.await_args.kwargs["acceleration"] == 900.0
+    await grippers.return_resource()
+    assert [s for s in commands.order if "PrepZDrive" not in s and not s.startswith("z_")] == [
+      "move_to_xy_positions",  # the approach, empty
+      "x_acceleration=900.0",
+      "PrepPickUpPlate",
+      "x_acceleration restored",
+      "x_acceleration=900.0",  # once for the whole drop, the carry inside it included
+      "PrepMovePlate",
+      "PrepDropPlate",
+      "x_acceleration restored",
+    ]
 
   asyncio.run(_run())

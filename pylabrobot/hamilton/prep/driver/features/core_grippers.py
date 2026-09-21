@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # How much further apart the channels stand than the width they are open around: the paddles' faces
-# sit inside the channels' centres. PRPAA1087, 2026-09-21: 94.45 around an 85.48 plate at 2.5 mm
-# clearance a side, and 95.47 at 3.0 when letting go of it.
+# sit inside the channels' centres: 94.45 around an 85.48 plate at 2.5 mm clearance a side, and
+# 95.47 at 3.0 when letting go of it.
 JAW_OPEN_EXTRA = 3.97
 
 
@@ -38,9 +38,7 @@ class CoreGrippers:
   the jaws close.
   """
 
-  # The Z drives' acceleration for Z moves with a resource held, in mm/s2; every other move runs at
-  # the pipettes' `default_z_acceleration`. None leaves the drives. PRPAA1087, 2026-09-21: 800, the
-  # drives' own, jolts a plate; 100 was gentle but slow.
+  default_x_acceleration_with_resource_held: Optional[float] = None
   default_z_acceleration_with_resource_held: Optional[float] = 150.0
 
   def __init__(
@@ -64,6 +62,7 @@ class CoreGrippers:
     self._taken_from: Optional[Tuple[Resource, Optional[Coordinate]]] = None
     self._tools_mounted = False
     self._parked_tools: List[Tuple[HeadTool, Optional[Resource], Optional[Coordinate]]] = []
+    self._x_acceleration_set = False
     self._z_acceleration_set = False
 
   # -- what carries them ---------------------------------------------------------------------------
@@ -165,7 +164,7 @@ class CoreGrippers:
     """The firmware's `plate_top_center` for a plate whose jaws are to be at `grip`.
 
     Move and drop are told the plate's top and put the jaws the pick-up's offset below it, so a grip
-    point sent as the top takes the plate that far too low. Measured on PRPAA1087: 5.00 mm.
+    point sent as the top takes the plate that far too low: 5.00 mm.
     """
     if self._plate_top_z_offset is None:
       raise RuntimeError("Not holding anything")
@@ -222,6 +221,31 @@ class CoreGrippers:
       self._z_acceleration_set = False
       await self._restore_z_acceleration()
 
+  @asynccontextmanager
+  async def _temporary_x_axis_acceleration(
+    self, *, holding: Optional[bool] = None
+  ) -> AsyncIterator[None]:
+    """The X axis at `default_x_acceleration_with_resource_held` while a resource is held.
+
+    Exists so only the outermost call sets it: a carry inside a drop would otherwise read, set and
+    restore the axis a second time.
+
+    Args:
+      holding: whether a resource is held for the enclosed moves. None asks the grippers.
+    """
+    if holding is None:
+      holding = self._holding_resource_width is not None
+    acceleration = self.default_x_acceleration_with_resource_held if holding else None
+    if acceleration is None or self._x_acceleration_set:
+      yield
+      return
+    self._x_acceleration_set = True
+    try:
+      async with self._x_arm._temporary_x_axis_profile(acceleration=acceleration):
+        yield
+    finally:
+      self._x_acceleration_set = False
+
   async def _raise_to_traverse(self, minimum_traverse_height_end: Optional[float]) -> None:
     """Leave the channels where they can travel.
 
@@ -253,8 +277,11 @@ class CoreGrippers:
     """Move the tools along X. See :meth:`XArm.move_to_x_position`.
 
     Allowed while holding: both channels ride the one arm, so the jaws keep their spacing.
-    `z_acceleration` None is `default_z_acceleration_with_resource_held` while holding.
+    `acceleration` and `z_acceleration` None are `default_x_acceleration_with_resource_held` and
+    `default_z_acceleration_with_resource_held` while holding.
     """
+    if acceleration is None and self._holding_resource_width is not None:
+      acceleration = self.default_x_acceleration_with_resource_held
     async with self._temporary_z_drive_acceleration(z_acceleration):
       self._require_mounted()
       await self._x_arm.move_to_x_position(
@@ -332,13 +359,14 @@ class CoreGrippers:
       acceleration_scale_x: X-axis acceleration scale.
     """
     async with self._temporary_z_drive_acceleration():
-      plate_top_center = self._plate_top(location)
-      await self._driver.send_command(
-        PrepCmd.PrepMovePlate(
-          plate_top_center=plate_top_center,
-          acceleration_scale_x=acceleration_scale_x,
+      async with self._temporary_x_axis_acceleration():
+        plate_top_center = self._plate_top(location)
+        await self._driver.send_command(
+          PrepCmd.PrepMovePlate(
+            plate_top_center=plate_top_center,
+            acceleration_scale_x=acceleration_scale_x,
+          )
         )
-      )
 
   async def move_resource_to_xy_position(
     self,
@@ -431,8 +459,7 @@ class CoreGrippers:
   async def drop_tools(self, *, move_to_safe_z_first: bool = True) -> None:
     """Put the tools back where they were taken from (PrepDropTool, cmd=16).
 
-    The firmware carries them there itself, from wherever the channels stand (PRPAA1087,
-    2026-09-21).
+    The firmware carries them there itself, from wherever the channels stand.
     """
     if move_to_safe_z_first:
       await self._pipettes.move_to_safe_z()
@@ -625,7 +652,7 @@ class CoreGrippers:
     self._require_mounted()
     await self._raise_to_traverse(minimum_traverse_height_start)
     # Over the plate first, jaws open, so the pick-up is straight down: left to itself the
-    # firmware dives across the deck (to 73 mm on PRPAA1087). 0 raises nothing: they are already
+    # firmware dives across the deck (to 73 mm). 0 raises nothing: they are already
     # up, and with the tools on the pipettes' traverse height is more than they reach.
     half = (resource_width + 2 * clearance_y + JAW_OPEN_EXTRA) / 2
     await self._pipettes.move_to_xy_positions(
@@ -650,17 +677,18 @@ class CoreGrippers:
 
     # The firmware lifts it as part of the pick-up.
     async with self._temporary_z_drive_acceleration(z_acceleration, holding=True):
-      await self._driver.send_command(
-        PrepCmd.PrepPickUpPlate(
-          plate_top_center=plate_top_center,
-          plate=plate_dims,
-          clearance_y=clearance_y,
-          grip_speed_y=grip_speed_y,
-          grip_distance=grip_distance,
-          grip_height=location.z,
+      async with self._temporary_x_axis_acceleration(holding=True):
+        await self._driver.send_command(
+          PrepCmd.PrepPickUpPlate(
+            plate_top_center=plate_top_center,
+            plate=plate_dims,
+            clearance_y=clearance_y,
+            grip_speed_y=grip_speed_y,
+            grip_distance=grip_distance,
+            grip_height=location.z,
+          )
         )
-      )
-      await self._raise_to_traverse(minimum_traverse_height_end)
+        await self._raise_to_traverse(minimum_traverse_height_end)
     self._plate_top_center = Coordinate(location.x, location.y, location.z + plate_top_z_offset)
     self._plate_top_z_offset = plate_top_z_offset
     self._holding_resource_width = resource_width
@@ -695,20 +723,21 @@ class CoreGrippers:
       raise RuntimeError("Not holding anything")
     # The firmware lowers it as part of letting go.
     async with self._temporary_z_drive_acceleration(z_acceleration):
-      await self._raise_to_traverse(minimum_traverse_height_start)
-      # Carried over the destination first, so letting go is straight down: left to itself the
-      # firmware dives across the deck with the plate.
-      await self.move_resource_to_xy_position(
-        location.x, location.y, acceleration_scale_x=acceleration_scale_x
-      )
-      plate_top_center = self._plate_top(location)
-      await self._driver.send_command(
-        PrepCmd.PrepDropPlate(
-          plate_top_center=plate_top_center,
-          clearance_y=clearance_y,
-          acceleration_scale_x=acceleration_scale_x,
+      async with self._temporary_x_axis_acceleration():
+        await self._raise_to_traverse(minimum_traverse_height_start)
+        # Carried over the destination first, so letting go is straight down: left to itself the
+        # firmware dives across the deck with the plate.
+        await self.move_resource_to_xy_position(
+          location.x, location.y, acceleration_scale_x=acceleration_scale_x
         )
-      )
+        plate_top_center = self._plate_top(location)
+        await self._driver.send_command(
+          PrepCmd.PrepDropPlate(
+            plate_top_center=plate_top_center,
+            clearance_y=clearance_y,
+            acceleration_scale_x=acceleration_scale_x,
+          )
+        )
     await self._raise_to_traverse(minimum_traverse_height_end)
     self._clear_held_state()
 
