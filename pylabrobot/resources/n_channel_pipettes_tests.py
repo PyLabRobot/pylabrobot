@@ -40,9 +40,11 @@ class ShaftHoldsItsTip(unittest.TestCase):
   def test_the_tip_bottom_is_what_reaches_below_the_channel(self):
     """Part of the tip is up inside the channel, so it does not reach its whole length down."""
     self.shaft.mount_tip(self.tip)
-    self.assertEqual(self.shaft.tip_bottom().z, self.tip.fitting_depth - self.tip.get_size_z())
+    bottom = self.shaft.tip_bottom()
+    assert bottom is not None
+    self.assertEqual(bottom.z, self.tip.fitting_depth - self.tip.get_size_z())
     self.shaft.release_tip()
-    self.assertEqual(self.shaft.tip_bottom(), Coordinate.zero())
+    self.assertIsNone(self.shaft.tip_bottom())
 
   def test_a_grip_tool_sits_by_its_pick_up_location(self):
     """Its opening is off the centre of its body and 32 mm up, where the channel goes in."""
