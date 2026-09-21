@@ -7,8 +7,10 @@ from pylabrobot.hamilton.star.conftest import BARE_X_ARM
 from pylabrobot.hamilton.star.device import STAR
 from pylabrobot.hamilton.star.driver.features.x_arm_tests import RECORDED_DEVICE, declaring
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.hamilton.star.driver.errors import HardwareError, STARFirmwareError
+from pylabrobot.resources.azenta.plates import azenta_96_wellplate_200uL_Vb_4titudeframestar
 from pylabrobot.resources.errors import HasTipError
-from pylabrobot.resources.hamilton import STARDeck, hamilton_tip_300uL
+from pylabrobot.resources.hamilton import PLT_CAR_L5AC_A00, STARDeck, hamilton_tip_300uL
 
 
 class TestWiring(unittest.IsolatedAsyncioTestCase):
@@ -176,3 +178,74 @@ class TestPickUpAndDropTools(unittest.IsolatedAsyncioTestCase):
       await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
     self.assertEqual(self.safe_z_moves(), ["C0ZA"])
     self.assertIsNone(self.grippers._tools_taken_from)
+
+
+def z_drive_stalled(trace: int = 62) -> STARFirmwareError:
+  """What a channel answers when its Z drive stalls: trace 62."""
+  error = HardwareError("Z-drive movement error", trace, "P8ZPer02/62", "P8")
+  return STARFirmwareError({"Pipetting channel 8": error}, "C0ZPer99/00 P8ZPer02/62")
+
+
+class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
+  """Legacy's presence check: the jaws pushed down onto a plate stall on it."""
+
+  async def asyncSetUp(self):
+    self.star = STAR(simulation=True)
+    await self.star.setup()
+    carrier = PLT_CAR_L5AC_A00(name="plate_carrier")
+    self.star.deck.assign_child_resource(carrier, track=30)
+    carrier[0] = self.plate = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    assert self.star.core_grippers is not None
+    self.grippers = self.star.core_grippers
+    self.location = self.plate.get_location_wrt(self.star.deck)
+    self.sent: List[str] = []
+    answer = self.grippers._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      if command == "ZP":
+        wire = {k: v for k, v in kwargs.items() if len(k) == 2}
+        self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      return await answer(module=module, command=command, **kwargs)
+
+    self.grippers._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def check(self, **kwargs: Any) -> bool:
+    return await self.grippers.check_resource_exists_at_location_center(
+      self.location, self.plate, audio_feedback=False, **kwargs
+    )
+
+  async def test_refused_without_the_tools(self):
+    with self.assertRaises(RuntimeError):
+      await self.check(gripper_y_margin=9, enable_recovery=False)
+
+  async def test_sends_what_legacy_sends_and_nothing_found_is_false(self):
+    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
+    self.assertFalse(await self.check(gripper_y_margin=9, enable_recovery=False))
+    self.assertEqual(
+      self.sent, ["C0ZPxs08204xd0yj1142yv0050zj1934zy0600yo0675yg0675yw20th2750te2750"]
+    )
+
+  async def test_a_stalled_z_drive_is_found(self):
+    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
+
+    async def stalls(**kwargs: Any):
+      raise z_drive_stalled()
+
+    self.grippers._unchecked_fw_get_plate = stalls  # type: ignore[method-assign, assignment]
+    self.assertTrue(await self.check(gripper_y_margin=9, enable_recovery=False))
+
+  async def test_any_other_error_raises(self):
+    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
+
+    async def fails(**kwargs: Any):
+      raise z_drive_stalled(trace=61)
+
+    self.grippers._unchecked_fw_get_plate = fails  # type: ignore[method-assign, assignment]
+    with self.assertRaises(ValueError):
+      await self.check(gripper_y_margin=9, enable_recovery=False)
+
+  async def test_a_width_out_of_range_sends_nothing(self):
+    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
+    with self.assertRaises(ValueError):
+      await self.check(gripper_y_margin=40, enable_recovery=False)
+    self.assertEqual(self.sent, [])

@@ -6,9 +6,13 @@ import dataclasses
 import logging
 from typing import TYPE_CHECKING, Optional, Tuple
 
+from pylabrobot import audio
+from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import HasTipError
+from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:
   from ..master import STARDriver
@@ -345,3 +349,158 @@ class CoreGrippers:
     await pipettes.move_to_safe_z()
     self._tools_taken_from = None
     self._back_channel = self._front_channel = None
+
+  # ----------------------------------------
+  # Resources
+  # ----------------------------------------
+
+  # -- firmware ------------------------------------------------------------------------------------
+
+  async def _unchecked_fw_get_plate(
+    self,
+    x_position: int,
+    y_position: int,
+    y_gripping_speed: int,
+    z_position: int,
+    z_speed: int,
+    open_gripper_position: int,
+    plate_width: int,
+    grip_strength: int,
+    minimum_traverse_height_start: int,
+    minimum_z_position_end: int,
+  ):
+    """Send the plate pick-up as it is given, in tenths of a millimetre. `C0 ZP`.
+
+    Args:
+      x_position: the plate centre's x; negative sends `xd1`.
+      y_position: the plate centre's y.
+      y_gripping_speed: in tenths of a mm/s.
+      z_position: the gripping height.
+      z_speed: in tenths of a mm/s.
+      open_gripper_position: the jaws' opening before they close.
+      plate_width: the width they close to.
+      grip_strength: 0 (low) to 99 (high).
+      minimum_traverse_height_start: how high the channels travel first.
+      minimum_z_position_end: where the channels are left.
+    """
+    return await self._driver.send_command(
+      module="C0",
+      command="ZP",
+      subsystem=_FirmwareLock.CHANNELS,
+      read_timeout=120,
+      xs=f"{abs(x_position):05}",
+      xd=int(x_position < 0),
+      yj=f"{y_position:04}",
+      yv=f"{y_gripping_speed:04}",
+      zj=f"{z_position:04}",
+      zy=f"{z_speed:04}",
+      yo=f"{open_gripper_position:04}",
+      yg=f"{plate_width:04}",
+      yw=f"{grip_strength:02}",
+      th=f"{minimum_traverse_height_start:04}",
+      te=f"{minimum_z_position_end:04}",
+    )
+
+  # -- presence ------------------------------------------------------------------------------------
+
+  async def check_resource_exists_at_location_center(
+    self,
+    location: Coordinate,
+    resource: Resource,
+    gripper_y_margin: float = 0.5,
+    offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_at_beginning_of_a_command: float = 275.0,
+    z_position_at_the_command_end: float = 275.0,
+    enable_recovery: bool = True,
+    audio_feedback: bool = True,
+  ) -> bool:
+    """Push the open jaws down onto `resource`'s centre: stalling on it is finding it (`C0 ZP`).
+
+    Args:
+      location: where the resource's left-front-bottom is, in deck coordinates.
+      resource: the resource to check for.
+      gripper_y_margin: how far inside each of its front and back walls the jaws come down, in mm.
+      offset: added to its centre, in mm.
+      minimum_traverse_height_at_beginning_of_a_command: in mm.
+      z_position_at_the_command_end: in mm.
+      enable_recovery: ask on the console whether to check again when it is not found.
+      audio_feedback: play a sound on found and not found.
+
+    Returns:
+      True if found.
+
+    Raises:
+      RuntimeError: If the tools are not picked up.
+      ValueError: If the jaw width is out of range, the check is aborted, or ZP fails otherwise.
+    """
+    if self._tools_taken_from is None or self._back_channel is None or self._front_channel is None:
+      raise RuntimeError(
+        "the CoRe gripper tools are not picked up; `pick_up_tools_at_location` first"
+      )
+    pipettes = self._pipettes
+
+    center = location + resource.centers()[0] + offset
+    y_width_to_gripper_bump = resource.get_absolute_size_y() - gripper_y_margin * 2
+    min_width = pipettes._min_spacing_between(self._back_channel, self._front_channel)
+    max_width = round(resource.get_absolute_size_y())
+    if not min_width <= y_width_to_gripper_bump <= max_width:
+      raise ValueError(
+        f"width between channels must be between {min_width} and {max_width} mm, is "
+        f"{y_width_to_gripper_bump}"
+      )
+
+    resource_found = False
+    try_counter = 0
+    try:
+      while not resource_found:
+        try:
+          await self._unchecked_fw_get_plate(
+            x_position=round(center.x * 10),
+            y_position=round(center.y * 10),
+            y_gripping_speed=50,
+            z_position=round(center.z * 10),
+            z_speed=600,
+            open_gripper_position=round(y_width_to_gripper_bump * 10),
+            plate_width=round(y_width_to_gripper_bump * 10),
+            grip_strength=20,
+            minimum_traverse_height_start=round(
+              minimum_traverse_height_at_beginning_of_a_command * 10
+            ),
+            minimum_z_position_end=round(z_position_at_the_command_end * 10),
+          )
+        except STARFirmwareError as exc:
+          # Trace 62 is the channels' Z drive stalling: the jaws came down on the resource.
+          for module_error in exc.errors.values():
+            if module_error.trace_information == 62:
+              resource_found = True
+            else:
+              raise ValueError(f"Unexpected error encountered: {exc}") from exc
+        else:
+          if audio_feedback:
+            audio.play_not_found()
+          if enable_recovery:
+            print(
+              f"\nWARNING: Resource '{resource.name}' not found at center"
+              f" location {(center.x, center.y, center.z)} during check no {try_counter}."
+            )
+            user_prompt = input(
+              "Have you checked resource is present?"
+              "\n [ yes ] -> machine will check location again"
+              "\n [ abort ] -> machine will abort run\n Answer:"
+            )
+            if user_prompt == "yes":
+              try_counter += 1
+            elif user_prompt == "abort":
+              raise ValueError(
+                f"Resource '{resource.name}' not found at center"
+                f" location {(center.x, center.y, center.z)}"
+                " & error not resolved -> aborted resource movement."
+              )
+          else:
+            return False
+    finally:
+      await pipettes._record_after_tip_command()
+
+    if audio_feedback:
+      audio.play_got_item()
+    return True
