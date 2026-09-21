@@ -2957,6 +2957,8 @@ class iSWAP:
 
     X is not part of it. No table carries an X stop and parking does not drive the carriage, so the
     arm parks wherever along the rail it stands.
+    Z only has to be at or above its stop: parking lifts to the park's traverse height and retracts
+    there, so a parked arm stands as high as it was parked from.
 
     Args:
       tolerance_increments: how far off its stop a drive may sit and still count as on it, in that
@@ -2970,14 +2972,16 @@ class iSWAP:
     """
     c = self.configuration
     joints = await self.request_joint_state()
-    # Each drive, the table its parking stop is in, the slot it is in, and what reads its position.
-    drives: List[Tuple[str, Optional[Dict[str, int]], str, Callable[[int], float], float]] = [
+    # Each drive, its table, the slot its stop is in, what reads its position, and whether it may
+    # stand above that stop rather than on it.
+    drives: List[Tuple[str, Optional[Dict[str, int]], str, Callable[[int], float], float, bool]] = [
       (
         "the rotation drive's Y",
         c.rotation_drive_predefined_y_positions_increments,
         "parking",
         c.y_increments_to_mm,
         joints[iSWAPAxis.Y],
+        False,
       ),
       (
         "the rotation drive's Z",
@@ -2985,6 +2989,7 @@ class iSWAP:
         "parking",
         c.z_increments_to_mm,
         joints[iSWAPAxis.Z] - c.rotation_drive_z_offset_above_finger,
+        True,
       ),
       (
         "the rotation drive",
@@ -2992,6 +2997,7 @@ class iSWAP:
         "parking",
         c.rotation_drive_increments_to_angle,
         joints[iSWAPAxis.ROTATION],
+        False,
       ),
       (
         "the wrist drive",
@@ -2999,6 +3005,7 @@ class iSWAP:
         "parking",
         c.wrist_increments_to_deg,
         joints[iSWAPAxis.WRIST],
+        False,
       ),
       (
         "the gripper drive",
@@ -3006,17 +3013,19 @@ class iSWAP:
         "home",
         c.gripper_increments_to_mm,
         joints[iSWAPAxis.GRIPPER],
+        False,
       ),
     ]
 
-    for what, table, slot, to_units, position in drives:
+    for what, table, slot, to_units, position, at_least in drives:
       if table is None:
         raise RuntimeError(f"{what}'s stored table was not read; have you called `star.setup()`?")
       stop = table[slot]
       # The tolerance is in increments, so it is taken across the same increments it allows: a
       # conversion need not be linear, and the rotation drive's is not.
       tolerance = abs(to_units(stop + tolerance_increments) - to_units(stop))
-      if abs(position - to_units(stop)) > tolerance:
+      below = to_units(stop) - position > tolerance
+      if below if at_least else abs(position - to_units(stop)) > tolerance:
         return False
     return True
 
