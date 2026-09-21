@@ -299,6 +299,20 @@ class _RecordedTree:
     return None
 
 
+# What PRPAA1087 answered while its plate-held latch was set (20-21 Sep): the Pipettor refuses to drop
+# the tools, and MLPrep to initialize, whose own attempt to drop them is refused the same way.
+_TOOLS_HELD_BY_A_PLATE = "0xE000.0x0001.0x1000:0x01,0x0010,0x0F04"
+_INITIALIZE_WITH_A_PLATE = "0x0001.0x0001.0x2000:0x01,0x0001,0x0F0A;" + _TOOLS_HELD_BY_A_PLATE
+
+
+class _DeviceRefuses(Exception):
+  """A simulated answer that is the device's exception, as its entries."""
+
+  def __init__(self, entries: str):
+    super().__init__(entries)
+    self.entries = entries
+
+
 class _Simulated:
   """Reaches the device behind a feature, which for a simulated one is the simulator."""
 
@@ -603,6 +617,8 @@ class SimulatedPipettes(_Simulated, Pipettes):
       self._move(front, None, request.front_channel_position_y, request.tool_seek)
       return None
     if isinstance(request, PrepCmd.PrepDropTool):
+      if self._plate_held:
+        raise _DeviceRefuses(_TOOLS_HELD_BY_A_PLATE)
       # Taken home from anywhere, the shafts' ends at the traverse height; the tools come off the model
       # after.
       height = self.device.simulated_default_minimum_traverse_height
@@ -1001,7 +1017,11 @@ class _SimulatedSession(TCPSession):
         dest, hoi, f"{node.path} has no such method in the recorded firmware"
       ), True
 
-    answer = await self._driver._answer(request, node.path, method["name"])
+    try:
+      answer = await self._driver._answer(request, node.path, method["name"])
+    except _DeviceRefuses as refused:
+      logger.debug("%s read: simulation refuses as the device does: %s", SIMULATED_LINK, refused)
+      return HoiParams().add(refused.entries, Str).build(), True
     if answer is None:
       if isinstance(request, PrepCmd.PrepProbeRequest) or hasattr(type(request), "Response"):
         return self._refusal(dest, hoi, f"{node.path}.{method['name']} is not simulated"), True
@@ -1148,6 +1168,8 @@ class PrepSimulationDriver(PrepDriver):
     declared = "the declared configuration"
 
     if isinstance(request, PrepCmd.PrepInitialize):
+      if isinstance(self.pipettes, SimulatedPipettes) and self.pipettes._plate_held:
+        raise _DeviceRefuses(_INITIALIZE_WITH_A_PLATE)
       self.initialized = True
       return None
     if isinstance(request, PrepCmd.PrepGetIsInitialized):

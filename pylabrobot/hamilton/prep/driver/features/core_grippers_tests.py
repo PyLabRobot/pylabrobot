@@ -13,6 +13,7 @@ import pytest
 from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.features.core_grippers import JAW_OPEN_EXTRA, CoreGrippers
+from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.azenta import azenta_96_wellplate_200uL_Vb_4titudeframestar
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
@@ -46,6 +47,7 @@ def _make_grippers(deck: PrepDeck, stub_pick_and_drop: bool = True) -> Tuple[Cor
     move_to_y_positions=AsyncMock(),
     move_to_xy_positions=AsyncMock(),
     _record_where_they_stopped=AsyncMock(),
+    shaft=lambda channel: None,
     # Where PRPAA1087 had the jaws once a plate was gripped and raised: centred on it, at Z safety.
     request_locations=AsyncMock(
       return_value=[Coordinate(62.55, 84.47, 144.6), Coordinate(62.55, 4.0, 144.6)]
@@ -1079,6 +1081,83 @@ def test_the_simulator_moves_the_grippers_where_the_device_did():
     assert await jaws() == pytest.approx(
       (290.0, 275.5, 257.5, 167.5), abs=0.01
     )  # home, shafts at traverse
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_a_held_plate_rides_on_the_front_tool_and_lands_where_it_is_put():
+  """Gripped, it hangs from the front tool where the jaws hold it; put down, it is in its place."""
+
+  async def _run():
+    deck = PrepDeck(with_core_grippers=True)
+    plate = deck[0] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    spot, taken_at = plate.parent, plate.location
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    grippers, pipettes = p.core_grippers, p.pipettes
+    assert grippers is not None and pipettes is not None
+    await grippers.pick_up_tools()
+    front_tool = grippers._front_tool()
+
+    async def jaws() -> Tuple[float, float, float]:
+      back, front = (await pipettes.request_locations())[:2]
+      return front.x, (back.y + front.y) / 2, front.z
+
+    def plate_centre_and_top() -> Tuple[float, float, float]:
+      c = plate.get_absolute_location(x="c", y="c", z="t")
+      return c.x, c.y, c.z
+
+    await grippers.pick_up_resource(plate)
+    from_top = grippers._pickup_distance_from_top
+    assert plate.parent is front_tool and from_top is not None
+    x, y, z = await jaws()
+    assert plate_centre_and_top() == pytest.approx((x, y, z + from_top), abs=0.01)
+
+    await grippers.move_resource_to_xy_position(x=80.0, y=280.0)
+    assert plate_centre_and_top() == pytest.approx((80.0, 280.0, z + from_top), abs=0.01)
+
+    await grippers.return_resource()
+    assert plate.parent is spot and plate.location == taken_at
+
+    await grippers.pick_up_resource(plate)
+    held_at = plate.get_location_wrt(deck)
+    await grippers.release_plate()
+    assert plate.parent is deck and plate.location == pytest.approx(held_at)
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_while_a_plate_is_held_the_simulator_refuses_the_tools_home_and_initializing_as_the_device():
+  """The plate-held latch: 0x0F04 for PrepDropTool, 0x0F0A (and 0x0F04) for PrepInitialize."""
+
+  async def _run():
+    deck = PrepDeck(with_core_grippers=True)
+    plate = deck[0] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    grippers = p.core_grippers
+    assert grippers is not None
+    await grippers.pick_up_tools()
+    await grippers.pick_up_resource(plate)
+    front_tool = grippers._front_tool()
+
+    with pytest.raises(HoiError, match="0x0F04"):
+      await grippers.return_tools()
+    assert grippers.tools_mounted and plate.parent is front_tool  # nothing let go of in the model
+    initialize = PrepCmd.PrepInitialize(
+      smart=True,
+      tip_drop_params=PrepCmd.InitTipDropParameters(
+        default_values=True, x_position=287.0, rolloff_distance=3, channel_parameters=[]
+      ),
+    )
+    with pytest.raises(HoiError, match="0x0F0A"):
+      await p.send_command(initialize)
+
+    await grippers.return_resource()
+    await grippers.return_tools()  # accepted once the plate is down
+    await p.send_command(initialize)
     await p.stop()
 
   asyncio.run(_run())

@@ -183,6 +183,42 @@ class CoreGrippers:
     self._plate_top_z_offset = None
     self._taken_from = None
 
+  def _front_tool(self) -> Optional[Resource]:
+    """The tool the model has on the front channel, or None while it has none."""
+    shaft = self._pipettes.shaft(self._front_channel)
+    return shaft.tip if shaft is not None and shaft.has_tip() else None
+
+  def _hang_held_resource_on_the_front_tool(self) -> None:
+    """Hang the held resource from the front tool where the jaws hold it, so it rides with them.
+
+    Its centre at the jaws' centre, its top `pickup_distance_from_top` above the grip line - where the
+    device reports the front channel with the tools on. Nothing happens while nothing models them.
+    """
+    held, from_top, tool = self._held_resource, self._pickup_distance_from_top, self._front_tool()
+    if held is None or from_top is None or tool is None:
+      return
+    back = self._pipettes.get_reference_point_location(self._back_channel)
+    front = self._pipettes.get_reference_point_location(self._front_channel)
+    if back is None or front is None:
+      return
+    center = held.center().rotated(held.get_absolute_rotation())
+    lfb = Coordinate(
+      front.x - center.x,
+      (back.y + front.y) / 2 - center.y,
+      front.z + from_top - held.get_absolute_size_z(),
+    )
+    held.unassign()
+    tool.assign_child_resource(held, location=lfb - tool.get_location_wrt(self._deck))
+
+  def _put_held_resource_on_the_deck(self) -> None:
+    """Put a resource hanging from the front tool on the deck, where it is now."""
+    held, tool = self._held_resource, self._front_tool()
+    if held is None or tool is None or held.parent is not tool:
+      return
+    where = held.get_location_wrt(self._deck)
+    held.unassign()
+    self._deck.assign_child_resource(held, location=where)
+
   # ----------------------------------------
   # Movement
   # ----------------------------------------
@@ -785,11 +821,15 @@ class CoreGrippers:
     self._clear_held_state()
 
   async def release_plate(self) -> None:
-    """Open the CoRe gripper and release whatever is held (PrepReleasePlate, cmd=21)."""
+    """Open the CoRe gripper and release whatever is held (PrepReleasePlate, cmd=21).
+
+    A held resource goes on the deck where it was let go: what the jaws do is unmeasured.
+    """
     try:
       await self._driver.send_command(PrepCmd.PrepReleasePlate())
     finally:
       await self._pipettes._record_where_they_stopped()
+    self._put_held_resource_on_the_deck()
     self._clear_held_state()
 
   # -- by resource ---------------------------------------------------------------------------------
@@ -847,6 +887,7 @@ class CoreGrippers:
     self._held_resource = resource
     source_parent, source_location = source
     self._taken_from = None if source_parent is None else (source_parent, source_location)
+    self._hang_held_resource_on_the_front_tool()
 
   async def drop_resource(
     self,
