@@ -1492,11 +1492,10 @@ class Pipettes:
     acceleration: Optional[float] = None,
     current_limit: Optional[int] = None,
   ):
-    """Move each named channel's stop disc along Z.
+    """Move each named channel's stop disc along Z, all together (`Px ZA` per channel).
 
-    One command per channel, as `request_stop_disc_z_positions` is one read per channel: a channel
-    module answers for its own channel and no other. They go one after another, so a channel that
-    refuses stops the rest. The channels not named stay where they are.
+    Every target is checked before any is sent. A channel that fails does not stop the others; the
+    first failure is raised once every channel has been recorded. The channels not named stay.
 
     Args:
       zs: where to put each named channel's stop disc, in mm, keyed by channel, 0-indexed from the
@@ -1510,13 +1509,20 @@ class Pipettes:
         drive accepts.
     """
     for channel, z in zs.items():
-      await self.move_stop_disc_to_z_position(
-        channel,
-        z,
-        speed=speed,
-        acceleration=acceleration,
-        current_limit=current_limit,
-      )
+      self._require_channel(channel)
+      self._check_reachable("z", z)
+    results = await asyncio.gather(
+      *(
+        self.move_stop_disc_to_z_position(
+          channel, z, speed=speed, acceleration=acceleration, current_limit=current_limit
+        )
+        for channel, z in zs.items()
+      ),
+      return_exceptions=True,
+    )
+    failed = [result for result in results if isinstance(result, BaseException)]
+    if failed:
+      raise failed[0]
 
   async def move_stop_disc_to_z_position(
     self,
@@ -1587,13 +1593,17 @@ class Pipettes:
 
     return positions
 
-  async def move_to_safe_z(self) -> None:
-    """Move every channel's stop disc to the top of the window `probe_z_max` measured.
+  async def move_to_safe_z(
+    self, speed: Optional[float] = None, acceleration: Optional[float] = None
+  ) -> None:
+    """Raise every channel to Z safety together (`C0 ZA`), whatever is mounted.
 
-    By stop disc, so the height holds whatever is mounted. Precedes any lateral move.
+    Args:
+      speed: in mm/s, held by the drives for the move. The stored speed when None.
+      acceleration: in mm/s2, held by the drives for the move. The stored one when None.
     """
-    top = self.configuration.z_range[1]
-    await self.move_stop_disc_to_z_positions({channel: top for channel in range(self.num_channels)})
+    async with self._temporary_z_drive_profile(speed=speed, acceleration=acceleration):
+      await self.probe_z_max()
 
   # -- spreading -----------------------------------------------------------------------------------
 

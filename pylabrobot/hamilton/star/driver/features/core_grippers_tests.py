@@ -108,14 +108,14 @@ class TestPickUpAndDropTools(unittest.IsolatedAsyncioTestCase):
     return [c for c in self.sent if c[2:4] in ("ZT", "ZS")]
 
   def safe_z_moves(self) -> List[str]:
-    return [c[:4] for c in self.sent if c[0] == "P" and c[2:4] == "ZA"]
+    return [c[:4] for c in self.sent if c[:4] == "C0ZA" or (c[0] == "P" and c[2:4] == "ZA")]
 
   async def test_default_pair_sends_what_legacy_sends(self):
     await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
     self.assertEqual(
       self.tool_commands(), ["C0ZTxs13375xd0ya1250yb1070pa07pb08tp2350tz2250th2800tt14"]
     )
-    self.assertEqual(self.safe_z_moves(), [f"P{i}ZA" for i in "12345678"])
+    self.assertEqual(self.safe_z_moves(), ["C0ZA"])
 
   async def test_a_named_pair(self):
     await self.grippers.pick_up_tools_at_location(
@@ -158,7 +158,7 @@ class TestPickUpAndDropTools(unittest.IsolatedAsyncioTestCase):
     self.sent.clear()
     await self.grippers.drop_tools()
     self.assertEqual(self.tool_commands(), ["C0ZSxs13375xd0ya1250yb1070tp2150tz2050th2800te2800"])
-    self.assertEqual(self.safe_z_moves(), [f"P{i}ZA" for i in "12345678"])
+    self.assertEqual(self.safe_z_moves(), ["C0ZA"])
     with self.assertRaises(RuntimeError):
       await self.grippers.drop_tools()
 
@@ -174,5 +174,5 @@ class TestPickUpAndDropTools(unittest.IsolatedAsyncioTestCase):
     self.grippers._unchecked_fw_pick_up_tools = refused  # type: ignore[method-assign]
     with self.assertRaises(RuntimeError):
       await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
-    self.assertEqual(self.safe_z_moves(), [f"P{i}ZA" for i in "12345678"])
+    self.assertEqual(self.safe_z_moves(), ["C0ZA"])
     self.assertIsNone(self.grippers._tools_taken_from)

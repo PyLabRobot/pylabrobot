@@ -314,6 +314,54 @@ class TestRequireISWAPParked(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.sent, [])
 
 
+class TestSafeZAndStopDiscMoves(unittest.IsolatedAsyncioTestCase):
+  """Safe Z is the firmware's own move under a Z profile; stop-disc moves go out together."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+    answer = self.pipettes._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      wire = {k: v for k, v in kwargs.items() if len(k) == 2 and not isinstance(v, list)}
+      if command in ("ZA", "AA"):
+        self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      return await answer(module=module, command=command, **kwargs)
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_safe_z_is_one_command(self):
+    await self.pipettes.move_to_safe_z()
+    self.assertEqual(self.sent, ["C0ZA"])
+
+  async def test_safe_z_at_a_speed_holds_it_for_the_move(self):
+    await self.pipettes.move_to_safe_z(speed=50.0)
+    self.assertEqual(
+      self.sent,
+      [f"P{i}AAzv04661" for i in "12345678"] + ["C0ZA"] + [f"P{i}AAzv11652" for i in "12345678"],
+    )
+
+  async def test_stop_disc_moves_are_checked_before_any_is_sent(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes.move_stop_disc_to_z_positions({0: 300.0, 3: 50.0})
+    self.assertEqual(self.sent, [])
+
+  async def test_a_failing_channel_does_not_stop_the_others(self):
+    moved: List[int] = []
+    move = self.pipettes.move_stop_disc_to_z_position
+
+    async def one(channel: int, z: float, **kwargs: Any):
+      if channel == 2:
+        raise RuntimeError("channel 2")
+      moved.append(channel)
+      return await move(channel, z, **kwargs)
+
+    self.pipettes.move_stop_disc_to_z_position = one  # type: ignore[method-assign, assignment]
+    with self.assertRaises(RuntimeError):
+      await self.pipettes.move_stop_disc_to_z_positions({ch: 300.0 for ch in range(8)})
+    self.assertEqual(sorted(moved), [0, 1, 3, 4, 5, 6, 7])
+
+
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
   """A v1 device plans with `pylabrobot.lib.liquid_handling`, from its own minimum channel spacing."""
 
