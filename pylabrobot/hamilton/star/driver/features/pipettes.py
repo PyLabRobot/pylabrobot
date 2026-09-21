@@ -4,10 +4,12 @@ import asyncio
 import datetime
 import logging
 import math
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import (
   TYPE_CHECKING,
   Any,
+  AsyncIterator,
   Dict,
   Iterable,
   List,
@@ -115,14 +117,9 @@ class PipettesConfiguration:
 
   # -- what a channel's own Z drive accepts, for the moves addressed to the channel itself --
   z_drive_speed_range_increments: Tuple[int, int] = (20, 15_000)
-  z_drive_speed_default: float = 125.0
-  """How fast a channel's Z drive moves when the caller names nothing, in mm/s."""
   z_drive_acceleration_range_increments: Tuple[int, int] = (5, 150)
-  z_drive_acceleration_default: float = 800.0
-  """How hard it accelerates when the caller names nothing, in mm/s2. Counted in thousands of
-  increments per second squared, unlike the positions and speeds beside it."""
+  """Counted in thousands of increments per second squared, unlike the speeds beside it."""
   z_drive_current_limit_range: Tuple[int, int] = (0, 7)
-  z_drive_current_limit_default: int = 3
   drive_parameters: Dict[str, int] = field(default_factory=lambda: {"zv": 5, "zr": 3})
   """The stored drive parameters a channel reads and writes, and their widths on the wire."""
 
@@ -252,6 +249,15 @@ class Pipettes:
   `configuration.channels`.
   """
 
+  # Z speed when the caller names none, in mm/s.
+  default_z_speed: float = 125.0
+  # Z acceleration when the caller names none, in mm/s2.
+  default_z_acceleration: float = 800.0
+  # Z drive current limit when the caller names none.
+  default_z_current_limit: int = 3
+  # Height the channels travel at when a command names none, in mm.
+  default_minimum_traverse_height: float = 245.0
+
   def __init__(self, driver: "STARDriver", configuration: Optional[PipettesConfiguration] = None):
     """
     Args:
@@ -263,9 +269,6 @@ class Pipettes:
     # on the arm; the reads keep them in step. Without a deck the list stays empty.
     self.resources: List[Resource] = []
     self.configuration = configuration or PipettesConfiguration()
-    # The height the channels travel at when a command names none, in mm. Legacy STARBackend's
-    # channel traversal height.
-    self.default_minimum_traverse_height: float = 245.0
 
   # -- addressing ------------------------------------------------------------
 
@@ -765,6 +768,87 @@ class Pipettes:
 
   # ---- z -----------------------------------------------------------------------------------------
 
+  async def request_z_speed(self, channel: int) -> float:
+    """Request the Z speed a channel's drive holds (`Px RA zv`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The speed in mm/s.
+    """
+    return await self._request_drive_parameter(channel, "zv")
+
+  async def request_z_acceleration(self, channel: int) -> float:
+    """Request the Z acceleration a channel's drive holds (`Px RA zr`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The acceleration in mm/s2.
+    """
+    return await self._request_drive_parameter(channel, "zr")
+
+  async def _set_z_speed(self, channel: int, speed: float) -> None:
+    """Write the Z speed a channel's drive holds (`Px AA zv`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      speed: in mm/s.
+
+    Raises:
+      ValueError: If the channel or speed is out of range.
+    """
+    await self._set_drive_parameter(channel, "zv", speed)
+
+  async def _set_z_acceleration(self, channel: int, acceleration: float) -> None:
+    """Write the Z acceleration a channel's drive holds (`Px AA zr`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      acceleration: in mm/s2.
+
+    Raises:
+      ValueError: If the channel or acceleration is out of range.
+    """
+    await self._set_drive_parameter(channel, "zr", acceleration)
+
+  @asynccontextmanager
+  async def _temporary_z_drive_profile(
+    self,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    channels: Optional[List[int]] = None,
+  ) -> AsyncIterator[None]:
+    """Set the channels' Z speed and acceleration for the enclosed block, then the defaults.
+
+    Args:
+      speed: in mm/s, or None to leave it.
+      acceleration: in mm/s2, or None to leave it.
+      channels: which channels, 0-indexed from the back. All of them when None.
+    """
+    channels = list(range(self.num_channels)) if channels is None else list(channels)
+    wanted = [(p, v) for p, v in (("zv", speed), ("zr", acceleration)) if v is not None]
+    defaults = {"zv": self.default_z_speed, "zr": self.default_z_acceleration}
+    written: List[Tuple[int, str]] = []
+    try:
+      for channel in channels:
+        for parameter, value in wanted:
+          await self._set_drive_parameter(channel, parameter, value)
+          written.append((channel, parameter))
+      yield
+    finally:
+      for channel, parameter in written:
+        try:
+          await self._set_drive_parameter(channel, parameter, defaults[parameter])
+        except Exception:
+          logger.warning(
+            "could not put channel %s's %s back to %s", channel, parameter, defaults[parameter]
+          )
+
+  # -- the raw register access these share --
+
   def _require_drive_parameter(self, parameter: str) -> int:
     """The wire width of a channel's stored drive parameter.
 
@@ -789,7 +873,14 @@ class Pipettes:
       return c.z_drive_mm_to_increments(value)
     return c.z_drive_acceleration_mm_to_increments(value)
 
-  async def request_drive_parameter(self, channel: int, parameter: str) -> float:
+  def _drive_parameter_to_mm(self, parameter: str, increments: int) -> float:
+    """A stored drive parameter in mm/s or mm/s2, from what the drive counts in."""
+    c = self.configuration
+    if parameter == "zv":
+      return c.z_drive_increments_to_mm(increments)
+    return c.z_drive_acceleration_increments_to_mm(increments)
+
+  async def _request_drive_parameter(self, channel: int, parameter: str) -> float:
     """Request a channel's stored drive parameter (`Px RA`).
 
     Args:
@@ -807,13 +898,9 @@ class Pipettes:
     resp = await self._driver.send_command(
       module=self.channel_id(channel), command="RA", ra=parameter, fmt=f"{parameter}{'#' * width}"
     )
-    increments = cast(int, resp[parameter])
-    c = self.configuration
-    if parameter == "zv":
-      return c.z_drive_increments_to_mm(increments)
-    return c.z_drive_acceleration_increments_to_mm(increments)
+    return self._drive_parameter_to_mm(parameter, cast(int, resp[parameter]))
 
-  async def set_drive_parameter(self, channel: int, parameter: str, value: float) -> None:
+  async def _set_drive_parameter(self, channel: int, parameter: str, value: float) -> None:
     """Write a channel's stored drive parameter (`Px AA`).
 
     Args:
@@ -833,15 +920,6 @@ class Pipettes:
     increments = self._drive_parameter_to_increments(parameter, value)
     written: Dict[str, Any] = {parameter: f"{increments:0{width}}"}
     await self._driver.send_command(module=self.channel_id(channel), command="AA", **written)
-
-  async def _restore_drive_parameter(
-    self, channel: int, parameter: str, written: float, was: float
-  ) -> None:
-    """Write `was` back unless it and `written` are the same increment."""
-    if self._drive_parameter_to_increments(
-      parameter, written
-    ) != self._drive_parameter_to_increments(parameter, was):
-      await self.set_drive_parameter(channel, parameter, was)
 
   # -- x position --------------------------------------------------------------------------------
 
@@ -1244,10 +1322,9 @@ class Pipettes:
     Args:
       channel: which channel to move, 0-indexed from the back.
       z: where to put the bottom of its tip, in mm on the deck.
-      speed: how fast, in mm/s. Defaults to `configuration.z_drive_speed_default`.
-      acceleration: how hard, in mm/s2. Defaults to `configuration.z_drive_acceleration_default`.
-      current_limit: the motor current limit. Defaults to
-        `configuration.z_drive_current_limit_default`.
+      speed: how fast, in mm/s. Defaults to `default_z_speed`.
+      acceleration: how hard, in mm/s2. Defaults to `default_z_acceleration`.
+      current_limit: the motor current limit. Defaults to `default_z_current_limit`.
 
     Raises:
       ValueError: If the channel carries no tip, or it cannot put the tip bottom at `z`.
@@ -1290,10 +1367,9 @@ class Pipettes:
     Args:
       zs: where to put each named channel's stop disc, in mm, keyed by channel, 0-indexed from the
         back.
-      speed: how fast, in mm/s. Defaults to `configuration.z_drive_speed_default`.
-      acceleration: how hard, in mm/s2. Defaults to `configuration.z_drive_acceleration_default`.
-      current_limit: the motor current limit. Defaults to
-        `configuration.z_drive_current_limit_default`.
+      speed: how fast, in mm/s. Defaults to `default_z_speed`.
+      acceleration: how hard, in mm/s2. Defaults to `default_z_acceleration`.
+      current_limit: the motor current limit. Defaults to `default_z_current_limit`.
 
     Raises:
       ValueError: If a named channel is not one this device has, or an argument is outside what the
@@ -1324,19 +1400,18 @@ class Pipettes:
     Args:
       channel: which channel to move, 0-indexed from the back.
       z: where to put its stop disc, in mm on the deck.
-      speed: how fast, in mm/s. Defaults to `configuration.z_drive_speed_default`.
-      acceleration: how hard, in mm/s2. Defaults to `configuration.z_drive_acceleration_default`.
-      current_limit: the motor current limit. Defaults to
-        `configuration.z_drive_current_limit_default`.
+      speed: how fast, in mm/s. Defaults to `default_z_speed`.
+      acceleration: how hard, in mm/s2. Defaults to `default_z_acceleration`.
+      current_limit: the motor current limit. Defaults to `default_z_current_limit`.
 
     Raises:
       ValueError: If an argument is outside what the drive accepts.
     """
     self._require_channel(channel)
     c = self.configuration
-    speed = c.z_drive_speed_default if speed is None else speed
-    acceleration = c.z_drive_acceleration_default if acceleration is None else acceleration
-    current_limit = c.z_drive_current_limit_default if current_limit is None else current_limit
+    speed = self.default_z_speed if speed is None else speed
+    acceleration = self.default_z_acceleration if acceleration is None else acceleration
+    current_limit = self.default_z_current_limit if current_limit is None else current_limit
 
     self._check_reachable("z", z)
     for checked, (low, high), name in (

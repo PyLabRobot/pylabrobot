@@ -35,10 +35,11 @@ attribute, built in `STARDriver.discover` from the configuration bits the device
 device's accessors read through to the driver's. A feature already built is kept, so a caller can
 hand one its configuration before setup and re-running setup does not throw it away.
 
-**P3. Every feature has a `.configuration` dataclass.** It holds three kinds of thing, in this
-order: what the device answered about itself, per-machine calibration, and the device facts of that
-generation of drive - encoder resolutions, the ranges each drive accepts, the defaults each command
-is sent with. `DeviceConfiguration` in `driver/configuration.py` is the same thing for the device.
+**P3. Every feature has a `.configuration` dataclass, and it holds facts only.** Three kinds, in
+this order: what the device answered about itself, per-machine calibration, and the device facts of
+that generation of drive - encoder resolutions, the ranges each drive accepts, and the firmware's own
+defaults. What the driver chooses to send is not a fact about the device and does not go here (P18).
+`DeviceConfiguration` in `driver/configuration.py` is the same thing for the device.
 
 **P4. The wire counts in increments; this driver speaks mm, degrees, uL and seconds.** Every
 conversion is a method on the configuration - `x_increments_to_mm` / `x_mm_to_increments` - so the
@@ -55,9 +56,9 @@ narrower window, `_check_pose_reachable` for the pose two joint angles would pro
 are `_require_*`.
 
 **P6. Every firmware parameter is an argument, and its default is written out.** A command that
-takes a speed, an acceleration and a current limit exposes all three, defaulted from the
-configuration rather than left to whatever the drive would have used, so a run records what it
-asked for.
+takes a speed, an acceleration and a current limit exposes all three, defaulted from the feature's
+`default_*` attributes (P18) rather than left to whatever the drive would have used, so a run
+records what it asked for.
 
 **P7. `_unchecked_fw_*` is the raw wire call.** It assembles and sends, and does nothing else.
 Unchecked means unchecked *by this driver*: the arguments are not guarded and the model is not
@@ -123,6 +124,11 @@ error is raised where the command was sent rather than inspected by the caller.
 machine is built belongs in one only when a device, a log or a wire capture established it. Numbers
 that a constant already holds are referenced by name rather than repeated.
 
+**P18. The driver's defaults are public `default_*` attributes on the feature.** Declared on the
+class with a type, in standard units, round, and slightly below the firmware's own default. A
+caller tunes one device by assigning on the instance, or every device by assigning on the class.
+Named `default_<quantity>[_<condition>]`: `default_z_speed`, `default_z_speed_with_resource_held`.
+
 ## Where this is not consistent yet
 
 1. **`.configuration` has two owners.** Most features own theirs
@@ -169,3 +175,7 @@ that a constant already holds are referenced by name rather than repeated.
    (`"Bit 1: ISWAP. False = none, True = installed."`), which no feature configuration does. It is
    the oldest of the configurations and reads like the document it was transcribed from rather than
    like the rest of them.
+
+10. **The driver's defaults still live in the configurations.** `Pipettes`, `Head`, `Head96`,
+   `Head384`, `iSWAP` and `Autoload` keep them as `*_default` / `*_default_increments` fields, some
+   in increments. `CoreGrippers` follows P18; the rest move over one feature at a time.

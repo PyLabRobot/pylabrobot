@@ -178,32 +178,41 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
 
     async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
       self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
-      return {"zr": 75} if command == "RA" else None
+      return {"zr": 75, "zv": 12000} if command == "RA" else None
 
     self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
 
   async def test_request(self):
-    self.assertEqual(await self.pipettes.request_drive_parameter(0, "zr"), 804.6)
-    self.assertEqual(self.sent, ["P1RArazr"])
+    self.assertEqual(await self.pipettes.request_z_acceleration(0), 804.6)
+    self.assertEqual(await self.pipettes.request_z_speed(0), 128.73)
+    self.assertEqual(self.sent, ["P1RArazr", "P1RArazv"])
 
   async def test_set(self):
-    await self.pipettes.set_drive_parameter(1, "zr", 800.0)
-    self.assertEqual(self.sent, ["P2AAzr075"])
+    await self.pipettes._set_z_acceleration(1, 800.0)
+    await self.pipettes._set_z_speed(1, 50.0)
+    self.assertEqual(self.sent, ["P2AAzr075", "P2AAzv04661"])
 
   async def test_refused_sends_nothing(self):
     with self.assertRaises(ValueError):
-      await self.pipettes.set_drive_parameter(0, "yv", 100.0)
+      await self.pipettes._set_drive_parameter(0, "yv", 100.0)
     with self.assertRaises(ValueError):
-      await self.pipettes.set_drive_parameter(0, "zr", 2000.0)
+      await self.pipettes._set_z_acceleration(0, 2000.0)
     with self.assertRaises(ValueError):
-      await self.pipettes.request_drive_parameter(0, "yv")
+      await self.pipettes._set_z_speed(0, 200.0)
     self.assertEqual(self.sent, [])
 
-  async def test_restore_only_what_changed(self):
-    await self.pipettes._restore_drive_parameter(0, "zr", 800.0, 804.6)
-    self.assertEqual(self.sent, [])
-    await self.pipettes._restore_drive_parameter(0, "zr", 150.0, 804.6)
-    self.assertEqual(self.sent, ["P1AAzr075"])
+  async def test_profile_sets_then_puts_back_the_defaults(self):
+    async with self.pipettes._temporary_z_drive_profile(
+      speed=50.0, acceleration=150.0, channels=[7]
+    ):
+      self.assertEqual(self.sent, ["P8AAzv04661", "P8AAzr014"])
+    self.assertEqual(self.sent[2:], ["P8AAzv11652", "P8AAzr075"])
+
+  async def test_profile_puts_back_when_the_block_raises(self):
+    with self.assertRaises(RuntimeError):
+      async with self.pipettes._temporary_z_drive_profile(acceleration=150.0, channels=[7]):
+        raise RuntimeError("the block")
+    self.assertEqual(self.sent, ["P8AAzr014", "P8AAzr075"])
 
 
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
