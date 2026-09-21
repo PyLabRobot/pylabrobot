@@ -61,9 +61,8 @@ class HTTPCommand(Command):
 
   ``request`` and ``response`` are JSON strings (the response is the raw body
   text on a non-2xx). ``status`` is kept so a non-2xx replays as the same
-  refusal rather than succeeding with an error body. The constructor accepts
-  the same keys :func:`_CaptureWriter.record` serializes from ``__dict__``, so
-  a recorded command round-trips through ``HTTPCommand(**cr.next_command())``.
+  refusal rather than succeeding with an error body. The HTTP method is stored
+  in the capture format's ``action`` field.
   """
 
   path: str
@@ -74,14 +73,14 @@ class HTTPCommand(Command):
   def __init__(
     self,
     device_id: str,
-    action: str,
+    method: str,
     path: str,
     response: str,
     status: int,
     request: Optional[str] = None,
     module: str = "http",
   ):
-    super().__init__(module=module, device_id=device_id, action=action)
+    super().__init__(module=module, device_id=device_id, action=method)
     self.path = path
     self.request = request
     self.response = response
@@ -152,10 +151,7 @@ class HTTP:
     request = urllib.request.Request(url, headers=headers, data=body, method=method)
     try:
       with urllib.request.urlopen(request, timeout=self.timeout) as response:
-        # A successful urlopen is 2xx (urllib raises HTTPError for >=400); the
-        # getattr keeps a bare read()-only response object (e.g. a test double)
-        # working while recording the real status when one is present.
-        return getattr(response, "status", 200), response.read().decode("utf-8")
+        return response.status, response.read().decode("utf-8")
     except urllib.error.HTTPError as error:
       return error.code, error.read().decode("utf-8", errors="replace")
 
@@ -195,7 +191,7 @@ class HTTP:
       capturer.record(
         HTTPCommand(
           device_id=self.base_url,
-          action=normalized_method,
+          method=normalized_method,
           path=path,
           request=request_json,
           response=body_text,
@@ -211,7 +207,7 @@ class HTTP:
     capturer.record(
       HTTPCommand(
         device_id=self.base_url,
-        action=normalized_method,
+        method=normalized_method,
         path=path,
         request=request_json,
         response=response_json,
@@ -259,7 +255,9 @@ class HTTPValidator(HTTP):
   ) -> Dict[str, Any]:
     normalized_method = method.upper()
     request_json = json.dumps(data, sort_keys=True) if data is not None else None
-    recorded = HTTPCommand(**self.cr.next_command())
+    command = self.cr.next_command()
+    command["method"] = command.pop("action")
+    recorded = HTTPCommand(**command)
     if not (
       recorded.module == "http"
       and recorded.device_id == self.base_url
