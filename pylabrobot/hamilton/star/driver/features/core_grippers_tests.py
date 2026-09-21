@@ -210,8 +210,8 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
     self.grippers._driver.send_command = recorded  # type: ignore[assignment]
 
   async def check(self, **kwargs: Any) -> bool:
-    return await self.grippers.check_resource_exists_at_location_center(
-      self.location, self.plate, audio_feedback=False, **kwargs
+    return await self.grippers.probe_z_for_resource_using_ztouch(
+      self.location, self.plate, **kwargs
     )
 
   async def test_refused_without_the_tools(self):
@@ -220,10 +220,16 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
 
   async def test_sends_what_legacy_sends_and_nothing_found_is_false(self):
     await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
-    self.assertFalse(await self.check(gripper_y_margin=9, enable_recovery=False))
+    heights = {"minimum_traverse_height_start": 275.0, "minimum_traverse_height_end": 275.0}
+    self.assertFalse(await self.check(gripper_y_margin=9, enable_recovery=False, **heights))
     self.assertEqual(
       self.sent, ["C0ZPxs08204xd0yj1142yv0050zj1934zy0600yo0675yg0675yw20th2750te2750"]
     )
+
+  async def test_the_heights_default_to_the_traverse_height(self):
+    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
+    await self.check(gripper_y_margin=9, enable_recovery=False)
+    self.assertTrue(self.sent[0].endswith("th2800te2800"), self.sent[0])
 
   async def test_a_stalled_z_drive_is_found(self):
     await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
@@ -231,7 +237,7 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
     async def stalls(**kwargs: Any):
       raise z_drive_stalled()
 
-    self.grippers._unchecked_fw_get_plate = stalls  # type: ignore[method-assign, assignment]
+    self.grippers._unchecked_fw_pick_up_resource = stalls  # type: ignore[method-assign, assignment]
     self.assertTrue(await self.check(gripper_y_margin=9, enable_recovery=False))
 
   async def test_any_other_error_raises(self):
@@ -240,7 +246,7 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
     async def fails(**kwargs: Any):
       raise z_drive_stalled(trace=61)
 
-    self.grippers._unchecked_fw_get_plate = fails  # type: ignore[method-assign, assignment]
+    self.grippers._unchecked_fw_pick_up_resource = fails  # type: ignore[method-assign, assignment]
     with self.assertRaises(ValueError):
       await self.check(gripper_y_margin=9, enable_recovery=False)
 

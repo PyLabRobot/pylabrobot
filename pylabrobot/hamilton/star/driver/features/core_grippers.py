@@ -6,7 +6,6 @@ import dataclasses
 import logging
 from typing import TYPE_CHECKING, Optional, Tuple
 
-from pylabrobot import audio
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.resources.coordinate import Coordinate
@@ -356,7 +355,7 @@ class CoreGrippers:
 
   # -- firmware ------------------------------------------------------------------------------------
 
-  async def _unchecked_fw_get_plate(
+  async def _unchecked_fw_pick_up_resource(
     self,
     x_position: int,
     y_position: int,
@@ -401,18 +400,17 @@ class CoreGrippers:
       te=f"{minimum_z_position_end:04}",
     )
 
-  # -- presence ------------------------------------------------------------------------------------
+  # -- probing ------------------------------------------------------------------------------------
 
-  async def check_resource_exists_at_location_center(
+  async def probe_z_for_resource_using_ztouch(
     self,
     location: Coordinate,
     resource: Resource,
-    gripper_y_margin: float = 0.5,
+    gripper_y_margin: float = 1.0,
     offset: Coordinate = Coordinate.zero(),
-    minimum_traverse_height_at_beginning_of_a_command: float = 275.0,
-    z_position_at_the_command_end: float = 275.0,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
     enable_recovery: bool = True,
-    audio_feedback: bool = True,
   ) -> bool:
     """Push the open jaws down onto `resource`'s centre: stalling on it is finding it (`C0 ZP`).
 
@@ -421,10 +419,11 @@ class CoreGrippers:
       resource: the resource to check for.
       gripper_y_margin: how far inside each of its front and back walls the jaws come down, in mm.
       offset: added to its centre, in mm.
-      minimum_traverse_height_at_beginning_of_a_command: in mm.
-      z_position_at_the_command_end: in mm.
+      minimum_traverse_height_start: how high the channels travel first, in mm.
+        `default_minimum_traverse_height` when None.
+      minimum_traverse_height_end: where to leave the channels, in mm.
+        `default_minimum_traverse_height` when None.
       enable_recovery: ask on the console whether to check again when it is not found.
-      audio_feedback: play a sound on found and not found.
 
     Returns:
       True if found.
@@ -438,6 +437,10 @@ class CoreGrippers:
         "the CoRe gripper tools are not picked up; `pick_up_tools_at_location` first"
       )
     pipettes = self._pipettes
+    if minimum_traverse_height_start is None:
+      minimum_traverse_height_start = self.default_minimum_traverse_height
+    if minimum_traverse_height_end is None:
+      minimum_traverse_height_end = self.default_minimum_traverse_height
 
     center = location + resource.centers()[0] + offset
     y_width_to_gripper_bump = resource.get_absolute_size_y() - gripper_y_margin * 2
@@ -454,7 +457,7 @@ class CoreGrippers:
     try:
       while not resource_found:
         try:
-          await self._unchecked_fw_get_plate(
+          await self._unchecked_fw_pick_up_resource(
             x_position=round(center.x * 10),
             y_position=round(center.y * 10),
             y_gripping_speed=50,
@@ -463,10 +466,8 @@ class CoreGrippers:
             open_gripper_position=round(y_width_to_gripper_bump * 10),
             plate_width=round(y_width_to_gripper_bump * 10),
             grip_strength=20,
-            minimum_traverse_height_start=round(
-              minimum_traverse_height_at_beginning_of_a_command * 10
-            ),
-            minimum_z_position_end=round(z_position_at_the_command_end * 10),
+            minimum_traverse_height_start=round(minimum_traverse_height_start * 10),
+            minimum_z_position_end=round(minimum_traverse_height_end * 10),
           )
         except STARFirmwareError as exc:
           # Trace 62 is the channels' Z drive stalling: the jaws came down on the resource.
@@ -476,8 +477,6 @@ class CoreGrippers:
             else:
               raise ValueError(f"Unexpected error encountered: {exc}") from exc
         else:
-          if audio_feedback:
-            audio.play_not_found()
           if enable_recovery:
             print(
               f"\nWARNING: Resource '{resource.name}' not found at center"
@@ -501,6 +500,4 @@ class CoreGrippers:
     finally:
       await pipettes._record_after_tip_command()
 
-    if audio_feedback:
-      audio.play_got_item()
     return True
