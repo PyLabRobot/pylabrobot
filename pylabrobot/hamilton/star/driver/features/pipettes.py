@@ -1587,24 +1587,13 @@ class Pipettes:
 
     return positions
 
-  async def move_to_safe_z(self) -> List[float]:
-    """Move every channel up to its safe Z: the top of the window setup probed.
+  async def move_to_safe_z(self) -> None:
+    """Move every channel's stop disc to the top of the window `probe_z_max` measured.
 
-    Nothing may move in X or Y while a channel is low, so this is the precondition for any lateral
-    move and it runs often. An ordinary Z move to a known height, not a command of its own, so it
-    is bounded and keeps the model current like any other move. With no window probed yet there is
-    no height to aim at, and the firmware's own safety move establishes one instead.
-
-    Returns:
-      Where each channel's stop disc came to rest, in mm, back to front.
+    By stop disc, so the height holds whatever is mounted. Precedes any lateral move.
     """
-    z_range = self.configuration.z_range
-
-    await self._unchecked_fw_move_lowest_point_to_z_positions(
-      {channel: z_range[1] for channel in range(self.num_channels)}
-    )
-
-    return list((await self._unchecked_fw_request_lowest_z_positions()).values())
+    top = self.configuration.z_range[1]
+    await self.move_stop_disc_to_z_positions({channel: top for channel in range(self.num_channels)})
 
   # -- spreading -----------------------------------------------------------------------------------
 
