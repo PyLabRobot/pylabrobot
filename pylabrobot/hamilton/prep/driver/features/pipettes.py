@@ -1795,6 +1795,19 @@ class Pipettes:
       )
     )
 
+  def _check_ys_by_channel(self, ys: Dict[int, float]) -> None:
+    """Raise unless `ys` maps channels that exist to a y each."""
+    if not isinstance(ys, dict):
+      raise TypeError(
+        f"ys maps each channel to its y in mm, e.g. {{0: 50, 1: 20}} for channel 0 at 50 and "
+        f"channel 1 at 20; got {ys!r}"
+      )
+    missing = sorted(c for c in ys if not 0 <= c < self.num_channels)
+    if missing:
+      names = " or ".join(str(c) for c in missing)
+      have = " and ".join(str(c) for c in range(self.num_channels))
+      raise ValueError(f"no channel {names} on this Prep: its channels are {have}, 0 at the back")
+
   async def move_to_y_positions(
     self, ys: Dict[int, float], make_space: bool = False, speed: Optional[float] = None
   ) -> None:
@@ -1816,12 +1829,10 @@ class Pipettes:
     speed = self.default_y_speed if speed is None else speed
     if speed <= 0:
       raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    self._check_ys_by_channel(ys)
     if not ys:
       return
     positions = await self.request_locations()
-    for channel in ys:
-      if not 0 <= channel < len(positions):
-        raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
     targets = {i: position.y for i, position in enumerate(positions)}
     targets.update(ys)
 
@@ -2222,13 +2233,12 @@ class Pipettes:
       RuntimeError: If a speed scale is given but there is no driver to set it through.
     """
     # Arguments
+    self._check_ys_by_channel(ys)
     if not ys:
       return
     if x_speed is not None and x_speed_scale is not None:
       raise ValueError("give x_speed or x_speed_scale, not both")
     channels = sorted(ys)
-    if max(channels) >= self.num_channels or min(channels) < 0:
-      raise ValueError(f"channels must be between 0 and {self.num_channels - 1}, are {channels}")
     traverse = (
       self.default_minimum_traverse_height
       if minimum_traverse_height_start is None

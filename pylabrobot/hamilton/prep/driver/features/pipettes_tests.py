@@ -232,7 +232,7 @@ def test_move_to_y_positions_moves_each_named_channel_in_one_command():
     assert (after[0].y, after[0].z) == (100.0, before[0].z)
     assert (after[1].y, after[1].z) == (75.0, before[1].z)
     assert after[0].x == after[1].x == before[0].x
-    with pytest.raises(ValueError, match="out of range"):
+    with pytest.raises(ValueError, match="no channel 2 on this Prep"):
       await p.pipettes.move_to_y_positions({2: 50.0})
     await p.stop()
 
@@ -1582,7 +1582,7 @@ def test_move_to_xy_positions_refuses_what_a_channel_cannot_reach():
       await p.pipettes.move_to_xy_positions(500.0, {0: 100.0})
     with pytest.raises(ValueError, match=r"y=500.0 outside channel 0"):
       await p.pipettes.move_to_xy_positions(100.0, {0: 500.0})
-    with pytest.raises(ValueError, match="channels must be between"):
+    with pytest.raises(ValueError, match="no channel 5 on this Prep"):
       await p.pipettes.move_to_xy_positions(100.0, {5: 100.0})
     await p.stop()
 
