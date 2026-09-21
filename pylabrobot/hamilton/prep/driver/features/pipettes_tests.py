@@ -2691,3 +2691,59 @@ def test_z_is_where_the_device_reports_it_at_the_bottom_of_what_a_channel_carrie
     await p.stop()
 
   _run(_t())
+
+
+def test_every_y_and_z_move_is_recorded_from_where_the_device_says_the_channels_are():
+  """Done, failed or cancelled: the model is read back from the device, never set from the target."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None and p.x_arm is not None
+    pipettes = p.pipettes
+    reads: List[str] = []
+    record = pipettes._record_where_they_stopped
+
+    async def recording() -> None:
+      reads.append("read")
+      await record()
+
+    pipettes._record_where_they_stopped = recording  # type: ignore[method-assign]
+    await pipettes.move_tool_bottom_to_z_positions({0: 150.0})
+    await pipettes.move_to_y_positions({0: 370.0})
+    assert reads == ["read", "read"]
+
+    for name, move in (
+      (
+        "_unchecked_fw_move_z_absolute",
+        lambda: pipettes.move_tool_bottom_to_z_positions({0: 140.0}),
+      ),
+      ("_unchecked_fw_move_y_absolute", lambda: pipettes.move_to_y_positions({0: 365.0})),
+    ):
+      reads.clear()
+
+      async def cancelled(*args: Any, **kwargs: Any) -> None:
+        raise asyncio.CancelledError()
+
+      setattr(pipettes, name, cancelled)
+      with pytest.raises(asyncio.CancelledError):
+        await move()
+      delattr(pipettes, name)
+      assert reads == ["read"], name
+
+    # The arm's move reads the channels as well as the arm: once before, to see what to raise (nothing,
+    # here), and once after, where it stopped.
+    await pipettes.move_to_safe_z()
+    located = pipettes.request_locations
+    asked: List[str] = []
+
+    async def locations() -> List[Coordinate]:
+      asked.append("pipettes")
+      return await located()
+
+    pipettes.request_locations = locations  # type: ignore[method-assign]
+    await p.x_arm.move_to_x_position(150.0, minimum_traverse_height_start=0)
+    assert asked == ["pipettes", "pipettes"]
+    await p.stop()
+
+  _run(_t())

@@ -163,14 +163,18 @@ class XArm:
     return x
 
   async def _record_where_it_stopped(self) -> None:
-    """Read where the arm came to rest, and record it.
+    """Read where the arm and the channels on it came to rest, and record it.
 
     For a move's `finally`. A move that failed part way left the arm somewhere no target describes.
     Its own failure is logged and swallowed: it must not replace the move's exception, which is the
     one that says what went wrong.
     """
     try:
-      await self.request_position()
+      pipettes = self._driver.pipettes
+      if pipettes is not None:
+        await pipettes.request_locations()  # the arm's X and each channel's Y and Z, in one read
+      else:
+        await self.request_position()
     except Exception:
       logger.warning("could not read where the X-arm stopped; its model is stale")
 

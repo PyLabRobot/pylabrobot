@@ -1842,12 +1842,8 @@ class Pipettes:
 
     try:
       await self._unchecked_fw_move_y_absolute(targets, speed)
-    except Exception:
-      # Only on the way out: a move that arrives is recorded from its targets below.
+    finally:
       await self._record_where_they_stopped()
-      raise
-    for channel, y in targets.items():
-      self.update_location_by_reference_point(channel, y=y)
 
   async def move_to_y_position(self, channel: int, y: float, speed: Optional[float] = None) -> None:
     """Move one channel along Y.
@@ -2021,12 +2017,8 @@ class Pipettes:
     try:
       async with self._temporary_z_drive_acceleration(acceleration):
         await self._unchecked_fw_move_z_absolute(targets, speed)
-    except Exception:
-      # Only on the way out: a move that arrives is recorded from its targets below.
+    finally:
       await self._record_where_they_stopped()
-      raise
-    for channel, z in targets.items():
-      self.update_location_by_reference_point(channel, z=z)
 
   @asynccontextmanager
   async def _temporary_z_drive_acceleration(
