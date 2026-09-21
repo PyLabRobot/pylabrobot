@@ -11,7 +11,11 @@ import pytest
 
 from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
-from pylabrobot.hamilton.prep.driver.features.core_grippers import JAW_OPEN_EXTRA, CoreGrippers
+from pylabrobot.hamilton.prep.driver.features.core_grippers import (
+  FIRMWARE_Z_LEG,
+  JAW_OPEN_EXTRA,
+  CoreGrippers,
+)
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.azenta import azenta_96_wellplate_200uL_Vb_4titudeframestar
@@ -774,6 +778,43 @@ def test_a_z_acceleration_holds_from_the_grip_until_it_is_let_go():
       "safe_z",
       "z_acceleration restored",
     ]
+
+  asyncio.run(_run())
+
+
+def test_a_z_speed_is_how_fast_a_held_plate_moves_in_z():
+  """The raise after the grip is at it; the let-go is left the last millimetre. The way down, empty,
+  is the firmware's."""
+
+  async def _run():
+    deck = PrepDeck(with_core_grippers=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.core_grippers is not None
+    grippers = p.core_grippers
+    plate = deck[0] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    spot = plate.parent
+    await grippers.pick_up_tools()
+    travel_z = (await grippers._pipettes.request_locations())[0].z
+    captured = _record_send(p)
+
+    def sent() -> List[Tuple[str, Any]]:
+      out: List[Tuple[str, Any]] = []
+      for c in captured:
+        if isinstance(c, PrepCmd.PrepMoveZAbsolute):
+          out.append(("z", (round(c.channels[0].z_position, 2), c.velocity)))
+        elif isinstance(c, (PrepCmd.PrepPickUpPlate, PrepCmd.PrepDropPlate)):
+          out.append((type(c).__name__, None))
+      return out
+
+    grip = grippers._compute_pickup_location(plate, Coordinate.zero(), 5.0).z
+    await grippers.pick_up_resource(plate, z_speed=20.0)
+    assert sent() == [("PrepPickUpPlate", None), ("z", (round(travel_z, 2), 20.0))]
+    captured.clear()
+    await grippers.return_resource(z_speed=20.0)
+    assert sent() == [("z", (round(grip + FIRMWARE_Z_LEG, 2), 20.0)), ("PrepDropPlate", None)]
+    assert plate.parent is spot
+    await p.stop()
 
   asyncio.run(_run())
 

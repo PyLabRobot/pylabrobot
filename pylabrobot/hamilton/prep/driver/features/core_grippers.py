@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 # sit inside the channels' centres: 94.45 around an 85.48 plate at 2.5 mm clearance a side, and
 # 95.47 at 3.0 when letting go of it.
 JAW_OPEN_EXTRA = 3.97
+# With a Z speed, how far above the let-go a held plate is lowered at it: PrepDropPlate makes its
+# own Z move at ~133 mm/s whatever is set, so it is left this much.
+FIRMWARE_Z_LEG = 1.0
 
 
 class CoreGrippers:
@@ -235,6 +238,12 @@ class CoreGrippers:
       return
     await self._pipettes.move_tool_bottom_to_z_positions(
       {channel: minimum_traverse_height_end for channel in range(self._pipettes.num_channels)}
+    )
+
+  async def _move_jaws_to_z(self, z: float, speed: float) -> None:
+    """Move both jaws to `z` together at `speed`, in mm and mm/s (MoveZAbsolute)."""
+    await self._pipettes.move_tool_bottom_to_z_positions(
+      {self._back_channel: z, self._front_channel: z}, speed=speed
     )
 
   # ---- z -----------------------------------------------------------------------------------------
@@ -653,6 +662,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    z_speed: Optional[float] = None,
     on_gripped: Optional[Callable[[], None]] = None,
   ) -> None:
     """Pick up a plate at a grip point; `pick_up_resource` sets what it holds.
@@ -672,6 +682,8 @@ class CoreGrippers:
         None goes to Z safety.
       z_acceleration: the Z drives' acceleration from the grip on, in mm/s2, then restored. None
         is `default_z_acceleration_with_resource_held`.
+      z_speed: how fast the jaws rise with the plate, in mm/s. None leaves it to the firmware
+        (~133 mm/s). The way down, empty, is the firmware's.
       on_gripped: called once the jaws have closed, before they rise.
     """
     self._require_mounted()
@@ -686,6 +698,10 @@ class CoreGrippers:
       make_space=True,
       minimum_traverse_height_start=0,
     )
+    raise_to: Optional[float] = None
+    if z_speed is not None:
+      here = (await self._pipettes.request_locations())[self._back_channel].z
+      raise_to = here if minimum_traverse_height_end is None else minimum_traverse_height_end
     plate_top_center = PrepCmd.XYZCoord(
       default_values=False,
       x_position=location.x,
@@ -724,7 +740,10 @@ class CoreGrippers:
       self._taken_from = None
       if on_gripped is not None:
         on_gripped()
-      await self._raise_to_traverse(minimum_traverse_height_end)
+      if z_speed is None or raise_to is None:
+        await self._raise_to_traverse(minimum_traverse_height_end)
+      else:
+        await self._move_jaws_to_z(raise_to, z_speed)
 
   async def _drop_at(
     self,
@@ -735,6 +754,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    z_speed: Optional[float] = None,
     on_released: Optional[Callable[[], None]] = None,
   ) -> None:
     """Let go of the held plate at a grip point.
@@ -749,6 +769,8 @@ class CoreGrippers:
         None goes to Z safety.
       z_acceleration: the Z drives' acceleration until it is let go, in mm/s2, then restored. None
         is `default_z_acceleration_with_resource_held`.
+      z_speed: how fast it is lowered to where it is let go, in mm/s. None leaves it to the
+        firmware (~133 mm/s).
       on_released: called once the jaws have let go, before they rise.
     """
     if self._holding_resource_width is None:
@@ -761,6 +783,8 @@ class CoreGrippers:
       await self.move_resource_to_xy_position(
         location.x, location.y, acceleration_scale_x=acceleration_scale_x
       )
+      if z_speed is not None:
+        await self._move_jaws_to_z(location.z + FIRMWARE_Z_LEG, z_speed)
       plate_top_center = self._compute_plate_top(location)
       try:
         await self._driver.send_command(
@@ -807,6 +831,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    z_speed: Optional[float] = None,
   ) -> None:
     """Grip a resource where the tree has it, and hold it on the front tool in the model.
 
@@ -826,6 +851,8 @@ class CoreGrippers:
         safety.
       z_acceleration: the Z drives' acceleration from the grip on, in mm/s2, then restored. None is
         `default_z_acceleration_with_resource_held`.
+      z_speed: how fast the jaws rise with it, in mm/s. None leaves it to the firmware (~133 mm/s).
+        The way down, empty, is the firmware's.
 
     Raises:
       RuntimeError: If the tools are not mounted.
@@ -862,6 +889,7 @@ class CoreGrippers:
       minimum_traverse_height_start=minimum_traverse_height_start,
       minimum_traverse_height_end=minimum_traverse_height_end,
       z_acceleration=z_acceleration,
+      z_speed=z_speed,
       on_gripped=gripped,
     )
 
@@ -876,6 +904,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    z_speed: Optional[float] = None,
   ) -> None:
     """Put the held resource down; the tree follows once it is down.
 
@@ -883,6 +912,8 @@ class CoreGrippers:
       destination: the resource it goes into, e.g. a PrepDeck spot.
       coordinate: where its centre-centre-bottom goes, in deck coordinates. It joins the deck there.
       offset: added to where it is let go.
+      z_speed: how fast it is lowered to where it is let go, in mm/s. None leaves it to the
+        firmware (~133 mm/s).
 
     Raises:
       ValueError: If neither or both of `destination` and `coordinate` are given.
@@ -925,6 +956,7 @@ class CoreGrippers:
       minimum_traverse_height_start=minimum_traverse_height_start,
       minimum_traverse_height_end=minimum_traverse_height_end,
       z_acceleration=z_acceleration,
+      z_speed=z_speed,
       on_released=lambda: place_resource(held, destination, location=child),
     )
 
@@ -937,6 +969,7 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
+    z_speed: Optional[float] = None,
   ) -> None:
     """Put the held resource back where :meth:`pick_up_resource` took it from.
 
@@ -955,6 +988,7 @@ class CoreGrippers:
       "minimum_traverse_height_start": minimum_traverse_height_start,
       "minimum_traverse_height_end": minimum_traverse_height_end,
       "z_acceleration": z_acceleration,
+      "z_speed": z_speed,
     }
     parent, location = self._taken_from
     if isinstance(parent, ResourceHolder):
