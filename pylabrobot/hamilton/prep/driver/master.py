@@ -94,6 +94,14 @@ def _fragment_values(data: bytes) -> List[Any]:
   return values
 
 
+def _confirm(question: str) -> bool:
+  """Ask the person at the device; only y or yes is a yes. No one to ask is a no."""
+  try:
+    return input(question).strip().lower() in ("y", "yes")
+  except EOFError:
+    return False
+
+
 class _PrepTCPClient(HamiltonTCPClient):
   """The TCP link to a Prep, describing firmware errors from the Prep's own error table."""
 
@@ -324,6 +332,10 @@ class PrepDriver:
         refuse them.
       default_minimum_traverse_height: the height the pipettes and the 8-channel head travel at when a command
         names none, in mm. Replaces what the device reports.
+
+    Raises:
+      RuntimeError: If the device records a plate gripped and has to initialize, and the person at it
+        does not confirm the grippers may open.
     """
     logger.debug("Setting up Prep on %s ...", self.describe_link())
     try:
@@ -343,9 +355,15 @@ class PrepDriver:
 
       # 2. Bring the device to a known state.
       logger.debug("[PHASE 2] Device initialization")
+      # Kept across a power cycle: while it is set, the device refuses to initialize (0x0F0A) and to
+      # take the tools home (0x0F04).
+      plate_held = await self._request_plate_held()
       if skip_device_initialization:
         logger.warning("skipping the device initialization procedure, as asked")
       else:
+        if plate_held and (force_initialize or not await self.request_initialization_status()):
+          await self._release_held_plate_by_hand()
+          plate_held = False
         await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
 
       # 3. Each feature brings itself up.
@@ -411,7 +429,13 @@ class PrepDriver:
         self._place_reported_sites()
         await self._create_capability_resources()
 
-      if any(tips):
+      if any(tips) and plate_held:
+        logger.warning(
+          "the device records a plate gripped, so the tools stay on: lower it onto a free spot with "
+          "`pipettes.move_tool_bottom_to_z_positions` (both channels together), let go with "
+          "`core_grippers.release_plate()`, then return the tools"
+        )
+      elif any(tips):
         try:
           await self._return_or_discard_attached(tips)
         except Exception:
@@ -976,6 +1000,41 @@ class PrepDriver:
       deck_sites=deck_sites,
       waste_sites=waste_sites,
     )
+
+  async def _release_held_plate_by_hand(self) -> None:
+    """Open the grippers with a person there to take the plate, so the device can initialize.
+
+    Before initializing nothing can move, so opening the grippers where they stand
+    (PrepReleasePlate) is the one way to clear the record.
+
+    Raises:
+      RuntimeError: If the person does not confirm, or the record is still set after.
+    """
+    print(
+      "\nThe Prep has a plate gripped written into its memory, which a power cycle does not clear. "
+      "It refuses to initialize (0x0F0A) until the grippers open, and until it initializes nothing "
+      "else can move."
+    )
+    if not _confirm(
+      "Take the plate out of the grippers, or have your hand under it to catch it as they open. "
+      "Ready for the grippers to open? [y/n] "
+    ):
+      raise RuntimeError(
+        "setup stopped: the device records a plate gripped and refuses to initialize until the "
+        "grippers open. Run setup again when someone can take the plate."
+      )
+    await self.send_command(PrepCmd.PrepReleasePlate())
+    if not _confirm("Have you moved your hands out of the device? [y/n] "):
+      raise RuntimeError(
+        "setup stopped before initializing: hands may be in the device. The grippers are open; run "
+        "setup again to initialize."
+      )
+    if await self._request_plate_held():
+      raise RuntimeError("the device still records a plate gripped after the grippers opened")
+
+  async def _request_plate_held(self) -> bool:
+    """Whether the device records a plate gripped (PrepGetPlateHeld): its record, not a sensor."""
+    return bool((await self.send_command(PrepCmd.PrepGetPlateHeld())).value)
 
   async def request_initialization_status(self) -> bool:
     """Whether MLPrep reports as initialized (GetIsInitialized, cmd=2)."""
