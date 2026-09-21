@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import Optional
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton.hamilton_tool import HamiltonTool
 from pylabrobot.resources.hamilton.tip_creators import TipPickupMethod, TipSize
-from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 
 # TODO: add new quad-core gripper definitions when they are released by Hamilton.
 
 
-class HamiltonCoreGripperTool(HeadTool):
+class HamiltonCoreGripperTool(HamiltonTool):
   """A CO-RE grip tool, picked up by a pair of channels to grip a plate."""
 
   def __init__(

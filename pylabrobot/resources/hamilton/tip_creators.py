@@ -10,6 +10,7 @@ import warnings
 from typing import Optional, Union
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton.hamilton_tool import HamiltonTool
 from pylabrobot.resources.tip import Tip
 
 
@@ -45,7 +46,7 @@ class TipDropMethod(enum.Enum):
   DROP = 1
 
 
-class HamiltonTip(Tip):
+class HamiltonTip(Tip, HamiltonTool):
   """Represents a single tip for Hamilton instruments."""
 
   def __init__(

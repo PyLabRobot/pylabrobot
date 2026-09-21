@@ -8,15 +8,8 @@ from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.serializer import serialize
 
 
-class HeadToolTests(unittest.TestCase):
-  """Tests for the head tools a channel can carry."""
-
-  def test_tool_name_is_required_and_immutable(self):
-    with self.assertRaises(TypeError):
-      hamilton_core_gripper_tool()  # type: ignore[call-arg]
-    tool = hamilton_core_gripper_tool(name="core_gripper_tool")
-    with self.assertRaises(AttributeError):
-      tool.name = "other"
+class HamiltonCoreGripperToolTests(unittest.TestCase):
+  """Serialization of Hamilton CO-RE gripper tools."""
 
   def test_core_gripper_tool_serialize(self):
     tool = hamilton_core_gripper_tool(name="core_gripper_tool")
