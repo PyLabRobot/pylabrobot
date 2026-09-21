@@ -85,13 +85,13 @@ class TipRackNamingTests(unittest.TestCase):
     self.assertIsNone(first.location)
 
 
-class NestedTipRackTests(unittest.TestCase):
-  """Tests for NestedTipRack."""
+class HamiltonNestedTipRackTests(unittest.TestCase):
+  """The 50 uL NTR keeps its definition through a copy, a round trip and a saved deck."""
 
   def test_deserialize_round_trip(self):
     rack = hamilton_96_tiprack_50uL_NTR("rack")
 
-    restored = NestedTipRack.deserialize(rack.serialize())
+    restored = StandingTipRack.deserialize(rack.serialize())
 
     self.assertEqual(restored.stacking_z_height, rack.stacking_z_height)
     self.assertEqual(restored.model, rack.model)
@@ -101,14 +101,20 @@ class NestedTipRackTests(unittest.TestCase):
     rack = hamilton_96_tiprack_50uL_NTR("rack")
     copied = rack.copy()
 
-    rack.assign_child_resource(hamilton_96_tiprack_50uL_NTR("stacked_on_rack"))
-    copied.assign_child_resource(hamilton_96_tiprack_50uL_NTR("stacked_on_copy"))
+    on_rack, on_copy = ResourceStack("on_rack", "z"), ResourceStack("on_copy", "z")
+    on_rack.assign_child_resource(rack)
+    on_rack.assign_child_resource(hamilton_96_tiprack_50uL_NTR("stacked_on_rack"))
+    on_copy.assign_child_resource(copied)
+    on_copy.assign_child_resource(hamilton_96_tiprack_50uL_NTR("stacked_on_copy"))
 
     self.assertEqual(copied.stacking_z_height, rack.stacking_z_height)
     self.assertEqual(
-      copied.get_resource("stacked_on_copy").location,
-      rack.get_resource("stacked_on_rack").location,
+      on_copy.get_resource("stacked_on_copy").location,
+      on_rack.get_resource("stacked_on_rack").location,
     )
+    stacked = on_rack.get_resource("stacked_on_rack")
+    assert stacked.location is not None
+    self.assertEqual(stacked.location.z, rack.stacking_z_height)
 
   def test_save_and_load_deck(self):
     deck = Deck(size_x=1000, size_y=1000, size_z=1000)
@@ -121,7 +127,7 @@ class NestedTipRackTests(unittest.TestCase):
       loaded = Deck.load_from_json_file(fn)
 
     loaded_rack = loaded.get_resource("rack")
-    assert isinstance(loaded_rack, NestedTipRack)
+    assert isinstance(loaded_rack, StandingTipRack)
     self.assertEqual(loaded_rack.stacking_z_height, rack.stacking_z_height)
     self.assertEqual(loaded_rack.location, rack.location)
 
