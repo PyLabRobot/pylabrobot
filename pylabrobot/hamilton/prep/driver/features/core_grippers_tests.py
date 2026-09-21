@@ -385,6 +385,7 @@ def test_the_tool_commands_are_the_frames_the_device_answered():
       "PrepProbeRequest",
       "PrepProbeRequest",
       "PrepGetTipDefinitionHeld",
+      "PrepGetPlateHeld",  # nothing held, so the tools may go home
       "PrepMoveZUpToSafe",  # and again before letting go
       "PrepDropTool",
       "PrepGetChannelBounds",
@@ -956,6 +957,8 @@ def test_every_firmware_move_records_where_the_channels_stopped_even_when_refuse
       sent(command, **kwargs)
       if refused and isinstance(command, kind):
         raise RuntimeError("refused")
+      if isinstance(command, PrepCmd.PrepGetPlateHeld):
+        return PrepCmd.PrepGetPlateHeld.Response(value=False)
 
     commands.send_command.side_effect = send
     steps = {
@@ -1124,8 +1127,10 @@ def test_while_a_plate_is_held_the_simulator_refuses_the_tools_home_and_initiali
     await grippers.pick_up_resource(plate)
     front_tool = grippers._front_tool()
 
+    with pytest.raises(RuntimeError, match="the grippers hold plate"):
+      await grippers.return_tools()  # refused before anything is sent
     with pytest.raises(HoiError, match="0x0F04"):
-      await grippers.return_tools()
+      await p.send_command(PrepCmd.PrepDropTool())
     assert grippers.tools_mounted and plate.parent is front_tool  # nothing let go of in the model
     initialize = PrepCmd.PrepInitialize(
       smart=True,

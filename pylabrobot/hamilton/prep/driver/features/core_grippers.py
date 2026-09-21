@@ -484,7 +484,20 @@ class CoreGrippers:
     """Put the tools back where they were taken from (PrepDropTool, cmd=16).
 
     The firmware carries them there itself, from wherever the channels stand.
+
+    Raises:
+      RuntimeError: If they hold something: the firmware refuses (0x0F04).
     """
+    if self._held_resource is not None:
+      raise RuntimeError(
+        f"the grippers hold {self._held_resource.name}: put it down first with `drop_resource` "
+        "or `return_resource`, then return the tools"
+      )
+    if await self.request_plate_held():
+      raise RuntimeError(
+        "the device reports a plate held, though none was picked up here: put it down with "
+        "`release_plate` first, then return the tools"
+      )
     if move_to_safe_z_first:
       await self._pipettes.move_to_safe_z()
     try:
