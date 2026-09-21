@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Literal, Optional, Tuple
 
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.deck import Deck
@@ -698,6 +698,7 @@ class CoreGrippers:
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
     x_acceleration: Optional[float] = None,
+    on_gripped: Optional[Callable[[], None]] = None,
   ) -> None:
     """Pick up a plate at a grip point; `pick_up_resource` sets what it holds.
 
@@ -718,6 +719,7 @@ class CoreGrippers:
         is `default_z_acceleration_with_resource_held`.
       x_acceleration: the X axis's acceleration from the grip on, in mm/s2, then restored. None is
         `default_x_acceleration_with_resource_held`.
+      on_gripped: called once the jaws have closed, before they rise.
     """
     self._require_mounted()
     await self._raise_to_traverse(minimum_traverse_height_start)
@@ -745,7 +747,7 @@ class CoreGrippers:
     )
     grip_distance = clearance_y + squeeze_mm
 
-    # The firmware lifts it as part of the pick-up.
+    # Held from the grip on: the raise after it carries the plate.
     async with self._temporary_z_drive_acceleration(z_acceleration, holding=True):
       async with self._temporary_x_axis_profile(x_acceleration=x_acceleration, holding=True):
         try:
@@ -761,13 +763,16 @@ class CoreGrippers:
           )
         finally:
           await self._pipettes._record_where_they_stopped()
+        # Held now, raised or not: recorded before the jaws rise, so the model rises with them.
+        self._plate_top_center = Coordinate(location.x, location.y, location.z + plate_top_z_offset)
+        self._plate_top_z_offset = plate_top_z_offset
+        self._holding_resource_width = resource_width
+        self._pickup_distance_from_top = None
+        self._held_resource = None
+        self._taken_from = None
+        if on_gripped is not None:
+          on_gripped()
         await self._raise_to_traverse(minimum_traverse_height_end)
-    self._plate_top_center = Coordinate(location.x, location.y, location.z + plate_top_z_offset)
-    self._plate_top_z_offset = plate_top_z_offset
-    self._holding_resource_width = resource_width
-    self._pickup_distance_from_top = None
-    self._held_resource = None
-    self._taken_from = None
 
   async def _drop_at(
     self,
@@ -779,6 +784,7 @@ class CoreGrippers:
     minimum_traverse_height_end: Optional[float] = None,
     z_acceleration: Optional[float] = None,
     x_acceleration: Optional[float] = None,
+    on_released: Optional[Callable[[], None]] = None,
   ) -> None:
     """Let go of the held plate at a grip point.
 
@@ -794,6 +800,7 @@ class CoreGrippers:
         is `default_z_acceleration_with_resource_held`.
       x_acceleration: the X axis's acceleration until it is let go, in mm/s2, then restored. None is
         `default_x_acceleration_with_resource_held`.
+      on_released: called once the jaws have let go, before they rise.
     """
     if self._holding_resource_width is None:
       raise RuntimeError("Not holding anything")
@@ -817,8 +824,11 @@ class CoreGrippers:
           )
         finally:
           await self._pipettes._record_where_they_stopped()
+        # Let go of now: put down in the model before the jaws rise without it.
+        if on_released is not None:
+          on_released()
+        self._clear_held_state()
     await self._raise_to_traverse(minimum_traverse_height_end)
-    self._clear_held_state()
 
   async def release_plate(self) -> None:
     """Open the CoRe gripper and release whatever is held (PrepReleasePlate, cmd=21).
@@ -868,6 +878,15 @@ class CoreGrippers:
       resource_height = resource.get_absolute_size_z()
 
     location = self._compute_pickup_location(resource, offset, from_top)
+
+    def gripped() -> None:
+      self._pickup_distance_from_top = from_top
+      self._holding_resource_width = resource_width
+      self._held_resource = resource
+      source_parent, source_location = source
+      self._taken_from = None if source_parent is None else (source_parent, source_location)
+      self._hang_held_resource_on_the_front_tool()
+
     await self._pick_up_at(
       location,
       resource_width,
@@ -881,13 +900,8 @@ class CoreGrippers:
       minimum_traverse_height_end=minimum_traverse_height_end,
       z_acceleration=z_acceleration,
       x_acceleration=x_acceleration,
+      on_gripped=gripped,
     )
-    self._pickup_distance_from_top = from_top
-    self._holding_resource_width = resource_width
-    self._held_resource = resource
-    source_parent, source_location = source
-    self._taken_from = None if source_parent is None else (source_parent, source_location)
-    self._hang_held_resource_on_the_front_tool()
 
   async def drop_resource(
     self,
@@ -951,8 +965,8 @@ class CoreGrippers:
       minimum_traverse_height_end=minimum_traverse_height_end,
       z_acceleration=z_acceleration,
       x_acceleration=x_acceleration,
+      on_released=lambda: place_resource(held, destination, location=child),
     )
-    place_resource(held, destination, location=child)
 
   async def return_resource(
     self,

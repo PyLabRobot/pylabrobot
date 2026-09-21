@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 from unittest.mock import AsyncMock
 
 import pytest
@@ -77,10 +77,19 @@ def _make_grippers(deck: PrepDeck, stub_pick_and_drop: bool = True) -> Tuple[Cor
 
   grippers._set_z_acceleration = set_z_acceleration  # type: ignore[method-assign]
   grippers._restore_z_acceleration = restore_z_acceleration  # type: ignore[method-assign]
+
+  def let_go(*args: Any, on_released: Optional[Callable[[], None]] = None, **kwargs: Any) -> None:
+    if on_released is not None:
+      on_released()
+    grippers._clear_held_state()
+
   commands = SimpleNamespace(
-    pick_up_at=AsyncMock(),
+    # The grip and the let-go stand in for the device and still call back, as the real ones do.
+    pick_up_at=AsyncMock(
+      side_effect=lambda *args, on_gripped=None, **kwargs: on_gripped and on_gripped()
+    ),
     # A release is what leaves the jaws empty, so the stand-in keeps that and skips only the device.
-    drop_at=AsyncMock(side_effect=lambda *args, **kwargs: grippers._clear_held_state()),
+    drop_at=AsyncMock(side_effect=let_go),
     send_command=driver.send_command,
     move_tool_bottom_to_z_positions=pipettes.move_tool_bottom_to_z_positions,
     move_to_safe_z=pipettes.move_to_safe_z,
@@ -1158,6 +1167,46 @@ def test_while_a_plate_is_held_the_simulator_refuses_the_tools_home_and_initiali
     await grippers.return_resource()
     await grippers.return_tools()  # accepted once the plate is down
     await p.send_command(initialize)
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_the_plate_is_taken_at_the_grip_and_put_down_at_the_let_go_before_the_jaws_rise():
+  """So the model lifts it with the jaws, and the jaws rise empty after letting go of it."""
+
+  async def _run():
+    deck = PrepDeck(with_core_grippers=True)
+    plate = deck[0] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    spot = plate.parent
+    at = plate.get_absolute_location()
+    stood_at = (at.x, at.y, at.z)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    grippers = p.core_grippers
+    assert grippers is not None
+    await grippers.pick_up_tools()
+    front_tool = grippers._front_tool()
+    at_each_raise: List[Tuple[Optional[str], Tuple[float, float, float]]] = []
+    raise_ = grippers._raise_to_traverse
+
+    async def recording(minimum_traverse_height_end: Optional[float]) -> None:
+      parent = None if plate.parent is None else plate.parent.name
+      where = plate.get_absolute_location()
+      at_each_raise.append((parent, (where.x, where.y, where.z)))
+      await raise_(minimum_traverse_height_end)
+
+    grippers._raise_to_traverse = recording  # type: ignore[method-assign]
+    assert spot is not None and front_tool is not None
+
+    await grippers.pick_up_resource(plate)
+    assert [parent for parent, _ in at_each_raise] == [spot.name, front_tool.name]
+    assert at_each_raise[1][1] == pytest.approx(stood_at, abs=0.01)  # taken where it stood
+
+    at_each_raise.clear()
+    await grippers.return_resource()
+    assert [parent for parent, _ in at_each_raise] == [front_tool.name, spot.name]
+    assert at_each_raise[1][1] == pytest.approx(stood_at, abs=0.01)  # put down where it stood
     await p.stop()
 
   asyncio.run(_run())
