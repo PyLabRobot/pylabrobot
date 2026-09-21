@@ -183,43 +183,13 @@ class CoreGrippers:
     self._plate_top_z_offset = None
     self._taken_from = None
 
-  # -- z -------------------------------------------------------------------------------------------
+  # ----------------------------------------
+  # Movement
+  # ----------------------------------------
 
-  async def _set_z_acceleration(self, z_acceleration: float) -> None:
-    """Set every Z drive's acceleration, in mm/s2."""
-    for drive in [c.zdrive for c in self._pipettes.channels if c.zdrive is not None]:
-      await self._driver.send_command(
-        PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=z_acceleration)
-      )
+  # -- Memory of Speed & Acceleration --------------------------------------------------------
 
-  async def _restore_z_acceleration(self) -> None:
-    """Put the Z drives back to the acceleration setup read."""
-    await self._set_z_acceleration(self._pipettes.default_z_acceleration)
-
-  @asynccontextmanager
-  async def _temporary_z_drive_acceleration(
-    self, z_acceleration: Optional[float] = None, *, holding: Optional[bool] = None
-  ) -> AsyncIterator[None]:
-    """The Z drives at `z_acceleration` for the enclosed moves, then back to the pipettes' default.
-
-    None is `default_z_acceleration_with_resource_held` while a resource is held, and sends nothing
-    otherwise. `holding` None asks the grippers. Set by the outermost call; calls inside it leave
-    the drives be.
-    """
-    if holding is None:
-      holding = self._holding_resource_width is not None
-    if z_acceleration is None and holding:
-      z_acceleration = self.default_z_acceleration_with_resource_held
-    if z_acceleration is None or self._z_acceleration_set:
-      yield
-      return
-    self._z_acceleration_set = True
-    try:
-      await self._set_z_acceleration(z_acceleration)
-      yield
-    finally:
-      self._z_acceleration_set = False
-      await self._restore_z_acceleration()
+  # ---- x -----------------------------------------------------------------------------------
 
   @asynccontextmanager
   async def _temporary_x_axis_acceleration(
@@ -260,10 +230,45 @@ class CoreGrippers:
       {channel: minimum_traverse_height_end for channel in range(self._pipettes.num_channels)}
     )
 
-  # ----------------------------------------
-  # Movement
-  # ----------------------------------------
-  # -- the gantry the tools ride -------------------------------------------------------------------
+  # ---- z -----------------------------------------------------------------------------------
+
+  async def _set_z_acceleration(self, z_acceleration: float) -> None:
+    """Set every Z drive's acceleration, in mm/s2."""
+    for drive in [c.zdrive for c in self._pipettes.channels if c.zdrive is not None]:
+      await self._driver.send_command(
+        PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=z_acceleration)
+      )
+
+  async def _restore_z_acceleration(self) -> None:
+    """Put the Z drives back to the acceleration setup read."""
+    await self._set_z_acceleration(self._pipettes.default_z_acceleration)
+
+  @asynccontextmanager
+  async def _temporary_z_drive_acceleration(
+    self, z_acceleration: Optional[float] = None, *, holding: Optional[bool] = None
+  ) -> AsyncIterator[None]:
+    """The Z drives at `z_acceleration` for the enclosed moves, then back to the pipettes' default.
+
+    None is `default_z_acceleration_with_resource_held` while a resource is held, and sends nothing
+    otherwise. `holding` None asks the grippers. Set by the outermost call; calls inside it leave
+    the drives be.
+    """
+    if holding is None:
+      holding = self._holding_resource_width is not None
+    if z_acceleration is None and holding:
+      z_acceleration = self.default_z_acceleration_with_resource_held
+    if z_acceleration is None or self._z_acceleration_set:
+      yield
+      return
+    self._z_acceleration_set = True
+    try:
+      await self._set_z_acceleration(z_acceleration)
+      yield
+    finally:
+      self._z_acceleration_set = False
+      await self._restore_z_acceleration()
+
+  # -- the gantry the tools ride -------------------------------------------------------------
 
   async def move_to_x_position(
     self,
@@ -346,27 +351,23 @@ class CoreGrippers:
 
   # -- with a resource held ------------------------------------------------------------------------
 
-  async def move_to_location(
-    self,
-    location: Coordinate,
-    *,
-    acceleration_scale_x: int = 1,
+  async def _unchecked_fw_move_resource(
+    self, plate_top_center: PrepCmd.XYZCoord, acceleration_scale_x: int
   ) -> None:
-    """Move a held plate to a new position without releasing it.
+    """Send `Pipettor.MovePlate` (PrepMovePlate, cmd=19) without checks.
+
+    Moves X, Y and Z at once: a target at another height is reached along an arc, plate held.
+    `move_resource_to_xy_position` sends the height it is already at.
 
     Args:
-      location: where the jaws are to hold it, as `_pick_up_at` takes it.
+      plate_top_center: where the held plate's top centre goes, in deck coordinates.
       acceleration_scale_x: X-axis acceleration scale.
     """
-    async with self._temporary_z_drive_acceleration():
-      async with self._temporary_x_axis_acceleration():
-        plate_top_center = self._plate_top(location)
-        await self._driver.send_command(
-          PrepCmd.PrepMovePlate(
-            plate_top_center=plate_top_center,
-            acceleration_scale_x=acceleration_scale_x,
-          )
-        )
+    await self._driver.send_command(
+      PrepCmd.PrepMovePlate(
+        plate_top_center=plate_top_center, acceleration_scale_x=acceleration_scale_x
+      )
+    )
 
   async def move_resource_to_xy_position(
     self,
@@ -394,8 +395,8 @@ class CoreGrippers:
       raise RuntimeError("Not holding anything")
     if self._plate_top_z_offset is None:
       raise RuntimeError(
-        "the offset the plate is held at was not recorded, so it cannot be carried in the plane "
-        "alone. Use `move_to_location`, which is told all three."
+        "the offset the plate is held at was not recorded, so where its top is cannot be worked "
+        "out. Put it down and pick it up with `pick_up_resource`."
       )
     # Where it is, asked of the device: the pick-up raises it, and the arm may move it in x. A
     # channel's z is where its jaw holds the plate, centred between the two.
@@ -403,7 +404,11 @@ class CoreGrippers:
     back, front = locations[self._back_channel], locations[self._front_channel]
     x = back.x if x is None else x
     y = (back.y + front.y) / 2 if y is None else y
-    await self.move_to_location(Coordinate(x, y, back.z), acceleration_scale_x=acceleration_scale_x)
+    async with self._temporary_z_drive_acceleration():
+      async with self._temporary_x_axis_acceleration():
+        await self._unchecked_fw_move_resource(
+          self._plate_top(Coordinate(x, y, back.z)), acceleration_scale_x=acceleration_scale_x
+        )
     self._plate_top_center = Coordinate(x, y, back.z + self._plate_top_z_offset)
 
   # ----------------------------------------
