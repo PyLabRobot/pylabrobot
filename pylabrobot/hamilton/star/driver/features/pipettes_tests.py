@@ -279,6 +279,41 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(await pipettes.request_z_acceleration(0), 300.4)
 
 
+class TestRequireISWAPParked(unittest.IsolatedAsyncioTestCase):
+  """The CoRe gripper commands refuse unless the iSWAP is parked; the check only reads."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+    answer = self.pipettes._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      self.sent.append(module + command)
+      return await answer(module=module, command=command, **kwargs)
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_parked_reads_only(self):
+    await self.pipettes._require_iswap_parked()
+    self.assertEqual(self.sent, ["R0RY", "R0RZ", "R0RW", "R0RT", "R0RG"])
+
+  async def test_not_parked_refuses(self):
+    iswap = self.pipettes.arm.iswap
+    assert iswap is not None
+
+    async def not_parked(*args: Any, **kwargs: Any) -> bool:
+      return False
+
+    iswap.request_parked = not_parked  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError):
+      await self.pipettes._require_iswap_parked()
+
+  async def test_no_iswap_sends_nothing(self):
+    self.pipettes.arm.iswap = None
+    await self.pipettes._require_iswap_parked()
+    self.assertEqual(self.sent, [])
+
+
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
   """A v1 device plans with `pylabrobot.lib.liquid_handling`, from its own minimum channel spacing."""
 

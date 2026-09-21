@@ -373,6 +373,19 @@ class Pipettes:
         f"`{instead}` is the one that answers whatever is mounted"
       )
 
+  async def _require_iswap_parked(self) -> None:
+    """Raise unless the iSWAP on these channels' arm is parked; nothing to check without one.
+
+    Raises:
+      RuntimeError: If it is not parked.
+    """
+    iswap = self.arm.iswap
+    if iswap is not None and not await iswap.request_parked():
+      raise RuntimeError(
+        "the iSWAP is not parked, and the channels move where it stands. "
+        "Call `await star.iswap.park()` first."
+      )
+
   async def request_firmware_version(self, channel: int) -> Tuple[str, datetime.date]:
     """Request one channel's firmware version and build date.
 
