@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.load\_all\_state
+=========================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.load_all_state

@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.assign\_child\_resource
+================================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.assign_child_resource

@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.get\_anchor
+====================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.get_anchor

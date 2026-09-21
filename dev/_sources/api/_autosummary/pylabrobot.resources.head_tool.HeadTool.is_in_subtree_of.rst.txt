@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.is\_in\_subtree\_of
+============================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.is_in_subtree_of

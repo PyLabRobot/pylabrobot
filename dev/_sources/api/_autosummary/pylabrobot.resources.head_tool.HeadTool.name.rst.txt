@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.name
+=============================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. autoproperty:: HeadTool.name

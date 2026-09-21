@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.find\_resource
+=======================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.find_resource

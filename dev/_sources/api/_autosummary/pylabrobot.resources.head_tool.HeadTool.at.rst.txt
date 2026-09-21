@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.at
+===========================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.at

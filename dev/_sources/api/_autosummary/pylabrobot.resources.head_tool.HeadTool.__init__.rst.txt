@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.\_\_init\_\_
+=====================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.__init__

@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.register\_did\_assign\_resource\_callback
+==================================================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.register_did_assign_resource_callback
