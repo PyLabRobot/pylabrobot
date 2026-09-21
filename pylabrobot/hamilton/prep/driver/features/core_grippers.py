@@ -861,11 +861,29 @@ class CoreGrippers:
     z_acceleration: Optional[float] = None,
     x_acceleration: Optional[float] = None,
   ) -> None:
-    """Grip a resource where the tree has it.
+    """Grip a resource where the tree has it, and hold it on the front tool in the model.
 
     Args:
+      resource: what to grip.
+      offset: added to the grip point, in mm.
       pickup_distance_from_top: how far below its top the jaws close, in mm. None is its preferred
         pickup location, else 5 mm.
+      resource_width: its size along the grip axis, in mm. None reads it from the resource.
+      resource_length: its size in x, in mm. None reads it from the resource.
+      resource_height: its size in z, in mm. None reads it from the resource.
+      clearance_y: how far clear of each side the jaws open before closing, in mm.
+      grip_speed_y: how fast the jaws close, in mm/s.
+      squeeze_mm: how far past touching the jaws close, in mm.
+      minimum_traverse_height_start: the height to travel to it at, in mm. None goes to Z safety.
+      minimum_traverse_height_end: the height to leave it at once gripped, in mm. None goes to Z
+        safety.
+      z_acceleration: the Z drives' acceleration from the grip on, in mm/s2, then restored. None is
+        `default_z_acceleration_with_resource_held`.
+      x_acceleration: the X axis's acceleration from the grip on, in mm/s2, then restored. None is
+        `default_x_acceleration_with_resource_held`.
+
+    Raises:
+      RuntimeError: If the tools are not mounted.
     """
     self._require_mounted()
     source = (resource.parent, resource.location)
