@@ -1,6 +1,6 @@
 """Tests for the Flex gripper capability (``flex.gripper``).
 
-Drives ``Flex.setup()`` with an injected ``ChatterboxHTTP``
+Drives ``Flex.setup()`` with an injected ``AsyncMock``
 advertising a gripper on the extension mount, and asserts discovery attaches
 a :class:`~pylabrobot.opentrons.flex.flex_gripper.FlexGripper`; ``move_labware``
 follows the stage -> wire -> commit idiom (PLR-side validation before any
@@ -10,32 +10,29 @@ wire command, deck re-parent only on wire success); and
 
 import asyncio
 import unittest
-from typing import Any, Dict, Optional, Tuple
+from typing import Tuple
+from unittest.mock import AsyncMock, patch
 
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
+from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
+from pylabrobot.opentrons.types import CommandInfo
 from pylabrobot.resources import Resource, cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.plate import Plate
 
 
-def _flex_with_gripper(**transport_kwargs) -> Tuple[Flex, ChatterboxHTTP]:
-  """An ``Flex`` whose transport advertises a gripper on the
-  extension mount (plus a single-channel pipette so setup() succeeds),
-  returning the transport too so a test can inspect recorded commands.
-
-  ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
-  """
-  transport = ChatterboxHTTP(
+def _flex_with_gripper(**api_kwargs) -> Tuple[Flex, AsyncMock]:
+  """Build a Flex with fixed API replies and return its mock for assertions."""
+  api = make_api(
     pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")],
     gripper=True,
-    **transport_kwargs,
+    **api_kwargs,
   )
-  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
-  return flex, transport
+  flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
+  return flex, api
 
 
 def _plate(name: str = "plate") -> Plate:
@@ -44,29 +41,11 @@ def _plate(name: str = "plate") -> Plate:
   return plate
 
 
-class _FailingMoveTransport(ChatterboxHTTP):
-  """Chatterbox whose ``moveLabware`` commands fail at the robot: the command
-  is accepted (recorded) but its status poll reports ``failed``, so
-  ``_execute_command`` raises the way a real robot-server failure would.
-  """
-
-  async def request(
-    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
-  ) -> Dict[str, Any]:
-    result = await super().request(method, path, data)
-    body = (data or {}).get("data", {})
-    if path.endswith("/commands") and body.get("commandType") == "moveLabware":
-      cmd_data = result["data"]
-      cmd_data["status"] = "failed"
-      cmd_data["error"] = {"detail": "simulated gripper failure"}
-    return result
-
-
 class TestGripperDiscovery(unittest.TestCase):
   """setup() composes a FlexGripper iff /instruments reports a gripper."""
 
   def test_gripper_attached_when_advertised(self):
-    flex, _transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       self.assertIsInstance(flex.gripper, FlexGripper)
@@ -78,8 +57,8 @@ class TestGripperDiscovery(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_gripper_none_when_absent(self):
-    transport = ChatterboxHTTP(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
-    flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+    api = make_api(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
+    flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
     asyncio.run(flex.setup())
     try:
       self.assertIsNone(flex.gripper)
@@ -92,7 +71,7 @@ class TestMoveLabware(unittest.TestCase):
   deck only on wire success; the labware is JIT-loaded once."""
 
   def test_happy_path_sends_exact_wire_params_and_reparents_deck(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()
@@ -102,11 +81,11 @@ class TestMoveLabware(unittest.TestCase):
 
       asyncio.run(gripper.move_labware(plate, "C2"))
 
-      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+      move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
       self.assertEqual(len(move_cmds), 1)
       labware_id = flex._require_labware().get(plate).labware_id
       self.assertEqual(
-        move_cmds[0]["params"],
+        move_cmds[0].args[2],
         {
           "labwareId": labware_id,
           "newLocation": {"slotName": "C2"},
@@ -121,7 +100,7 @@ class TestMoveLabware(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_second_move_reuses_the_loaded_labware(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()
@@ -132,8 +111,8 @@ class TestMoveLabware(unittest.TestCase):
       asyncio.run(gripper.move_labware(plate, "C2"))
       asyncio.run(gripper.move_labware(plate, "D3"))
 
-      load_cmds = [c for c in transport.commands if c["commandType"] == "loadLabware"]
-      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+      load_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "loadLabware"]
+      move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
       self.assertEqual(len(load_cmds), 1, "labware must be JIT-loaded exactly once")
       self.assertEqual(len(move_cmds), 2)
       self.assertEqual(flex.deck.get_slot(plate), "D3")
@@ -143,7 +122,7 @@ class TestMoveLabware(unittest.TestCase):
   def test_move_to_staging_slot_uses_addressable_area_form(self):
     # The robot-server's DeckSlotName has no A4-D4: staging slots are
     # addressable areas, so {"slotName": "B4"} would be rejected there.
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()
@@ -153,15 +132,15 @@ class TestMoveLabware(unittest.TestCase):
 
       asyncio.run(gripper.move_labware(plate, "B4"))
 
-      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+      move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
       self.assertEqual(len(move_cmds), 1)
-      self.assertEqual(move_cmds[0]["params"]["newLocation"], {"addressableAreaName": "B4"})
+      self.assertEqual(move_cmds[0].args[2]["newLocation"], {"addressableAreaName": "B4"})
       self.assertEqual(flex.deck.get_slot(plate), "B4")
     finally:
       asyncio.run(flex.stop())
 
   def test_move_back_from_staging_slot_uses_slot_name_form(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()
@@ -171,15 +150,15 @@ class TestMoveLabware(unittest.TestCase):
 
       asyncio.run(gripper.move_labware(plate, "C2"))
 
-      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
-      self.assertEqual(move_cmds[0]["params"]["newLocation"], {"slotName": "C2"})
+      move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
+      self.assertEqual(move_cmds[0].args[2]["newLocation"], {"slotName": "C2"})
     finally:
       asyncio.run(flex.stop())
 
   def test_move_bare_resource_uploads_stub_with_grip_geometry(self):
     # A resource with no pipettable geometry (lid, adapter) rides the movable
     # stub definition; grip_distance_from_top shapes its grip height.
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       lid = Resource(name="lid stack", size_x=100.0, size_y=90.0, size_z=20.0)
@@ -189,14 +168,14 @@ class TestMoveLabware(unittest.TestCase):
 
       asyncio.run(gripper.move_labware(lid, "C2", grip_distance_from_top=5.0))
 
-      self.assertEqual(len(transport.labware_definitions), 1)
-      definition = transport.labware_definitions[0]
+      self.assertEqual(api.define_labware.await_count, 1)
+      definition = [c.args[1] for c in api.define_labware.await_args_list][0]
       self.assertEqual(definition["ordering"], [["A1"]])
       self.assertEqual(definition["gripHeightFromLabwareBottom"], 15.0)  # 20 - 5
-      load_cmds = [c for c in transport.commands if c["commandType"] == "loadLabware"]
-      self.assertEqual(load_cmds[0]["params"]["namespace"], "pylabrobot")
-      self.assertEqual(load_cmds[0]["params"]["loadName"], "lid_stack_2196eb")
-      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+      load_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "loadLabware"]
+      self.assertEqual(load_cmds[0].args[2]["namespace"], "pylabrobot")
+      self.assertEqual(load_cmds[0].args[2]["loadName"], "lid_stack_2196eb")
+      move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
       self.assertEqual(len(move_cmds), 1)
       self.assertEqual(flex.deck.get_slot(lid), "C2")
     finally:
@@ -208,7 +187,7 @@ class TestGripDistanceDiscarded(unittest.TestCase):
   the paths that cannot honor it say so instead of dropping it silently."""
 
   def test_catalogue_labware_logs_the_ignored_grip_distance(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()  # resolves to an official Opentrons load name
@@ -221,9 +200,9 @@ class TestGripDistanceDiscarded(unittest.TestCase):
 
       # Nothing is uploaded, so there is nowhere to put the requested height:
       # the robot grips at the catalogue definition's own.
-      self.assertEqual(len(transport.labware_definitions), 0)
-      load_cmds = [c for c in transport.commands if c["commandType"] == "loadLabware"]
-      self.assertEqual(load_cmds[0]["params"]["namespace"], "opentrons")
+      self.assertEqual(api.define_labware.await_count, 0)
+      load_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "loadLabware"]
+      self.assertEqual(load_cmds[0].args[2]["namespace"], "opentrons")
       self.assertTrue(any("grip_distance_from_top=5.0" in line for line in logs.output))
       self.assertTrue(
         any("corning_96_wellplate_360ul_flat" in line for line in logs.output),
@@ -233,7 +212,7 @@ class TestGripDistanceDiscarded(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_second_move_logs_the_grip_distance_the_loaded_labware_ignores(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       lid = Resource(name="lid stack", size_x=100.0, size_y=90.0, size_z=20.0)
@@ -245,8 +224,11 @@ class TestGripDistanceDiscarded(unittest.TestCase):
       with self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING") as logs:
         asyncio.run(gripper.move_labware(lid, "C3", grip_distance_from_top=9.0))
 
-      self.assertEqual(len(transport.labware_definitions), 1)
-      self.assertEqual(transport.labware_definitions[0]["gripHeightFromLabwareBottom"], 15.0)
+      self.assertEqual(api.define_labware.await_count, 1)
+      self.assertEqual(
+        [c.args[1] for c in api.define_labware.await_args_list][0]["gripHeightFromLabwareBottom"],
+        15.0,
+      )
       self.assertTrue(any("grip_distance_from_top=9.0" in line for line in logs.output))
     finally:
       asyncio.run(flex.stop())
@@ -255,12 +237,12 @@ class TestGripDistanceDiscarded(unittest.TestCase):
 class TestMoveLabwarePreWireRejections(unittest.TestCase):
   """Invalid moves raise OpentronsError BEFORE any wire command is sent."""
 
-  def _assert_no_move_commands(self, transport: ChatterboxHTTP) -> None:
-    move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+  def _assert_no_move_commands(self, api: AsyncMock) -> None:
+    move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
     self.assertEqual(len(move_cmds), 0, "no moveLabware wire command may be sent")
 
   def test_labware_not_on_deck_raises(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()  # never assigned to the deck
@@ -270,12 +252,12 @@ class TestMoveLabwarePreWireRejections(unittest.TestCase):
       with self.assertRaises(OpentronsError):
         asyncio.run(gripper.move_labware(plate, "C2"))
 
-      self._assert_no_move_commands(transport)
+      self._assert_no_move_commands(api)
     finally:
       asyncio.run(flex.stop())
 
   def test_occupied_destination_raises_and_deck_untouched(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()
@@ -288,14 +270,14 @@ class TestMoveLabwarePreWireRejections(unittest.TestCase):
       with self.assertRaises(OpentronsError):
         asyncio.run(gripper.move_labware(plate, "C2"))
 
-      self._assert_no_move_commands(transport)
+      self._assert_no_move_commands(api)
       self.assertEqual(flex.deck.get_slot(plate), "C1")
       self.assertEqual(flex.deck.get_slot(other), "C2")
     finally:
       asyncio.run(flex.stop())
 
   def test_invalid_destination_slot_raises(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()
@@ -306,7 +288,7 @@ class TestMoveLabwarePreWireRejections(unittest.TestCase):
       with self.assertRaises(OpentronsError):
         asyncio.run(gripper.move_labware(plate, "E5"))
 
-      self._assert_no_move_commands(transport)
+      self._assert_no_move_commands(api)
       self.assertEqual(flex.deck.get_slot(plate), "C1")
     finally:
       asyncio.run(flex.stop())
@@ -316,10 +298,8 @@ class TestMoveLabwareWireFailure(unittest.TestCase):
   """A wire-level moveLabware failure re-raises and leaves the deck untouched."""
 
   def test_failed_move_leaves_deck_untouched(self):
-    transport = _FailingMoveTransport(
-      pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")], gripper=True
-    )
-    flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+    api = make_api(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")], gripper=True)
+    flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
     asyncio.run(flex.setup())
     try:
       plate = _plate()
@@ -327,10 +307,22 @@ class TestMoveLabwareWireFailure(unittest.TestCase):
       gripper = flex.gripper
       assert gripper is not None
 
-      with self.assertRaises(RuntimeError):
+      with (
+        patch.object(
+          api,
+          "get_command",
+          AsyncMock(
+            side_effect=[
+              api.get_command.return_value,
+              CommandInfo("failed", {}, {"errorType": "moveFailed", "detail": "move failed"}),
+            ]
+          ),
+        ),
+        self.assertRaises(RuntimeError),
+      ):
         asyncio.run(gripper.move_labware(plate, "C2"))
 
-      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+      move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
       self.assertEqual(len(move_cmds), 1, "the command reached the wire and failed there")
       self.assertEqual(flex.deck.get_slot(plate), "C1")
       self.assertIsNone(flex.deck.get_resource_at_slot("C2"))
@@ -343,7 +335,7 @@ class TestLabwareMovedOffDeck(unittest.TestCase):
   move) for loaded labware, evicts the load cache, and frees the PLR slot."""
 
   def test_loaded_labware_sends_offdeck_move_and_evicts_cache(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()
@@ -352,10 +344,10 @@ class TestLabwareMovedOffDeck(unittest.TestCase):
 
       asyncio.run(flex.labware_moved_off_deck(plate))
 
-      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+      move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
       self.assertEqual(len(move_cmds), 1)
       self.assertEqual(
-        move_cmds[0]["params"],
+        move_cmds[0].args[2],
         {
           "labwareId": labware_id,
           "newLocation": "offDeck",
@@ -369,7 +361,7 @@ class TestLabwareMovedOffDeck(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_never_loaded_labware_frees_slot_without_wire_command(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       plate = _plate()
@@ -377,7 +369,7 @@ class TestLabwareMovedOffDeck(unittest.TestCase):
 
       asyncio.run(flex.labware_moved_off_deck(plate))
 
-      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+      move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
       self.assertEqual(len(move_cmds), 0, "never-loaded labware needs no wire command")
       self.assertIsNone(flex.deck.get_slot(plate))
       self.assertIsNone(flex.deck.get_resource_at_slot("C1"))
@@ -389,7 +381,7 @@ class TestUngrip(unittest.TestCase):
   """ungrip() sends the unsafe/ungripLabware recovery command."""
 
   def test_ungrip_sends_unsafe_ungrip_labware(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       gripper = flex.gripper
@@ -397,9 +389,11 @@ class TestUngrip(unittest.TestCase):
 
       asyncio.run(gripper.ungrip())
 
-      ungrip_cmds = [c for c in transport.commands if c["commandType"] == "unsafe/ungripLabware"]
+      ungrip_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "unsafe/ungripLabware"
+      ]
       self.assertEqual(len(ungrip_cmds), 1)
-      self.assertEqual(ungrip_cmds[0]["params"], {})
+      self.assertEqual(ungrip_cmds[0].args[2], {})
     finally:
       asyncio.run(flex.stop())
 

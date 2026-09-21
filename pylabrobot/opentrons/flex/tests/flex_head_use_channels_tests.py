@@ -8,17 +8,18 @@ nozzles for that call. The layout itself is fixed at pickup (the engine refuses 
 nozzle reconfiguration while tips are attached), so a liquid op emits NO
 ``configureNozzleLayout`` -- only the ``aspirate``/``dispense`` command.
 
-Wire payloads are inspected through the injected ``ChatterboxHTTP``.
+Wire payloads are inspected through the injected ``AsyncMock``.
 """
 
 import asyncio
 import unittest
 from typing import List, Tuple
+from unittest.mock import AsyncMock, _Call
 
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
+from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import (
   Container,
   cor_96_wellplate_360uL_Fb,
@@ -44,13 +45,13 @@ def _make_trough(name: str = "trough") -> Container:
   return trough
 
 
-def _flex_head8() -> Tuple[Flex, ChatterboxHTTP, FlexHead8]:
-  transport = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+def _flex_head8() -> Tuple[Flex, AsyncMock, FlexHead8]:
+  api = make_api(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
+  flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
-  return flex, transport, head
+  return flex, api, head
 
 
 def _plate_on(flex: Flex, slot: str = "C2"):
@@ -66,8 +67,8 @@ def _rack_on(flex: Flex, slot: str = "C1"):
   return rack
 
 
-def _commands_of(transport: ChatterboxHTTP, command_type: str) -> List[dict]:
-  return [c for c in transport.commands if c["commandType"] == command_type]
+def _commands_of(api: AsyncMock, command_type: str) -> List[_Call]:
+  return [c for c in api.submit_command.await_args_list if c.args[1] == command_type]
 
 
 class TestUnifiedAspirateColumn(unittest.TestCase):
@@ -84,7 +85,7 @@ class TestUnifiedAspirateColumn(unittest.TestCase):
     set_volume_tracking(False)
 
   def test_column_target_emits_one_anchored_aspirate_and_tracks_only_that_column(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
       plate = _plate_on(flex)
@@ -92,20 +93,20 @@ class TestUnifiedAspirateColumn(unittest.TestCase):
         well.tracker.set_volume(100.0)
 
       asyncio.run(head.pick_up_tips(rack, column=0))
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
 
       asyncio.run(head.aspirate(plate.column(2), volume=50))
 
-      aspirate_cmds = _commands_of(transport, "aspirateInPlace")
+      aspirate_cmds = _commands_of(api, "aspirateInPlace")
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
+      self.assertNotIn("wellName", aspirate_cmds[0].args[2])
 
       # No configureNozzleLayout may be emitted by the aspirate itself: the
       # engine refuses a reconfiguration while tips are attached.
-      new_cmds = transport.commands[commands_before:]
+      new_cmds = api.submit_command.await_args_list[commands_before:]
       self.assertNotIn(
         "configureNozzleLayout",
-        [c["commandType"] for c in new_cmds],
+        [c.args[1] for c in new_cmds],
       )
 
       wells = plate.get_all_items()
@@ -130,7 +131,7 @@ class TestUnifiedAspirateSingleWell(unittest.TestCase):
     set_volume_tracking(False)
 
   def test_bare_well_target_aspirates_with_single_nozzle(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
       plate = _plate_on(flex)
@@ -138,15 +139,15 @@ class TestUnifiedAspirateSingleWell(unittest.TestCase):
       target.tracker.set_volume(100.0)
 
       asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
 
       asyncio.run(head.aspirate(target, volume=20))
 
-      aspirate_cmds = _commands_of(transport, "aspirateInPlace")
+      aspirate_cmds = _commands_of(api, "aspirateInPlace")
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
+      self.assertNotIn("wellName", aspirate_cmds[0].args[2])
 
-      new_cmds = [c["commandType"] for c in transport.commands[commands_before:]]
+      new_cmds = [c.args[1] for c in api.submit_command.await_args_list[commands_before:]]
       self.assertNotIn("configureNozzleLayout", new_cmds)
 
       self.assertAlmostEqual(target.tracker.volume, 80.0)
@@ -172,7 +173,7 @@ class TestUnifiedAspirateContainer(unittest.TestCase):
     set_volume_tracking(False)
 
   def test_container_target_stages_total_and_emits_one_aspirate(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
       trough = _make_trough()
@@ -180,15 +181,15 @@ class TestUnifiedAspirateContainer(unittest.TestCase):
       trough.tracker.set_volume(1000.0)
 
       asyncio.run(head.pick_up_tips(rack, column=0))  # 8 tips, ALL layout
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
 
       asyncio.run(head.aspirate(trough, volume=10))
 
-      aspirate_cmds = _commands_of(transport, "aspirateInPlace")
+      aspirate_cmds = _commands_of(api, "aspirateInPlace")
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
+      self.assertNotIn("wellName", aspirate_cmds[0].args[2])
 
-      new_cmds = [c["commandType"] for c in transport.commands[commands_before:]]
+      new_cmds = [c.args[1] for c in api.submit_command.await_args_list[commands_before:]]
       self.assertNotIn("configureNozzleLayout", new_cmds)
 
       # 8 channels x 10 uL = 80 uL removed from the one cavity.
@@ -211,7 +212,7 @@ class TestUnifiedUseChannelsValidation(unittest.TestCase):
     set_volume_tracking(False)
 
   def test_use_channels_not_matching_mounted_tips_refuses_before_wire(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
       plate = _plate_on(flex)
@@ -219,19 +220,21 @@ class TestUnifiedUseChannelsValidation(unittest.TestCase):
         well.tracker.set_volume(100.0)
 
       asyncio.run(head.pick_up_tips(rack, column=0))  # all 8 channels hold tips
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
 
       # Only 3 channels named, but 8 are mounted: the fanned command cannot
       # actuate a subset, so this is refused.
       with self.assertRaises(OpentronsError):
         asyncio.run(head.aspirate(plate.column(2), volume=20, use_channels=[0, 1, 2]))
 
-      self.assertEqual(len(transport.commands), commands_before, "no wire command may be sent")
+      self.assertEqual(
+        api.submit_command.await_count, commands_before, "no wire command may be sent"
+      )
     finally:
       asyncio.run(flex.stop())
 
   def test_use_channels_matching_all_mounted_is_accepted(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
       plate = _plate_on(flex)
@@ -241,9 +244,9 @@ class TestUnifiedUseChannelsValidation(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate(plate.column(2), volume=20, use_channels=list(range(8))))
 
-      aspirate_cmds = _commands_of(transport, "aspirateInPlace")
+      aspirate_cmds = _commands_of(api, "aspirateInPlace")
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
+      self.assertNotIn("wellName", aspirate_cmds[0].args[2])
     finally:
       asyncio.run(flex.stop())
 
@@ -260,27 +263,27 @@ class TestUnifiedPickUpTips(unittest.TestCase):
     set_tip_tracking(False)
 
   def test_column_of_spots_picks_up_eight_in_all_layout(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
 
       asyncio.run(head.pick_up_tips(rack.column(0)))
 
-      pickup = _commands_of(transport, "pickUpTip")
+      pickup = _commands_of(api, "pickUpTip")
       self.assertEqual(len(pickup), 1)
-      self.assertEqual(pickup[0]["params"]["wellName"], "A1")
+      self.assertEqual(pickup[0].args[2]["wellName"], "A1")
       self.assertEqual(sum(1 for t in head.get_mounted_tips() if t is not None), 8)
       # A fresh head is already ALL, so no SINGLE reconfiguration is emitted.
       styles = [
-        c["params"]["configurationParams"]["style"]
-        for c in _commands_of(transport, "configureNozzleLayout")
+        c.args[2]["configurationParams"]["style"]
+        for c in _commands_of(api, "configureNozzleLayout")
       ]
       self.assertNotIn("SINGLE", styles)
     finally:
       asyncio.run(flex.stop())
 
   def test_single_spot_with_use_channels_configures_single_primary_nozzle(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
 
@@ -288,12 +291,12 @@ class TestUnifiedPickUpTips(unittest.TestCase):
       # front row is the one it can take a single tip from on a full rack.
       asyncio.run(head.pick_up_tips(rack.get_item("H1"), use_channels=[0]))
 
-      configure = _commands_of(transport, "configureNozzleLayout")
-      cfg = configure[-1]["params"]["configurationParams"]
+      configure = _commands_of(api, "configureNozzleLayout")
+      cfg = configure[-1].args[2]["configurationParams"]
       self.assertEqual(cfg["style"], "SINGLE")
       self.assertEqual(cfg["primaryNozzle"], "A1")
-      pickup = _commands_of(transport, "pickUpTip")
-      self.assertEqual(pickup[-1]["params"]["wellName"], "H1")
+      pickup = _commands_of(api, "pickUpTip")
+      self.assertEqual(pickup[-1].args[2]["wellName"], "H1")
       tips = head.get_mounted_tips()
       self.assertIsNotNone(tips[0])
       self.assertEqual(sum(1 for t in tips if t is not None), 1)
@@ -301,7 +304,7 @@ class TestUnifiedPickUpTips(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_single_spot_use_channels_off_anchor_refuses(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
       # An 8-channel Flex can single-anchor only on A1 (ch 0) or H1 (ch 7).
@@ -323,7 +326,7 @@ class TestUnifiedPartialPickUp(unittest.TestCase):
     set_tip_tracking(False)
 
   def test_front_partial_emits_quadrant_and_picks_the_front_channels(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
 
@@ -331,14 +334,14 @@ class TestUnifiedPartialPickUp(unittest.TestCase):
       await_spots = rack.column(0)[4:8]
       asyncio.run(head.pick_up_tips(await_spots, use_channels=[4, 5, 6, 7]))
 
-      cfg = _commands_of(transport, "configureNozzleLayout")[-1]["params"]["configurationParams"]
+      cfg = _commands_of(api, "configureNozzleLayout")[-1].args[2]["configurationParams"]
       self.assertEqual(cfg["style"], "QUADRANT")
       self.assertEqual(cfg["primaryNozzle"], "H1")
       self.assertEqual(cfg["frontRightNozzle"], "H1")
       self.assertEqual(cfg["backLeftNozzle"], "E1")  # rear-most of the front-4
 
-      pickup = _commands_of(transport, "pickUpTip")
-      self.assertEqual(pickup[-1]["params"]["wellName"], "H1")  # anchor = primary nozzle's well
+      pickup = _commands_of(api, "pickUpTip")
+      self.assertEqual(pickup[-1].args[2]["wellName"], "H1")  # anchor = primary nozzle's well
 
       tips = head.get_mounted_tips()
       self.assertEqual([i for i, t in enumerate(tips) if t is not None], [4, 5, 6, 7])
@@ -346,7 +349,7 @@ class TestUnifiedPartialPickUp(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_non_contiguous_partial_refuses(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = _rack_on(flex)
       spots = [rack.get_item("A1"), rack.get_item("C1"), rack.get_item("E1")]
@@ -370,7 +373,7 @@ class TestSingleNozzleLiquidClearance(unittest.TestCase):
     set_volume_tracking(False)
 
   def test_single_aspirate_refuses_when_idle_nozzles_overhang_a_tip_rack(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       flex.deck.assign_child_at_slot(rack, "C1")
@@ -381,14 +384,12 @@ class TestSingleNozzleLiquidClearance(unittest.TestCase):
       with self.assertRaises((ValueError, OpentronsError)):
         asyncio.run(head.aspirate(plate.get_item("A1"), volume=20))
 
-      self.assertEqual(
-        len(_commands_of(transport, "aspirateInPlace")), 0, "no aspirate may be sent"
-      )
+      self.assertEqual(len(_commands_of(api, "aspirateInPlace")), 0, "no aspirate may be sent")
     finally:
       asyncio.run(flex.stop())
 
   def test_single_aspirate_allowed_when_trailing_row_empty(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       flex.deck.assign_child_at_slot(rack, "D1")  # pick from D1 (behind it, C1, is empty)
@@ -398,7 +399,7 @@ class TestSingleNozzleLiquidClearance(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack.get_item("A1"), use_channels=[7]))
       asyncio.run(head.aspirate(plate.get_item("A1"), volume=20))
 
-      self.assertEqual(len(_commands_of(transport, "aspirateInPlace")), 1)
+      self.assertEqual(len(_commands_of(api, "aspirateInPlace")), 1)
     finally:
       asyncio.run(flex.stop())
 

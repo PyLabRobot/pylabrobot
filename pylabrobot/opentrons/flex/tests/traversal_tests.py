@@ -3,10 +3,11 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.opentrons import ChatterboxHTTP, Flex, FlexHead1, FlexHead8, FlexHead96
+from pylabrobot.opentrons import FlexHead1, FlexHead8, FlexHead96
+from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import (
-  cor_96_wellplate_360uL_Fb,
   Resource,
+  cor_96_wellplate_360uL_Fb,
   set_tip_tracking,
   set_volume_tracking,
 )
@@ -17,11 +18,11 @@ from pylabrobot.resources.opentrons import (
 
 class FlexTraversalTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.io = ChatterboxHTTP(
+    self.io = make_api(
       pipettes=[("p1000_multi_flex", 8, 5, 1000, "left")],
       saved_position={"x": 14, "y": 74, "z": 20},
     )
-    self.flex = Flex("offline", io=self.io)
+    self.flex = make_flex("offline", api=self.io)
     self.rack = flex_96_filtertiprack_50ul("tips")
     self.plate = cor_96_wellplate_360uL_Fb("plate")
     self.flex.deck.assign_child_at_slot(self.rack, "D1")
@@ -40,23 +41,21 @@ class FlexTraversalTests(unittest.IsolatedAsyncioTestCase):
 
   def assert_vertical_retraction(self):
     """The final command must address Z alone, to the computed clearance."""
-    self.assertEqual(self.io.commands[-2]["commandType"], "savePosition")
-    self.assertEqual(
-      self.io.commands[-1],
+    self.assertEqual(self.io.submit_command.await_args_list[-2].args[1], "savePosition")
+    self.io.submit_command.assert_awaited_with(
+      "run",
+      "moveRelative",
       {
-        "commandType": "moveRelative",
-        "params": {
-          "pipetteId": self.head.pipette_id,
-          "axis": "z",
-          "distance": self.flex.traversal_height - 20,
-        },
+        "pipetteId": self.head.pipette_id,
+        "axis": "z",
+        "distance": self.flex.traversal_height - 20,
       },
     )
 
   async def test_pickup_retracts_after_tip_verification(self):
     await self.head.pick_up_tips(self.rack.column(0))
     self.assert_vertical_retraction()
-    self.assertEqual(self.io.commands[-3]["commandType"], "getTipPresence")
+    self.assertEqual(self.io.submit_command.await_args_list[-3].args[1], "getTipPresence")
     self.assertEqual(sum(t is not None for t in self.head.get_mounted_tips()), 8)
 
   async def test_aspirate_dispense_and_rack_return_retract(self):
@@ -71,10 +70,12 @@ class FlexTraversalTests(unittest.IsolatedAsyncioTestCase):
     self.assert_vertical_retraction()
 
   async def test_does_not_lower_a_head_already_above_clearance(self):
-    self.io.saved_position = {"x": 14, "y": 74, "z": 250}
+    self.io.get_command.return_value.result["position"] = {"x": 14, "y": 74, "z": 250}
     await self.head.pick_up_tips(self.rack.column(0))
-    self.assertEqual(self.io.commands[-1]["commandType"], "savePosition")
-    self.assertFalse(any(c["commandType"] == "moveRelative" for c in self.io.commands))
+    self.assertEqual(self.io.submit_command.await_args_list[-1].args[1], "savePosition")
+    self.assertFalse(
+      any(c.args[1] == "moveRelative" for c in self.io.submit_command.await_args_list)
+    )
 
   async def test_tall_labware_raises_clearance(self):
     self.flex.deck.assign_child_at_slot(Resource("obstacle", 100, 70, 150), "C2")
@@ -108,8 +109,8 @@ class FlexTraversalTests(unittest.IsolatedAsyncioTestCase):
   async def test_other_head_sizes_retract_after_pickup(self):
     for channels, name in ((1, "p1000_single_flex"), (96, "p1000_96")):
       with self.subTest(channels=channels):
-        io = ChatterboxHTTP(pipettes=[(name, channels, 1, 1000, "left")])
-        flex = Flex("offline", io=io)
+        io = make_api(pipettes=[(name, channels, 1, 1000, "left")])
+        flex = make_flex("offline", api=io)
         rack = flex_96_filtertiprack_50ul("tips")
         flex.deck.assign_child_at_slot(rack, "D1")
         try:
@@ -120,7 +121,7 @@ class FlexTraversalTests(unittest.IsolatedAsyncioTestCase):
           else:
             assert isinstance(head, FlexHead96)
             await head.pick_up_tips(rack)
-          self.assertEqual(io.commands[-1]["commandType"], "moveRelative")
-          self.assertEqual(io.commands[-1]["params"]["axis"], "z")
+          self.assertEqual(io.submit_command.await_args_list[-1].args[1], "moveRelative")
+          self.assertEqual(io.submit_command.await_args_list[-1].args[2]["axis"], "z")
         finally:
           await flex.disconnect()

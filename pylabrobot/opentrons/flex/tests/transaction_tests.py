@@ -4,7 +4,8 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.opentrons import ChatterboxHTTP, Flex, FlexHead8
+from pylabrobot.opentrons import FlexHead8
+from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.errors import TooLittleLiquidError
 from pylabrobot.resources.opentrons import (
@@ -17,9 +18,9 @@ class FlexTransactionTests(unittest.IsolatedAsyncioTestCase):
   """A failed operation must leave all participating trackers unchanged."""
 
   async def asyncSetUp(self):
-    """Mount a simulated column and initialize source water volumes."""
-    self.io = ChatterboxHTTP(pipettes=[("p1000_multi_flex", 8, 5, 1000, "left")])
-    self.flex = Flex(deck=FlexDeck(), host="offline", io=self.io)
+    """Mount a column with mocked API replies and initialize source water volumes."""
+    self.api = make_api(pipettes=[("p1000_multi_flex", 8, 5, 1000, "left")])
+    self.flex = make_flex(deck=FlexDeck(), host="offline", api=self.api)
     self.rack = flex_96_tiprack_50ul("tips")
     self.plate = cor_96_wellplate_360uL_Fb("plate")
     self.flex.deck.assign_child_at_slot(self.rack, "D1")
@@ -35,7 +36,7 @@ class FlexTransactionTests(unittest.IsolatedAsyncioTestCase):
       well.tracker.set_volume(100)
 
   async def asyncTearDown(self):
-    """Release only the simulated run and restore global tracking flags."""
+    """Release the mocked run and restore global tracking flags."""
     await self.flex.disconnect()
     set_tip_tracking(False)
     set_volume_tracking(False)

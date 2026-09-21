@@ -9,28 +9,29 @@ traversal plane replaces the hardcoded magic number.
 import asyncio
 import unittest
 from typing import List, Tuple
+from unittest.mock import AsyncMock, _Call
 
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.envelope import FLEX_ENVELOPE
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
+from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 
 
-def _flex_head8() -> Tuple[Flex, ChatterboxHTTP, FlexHead8]:
-  transport = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+def _flex_head8() -> Tuple[Flex, AsyncMock, FlexHead8]:
+  api = make_api(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
+  flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
-  return flex, transport, head
+  return flex, api, head
 
 
-def _commands_of(transport: ChatterboxHTTP, command_type: str) -> List[dict]:
-  return [c for c in transport.commands if c["commandType"] == command_type]
+def _commands_of(api: AsyncMock, command_type: str) -> List[_Call]:
+  return [c for c in api.submit_command.await_args_list if c.args[1] == command_type]
 
 
 class TestRearCapGroundedTo881(unittest.TestCase):
@@ -67,7 +68,7 @@ class TestComputedTraversalPlane(unittest.TestCase):
   (tallest labware top + arc margin), not a hardcoded 120.0 magic number."""
 
   def test_move_to_uses_computed_traversal_not_120(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       plate = cor_96_wellplate_360uL_Fb(name="plate")
       set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
@@ -78,9 +79,9 @@ class TestComputedTraversalPlane(unittest.TestCase):
 
       asyncio.run(head.move_to(x=100.0, y=100.0, z=50.0))
 
-      move_cmds = _commands_of(transport, "moveToCoordinates")
+      move_cmds = _commands_of(api, "moveToCoordinates")
       self.assertEqual(len(move_cmds), 1)
-      self.assertAlmostEqual(move_cmds[0]["params"]["minimumZHeight"], expected)
+      self.assertAlmostEqual(move_cmds[0].args[2]["minimumZHeight"], expected)
     finally:
       asyncio.run(flex.stop())
 
@@ -94,7 +95,7 @@ class TestTrashDropArcsHighEnough(unittest.TestCase):
     from pylabrobot.resources import cor_96_wellplate_360uL_Fb
     from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
@@ -107,9 +108,11 @@ class TestTrashDropArcsHighEnough(unittest.TestCase):
       asyncio.run(head.discard_tips(trash))
 
       move = next(
-        c for c in transport.commands if c["commandType"] == "moveToAddressableAreaForDropTip"
+        c
+        for c in api.submit_command.await_args_list
+        if c.args[1] == "moveToAddressableAreaForDropTip"
       )
-      self.assertAlmostEqual(move["params"]["minimumZHeight"], traversal_z(flex.deck))
+      self.assertAlmostEqual(move.args[2]["minimumZHeight"], traversal_z(flex.deck))
     finally:
       asyncio.run(flex.stop())
 
@@ -134,7 +137,7 @@ class TestBetweenSlotArcGuard(unittest.TestCase):
     from pylabrobot.resources import cor_96_wellplate_360uL_Fb
     from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
@@ -142,38 +145,38 @@ class TestBetweenSlotArcGuard(unittest.TestCase):
     flex.deck.assign_child_at_slot(plate, "C2")
     for w in plate.get_all_items():
       w.tracker.set_volume(100.0)
-    return flex, transport, head, rack, plate
+    return flex, api, head, rack, plate
 
-  def _coordinate_moves(self, transport):
-    return [c for c in transport.commands if c["commandType"] == "moveToCoordinates"]
+  def _coordinate_moves(self, api):
+    return [c for c in api.submit_command.await_args_list if c.args[1] == "moveToCoordinates"]
 
   def test_crossing_to_a_new_slot_arcs_high_first(self):
-    flex, transport, head, rack, plate = self._setup()
+    flex, api, head, rack, plate = self._setup()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))  # over the rack (C1)
-      before = len(self._coordinate_moves(transport))
+      before = len(self._coordinate_moves(api))
       asyncio.run(head.aspirate(plate.column(0), volume=50))  # -> plate (C2), a new slot
 
-      moves = self._coordinate_moves(transport)
+      moves = self._coordinate_moves(api)
       self.assertEqual(
         len(moves), before + 1, "one safe move should precede the cross-slot aspirate"
       )
-      self.assertAlmostEqual(moves[-1]["params"]["minimumZHeight"], traversal_z(flex.deck))
+      self.assertAlmostEqual(moves[-1].args[2]["minimumZHeight"], traversal_z(flex.deck))
       # Vertical descent immediately precedes aspiration.
-      types = [c["commandType"] for c in transport.commands]
+      types = [c.args[1] for c in api.submit_command.await_args_list]
       self.assertEqual(types[types.index("aspirateInPlace") - 1], "moveRelative")
     finally:
       asyncio.run(flex.stop())
 
   def test_moving_within_the_same_labware_also_arcs_high(self):
-    flex, transport, head, rack, plate = self._setup()
+    flex, api, head, rack, plate = self._setup()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate(plate.column(0), volume=50))  # cross-slot -> one safe move
-      n = len(self._coordinate_moves(transport))
+      n = len(self._coordinate_moves(api))
       asyncio.run(head.dispense(plate.column(1), volume=50))  # same plate -> safe coordinate move
       self.assertEqual(
-        len(self._coordinate_moves(transport)), n + 1, "within-slot move must also arc high"
+        len(self._coordinate_moves(api)), n + 1, "within-slot move must also arc high"
       )
     finally:
       asyncio.run(flex.stop())

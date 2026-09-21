@@ -2,7 +2,7 @@
 (``_FlexHead.position``/``_FlexHead.move_to``) and gripper motion + jaw
 control (``FlexGripper.move_to``/``grip``/``open_jaw``).
 
-Drives ``Flex.setup()`` with an injected ``ChatterboxHTTP`` and
+Drives ``Flex.setup()`` with an injected ``AsyncMock`` and
 asserts the exact wire commands: ``savePosition`` reads, ``moveToCoordinates``
 axis merging and ``minimumZHeight``/``speed`` handling, the ``robot/moveTo``
 extension-mount params, jaw force validation before any wire command, and the
@@ -11,14 +11,15 @@ robot-software version gate on the robot/* command family.
 
 import asyncio
 import unittest
-from typing import Any, Dict, List, Tuple
+from typing import List, Tuple
+from unittest.mock import AsyncMock, _Call
 
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper, _require_robot_commands
 from pylabrobot.opentrons.flex.flex_head import FlexHead8, _FlexHead
+from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import set_tip_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
@@ -26,18 +27,15 @@ from pylabrobot.resources.opentrons.flex_plates import corning_96_wellplate_360u
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
 
-def _flex_with_gripper(**transport_kwargs) -> Tuple[Flex, ChatterboxHTTP]:
-  """An ``Flex`` with a single-channel right-mount pipette and a
-  gripper, returning the transport too so a test can inspect recorded
-  commands. ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
-  """
-  transport = ChatterboxHTTP(
+def _flex_with_gripper(**api_kwargs) -> Tuple[Flex, AsyncMock]:
+  """Build a Flex with fixed API replies and return its mock for assertions."""
+  api = make_api(
     pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")],
     gripper=True,
-    **transport_kwargs,
+    **api_kwargs,
   )
-  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
-  return flex, transport
+  flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
+  return flex, api
 
 
 def _head(flex: Flex) -> _FlexHead:
@@ -52,11 +50,11 @@ def _gripper(flex: Flex) -> FlexGripper:
   return gripper
 
 
-def _cmds(transport: ChatterboxHTTP, command_type: str) -> List[Dict[str, Any]]:
-  return [c for c in transport.commands if c["commandType"] == command_type]
+def _cmds(api: AsyncMock, command_type: str) -> List[_Call]:
+  return [c for c in api.submit_command.await_args_list if c.args[1] == command_type]
 
 
-def _flex_with_version(api_version: str) -> Tuple[Flex, ChatterboxHTTP]:
+def _flex_with_version(api_version: str) -> Tuple[Flex, AsyncMock]:
   """A gripper-equipped Flex whose ``/health`` reports ``api_version``, so a
   test can drive the robot/* version gate."""
   return _flex_with_gripper(api_version=api_version)
@@ -66,7 +64,7 @@ class TestHeadPosition(unittest.TestCase):
   """position() reads the head's pose from a savePosition command result."""
 
   def test_position_reads_save_position_result(self):
-    flex, transport = _flex_with_gripper(saved_position={"x": 10.0, "y": 20.0, "z": 30.5})
+    flex, api = _flex_with_gripper(saved_position={"x": 10.0, "y": 20.0, "z": 30.5})
     asyncio.run(flex.setup())
     try:
       head = _head(flex)
@@ -74,9 +72,9 @@ class TestHeadPosition(unittest.TestCase):
       position = asyncio.run(head.position())
 
       self.assertEqual(position, Coordinate(10.0, 20.0, 30.5))
-      save_cmds = _cmds(transport, "savePosition")
+      save_cmds = _cmds(api, "savePosition")
       self.assertEqual(len(save_cmds), 1)
-      self.assertEqual(save_cmds[0]["params"], {"pipetteId": head.pipette_id})
+      self.assertEqual(save_cmds[0].args[2], {"pipetteId": head.pipette_id})
     finally:
       asyncio.run(flex.stop())
 
@@ -88,18 +86,18 @@ class TestHeadMoveTo(unittest.TestCase):
   """
 
   def test_partial_axes_merge_saved_with_given(self):
-    flex, transport = _flex_with_gripper(saved_position={"x": 10.0, "y": 20.0, "z": 30.0})
+    flex, api = _flex_with_gripper(saved_position={"x": 10.0, "y": 20.0, "z": 30.0})
     asyncio.run(flex.setup())
     try:
       head = _head(flex)
 
       asyncio.run(head.move_to(x=50.0))
 
-      self.assertEqual(len(_cmds(transport, "savePosition")), 1)
-      move_cmds = _cmds(transport, "moveToCoordinates")
+      self.assertEqual(len(_cmds(api, "savePosition")), 1)
+      move_cmds = _cmds(api, "moveToCoordinates")
       self.assertEqual(len(move_cmds), 1)
       self.assertEqual(
-        move_cmds[0]["params"],
+        move_cmds[0].args[2],
         {
           "pipetteId": head.pipette_id,
           "coordinates": {"x": 50.0, "y": 20.0, "z": 30.0},
@@ -112,60 +110,60 @@ class TestHeadMoveTo(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_all_axes_given_skips_position_read(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_head(flex).move_to(x=1.0, y=2.0, z=3.0))
 
-      self.assertEqual(len(_cmds(transport, "savePosition")), 0)
-      move_cmds = _cmds(transport, "moveToCoordinates")
+      self.assertEqual(len(_cmds(api, "savePosition")), 0)
+      move_cmds = _cmds(api, "moveToCoordinates")
       self.assertEqual(len(move_cmds), 1)
-      self.assertEqual(move_cmds[0]["params"]["coordinates"], {"x": 1.0, "y": 2.0, "z": 3.0})
+      self.assertEqual(move_cmds[0].args[2]["coordinates"], {"x": 1.0, "y": 2.0, "z": 3.0})
     finally:
       asyncio.run(flex.stop())
 
   def test_minimum_z_height_override(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_head(flex).move_to(x=1.0, y=2.0, z=3.0, minimum_z_height=35.0))
 
-      move_cmds = _cmds(transport, "moveToCoordinates")
-      self.assertEqual(move_cmds[0]["params"]["minimumZHeight"], 35.0)
+      move_cmds = _cmds(api, "moveToCoordinates")
+      self.assertEqual(move_cmds[0].args[2]["minimumZHeight"], 35.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_speed_passthrough(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_head(flex).move_to(x=1.0, y=2.0, z=3.0, speed=40.0))
 
-      move_cmds = _cmds(transport, "moveToCoordinates")
-      self.assertEqual(move_cmds[0]["params"]["speed"], 40.0)
+      move_cmds = _cmds(api, "moveToCoordinates")
+      self.assertEqual(move_cmds[0].args[2]["speed"], 40.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_speed_omitted_by_default(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_head(flex).move_to(x=1.0, y=2.0, z=3.0))
 
-      move_cmds = _cmds(transport, "moveToCoordinates")
-      self.assertNotIn("speed", move_cmds[0]["params"])
+      move_cmds = _cmds(api, "moveToCoordinates")
+      self.assertNotIn("speed", move_cmds[0].args[2])
     finally:
       asyncio.run(flex.stop())
 
   def test_no_axes_raises_before_any_wire_command(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       with self.assertRaises(ValueError):
         asyncio.run(_head(flex).move_to())
 
-      self.assertEqual(len(_cmds(transport, "savePosition")), 0)
-      self.assertEqual(len(_cmds(transport, "moveToCoordinates")), 0)
+      self.assertEqual(len(_cmds(api, "savePosition")), 0)
+      self.assertEqual(len(_cmds(api, "moveToCoordinates")), 0)
     finally:
       asyncio.run(flex.stop())
 
@@ -174,28 +172,28 @@ class TestGripperMoveTo(unittest.TestCase):
   """Gripper move_to sends robot/moveTo with the extension mount."""
 
   def test_exact_wire_params(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).move_to(100.0, 50.0, 75.5))
 
-      move_cmds = _cmds(transport, "robot/moveTo")
+      move_cmds = _cmds(api, "robot/moveTo")
       self.assertEqual(len(move_cmds), 1)
       self.assertEqual(
-        move_cmds[0]["params"],
+        move_cmds[0].args[2],
         {"mount": "extension", "destination": {"x": 100.0, "y": 50.0, "z": 75.5}},
       )
     finally:
       asyncio.run(flex.stop())
 
   def test_speed_passthrough(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).move_to(1.0, 2.0, 3.0, speed=25.0))
 
-      move_cmds = _cmds(transport, "robot/moveTo")
-      self.assertEqual(move_cmds[0]["params"]["speed"], 25.0)
+      move_cmds = _cmds(api, "robot/moveTo")
+      self.assertEqual(move_cmds[0].args[2]["speed"], 25.0)
     finally:
       asyncio.run(flex.stop())
 
@@ -204,19 +202,19 @@ class TestGripperJaw(unittest.TestCase):
   """grip() validates force before the wire; open_jaw() homes the jaw open."""
 
   def test_grip_without_force_sends_empty_params(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).grip())
 
-      close_cmds = _cmds(transport, "robot/closeGripperJaw")
+      close_cmds = _cmds(api, "robot/closeGripperJaw")
       self.assertEqual(len(close_cmds), 1)
-      self.assertEqual(close_cmds[0]["params"], {})
+      self.assertEqual(close_cmds[0].args[2], {})
     finally:
       asyncio.run(flex.stop())
 
   def test_grip_force_boundaries_accepted(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       gripper = _gripper(flex)
@@ -224,15 +222,15 @@ class TestGripperJaw(unittest.TestCase):
       asyncio.run(gripper.grip(force=2.0))
       asyncio.run(gripper.grip(force=30.0))
 
-      close_cmds = _cmds(transport, "robot/closeGripperJaw")
+      close_cmds = _cmds(api, "robot/closeGripperJaw")
       self.assertEqual(len(close_cmds), 2)
-      self.assertEqual(close_cmds[0]["params"], {"force": 2.0})
-      self.assertEqual(close_cmds[1]["params"], {"force": 30.0})
+      self.assertEqual(close_cmds[0].args[2], {"force": 2.0})
+      self.assertEqual(close_cmds[1].args[2], {"force": 30.0})
     finally:
       asyncio.run(flex.stop())
 
   def test_grip_force_out_of_range_raises_before_any_wire_command(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       gripper = _gripper(flex)
@@ -241,19 +239,19 @@ class TestGripperJaw(unittest.TestCase):
         with self.assertRaises(OpentronsError):
           asyncio.run(gripper.grip(force=force))
 
-      self.assertEqual(len(_cmds(transport, "robot/closeGripperJaw")), 0)
+      self.assertEqual(len(_cmds(api, "robot/closeGripperJaw")), 0)
     finally:
       asyncio.run(flex.stop())
 
   def test_open_jaw_sends_open_gripper_jaw(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).open_jaw())
 
-      open_cmds = _cmds(transport, "robot/openGripperJaw")
+      open_cmds = _cmds(api, "robot/openGripperJaw")
       self.assertEqual(len(open_cmds), 1)
-      self.assertEqual(open_cmds[0]["params"], {})
+      self.assertEqual(open_cmds[0].args[2], {})
     finally:
       asyncio.run(flex.stop())
 
@@ -265,12 +263,12 @@ class TestRobotCommandsVersionGate(unittest.TestCase):
   family.
   """
 
-  def _assert_no_robot_commands(self, transport: ChatterboxHTTP) -> None:
-    robot_cmds = [c for c in transport.commands if c["commandType"].startswith("robot/")]
+  def _assert_no_robot_commands(self, api: AsyncMock) -> None:
+    robot_cmds = [c for c in api.submit_command.await_args_list if c.args[1].startswith("robot/")]
     self.assertEqual(len(robot_cmds), 0, "no robot/* wire command may be sent")
 
   def test_old_release_raises_and_sends_no_robot_commands(self):
-    flex, transport = _flex_with_version("8.1.0")
+    flex, api = _flex_with_version("8.1.0")
     asyncio.run(flex.setup())
     try:
       gripper = _gripper(flex)
@@ -283,107 +281,107 @@ class TestRobotCommandsVersionGate(unittest.TestCase):
       with self.assertRaises(OpentronsError):
         asyncio.run(gripper.open_jaw())
 
-      self._assert_no_robot_commands(transport)
+      self._assert_no_robot_commands(api)
     finally:
       asyncio.run(flex.stop())
 
   def test_minimum_release_passes(self):
-    flex, transport = _flex_with_version("8.2.0")
+    flex, api = _flex_with_version("8.2.0")
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).open_jaw())
-      self.assertEqual(len(_cmds(transport, "robot/openGripperJaw")), 1)
+      self.assertEqual(len(_cmds(api, "robot/openGripperJaw")), 1)
     finally:
       asyncio.run(flex.stop())
 
   def test_double_digit_major_passes(self):
     # A lexicographic comparison would put "10.0.0" below "8.2.0".
-    flex, transport = _flex_with_version("10.0.0")
+    flex, api = _flex_with_version("10.0.0")
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).open_jaw())
-      self.assertEqual(len(_cmds(transport, "robot/openGripperJaw")), 1)
+      self.assertEqual(len(_cmds(api, "robot/openGripperJaw")), 1)
     finally:
       asyncio.run(flex.stop())
 
   def test_two_part_version_passes(self):
     # "8.2" pads to (8, 2, 0), equal to the minimum, not below it.
-    flex, transport = _flex_with_version("8.2")
+    flex, api = _flex_with_version("8.2")
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).open_jaw())
-      self.assertEqual(len(_cmds(transport, "robot/openGripperJaw")), 1)
+      self.assertEqual(len(_cmds(api, "robot/openGripperJaw")), 1)
     finally:
       asyncio.run(flex.stop())
 
   def test_patch_release_below_minimum_rejected(self):
-    flex, transport = _flex_with_version("8.1.9")
+    flex, api = _flex_with_version("8.1.9")
     asyncio.run(flex.setup())
     try:
       with self.assertRaises(OpentronsError):
         asyncio.run(_gripper(flex).open_jaw())
-      self._assert_no_robot_commands(transport)
+      self._assert_no_robot_commands(api)
     finally:
       asyncio.run(flex.stop())
 
   def test_unparseable_version_rejected(self):
     # A version the gate cannot parse must raise, not silently pass.
-    flex, transport = _flex_with_version("unknown")
+    flex, api = _flex_with_version("unknown")
     asyncio.run(flex.setup())
     try:
       with self.assertRaises(OpentronsError) as ctx:
         asyncio.run(_gripper(flex).open_jaw())
       self.assertIn("unknown", str(ctx.exception))
-      self._assert_no_robot_commands(transport)
+      self._assert_no_robot_commands(api)
     finally:
       asyncio.run(flex.stop())
 
   def test_dev_build_passes(self):
-    flex, transport = _flex_with_version("0.0.0.dev0")
+    flex, api = _flex_with_version("0.0.0.dev0")
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).open_jaw())
-      self.assertEqual(len(_cmds(transport, "robot/openGripperJaw")), 1)
+      self.assertEqual(len(_cmds(api, "robot/openGripperJaw")), 1)
     finally:
       asyncio.run(flex.stop())
 
   def test_dev_build_cut_off_a_too_old_tag_is_still_gated(self):
     # An untagged build reports 0.0.0.dev*; a build cut off a release tag
     # reports that tag plus a dev suffix, and is as old as the tag says.
-    flex, transport = _flex_with_version("8.1.0.dev5")
+    flex, api = _flex_with_version("8.1.0.dev5")
     asyncio.run(flex.setup())
     try:
       with self.assertRaises(OpentronsError) as ctx:
         asyncio.run(_gripper(flex).open_jaw())
       self.assertIn("8.2.0", str(ctx.exception))
-      self._assert_no_robot_commands(transport)
+      self._assert_no_robot_commands(api)
     finally:
       asyncio.run(flex.stop())
 
   def test_dev_build_cut_off_a_new_enough_tag_passes(self):
-    flex, transport = _flex_with_version("8.2.0.dev3")
+    flex, api = _flex_with_version("8.2.0.dev3")
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).open_jaw())
-      self.assertEqual(len(_cmds(transport, "robot/openGripperJaw")), 1)
+      self.assertEqual(len(_cmds(api, "robot/openGripperJaw")), 1)
     finally:
       asyncio.run(flex.stop())
 
-  def test_default_chatterbox_passes(self):
-    flex, transport = _flex_with_gripper()  # /health reports "dry-run"
+  def test_offline_version_sentinel_passes(self):
+    flex, api = _flex_with_gripper()  # /health reports "dry-run"
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).open_jaw())
-      self.assertEqual(len(_cmds(transport, "robot/openGripperJaw")), 1)
+      self.assertEqual(len(_cmds(api, "robot/openGripperJaw")), 1)
     finally:
       asyncio.run(flex.stop())
 
   def test_head_motion_is_not_gated(self):
-    flex, transport = _flex_with_version("8.1.0")
+    flex, api = _flex_with_version("8.1.0")
     asyncio.run(flex.setup())
     try:
       asyncio.run(_head(flex).move_to(x=1.0, y=2.0, z=3.0))
-      self.assertEqual(len(_cmds(transport, "moveToCoordinates")), 1)
+      self.assertEqual(len(_cmds(api, "moveToCoordinates")), 1)
     finally:
       asyncio.run(flex.stop())
 
@@ -406,8 +404,8 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     set_tip_tracking(False)
 
   def _flex_head8(self) -> Tuple[Flex, FlexHead8]:
-    transport = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-    flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+    api = make_api(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
     asyncio.run(flex.setup())
     head = flex.left
     assert isinstance(head, FlexHead8)
@@ -431,7 +429,7 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     self.assertEqual(FlexGripper._HARDWARE_VERIFIED_OPS, frozenset(ops))
 
   def test_an_op_outside_the_gripper_s_verified_set_still_warns(self):
-    flex, _transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     self.addCleanup(lambda: asyncio.run(flex.stop()))
     gripper = FlexGripper(flex, gripper_model="gripperV1")
@@ -487,8 +485,8 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
 
   def test_head1_hardware_verified_ops_do_not_warn(self):
     """FlexHead1's ops were confirmed on a p50 single channel, so they stay quiet."""
-    transport = ChatterboxHTTP(pipettes=[("p50_single_flex", 1, 1.0, 50.0, "left")])
-    flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+    api = make_api(pipettes=[("p50_single_flex", 1, 1.0, 50.0, "left")])
+    flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
     asyncio.run(flex.setup())
     try:
       head = flex.left
@@ -518,77 +516,77 @@ class TestMoveToWell(unittest.TestCase):
   """move_to_well names the well and lets the robot resolve where that is."""
 
   def _flex_with_plate(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     plate = corning_96_wellplate_360ul_flat(name="plate")
     flex.deck.assign_child_at_slot(plate, "C1")
-    return flex, transport, plate
+    return flex, api, plate
 
   def test_a_tip_spot_is_a_valid_target(self):
     """Looking at where a pickup would descend, before committing to it. The
     robot addresses a tip rack's wells by the same names a plate's use."""
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     rack = flex_96_tiprack_50ul(name="tips")
     flex.deck.assign_child_at_slot(rack, "C1")
     asyncio.run(flex.setup())
     try:
       asyncio.run(_head(flex).move_to_well(rack.get_item("A1"), offset=Coordinate(0, 0, 20)))
 
-      (cmd,) = _cmds(transport, "moveToWell")
-      self.assertEqual(cmd["params"]["wellName"], "A1")
-      self.assertEqual(cmd["params"]["labwareId"], transport.labware_ids["tips"])
-      self.assertEqual(cmd["params"]["wellLocation"]["offset"]["z"], 20)
+      (cmd,) = _cmds(api, "moveToWell")
+      self.assertEqual(cmd.args[2]["wellName"], "A1")
+      self.assertEqual(cmd.args[2]["labwareId"], "labware")
+      self.assertEqual(cmd.args[2]["wellLocation"]["offset"]["z"], 20)
     finally:
       asyncio.run(flex.stop())
 
   def test_names_the_well_and_defaults_to_the_top_origin(self):
-    flex, transport, plate = self._flex_with_plate()
+    flex, api, plate = self._flex_with_plate()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_head(flex).move_to_well(plate.get_item("D2")))
 
-      (cmd,) = _cmds(transport, "moveToWell")
-      self.assertEqual(cmd["params"]["wellName"], "D2")
+      (cmd,) = _cmds(api, "moveToWell")
+      self.assertEqual(cmd.args[2]["wellName"], "D2")
       self.assertEqual(
-        cmd["params"]["wellLocation"],
+        cmd.args[2]["wellLocation"],
         {"origin": "top", "offset": {"x": 0, "y": 0, "z": 0}},
       )
-      self.assertNotIn("coordinates", cmd["params"])
+      self.assertNotIn("coordinates", cmd.args[2])
     finally:
       asyncio.run(flex.stop())
 
   def test_offset_above_the_well_rides_the_top_origin(self):
     """'10 mm above the D2 well' is an offset from the top, not a coordinate."""
-    flex, transport, plate = self._flex_with_plate()
+    flex, api, plate = self._flex_with_plate()
     asyncio.run(flex.setup())
     try:
       asyncio.run(
         _head(flex).move_to_well(plate.get_item("D2"), offset=Coordinate(0, 0, 10), speed=50.0)
       )
 
-      (cmd,) = _cmds(transport, "moveToWell")
-      self.assertEqual(cmd["params"]["wellLocation"]["origin"], "top")
-      self.assertEqual(cmd["params"]["wellLocation"]["offset"]["z"], 10)
-      self.assertEqual(cmd["params"]["speed"], 50.0)
+      (cmd,) = _cmds(api, "moveToWell")
+      self.assertEqual(cmd.args[2]["wellLocation"]["origin"], "top")
+      self.assertEqual(cmd.args[2]["wellLocation"]["offset"]["z"], 10)
+      self.assertEqual(cmd.args[2]["speed"], 50.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_unknown_origin_is_refused_before_any_wire_command(self):
-    flex, transport, plate = self._flex_with_plate()
+    flex, api, plate = self._flex_with_plate()
     asyncio.run(flex.setup())
     try:
       with self.assertRaisesRegex(ValueError, "origin must be one of"):
         asyncio.run(_head(flex).move_to_well(plate.get_item("A1"), origin="sideways"))
-      self.assertEqual(_cmds(transport, "moveToWell"), [])
+      self.assertEqual(_cmds(api, "moveToWell"), [])
     finally:
       asyncio.run(flex.stop())
 
   def test_no_mounted_tip_required(self):
     """Jogging to a well is for teaching and recovery, so it must not need a tip."""
-    flex, transport, plate = self._flex_with_plate()
+    flex, api, plate = self._flex_with_plate()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_head(flex).move_to_well(plate.get_item("A1")))
-      self.assertEqual(len(_cmds(transport, "moveToWell")), 1)
+      self.assertEqual(len(_cmds(api, "moveToWell")), 1)
     finally:
       asyncio.run(flex.stop())
 
@@ -597,25 +595,25 @@ class TestMoveRelative(unittest.TestCase):
   """move_relative jogs one axis without reading the position first."""
 
   def test_sends_axis_and_distance_only(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(_head(flex).move_relative("z", -5.0))
 
-      (cmd,) = _cmds(transport, "moveRelative")
-      self.assertEqual(cmd["params"]["axis"], "z")
-      self.assertEqual(cmd["params"]["distance"], -5.0)
-      self.assertEqual(_cmds(transport, "savePosition"), [])
+      (cmd,) = _cmds(api, "moveRelative")
+      self.assertEqual(cmd.args[2]["axis"], "z")
+      self.assertEqual(cmd.args[2]["distance"], -5.0)
+      self.assertEqual(_cmds(api, "savePosition"), [])
     finally:
       asyncio.run(flex.stop())
 
   def test_unknown_axis_is_refused_before_any_wire_command(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       with self.assertRaisesRegex(ValueError, "axis must be one of"):
         asyncio.run(_head(flex).move_relative("w", 1.0))
-      self.assertEqual(_cmds(transport, "moveRelative"), [])
+      self.assertEqual(_cmds(api, "moveRelative"), [])
     finally:
       asyncio.run(flex.stop())
 
@@ -624,17 +622,17 @@ class TestMoveToAddressableArea(unittest.TestCase):
   """move_to_addressable_area targets a deck fixture by name."""
 
   def test_names_the_area_and_carries_the_offset(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(
         _head(flex).move_to_addressable_area("movableTrashA3", offset=Coordinate(0, 0, 5))
       )
 
-      (cmd,) = _cmds(transport, "moveToAddressableArea")
-      self.assertEqual(cmd["params"]["addressableAreaName"], "movableTrashA3")
-      self.assertEqual(cmd["params"]["offset"], {"x": 0, "y": 0, "z": 5})
-      self.assertFalse(cmd["params"]["stayAtHighestPossibleZ"])
+      (cmd,) = _cmds(api, "moveToAddressableArea")
+      self.assertEqual(cmd.args[2]["addressableAreaName"], "movableTrashA3")
+      self.assertEqual(cmd.args[2]["offset"], {"x": 0, "y": 0, "z": 5})
+      self.assertFalse(cmd.args[2]["stayAtHighestPossibleZ"])
     finally:
       asyncio.run(flex.stop())
 
@@ -643,24 +641,24 @@ class TestSendCommandEscapeHatch(unittest.TestCase):
   """send_command reaches commands the driver wraps no method around."""
 
   def test_passes_command_type_and_params_through_untouched(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       params = {"moduleId": "abc", "celsius": 37.0}
       asyncio.run(flex.send_command("heaterShaker/setTargetTemperature", params))
 
-      (cmd,) = _cmds(transport, "heaterShaker/setTargetTemperature")
-      self.assertEqual(cmd["params"], params)
+      (cmd,) = _cmds(api, "heaterShaker/setTargetTemperature")
+      self.assertEqual(cmd.args[2], params)
     finally:
       asyncio.run(flex.stop())
 
   def test_defaults_params_to_an_empty_payload(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       asyncio.run(flex.send_command("unsafe/engageAxes"))
-      (cmd,) = _cmds(transport, "unsafe/engageAxes")
-      self.assertEqual(cmd["params"], {})
+      (cmd,) = _cmds(api, "unsafe/engageAxes")
+      self.assertEqual(cmd.args[2], {})
     finally:
       asyncio.run(flex.stop())
 
@@ -669,7 +667,7 @@ class TestSyncTipsToRobot(unittest.TestCase):
   """sync_tips_to_robot pushes PyLabRobot's tip layout onto the robot."""
 
   def test_splits_present_and_absent_into_one_command_each(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     rack = flex_96_tiprack_50ul(name="tips")
     flex.deck.assign_child_at_slot(rack, "C1")
     asyncio.run(flex.setup())
@@ -679,22 +677,22 @@ class TestSyncTipsToRobot(unittest.TestCase):
 
       asyncio.run(flex.sync_tips_to_robot(rack))
 
-      cmds = _cmds(transport, "setTipState")
-      by_state = {c["params"]["tipWellState"]: c["params"]["wellNames"] for c in cmds}
+      cmds = _cmds(api, "setTipState")
+      by_state = {c.args[2]["tipWellState"]: c.args[2]["wellNames"] for c in cmds}
       self.assertEqual(by_state["clean"], ["A1", "B1"])
       self.assertEqual(len(by_state["empty"]), 94)
     finally:
       asyncio.run(flex.stop())
 
   def test_a_uniform_rack_sends_only_the_state_it_has(self):
-    flex, transport = _flex_with_gripper()
+    flex, api = _flex_with_gripper()
     rack = flex_96_tiprack_50ul(name="tips")
     flex.deck.assign_child_at_slot(rack, "C1")
     asyncio.run(flex.setup())
     try:
       asyncio.run(flex.sync_tips_to_robot(rack))
 
-      states = {c["params"]["tipWellState"] for c in _cmds(transport, "setTipState")}
+      states = {c.args[2]["tipWellState"] for c in _cmds(api, "setTipState")}
       self.assertEqual(states, {"clean"})
     finally:
       asyncio.run(flex.stop())

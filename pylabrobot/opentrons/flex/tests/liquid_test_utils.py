@@ -1,17 +1,20 @@
 """Read the pipetting destination from captured coordinate and Z moves."""
 
-from pylabrobot.opentrons import ChatterboxHTTP
+from unittest.mock import AsyncMock
+
 from pylabrobot.resources import Container
 
 
-def pipetting_location(io: ChatterboxHTTP, target: Container, channels: int = 1) -> dict:
+def pipetting_location(io: AsyncMock, target: Container, channels: int = 1) -> dict:
   """Express the last pipetting destination relative to a cavity's primary nozzle."""
-  commands = io.commands
-  index = max(i for i, c in enumerate(commands) if c["commandType"] == "moveToCoordinates")
-  xy = commands[index]["params"]["coordinates"]
-  descent = next(c for c in commands[index + 1 :] if c["commandType"] == "moveRelative")
-  assert descent["params"]["axis"] == "z"
-  z = (io.saved_position or {"z": 100})["z"] + descent["params"]["distance"]
+  commands = io.submit_command.await_args_list
+  index = max(i for i, c in enumerate(commands) if c.args[1] == "moveToCoordinates")
+  xy = commands[index].args[2]["coordinates"]
+  descent = next(c for c in commands[index + 1 :] if c.args[1] == "moveRelative")
+  assert descent.args[2]["axis"] == "z"
+  z = (io.get_command.return_value.result["position"] or {"z": 100})["z"] + descent.args[2][
+    "distance"
+  ]
   origin = target.get_absolute_location(x="c", y="c", z="cavity_bottom")
   return {
     "origin": "bottom",

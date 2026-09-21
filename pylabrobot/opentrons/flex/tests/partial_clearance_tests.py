@@ -2,7 +2,8 @@
 
 import unittest
 
-from pylabrobot.opentrons import ChatterboxHTTP, Flex, FlexHead8
+from pylabrobot.opentrons import FlexHead8
+from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import (
   Coordinate,
   Resource,
@@ -15,9 +16,9 @@ from pylabrobot.resources.opentrons import flex_96_filtertiprack_50ul
 
 class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    """Pick up four front tips in a simulated clear D1 slot."""
-    self.io = ChatterboxHTTP(pipettes=[("p1000_multi_flex", 8, 5, 1000, "left")])
-    self.flex = Flex("offline", io=self.io)
+    """Pick up four front tips with mocked API replies in a clear D1 slot."""
+    self.api = make_api(pipettes=[("p1000_multi_flex", 8, 5, 1000, "left")])
+    self.flex = make_flex("offline", api=self.api)
     self.rack = flex_96_filtertiprack_50ul("tips")
     self.plate = cor_96_wellplate_360uL_Fb("plate")
     self.flex.deck.assign_child_at_slot(self.rack, "D1")
@@ -27,10 +28,10 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
     assert isinstance(head, FlexHead8)
     self.head: FlexHead8 = head
     await head.pick_up_tips(self.rack.column(5)[:4], use_channels=[4, 5, 6, 7])
-    self.io.commands.clear()
+    self.api.submit_command.reset_mock()
 
   async def asyncTearDown(self):
-    """Release the simulated session."""
+    """Release the mocked session."""
     await self.flex.disconnect()
 
   async def test_modeled_tip_rack_blocks_aspirate_and_dispense_before_motion(self):
@@ -41,7 +42,7 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
       with self.subTest(operation=operation.__name__), no_volume_tracking():
         with self.assertRaisesRegex(ValueError, "Collision risk.*C2.*B2"):
           await operation(self.plate.column(0)[:4], 1, liquid_height=1)
-        self.assertEqual(self.io.commands, [])
+        self.assertEqual(self.api.submit_command.await_args_list, [])
         self.assertEqual(self.head._nozzle_layout, "PARTIAL")
         self.assertEqual(sum(t is not None for t in self.head.get_mounted_tips()), 4)
 
@@ -50,11 +51,11 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
     with no_volume_tracking():
       await self.head.aspirate(self.plate.column(0)[:4], 1, liquid_height=1)
       await self.head.dispense(self.plate.column(1)[:4], 1, liquid_height=1)
-    types = [c["commandType"] for c in self.io.commands]
+    types = [c.args[1] for c in self.api.submit_command.await_args_list]
     self.assertNotIn("configureNozzleLayout", types)
-    moves = [c for c in self.io.commands if c["commandType"] == "moveToCoordinates"]
-    self.assertEqual(moves[0]["params"]["coordinates"], {"x": 178.3, "y": 154.2, "z": 109.0})
-    self.assertEqual(moves[1]["params"]["coordinates"], {"x": 187.3, "y": 154.2, "z": 109.0})
+    moves = [c for c in self.api.submit_command.await_args_list if c.args[1] == "moveToCoordinates"]
+    self.assertEqual(moves[0].args[2]["coordinates"], {"x": 178.3, "y": 154.2, "z": 109.0})
+    self.assertEqual(moves[1].args[2]["coordinates"], {"x": 187.3, "y": 154.2, "z": 109.0})
     self.assertEqual(types.count("aspirateInPlace"), 1)
     self.assertEqual(types.count("dispenseInPlace"), 1)
 
@@ -64,7 +65,7 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
     wells[1] = self.plate.get_item("B2")
     with self.assertRaisesRegex(ValueError, "9 mm spacing"), no_volume_tracking():
       await self.head.aspirate(wells, 1)
-    self.assertEqual(self.io.commands, [])
+    self.assertEqual(self.api.submit_command.await_args_list, [])
 
   async def test_clearance_uses_operation_height_and_tip_length(self):
     """The same obstacle clears long tips or a higher target, but not short low tips."""
@@ -73,14 +74,14 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
     with no_volume_tracking():
       with self.assertRaisesRegex(ValueError, "Collision risk"):
         await self.head.aspirate(self.plate.column(0)[:4], 1, liquid_height=1)
-      self.assertEqual(self.io.commands, [])
+      self.assertEqual(self.api.submit_command.await_args_list, [])
       await self.head.aspirate(self.plate.column(0)[:4], 1, liquid_height=35)
-      self.io.commands.clear()
+      self.api.submit_command.reset_mock()
       for tip in self.head.get_mounted_tips():
         if tip is not None:
           tip.total_tip_length = 95.6
       await self.head.dispense(self.plate.column(0)[:4], 1, liquid_height=1)
-      self.assertIn("dispenseInPlace", [c["commandType"] for c in self.io.commands])
+      self.assertIn("dispenseInPlace", [c.args[1] for c in self.api.submit_command.await_args_list])
 
   async def test_rack_can_clear_at_high_operation_z(self):
     """Tip racks use geometry too; their type alone cannot block a high operation."""
@@ -90,7 +91,7 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
       await self.head.aspirate(
         self.plate.column(0)[:4], 1, liquid_height=1, offset=Coordinate(z=80)
       )
-    self.assertIn("aspirateInPlace", [c["commandType"] for c in self.io.commands])
+    self.assertIn("aspirateInPlace", [c.args[1] for c in self.api.submit_command.await_args_list])
 
   async def test_obstacle_absolute_height_includes_elevation(self):
     """A short plate on a tall support is not treated as a short obstacle."""
@@ -100,14 +101,14 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
     obstacle.location += Coordinate(z=50)
     with self.assertRaisesRegex(ValueError, "Collision risk"), no_volume_tracking():
       await self.head.aspirate(self.plate.column(0)[:4], 1, liquid_height=1)
-    self.assertEqual(self.io.commands, [])
+    self.assertEqual(self.api.submit_command.await_args_list, [])
 
   async def test_low_plate_clears_short_tips(self):
     """A normal low plate behind C2 must not prevent the partial operation."""
     self.flex.deck.assign_child_at_slot(Resource("low_plate_B2", 127.76, 85.48, 14.2), "B2")
     with no_volume_tracking():
       await self.head.aspirate(self.plate.column(0)[:4], 1, liquid_height=1)
-    self.assertIn("aspirateInPlace", [c["commandType"] for c in self.io.commands])
+    self.assertIn("aspirateInPlace", [c.args[1] for c in self.api.submit_command.await_args_list])
 
   async def test_single_nozzle_uses_the_same_height_check(self):
     """Single and partial columns both reach the geometry guard before motion."""
@@ -118,7 +119,7 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
     with no_volume_tracking():
       with self.assertRaisesRegex(ValueError, "Collision risk"):
         await self.head.aspirate(self.plate.get_item("A1"), 1, liquid_height=1)
-      self.assertEqual(self.io.commands, [])
+      self.assertEqual(self.api.submit_command.await_args_list, [])
       await self.head.aspirate(self.plate.get_item("A1"), 1, liquid_height=35)
 
   async def test_touching_nozzle_plane_is_blocked(self):
@@ -126,7 +127,7 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
     self.flex.deck.assign_child_at_slot(Resource("contact_B2", 127.76, 85.48, 52), "B2")
     with self.assertRaisesRegex(ValueError, "Collision risk"), no_volume_tracking():
       await self.head.dispense(self.plate.column(0)[:4], 1, liquid_height=1.07)
-    self.assertEqual(self.io.commands, [])
+    self.assertEqual(self.api.submit_command.await_args_list, [])
 
   def test_twenty_mm_margin_boundary(self):
     """Reject less than 20 mm, accept exactly 20 mm and greater clearance."""

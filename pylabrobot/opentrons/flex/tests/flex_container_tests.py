@@ -11,17 +11,17 @@ axis-name and version-gate refusals that must send nothing, and the exact
 params of the status, comment, wait and reload commands.
 """
 
-from pylabrobot.opentrons.flex.tests.liquid_test_utils import pipetting_location
-
 import asyncio
 import unittest
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import List, Tuple
+from unittest.mock import AsyncMock, _Call, patch
 
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
 from pylabrobot.opentrons.flex.flex_wire import OFFLINE_API_VERSION
+from pylabrobot.opentrons.flex.tests.liquid_test_utils import pipetting_location
+from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import (
   Container,
   cor_96_wellplate_360uL_Fb,
@@ -34,35 +34,6 @@ from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
-
-
-class _FailingAspirateTransport(ChatterboxHTTP):
-  """Chatterbox whose ``aspirate`` POST raises -- models a wire-level failure
-  AFTER trackers are staged, driving the rollback paths."""
-
-  async def request(
-    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
-  ) -> Dict[str, Any]:
-    if (
-      path.endswith("/commands")
-      and (data or {}).get("data", {}).get("commandType") == "aspirateInPlace"
-    ):
-      raise RuntimeError("simulated aspirate wire failure")
-    return await super().request(method, path, data)
-
-
-class _FailingDispenseTransport(ChatterboxHTTP):
-  """Like ``_FailingAspirateTransport`` but for ``dispense`` commands."""
-
-  async def request(
-    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
-  ) -> Dict[str, Any]:
-    if (
-      path.endswith("/commands")
-      and (data or {}).get("data", {}).get("commandType") == "dispenseInPlace"
-    ):
-      raise RuntimeError("simulated dispense wire failure")
-    return await super().request(method, path, data)
 
 
 def _make_trough(
@@ -89,46 +60,40 @@ def _make_trough(
   return trough
 
 
-def _flex_head1(
-  transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
-) -> Tuple[Flex, ChatterboxHTTP, FlexHead1]:
+def _flex_head1() -> Tuple[Flex, AsyncMock, FlexHead1]:
   """An ``Flex`` with a single-channel head on the right mount, plus
-  the transport (for command inspection) and the head itself.
+  the api (for command inspection) and the head itself.
   """
-  transport = transport_cls(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
-  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+  api = make_api(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
+  flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
   asyncio.run(flex.setup())
   head = flex.right
   assert isinstance(head, FlexHead1)
-  return flex, transport, head
+  return flex, api, head
 
 
-def _flex_head8(
-  transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
-) -> Tuple[Flex, ChatterboxHTTP, FlexHead8]:
+def _flex_head8() -> Tuple[Flex, AsyncMock, FlexHead8]:
   """An ``Flex`` with an 8-channel head on the left mount, plus the
-  transport (for command inspection) and the head itself.
+  api (for command inspection) and the head itself.
   """
-  transport = transport_cls(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+  api = make_api(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
+  flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
-  return flex, transport, head
+  return flex, api, head
 
 
-def _flex_head96(
-  transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
-) -> Tuple[Flex, ChatterboxHTTP, FlexHead96]:
-  """An ``Flex`` with a 96-channel head, plus the transport (for
+def _flex_head96() -> Tuple[Flex, AsyncMock, FlexHead96]:
+  """An ``Flex`` with a 96-channel head, plus the api (for
   command inspection) and the head itself.
   """
-  transport = transport_cls(pipettes=[("p1000_96", 96, 1.0, 1000.0, "left")])
-  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+  api = make_api(pipettes=[("p1000_96", 96, 1.0, 1000.0, "left")])
+  flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
   asyncio.run(flex.setup())
   head = flex.head96
   assert isinstance(head, FlexHead96)
-  return flex, transport, head
+  return flex, api, head
 
 
 class TestFlexHead1ContainerOps(unittest.TestCase):
@@ -146,7 +111,7 @@ class TestFlexHead1ContainerOps(unittest.TestCase):
     set_volume_tracking(False)
 
   def test_aspirate_positions_container_without_loading_labware(self):
-    flex, transport, head = _flex_head1()
+    flex, api, head = _flex_head1()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -159,19 +124,21 @@ class TestFlexHead1ContainerOps(unittest.TestCase):
 
       load_cmds = [
         c
-        for c in transport.commands
-        if c["commandType"] == "loadLabware" and c["params"]["loadName"] == "nest_1_reservoir_195ml"
+        for c in api.submit_command.await_args_list
+        if c.args[1] == "loadLabware" and c.args[2]["loadName"] == "nest_1_reservoir_195ml"
       ]
       self.assertEqual(len(load_cmds), 0, "PLR positioning must not load the container")
 
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
+      aspirate_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "aspirateInPlace"
+      ]
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertNotIn("wellName", aspirate_cmds[0]["params"])
-      self.assertNotIn("labwareId", aspirate_cmds[0]["params"])
+      self.assertNotIn("wellName", aspirate_cmds[0].args[2])
+      self.assertNotIn("labwareId", aspirate_cmds[0].args[2])
       # A single nozzle goes to the cavity center: no x/y centering offset,
       # just the default bottom clearance.
       self.assertEqual(
-        pipetting_location(transport, trough, head.channels),
+        pipetting_location(api, trough, head.channels),
         {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
 
@@ -180,7 +147,7 @@ class TestFlexHead1ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_dispense_adds_volume_to_container_tracker(self):
-    flex, transport, head = _flex_head1()
+    flex, api, head = _flex_head1()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -193,46 +160,48 @@ class TestFlexHead1ContainerOps(unittest.TestCase):
           tip.tracker.set_volume(30)
       asyncio.run(head.dispense(trough, volume=30))
 
-      dispense_cmds = [c for c in transport.commands if c["commandType"] == "dispenseInPlace"]
+      dispense_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "dispenseInPlace"
+      ]
       self.assertEqual(len(dispense_cmds), 1)
-      self.assertNotIn("wellName", dispense_cmds[0]["params"])
+      self.assertNotIn("wellName", dispense_cmds[0].args[2])
       self.assertAlmostEqual(trough.tracker.volume, 30.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_aspirate_container_without_tip_rejects_before_any_wire_command(self):
-    flex, transport, head = _flex_head1()
+    flex, api, head = _flex_head1()
     try:
       trough = _make_trough()
       flex.deck.assign_child_at_slot(trough, "C2")
       trough.tracker.set_volume(1000.0)
 
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.aspirate(trough, volume=50))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(trough.tracker.volume, 1000.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_dispense_container_without_tip_rejects_before_any_wire_command(self):
-    flex, transport, head = _flex_head1()
+    flex, api, head = _flex_head1()
     try:
       trough = _make_trough()
       flex.deck.assign_child_at_slot(trough, "C2")
 
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.dispense(trough, volume=30))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(trough.tracker.volume, 0.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_wire_failure_rolls_back_container_tracker(self):
-    flex, _transport, head = _flex_head1(transport_cls=_FailingAspirateTransport)
+    flex, api, head = _flex_head1()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -241,9 +210,19 @@ class TestFlexHead1ContainerOps(unittest.TestCase):
       trough.tracker.set_volume(1000.0)
 
       asyncio.run(head.pick_up_tips(rack.get_item("A1")))
-      with self.assertRaises(RuntimeError):
+      with (
+        patch.object(
+          api,
+          "submit_command",
+          AsyncMock(
+            side_effect=[api.submit_command.return_value] * 4 + [RuntimeError("pipetting failed")]
+          ),
+        ) as submit,
+        self.assertRaisesRegex(RuntimeError, "pipetting failed"),
+      ):
         asyncio.run(head.aspirate(trough, volume=50))
 
+      self.assertEqual(submit.await_args.args[1], "aspirateInPlace")
       self.assertAlmostEqual(trough.tracker.volume, 1000.0)
       self.assertAlmostEqual(trough.tracker.get_used_volume(), 1000.0)
     finally:
@@ -262,7 +241,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
     set_volume_tracking(False)
 
   def test_aspirate_container_centers_nozzle_row(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -273,18 +252,20 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate_container(trough, volume=50))
 
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
+      aspirate_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "aspirateInPlace"
+      ]
       self.assertEqual(len(aspirate_cmds), 1)
-      params = aspirate_cmds[0]["params"]
+      params = aspirate_cmds[0].args[2]
       self.assertNotIn("wellName", params)
       self.assertEqual(params["volume"], 50)
       # The primary nozzle is positioned so the row centers on the cavity.
       self.assertEqual(
-        pipetting_location(transport, trough, head.channels),
+        pipetting_location(api, trough, head.channels),
         {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
 
-      cmd_types = [c["commandType"] for c in transport.commands]
+      cmd_types = [c.args[1] for c in api.submit_command.await_args_list]
       self.assertIn(
         "prepareToAspirate",
         cmd_types,
@@ -298,7 +279,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_aspirate_container_tracker_scales_with_mounted_tips(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -322,7 +303,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_dispense_container_adds_volume_per_mounted_tip(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -335,12 +316,14 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
           tip.tracker.set_volume(40)
       asyncio.run(head.dispense_container(trough, volume=40))
 
-      dispense_cmds = [c for c in transport.commands if c["commandType"] == "dispenseInPlace"]
+      dispense_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "dispenseInPlace"
+      ]
       self.assertEqual(len(dispense_cmds), 1)
-      params = dispense_cmds[0]["params"]
+      params = dispense_cmds[0].args[2]
       self.assertNotIn("wellName", params)
       self.assertEqual(
-        pipetting_location(transport, trough, head.channels),
+        pipetting_location(api, trough, head.channels),
         {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
       self.assertAlmostEqual(trough.tracker.volume, 320.0)
@@ -348,7 +331,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_offset_and_liquid_height_merge_into_well_location(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -363,34 +346,34 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
         )
       )
 
-      [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
+      [c for c in api.submit_command.await_args_list if c.args[1] == "aspirateInPlace"]
       # Caller offsets shift the centered row; liquid_height replaces clearance.
       self.assertEqual(
-        pipetting_location(transport, trough, head.channels),
+        pipetting_location(api, trough, head.channels),
         {"origin": "bottom", "offset": {"x": 2, "y": -1, "z": 3.5}},
       )
     finally:
       asyncio.run(flex.stop())
 
   def test_aspirate_container_without_tip_rejects_before_any_wire_command(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       trough = _make_trough()
       flex.deck.assign_child_at_slot(trough, "C2")
       trough.tracker.set_volume(10000.0)
 
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.aspirate_container(trough, volume=50))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(trough.tracker.volume, 10000.0)
       self.assertAlmostEqual(trough.tracker.get_used_volume(), 10000.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_aspirate_container_rejects_cavity_narrower_than_nozzle_row(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       narrow = _make_trough(name="narrow", size_y=40.0, max_volume=50000.0)
@@ -401,18 +384,18 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack, column=0))
 
       # 40 mm front-to-back cannot contain the 63 mm nozzle row.
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.aspirate_container(narrow, volume=50))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(narrow.tracker.volume, 10000.0)
       self.assertAlmostEqual(narrow.tracker.get_used_volume(), 10000.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_wire_failure_rolls_back_container_tracker(self):
-    flex, _transport, head = _flex_head8(transport_cls=_FailingAspirateTransport)
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -421,9 +404,19 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       trough.tracker.set_volume(10000.0)
 
       asyncio.run(head.pick_up_tips(rack, column=0))
-      with self.assertRaises(RuntimeError):
+      with (
+        patch.object(
+          api,
+          "submit_command",
+          AsyncMock(
+            side_effect=[api.submit_command.return_value] * 4 + [RuntimeError("pipetting failed")]
+          ),
+        ) as submit,
+        self.assertRaisesRegex(RuntimeError, "pipetting failed"),
+      ):
         asyncio.run(head.aspirate_container(trough, volume=50))
 
+      self.assertEqual(submit.await_args.args[1], "aspirateInPlace")
       # The staged 8 * 50 uL is rolled back in full: committed AND pending
       # volume are untouched.
       self.assertAlmostEqual(trough.tracker.volume, 10000.0)
@@ -432,22 +425,22 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_dispense_container_without_tip_rejects_before_any_wire_command(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       trough = _make_trough()
       flex.deck.assign_child_at_slot(trough, "C2")
 
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.dispense_container(trough, volume=40))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(trough.tracker.volume, 0.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_dispense_container_wire_failure_rolls_back_container_tracker(self):
-    flex, _transport, head = _flex_head8(transport_cls=_FailingDispenseTransport)
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -455,12 +448,22 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       flex.deck.assign_child_at_slot(trough, "C2")
 
       asyncio.run(head.pick_up_tips(rack, column=0))
-      with self.assertRaises(RuntimeError):
+      with (
+        patch.object(
+          api,
+          "submit_command",
+          AsyncMock(
+            side_effect=[api.submit_command.return_value] * 3 + [RuntimeError("pipetting failed")]
+          ),
+        ) as submit,
+        self.assertRaisesRegex(RuntimeError, "pipetting failed"),
+      ):
         for tip in head.get_mounted_tips():
           if tip is not None:
             tip.tracker.set_volume(40)
         asyncio.run(head.dispense_container(trough, volume=40))
 
+      self.assertEqual(submit.await_args.args[1], "dispenseInPlace")
       # The staged 8 * 40 uL is rolled back in full.
       self.assertAlmostEqual(trough.tracker.volume, 0.0)
       self.assertAlmostEqual(trough.tracker.get_used_volume(), 0.0)
@@ -468,7 +471,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_offset_that_keeps_row_inside_cavity_passes(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()  # 85.48 mm front-to-back; 63 mm row + 2*11.24 = 85.48 just fits
@@ -479,19 +482,21 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate_container(trough, volume=10, offset=Coordinate(y=11.24)))
 
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
+      aspirate_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "aspirateInPlace"
+      ]
       self.assertEqual(len(aspirate_cmds), 1)
       # A lateral-only offset keeps the default bottom clearance: its z is 0
       # because the caller said nothing about z, not to ask for the floor.
       self.assertEqual(
-        pipetting_location(transport, trough, head.channels)["offset"],
+        pipetting_location(api, trough, head.channels)["offset"],
         {"x": 0, "y": 11.24, "z": 1.0},
       )
     finally:
       asyncio.run(flex.stop())
 
   def test_zero_offset_keeps_the_default_bottom_clearance(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -502,9 +507,9 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate_container(trough, volume=10, offset=Coordinate.zero()))
 
-      [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
+      [c for c in api.submit_command.await_args_list if c.args[1] == "aspirateInPlace"]
       self.assertEqual(
-        pipetting_location(transport, trough, head.channels)["offset"],
+        pipetting_location(api, trough, head.channels)["offset"],
         {"x": 0, "y": 0, "z": 1.0},
         "a no-op offset must not move the tip to the cavity floor",
       )
@@ -512,7 +517,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_too_small_container_message_names_no_offset_when_none_was_passed(self):
-    flex, _transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       narrow = _make_trough(name="narrow", size_y=40.0, max_volume=50000.0)
@@ -534,7 +539,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
   def test_rotated_cavity_is_guarded_on_the_axis_the_robot_sees(self):
     # 40 x 70 mm rotated a quarter turn is a 70 x 40 mm cavity to the robot,
     # which is the footprint the uploaded definition carries.
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       rotated = _make_trough(name="rotated", size_x=40.0, size_y=70.0, max_volume=50000.0)
@@ -544,11 +549,11 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       rotated.tracker.set_volume(10000.0)
 
       asyncio.run(head.pick_up_tips(rack, column=0))
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.aspirate_container(rotated, volume=50))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(rotated.tracker.volume, 10000.0)
     finally:
       asyncio.run(flex.stop())
@@ -556,7 +561,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
   def test_rotated_cavity_deep_enough_for_the_row_is_accepted(self):
     # The mirror case: 110 x 60 mm rotated presents 110 mm front-to-back, so
     # the 63 mm row fits and reading the pre-rotation 60 mm would refuse it.
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       rotated = _make_trough(name="rotated", size_x=110.0, size_y=60.0, max_volume=50000.0)
@@ -568,7 +573,9 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate_container(rotated, volume=50))
 
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
+      aspirate_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "aspirateInPlace"
+      ]
       self.assertEqual(len(aspirate_cmds), 1)
     finally:
       asyncio.run(flex.stop())
@@ -576,7 +583,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
   def test_rotated_parent_rotates_the_cavity_too(self):
     # The guard reads the COMPOSED rotation, so a plain container inside a
     # rotated carrier is guarded on the same axis the robot will see.
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       carrier = Resource(name="carrier", size_x=70.0, size_y=40.0, size_z=25.0)
@@ -588,19 +595,19 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       inner.tracker.set_volume(10000.0)
 
       asyncio.run(head.pick_up_tips(rack, column=0))
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError) as raised:
         asyncio.run(head.aspirate_container(inner, volume=50))
 
       # Name the guard: reading the container's own y (70 mm) would let this
       # through, and it would then fail later for an unrelated reason.
       self.assertEqual(raised.exception.title, "Container too small")
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
     finally:
       asyncio.run(flex.stop())
 
   def test_offset_that_shifts_row_past_cavity_wall_rejects_pre_wire(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()  # 85.48 front-to-back; 63 mm row + 2*11.5 = 86 overhangs
@@ -609,11 +616,11 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       trough.tracker.set_volume(10000.0)
 
       asyncio.run(head.pick_up_tips(rack, column=0))
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.aspirate_container(trough, volume=10, offset=Coordinate(y=-11.5)))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(trough.tracker.volume, 10000.0)
     finally:
       asyncio.run(flex.stop())
@@ -631,7 +638,7 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
     set_volume_tracking(False)
 
   def test_aspirate_container_centers_grid_and_tracks_96_channels(self):
-    flex, transport, head = _flex_head96()
+    flex, api, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -642,13 +649,15 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack))
       asyncio.run(head.aspirate(trough, volume=50))
 
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
+      aspirate_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "aspirateInPlace"
+      ]
       self.assertEqual(len(aspirate_cmds), 1)
-      params = aspirate_cmds[0]["params"]
+      params = aspirate_cmds[0].args[2]
       self.assertNotIn("wellName", params)
       # The primary nozzle is positioned so the grid centers on the cavity.
       self.assertEqual(
-        pipetting_location(transport, trough, head.channels),
+        pipetting_location(api, trough, head.channels),
         {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
 
@@ -658,7 +667,7 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_dispense_container_centers_grid_and_adds_96x(self):
-    flex, transport, head = _flex_head96()
+    flex, api, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -671,12 +680,14 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
           tip.tracker.set_volume(20)
       asyncio.run(head.dispense(trough, volume=20))
 
-      dispense_cmds = [c for c in transport.commands if c["commandType"] == "dispenseInPlace"]
+      dispense_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "dispenseInPlace"
+      ]
       self.assertEqual(len(dispense_cmds), 1)
-      params = dispense_cmds[0]["params"]
+      params = dispense_cmds[0].args[2]
       self.assertNotIn("wellName", params)
       self.assertEqual(
-        pipetting_location(transport, trough, head.channels),
+        pipetting_location(api, trough, head.channels),
         {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
       self.assertAlmostEqual(trough.tracker.volume, 96 * 20.0)
@@ -684,23 +695,23 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_aspirate_container_without_tip_rejects_before_any_wire_command(self):
-    flex, transport, head = _flex_head96()
+    flex, api, head = _flex_head96()
     try:
       trough = _make_trough()
       flex.deck.assign_child_at_slot(trough, "C2")
       trough.tracker.set_volume(100000.0)
 
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.aspirate(trough, volume=50))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(trough.tracker.volume, 100000.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_aspirate_container_rejects_cavity_smaller_than_grid(self):
-    flex, transport, head = _flex_head96()
+    flex, api, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       narrow = _make_trough(name="narrow", size_x=90.0, max_volume=50000.0)
@@ -711,17 +722,17 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack))
 
       # 90 mm left-to-right cannot contain the grid's 99 mm x span.
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.aspirate(narrow, volume=50))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(narrow.tracker.volume, 10000.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_wire_failure_rolls_back_container_tracker(self):
-    flex, _transport, head = _flex_head96(transport_cls=_FailingAspirateTransport)
+    flex, api, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()
@@ -730,9 +741,19 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       trough.tracker.set_volume(100000.0)
 
       asyncio.run(head.pick_up_tips(rack))
-      with self.assertRaises(RuntimeError):
+      with (
+        patch.object(
+          api,
+          "submit_command",
+          AsyncMock(
+            side_effect=[api.submit_command.return_value] * 4 + [RuntimeError("pipetting failed")]
+          ),
+        ) as submit,
+        self.assertRaisesRegex(RuntimeError, "pipetting failed"),
+      ):
         asyncio.run(head.aspirate(trough, volume=50))
 
+      self.assertEqual(submit.await_args.args[1], "aspirateInPlace")
       # The staged 96 * 50 uL is rolled back in full: committed AND pending
       # volume are untouched.
       self.assertAlmostEqual(trough.tracker.volume, 100000.0)
@@ -741,7 +762,7 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_aspirate_container_rejects_cavity_shallower_than_grid_y_span(self):
-    flex, transport, head = _flex_head96()
+    flex, api, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       shallow = _make_trough(name="shallow", size_y=50.0, max_volume=50000.0)
@@ -752,17 +773,17 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack))
 
       # 50 mm front-to-back cannot contain the grid's 63 mm y span.
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(OpentronsError):
         asyncio.run(head.aspirate(shallow, volume=50))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(shallow.tracker.volume, 10000.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_offset_that_keeps_grid_inside_cavity_passes(self):
-    flex, transport, head = _flex_head96()
+    flex, api, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()  # 127.76 x 85.48; grid 99 x 63 plus 2*14.38 / 2*11.24 just fits
@@ -773,10 +794,12 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       asyncio.run(head.pick_up_tips(rack))
       asyncio.run(head.aspirate(trough, volume=10, offset=Coordinate(x=14.38, y=11.24)))
 
-      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirateInPlace"]
+      aspirate_cmds = [
+        c for c in api.submit_command.await_args_list if c.args[1] == "aspirateInPlace"
+      ]
       self.assertEqual(len(aspirate_cmds), 1)
       self.assertEqual(
-        pipetting_location(transport, trough, head.channels)["offset"],
+        pipetting_location(api, trough, head.channels)["offset"],
         {"x": 14.38, "y": 11.24, "z": 1.0},
       )
     finally:
@@ -785,7 +808,7 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
   def test_rotated_cavity_is_guarded_on_the_axis_the_robot_sees(self):
     # 107 x 71 mm rotated a quarter turn is 71 mm left-to-right to the robot,
     # too narrow for the grid's 99 mm x span, though unrotated it fits.
-    flex, transport, head = _flex_head96()
+    flex, api, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       rotated = _make_trough(name="rotated")
@@ -799,16 +822,16 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
         lambda: head.aspirate(rotated, volume=50),
         lambda: head.dispense(rotated, volume=50),
       ):
-        commands_before = len(transport.commands)
+        commands_before = api.submit_command.await_count
         with self.assertRaises(OpentronsError):
           asyncio.run(op())
-        self.assertEqual(len(transport.commands), commands_before)
+        self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(rotated.tracker.volume, 100000.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_offset_that_shifts_grid_past_cavity_wall_rejects_pre_wire(self):
-    flex, transport, head = _flex_head96()
+    flex, api, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       trough = _make_trough()  # 127.76 x 85.48: 99 + 2*14.5 and 63 + 2*11.5 both overhang
@@ -818,10 +841,10 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
 
       asyncio.run(head.pick_up_tips(rack))
       for offset in (Coordinate(x=14.5), Coordinate(y=11.5)):
-        commands_before = len(transport.commands)
+        commands_before = api.submit_command.await_count
         with self.assertRaises(OpentronsError):
           asyncio.run(head.aspirate(trough, volume=10, offset=offset))
-        self.assertEqual(len(transport.commands), commands_before)
+        self.assertEqual(api.submit_command.await_count, commands_before)
       self.assertAlmostEqual(trough.tracker.volume, 100000.0)
     finally:
       asyncio.run(flex.stop())
@@ -851,81 +874,59 @@ class TestLiquidOpsRequireAMountedTip(unittest.TestCase):
       well.tracker.set_volume(100.0)
     return plate
 
-  def _assert_refused_pre_wire(self, flex, transport, op) -> None:
-    commands_before = len(transport.commands)
+  def _assert_refused_pre_wire(self, flex, api, op) -> None:
+    commands_before = api.submit_command.await_count
     with self.assertRaises(OpentronsError) as caught:
       asyncio.run(op())
     self.assertEqual(caught.exception.title, "NoTipError")
-    self.assertEqual(len(transport.commands), commands_before)
+    self.assertEqual(api.submit_command.await_count, commands_before)
 
   def test_head1_well_ops_refuse_without_a_tip(self):
-    flex, transport, head = _flex_head1()
+    flex, api, head = _flex_head1()
     try:
       well = self._plate(flex).get_item("B3")
-      self._assert_refused_pre_wire(flex, transport, lambda: head.aspirate(well, volume=10))
-      self._assert_refused_pre_wire(flex, transport, lambda: head.dispense(well, volume=10))
+      self._assert_refused_pre_wire(flex, api, lambda: head.aspirate(well, volume=10))
+      self._assert_refused_pre_wire(flex, api, lambda: head.dispense(well, volume=10))
       self.assertAlmostEqual(well.tracker.volume, 100.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_head8_column_ops_refuse_without_tips(self):
-    flex, transport, head = _flex_head8()
+    flex, api, head = _flex_head8()
     try:
       plate = self._plate(flex)
-      self._assert_refused_pre_wire(
-        flex, transport, lambda: head.aspirate(plate, column=0, volume=10)
-      )
-      self._assert_refused_pre_wire(
-        flex, transport, lambda: head.dispense(plate, column=0, volume=10)
-      )
+      self._assert_refused_pre_wire(flex, api, lambda: head.aspirate(plate, column=0, volume=10))
+      self._assert_refused_pre_wire(flex, api, lambda: head.dispense(plate, column=0, volume=10))
       self.assertAlmostEqual(plate.get_item("A1").tracker.volume, 100.0)
     finally:
       asyncio.run(flex.stop())
 
   def test_head96_plate_ops_refuse_without_tips(self):
-    flex, transport, head = _flex_head96()
+    flex, api, head = _flex_head96()
     try:
       plate = self._plate(flex)
-      self._assert_refused_pre_wire(flex, transport, lambda: head.aspirate(plate, volume=10))
-      self._assert_refused_pre_wire(flex, transport, lambda: head.dispense(plate, volume=10))
+      self._assert_refused_pre_wire(flex, api, lambda: head.aspirate(plate, volume=10))
+      self._assert_refused_pre_wire(flex, api, lambda: head.dispense(plate, volume=10))
       self.assertAlmostEqual(plate.get_item("A1").tracker.volume, 100.0)
     finally:
       asyncio.run(flex.stop())
 
 
-class _AxisPositionTransport(ChatterboxHTTP):
-  """Chatterbox whose robot/moveAxes* commands report the axis positions they
-  reached, as the real robot-server does. The dict it hands back is the one the
-  completion poll reads, so setting the result here is what the caller sees."""
-
-  async def request(
-    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
-  ) -> Dict[str, Any]:
-    response = await super().request(method, path, data)
-    command_type = (data or {}).get("data", {}).get("commandType")
-    if command_type in ("robot/moveAxesTo", "robot/moveAxesRelative"):
-      response["data"]["result"] = {"position": {"x": 11.0, "y": 22.0, "leftZ": 33.0}}
-    return response
-
-
 def _flex_device(
   api_version: str = OFFLINE_API_VERSION,
-  transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
-) -> Tuple[Flex, ChatterboxHTTP]:
-  """A set-up ``Flex`` plus its transport, for the robot-level
+) -> Tuple[Flex, AsyncMock]:
+  """A set-up ``Flex`` plus its api, for the robot-level
   commands that belong to the device rather than to a head. ``api_version`` is
   what ``/health`` reports, which is what the robot/* version gate reads.
   """
-  transport = transport_cls(
-    pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")], api_version=api_version
-  )
-  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
+  api = make_api(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")], api_version=api_version)
+  flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
   asyncio.run(flex.setup())
-  return flex, transport
+  return flex, api
 
 
-def _cmds(transport: ChatterboxHTTP, command_type: str) -> List[Dict[str, Any]]:
-  return [c for c in transport.commands if c["commandType"] == command_type]
+def _cmds(api: AsyncMock, command_type: str) -> List[_Call]:
+  return [c for c in api.submit_command.await_args_list if c.args[1] == command_type]
 
 
 class TestFlexAxisMotion(unittest.TestCase):
@@ -933,50 +934,51 @@ class TestFlexAxisMotion(unittest.TestCase):
   params and return the axis positions the command reports."""
 
   def test_move_axes_to_sends_snake_case_axis_map_only(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       asyncio.run(flex.move_axes_to({"x": 100.0, "leftZ": 250.0}))
 
-      (cmd,) = _cmds(transport, "robot/moveAxesTo")
-      self.assertEqual(cmd["params"], {"axis_map": {"x": 100.0, "leftZ": 250.0}})
+      (cmd,) = _cmds(api, "robot/moveAxesTo")
+      self.assertEqual(cmd.args[2], {"axis_map": {"x": 100.0, "leftZ": 250.0}})
     finally:
       asyncio.run(flex.stop())
 
   def test_move_axes_to_sends_critical_point_and_speed_snake_case(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       asyncio.run(flex.move_axes_to({"x": 1.0}, critical_point={"rightZ": 5.0}, speed=40.0))
 
-      (cmd,) = _cmds(transport, "robot/moveAxesTo")
+      (cmd,) = _cmds(api, "robot/moveAxesTo")
       self.assertEqual(
-        cmd["params"],
+        cmd.args[2],
         {"axis_map": {"x": 1.0}, "critical_point": {"rightZ": 5.0}, "speed": 40.0},
       )
     finally:
       asyncio.run(flex.stop())
 
   def test_move_axes_relative_sends_snake_case_axis_map_and_speed(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       asyncio.run(flex.move_axes_relative({"y": -5.0}, speed=20.0))
 
-      (cmd,) = _cmds(transport, "robot/moveAxesRelative")
-      self.assertEqual(cmd["params"], {"axis_map": {"y": -5.0}, "speed": 20.0})
+      (cmd,) = _cmds(api, "robot/moveAxesRelative")
+      self.assertEqual(cmd.args[2], {"axis_map": {"y": -5.0}, "speed": 20.0})
     finally:
       asyncio.run(flex.stop())
 
   def test_speed_omitted_when_not_given(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       asyncio.run(flex.move_axes_relative({"y": -5.0}))
 
-      (cmd,) = _cmds(transport, "robot/moveAxesRelative")
-      self.assertNotIn("speed", cmd["params"])
+      (cmd,) = _cmds(api, "robot/moveAxesRelative")
+      self.assertNotIn("speed", cmd.args[2])
     finally:
       asyncio.run(flex.stop())
 
   def test_both_moves_return_the_reported_position(self):
-    flex, _transport = _flex_device(transport_cls=_AxisPositionTransport)
+    flex, api = _flex_device()
+    api.get_command.return_value.result["position"] = {"x": 11.0, "y": 22.0, "leftZ": 33.0}
     try:
       reached = {"x": 11.0, "y": 22.0, "leftZ": 33.0}
       self.assertEqual(asyncio.run(flex.move_axes_to({"x": 11.0})), reached)
@@ -985,41 +987,41 @@ class TestFlexAxisMotion(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_unknown_axis_refused_before_any_wire_command(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       for op in (
         lambda: flex.move_axes_to({"x": 1.0, "zed": 2.0}),
         lambda: flex.move_axes_relative({"zed": 2.0}),
       ):
-        commands_before = len(transport.commands)
+        commands_before = api.submit_command.await_count
         with self.assertRaises(ValueError) as caught:
           asyncio.run(op())
         # The refusal names what was wrong AND what would have been right.
         self.assertIn("zed", str(caught.exception))
         self.assertIn("extensionJaw", str(caught.exception))
-        self.assertEqual(len(transport.commands), commands_before)
+        self.assertEqual(api.submit_command.await_count, commands_before)
     finally:
       asyncio.run(flex.stop())
 
   def test_unknown_critical_point_axis_refused_before_any_wire_command(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(ValueError):
         asyncio.run(flex.move_axes_to({"x": 1.0}, critical_point={"zed": 2.0}))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
     finally:
       asyncio.run(flex.stop())
 
   def test_retract_axis_refuses_an_unknown_axis_before_the_wire(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
-      commands_before = len(transport.commands)
+      commands_before = api.submit_command.await_count
       with self.assertRaises(ValueError):
         asyncio.run(flex.retract_axis("zed"))
 
-      self.assertEqual(len(transport.commands), commands_before)
+      self.assertEqual(api.submit_command.await_count, commands_before)
     finally:
       asyncio.run(flex.stop())
 
@@ -1029,7 +1031,7 @@ class TestFlexAxisMotionVersionGate(unittest.TestCase):
   predates that family and is not gated."""
 
   def test_old_release_refuses_both_moves_and_sends_nothing(self):
-    flex, transport = _flex_device(api_version="8.1.0")
+    flex, api = _flex_device(api_version="8.1.0")
     try:
       for op in (
         lambda: flex.move_axes_to({"x": 1.0}),
@@ -1039,16 +1041,16 @@ class TestFlexAxisMotionVersionGate(unittest.TestCase):
           asyncio.run(op())
         self.assertIn("8.2.0", str(caught.exception))
 
-      robot_cmds = [c for c in transport.commands if c["commandType"].startswith("robot/")]
+      robot_cmds = [c for c in api.submit_command.await_args_list if c.args[1].startswith("robot/")]
       self.assertEqual(robot_cmds, [])
     finally:
       asyncio.run(flex.stop())
 
   def test_retract_axis_is_not_gated(self):
-    flex, transport = _flex_device(api_version="8.1.0")
+    flex, api = _flex_device(api_version="8.1.0")
     try:
       asyncio.run(flex.retract_axis("leftZ"))
-      self.assertEqual(len(_cmds(transport, "retractAxis")), 1)
+      self.assertEqual(len(_cmds(api, "retractAxis")), 1)
     finally:
       asyncio.run(flex.stop())
 
@@ -1057,72 +1059,72 @@ class TestFlexRobotCommands(unittest.TestCase):
   """The device's one-shot commands: exact params, no extras."""
 
   def test_retract_axis(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       asyncio.run(flex.retract_axis("extensionJaw"))
 
-      (cmd,) = _cmds(transport, "retractAxis")
-      self.assertEqual(cmd["params"], {"axis": "extensionJaw"})
+      (cmd,) = _cmds(api, "retractAxis")
+      self.assertEqual(cmd.args[2], {"axis": "extensionJaw"})
     finally:
       asyncio.run(flex.stop())
 
   def test_set_status_bar(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       asyncio.run(flex.set_status_bar("disco"))
 
-      (cmd,) = _cmds(transport, "setStatusBar")
-      self.assertEqual(cmd["params"], {"animation": "disco"})
+      (cmd,) = _cmds(api, "setStatusBar")
+      self.assertEqual(cmd.args[2], {"animation": "disco"})
     finally:
       asyncio.run(flex.stop())
 
   def test_set_rail_lights_carries_the_boolean_both_ways(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       asyncio.run(flex.set_rail_lights(True))
       asyncio.run(flex.set_rail_lights(False))
 
-      cmds = _cmds(transport, "setRailLights")
-      self.assertEqual([c["params"] for c in cmds], [{"on": True}, {"on": False}])
+      cmds = _cmds(api, "setRailLights")
+      self.assertEqual([c.args[2] for c in cmds], [{"on": True}, {"on": False}])
     finally:
       asyncio.run(flex.stop())
 
   def test_add_comment(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       asyncio.run(flex.add_comment("starting plate 3"))
 
-      (cmd,) = _cmds(transport, "comment")
-      self.assertEqual(cmd["params"], {"message": "starting plate 3"})
+      (cmd,) = _cmds(api, "comment")
+      self.assertEqual(cmd.args[2], {"message": "starting plate 3"})
     finally:
       asyncio.run(flex.stop())
 
   def test_wait_for_duration(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       asyncio.run(flex.wait_for_duration(2.5))
 
-      (cmd,) = _cmds(transport, "waitForDuration")
-      self.assertEqual(cmd["params"], {"seconds": 2.5})
+      (cmd,) = _cmds(api, "waitForDuration")
+      self.assertEqual(cmd.args[2], {"seconds": 2.5})
     finally:
       asyncio.run(flex.stop())
 
   def test_reload_labware_names_the_id_the_labware_was_loaded_under(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       trough = _make_trough()
       flex.deck.assign_child_at_slot(trough, "C2")
 
       asyncio.run(flex.reload_labware(trough))
 
-      (_load_cmd,) = _cmds(transport, "loadLabware")
-      (reload_cmd,) = _cmds(transport, "reloadLabware")
-      self.assertEqual(reload_cmd["params"], {"labwareId": transport.labware_ids["trough"]})
+      (_load_cmd,) = _cmds(api, "loadLabware")
+      (reload_cmd,) = _cmds(api, "reloadLabware")
+      self.assertEqual(reload_cmd.args[2], {"labwareId": "labware"})
     finally:
       asyncio.run(flex.stop())
 
   def test_reload_labware_of_loaded_labware_does_not_load_it_again(self):
-    flex, transport = _flex_device()
+    flex, api = _flex_device()
     try:
       trough = _make_trough()
       flex.deck.assign_child_at_slot(trough, "C2")
@@ -1130,8 +1132,8 @@ class TestFlexRobotCommands(unittest.TestCase):
       asyncio.run(flex.reload_labware(trough))
       asyncio.run(flex.reload_labware(trough))
 
-      self.assertEqual(len(_cmds(transport, "loadLabware")), 1)
-      self.assertEqual(len(_cmds(transport, "reloadLabware")), 2)
+      self.assertEqual(len(_cmds(api, "loadLabware")), 1)
+      self.assertEqual(len(_cmds(api, "reloadLabware")), 2)
     finally:
       asyncio.run(flex.stop())
 
