@@ -129,6 +129,10 @@ class with a type, in standard units, round, and slightly below the firmware's o
 caller tunes one device by assigning on the instance, or every device by assigning on the class.
 Named `default_<quantity>[_<condition>]`: `default_z_speed`, `default_z_speed_with_resource_held`.
 
+**P19. A probe names its speeds for what they do.** `search_speed` is the speed it searches at;
+`approach_speed` is the speed to where the search starts, where the command has one. Never a bare
+`speed`, on the probe or on its `_unchecked_fw_` command. The Prep's probes follow the same rule.
+
 ## Where this is not consistent yet
 
 1. **`.configuration` has two owners.** Most features own theirs

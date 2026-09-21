@@ -2184,4 +2184,44 @@ class Pipettes:
 
   # -- z probing (capacitive, pressure, force) --------------------------------------------------
 
+  async def _unchecked_fw_probe_z_using_ztouch(
+    self,
+    channel: int,
+    start_position: int,
+    end_position: int,
+    search_speed: int,
+    approach_speed: int,
+    acceleration: int,
+    detection_limiter_pwm: int,
+    push_force_pwm: int,
+  ) -> int:
+    """Send the z-touch search as it is given, in Z increments; the stop disc where it stopped. `Px ZH`.
+
+    Args:
+      channel: 0-indexed from the back.
+      start_position: stop disc height the search starts from (`zb`).
+      end_position: stop disc height it goes no lower than (`za`).
+      search_speed: search speed, increments/s (`zu`).
+      approach_speed: speed to the start, increments/s (`zv`).
+      acceleration: thousands of increments/s2 (`zr`).
+      detection_limiter_pwm: offset PWM limiter for the search, 0 to 125 (`cg`).
+      push_force_pwm: offset PWM push-down force, 0 to 125; 0 switches the drive off (`cf`).
+
+    Returns:
+      The stop disc's height where the search stopped, in Z increments (`rz`).
+    """
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel),
+      command="ZH",
+      zb=f"{start_position:05}",
+      za=f"{end_position:05}",
+      zv=f"{approach_speed:05}",
+      zr=f"{acceleration:03}",
+      zu=f"{search_speed:05}",
+      cg=f"{detection_limiter_pwm:03}",
+      cf=f"{push_force_pwm:03}",
+      fmt="rz#####",
+    )
+    return cast(int, resp["rz"])
+
   # TODO: _unchecked_fw_ vs tip-presence-guarded versions

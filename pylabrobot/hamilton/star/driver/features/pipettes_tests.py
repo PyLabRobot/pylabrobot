@@ -362,6 +362,31 @@ class TestSafeZAndStopDiscMoves(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(sorted(moved), [0, 1, 3, 4, 5, 6, 7])
 
 
+class TestZTouchFirmware(unittest.IsolatedAsyncioTestCase):
+  """`Px ZH` as it goes on the wire, byte for byte as legacy sends it."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+
+    async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      return {"rz": 20000}
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_legacys_defaults(self):
+    rz = await self.pipettes._unchecked_fw_probe_z_using_ztouch(
+      7, 31200, 9320, 932, 11652, 75, 1, 0
+    )
+    self.assertEqual(self.sent, ["P8ZHzb31200za09320zv11652zr075zu00932cg001cf000"])
+    self.assertEqual(rz, 20000)
+
+  async def test_a_window_a_speed_and_a_push_force(self):
+    await self.pipettes._unchecked_fw_probe_z_using_ztouch(0, 28142, 13983, 466, 11652, 75, 1, 10)
+    self.assertEqual(self.sent, ["P1ZHzb28142za13983zv11652zr075zu00466cg001cf010"])
+
+
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
   """A v1 device plans with `pylabrobot.lib.liquid_handling`, from its own minimum channel spacing."""
 
