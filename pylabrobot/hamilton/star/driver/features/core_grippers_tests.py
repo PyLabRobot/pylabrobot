@@ -5,9 +5,9 @@ from typing import Any, List
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.conftest import BARE_X_ARM
 from pylabrobot.hamilton.star.device import STAR
+from pylabrobot.hamilton.star.driver.errors import HardwareError, STARFirmwareError
 from pylabrobot.hamilton.star.driver.features.x_arm_tests import RECORDED_DEVICE, declaring
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
-from pylabrobot.hamilton.star.driver.errors import HardwareError, STARFirmwareError
 from pylabrobot.resources.azenta.plates import azenta_96_wellplate_200uL_Vb_4titudeframestar
 from pylabrobot.resources.errors import HasTipError
 from pylabrobot.resources.hamilton import PLT_CAR_L5AC_A00, STARDeck, hamilton_tip_300uL

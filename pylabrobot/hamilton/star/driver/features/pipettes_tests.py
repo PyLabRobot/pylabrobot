@@ -534,7 +534,9 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     spot = rack.get_item("A1")
     tip = spot.tip
     await pipettes.pick_up_tips([spot])
-    pipettes.shaft(1).mount_tip(tip)
+    shaft = pipettes.shaft(1)
+    assert shaft is not None
+    shaft.mount_tip(tip)
     await pipettes.return_tips()
     self.assertIs(tip.parent, spot)
     self.assertEqual(
@@ -556,7 +558,9 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     pipettes, _, _ = await channels_over_a_rack()
     with self.assertRaises(RuntimeError):
       await pipettes.return_tips()
-    pipettes.shaft(0).mount_tip(hamilton_tip_300uL(name="loose"))
+    shaft = pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="loose"))
     with self.assertRaises(RuntimeError):
       await pipettes.return_tips()
 
