@@ -244,6 +244,41 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.sent, ["P7AAyr1", "P8AAyr1", "P7AAyr3", "P8AAyr3"])
 
 
+class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
+  """Setup writes the driver's defaults into every channel, whatever an earlier session left."""
+
+  async def test_every_channel_holds_the_defaults_after_setup(self):
+    pipettes = await simulated_channels()
+    for channel in range(pipettes.num_channels):
+      self.assertEqual(await pipettes.request_y_speed(channel), 249.98)
+      self.assertEqual(await pipettes.request_y_acceleration_level(channel), 3)
+      self.assertEqual(await pipettes.request_z_speed(channel), 125.0)
+      self.assertEqual(await pipettes.request_z_acceleration(channel), 804.6)
+
+  async def test_setup_writes_four_per_channel(self):
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    sent: List[str] = []
+    answer = driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      if command == "AA":
+        sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      return await answer(module=module, command=command, **kwargs)
+
+    driver.send_command = recorded  # type: ignore[assignment]
+    await driver.setup()
+    written = [command for command in sent if command[0] == "P"]
+    self.assertEqual(len(written), 32)
+    self.assertEqual(written[:4], ["P1AAyv5399", "P1AAyr3", "P1AAzv11652", "P1AAzr075"])
+
+  async def test_a_channel_move_writes_what_it_moved_with(self):
+    pipettes = await simulated_channels()
+    z = pipettes.configuration.z_range[1]
+    await pipettes.move_stop_disc_to_z_position(0, z, speed=100.0, acceleration=300.0)
+    self.assertEqual(await pipettes.request_z_speed(0), 100.0)
+    self.assertEqual(await pipettes.request_z_acceleration(0), 300.4)
+
+
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
   """A v1 device plans with `pylabrobot.lib.liquid_handling`, from its own minimum channel spacing."""
 

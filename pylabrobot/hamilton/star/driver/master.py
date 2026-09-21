@@ -1381,6 +1381,8 @@ class STARDriver:
       # channel to. The floor is left as it stands: nothing here measures how low they go.
       c = arm.pipettes.configuration
       c.z_range = (c.z_range[0], min(reached.values()))
+      # The drives keep what an earlier session wrote until a power cycle; every run starts here.
+      await arm.pipettes._set_default_drive_parameters()
 
     if arm.iswap is not None and "iswap" in skipped:
       logger.debug("iSWAP: initializing it was skipped")

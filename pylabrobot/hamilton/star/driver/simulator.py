@@ -73,6 +73,9 @@ SIMULATED_COVER_POSITION: CoverPosition = "closed"
 # The three inputs on the cover connector: the cover input, and two whose meaning is not known.
 SIMULATED_COVER_INPUTS = (True, False, False)
 
+# What a channel's drive holds after a power cycle, as the device read.
+SIMULATED_CHANNEL_DRIVE_PARAMETERS = {"zv": 12_000, "zr": 75, "yv": 6_000, "yr": 4}
+
 # What its scanner reads. A simulated deck holds no carriers, so nothing.
 SIMULATED_BARCODE: Optional[str] = None
 
@@ -267,6 +270,20 @@ class SimulatedPipettes(_Simulated, Pipettes):
         {"rz": c.z_drive_mm_to_increments(self._modelled_z(channel))},
         f"where the model has channel {channel}'s stop disc",
       )
+
+    # A channel's drive keeps what `AA` writes, and what its own `ZA` moves with.
+    stored = self.device.channel_drive_parameters.setdefault(
+      channel, dict(SIMULATED_CHANNEL_DRIVE_PARAMETERS)
+    )
+    if command in ("AA", "ZA"):
+      for parameter in stored:
+        if parameter in kwargs:
+          stored[parameter] = int(kwargs[parameter])
+      return None
+
+    if command == "RA" and kwargs.get("ra") in stored:
+      parameter = kwargs["ra"]
+      return {parameter: stored[parameter]}, f"what channel {channel}'s drive holds"
 
     return None
 
@@ -1153,6 +1170,8 @@ class STARSimulationDriver(STARDriver):
     if len(tips_mounted) != channels:
       raise ValueError(f"tips_mounted has {len(tips_mounted)} entries, expected {channels}")
     self.tips_mounted = list(tips_mounted)
+    # What each channel's drive holds, by channel; filled from the power-on values when first asked.
+    self.channel_drive_parameters: Dict[int, Dict[str, int]] = {}
 
     # What each module says when asked whether it is initialized, and where things are.
     self.initialized = {module: initialized for module in ("C0", "I0", "R0", "H0")}

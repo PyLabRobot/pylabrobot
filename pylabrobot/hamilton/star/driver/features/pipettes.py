@@ -1034,6 +1034,14 @@ class Pipettes:
     written: Dict[str, Any] = {parameter: f"{increments:0{width}}"}
     await self._driver.send_command(module=self.channel_id(channel), command="AA", **written)
 
+  async def _set_default_drive_parameters(self) -> None:
+    """Write the driver's Y and Z defaults into every channel's drive (`Px AA`)."""
+    for channel in range(self.num_channels):
+      await self._set_y_speed(channel, self.default_y_speed)
+      await self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
+      await self._set_z_speed(channel, self.default_z_speed)
+      await self._set_z_acceleration(channel, self.default_z_acceleration)
+
   # -- x position --------------------------------------------------------------------------------
 
   async def request_x_position(self) -> float:
