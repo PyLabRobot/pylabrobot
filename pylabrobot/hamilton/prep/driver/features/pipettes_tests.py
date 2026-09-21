@@ -555,7 +555,7 @@ def test_probe_y_using_clld_searches_with_the_channels_own_y_axis():
 
     p.send_command = record  # type: ignore[method-assign]
     found = await p.pipettes.probe_y_using_clld(
-      1, "forward", search_end_position=150.0, speed=5.0, allow_without_tip=True
+      1, "forward", search_end_position=150.0, search_speed=5.0, allow_without_tip=True
     )
     assert found is None
     seek = next(c for c in sent if isinstance(c, PrepCmd.PrepYAxisSeekCapacitiveLld))
@@ -596,7 +596,7 @@ def test_probe_y_using_clld_refuses_searches_it_cannot_make():
       ),
       (lambda: probe(1, "backward", search_end_position=150.0), "cannot end at"),
       (lambda: probe(1, "sideways"), "direction"),  # type: ignore[arg-type]
-      (lambda: probe(1, "forward", speed=0), "speed must be above 0"),
+      (lambda: probe(1, "forward", search_speed=0), "search_speed must be above 0"),
       (lambda: probe(2, "forward"), "channel_idx must be between"),
     ):
       with pytest.raises(ValueError, match=message):
@@ -829,7 +829,7 @@ def test_probe_z_using_ztouch_seeks_with_the_channels_own_z_axis():
     found = await p.pipettes.probe_z_using_ztouch(
       1,
       search_start_position=160.0,
-      speed=5.0,
+      search_speed=5.0,
       search_end_position=100.0,
       minimum_traverse_height_end=150.0,
       allow_without_tip=True,
@@ -976,7 +976,7 @@ def test_probe_z_using_ztouch_refuses_seeks_it_cannot_make():
     p.send_command = record  # type: ignore[method-assign]
     probe = functools.partial(p.pipettes.probe_z_using_ztouch, 1, allow_without_tip=True)
     for kwargs, message in (
-      ({"speed": 0}, "speed must be above 0"),
+      ({"search_speed": 0}, "search_speed must be above 0"),
       ({"search_start_position": 100.0, "search_end_position": 120.0}, "must be below"),
       ({"search_end_position": 5.0}, "outside channel 1 range"),
       ({"minimum_traverse_height_end": 400.0}, "outside channel 1 range"),

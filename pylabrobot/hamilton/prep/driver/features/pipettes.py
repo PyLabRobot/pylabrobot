@@ -2623,7 +2623,7 @@ class Pipettes:
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
     minimum_traverse_height_start: Optional[float] = None,
-    speed: float = 10.0,
+    search_speed: float = 10.0,
     sensitivity: Optional[int] = None,
     detect_mode: int = 2,
     post_detection_distance: float = 2.0,
@@ -2644,7 +2644,7 @@ class Pipettes:
       minimum_traverse_height_start: height to raise every low channel to before travelling to
         `search_start_position`, in mm. `default_minimum_traverse_height` when None. A lower value
         asserts the lateral path is clear, which the driver cannot check.
-      speed: search speed in mm/s.
+      search_speed: search speed in mm/s.
       sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
       detect_mode: cLLD detect mode.
       post_detection_dist: back-off after a detection in mm.
@@ -2673,8 +2673,8 @@ class Pipettes:
       )
     if direction not in ("forward", "backward"):
       raise ValueError(f"direction must be 'forward' or 'backward', is {direction!r}")
-    if speed <= 0:
-      raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    if search_speed <= 0:
+      raise ValueError(f"search_speed must be above 0 mm/s, is {search_speed}")
     forward = direction == "forward"
     positions = await self.request_locations()
     if (
@@ -2767,10 +2767,10 @@ class Pipettes:
       result = await self._unchecked_fw_y_axis_seek_capacitive_lld(
         channel.yaxis,
         position=end + offset,
-        speed=speed,
+        speed=search_speed,
         detect_mode=detect_mode,
         sensitivity=self.default_clld_sensitivity if sensitivity is None else sensitivity,
-        read_timeout=abs(end - here.y) / speed + 30,
+        read_timeout=abs(end - here.y) / search_speed + 30,
       )
     finally:
       await self._record_where_they_stopped()
@@ -2784,7 +2784,7 @@ class Pipettes:
       if forward
       else max(detected_y - post_detection_distance, low)
     )
-    await self.move_to_y_positions({channel_idx: back_off}, speed=speed)
+    await self.move_to_y_positions({channel_idx: back_off}, speed=search_speed)
     surface = detected_y - diameter / 2 if forward else detected_y + diameter / 2
     return round(surface, 2)
 
@@ -2811,7 +2811,7 @@ class Pipettes:
     channel_idx: int,
     *,
     search_start_position: Optional[float] = None,
-    speed: Optional[float] = None,
+    search_speed: Optional[float] = None,
     search_end_position: Optional[float] = None,
     sensitivity: Optional[int] = None,
     detect_mode: Optional[int] = None,
@@ -2823,7 +2823,7 @@ class Pipettes:
     Args:
       channel_idx: which channel, 0-indexed from the back.
       search_start_position: start height in mm. Defaults to where the channel stands.
-      speed: seek speed in mm/s. Defaults to `default_clld_probe_speed`.
+      search_speed: seek speed in mm/s. Defaults to `default_clld_probe_speed`.
       search_end_position: where the search ends, in mm. The bottom of the channel's Z range when
         None: a seek that detects nothing goes that far down.
       sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
@@ -2861,7 +2861,7 @@ class Pipettes:
     search_start_position = (
       round(positions[channel_idx].z, 2) if search_start_position is None else search_start_position
     )
-    speed = self.default_clld_probe_speed if speed is None else speed
+    search_speed = self.default_clld_probe_speed if search_speed is None else search_speed
     sensitivity = self.default_clld_sensitivity if sensitivity is None else sensitivity
     detect_mode = self.default_clld_detect_mode if detect_mode is None else detect_mode
     minimum_traverse_height_end = (
@@ -2881,8 +2881,8 @@ class Pipettes:
           f"channel {channel_idx}'s Z range has not been read; pass search_end_position"
         )
       search_end_position = reach_z[0]
-    if speed <= 0:
-      raise ValueError(f"speed must be positive, is {speed}")
+    if search_speed <= 0:
+      raise ValueError(f"search_speed must be positive, is {search_speed}")
     if search_end_position > search_start_position:
       raise ValueError(
         f"search_end_position={search_end_position} is above search_start_position={search_start_position}"
@@ -2904,7 +2904,7 @@ class Pipettes:
       channel=self.channel_enum(channel_idx),
       seek_position_x=x,
       seek_position_y=y,
-      seek_velocity_z=speed,
+      seek_velocity_z=search_speed,
       seek_height=search_start_position,
       min_seek_height=search_end_position,
       final_position_z=minimum_traverse_height_end,
@@ -2964,7 +2964,7 @@ class Pipettes:
     *,
     tip_len: Optional[float] = None,
     search_start_position: Optional[float] = None,
-    speed: float = 10.0,
+    search_speed: float = 10.0,
     search_end_position: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     allow_without_tip: bool = False,
@@ -2975,7 +2975,7 @@ class Pipettes:
     """Lower a channel where it stands until it meets resistance, with its Z axis's obstacle seek.
 
     Sent as `ZAxis.SeekObstacle`. What it does, measured on PRPAA1087 on 2026-09-16: it goes to the start at
-    full speed, searches down at `speed`, and on contact keeps pressing until the Z drive's following error
+    full speed, searches down at `search_speed`, and on contact keeps pressing until the Z drive's following error
     reaches its limit of 150 increments (1.6 mm), then stops and answers. Its answer sits about 0.15 mm above
     where the drive actually stopped. Only a firm surface is detected: a finger is pushed through, because it
     yields and no following error builds. Reaching the end of the search untouched is also answered as a
@@ -2987,7 +2987,7 @@ class Pipettes:
       tip_len: total length of the mounted tip in mm. Defaults to the length the firmware holds
         for it plus the fitting depth.
       search_start_position: start height in mm. Defaults to where the channel stands.
-      speed: seek speed in mm/s.
+      search_speed: seek speed in mm/s.
       search_end_position: where the search ends, in mm. The bottom of the channel's Z range when
         None: a seek that detects nothing goes that far down.
       minimum_traverse_height_end: height to finish at in mm. Defaults to `search_start_position`.
@@ -3028,8 +3028,8 @@ class Pipettes:
       raise ValueError(
         f"channel_idx must be between 0 and {self.num_channels - 1}, is {channel_idx}"
       )
-    if speed <= 0:
-      raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    if search_speed <= 0:
+      raise ValueError(f"search_speed must be above 0 mm/s, is {search_speed}")
     if push_force_pwm is not None and not 40 <= push_force_pwm <= 125:
       raise ValueError(f"push_force_pwm must be between 40 and 125, is {push_force_pwm}")
     positions = await self.request_locations()
@@ -3076,8 +3076,8 @@ class Pipettes:
           start_position=start + extension + offset,
           end_position=floor + extension + offset,
           final_position=final + extension + offset,
-          speed=speed,
-          read_timeout=(abs(here.z - start) + start - floor) / speed + 30,
+          speed=search_speed,
+          read_timeout=(abs(here.z - start) + start - floor) / search_speed + 30,
         )
     finally:
       await self._record_where_they_stopped()
@@ -4635,7 +4635,7 @@ class Pipettes:
     side_approach: float = 12.0,
     below_the_top: float = 1.0,
     between_edges: float = 20.0,
-    speed: float = 5.0,
+    search_speed: float = 5.0,
     tip_bottom_diameter: float = 1.2,
     stop_disc_diameter: float = 7.0,
     allow_without_tip: bool = False,
@@ -4656,7 +4656,7 @@ class Pipettes:
       side_approach: how far to either side the X searches start, in mm.
       below_the_top: how far below the target's top to probe, in mm.
       between_edges: how far above the top to lift between edges, in mm.
-      speed: search speed for the Y searches, in mm/s.
+      search_speed: search speed for the Y searches, in mm/s.
       tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
       stop_disc_diameter: diameter of the stop disc (tip mounting shaft) in mm, when none is.
       allow_without_tip: whether to probe without a mounted tip. False requires one.
@@ -4686,7 +4686,7 @@ class Pipettes:
         channel_idx,
         direction,
         search_end_position=target.y,
-        speed=speed,
+        search_speed=search_speed,
         tip_bottom_diameter=tip_bottom_diameter,
         stop_disc_diameter=stop_disc_diameter,
         allow_without_tip=allow_without_tip,
@@ -4926,7 +4926,7 @@ class Pipettes:
               search_start_position=search_start,
               search_end_position=end_position,
               minimum_traverse_height_start=probe_z,
-              speed=5,
+              search_speed=5,
             )
           else:
             surface = await self.probe_x_using_clld(
