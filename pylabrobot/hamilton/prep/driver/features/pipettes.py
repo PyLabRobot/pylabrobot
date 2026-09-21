@@ -811,11 +811,13 @@ class Pipettes:
     # carries none.
     self.default_y_speed: float = 276.0
     self.default_y_acceleration: float = 760.0
-    # Z: 80 % of 142 mm/s, fitted from timed `MoveToPosition` moves of 2 to 30 mm (rms 4.5 ms), and of
-    # 800 mm/s2, read with `ZDrive.GetAcceleration` and matched by that fit. `move_tool_bottom_to_z_positions`
-    # sends the speed with `MoveZAbsolute`, in mm/s; `MoveToPosition` carries none.
+    # Z: 80 % of 142 mm/s, fitted from timed `MoveToPosition` moves of 2 to 30 mm (rms 4.5 ms).
+    # `move_tool_bottom_to_z_positions` sends the speed with `MoveZAbsolute`, in mm/s;
+    # `MoveToPosition` carries none.
     self.default_z_speed: float = 113.6
-    self.default_z_acceleration: float = 640.0
+    # The Z drives' own, read with `ZDrive.GetAcceleration` and matched by that fit. Setup
+    # overwrites it with what the firmware holds.
+    self.default_z_acceleration: float = 800.0
     # cLLD probes: the seek speed (mm/s), sensitivity and detect mode that detect. Swept on
     # PRPAA1087 (V1.2.2) over sensitivities 0 to 4 against modes 0 to 3, 286 seeks onto the same
     # surface: sensitivity 3 detected in 64 of 76, every other sensitivity in under a third of
@@ -866,6 +868,16 @@ class Pipettes:
     await self.discover()
     if not any(c.x_range is not None for c in self.configuration.channels):
       logger.warning("Channel bounds not available — move_to_location will skip validation")
+
+    z_accelerations = []
+    for drive in [c.zdrive for c in self.channels if c.zdrive is not None]:
+      answer = await self._driver.send_command(PrepCmd.PrepZDriveGetAcceleration(dest=drive))
+      z_accelerations.append(float(answer.value))
+    if z_accelerations:
+      if len(set(z_accelerations)) > 1:
+        logger.warning("the Z drives differ in acceleration: %s mm/s2", z_accelerations)
+      self.default_z_acceleration = z_accelerations[0]
+    logger.debug("default Z acceleration: %s mm/s2", self.default_z_acceleration)
 
     # Probe pipettor for v2 aspirate/dispense support (cmd 38-43).
     if self.configuration.use_v1_aspirate_dispense:
@@ -1998,7 +2010,7 @@ class Pipettes:
 
   @asynccontextmanager
   async def _z_drive_acceleration(self, acceleration: Optional[float]) -> AsyncIterator[None]:
-    """Set every channel's Z drive acceleration for the enclosed block, then restore it.
+    """Set every channel's Z drive acceleration for the enclosed block, then `default_z_acceleration`.
 
     Args:
       acceleration: acceleration in mm/s2, or None to leave the drives unchanged.
@@ -2006,26 +2018,26 @@ class Pipettes:
     if acceleration is None:
       yield
       return
-    held: Dict[Address, float] = {}
+    drives = [c.zdrive for c in self.channels if c.zdrive is not None]
+    set_: List[Address] = []
     try:
-      for drive in [c.zdrive for c in self.channels if c.zdrive is not None]:
-        response = await self._driver.send_command(PrepCmd.PrepZDriveGetAcceleration(dest=drive))
-        held[drive] = float(response.value)
+      for drive in drives:
         await self._driver.send_command(
           PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=acceleration)
         )
+        set_.append(drive)
       yield
     finally:
-      for drive, value in held.items():
+      for drive in set_:
         try:
           await self._driver.send_command(
-            PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=value)
+            PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=self.default_z_acceleration)
           )
         except Exception:
           logger.warning(
             "could not put the Z drive acceleration at %s back to %s mm/s2",
             drive,
-            value,
+            self.default_z_acceleration,
             exc_info=True,
           )
 
