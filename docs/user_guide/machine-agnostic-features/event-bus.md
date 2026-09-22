@@ -128,8 +128,8 @@ events.
 | `legacy.temperature_controlling.TemperatureController` | set temperature, wait for temperature, deactivate |
 | `legacy.centrifuge.Centrifuge` | `centrifuge.spin` |
 | `legacy.centrifuge.Loader` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
-| `agilent.vspin.VSpin` | `centrifuge.spin` |
-| `agilent.vspin.Access2` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
+| `agilent.vspin.VSpin` | `centrifuge.setup`, `centrifuge.stop`, `centrifuge.spin` |
+| `agilent.vspin.Access2` | `centrifuge_loader.setup`, `centrifuge_loader.stop`, `centrifuge_loader.load`, `centrifuge_loader.unload` |
 | `brooks.precise_flex.PreciseFlex` | lifecycle, fault/home/freedrive, joint/cartesian/rail/gripper motion, pick/drop, park |
 | `manual_operator.ManualOperator` | arbitrary acknowledged manual actions; resource moves |
 

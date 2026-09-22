@@ -98,20 +98,10 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
 from pylabrobot.legacy.liquid_handling.backends.hamilton.common import fill_in_defaults
-from pylabrobot.legacy.liquid_handling.channel_positioning import (
-  get_tight_single_resource_liquid_op_offsets,
-  get_wide_single_resource_liquid_op_offsets,
-)
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
-)
-from pylabrobot.legacy.liquid_handling.pipette_batch_scheduling import (
-  ChannelBatch,
-  log_batches,
-  plan_batches,
-  validate_channel_selections,
 )
 from pylabrobot.legacy.liquid_handling.standard import (
   Drop,
@@ -130,6 +120,16 @@ from pylabrobot.legacy.liquid_handling.standard import (
   ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,
+)
+from pylabrobot.lib.liquid_handling.channel_positioning import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
+)
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import (
+  ChannelBatch,
+  log_batches,
+  plan_batches,
+  validate_channel_selections,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -151,7 +151,7 @@ from pylabrobot.resources.hamilton import (
 )
 from pylabrobot.resources.hamilton.hamilton_decks import (
   HamiltonCoreGrippers,
-  rails_for_x_coordinate,
+  track_for_x_coordinate,
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
@@ -1474,34 +1474,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     tip_spots = [op.resource for op in ops]
-    tips = set(cast(HamiltonTip, tip_spot.get_tip()) for tip_spot in tip_spots)
-    if len(tips) > 1:
-      raise ValueError("Cannot mix tips with different tip types.")
-    ttti = await self.get_or_assign_tip_type_index(tips.pop())
+    ttti = await self.get_or_assign_tip_type_index(self._get_hamilton_tip(tip_spots))
 
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
-    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
-
-    # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
-      max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
-      max_tip_length -= 2
+    collar_heights = {op.tip.collar_height for op in ops}
+    if len(collar_heights) > 1:
+      raise ValueError("Cannot mix tips with different collar heights.")
+    collar_height = collar_heights.pop()
 
     tip = ops[0].tip
     if not isinstance(tip, HamiltonTip):
       raise TypeError("Tip type must be HamiltonTip.")
 
     begin_tip_pick_up_process = (
-      round((max_z + max_total_tip_length) * 10)
+      round((max_z + collar_height) * 10)
       if begin_tip_pick_up_process is None
       else int(begin_tip_pick_up_process * 10)
     )
     end_tip_pick_up_process = (
-      round((max_z + max_tip_length) * 10)
-      if end_tip_pick_up_process is None
-      else round(end_tip_pick_up_process * 10)
+      round(max_z * 10) if end_tip_pick_up_process is None else round(end_tip_pick_up_process * 10)
     )
     minimum_traverse_height_at_beginning_of_a_command = (
       round(self._channel_traversal_height * 10)
@@ -1569,15 +1560,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         else round(end_tip_deposit_process * 10)
       )
     else:
-      max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-      max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
+      tips = [op.tip for op in ops]
+      assert all(isinstance(tip, HamiltonTip) for tip in tips), "All tips must be HamiltonTip."
+      collar_heights = set(tip.collar_height for tip in tips)
+      if len(collar_heights) > 1:
+        raise ValueError("Cannot mix tips with different collar heights.")
+      collar_height = collar_heights.pop()
+      fitting_depth = tips[0].fitting_depth
+
       begin_tip_deposit_process = (
-        round((max_z + max_total_tip_length) * 10)
+        round((max_z + collar_height) * 10)
         if begin_tip_deposit_process is None
         else round(begin_tip_deposit_process * 10)
       )
       end_tip_deposit_process = (
-        round((max_z + max_tip_length) * 10)
+        round((max_z + collar_height - fitting_depth) * 10)
         if end_tip_deposit_process is None
         else round(end_tip_deposit_process * 10)
       )
@@ -3023,26 +3020,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
 
-    tip_length = prototypical_tip.total_tip_length
-    fitting_depth = prototypical_tip.fitting_depth
-    tip_engage_height_from_tipspot = tip_length - fitting_depth
-
-    # Adjust tip engage height based on tip size
-    if prototypical_tip.tip_size == TipSize.LOW_VOLUME:
-      tip_engage_height_from_tipspot += 2
-    elif prototypical_tip.tip_size != TipSize.STANDARD_VOLUME:
-      tip_engage_height_from_tipspot -= 2
-
-    # Compute pickup Z
+    # Compute pickup position
     alignment_tipspot = pickup.resource.get_item(experimental_alignment_tipspot_identifier)
-    tip_spot_z = alignment_tipspot.get_location_wrt(self.deck).z + pickup.offset.z
-    z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
-
-    # Compute full position (used for x/y)
     pickup_position = (
       alignment_tipspot.get_location_wrt(self.deck) + alignment_tipspot.center() + pickup.offset
     )
-    pickup_position.z = round(z_pickup_position, 2)
 
     self._check_96_position_legal(pickup_position, skip_z=True)
 
@@ -3090,12 +3072,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item(experimental_alignment_tipspot_identifier)
       position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
-      tip_rack = tip_spot_a1.parent
-      assert tip_rack is not None
-      position.z = tip_rack.get_location_wrt(self.deck).z + 1.45
-      # This should be the case for all normal hamilton tip carriers + racks
-      # In the future, we might want to make this more flexible
-      assert abs(position.z - 216.4) < 1e-6, f"z position must be 216.4, got {position.z}"
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
@@ -6185,7 +6161,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     front_offset: Optional[Coordinate] = None,
     back_offset: Optional[Coordinate] = None,
   ):
-    """Get CoRe gripper tool from wasteblock mount."""
+    """Pick up the CO-RE gripper tools stored on the deck's wasteblock mount."""
 
     if not 0 < front_channel < self.num_channels:
       raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
@@ -6209,6 +6185,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
 
+    core_grippers = self.deck.get_resource("core_grippers")
+    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    front_tool, back_tool = core_grippers.front_tool, core_grippers.back_tool
+    if front_tool.model != back_tool.model:
+      raise ValueError("CO-RE gripper tools must have the same model.")
+    ttti = await self.get_or_assign_tip_type_index(front_tool)
+
     command_output = await self.send_command(
       module="C0",
       command="ZT",
@@ -6221,7 +6204,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tp=f"{round(begin_z_coord * 10):04}",
       tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
-      tt="14",
+      tt=f"{ttti:02}",
     )
     self._core_parked = False
     return command_output
@@ -10046,8 +10029,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if isinstance(child, Carrier):
         # Get x coordinate relative to deck
         carrier_x = child.get_location_wrt(self.deck).x
-        carrier_start_rail = rails_for_x_coordinate(carrier_x)
-        carrier_end_rail = rails_for_x_coordinate(carrier_x - 100.0 + child.get_absolute_size_x())
+        carrier_start_rail = track_for_x_coordinate(carrier_x)
+        carrier_end_rail = track_for_x_coordinate(carrier_x - 100.0 + child.get_absolute_size_x())
 
         # Verify rails are valid
         carrier_start_rail = max(1, min(carrier_start_rail, 54))
@@ -13629,7 +13612,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if tip_len is None:
       # currently a bug, will be fixed in the future
       # reverted to previous implementation
-      # tip_len = self.head[channel_idx].get_tip().total_tip_length
+      # tip_len = self.head[channel_idx].get_tip().get_size_z()
       tip_len = await self.request_tip_len_on_channel(channel_idx)
 
     if start_pos_search is None:

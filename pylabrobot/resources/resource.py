@@ -354,24 +354,39 @@ class Resource(SerializableMixin):
     if self.location is None:
       raise NoLocationError(f"Resource '{self.name}' has no location.")
 
-    rotated_anchor = Coordinate(
-      *matrix_vector_multiply_3x3(
-        self.get_absolute_rotation().get_rotation_matrix(),
-        self.get_anchor(x=x, y=y, z=z).vector(),
-      )
-    )
+    # 1. Collect the chain this resource is positioned through, topmost first
+    chain: List[Resource] = [self]
+    while chain[-1].parent is not None and chain[-1].parent.location is not None:
+      chain.append(chain[-1].parent)
+    chain.reverse()
 
-    if self.parent is None or self.parent.location is None:
-      return self.location + rotated_anchor
-
-    parent_pos = self.parent.get_absolute_location()
-    rotated_location = Coordinate(
-      *matrix_vector_multiply_3x3(
-        self.parent.get_absolute_rotation().get_rotation_matrix(),
-        self.location.vector(),
-      )
+    # 2a. Seed the accumulators at the top of the chain. Ancestors above where the walk stops may
+    # carry no location yet still rotate what hangs from them, so the rotation is taken from the
+    # whole tree rather than from the chain.
+    rotation = chain[0].get_absolute_rotation()
+    matrix = (
+      None if rotation._quaternion == (1.0, 0.0, 0.0, 0.0) else rotation.get_rotation_matrix()
     )
-    return parent_pos + rotated_location + rotated_anchor
+    position = cast(Coordinate, chain[0].location)
+
+    # 2b. Accumulate each child's offset in its parent's frame
+    for parent, child in zip(chain, chain[1:]):
+      anchor, location = parent.get_anchor(), cast(Coordinate, child.location)
+      if matrix is None:
+        position += anchor + location
+      else:
+        position += Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector())) + Coordinate(
+          *matrix_vector_multiply_3x3(matrix, location.vector())
+        )
+      if child.rotation._quaternion != (1.0, 0.0, 0.0, 0.0):
+        rotation = rotation + child.rotation
+        matrix = rotation.get_rotation_matrix()
+
+    # 3. Apply the requested anchor
+    anchor = self.get_anchor(x=x, y=y, z=z)
+    if matrix is None:
+      return position + anchor
+    return position + Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector()))
 
   def get_location_wrt(
     self, other: Resource, x: str = "l", y: str = "f", z: str = "b"
@@ -877,14 +892,111 @@ class Resource(SerializableMixin):
     if changed and self.parent is not None:
       self._state_updated()
 
-  def rotate(self, x: float = 0, y: float = 0, z: float = 0):
-    """Rotate counter-clockwise by the given number of degrees."""
+  def _apply_pivot_shift(self, before: List[List[float]], pivot_coordinate: Coordinate) -> None:
+    """Shift `location` so `pivot_coordinate` ends where it was before this resource turned.
 
-    self.rotation.x = (self.rotation.x + x) % 360
-    self.rotation.y = (self.rotation.y + y) % 360
-    self.rotation.z = (self.rotation.z + z) % 360
+    Args:
+      before: this resource's absolute rotation matrix, from before the turn.
+      pivot_coordinate: what to hold still, in this resource's own frame.
+    """
+    after = self.get_absolute_rotation().get_rotation_matrix()
+    was = matrix_vector_multiply_3x3(before, pivot_coordinate.vector())
+    now = matrix_vector_multiply_3x3(after, pivot_coordinate.vector())
+    shift = Coordinate(was[0] - now[0], was[1] - now[1], was[2] - now[2])
+    # `shift` is in this resource's frame, `location` in the parent's. A rotation matrix
+    # inverts by transposing. A parent with no location of its own is where
+    # `get_absolute_location` stops walking, so `location` is read in absolute axes from there
+    # and needs no conversion.
+    parent = self.parent
+    if parent is not None and parent.location is not None:
+      turned = parent.get_absolute_rotation().get_rotation_matrix()
+      shift = Coordinate(
+        *matrix_vector_multiply_3x3(
+          [[turned[j][i] for j in range(3)] for i in range(3)], shift.vector()
+        )
+      )
+    # Straight onto the field: the caller fires one `_state_updated` for the whole turn, and
+    # going through the setter would fire a second carrying the same final state.
+    self._location = cast(Coordinate, self.location) + shift
+
+  def _pivot_reference(self, pivot_coordinate: Optional[Coordinate]) -> Optional[List[List[float]]]:
+    """The rotation to measure a pivoted turn against, or None when no pivot was asked for.
+
+    Args:
+      pivot_coordinate: what the caller wants held still, if anything.
+
+    Returns:
+      This resource's absolute rotation matrix, to hand back after the turn.
+
+    Raises:
+      NoLocationError: If a pivot is given for a resource with no location. A pivot is held by
+        moving `location`, so there is nothing to hold it with.
+    """
+    if pivot_coordinate is None:
+      return None
+    if self.location is None:
+      raise NoLocationError(f"Resource '{self.name}' has no location, so a pivot cannot be held.")
+    return self.get_absolute_rotation().get_rotation_matrix()
+
+  def rotate(
+    self,
+    x: float = 0,
+    y: float = 0,
+    z: float = 0,
+    pivot_coordinate: Optional[Coordinate] = None,
+  ):
+    """Rotate counter-clockwise around the parent-coordinate axes by the given degrees.
+
+    Args:
+      x: degrees to turn about X.
+      y: degrees to turn about Y.
+      z: degrees to turn about Z.
+      pivot_coordinate: what to turn about, in this resource's own frame. Its own origin when
+        None, which is what a resource turns about when nothing is said. Given one, `location`
+        carries by however far the turn moved it, so it ends where it began.
+
+    Raises:
+      NoLocationError: If a pivot is given for a resource with no location. A pivot is held by
+        moving `location`, so there is nothing to hold it with.
+    """
+    before = self._pivot_reference(pivot_coordinate)
+
+    self.rotation._prepend(Rotation(x=x, y=y, z=z))
+
+    if before is not None:
+      self._apply_pivot_shift(before, cast(Coordinate, pivot_coordinate))
+
     # Rotation is part of the resource's state; notify subscribers (e.g. the
     # Visualizer) so they can re-render.
+    self._state_updated()
+
+  def rotate_to(
+    self,
+    x: Optional[float] = None,
+    y: Optional[float] = None,
+    z: Optional[float] = None,
+    pivot_coordinate: Optional[Coordinate] = None,
+  ):
+    """Set the rotation about each axis, where `rotate` turns by an amount instead.
+
+    Args:
+      x: the angle about X to sit at, in degrees. Left where it is when None.
+      y: the angle about Y to sit at, in degrees. Left where it is when None.
+      z: the angle about Z to sit at, in degrees. Left where it is when None.
+      pivot_coordinate: what to turn about, as `rotate` takes it.
+
+    Raises:
+      NoLocationError: If a pivot is given for a resource with no location, as `rotate` raises.
+    """
+    before = self._pivot_reference(pivot_coordinate)
+
+    self.rotation.x = self.rotation.x if x is None else x % 360
+    self.rotation.y = self.rotation.y if y is None else y % 360
+    self.rotation.z = self.rotation.z if z is None else z % 360
+
+    if before is not None:
+      self._apply_pivot_shift(before, cast(Coordinate, pivot_coordinate))
+
     self._state_updated()
 
   def copy(self) -> Self:
@@ -892,11 +1004,28 @@ class Resource(SerializableMixin):
     resource_copy.load_all_state(self.serialize_all_state())
     return resource_copy
 
-  def rotated(self, x: float = 0, y: float = 0, z: float = 0) -> Self:
-    """Return a copy of this resource rotated by the given number of degrees."""
+  def rotated(
+    self,
+    x: float = 0,
+    y: float = 0,
+    z: float = 0,
+    pivot_coordinate: Optional[Coordinate] = None,
+  ) -> Self:
+    """Return a copy of this resource rotated by the given number of degrees.
+
+    Args:
+      x: degrees to turn about X.
+      y: degrees to turn about Y.
+      z: degrees to turn about Z.
+      pivot_coordinate: what to turn about, as `rotate` takes it.
+    """
 
     new_resource = self.copy()
-    new_resource.rotate(x=x, y=y, z=z)
+    # Only passed when given, so a subclass overriding `rotate` without it keeps working.
+    if pivot_coordinate is None:
+      new_resource.rotate(x=x, y=y, z=z)
+    else:
+      new_resource.rotate(x=x, y=y, z=z, pivot_coordinate=pivot_coordinate)
     return new_resource
 
   def at(self, location: Coordinate) -> Self:

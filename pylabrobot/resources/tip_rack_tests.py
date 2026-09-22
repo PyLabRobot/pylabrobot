@@ -1,8 +1,27 @@
+import os
+import tempfile
 import unittest
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.lid import Lid
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.resource_stack import ResourceStack
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipRack, TipSpot
+from pylabrobot.resources.tip_rack import NestedTipRack, StandingTipRack, TipRack, TipSpot
+from pylabrobot.resources.utils import create_ordered_items_2d
+
+
+def _make_tip(name: str) -> Tip:
+  """Create a vendor-independent tip for resource tests."""
+  return Tip(
+    name=name,
+    has_filter=False,
+    maximal_volume=10.0,
+    fitting_depth=1.0,
+    diameter=1.0,
+    size_z=10.0,
+  )
 
 
 class SimpleTipRack(TipRack):
@@ -13,7 +32,7 @@ class SimpleTipRack(TipRack):
       name="A1",
       size_x=1.0,
       size_y=1.0,
-      make_tip=lambda name: Tip(False, 10.0, 10.0, 1.0, name=name),
+      make_tip=_make_tip,
     )
     spot.location = Coordinate(0.0, 0.0, 0.0)
     ordered_items = {"A1": spot}
@@ -48,3 +67,141 @@ class TipRackNamingTests(unittest.TestCase):
     spot = rack.get_item("A1")
     tip = spot.tracker.get_tip()
     self.assertIsNotNone(tip.name)
+
+  def test_deserialize_prototype_with_resource_state(self):
+    """A restored spot constructs named tips from a resource prototype."""
+    spot = TipSpot("spot", 9, 9, make_tip=_make_tip)
+    data = spot.serialize()
+    data["prototype_tip"]["rotation"] = {"type": "Rotation", "x": 0, "y": 0, "z": 90}
+    data["prototype_tip"]["metadata"] = {"batch": "example"}
+    data["prototype_tip"]["location"] = Coordinate(1, 2, 3).serialize()
+
+    restored = TipSpot.deserialize(data)
+    first, second = restored.make_tip(), restored.make_tip()
+    self.assertIsInstance(first, Tip)
+    self.assertNotEqual(first.name, second.name)
+    self.assertEqual(first.rotation.z, 90)
+    self.assertEqual(first.metadata, {"batch": "example"})
+    self.assertIsNone(first.location)
+
+
+class NestedTipRackTests(unittest.TestCase):
+  """A nesting rack keeps its definition through a copy, a round trip and a saved deck."""
+
+  @staticmethod
+  def _rack(name: str) -> StandingTipRack:
+    """Create a vendor-independent rack with tips and a known stacking height."""
+    return StandingTipRack(
+      name=name,
+      size_x=30,
+      size_y=20,
+      size_z=25,
+      stacking_z_height=10,
+      model="test_tip_rack",
+      ordered_items=create_ordered_items_2d(
+        TipSpot,
+        num_items_x=3,
+        num_items_y=2,
+        dx=2,
+        dy=2,
+        dz=25,
+        item_dx=8,
+        item_dy=8,
+        size_x=1,
+        size_y=1,
+        make_tip=_make_tip,
+        name_prefix=name,
+      ),
+    )
+
+  def test_deserialize_round_trip(self):
+    rack = self._rack("rack")
+
+    restored = StandingTipRack.deserialize(rack.serialize())
+
+    self.assertEqual(restored.stacking_z_height, rack.stacking_z_height)
+    self.assertEqual(restored.model, rack.model)
+    self.assertEqual(restored.num_items, rack.num_items)
+
+  def test_copy_stacks_like_original(self):
+    rack = self._rack("rack")
+    copied = rack.copy()
+
+    on_rack, on_copy = ResourceStack("on_rack", "z"), ResourceStack("on_copy", "z")
+    on_rack.assign_child_resource(rack)
+    on_rack.assign_child_resource(self._rack("stacked_on_rack"))
+    on_copy.assign_child_resource(copied)
+    on_copy.assign_child_resource(self._rack("stacked_on_copy"))
+
+    self.assertEqual(copied.stacking_z_height, rack.stacking_z_height)
+    self.assertEqual(
+      on_copy.get_resource("stacked_on_copy").location,
+      on_rack.get_resource("stacked_on_rack").location,
+    )
+    stacked = on_rack.get_resource("stacked_on_rack")
+    assert stacked.location is not None
+    self.assertEqual(stacked.location.z, rack.stacking_z_height)
+
+  def test_save_and_load_deck(self):
+    deck = Deck(size_x=1000, size_y=1000, size_z=1000)
+    rack = self._rack("rack")
+    deck.assign_child_resource(rack, location=Coordinate(100, 100, 0))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+      fn = os.path.join(tmp_dir, "deck.json")
+      deck.save(fn)
+      loaded = Deck.load_from_json_file(fn)
+
+    loaded_rack = loaded.get_resource("rack")
+    assert isinstance(loaded_rack, StandingTipRack)
+    self.assertEqual(loaded_rack.stacking_z_height, rack.stacking_z_height)
+    self.assertEqual(loaded_rack.location, rack.location)
+
+
+class TipRackLidTests(unittest.TestCase):
+  def _lid(self, name="lid"):
+    return Lid(name, size_x=10, size_y=10, size_z=10, nesting_z_height=2)
+
+  def test_a_lid_seats_on_the_top_face_and_covers_the_rack(self):
+    rack = StandingTipRack("rack", size_x=10, size_y=10, size_z=55, ordered_items={})
+    self.assertTrue(rack._available_for_tip_handling)
+    rack.lid = self._lid()
+    self.assertEqual(rack.lid.location, Coordinate(0, 0, 53))
+    self.assertFalse(rack._available_for_tip_handling)
+    with self.assertRaisesRegex(ValueError, "already has a lid"):
+      rack.lid = self._lid("lid_2")
+
+  def test_only_the_top_rack_of_a_stack_is_available(self):
+    lower = StandingTipRack("lower", size_x=10, size_y=10, size_z=55, ordered_items={})
+    upper = StandingTipRack("upper", size_x=10, size_y=10, size_z=55, ordered_items={})
+    stack = ResourceStack("stack", "z")
+    stack.assign_child_resource(lower)
+    stack.assign_child_resource(upper)
+    self.assertFalse(lower._available_for_tip_handling)
+    self.assertTrue(upper._available_for_tip_handling)
+
+  def test_a_nested_tip_rack_takes_a_lid(self):
+    with self.assertWarns(DeprecationWarning):
+      rack = NestedTipRack(
+        "rack", size_x=10, size_y=10, size_z=20, stacking_z_height=12, ordered_items={}
+      )
+    rack.lid = self._lid()
+    self.assertEqual(rack.lid.location, Coordinate(0, 0, 18))
+
+
+class StandingTipRackTests(unittest.TestCase):
+  def test_serialize_round_trip(self):
+    rack = StandingTipRack(
+      "rack",
+      size_x=10,
+      size_y=10,
+      size_z=55,
+      ordered_items={},
+      stacking_z_height=16,
+      frame_height=3,
+    )
+    restored = Resource.deserialize(rack.serialize())
+    assert isinstance(restored, StandingTipRack)
+    self.assertEqual(restored.stacking_z_height, 16)
+    self.assertEqual(restored.frame_height, 3)
+    self.assertEqual(restored, rack)

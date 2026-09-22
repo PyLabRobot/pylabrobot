@@ -10,13 +10,13 @@ import pytest
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.legacy.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
-from pylabrobot.legacy.liquid_handling.channel_positioning import (
-  get_tight_single_resource_liquid_op_offsets,
-)
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.strictness import (
   Strictness,
   set_strictness,
+)
+from pylabrobot.lib.liquid_handling.channel_positioning import (
+  get_tight_single_resource_liquid_op_offsets,
 )
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
@@ -31,7 +31,9 @@ from pylabrobot.resources import (
   ResourceHolder,
   ResourceNotFoundError,
   ResourceStack,
+  StandingTipRack,
   TipRack,
+  TipSpot,
   cor_96_wellplate_360uL_Fb,
   hamilton_1_trough_200mL_Vb,
   nest_1_troughplate_195000uL_Vb,
@@ -47,6 +49,7 @@ from pylabrobot.resources.hamilton import (
   STARLetDeck,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
+  hamilton_tip_50uL,
 )
 from pylabrobot.resources.revvity.plates import Revvity_384_wellplate_28ul_Ub
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -134,37 +137,37 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
     plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
 
-    self.deck.assign_child_resource(tip_car, rails=1)
-    self.deck.assign_child_resource(plt_car, rails=21)
+    self.deck.assign_child_resource(tip_car, track=1)
+    self.deck.assign_child_resource(plt_car, track=21)
 
     # Test placing a carrier at a location where another carrier is located.
     with self.assertRaises(ValueError):
       dbl_plt_car_1 = PLT_CAR_L5AC_A00(name="double placed carrier 1")
-      self.deck.assign_child_resource(dbl_plt_car_1, rails=1)
+      self.deck.assign_child_resource(dbl_plt_car_1, track=1)
 
     with self.assertRaises(ValueError):
       dbl_plt_car_2 = PLT_CAR_L5AC_A00(name="double placed carrier 2")
-      self.deck.assign_child_resource(dbl_plt_car_2, rails=2)
+      self.deck.assign_child_resource(dbl_plt_car_2, track=2)
 
     with self.assertRaises(ValueError):
       dbl_plt_car_3 = PLT_CAR_L5AC_A00(name="double placed carrier 3")
-      self.deck.assign_child_resource(dbl_plt_car_3, rails=20)
+      self.deck.assign_child_resource(dbl_plt_car_3, track=20)
 
     # Test invalid rails.
     with self.assertRaises(ValueError):
-      self.deck.assign_child_resource(plt_car, rails=-1)
+      self.deck.assign_child_resource(plt_car, track=-1)
     with self.assertRaises(ValueError):
-      self.deck.assign_child_resource(plt_car, rails=42)
+      self.deck.assign_child_resource(plt_car, track=42)
     with self.assertRaises(ValueError):
-      self.deck.assign_child_resource(plt_car, rails=27)
+      self.deck.assign_child_resource(plt_car, track=27)
 
   def test_get_resource(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
-    self.deck.assign_child_resource(tip_car, rails=1)
-    self.deck.assign_child_resource(plt_car, rails=10)
+    self.deck.assign_child_resource(tip_car, track=1)
+    self.deck.assign_child_resource(plt_car, track=10)
 
     # Get resource.
     self.assertEqual(self.lh.deck.get_resource("tip_carrier").name, "tip_carrier")
@@ -199,8 +202,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
     plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
-    self.deck.assign_child_resource(tip_car, rails=1)
-    self.deck.assign_child_resource(plt_car, rails=10)
+    self.deck.assign_child_resource(tip_car, track=1)
+    self.deck.assign_child_resource(plt_car, track=10)
 
     # Rails 10 should be left of rails 1.
     self.assertGreater(
@@ -219,16 +222,16 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       Coordinate(302.5, 63.0, 100.0),
     )
 
-    # Subresources.
+    # Tip spots are at the support height: 100 + 114.95 - 6 + 7.5 = 216.45 mm.
     self.assertEqual(
       cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_item("A1").get_absolute_location()
       + cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_item("A1").center(),
-      Coordinate(117.900, 145.800, 164.450),
+      Coordinate(117.900, 145.800, 216.450),
     )
     self.assertEqual(
       cast(TipRack, self.lh.deck.get_resource("tip_rack_04")).get_item("A1").get_absolute_location()
       + cast(TipRack, self.lh.deck.get_resource("tip_rack_04")).get_item("A1").center(),
-      Coordinate(117.900, 433.800, 131.450),
+      Coordinate(117.900, 433.800, 216.450),
     )
 
     self.assertEqual(
@@ -246,9 +249,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="sub")
-    self.deck.assign_child_resource(tip_car, rails=1)
+    self.deck.assign_child_resource(tip_car, track=1)
     with self.assertRaises(ValueError):
-      self.deck.assign_child_resource(plt_car, rails=10)
+      self.deck.assign_child_resource(plt_car, track=10)
 
   def test_illegal_subresource_assignment_after(self):
     # Test assigning subresource with the same name as another resource in another carrier, after
@@ -257,15 +260,15 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="ok")
-    self.deck.assign_child_resource(tip_car, rails=1)
-    self.deck.assign_child_resource(plt_car, rails=10)
+    self.deck.assign_child_resource(tip_car, track=1)
+    self.deck.assign_child_resource(plt_car, track=10)
     with self.assertRaises(ValueError):
       plt_car[1] = cor_96_wellplate_360uL_Fb(name="sub")
 
   async def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
-    self.deck.assign_child_resource(plt_car, rails=21)
+    self.deck.assign_child_resource(plt_car, track=21)
 
     await self.lh.move_plate(plate, plt_car[2])
     self.assertIsNotNone(plt_car[2].resource)
@@ -279,7 +282,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
   async def test_move_plate_free(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
-    self.deck.assign_child_resource(plt_car, rails=1)
+    self.deck.assign_child_resource(plt_car, track=1)
 
     await self.lh.move_plate(plate, Coordinate(1000, 1000, 1000))
     self.assertIsNotNone(self.lh.deck.get_resource("plate"))
@@ -518,6 +521,31 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
 
+  async def test_consolidate_tip_inventory(self):
+    """Execute library-planned transfers through the normal tracked tip operations."""
+    self.tip_rack.set_tip_state([index >= 86 for index in range(96)])
+    self.backend.can_pick_up_tip.side_effect = lambda channel, tip: channel in [1, 3, 5]
+    tips = [spot.tracker.get_tip() for spot in self.tip_rack.get_all_items()[86:]]
+    set_tip_tracking(True)
+    try:
+      await self.lh.consolidate_tip_inventory([self.tip_rack])
+      self.assertEqual(
+        [spot.has_tip() for spot in self.tip_rack.get_all_items()],
+        [True] * 10 + [False] * 86,
+      )
+      self.assertEqual(
+        [spot.tracker.get_tip() for spot in self.tip_rack.get_all_items()[:10]], tips
+      )
+      self.assertFalse(any(tracker.has_tip for tracker in self.lh.head.values()))
+      self.assertEqual(self.backend.pick_up_tips.call_count, 4)
+      self.assertEqual(self.backend.drop_tips.call_count, 4)
+      self.assertEqual(
+        [call.kwargs["use_channels"] for call in self.backend.pick_up_tips.call_args_list],
+        [[1, 3, 5], [1, 3, 5], [1, 3, 5], [1]],
+      )
+    finally:
+      set_tip_tracking(False)
+
   async def test_offsets_tips(self):
     tip_spot = self.tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
@@ -685,7 +713,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(pickup["resources"][0]["type"], "TipSpot")
     self.assertTrue(
       any(
-        ancestor["name"] == self.tip_rack.name and ancestor["type"] == "TipRack"
+        ancestor["name"] == self.tip_rack.name and ancestor["type"] == "EmbeddedTipRack"
         for ancestor in pickup["resources"][0]["ancestors"]
       )
     )
@@ -731,7 +759,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ],
     )
     self.assertEqual(events[0].context["resources"][0]["name"], self.tip_rack.name)
-    self.assertEqual(events[0].context["resources"][0]["type"], "TipRack")
+    self.assertEqual(events[0].context["resources"][0]["type"], "EmbeddedTipRack")
 
   async def _exercise_evented_operations_with_argument_style(
     self, *, use_keywords: bool
@@ -1116,22 +1144,22 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         ops=[
           Drop(
             self.deck.get_trash_area(),
-            tip=tips[3],
+            tip=tips[0],
             offset=offsets[0],
           ),
           Drop(
             self.deck.get_trash_area(),
-            tip=tips[2],
+            tip=tips[1],
             offset=offsets[1],
           ),
           Drop(
             self.deck.get_trash_area(),
-            tip=tips[1],
+            tip=tips[2],
             offset=offsets[2],
           ),
           Drop(
             self.deck.get_trash_area(),
-            tip=tips[0],
+            tip=tips[3],
             offset=offsets[3],
           ),
         ],
@@ -1310,6 +1338,67 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       self.assertTrue(self.lh.head96[i].has_tip)
 
     set_tip_tracking(enabled=False)
+
+
+def _standing_tip_rack(name: str) -> StandingTipRack:
+  return StandingTipRack(
+    name=name,
+    size_x=127.76,
+    size_y=85.48,
+    size_z=55.0,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.0,
+      dy=7.0,
+      dz=55.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=7.2,
+      size_y=7.2,
+      make_tip=hamilton_tip_50uL,
+      name_prefix=name,
+    ),
+    stacking_z_height=16.0,
+  )
+
+
+class TestCoveredTipRacks(unittest.IsolatedAsyncioTestCase):
+  """A tip rack with a lid, or another rack stacked on it, cannot be reached."""
+
+  async def asyncSetUp(self):
+    self.backend = _create_mock_backend(num_channels=8)
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    self.stack = ResourceStack("stack", direction="z")
+    self.bottom = _standing_tip_rack("bottom")
+    self.top = _standing_tip_rack("top")
+    self.stack.assign_child_resource(self.bottom)
+    self.stack.assign_child_resource(self.top)
+    self.deck.assign_child_resource(self.stack, location=Coordinate(100, 100, 0))
+    await self.lh.setup()
+
+  async def test_only_the_top_rack_of_a_stack_can_be_picked_up_from(self):
+    with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
+      await self.lh.pick_up_tips([self.bottom.get_item("A1")])
+    self.backend.pick_up_tips.assert_not_called()
+    await self.lh.pick_up_tips([self.top.get_item("A1")])
+    self.backend.pick_up_tips.assert_called_once()
+
+  async def test_tips_are_not_dropped_into_a_covered_rack(self):
+    with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
+      await self.lh.drop_tips([self.bottom.get_item("A1")])
+    self.backend.drop_tips.assert_not_called()
+
+  async def test_a_lid_covers_a_rack_for_the_96_head(self):
+    self.top.lid = Lid("lid", size_x=127.76, size_y=85.48, size_z=10.0, nesting_z_height=2.0)
+    with self.assertRaisesRegex(ValueError, "'top': something is stacked on top of it"):
+      await self.lh.pick_up_tips96(self.top)
+    with self.assertRaisesRegex(ValueError, "'top': something is stacked on top of it"):
+      await self.lh.drop_tips96(self.top)
+    self.backend.pick_up_tips96.assert_not_called()
+    self.backend.drop_tips96.assert_not_called()
 
 
 class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):

@@ -1,13 +1,17 @@
 import textwrap
 import unittest
+from typing import cast
 
-from pylabrobot.resources import Deck, TipRack
+from pylabrobot.resources import Coordinate, Deck, Resource, TipRack
 from pylabrobot.resources.corning import (
   cor_96_wellplate_360uL_Fb,
 )
 from pylabrobot.resources.hamilton import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
+  HamiltonCoreGrippers,
+  HamiltonDeck,
+  STARDeck,
   STARLetDeck,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
@@ -18,6 +22,86 @@ from pylabrobot.resources.stanley.cups import (
 
 
 class HamiltonDeckTests(unittest.TestCase):
+  def test_rails_is_deprecated(self):
+    """`rails` still places a resource, and says it is deprecated."""
+    deck = STARLetDeck()
+    with self.assertWarns(DeprecationWarning):
+      deck.assign_child_resource(TIP_CAR_480_A00(name="tip_carrier"), rails=1)
+    self.assertEqual(
+      deck.get_resource("tip_carrier").get_location_wrt(deck).x,
+      deck.track_to_location(1).x,
+    )
+
+  def test_track_and_rails_together_is_refused(self):
+    """Passing both is a mistake rather than a preference."""
+    deck = STARLetDeck()
+    with self.assertRaises(ValueError):
+      deck.assign_child_resource(TIP_CAR_480_A00(name="tip_carrier"), track=1, rails=1)
+
+  def test_num_tracks_and_num_rails_together_is_refused(self):
+    class OwnDeck(HamiltonDeck):
+      def track_to_location(self, track: int) -> Coordinate:
+        return Coordinate(100.0 + (track - 1) * 22.5, 63, 100)
+
+    with self.assertRaises(ValueError):
+      OwnDeck(num_tracks=30, num_rails=30, size_x=1000, size_y=600, size_z=300)
+
+  def test_a_deck_saved_with_num_rails_loads_with_the_tracks_it_has(self):
+    """A saved STAR deck counted two more rails than it has tracks."""
+    for factory, tracks in ((STARLetDeck, 30), (STARDeck, 54)):
+      data = factory().serialize()
+      data["num_rails"] = data.pop("num_tracks") + 2
+      with self.assertWarns(DeprecationWarning):
+        deck = Deck.deserialize(data)
+      self.assertEqual(cast(HamiltonDeck, deck).num_tracks, tracks)
+
+  def test_num_rails_counts_as_it_did(self):
+    with self.assertWarns(DeprecationWarning):
+      self.assertEqual((STARLetDeck().num_rails, STARDeck().num_rails), (32, 56))
+
+  def test_rails_is_bounded_as_it_was_and_track_by_the_tracks(self):
+    deck = STARLetDeck()
+    with self.assertWarns(DeprecationWarning):
+      deck.assign_child_resource(Resource("front", size_x=20, size_y=20, size_z=20), rails=32)
+    with self.assertRaises(ValueError):
+      deck.assign_child_resource(Resource("front_2", size_x=20, size_y=20, size_z=20), track=32)
+
+  def test_names_the_module_had_still_import(self):
+    from pylabrobot.resources.hamilton import core_grippers, hamilton_decks, star_decks
+
+    for name in ("HamiltonSTARDeck", "STARDeck", "STARLetDeck"):
+      self.assertIs(getattr(hamilton_decks, name), getattr(star_decks, name))
+    self.assertIs(
+      hamilton_decks.hamilton_core_gripper_1000ul_at_waste,
+      core_grippers.hamilton_core_gripper_1000ul_at_waste,
+    )
+    self.assertEqual((hamilton_decks.STARLET_NUM_RAILS, hamilton_decks.STAR_NUM_RAILS), (32, 56))
+
+  def test_hamilton_deck_takes_its_track_count_first_as_it_took_rails(self):
+    class OwnDeck(HamiltonDeck):
+      def track_to_location(self, track: int) -> Coordinate:
+        return Coordinate(100.0 + (track - 1) * 22.5, 63, 100)
+
+    deck = OwnDeck(30, 1000, 600, 300)
+    self.assertEqual((deck.num_tracks, deck.get_size_x()), (30, 1000))
+
+  def test_a_deck_implementing_rails_to_location_still_places_by_track(self):
+    class RailsDeck(HamiltonDeck):
+      def rails_to_location(self, rails: int) -> Coordinate:
+        return Coordinate(100.0 + (rails - 1) * 22.5, 63, 100)
+
+    deck = RailsDeck(30, 1000, 600, 300)
+    self.assertEqual(deck.track_to_location(3), Coordinate(145.0, 63, 100))
+    deck.assign_child_resource(TIP_CAR_480_A00(name="tip_carrier"), track=3)
+    self.assertEqual(deck.get_resource("tip_carrier").location, Coordinate(145.0, 63, 100))
+
+  def test_a_deck_implementing_neither_location_method_is_refused(self):
+    class NoTracksDeck(HamiltonDeck):
+      pass
+
+    with self.assertRaises(TypeError):
+      NoTracksDeck(30, 1000, 600, 300)
+
   """Tests for the HamiltonDeck class."""
 
   def build_layout(self):
@@ -33,8 +117,8 @@ class HamiltonDeckTests(unittest.TestCase):
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
     plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
 
-    deck.assign_child_resource(tip_car, rails=1)
-    deck.assign_child_resource(plt_car, rails=21)
+    deck.assign_child_resource(tip_car, track=1)
+    deck.assign_child_resource(plt_car, track=21)
 
     return deck
 
@@ -45,29 +129,31 @@ class HamiltonDeckTests(unittest.TestCase):
       deck.summary(),
       textwrap.dedent(
         """
-    Rail  Resource                      Type                 Coordinates (mm)
-    =======================================================================================
-    (-6)  ├── trash_core96              Trash                (-58.200, 106.000, 216.400)
+    Rail  Resource                           Type                    Coordinates (mm)
+    ===============================================================================================
+    (-6)  ├── trash_core96                   Trash                   (-58.200, 106.000, 216.400)
           │
-    (1)   ├── tip_carrier               TipCarrier           (100.000, 063.000, 100.000)
-          │   ├── tip_rack_01           TipRack              (106.200, 073.000, 214.950)
-          │   ├── tip_rack_02           TipRack              (106.200, 169.000, 214.950)
+    (1)   ├── tip_carrier                    TipCarrier              (100.000, 063.000, 100.000)
+          │   ├── tip_rack_01                EmbeddedTipRack         (106.200, 073.000, 208.950)
+          │   ├── tip_rack_02                EmbeddedTipRack         (106.200, 169.000, 208.950)
           │   ├── <empty>
-          │   ├── tip_rack_04           TipRack              (106.200, 361.000, 214.950)
-          │   ├── <empty>
-          │
-    (21)  ├── plate carrier             PlateCarrier         (550.000, 063.000, 100.000)
-          │   ├── aspiration plate      Plate                (554.000, 071.500, 183.120)
-          │   ├── <empty>
-          │   ├── dispense plate        Plate                (554.000, 263.500, 183.120)
-          │   ├── <empty>
+          │   ├── tip_rack_04                EmbeddedTipRack         (106.200, 361.000, 208.950)
           │   ├── <empty>
           │
-    (31)  ├── waste_block               Resource             (775.000, 115.000, 100.000)
-          │   ├── teaching_tip_rack     TipRack              (780.900, 461.100, 100.000)
-          │   ├── core_grippers         HamiltonCoreGrippers (797.500, 085.500, 205.000)
+    (21)  ├── plate carrier                  PlateCarrier            (550.000, 063.000, 100.000)
+          │   ├── aspiration plate           Plate                   (554.000, 071.500, 183.120)
+          │   ├── <empty>
+          │   ├── dispense plate             Plate                   (554.000, 263.500, 183.120)
+          │   ├── <empty>
+          │   ├── <empty>
           │
-    (32)  ├── trash                     Trash                (800.000, 190.600, 137.100)
+    (31)  ├── waste_block                    Resource                (775.000, 115.000, 100.000)
+          │   ├── teaching_tip_rack          TipRack                 (780.900, 461.100, 100.000)
+          │   ├── core_grippers              HamiltonCoreGrippers    (797.500, 085.500, 200.500)
+          │   │   ├── core_grippers_front    HamiltonCoreGripperTool (779.500, 102.750, 203.000)
+          │   │   ├── core_grippers_back     HamiltonCoreGripperTool (779.500, 120.750, 203.000)
+          │
+    (32)  ├── trash                          Trash                   (800.000, 190.600, 137.100)
     """[1:]
       ),
     )
@@ -80,7 +166,7 @@ class HamiltonDeckTests(unittest.TestCase):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     for i in range(5):
       tip_car[i] = hamilton_96_tiprack_300uL_filter(name=f"tip_rack_0{i}")
-    deck.assign_child_resource(tip_car, rails=1)
+    deck.assign_child_resource(tip_car, track=1)
 
     tip_racks = [r for r in deck.get_all_children() if isinstance(r, TipRack)]
     matches = [
@@ -122,7 +208,7 @@ class HamiltonDeckTests(unittest.TestCase):
     stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
     deck = STARLetDeck()
     with self.assertLogs("pylabrobot") as log:
-      deck.assign_child_resource(stanley_cup, rails=1)
+      deck.assign_child_resource(stanley_cup, track=1)
     self.assertEqual(
       log.output,
       [
@@ -132,3 +218,36 @@ class HamiltonDeckTests(unittest.TestCase):
         "careful when grabbing this resource.",
       ],
     )
+
+  def test_core_gripper_holder_on_the_waste_block_as_probed(self):
+    # Probed on a STAR: the holder's top is at 220.0 and it is 19.5 mm tall, so it stands at 200.5.
+    # Its centre is the x the channels take the tools at.
+    for deck, x in ((STARDeck(), 1337.5), (STARLetDeck(), 797.5)):
+      with self.subTest(deck=type(deck).__name__):
+        holder = deck.get_resource("core_grippers")
+        self.assertAlmostEqual(holder.get_location_wrt(deck).x, x)
+        self.assertAlmostEqual(holder.get_location_wrt(deck).z, 200.5)
+        self.assertAlmostEqual(holder.get_location_wrt(deck, z="t").z, 220.0)
+
+  def test_core_gripper_tools_belong_to_the_mount_and_round_trip(self):
+    """The deck owns the two parked tools and preserves them through serialization."""
+    for deck_factory in (STARDeck, STARLetDeck):
+      with self.subTest(deck=deck_factory.__name__):
+        deck = deck_factory(with_teaching_rack=False)
+        mount = deck.get_resource("core_grippers")
+        self.assertIsInstance(mount, HamiltonCoreGrippers)
+        assert isinstance(mount, HamiltonCoreGrippers)
+        self.assertEqual(len(mount.children), 2)
+        self.assertIsNot(mount.front_tool, mount.back_tool)
+        for tool in (mount.front_tool, mount.back_tool):
+          self.assertIs(tool.parent, mount)
+          self.assertIs(deck.get_resource(tool.name), tool)
+          self.assertEqual(tool.collar_height, 10)
+
+        restored = Resource.deserialize(deck.serialize())
+        self.assertEqual(restored.serialize(), deck.serialize())
+        restored_mount = restored.get_resource("core_grippers")
+        assert isinstance(restored_mount, HamiltonCoreGrippers)
+        self.assertEqual(len(restored_mount.children), 2)
+        self.assertEqual(restored_mount.front_tool, mount.front_tool)
+        self.assertEqual(restored_mount.back_tool, mount.back_tool)

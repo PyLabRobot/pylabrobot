@@ -79,7 +79,8 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
       self.api.submit_command.reset_mock()
       for tip in self.head.get_mounted_tips():
         if tip is not None:
-          tip.total_tip_length = 95.6
+          tip._size_z = 95.6
+          tip._local_size_z = 95.6
       await self.head.dispense(self.plate.column(0)[:4], 1, liquid_height=1)
       self.assertIn("dispenseInPlace", [c.args[1] for c in self.api.submit_command.await_args_list])
 

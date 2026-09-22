@@ -59,7 +59,8 @@ def _make_flex_tip_rack(
     return Tip(
       name=name,
       maximal_volume=tip_volume,
-      total_tip_length=total_tip_length,
+      diameter=_SPOT_SIZE,
+      size_z=total_tip_length,
       fitting_depth=fitting_depth,
       has_filter=has_filter,
     )

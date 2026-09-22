@@ -105,7 +105,8 @@ def _tip_rack(
   def make_tip(name: str) -> Tip:
     return Tip(
       has_filter=False,
-      total_tip_length=50.0,
+      diameter=5.0,
+      size_z=50.0,
       maximal_volume=200.0,
       fitting_depth=8.0,
       name=name,

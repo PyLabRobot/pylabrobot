@@ -268,7 +268,7 @@ def _tip_rack_well(tip_rack: TipRack, spot: TipSpot, tip: Tip) -> dict:
       "load name."
     )
   return {
-    "depth": tip.total_tip_length,
+    "depth": tip.get_size_z(),
     "x": location.x + spot.get_size_x() / 2,
     "y": location.y + spot.get_size_y() / 2,
     "z": location.z,
@@ -315,7 +315,7 @@ def build_tip_rack_definition(
     "parameters": {
       "format": _format_from_grid(tip_rack.num_items_x, tip_rack.num_items_y),
       "isTiprack": True,
-      "tipLength": tip.total_tip_length,
+      "tipLength": tip.get_size_z(),
       "tipOverlap": tip.fitting_depth,
       "loadName": load_name or _definition_load_name(tip_rack),
       "isMagneticModuleCompatible": False,

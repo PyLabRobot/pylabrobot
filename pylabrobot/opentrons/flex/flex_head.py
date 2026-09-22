@@ -1908,7 +1908,7 @@ class FlexHead8(_FlexHead):
     else:
       return
     tips = [tip for tip in self._channel_tips if tip is not None]
-    lengths = [tip.total_tip_length - tip.fitting_depth for tip in tips]
+    lengths = [tip.get_size_z() - tip.fitting_depth for tip in tips]
     if not lengths or any(not math.isfinite(length) or length <= 0 for length in lengths):
       raise ValueError("Mounted tips must define a positive effective length")
     labware = self._require_itemized_parent(target) if isinstance(target, Well) else target
