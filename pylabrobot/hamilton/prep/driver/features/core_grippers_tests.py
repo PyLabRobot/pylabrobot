@@ -1041,7 +1041,7 @@ def test_the_simulator_moves_the_grippers_where_the_device_did():
     width = plate.get_absolute_size_y()
     centre = plate.get_absolute_location(x="c", y="c")
     closed = width + JAW_OPEN_EXTRA - 2 * 4.5  # grip_distance: clearance 2.5 + squeeze 2.0
-    opened = closed + 2 * (3.0 + 4.5)  # a drop opens by its clearance and the grip distance
+    opened = closed + 2 * (2.5 + 4.5)  # a drop opens by its y_clearance and the grip distance
 
     await grippers.pick_up_tools()
     assert await jaws() == pytest.approx(

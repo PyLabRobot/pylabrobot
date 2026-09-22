@@ -37,7 +37,7 @@ class CoreGrippers:
   ``pick_up_resource`` / ``drop_resource`` / ``return_resource`` move resources, into a
   destination or to a point on the deck; ``release_plate`` opens in place, for recovery.
 
-  Prep has no grip-force field: ``clearance_y``, ``squeeze_mm`` and ``grip_speed_y`` set how hard
+  Prep has no grip-force field: ``y_clearance``, ``squeeze_mm`` and ``grip_speed_y`` set how hard
   the jaws close.
   """
 
@@ -669,7 +669,7 @@ class CoreGrippers:
     resource_length: float,
     resource_height: float,
     plate_top_z_offset: float,
-    clearance_y: float = 2.5,
+    y_clearance: float = 2.5,
     grip_speed_y: float = 5.0,
     squeeze_mm: float = 2.0,
     minimum_traverse_height_start: Optional[float] = None,
@@ -686,7 +686,8 @@ class CoreGrippers:
       resource_length: Plate length (X) in mm.
       resource_height: Plate height (Z) in mm.
       plate_top_z_offset: Offset from grip Z to plate top center Z.
-      clearance_y: Approach clearance along the grip axis (mm).
+      y_clearance: how far each gripper stands from the resource, either side, as it moves in to
+        grip it and out after letting go, in mm.
       grip_speed_y: Grip speed (mm/s).
       squeeze_mm: Additional squeeze distance beyond clearance (mm).
       minimum_traverse_height_start: the height to travel to the plate at, in mm. None goes to Z
@@ -704,7 +705,7 @@ class CoreGrippers:
     # Over the plate first, jaws open, so the pick-up is straight down: left to itself the
     # firmware dives across the deck (to 73 mm). 0 raises nothing: they are already
     # up, and with the tools on the pipettes' traverse height is more than they reach.
-    half = (resource_width + 2 * clearance_y + JAW_OPEN_EXTRA) / 2
+    half = (resource_width + 2 * y_clearance + JAW_OPEN_EXTRA) / 2
     await self._pipettes.move_to_xy_positions(
       location.x,
       {self._back_channel: location.y + half, self._front_channel: location.y - half},
@@ -727,7 +728,7 @@ class CoreGrippers:
       width=resource_width,
       height=resource_height,
     )
-    grip_distance = clearance_y + squeeze_mm
+    grip_distance = y_clearance + squeeze_mm
 
     # Held from the grip on: the raise after it carries the plate.
     async with self._temporary_z_drive_acceleration(z_acceleration, holding=True):
@@ -736,7 +737,7 @@ class CoreGrippers:
           PrepCmd.PrepPickUpPlate(
             plate_top_center=plate_top_center,
             plate=plate_dims,
-            clearance_y=clearance_y,
+            clearance_y=y_clearance,
             grip_speed_y=grip_speed_y,
             grip_distance=grip_distance,
             grip_height=location.z,
@@ -762,7 +763,7 @@ class CoreGrippers:
     self,
     location: Coordinate,
     *,
-    clearance_y: float = 3.0,
+    y_clearance: float = 2.5,
     acceleration_scale_x: int = 1,
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
@@ -774,7 +775,8 @@ class CoreGrippers:
 
     Args:
       location: where the jaws are to hold it when it is let go, as `_pick_up_at` takes it.
-      clearance_y: Release clearance along the grip axis (mm).
+      y_clearance: how far each gripper stands from the resource, either side, as it moves in to
+        grip it and out after letting go, in mm.
       acceleration_scale_x: X-axis acceleration scale; showed no effect at 2.
       minimum_traverse_height_start: the height to carry it to the destination at, in mm. None
         goes to Z safety, as high as they reach.
@@ -803,7 +805,7 @@ class CoreGrippers:
         await self._driver.send_command(
           PrepCmd.PrepDropPlate(
             plate_top_center=plate_top_center,
-            clearance_y=clearance_y,
+            clearance_y=y_clearance,
             acceleration_scale_x=acceleration_scale_x,
           )
         )
@@ -838,7 +840,7 @@ class CoreGrippers:
     resource_width: Optional[float] = None,
     resource_length: Optional[float] = None,
     resource_height: Optional[float] = None,
-    clearance_y: float = 2.5,
+    y_clearance: float = 2.5,
     grip_speed_y: float = 5.0,
     squeeze_mm: float = 2.0,
     minimum_traverse_height_start: Optional[float] = None,
@@ -856,7 +858,8 @@ class CoreGrippers:
       resource_width: its size along the grip axis, in mm. None reads it from the resource.
       resource_length: its size in x, in mm. None reads it from the resource.
       resource_height: its size in z, in mm. None reads it from the resource.
-      clearance_y: how far clear of each side the jaws open before closing, in mm.
+      y_clearance: how far each gripper stands from the resource, either side, as it moves in to
+        grip it and out after letting go, in mm.
       grip_speed_y: how fast the jaws close, in mm/s.
       squeeze_mm: how far past touching the jaws close, in mm.
       minimum_traverse_height_start: the height to travel to it at, in mm. None goes to Z safety.
@@ -896,7 +899,7 @@ class CoreGrippers:
       resource_length=resource_length,
       resource_height=resource_height,
       plate_top_z_offset=from_top,
-      clearance_y=clearance_y,
+      y_clearance=y_clearance,
       grip_speed_y=grip_speed_y,
       squeeze_mm=squeeze_mm,
       minimum_traverse_height_start=minimum_traverse_height_start,
@@ -912,7 +915,7 @@ class CoreGrippers:
     coordinate: Optional[Coordinate] = None,
     offset: Coordinate = Coordinate.zero(),
     *,
-    clearance_y: float = 3.0,
+    y_clearance: float = 2.5,
     acceleration_scale_x: int = 1,
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
@@ -925,6 +928,8 @@ class CoreGrippers:
       destination: the resource it goes into, e.g. a PrepDeck spot.
       coordinate: where its centre-centre-bottom goes, in deck coordinates. It joins the deck there.
       offset: added to where it is let go.
+      y_clearance: how far each gripper stands from the resource, either side, as it moves in to
+        grip it and out after letting go, in mm.
       z_speed: how fast it is lowered to where it is let go, in mm/s. None leaves it to the
         firmware (~133 mm/s).
 
@@ -964,7 +969,7 @@ class CoreGrippers:
     location = self._compute_drop_location(destination, offset, child)
     await self._drop_at(
       location,
-      clearance_y=clearance_y,
+      y_clearance=y_clearance,
       acceleration_scale_x=acceleration_scale_x,
       minimum_traverse_height_start=minimum_traverse_height_start,
       minimum_traverse_height_end=minimum_traverse_height_end,
@@ -977,7 +982,7 @@ class CoreGrippers:
     self,
     offset: Coordinate = Coordinate.zero(),
     *,
-    clearance_y: float = 3.0,
+    y_clearance: float = 2.5,
     acceleration_scale_x: int = 1,
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
@@ -996,7 +1001,7 @@ class CoreGrippers:
       )
     kwargs: Dict[str, Any] = {
       "offset": offset,
-      "clearance_y": clearance_y,
+      "y_clearance": y_clearance,
       "acceleration_scale_x": acceleration_scale_x,
       "minimum_traverse_height_start": minimum_traverse_height_start,
       "minimum_traverse_height_end": minimum_traverse_height_end,
