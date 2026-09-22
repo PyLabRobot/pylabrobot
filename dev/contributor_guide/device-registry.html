@@ -666,35 +666,39 @@ one object to that file.</p>
 <td><p>yes</p></td>
 <td><p>One of <code class="docutils literal notranslate"><span class="pre">wip</span></code>, <code class="docutils literal notranslate"><span class="pre">basic</span></code>, <code class="docutils literal notranslate"><span class="pre">mostly</span></code>, <code class="docutils literal notranslate"><span class="pre">full</span></code>. See <a class="reference internal" href="../user_guide/machines.html"><span class="doc">Supported Machines</span></a> for what each level means.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">capabilities</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">needs_hardware_testing</span></code></p></td>
+<td><p>no</p></td>
+<td><p>Boolean, default <code class="docutils literal notranslate"><span class="pre">false</span></code>. Set <code class="docutils literal notranslate"><span class="pre">true</span></code> when hardware testing is needed, based on the device’s docs, driver warnings, or reports. Each model can also set this boolean; omitted model flags inherit the device flag.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">capabilities</span></code></p></td>
 <td><p>no</p></td>
 <td><p>Core functions, e.g. <code class="docutils literal notranslate"><span class="pre">[&quot;heating&quot;,</span> <span class="pre">&quot;shaking&quot;]</span></code>. Must come from <code class="docutils literal notranslate"><span class="pre">CAPABILITIES</span></code> in <code class="docutils literal notranslate"><span class="pre">docs/_exts/plr_devices/data.py</span></code>. These drive the badges and the capability filter.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">api</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">api</span></code></p></td>
 <td><p>no</p></td>
 <td><p>Import path of the driver class, e.g. <code class="docutils literal notranslate"><span class="pre">pylabrobot.curiox.CurioxHT2000</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">api_version</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">api_version</span></code></p></td>
 <td><p>no</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">v1</span></code>, or <code class="docutils literal notranslate"><span class="pre">v0</span></code> for drivers still under <code class="docutils literal notranslate"><span class="pre">pylabrobot.legacy</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">doc_slug</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">doc_slug</span></code></p></td>
 <td><p>no</p></td>
 <td><p>The machine’s own page, relative to <code class="docutils literal notranslate"><span class="pre">docs/user_guide/</span></code> and without the extension. Links the device name and builds the <strong>docs</strong> link; verified at build time.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">code_slug</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">code_slug</span></code></p></td>
 <td><p>no</p></td>
 <td><p>The driver’s module or package, relative to <code class="docutils literal notranslate"><span class="pre">pylabrobot/</span></code>. Builds the <strong>code</strong> link to the source on GitHub; verified at build time.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">manager</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">manager</span></code></p></td>
 <td><p>no</p></td>
 <td><p>Forum profile of whoever looks after this driver, e.g. <code class="docutils literal notranslate"><span class="pre">https://discuss.pylabrobot.org/u/rickwierenga</span></code>. Shown as their handle, and who to ask about the device.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">oem</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">oem</span></code></p></td>
 <td><p>no</p></td>
 <td><p>Manufacturer product page.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">notes</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">notes</span></code></p></td>
 <td><p>no</p></td>
 <td><p>One line of additional context about the entry, such as functionality that is missing. Use <code class="docutils literal notranslate"><span class="pre">models</span></code> for the hardware models an entry covers.</p></td>
 </tr>
@@ -756,6 +760,24 @@ always matches them and automatically reveals matching model rows when 10 or few
 <p><code class="docutils literal notranslate"><span class="pre">capabilities</span></code>, <code class="docutils literal notranslate"><span class="pre">vendor</span></code>, <code class="docutils literal notranslate"><span class="pre">kind</span></code> and <code class="docutils literal notranslate"><span class="pre">status</span></code> each take one value and filter the rows. <code class="docutils literal notranslate"><span class="pre">search</span></code> and
 <code class="docutils literal notranslate"><span class="pre">filters</span></code> take <code class="docutils literal notranslate"><span class="pre">false</span></code> to hide the search box or the chips, which is useful for a short,
 pre-filtered list on a vendor page.</p>
+<p>The <a class="reference internal" href="../user_guide/needs-testing.html"><span class="doc">Devices that need testing</span></a> page uses:</p>
+<div class="highlight-md notranslate"><div class="highlight"><pre><span></span>```{device-table}
+:needs-hardware-testing:
+```
+</pre></div>
+</div>
+<p>This includes devices that need hardware testing and families with at least one model that needs
+it. Only flagged models appear in this table; other tables and cards keep the complete model list.
+An explicit model flag overrides the device default. For example, a family can have
+<code class="docutils literal notranslate"><span class="pre">&quot;needs_hardware_testing&quot;:</span> <span class="pre">true</span></code> with <code class="docutils literal notranslate"><span class="pre">&quot;needs_hardware_testing&quot;:</span> <span class="pre">false</span></code> on its tested model.
+A family whose models are all explicitly <code class="docutils literal notranslate"><span class="pre">false</span></code> is excluded. An omitted or <code class="docutils literal notranslate"><span class="pre">false</span></code> flag means
+there is no testing request recorded, not a claim that all firmware or operations are verified.</p>
+<p>Use existing docs, code warnings, or linked hardware reports to set the flag; do not infer it from
+<code class="docutils literal notranslate"><span class="pre">wip</span></code> or any other support level. A device or model awaiting initial hardware verification has
+<code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">&quot;wip&quot;</span></code>, even if its shared driver works on other models. After reviewing a hardware report,
+update only the tested model or device, preserve flags for untested siblings, and link the evidence
+in the device guide. Follow
+the reporting and follow-up process on <a class="reference internal" href="../user_guide/needs-testing.html"><span class="doc">Devices that need testing</span></a>.</p>
 </section>
 <section id="rendering-a-card">
 <h2>Rendering a card<a class="headerlink" href="#rendering-a-card" title="Link to this heading">#</a></h2>

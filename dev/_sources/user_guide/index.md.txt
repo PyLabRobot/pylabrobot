@@ -18,6 +18,7 @@ getting-started/units
 :hidden:
 
 machines
+needs-testing
 definitions
 generic/index
 00_liquid-handling/_liquid-handling
