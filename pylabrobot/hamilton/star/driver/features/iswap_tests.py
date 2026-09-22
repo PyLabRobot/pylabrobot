@@ -267,7 +267,9 @@ class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(await iswap.rotation_drive_request_y_position(), c.rotation_drive_y_max)
     for stop in ("left", "right"):
       angle = c.rotation_drive_increments_to_angle(
-        c.rotation_drive_predefined_increments.position(stop)
+        c.rotation_drive_predefined_increments.left
+        if stop == "left"
+        else c.rotation_drive_predefined_increments.right
       )
       straight = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.straight)
       iswap._check_pose_reachable(angle, straight)
@@ -362,13 +364,20 @@ class TestGripperDirections(unittest.IsolatedAsyncioTestCase):
     c = iswap.configuration
     assert c.rotation_drive_predefined_increments is not None
     assert c.wrist_drive_predefined_increments is not None
-    stored = {c.wrist_drive_predefined_increments.position(name) for name, _ in c.WRIST_STOP_ANGLES}
+    stored = {
+      c.wrist_drive_predefined_increments.right,
+      c.wrist_drive_predefined_increments.straight,
+      c.wrist_drive_predefined_increments.left,
+      c.wrist_drive_predefined_increments.reverse,
+    }
 
-    for rotation in ("left", "front", "right"):
+    for rotation, rotation_increments in (
+      ("left", c.rotation_drive_predefined_increments.left),
+      ("front", c.rotation_drive_predefined_increments.front),
+      ("right", c.rotation_drive_predefined_increments.right),
+    ):
       for direction in ("right", "back", "left", "front"):
-        increments = iswap._resolve_gripper_direction_increments(
-          direction, c.rotation_drive_predefined_increments.position(rotation)
-        )
+        increments = iswap._resolve_gripper_direction_increments(direction, rotation_increments)
         self.assertIn(increments, stored, f"{rotation}/{direction}")
 
 

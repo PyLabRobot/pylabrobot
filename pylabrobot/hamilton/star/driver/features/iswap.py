@@ -194,27 +194,6 @@ class iSWAPRotationPositions:
   extra_3: int
   extra_4: int
 
-  def position(self, name: str) -> int:
-    if name == "home":
-      return self.home
-    if name == "left":
-      return self.left
-    if name == "front":
-      return self.front
-    if name == "right":
-      return self.right
-    if name == "parking":
-      return self.parking
-    if name == "extra_1":
-      return self.extra_1
-    if name == "extra_2":
-      return self.extra_2
-    if name == "extra_3":
-      return self.extra_3
-    if name == "extra_4":
-      return self.extra_4
-    raise KeyError(name)
-
 
 @dataclasses.dataclass(frozen=True)
 class iSWAPWristPositions:
@@ -227,27 +206,6 @@ class iSWAPWristPositions:
   extra_1: int
   extra_2: int
   extra_3: int
-
-  def position(self, name: str) -> int:
-    if name == "home":
-      return self.home
-    if name == "right":
-      return self.right
-    if name == "straight":
-      return self.straight
-    if name == "left":
-      return self.left
-    if name == "reverse":
-      return self.reverse
-    if name == "parking":
-      return self.parking
-    if name == "extra_1":
-      return self.extra_1
-    if name == "extra_2":
-      return self.extra_2
-    if name == "extra_3":
-      return self.extra_3
-    raise KeyError(name)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -590,7 +548,12 @@ class iSWAPConfiguration:
     predefined_positions = self.wrist_drive_predefined_increments
     if predefined_positions is None:
       raise RuntimeError("the wrist drive's stops were not read; have you called `star.setup()`?")
-    return [(predefined_positions.position(name), angle) for name, angle in self.WRIST_STOP_ANGLES]
+    return [
+      (predefined_positions.right, -135.0),
+      (predefined_positions.straight, -45.0),
+      (predefined_positions.left, 45.0),
+      (predefined_positions.reverse, 135.0),
+    ]
 
   def wrist_increments_to_deg(self, increments: int) -> float:
     """A wrist-drive angle in degrees, from increments, against the calibrated stops.
@@ -1710,7 +1673,24 @@ class iSWAP:
         raise RuntimeError("the rotation drive's stops were not read; have you called `setup()`?")
       if angle not in c.rotation_drive_slots:
         raise ValueError(f"{angle!r} is not one of the stops {c.rotation_drive_slots}")
-      increments = predefined_positions.position(angle)
+      if angle == "home":
+        increments = predefined_positions.home
+      elif angle == "left":
+        increments = predefined_positions.left
+      elif angle == "front":
+        increments = predefined_positions.front
+      elif angle == "right":
+        increments = predefined_positions.right
+      elif angle == "parking":
+        increments = predefined_positions.parking
+      elif angle == "extra_1":
+        increments = predefined_positions.extra_1
+      elif angle == "extra_2":
+        increments = predefined_positions.extra_2
+      elif angle == "extra_3":
+        increments = predefined_positions.extra_3
+      else:
+        increments = predefined_positions.extra_4
     else:
       increments = c.rotation_drive_angle_to_increments(angle)
     low, high = c.rotation_range_increments
@@ -1790,8 +1770,12 @@ class iSWAP:
     # A stop's own angle converts back to the increment this arm stores for it, so a named
     # direction off a named rotation lands there without being pushed. What is left is rounding:
     # an angle a hair off a stop takes the stop, which is the tolerance legacy used.
-    for name, _ in c.WRIST_STOP_ANGLES:
-      stored = c.wrist_drive_predefined_increments.position(name)
+    for stored, _ in (
+      (c.wrist_drive_predefined_increments.right, -135.0),
+      (c.wrist_drive_predefined_increments.straight, -45.0),
+      (c.wrist_drive_predefined_increments.left, 45.0),
+      (c.wrist_drive_predefined_increments.reverse, 135.0),
+    ):
       if abs(wrist_deg - c.wrist_increments_to_deg(stored)) <= c.wrist_deg_per_increment:
         increments = stored
         break
@@ -1824,7 +1808,24 @@ class iSWAP:
         raise RuntimeError("the wrist drive's stops were not read; have you called `setup()`?")
       if angle not in c.wrist_drive_slots:
         raise ValueError(f"{angle!r} is not one of the stops {c.wrist_drive_slots}")
-      increments = stops.position(angle)
+      if angle == "home":
+        increments = stops.home
+      elif angle == "right":
+        increments = stops.right
+      elif angle == "straight":
+        increments = stops.straight
+      elif angle == "left":
+        increments = stops.left
+      elif angle == "reverse":
+        increments = stops.reverse
+      elif angle == "parking":
+        increments = stops.parking
+      elif angle == "extra_1":
+        increments = stops.extra_1
+      elif angle == "extra_2":
+        increments = stops.extra_2
+      else:
+        increments = stops.extra_3
     else:
       increments = c.wrist_deg_to_increments(angle)
     low, high = c.wrist_range_increments
