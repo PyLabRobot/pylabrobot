@@ -368,7 +368,10 @@ class PrepDriver:
         if plate_held and (force_initialize or not await self.request_initialization_status()):
           await self._release_held_plate_by_hand()
           plate_held = False
-        await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
+          # Known to need it, just asked: not asked again.
+          await self._initialize_instrument(smart=smart, force_initialize=True)
+        else:
+          await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
 
       # 3. Each feature brings itself up.
       logger.debug("[PHASE 3] Feature initialization")
