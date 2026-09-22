@@ -12,8 +12,10 @@ from pylabrobot.resources.hamilton import (
   hamilton_24_tiprack_4000uL_filter,
   hamilton_24_tiprack_5000uL,
   hamilton_96_tiprack_10uL,
+  hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL,
+  hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_raised_core_i,
   hamilton_96_tiprack_raised_core_ii,
@@ -21,7 +23,10 @@ from pylabrobot.resources.hamilton import (
   hamilton_mfx_module_tiprackholder_ntr,
   hamilton_mfx_tiprackholder_standard,
   hamilton_tip_10uL,
+  hamilton_tip_carrier_L5_ntr_a00,
 )
+from pylabrobot.resources.resource_stack import ResourceStack
+from pylabrobot.resources.tip_rack import StandingTipRack
 
 
 class StandardTipCarrierTests(unittest.TestCase):
@@ -106,13 +111,111 @@ class StandardTipCarrierTests(unittest.TestCase):
             self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
 
   def test_non_embedded_racks_on_their_carriers(self):
-    # TODO: model the 4 mL / 5 mL racks and the NTR, then place them like the standard rack
+    # TODO: model the 4 mL / 5 mL racks, then place them like the standard rack
     for carrier_fn, rack_fn in [
       (TIP_CAR_72_4mlTF_C00, hamilton_24_tiprack_4000uL_filter),
       (TIP_CAR_96BC_5mlT_A00, hamilton_24_tiprack_5000uL),
-      (TIP_CAR_NTR_A00, hamilton_96_tiprack_50uL_NTR),
     ]:
       with self.subTest(carrier=carrier_fn.__name__):
         carrier = carrier_fn("carrier")
         carrier[0] = rack = rack_fn("rack", with_tips=False)
         self.assertEqual(rack.location, Coordinate.zero())
+
+
+class NestedTipCarrierTests(unittest.TestCase):
+  def test_tip_spot_positions_on_star_deck(self):
+    # Pick-up positions, with the carrier at x 752.5
+    for rack_fn, site, a1_y in [
+      (hamilton_96_tiprack_10uL_NTR, 0, 145.8),
+      (hamilton_96_tiprack_50uL_NTR, 1, 241.8),
+      (hamilton_96_tiprack_300uL_NTR, 2, 337.8),
+    ]:
+      with self.subTest(rack=rack_fn.__name__):
+        deck = STARDeck()
+        carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")
+        carrier[site] = rack = rack_fn("rack")
+        deck.assign_child_resource(carrier, location=Coordinate(752.5, 63, 100))
+        for spot, expected in (
+          ("A1", Coordinate(770.4, a1_y, 184.0)),
+          ("H12", Coordinate(869.4, a1_y - 63, 184.0)),
+        ):
+          actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
+          for axis in ("x", "y", "z"):
+            self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
+
+  def test_tip_spot_positions_on_the_mfx_ntr4_module(self):
+    # Pick-up positions, with the MFX carrier at x 932.5 and the module in slot 3
+    for rack_fn in (
+      hamilton_96_tiprack_10uL_NTR,
+      hamilton_96_tiprack_50uL_NTR,
+      hamilton_96_tiprack_300uL_NTR,
+    ):
+      with self.subTest(rack=rack_fn.__name__):
+        deck = STARDeck()
+        module = hamilton_mfx_module_tiprackholder_ntr("module")
+        carrier = hamilton_mfx_carrier_L5_base("carrier", modules={3: module})
+        module.assign_child_resource(rack := rack_fn("rack"))
+        deck.assign_child_resource(carrier, location=Coordinate(932.5, 63, 100))
+        for spot, expected in (
+          ("A1", Coordinate(950.5, 434.0, 184.0)),
+          ("H12", Coordinate(1049.5, 371.0, 184.0)),
+        ):
+          actual = rack.get_item(spot).get_absolute_location("c", "c", "b")
+          for axis in ("x", "y", "z"):
+            self.assertAlmostEqual(getattr(actual, axis), getattr(expected, axis))
+
+  def test_a_stack_of_nested_tip_racks_on_both_holders(self):
+    # Each rack in a nest stands its 16 mm stacking height above the one below, so the top rack's
+    # A1 is at 184.0 + 16 per rack below it. Derived: no capture has picked up from a nest.
+    module = hamilton_mfx_module_tiprackholder_ntr("module")
+    mfx = hamilton_mfx_carrier_L5_base("mfx", modules={3: module})
+    ntr_carrier = hamilton_tip_carrier_L5_ntr_a00("ntr_carrier")
+    for holder, carrier, location, racks, a1 in [
+      (module, mfx, Coordinate(932.5, 63, 100), 4, Coordinate(950.5, 434.0, 184.0 + 3 * 16)),
+      (
+        ntr_carrier.sites[1],
+        ntr_carrier,
+        Coordinate(752.5, 63, 100),
+        2,
+        Coordinate(770.4, 241.8, 200.0),
+      ),
+    ]:
+      with self.subTest(holder=holder.name, racks=racks):
+        deck = STARDeck()
+        stack = ResourceStack(f"stack_{racks}", direction="z")
+        holder.assign_child_resource(stack)
+        for i in range(racks):
+          stack.assign_child_resource(hamilton_96_tiprack_50uL_NTR(f"{holder.name}_ntr{i}"))
+        deck.assign_child_resource(carrier, location=location)
+        self.assertAlmostEqual(stack.get_size_z(), 55 + (racks - 1) * 16)
+        top = stack.get_top_item()
+        assert isinstance(top, StandingTipRack)
+        actual = top.get_item("A1").get_absolute_location("c", "c", "b")
+        for axis in ("x", "y", "z"):
+          self.assertAlmostEqual(getattr(actual, axis), getattr(a1, axis))
+
+  def test_a_tip_ends_above_the_nested_racks_bottom(self):
+    # How far a tip's end stands above the rack's bottom, by tip size
+    for rack_fn, tip_end in [
+      (hamilton_96_tiprack_10uL_NTR, 31.0),
+      (hamilton_96_tiprack_50uL_NTR, 12.6),
+      (hamilton_96_tiprack_300uL_NTR, 3.0),
+    ]:
+      with self.subTest(rack=rack_fn.__name__):
+        rack = rack_fn("rack")
+        spot = rack.get_item("A1")
+        tip = spot.get_tip()
+        self.assertAlmostEqual(
+          spot.get_location_wrt(rack).z + tip.collar_height - tip.get_size_z(), tip_end, delta=0.15
+        )
+
+  def test_the_carrier_stands_29_mm_above_its_sites(self):
+    carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")
+    self.assertEqual(carrier.get_size_z(), 58.0)
+    for site in carrier.sites.values():
+      self.assertEqual(carrier.get_size_z() - site.location.z, 29.0)
+
+  def test_the_old_carrier_name_still_works(self):
+    with self.assertWarns(DeprecationWarning):
+      old = TIP_CAR_NTR_A00("carrier")
+    self.assertEqual(old, hamilton_tip_carrier_L5_ntr_a00("carrier"))

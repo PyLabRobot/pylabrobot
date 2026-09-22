@@ -33,6 +33,7 @@ from pylabrobot.resources import (
   Liquid,
   Plate,
   Resource,
+  StandingTipRack,
   Tip,
   TipRack,
   TipSpot,
@@ -529,8 +530,10 @@ class VantageBackend(HamiltonLiquidHandler):
     tip_end_positions = []
     for op in ops:
       z = op.resource.get_location_wrt(self.deck).z + op.offset.z
-      if isinstance(op.resource, TipSpot) and isinstance(op.resource.parent, EmbeddedTipRack):
-        # Embedded rack spots specify the collar support height; discard uses the tip end.
+      if isinstance(op.resource, TipSpot) and isinstance(
+        op.resource.parent, (EmbeddedTipRack, StandingTipRack)
+      ):
+        # Tip rack spots specify the collar support height; discard uses the tip end.
         tip = cast(HamiltonTip, op.tip)
         z -= tip.get_size_z() - tip.collar_height
       tip_end_positions.append(z)
