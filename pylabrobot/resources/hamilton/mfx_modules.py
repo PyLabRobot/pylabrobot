@@ -38,7 +38,7 @@ def MFX_TIP_module(name: str) -> EmbeddedTipRackHolder:
   return hamilton_mfx_tiprackholder_standard(name=name)
 
 
-def hamilton_mfx_module_tiprackholder_ntr(name: str) -> ResourceHolder:
+def hamilton_mfx_resourceholder_ntr(name: str) -> ResourceHolder:
   """Hamilton cat. no.: 191425
   Hamilton name: '_NTR4' site of an MFX carrier.
   Module to position a stack of up to 4x 96 nested tip racks (NTR).
@@ -53,7 +53,7 @@ def hamilton_mfx_module_tiprackholder_ntr(name: str) -> ResourceHolder:
     size_z=20.0,  # measured
     # The rack stands centred in the module's pocket, its SBS footprint on the module's centre.
     child_location=Coordinate(x=(135.0 - 127.76) / 2, y=(94.0 - 85.48) / 2, z=10.8),
-    model=hamilton_mfx_module_tiprackholder_ntr.__name__,
+    model=hamilton_mfx_resourceholder_ntr.__name__,
   )
 
 

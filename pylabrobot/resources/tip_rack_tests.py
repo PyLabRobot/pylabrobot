@@ -181,9 +181,10 @@ class TipRackLidTests(unittest.TestCase):
     self.assertTrue(upper._available_for_tip_handling)
 
   def test_a_nested_tip_rack_takes_a_lid(self):
-    rack = NestedTipRack(
-      "rack", size_x=10, size_y=10, size_z=20, stacking_z_height=12, ordered_items={}
-    )
+    with self.assertWarns(DeprecationWarning):
+      rack = NestedTipRack(
+        "rack", size_x=10, size_y=10, size_z=20, stacking_z_height=12, ordered_items={}
+      )
     rack.lid = self._lid()
     self.assertEqual(rack.lid.location, Coordinate(0, 0, 18))
 
