@@ -36,8 +36,8 @@ from pylabrobot.hamilton.star.driver.features.head384 import Head384, Head384Con
 from pylabrobot.hamilton.star.driver.features.iswap import (
   iSWAP,
   iSWAPConfiguration,
+  iSWAPElbowPositions,
   iSWAPGripperPositions,
-  iSWAPRotationPositions,
   iSWAPWristPositions,
   iSWAPYPositions,
   iSWAPZPositions,
@@ -648,18 +648,18 @@ class SimulatedISWAP(_Simulated, iSWAP):
     c = self.configuration
     if module == "R0":
       if command == "RW":
-        angle = self.rotation_drive_get_angle()
+        angle = self.elbow_drive_get_angle()
         if angle is not None:
           return (
-            {"rw": c.rotation_drive_angle_to_increments(angle)},
+            {"rw": c.elbow_drive_angle_to_increments(angle)},
             "which way the model has the arm pointing",
           )
-        stops = (await self._request_slots("pw"))[: len(iSWAPRotationPositions.SLOTS)]
-        parked = stops[iSWAPRotationPositions.SLOTS.index("parking")]
+        stops = (await self._request_slots("pw"))[: len(iSWAPElbowPositions.SLOTS)]
+        parked = stops[iSWAPElbowPositions.SLOTS.index("parking")]
         return {"rw": parked}, "the rotation drive's parking stop"
 
       if command == "RY":
-        point = self.rotation_drive_get_reference_point_location()
+        point = self.elbow_get_reference_point_location()
         if point is None:
           # Nothing models it yet, so where an initialized device leaves it: its parking stop, out
           # of the stored table rather than a position written down here.
@@ -671,14 +671,14 @@ class SimulatedISWAP(_Simulated, iSWAP):
         return {"ry": [increments, increments]}, "where the model has the rotation drive along Y"
 
       if command == "RZ":
-        point = self.rotation_drive_get_reference_point_location()
+        point = self.elbow_get_reference_point_location()
         if point is None:
           # Nothing models it yet, so where an initialized device leaves it: its parking stop, out
           # of the stored table rather than a height written down here.
           stops = (await self._request_slots("pz"))[: len(iSWAPZPositions.SLOTS)]
           parked = stops[iSWAPZPositions.SLOTS.index("parking")]
           return {"rz": [parked, parked]}, "the rotation drive's parking stop"
-        increments = c.z_mm_to_increments(point.z - c.rotation_drive_z_offset_above_finger)
+        increments = c.z_mm_to_increments(point.z - c.elbow_z_offset_above_finger)
         return {"rz": [increments, increments]}, "where the model has the rotation drive along Z"
       if command == "RT":
         angle = self.wrist_drive_get_angle()
@@ -719,7 +719,7 @@ class SimulatedISWAP(_Simulated, iSWAP):
       return {"ph": int(held)}, "whether the model has anything in the gripper"
 
     if (module, command) == ("C0", "RA") and kwargs.get("ra") == "kg":
-      offset = self._declared.rotation_drive_x_offset
+      offset = self._declared.elbow_x_offset
       if offset is None:
         raise RuntimeError("the simulated iSWAP has no X offset; set it on its configuration")
       return {"kg": round(offset * 10)}, "the X offset it was declared with"
@@ -760,13 +760,13 @@ class SimulatedISWAP(_Simulated, iSWAP):
     declared = self._declared
     stops: Any
     if table == "py":
-      stops, length = declared.rotation_drive_predefined_y_positions_increments, None
+      stops, length = declared.elbow_predefined_y_positions_increments, None
     elif table == "pz":
-      stops, length = declared.rotation_drive_predefined_z_positions_increments, None
+      stops, length = declared.elbow_predefined_z_positions_increments, None
     elif table == "pg":
       stops, length = declared.gripper_drive_predefined_increments, None
     elif table == "pw":
-      stops, length = declared.rotation_drive_predefined_increments, declared.link_1_length
+      stops, length = declared.elbow_drive_predefined_increments, declared.link_1_length
     else:
       stops, length = declared.wrist_drive_predefined_increments, declared.tool_length
     if stops is None:
