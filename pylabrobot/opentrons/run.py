@@ -145,7 +145,6 @@ class OpentronsRun:
           command_type,
           command.error.get("errorType", "unknown"),
           command.error.get("detail", "no detail returned"),
-          error=command.error,
         )
       if command.status not in {"queued", "running"}:
         raise OpentronsProtocolError(

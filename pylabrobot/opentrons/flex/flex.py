@@ -8,7 +8,6 @@ from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
-from pylabrobot.opentrons.flex.flex_run import COMMAND_POLL_HEADROOM, FlexRun, PipetteInfo
 from pylabrobot.opentrons.flex.flex_wire import (
   ROBOT_AXES,
   _require_robot_commands,
@@ -21,10 +20,12 @@ from pylabrobot.opentrons.labware_definitions import (
   build_tip_rack_definition,
 )
 from pylabrobot.opentrons.operations import OperationLock, serialized
+from pylabrobot.opentrons.run import COMMAND_POLL_HEADROOM, OpentronsRun
 from pylabrobot.opentrons.types import (
   InstrumentInfo,
   LabwareIdentity,
   ModuleInfo,
+  PipetteInfo,
   RobotInfo,
   RunInfo,
 )
@@ -104,7 +105,7 @@ class Flex:
   """Opentrons Flex liquid handler, over the robot-server HTTP API.
 
   A device shell composed on the shared ``pylabrobot.io.HTTP`` transport
-  (``OpentronsAPI`` + a run-scoped ``FlexRun``): it owns the deck, deck-scoped
+  (``OpentronsAPI`` + a run-scoped ``OpentronsRun``): it owns the deck, deck-scoped
   labware loading, and the discover-then-compose lifecycle that builds
   mount-addressed head sub-objects (``left``/``right``/``head96``).
   Liquid-handling ops live on the heads, not here — see
@@ -147,7 +148,7 @@ class Flex:
     self._api = OpentronsAPI(self.io)
     self._operation_lock = OperationLock()
     self._connected = False
-    self._run: Optional[FlexRun] = None
+    self._run: Optional[OpentronsRun] = None
     self.run_id: Optional[str] = None
     self.api_version: Optional[str] = None
     self.robot_model: Optional[str] = None
@@ -262,7 +263,7 @@ class Flex:
     await self._cancel_run()
     receipt = await self._api.create_run()
     self.run_id = receipt.id
-    self._run = FlexRun(
+    self._run = OpentronsRun(
       self._api,
       receipt.id,
       self.api_version or "",
@@ -307,7 +308,7 @@ class Flex:
     self.gripper = None
     self._heads.clear()
 
-  def _require_run(self) -> FlexRun:
+  def _require_run(self) -> OpentronsRun:
     """Return the active run or reject commands outside a control session."""
     if self._run is None or not self._run.active:
       raise RuntimeError("The Flex is not set up")

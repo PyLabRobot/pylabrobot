@@ -1,7 +1,5 @@
 """Errors from the Opentrons robot-server protocol."""
 
-from typing import Any, Dict, Optional
-
 
 class OpentronsError(RuntimeError):
   """An Opentrons operation could not be completed."""
@@ -15,20 +13,13 @@ class OpentronsCommandError(OpentronsError):
   """A command failed, with its server identifiers available for inspection."""
 
   def __init__(
-    self,
-    run_id: str,
-    command_id: str,
-    command_type: str,
-    error_type: str,
-    detail: str,
-    error: Optional[Dict[str, Any]] = None,
+    self, run_id: str, command_id: str, command_type: str, error_type: str, detail: str
   ) -> None:
     self.run_id = run_id
     self.command_id = command_id
     self.command_type = command_type
     self.error_type = error_type
     self.detail = detail
-    self.error = dict(error) if error is not None else {"errorType": error_type, "detail": detail}
     super().__init__(f"{command_type} failed with {error_type}: {detail}")
 
 
