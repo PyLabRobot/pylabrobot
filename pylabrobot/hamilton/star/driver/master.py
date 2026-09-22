@@ -1814,7 +1814,7 @@ class STARDriver:
         # And standing where an initialized gripper stands, so the model does not start out
         # claiming a width nothing has read. Setup reads the jaws straight after and records it.
         jaw_width=(
-          c.gripper_increments_to_mm(c.gripper_drive_predefined_increments["home"])
+          c.gripper_increments_to_mm(c.gripper_drive_predefined_increments.home)
           if c.gripper_drive_predefined_increments
           else None
         ),

@@ -10,6 +10,7 @@ simulated makes itself known: override the method that sends it, on the feature 
 """
 
 import copy
+import dataclasses
 import datetime
 import logging
 from typing import Any, Dict, List, Literal, Optional, Tuple, cast
@@ -32,7 +33,15 @@ from pylabrobot.hamilton.star.driver.features.head import (
 )
 from pylabrobot.hamilton.star.driver.features.head96 import Head96, Head96Configuration
 from pylabrobot.hamilton.star.driver.features.head384 import Head384, Head384Configuration
-from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPConfiguration
+from pylabrobot.hamilton.star.driver.features.iswap import (
+  iSWAP,
+  iSWAPConfiguration,
+  iSWAPGripperPositions,
+  iSWAPRotationPositions,
+  iSWAPWristPositions,
+  iSWAPYPositions,
+  iSWAPZPositions,
+)
 from pylabrobot.hamilton.star.driver.features.pipettes import (
   PipetteConfiguration,
   Pipettes,
@@ -724,19 +733,15 @@ class SimulatedISWAP(_Simulated, iSWAP):
     )
     if any(table is None for table in stops):
       return resp
-    y_stops, z_stops, rotation_stops, wrist_stops, gripper_stops = cast(
-      Tuple[Dict[str, int], ...], stops
-    )
+    y_stops, z_stops, rotation_stops, wrist_stops, gripper_stops = cast(Tuple[Any, ...], stops)
     self.update_location_by_reference_point(
-      y=c.y_increments_to_mm(y_stops["parking"]),
-      z=c.z_increments_to_mm(z_stops["parking"]) + c.rotation_drive_z_offset_above_finger,
+      y=c.y_increments_to_mm(y_stops.parking),
+      z=c.z_increments_to_mm(z_stops.parking) + c.rotation_drive_z_offset_above_finger,
     )
-    self.rotation_drive_update_angle(
-      c.rotation_drive_increments_to_angle(rotation_stops["parking"])
-    )
-    self.wrist_drive_update_angle(c.wrist_increments_to_deg(wrist_stops["parking"]))
+    self.rotation_drive_update_angle(c.rotation_drive_increments_to_angle(rotation_stops.parking))
+    self.wrist_drive_update_angle(c.wrist_increments_to_deg(wrist_stops.parking))
     # Parking closes the jaws, and the gripper's table names that stop its home.
-    self.gripper_update_width(c.gripper_increments_to_mm(gripper_stops["home"]))
+    self.gripper_update_width(c.gripper_increments_to_mm(gripper_stops.home))
     return resp
 
   async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
@@ -755,8 +760,8 @@ class SimulatedISWAP(_Simulated, iSWAP):
             {"rw": c.rotation_drive_angle_to_increments(angle)},
             "which way the model has the arm pointing",
           )
-        stops = (await self._request_slots("pw"))[: len(c.rotation_drive_slots)]
-        parked = dict(zip(c.rotation_drive_slots, stops))["parking"]
+        stops = (await self._request_slots("pw"))[: len(iSWAPRotationPositions.SLOTS)]
+        parked = stops[iSWAPRotationPositions.SLOTS.index("parking")]
         return {"rw": parked}, "the rotation drive's parking stop"
 
       if command == "RY":
@@ -764,8 +769,8 @@ class SimulatedISWAP(_Simulated, iSWAP):
         if point is None:
           # Nothing models it yet, so where an initialized device leaves it: its parking stop, out
           # of the stored table rather than a position written down here.
-          stops = (await self._request_slots("py"))[: len(c.rotation_drive_y_slots)]
-          parked = dict(zip(c.rotation_drive_y_slots, stops))["parking"]
+          stops = (await self._request_slots("py"))[: len(iSWAPYPositions.SLOTS)]
+          parked = stops[iSWAPYPositions.SLOTS.index("parking")]
           return {"ry": [parked, parked]}, "the rotation drive's parking stop"
         increments = c.y_mm_to_increments(point.y)
         # Two counters come back, the firmware's and the hardware's; the read takes the hardware.
@@ -776,8 +781,8 @@ class SimulatedISWAP(_Simulated, iSWAP):
         if point is None:
           # Nothing models it yet, so where an initialized device leaves it: its parking stop, out
           # of the stored table rather than a height written down here.
-          stops = (await self._request_slots("pz"))[: len(c.rotation_drive_z_slots)]
-          parked = dict(zip(c.rotation_drive_z_slots, stops))["parking"]
+          stops = (await self._request_slots("pz"))[: len(iSWAPZPositions.SLOTS)]
+          parked = stops[iSWAPZPositions.SLOTS.index("parking")]
           return {"rz": [parked, parked]}, "the rotation drive's parking stop"
         increments = c.z_mm_to_increments(point.z - c.rotation_drive_z_offset_above_finger)
         return {"rz": [increments, increments]}, "where the model has the rotation drive along Z"
@@ -790,8 +795,8 @@ class SimulatedISWAP(_Simulated, iSWAP):
           )
         # Nothing models it yet, so where an initialized arm leaves it: its parking stop, out of
         # the stored table rather than an angle written down here.
-        stops = (await self._request_slots("pt"))[: len(c.wrist_drive_slots)]
-        parked = dict(zip(c.wrist_drive_slots, stops))["parking"]
+        stops = (await self._request_slots("pt"))[: len(iSWAPWristPositions.SLOTS)]
+        parked = stops[iSWAPWristPositions.SLOTS.index("parking")]
         return {"rt": parked}, "the wrist drive's parking stop"
       if command == "RH":
         # Nothing models the force sensor: a simulated arm meets nothing, so its peaks are its
@@ -804,8 +809,8 @@ class SimulatedISWAP(_Simulated, iSWAP):
         if gripper is None:
           # Nothing models the jaws, so where an initialized gripper leaves them: the width it
           # homes and parks at, out of the stored table rather than written down here.
-          stops = (await self._request_slots("pg"))[: len(c.gripper_drive_slots)]
-          home = dict(zip(c.gripper_drive_slots, stops))["home"]
+          stops = (await self._request_slots("pg"))[: len(iSWAPGripperPositions.SLOTS)]
+          home = stops[iSWAPGripperPositions.SLOTS.index("home")]
           return {"rg": [home, home]}, "the gripper's home and parking width"
         width = c.gripper_mm_to_increments(gripper.jaw_width)
         return {"rg": [width, width]}, "how far the model has the jaws open"
@@ -859,24 +864,20 @@ class SimulatedISWAP(_Simulated, iSWAP):
     # tables back into the stops and link lengths, so an iSWAP configured differently answers
     # differently. Each table carries its drive's stops, then that link's length in tenths.
     declared = self._declared
+    stops: Any
     if table == "py":
       stops, length = declared.rotation_drive_predefined_y_positions_increments, None
-      names: Tuple[str, ...] = declared.rotation_drive_y_slots
     elif table == "pz":
       stops, length = declared.rotation_drive_predefined_z_positions_increments, None
-      names = declared.rotation_drive_z_slots
     elif table == "pg":
       stops, length = declared.gripper_drive_predefined_increments, None
-      names = declared.gripper_drive_slots
     elif table == "pw":
       stops, length = declared.rotation_drive_predefined_increments, declared.link_1_length
-      names = declared.rotation_drive_slots
     else:
       stops, length = declared.wrist_drive_predefined_increments, declared.tool_length
-      names = declared.wrist_drive_slots
     if stops is None:
       raise RuntimeError(f"the simulated iSWAP has no {table} table; set it on its configuration")
-    rendered = [stops[name] for name in names]
+    rendered = list(dataclasses.astuple(stops))
     return rendered if length is None else rendered + [round(length * 10)]
 
   async def initialize(self):
