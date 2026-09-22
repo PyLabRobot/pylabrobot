@@ -1,5 +1,6 @@
 """Values exchanged with the Opentrons robot-server API."""
 
+import math
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional
 
@@ -96,6 +97,7 @@ class CommandInfo:
   status: str
   result: Dict[str, Any]
   error: Dict[str, Any]
+  id: str = ""
 
   @classmethod
   def from_response(cls, data: Dict[str, Any]) -> "CommandInfo":
@@ -124,3 +126,62 @@ class LabwareIdentity:
     except ValueError as error:
       raise OpentronsProtocolError(f"Invalid labware definition URI {uri!r}") from error
     return cls(namespace, load_name, revision)
+
+
+@dataclass(frozen=True)
+class InstrumentInfo:
+  """A physical Flex instrument, independent of a run's loaded IDs."""
+
+  mount: str
+  instrument_type: str
+  name: str
+  model: str
+  channels: Optional[int] = None
+  minimum_volume: Optional[float] = None
+  maximum_volume: Optional[float] = None
+
+  @classmethod
+  def from_response(cls, data: Dict[str, Any]) -> "InstrumentInfo":
+    """Validate the robot's instrument identity and pipette specifications."""
+    instrument_type = _string(data, "instrumentType")
+    channels: Optional[int] = None
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    if instrument_type == "pipette":
+      details = _object(data.get("data"))
+      channels = details.get("channels")
+      minimum, maximum = details.get("min_volume"), details.get("max_volume")
+      if not isinstance(channels, int) or isinstance(channels, bool) or channels <= 0:
+        raise OpentronsProtocolError("Invalid pipette channel count")
+      for volume in (minimum, maximum):
+        if (
+          not isinstance(volume, (float, int))
+          or isinstance(volume, bool)
+          or not math.isfinite(volume)
+        ):
+          raise OpentronsProtocolError("Invalid pipette volume range")
+      assert minimum is not None and maximum is not None
+      if minimum < 0 or maximum <= 0 or minimum > maximum:
+        raise OpentronsProtocolError("Invalid pipette volume range")
+    return cls(
+      mount=_string(data, "mount"),
+      instrument_type=instrument_type,
+      name=_optional_string(data, "instrumentName") or "",
+      model=_string(data, "instrumentModel"),
+      channels=channels,
+      minimum_volume=minimum,
+      maximum_volume=maximum,
+    )
+
+
+@dataclass(frozen=True)
+class PipetteInfo:
+  """Pipette geometry used for channel-specific reach checks."""
+
+  mount: str
+  pipette_name: str
+  pipette_model: str
+  pipette_id: str
+  channels: int
+  min_volume: float
+  max_volume: float

@@ -20,6 +20,34 @@ class OpentronsRunTests(unittest.IsolatedAsyncioTestCase):
     self.api = OpentronsAPI(self.io)
     self.protocol_run = OpentronsRun(self.api, "run", "8.7.0", command_poll_interval=0)
 
+  async def test_nonblocking_submission_returns_receipt_without_polling(self):
+    self.io.request.return_value = {"data": {"id": "queued-command"}}
+    result = await self.protocol_run.execute("home", {}, wait=False)
+    self.assertEqual((result.id, result.status), ("queued-command", "queued"))
+    self.assertEqual(self.io.request.await_count, 1)
+
+  async def test_slow_transfer_extends_configured_timeout(self):
+    self.protocol_run.command_timeout = 2
+    self.io.request.side_effect = [
+      {"data": {"id": "slow"}},
+      {"data": {"status": "running"}},
+      {"data": {"status": "succeeded"}},
+    ]
+    with patch("pylabrobot.opentrons.run.time") as clock:
+      clock.monotonic.side_effect = [0, 100]
+      await self.protocol_run.execute("aspirate", {"volume": 1000, "flowRate": 5})
+    self.assertEqual(self.io.request.await_count, 3)
+
+  async def test_per_command_timeout_overrides_configuration(self):
+    self.io.request.side_effect = [
+      {"data": {"id": "slow"}},
+      {"data": {"status": "running"}},
+    ]
+    with patch("pylabrobot.opentrons.run.time") as clock:
+      clock.monotonic.side_effect = [0, 3]
+      with self.assertRaises(OpentronsCommandTimeout):
+        await self.protocol_run.execute("home", {}, timeout=2)
+
   async def test_named_command_waits_for_success_and_returns_only_its_result(self) -> None:
     self.io.request.side_effect = [
       {"data": {"id": "load"}},
@@ -67,7 +95,7 @@ class OpentronsRunTests(unittest.IsolatedAsyncioTestCase):
       {"data": {"status": "running"}},
     ]
     with patch("pylabrobot.opentrons.run.time") as clock:
-      clock.monotonic.side_effect = [0, 31]
+      clock.monotonic.side_effect = [0, 34]
       with self.assertRaises(OpentronsCommandTimeout) as raised:
         await self.protocol_run.aspirate_in_place("pipette", 10, 3)
     self.assertEqual(raised.exception.run_id, "run")
@@ -142,7 +170,7 @@ class OpentronsRunTests(unittest.IsolatedAsyncioTestCase):
       {"data": {"id": "run", "status": "stop-requested"}},
     ]
     with patch("pylabrobot.opentrons.run.time") as clock:
-      clock.monotonic.side_effect = [0, 31]
+      clock.monotonic.side_effect = [0, 34]
       with self.assertRaisesRegex(OpentronsError, "Timed out waiting for run run to stop"):
         await self.protocol_run.stop()
     self.assertTrue(self.protocol_run.active)

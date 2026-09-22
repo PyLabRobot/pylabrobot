@@ -251,22 +251,25 @@ class OT2LabwareTests(unittest.IsolatedAsyncioTestCase):
     await self.robot._load_tip_rack(self.rack, self.rack.get_item("A1").get_tip())
 
     self.registry.load.assert_awaited_once_with(
-      self.rack, "1", LabwareIdentity("opentrons", "opentrons_96_filtertiprack_20ul", 1), None
+      self.rack, "1", LabwareIdentity("opentrons", "opentrons_96_filtertiprack_20ul", 1)
     )
+    self.registry.define.assert_not_awaited()
 
   async def test_custom_rack_passes_its_geometry_to_the_registry(self) -> None:
     self.rack.model = None
     tip = self.rack.get_item("A1").get_tip()
+    identity = LabwareIdentity("pylabrobot", "uploaded", 1)
+    self.registry.define.return_value = identity
 
     await self.robot._load_tip_rack(self.rack, tip)
 
-    self.registry.load.assert_awaited_once()
-    rack, slot, identity, definition = self.registry.load.await_args.args
+    self.registry.define.assert_awaited_once()
+    rack, definition = self.registry.define.await_args.args
     self.assertIs(rack, self.rack)
-    self.assertEqual(slot, "1")
-    self.assertEqual((identity.namespace, identity.version), ("pylabrobot", 1))
-    self.assertEqual(definition["parameters"]["loadName"], identity.load_name)
+    self.assertRegex(definition["parameters"]["loadName"], r"^[0-9a-f]{32}$")
     self.assertEqual(definition["parameters"]["tipLength"], tip.get_size_z())
+    self.assertEqual(definition["metadata"]["displayName"], self.rack.name)
+    self.registry.load.assert_awaited_once_with(self.rack, "1", identity)
 
 
 if __name__ == "__main__":
