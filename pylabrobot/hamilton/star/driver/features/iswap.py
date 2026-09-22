@@ -8,7 +8,18 @@ import enum
 import logging
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple, Union, cast
+from typing import (
+  TYPE_CHECKING,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+  Union,
+  cast,
+)
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import NoElementError, STARFirmwareError
@@ -2934,6 +2945,89 @@ class iSWAP:
     )
 
   # -- parking ---------------------------------------------------------------
+
+  async def request_parked(self, tolerance_increments: int = 2) -> bool:
+    """Whether the arm stands parked: every drive on the stop the firmware parks it against.
+
+    Worked out from where the drives are rather than asked for: the master answers a parked flag of
+    its own, `C0 RG`, and that answer is wrong, so nothing here reads it. Each drive's stored table
+    carries the position it parks at, read at setup, and the arm is parked when every drive sits on
+    its own. The gripper's table has no parking stop, so its home is taken instead: parking closes
+    the jaws to it.
+
+    X is not part of it. No table carries an X stop and parking does not drive the carriage, so the
+    arm parks wherever along the rail it stands.
+    Z only has to be at or above its stop: parking lifts to the park's traverse height and retracts
+    there, so a parked arm stands as high as it was parked from.
+
+    Args:
+      tolerance_increments: how far off its stop a drive may sit and still count as on it, in that
+        drive's own increments.
+
+    Returns:
+      True when every drive is on its parking stop.
+
+    Raises:
+      RuntimeError: If a drive's stored table was not read, so where it parks is unknown.
+    """
+    c = self.configuration
+    joints = await self.request_joint_state()
+    # Each drive, its table, the slot its stop is in, what reads its position, and whether it may
+    # stand above that stop rather than on it.
+    drives: List[Tuple[str, Optional[Dict[str, int]], str, Callable[[int], float], float, bool]] = [
+      (
+        "the rotation drive's Y",
+        c.rotation_drive_predefined_y_positions_increments,
+        "parking",
+        c.y_increments_to_mm,
+        joints[iSWAPAxis.Y],
+        False,
+      ),
+      (
+        "the rotation drive's Z",
+        c.rotation_drive_predefined_z_positions_increments,
+        "parking",
+        c.z_increments_to_mm,
+        joints[iSWAPAxis.Z] - c.rotation_drive_z_offset_above_finger,
+        True,
+      ),
+      (
+        "the rotation drive",
+        c.rotation_drive_predefined_increments,
+        "parking",
+        c.rotation_drive_increments_to_angle,
+        joints[iSWAPAxis.ROTATION],
+        False,
+      ),
+      (
+        "the wrist drive",
+        c.wrist_drive_predefined_increments,
+        "parking",
+        c.wrist_increments_to_deg,
+        joints[iSWAPAxis.WRIST],
+        False,
+      ),
+      (
+        "the gripper drive",
+        c.gripper_drive_predefined_increments,
+        "home",
+        c.gripper_increments_to_mm,
+        joints[iSWAPAxis.GRIPPER],
+        False,
+      ),
+    ]
+
+    for what, table, slot, to_units, position, at_least in drives:
+      if table is None:
+        raise RuntimeError(f"{what}'s stored table was not read; have you called `star.setup()`?")
+      stop = table[slot]
+      # The tolerance is in increments, so it is taken across the same increments it allows: a
+      # conversion need not be linear, and the rotation drive's is not.
+      tolerance = abs(to_units(stop + tolerance_increments) - to_units(stop))
+      below = to_units(stop) - position > tolerance
+      if below if at_least else abs(position - to_units(stop)) > tolerance:
+        return False
+    return True
 
   async def _unchecked_fw_park(self, traverse_height: Optional[float] = None):
     """Close the gripper and park the arm. Nothing is guarded and nothing is recorded.
