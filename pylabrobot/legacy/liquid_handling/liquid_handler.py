@@ -325,6 +325,15 @@ def _check_no_lid(resource: Resource, action: str) -> None:
   )
 
 
+def _check_tip_racks_available(resources: Sequence[TipSpot], action: str) -> None:
+  """Raise if a lid or another tip rack sits on a rack behind ``resources``, checking each rack once.
+  ``action`` is a verb phrase for the error."""
+  racks = {id(r.parent): r.parent for r in resources if isinstance(r.parent, TipRack)}
+  for rack in racks.values():
+    if not rack._available_for_tip_handling:
+      raise ValueError(f"Cannot {action} {rack.name!r}: something is stacked on top of it.")
+
+
 class LiquidHandler(Resource, Machine):
   """
   Front end for liquid handlers.
@@ -705,6 +714,7 @@ class LiquidHandler(Resource, Machine):
     not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, TipSpot)]
     if len(not_tip_spots) > 0:
       raise TypeError(f"Resources must be `TipSpot`s, got {not_tip_spots}")
+    _check_tip_racks_available(tip_spots, "pick up tips from")
 
     # fix arguments
     use_channels = use_channels or self._default_use_channels or list(range(len(tip_spots)))
@@ -855,6 +865,7 @@ class LiquidHandler(Resource, Machine):
     not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, (TipSpot, Trash))]
     if len(not_tip_spots) > 0:
       raise TypeError(f"Resources must be `TipSpot`s or Trash, got {not_tip_spots}")
+    _check_tip_racks_available([ts for ts in tip_spots if isinstance(ts, TipSpot)], "drop tips to")
 
     # fix arguments
     use_channels = use_channels or self._default_use_channels or list(range(len(tip_spots)))
@@ -1690,6 +1701,7 @@ class LiquidHandler(Resource, Machine):
       raise TypeError(f"Resource must be a TipRack, got {tip_rack}")
     if not tip_rack.num_items == 96:
       raise ValueError("Tip rack must have 96 tips")
+    _check_tip_racks_available(tip_rack.get_all_items()[:1], "pick up tips from")
 
     extras = self._check_args(
       self.backend.pick_up_tips96, backend_kwargs, default={"pickup"}, strictness=get_strictness()
@@ -1769,6 +1781,8 @@ class LiquidHandler(Resource, Machine):
       raise TypeError(f"Resource must be a TipRack or Trash, got {resource}")
     if isinstance(resource, TipRack) and not resource.num_items == 96:
       raise ValueError("Tip rack must have 96 tips")
+    if isinstance(resource, TipRack):
+      _check_tip_racks_available(resource.get_all_items()[:1], "drop tips to")
 
     extras = self._check_args(
       self.backend.drop_tips96, backend_kwargs, default={"drop"}, strictness=get_strictness()
