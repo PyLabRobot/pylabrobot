@@ -1,5 +1,4 @@
 from pylabrobot.opentrons.api import OpentronsAPI
-from pylabrobot.opentrons.chatterbox import ChatterboxHTTP, ReplayTransport
 from pylabrobot.opentrons.discovery import find_ot2_ip
 from pylabrobot.opentrons.errors import (
   OpentronsCommandError,
@@ -20,7 +19,6 @@ from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import InstrumentInfo, ModuleInfo, MountedPipette, RobotInfo
 
 __all__ = [
-  "ChatterboxHTTP",
   "Flex",
   "FlexGripper",
   "FlexHead1",
@@ -38,7 +36,6 @@ __all__ = [
   "OpentronsError",
   "OpentronsProtocolError",
   "OpentronsRun",
-  "ReplayTransport",
   "RobotInfo",
   "find_flex_ip",
   "find_ot2_ip",

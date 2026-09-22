@@ -111,8 +111,7 @@ class Flex:
   :mod:`pylabrobot.opentrons.flex.flex_head`.
 
   ``connect()`` opens the transport for health/discovery queries; ``setup()``
-  also creates a run, homes, and composes the heads. Pass a stand-in ``io``
-  (e.g. ``ChatterboxHTTP``) to drive the whole lifecycle offline.
+  also creates a run, homes, and composes the heads.
   """
 
   def __init__(

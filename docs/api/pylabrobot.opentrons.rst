@@ -18,8 +18,6 @@ pylabrobot.opentrons package
     ModuleInfo
     InstrumentInfo
     find_ot2_ip
-    ChatterboxHTTP
-    ReplayTransport
     OpentronsError
     OpentronsCommandError
     OpentronsCommandTimeout
