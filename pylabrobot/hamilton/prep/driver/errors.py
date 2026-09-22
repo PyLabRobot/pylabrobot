@@ -549,6 +549,15 @@ PREP_ERROR_CODES: Dict[Tuple[int, int, int, int, int], str] = {
   (0x0001, 0x0001, 0x1100, 1, 0x0F06): "The MPH head is not installed.",
 }
 
+# The Pipettor answers from module 0xE000 (57344:1:4096), not 0x0001: its codes under both.
+PREP_ERROR_CODES.update(
+  {
+    (0xE000, node, obj, interface, code): text
+    for (module, node, obj, interface, code), text in list(PREP_ERROR_CODES.items())
+    if (module, node, obj) == (0x0001, 0x0001, 0x1000)
+  }
+)
+
 
 class PrepMethodNotFoundError(RuntimeError):
   """The firmware has no method of the name asked for on that object.
