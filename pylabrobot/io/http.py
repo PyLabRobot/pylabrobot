@@ -368,6 +368,7 @@ class HTTP:
       response_base64=base64.b64encode(response.body).decode("ascii"),
     )
 
+
 class HTTPValidator(HTTP):
   """Replays a capture file instead of reaching the device.
 
