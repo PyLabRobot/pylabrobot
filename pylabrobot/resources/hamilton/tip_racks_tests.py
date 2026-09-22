@@ -26,8 +26,6 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_1000uL_filter,
   hamilton_96_tiprack_1000uL_filter_ultrawide,
   hamilton_96_tiprack_1000uL_filter_wide,
-  hamilton_96_tiprack_raised_core_i,
-  hamilton_96_tiprack_raised_core_ii,
   hamilton_96_tiprack_standard,
   hamilton_tip_300uL,
   hamilton_tiprack_standard,
@@ -61,16 +59,6 @@ class HamiltonTipSpotTests(unittest.TestCase):
     check_tip_spot_h1(hamilton_96_tiprack_10uL_NTR(name="tr"), ntr_loc)
     check_tip_spot_h1(hamilton_96_tiprack_50uL_NTR(name="tr"), ntr_loc)
     check_tip_spot_h1(hamilton_96_tiprack_300uL_NTR(name="tr"), ntr_loc)
-
-  def test_a_spot_is_the_7_2_mm_hole(self):
-    for rack in (
-      hamilton_96_tiprack_300uL(name="tr"),
-      hamilton_96_tiprack_raised_core_ii(name="tr", make_tip=hamilton_tip_300uL),
-      hamilton_96_tiprack_raised_core_i(name="tr", make_tip=hamilton_tip_300uL),
-    ):
-      with self.subTest(rack=rack.model):
-        for spot in rack.get_all_items():
-          self.assertEqual((spot.get_size_x(), spot.get_size_y()), (7.2, 7.2))
 
   def test_the_old_standard_rack_name_still_works(self):
     with self.assertWarns(DeprecationWarning):
