@@ -12,9 +12,11 @@ from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import HasTipError
+from pylabrobot.resources.hamilton.core_gripper_tools import HamiltonCoreGripperTool
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.resource_holder import ResourceHolder
 
 if TYPE_CHECKING:
   from ..master import STARDriver
@@ -63,6 +65,10 @@ class CoreGrippers:
     self._tools_taken_from: Optional[Tuple[float, float, float, float, float]] = None
     # Each mounted tool, the holder it came from and where in it, to put it back in the model.
     self._parked_tools: List[Tuple[HeadTool, Optional[Resource], Optional[Coordinate]]] = []
+    self._pickup_distance_from_top: Optional[float] = None
+    self._holding_resource_width: Optional[float] = None
+    self._held_resource: Optional[Resource] = None
+    self._taken_from: Optional[Tuple[Resource, Optional[Coordinate]]] = None
 
   # -- what carries them ---------------------------------------------------------------------------
 
@@ -136,6 +142,51 @@ class CoreGrippers:
         "`await star.core_grippers.pick_up_tools()` first, or use "
         "`async with star.core_grippers.mounted():`."
       )
+
+  def _clear_held_state(self) -> None:
+    self._holding_resource_width = None
+    self._pickup_distance_from_top = None
+    self._held_resource = None
+    self._taken_from = None
+
+  def _front_tool(self) -> Optional[Resource]:
+    """The tool the model has on the front channel, or None while it has none."""
+    if self._front_channel is None:
+      return None
+    shaft = self._pipettes.shaft(self._front_channel)
+    return shaft.tip if shaft is not None and shaft.has_tip() else None
+
+  def _hang_held_resource_on_the_front_tool(self) -> None:
+    """Hang the held resource from the front tool where the jaws hold it, so it rides with them.
+
+    Its centre at the jaws' centre, its top `pickup_distance_from_top` above the grip line - the
+    front channel's stop disc less the tool's overhang. Nothing happens while nothing models them.
+    """
+    held, from_top, tool = self._held_resource, self._pickup_distance_from_top, self._front_tool()
+    if held is None or from_top is None or not isinstance(tool, HamiltonCoreGripperTool):
+      return
+    back = self._pipettes.get_reference_point_location(cast(int, self._back_channel))
+    front = self._pipettes.get_reference_point_location(cast(int, self._front_channel))
+    if back is None or front is None:
+      return
+    grip_line = front.z - (tool.total_length - tool.fitting_depth)
+    center = held.center().rotated(held.get_absolute_rotation())
+    lfb = Coordinate(
+      front.x - center.x,
+      (back.y + front.y) / 2 - center.y,
+      grip_line + from_top - held.get_absolute_size_z(),
+    )
+    held.unassign()
+    tool.assign_child_resource(held, location=lfb - tool.get_location_wrt(self._deck))
+
+  def _put_held_resource_on_the_deck(self) -> None:
+    """Put a resource hanging from the front tool on the deck, where it is now."""
+    held, tool = self._held_resource, self._front_tool()
+    if held is None or tool is None or held.parent is not tool:
+      return
+    where = held.get_location_wrt(self._deck)
+    held.unassign()
+    self._deck.assign_child_resource(held, location=where)
 
   # ----------------------------------------
   # Movement
@@ -381,6 +432,11 @@ class CoreGrippers:
     """
     if self._tools_taken_from is None or self._back_channel is None or self._front_channel is None:
       raise RuntimeError("no pick-up to put the tools back to; `pick_up_tools_at_location` first")
+    if self._held_resource is not None:
+      raise RuntimeError(
+        f"the grippers hold {self._held_resource.name}: put it down first with `drop_resource` "
+        "or `return_resource`, then return the tools"
+      )
     pipettes = self._pipettes
     x, rear_y, front_y, seek, end = self._tools_taken_from
     start = self.default_minimum_traverse_height if move_to_safe_z_first else 0.0
@@ -504,6 +560,61 @@ class CoreGrippers:
   # ----------------------------------------
   # Resources
   # ----------------------------------------
+
+  def _resolve_pickup_distance(
+    self, resource: Resource, pickup_distance_from_top: Optional[float]
+  ) -> float:
+    """How far below the resource's top the jaws close: given, preferred, else 5 mm (as legacy)."""
+    if pickup_distance_from_top is not None:
+      return pickup_distance_from_top
+    if resource.preferred_pickup_location is not None:
+      logger.debug(
+        "Using preferred pickup location for resource %s as pickup_distance_from_top was "
+        "not specified.",
+        resource.name,
+      )
+      return resource.get_absolute_size_z() - resource.preferred_pickup_location.z
+    logger.debug(
+      "No preferred pickup location for resource %s. Using default pickup distance of 5mm "
+      "from top.",
+      resource.name,
+    )
+    return 5.0
+
+  def _compute_pickup_location(
+    self,
+    resource: Resource,
+    offset: Coordinate,
+    pickup_distance_from_top: float,
+  ) -> Coordinate:
+    center = resource.center().rotated(resource.get_absolute_rotation())
+    if resource.is_in_subtree_of(self._deck):
+      loc = resource.get_location_wrt(self._deck, "l", "f", "b") + center + offset
+    else:
+      loc = center + offset
+    return Coordinate(
+      loc.x, loc.y, loc.z + resource.get_absolute_size_z() - pickup_distance_from_top
+    )
+
+  def _compute_drop_location(
+    self, destination: Resource, offset: Coordinate, child: Optional[Coordinate] = None
+  ) -> Coordinate:
+    if self._held_resource is None or self._pickup_distance_from_top is None:
+      raise RuntimeError(
+        "drop_resource requires a prior pick_up_resource (held resource and grip height)."
+      )
+    held = self._held_resource
+    from_top = self._pickup_distance_from_top
+    if child is None:
+      child = (
+        destination.get_default_child_location(held)
+        if isinstance(destination, ResourceHolder)
+        else Coordinate.zero()
+      )
+    center = held.center().rotated(held.get_absolute_rotation())
+    plate_lfb = destination.get_location_wrt(self._deck, "l", "f", "b") + child
+    loc = plate_lfb + center + offset
+    return Coordinate(loc.x, loc.y, loc.z + held.get_absolute_size_z() - from_top)
 
   # -- firmware ------------------------------------------------------------------------------------
 
