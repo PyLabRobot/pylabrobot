@@ -1,0 +1,6 @@
+pylabrobot.resources.TipRack.lid
+================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: TipRack.lid

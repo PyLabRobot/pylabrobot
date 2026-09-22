@@ -19,6 +19,7 @@ pylabrobot.resources.TipRack
       ~TipRack.item_dx
       ~TipRack.item_dy
       ~TipRack.items
+      ~TipRack.lid
       ~TipRack.location
       ~TipRack.name
       ~TipRack.num_items
@@ -70,6 +71,7 @@ pylabrobot.resources.TipRack
       ~TipRack.get_highest_known_point
       ~TipRack.get_item
       ~TipRack.get_items
+      ~TipRack.get_lid_location
       ~TipRack.get_location_wrt
       ~TipRack.get_resource
       ~TipRack.get_root
@@ -78,6 +80,7 @@ pylabrobot.resources.TipRack
       ~TipRack.get_size_z
       ~TipRack.get_tip
       ~TipRack.get_tips
+      ~TipRack.has_lid
       ~TipRack.has_resource
       ~TipRack.index_of_item
       ~TipRack.is_in_subtree_of
