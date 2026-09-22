@@ -1,10 +1,11 @@
 import math
 import unittest
 from typing import Any, List, Optional, Tuple, cast
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
-from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
+from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPAxis
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
@@ -57,6 +58,62 @@ def moves(sent: List[str]) -> List[str]:
   ]
 
 
+class TestParking(unittest.IsolatedAsyncioTestCase):
+  """Whether the drives are in the positions parking leaves them in."""
+
+  async def test_the_arm_is_parked_when_every_drive_is_at_its_parking_position(self):
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    assert (
+      c.elbow_predefined_y_positions_increments is not None
+      and c.elbow_predefined_z_positions_increments is not None
+      and c.elbow_drive_predefined_increments is not None
+      and c.wrist_drive_predefined_increments is not None
+      and c.gripper_drive_predefined_increments is not None
+    )
+
+    with patch.object(
+      iswap,
+      "request_joint_state",
+      new=AsyncMock(
+        return_value={
+          iSWAPAxis.Y: c.y_increments_to_mm(c.elbow_predefined_y_positions_increments.parking),
+          iSWAPAxis.Z: c.z_increments_to_mm(c.elbow_predefined_z_positions_increments.parking)
+          + c.elbow_z_offset_above_finger,
+          iSWAPAxis.ELBOW: c.elbow_drive_increments_to_angle(
+            c.elbow_drive_predefined_increments.parking
+          ),
+          iSWAPAxis.WRIST: c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.parking),
+          iSWAPAxis.GRIPPER: c.gripper_increments_to_mm(c.gripper_drive_predefined_increments.home),
+        }
+      ),
+    ):
+      self.assertTrue(await iswap.request_parked())
+
+  async def test_the_arm_is_not_parked_when_a_drive_is_moved(self):
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    assert c.elbow_predefined_y_positions_increments is not None
+    joints = await iswap.request_joint_state()
+    joints[iSWAPAxis.Y] = c.y_increments_to_mm(
+      c.elbow_predefined_y_positions_increments.parking - 10
+    )
+    with patch.object(iswap, "request_joint_state", new=AsyncMock(return_value=joints)):
+      self.assertFalse(await iswap.request_parked())
+
+  async def test_z_above_the_parking_position_is_still_parked(self):
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    assert c.elbow_predefined_z_positions_increments is not None
+    joints = await iswap.request_joint_state()
+    joints[iSWAPAxis.Z] = (
+      c.z_increments_to_mm(c.elbow_predefined_z_positions_increments.parking + 10)
+      + c.elbow_z_offset_above_finger
+    )
+    with patch.object(iswap, "request_joint_state", new=AsyncMock(return_value=joints)):
+      self.assertTrue(await iswap.request_parked())
+
+
 class TestJawMoves(unittest.IsolatedAsyncioTestCase):
   """What a jaw move puts on the wire."""
 
@@ -104,72 +161,72 @@ class TestYMoves(unittest.IsolatedAsyncioTestCase):
     before = (await pipettes.request_y_positions())[0]
 
     with self.assertRaises(ValueError):
-      await iswap.rotation_drive_move_to_y_position(460.0, make_space=True, speed=500.0)
+      await iswap.elbow_move_to_y_position(460.0, make_space=True, speed=500.0)
 
     self.assertEqual((await pipettes.request_y_positions())[0], before)
     self.assertEqual(moves(sent), [])
 
   async def test_a_y_move_that_carries_the_arm_behind_the_rail_is_refused(self):
-    """The arm rides the carriage, so moving it back carries the pose with it. Turned to rotation
+    """The arm rides the carriage, so moving it back carries the pose with it. Turned to elbow
     -90 deg with the wrist at -140 deg, the grip centre stands clear with the drive at 450 mm, and
-    137 mm behind the rotation drive's back stop once the drive is there."""
+    137 mm behind the elbow's back stop once the elbow is there."""
     iswap, sent = await gripper()
     c = iswap.configuration
-    assert c.rotation_drive_y_max is not None
+    assert c.elbow_y_max is not None
     iswap.update_location_by_reference_point(y=450.0)
-    iswap.rotation_drive_update_angle(-90.0)
+    iswap.elbow_drive_update_angle(-90.0)
     iswap.wrist_drive_update_angle(-140.0)
     iswap._check_pose_reachable(-90.0, -140.0)
 
     with self.assertRaises(ValueError):
-      await iswap.rotation_drive_move_to_y_position(c.rotation_drive_y_max)
+      await iswap.elbow_move_to_y_position(c.elbow_y_max)
     self.assertEqual(moves(sent), [])
 
   async def test_a_y_move_that_keeps_the_arm_clear_goes_ahead(self):
     """Pointing to the front, nothing the arm carries reaches behind the drive at any Y."""
     iswap, sent = await gripper()
     c = iswap.configuration
-    assert c.rotation_drive_y_max is not None
-    iswap.rotation_drive_update_angle(0.0)
+    assert c.elbow_y_max is not None
+    iswap.elbow_drive_update_angle(0.0)
     iswap.wrist_drive_update_angle(-45.0)
 
-    await iswap.rotation_drive_move_to_y_position(c.rotation_drive_y_max)
+    await iswap.elbow_move_to_y_position(c.elbow_y_max)
     self.assertEqual(len([m for m in moves(sent) if m.startswith("R0YA")]), 1)
 
   async def test_only_park_puts_the_arm_in_its_parking_position(self):
-    """The parking pose leaves the wrist joint behind the rotation drive's back stop, which only the
+    """The parking pose leaves the wrist joint behind the elbow's back stop, which only the
     park command may do. A parked arm moves forward along Y, and is refused a move to the back stop
     that would leave it in that pose."""
     iswap, sent = await gripper()
     c = iswap.configuration
-    assert c.rotation_drive_y_max is not None
-    self.assertEqual(await iswap.rotation_drive_request_y_position(), c.rotation_drive_y_max)
+    assert c.elbow_y_max is not None
+    self.assertEqual(await iswap.elbow_request_y_position(), c.elbow_y_max)
 
     with self.assertRaises(ValueError):
-      await iswap.rotation_drive_move_to_y_position(c.rotation_drive_y_max)
+      await iswap.elbow_move_to_y_position(c.elbow_y_max)
     self.assertEqual(moves(sent), [])
 
-    await iswap.rotation_drive_move_to_y_position(c.rotation_drive_y_max - 5.0)
+    await iswap.elbow_move_to_y_position(c.elbow_y_max - 5.0)
     self.assertEqual(len([m for m in moves(sent) if m.startswith("R0YA")]), 1)
 
 
-class TestRotationWithoutADeck(unittest.IsolatedAsyncioTestCase):
+class TestElbowWithoutADeck(unittest.IsolatedAsyncioTestCase):
   """A driver given no deck models no arm: a relative angle needs none, an absolute one is on it."""
 
-  async def test_a_relative_rotation_goes_ahead(self):
+  async def test_a_relative_elbow_turn_goes_ahead(self):
     iswap, sent = await gripper()
     iswap._driver.deck = None
 
-    await iswap.rotate_to_angles(rotation_relative_angle="front", raise_features=False)
+    await iswap.rotate_to_angles(elbow_relative_angle="front", raise_features=False)
 
     self.assertEqual(len([move for move in moves(sent) if move.startswith("R0PA")]), 1)
 
-  async def test_an_absolute_rotation_is_refused_before_anything_moves(self):
+  async def test_an_absolute_elbow_turn_is_refused_before_anything_moves(self):
     iswap, sent = await gripper()
     iswap._driver.deck = None
 
     with self.assertRaises(RuntimeError):
-      await iswap.rotate_to_angles(rotation_absolute_angle="front", raise_features=False)
+      await iswap.rotate_to_angles(elbow_absolute_angle="front", raise_features=False)
 
     self.assertEqual(moves(sent), [])
 
@@ -200,13 +257,17 @@ class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
     millimetre past its own maximum."""
     iswap, _ = await gripper()
     c = iswap.configuration
-    assert c.rotation_drive_predefined_increments is not None
+    assert c.elbow_drive_predefined_increments is not None
     assert c.wrist_drive_predefined_increments is not None
 
-    self.assertEqual(await iswap.rotation_drive_request_y_position(), c.rotation_drive_y_max)
+    self.assertEqual(await iswap.elbow_request_y_position(), c.elbow_y_max)
     for stop in ("left", "right"):
-      angle = c.rotation_drive_increments_to_angle(c.rotation_drive_predefined_increments[stop])
-      straight = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments["straight"])
+      angle = c.elbow_drive_increments_to_angle(
+        c.elbow_drive_predefined_increments.left
+        if stop == "left"
+        else c.elbow_drive_predefined_increments.right
+      )
+      straight = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.straight)
       iswap._check_pose_reachable(angle, straight)
 
   async def test_a_pose_that_reaches_behind_the_rail_is_still_refused(self):
@@ -214,22 +275,22 @@ class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
     centre 137.7 mm behind the carriage, where the X-arm is."""
     iswap, _ = await gripper()
     c = iswap.configuration
-    assert c.rotation_drive_predefined_increments is not None
+    assert c.elbow_drive_predefined_increments is not None
     assert c.wrist_drive_predefined_increments is not None
 
-    angle = c.rotation_drive_increments_to_angle(c.rotation_drive_predefined_increments["right"])
-    wrist = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments["left"])
+    angle = c.elbow_drive_increments_to_angle(c.elbow_drive_predefined_increments.right)
+    wrist = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.left)
     with self.assertRaises(ValueError):
       iswap._check_pose_reachable(angle, wrist)
 
   async def test_a_grip_centre_just_in_front_of_the_rail_is_allowed(self):
-    """Rotation -3.5 deg with the wrist at 121 deg puts the grip centre 6.2 mm in front of the
+    """Elbow -3.5 deg with the wrist at 121 deg puts the grip centre 6.2 mm in front of the
     carriage's back stop. Measuring the tool from the gripper's corner rather than its wrist put it
     6.2 mm behind, and refused a pose the arm can reach."""
     iswap, _ = await gripper()
     c = iswap.configuration
 
-    self.assertEqual(await iswap.rotation_drive_request_y_position(), c.rotation_drive_y_max)
+    self.assertEqual(await iswap.elbow_request_y_position(), c.elbow_y_max)
     iswap._check_pose_reachable(-3.5, 121.0)
 
 
@@ -243,10 +304,10 @@ class TestToolCentrePoint(unittest.IsolatedAsyncioTestCase):
     c = iswap.configuration
     assert c.tool_length is not None
 
-    for rotation in (-90.0, 0.0, 45.0, 90.0):
+    for elbow in (-90.0, 0.0, 45.0, 90.0):
       for wrist in (-135.0, -45.0, 45.0, 121.0):
-        with self.subTest(rotation=rotation, wrist=wrist):
-          pose = iswap._compute_pose_at_angles(rotation, wrist)
+        with self.subTest(elbow=elbow, wrist=wrist):
+          pose = iswap._compute_pose_at_angles(elbow, wrist)
           w, t = pose.wrist_joint_location, pose.gripper_center_location
           self.assertAlmostEqual(math.hypot(t.x - w.x, t.y - w.y), c.tool_length, places=2)
 
@@ -290,23 +351,30 @@ class TestGripperDirections(unittest.IsolatedAsyncioTestCase):
   """Where a named gripper direction sends the wrist."""
 
   async def test_every_named_pose_lands_on_a_stored_stop(self):
-    """Three rotation stops against four directions, each resolving to one of the four increments
+    """Three elbow stops against four directions, each resolving to one of the four increments
     this arm stores for its wrist. Nothing is pushed there: the conversion interpolates against the
     same stops, so a stop's own angle converts back to its own increment. A conversion anchored on
     the motor's zero instead would miss two of the four by around a degree, which is more than a
     rounding tolerance would carry."""
     iswap, _ = await gripper()
     c = iswap.configuration
-    assert c.rotation_drive_predefined_increments is not None
+    assert c.elbow_drive_predefined_increments is not None
     assert c.wrist_drive_predefined_increments is not None
-    stored = {c.wrist_drive_predefined_increments[name] for name, _ in c.WRIST_STOP_ANGLES}
+    stored = {
+      c.wrist_drive_predefined_increments.right,
+      c.wrist_drive_predefined_increments.straight,
+      c.wrist_drive_predefined_increments.left,
+      c.wrist_drive_predefined_increments.reverse,
+    }
 
-    for rotation in ("left", "front", "right"):
+    for elbow, elbow_increments in (
+      ("left", c.elbow_drive_predefined_increments.left),
+      ("front", c.elbow_drive_predefined_increments.front),
+      ("right", c.elbow_drive_predefined_increments.right),
+    ):
       for direction in ("right", "back", "left", "front"):
-        increments = iswap._resolve_gripper_direction_increments(
-          direction, c.rotation_drive_predefined_increments[rotation]
-        )
-        self.assertIn(increments, stored, f"{rotation}/{direction}")
+        increments = iswap._resolve_gripper_direction_increments(direction, elbow_increments)
+        self.assertIn(increments, stored, f"{elbow}/{direction}")
 
 
 class TestSafeZ(unittest.IsolatedAsyncioTestCase):
@@ -319,10 +387,10 @@ class TestSafeZ(unittest.IsolatedAsyncioTestCase):
     saves."""
     iswap, sent = await gripper()
 
-    height = await iswap.rotation_drive_move_to_safe_z_height()
+    height = await iswap.elbow_move_to_safe_z_height()
 
     self.assertEqual(len([command for command in sent if command.startswith("R0RZ")]), 1)
-    self.assertEqual(height, await iswap.rotation_drive_request_z_position())
+    self.assertEqual(height, await iswap.elbow_request_z_position())
 
 
 if __name__ == "__main__":

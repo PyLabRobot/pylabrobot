@@ -295,8 +295,8 @@
       "iswap": {
         "firmware_version": "4.1S 2011-12-19",
         "firmware_date": null,
-        "rotation_drive_x_offset": 32.8,
-        "rotation_drive_predefined_increments": {
+        "elbow_x_offset": 32.8,
+        "elbow_drive_predefined_increments": {
           "home": 13000,
           "left": -29007,
           "front": 156,
@@ -329,9 +329,9 @@
           50,
           8000
         ],
-        "rotation_drive_diameter": 30.5,
-        "rotation_drive_safety_radius": 90.0,
-        "rotation_drive_size_z": 120.0,
+        "elbow_drive_diameter": 30.5,
+        "elbow_drive_safety_radius": 90.0,
+        "elbow_drive_size_z": 120.0,
         "z_range_increments": [
           -187,
           26661
@@ -345,12 +345,12 @@
           5,
           999
         ],
-        "rotation_drive_z_offset_above_finger": 13.0,
-        "rotation_range_increments": [
+        "elbow_z_offset_above_finger": 13.0,
+        "elbow_range_increments": [
           -30032,
           30032
         ],
-        "rotation_deg_per_increment": 0.00309619077,
+        "elbow_deg_per_increment": 0.00309619077,
         "wrist_range_increments": [
           -30000,
           30000
@@ -361,7 +361,7 @@
           24120
         ],
         "gripper_mm_per_increment": 0.00554337,
-        "rotation_drive_predefined_y_positions_increments": {
+        "elbow_predefined_y_positions_increments": {
           "home": 9855,
           "lower_limit": 7000,
           "upper_limit": 9000,
@@ -373,7 +373,7 @@
           "extra_4": 9855,
           "extra_5": 9855
         },
-        "rotation_drive_predefined_z_positions_increments": {
+        "elbow_predefined_z_positions_increments": {
           "home": 25600,
           "parking": 25400,
           "extra_1": 24600,
