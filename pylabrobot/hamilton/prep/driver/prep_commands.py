@@ -3481,6 +3481,26 @@ class PrepYDriveGetPosition(PrepStatusRequest["PrepYDriveGetPosition.Response"])
 
 
 @dataclass(frozen=True)
+class PrepYAxisMoveRelative(PrepCommand[None]):
+  """Move a channel along Y by a distance, in mm (cmd=3, dest=YAxis). Runs before initializing."""
+
+  command_id = 3
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # A default only because `dest` comes first; every caller names it.
+  distance: F32 = math.nan
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.distance, F32)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
 class PrepZAxisSeekObstacle(PrepCommand["PrepZAxisSeekObstacle.Response"]):
   """Seek a channel down, in its Z drive frame, until it meets an obstacle (cmd=14, dest=ZAxis)."""
 

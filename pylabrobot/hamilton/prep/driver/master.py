@@ -94,6 +94,10 @@ def _fragment_values(data: bytes) -> List[Any]:
   return values
 
 
+# How far each channel moves out to open the grippers before initializing, in mm.
+_OPEN_GRIPPERS_BY = 5.0
+
+
 def _confirm(question: str) -> bool:
   """Ask the person at the device; only y or yes is a yes. No one to ask is a no."""
   try:
@@ -1012,8 +1016,8 @@ class PrepDriver:
   async def _release_held_plate_by_hand(self) -> None:
     """Open the grippers with a person there to take the plate, so the device can initialize.
 
-    Before initializing nothing can move, so opening the grippers where they stand
-    (PrepReleasePlate) is the one way to clear the record.
+    Before initializing only each channel's own relative Y move runs: the two move apart by
+    `_OPEN_GRIPPERS_BY`, then PrepReleasePlate clears the record.
 
     Raises:
       RuntimeError: If the person does not confirm, or the record is still set after.
@@ -1031,6 +1035,11 @@ class PrepDriver:
         "setup stopped: the device records a plate gripped and refuses to initialize until the "
         "grippers open. Run setup again when someone can take the plate."
       )
+    for channel, distance in ((1, -_OPEN_GRIPPERS_BY), (0, _OPEN_GRIPPERS_BY)):
+      try:
+        await self._move_relative_in_y(channel, distance)
+      except Exception:
+        logger.warning("channel %d did not move %+.1f mm", channel, distance, exc_info=True)
     await self.send_command(PrepCmd.PrepReleasePlate())
     if not _confirm("Have you moved your hands out of the device? [y/n] "):
       raise RuntimeError(
@@ -1063,6 +1072,16 @@ class PrepDriver:
     except Exception:
       logger.error("could not read whether a plate is held; treating it as held", exc_info=True)
       return True
+
+  async def _move_relative_in_y(self, channel: int, distance: float) -> None:
+    """Move a channel along Y by `distance` mm with its own Y axis; runs before initializing.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      distance: how far, in mm; positive is towards the back.
+    """
+    yaxes = (await self.request_channel_drives()).yaxis_addrs
+    await self.send_command(PrepCmd.PrepYAxisMoveRelative(dest=yaxes[channel], distance=distance))
 
   async def _request_plate_held(self) -> bool:
     """Whether the device records a plate gripped (PrepGetPlateHeld): its record, not a sensor."""
