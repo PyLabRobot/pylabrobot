@@ -12,12 +12,13 @@ from pylabrobot.opentrons.flex.flex_wire import (
   ROBOT_AXES,
   _require_robot_commands,
 )
-from pylabrobot.opentrons.labware import LabwareRegistry, official_tip_rack_identity
-from pylabrobot.opentrons.labware_definitions import (
+from pylabrobot.opentrons.labware import (
+  LabwareRegistry,
   build_container_definition,
   build_movable_labware_definition,
   build_plate_definition,
   build_tip_rack_definition,
+  official_tip_rack_identity,
 )
 from pylabrobot.opentrons.operations import OperationLock, serialized
 from pylabrobot.opentrons.run import COMMAND_POLL_HEADROOM, OpentronsRun
@@ -765,7 +766,9 @@ class Flex:
       if isinstance(resource, Plate):
         return build_plate_definition(resource, grip_distance_from_top)
       if isinstance(resource, TipRack):
-        return build_tip_rack_definition(resource, grip_distance_from_top)
+        return build_tip_rack_definition(
+          resource, for_flex=True, grip_distance_from_top=grip_distance_from_top
+        )
       if isinstance(resource, Container):
         return build_container_definition(resource, grip_distance_from_top)
     except ValueError as e:

@@ -45,8 +45,8 @@ from typing import (
 
 from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.flex.flex_wire import UNTESTED_HARDWARE_WARNING
-from pylabrobot.opentrons.flex.labware_definitions import container_footprint
 from pylabrobot.opentrons.flex.pipette_defaults import FlowRates, flow_rates
+from pylabrobot.opentrons.labware import container_footprint
 from pylabrobot.opentrons.operations import OperationLock, instrument_operation
 from pylabrobot.opentrons.tracking import track_liquid_transfer
 from pylabrobot.resources import (

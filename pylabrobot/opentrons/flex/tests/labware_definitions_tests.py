@@ -17,14 +17,14 @@ from unittest.mock import AsyncMock, patch
 from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
-from pylabrobot.opentrons.flex.labware_definitions import (
+from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
+from pylabrobot.opentrons.labware import (
   build_container_definition,
   build_movable_labware_definition,
   build_plate_definition,
   build_tip_rack_definition,
   container_footprint,
 )
-from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.opentrons.types import CommandInfo
 from pylabrobot.resources import (
   Container,
@@ -325,8 +325,17 @@ class TestBuildPlateDefinition(unittest.TestCase):
 class TestBuildTipRackDefinition(unittest.TestCase):
   """build_tip_rack_definition maps rack geometry and the prototype tip."""
 
+  def test_ot2_defaults_keep_diagonal_diameter_and_empty_group_metadata(self):
+    rack = _tip_rack()
+    definition = build_tip_rack_definition(rack, rack.get_item("A1").get_tip(), "custom")
+
+    self.assertAlmostEqual(definition["wells"]["A1"]["diameter"], 7.0710678118654755)
+    self.assertEqual(definition["metadata"]["displayName"], "custom")
+    self.assertEqual(definition["parameters"]["loadName"], "custom")
+    self.assertEqual(definition["groups"][0]["metadata"], {})
+
   def test_tip_parameters_come_from_prototype_tip(self):
-    definition = build_tip_rack_definition(_tip_rack())
+    definition = build_tip_rack_definition(_tip_rack(), for_flex=True)
     self.assertEqual(definition["metadata"]["displayCategory"], "tipRack")
     self.assertEqual(definition["parameters"]["format"], "irregular")  # 2x2 is not an SBS grid
     self.assertTrue(definition["parameters"]["isTiprack"])
@@ -335,11 +344,11 @@ class TestBuildTipRackDefinition(unittest.TestCase):
     self.assertEqual(definition["parameters"]["loadName"], "hamilton_tips_300_0558ff")
 
   def test_full_rack_format_is_96standard(self):
-    definition = build_tip_rack_definition(_tip_rack(num_items_x=12, num_items_y=8))
+    definition = build_tip_rack_definition(_tip_rack(num_items_x=12, num_items_y=8), for_flex=True)
     self.assertEqual(definition["parameters"]["format"], "96Standard")
 
   def test_spot_geometry_and_zero_corner_offset(self):
-    definition = build_tip_rack_definition(_tip_rack())
+    definition = build_tip_rack_definition(_tip_rack(), for_flex=True)
     self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 0, "z": 0})
     self.assertEqual(definition["ordering"], [["A1", "B1"], ["A2", "B2"]])
     # A1 spot origin (10, 17, 0), 5 mm square: center (12.5, 19.5). The depth
@@ -362,7 +371,9 @@ class TestBuildTipRackDefinition(unittest.TestCase):
     # PLR builds this rack BY loading Opentrons' own definition, so the
     # rebuilt one must carry that file's numbers back: z 5.39, depth 59.3,
     # tipLength 59.3.
-    definition = build_tip_rack_definition(opentrons_96_filtertiprack_200ul(name="ot rack"))
+    definition = build_tip_rack_definition(
+      opentrons_96_filtertiprack_200ul(name="ot rack"), for_flex=True
+    )
     self.assertAlmostEqual(definition["wells"]["A1"]["z"], 5.39)
     self.assertAlmostEqual(definition["wells"]["A1"]["depth"], 59.3)
     self.assertAlmostEqual(definition["parameters"]["tipLength"], 59.3)
@@ -370,20 +381,25 @@ class TestBuildTipRackDefinition(unittest.TestCase):
   def test_rack_whose_tips_hang_below_its_base_is_refused(self):
     # The robot-server's schema declares well z non-negative, so this uploads
     # as a 422 per well; refuse it here, naming the rack and the spot.
-    with self.assertRaises(ValueError) as caught:
-      build_tip_rack_definition(_tip_rack(dz=-50.5))
-    self.assertIn("hamilton tips 300", str(caught.exception))
-    self.assertIn("50.5 mm BELOW", str(caught.exception))
+    for for_flex in (False, True):
+      with self.subTest(for_flex=for_flex):
+        with self.assertRaises(ValueError) as caught:
+          build_tip_rack_definition(_tip_rack(dz=-50.5), for_flex=for_flex)
+        self.assertIn("hamilton tips 300", str(caught.exception))
+        self.assertIn("50.5 mm BELOW", str(caught.exception))
 
   def test_rotated_tip_rack_is_refused(self):
     rack = _tip_rack()
     rack.rotation = Rotation(z=90)
-    with self.assertRaises(ValueError):
-      build_tip_rack_definition(rack)
+    for for_flex in (False, True):
+      with self.subTest(for_flex=for_flex), self.assertRaises(ValueError):
+        build_tip_rack_definition(rack, for_flex=for_flex)
 
   def test_grip_height_from_grip_distance(self):
-    self.assertNotIn("gripHeightFromLabwareBottom", build_tip_rack_definition(_tip_rack()))
-    definition = build_tip_rack_definition(_tip_rack(), grip_distance_from_top=10.0)
+    self.assertNotIn(
+      "gripHeightFromLabwareBottom", build_tip_rack_definition(_tip_rack(), for_flex=True)
+    )
+    definition = build_tip_rack_definition(_tip_rack(), grip_distance_from_top=10.0, for_flex=True)
     self.assertEqual(definition["gripHeightFromLabwareBottom"], 80.0)  # 90 - 10
 
 
