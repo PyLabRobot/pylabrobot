@@ -1,14 +1,4 @@
-"""Wire-level facts shared by the Flex device, its heads and its gripper.
-
-Small pieces that more than one of :mod:`~pylabrobot.opentrons.flex.flex`,
-:mod:`~pylabrobot.opentrons.flex.flex_head` and
-:mod:`~pylabrobot.opentrons.flex.flex_gripper` needs, and that belong to none of
-them: how a deck slot is spelled on the wire, which axes the robot addresses by
-name, the software-version gate on the robot/* command family, and the notice
-every not-yet-hardware-verified op logs. They live here so the always-present
-device module does not have to reach into the optional gripper module (or the
-heads) for them.
-"""
+"""Flex axis names, deck locations, and robot command version requirements."""
 
 from typing import FrozenSet, Optional
 
@@ -20,14 +10,6 @@ from pylabrobot.opentrons.run import (
 )
 
 OFFLINE_API_VERSION = "dry-run"
-
-# Shared by the heads and the gripper so the notice reads identically
-# everywhere; each module logs it through its own logger.
-UNTESTED_HARDWARE_WARNING = (
-  "%s.%s is coded but NOT YET VERIFIED on real Opentrons Flex hardware -- "
-  "tested only with mocks or simulation. Verify behavior "
-  "on real hardware before relying on it in a production protocol."
-)
 
 # The robot-server's DeckSlotName covers only the A1-D3 grid; the column-4
 # staging slots are addressable areas and ride a different location key.

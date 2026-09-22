@@ -969,9 +969,7 @@ class TestFlexHead96Ops(unittest.IsolatedAsyncioTestCase):
     rack = flex_96_tiprack_50ul(name="rack96")
     self.flex.deck.assign_child_at_slot(rack, "C1")
 
-    with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING") as log_ctx:
-      await self.head.pick_up_tips(rack)
-    self.assertTrue(any("not yet verified" in msg.lower() for msg in log_ctx.output))
+    await self.head.pick_up_tips(rack)
 
     cmd_types = [c.args[1] for c in self.api.submit_command.await_args_list]
     configure_cmds = [

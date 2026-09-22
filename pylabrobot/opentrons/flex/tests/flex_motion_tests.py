@@ -17,9 +17,9 @@ from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper, _require_robot_commands
-from pylabrobot.opentrons.flex.flex_head import FlexHead8, _FlexHead
+from pylabrobot.opentrons.flex.flex_head import _FlexHead
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
-from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking
+from pylabrobot.resources import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
@@ -315,107 +315,6 @@ class TestRobotCommandsVersionGate(unittest.IsolatedAsyncioTestCase):
   def test_unknown_version_raises(self):
     with self.assertRaises(OpentronsError):
       _require_robot_commands("robot/moveTo", None)
-
-
-class TestUntestedHardwareWarnings(unittest.IsolatedAsyncioTestCase):
-  """Hardware-verification coverage is op-scoped per head class: an op in the
-  class's verified set never warns; every other op logs the one-time
-  untested-hardware notice, naming the op. The gripper carries the same
-  mechanism with all five of its ops verified, so an op added later is
-  untested by default rather than silently unnoticed."""
-
-  def setUp(self):
-    set_tip_tracking(True)
-
-  def tearDown(self):
-    set_tip_tracking(False)
-
-  async def _flex_head8(self) -> Tuple[Flex, FlexHead8]:
-    api = make_api(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-    flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
-    self.addAsyncCleanup(flex.disconnect)
-    await flex.setup()
-    head = flex.left
-    assert isinstance(head, FlexHead8)
-    return flex, head
-
-  async def test_head8_verified_pickup_does_not_warn(self):
-    flex, head = await self._flex_head8()
-    rack = flex_96_tiprack_50ul(name="rack")
-    flex.deck.assign_child_at_slot(rack, "C1")
-    with self.assertRaises(AssertionError):
-      with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
-        await head.pick_up_tips(rack, column=0)
-
-  def test_every_gripper_op_is_in_the_gripper_s_verified_set(self):
-    """The gripper's notice can never fire today, and that is the point: the set
-    is full rather than the mechanism deleted, so the next op added warns."""
-    ops = {"grip", "move_labware", "move_to", "open_jaw", "ungrip"}
-    self.assertEqual(FlexGripper._HARDWARE_VERIFIED_OPS, frozenset(ops))
-
-  async def test_an_op_outside_the_gripper_s_verified_set_still_warns(self):
-    flex, api = _flex_with_gripper(self)
-    await flex.setup()
-    gripper = FlexGripper(flex, gripper_model="gripperV1")
-
-    with self.assertLogs("pylabrobot.opentrons.flex.flex_gripper", level="WARNING") as logged:
-      gripper._warn_untested_hardware("an_op_added_later")
-
-    self.assertIn("an_op_added_later", logged.output[0])
-
-  async def test_each_unverified_head_op_warns_not_just_the_first(self):
-    """Unverified operations warn once each, including after verified operations."""
-    flex, head = await self._flex_head8()
-    with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING") as log_ctx:
-      head._warn_untested_hardware("another_op_added_later")
-      head._warn_untested_hardware("an_op_added_later")
-      head._warn_untested_hardware("another_op_added_later")
-    self.assertEqual(len(log_ctx.output), 2)
-    self.assertTrue(any("FlexHead8.another_op_added_later" in msg for msg in log_ctx.output))
-    self.assertTrue(any("FlexHead8.an_op_added_later" in msg for msg in log_ctx.output))
-    self.assertTrue(any("not yet verified" in msg.lower() for msg in log_ctx.output))
-
-  async def test_head8_verified_motion_and_priming_do_not_warn(self):
-    """Hardware-tested motion and priming no longer emit the unverified notice."""
-    flex, head = await self._flex_head8()
-    rack = flex_96_tiprack_50ul(name="rack")
-    flex.deck.assign_child_at_slot(rack, "D1")
-    await head.pick_up_tips(rack, column=0)
-    with self.assertNoLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
-      await head.position()
-      await head.move_to(x=100, y=100, z=109)
-      await head.move_relative("z", 1)
-      await head.prepare_to_aspirate()
-      await head.move_to_addressable_area("movableTrashA3", stay_at_max_height=True)
-
-  async def test_in_place_ops_ran_on_the_eight_head_so_they_stay_quiet(self):
-    # These ran on the robot under an 8-nozzle layout.
-    flex, head = await self._flex_head8()
-    rack = flex_96_tiprack_50ul(name="rack")
-    flex.deck.assign_child_at_slot(rack, "C1")
-    await head.pick_up_tips(rack, column=0)
-    with self.assertRaises(AssertionError):
-      with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
-        await head.blow_out()
-
-  async def test_head1_hardware_verified_ops_do_not_warn(self):
-    """FlexHead1's ops were confirmed on a p50 single channel, so they stay quiet."""
-    api = make_api(pipettes=[("p50_single_flex", 1, 1.0, 50.0, "left")])
-    flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
-    self.addAsyncCleanup(flex.disconnect)
-    await flex.setup()
-    head = flex.left
-    assert head is not None
-    with self.assertRaises(AssertionError):
-      with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
-        await head.position()
-
-  async def test_head8_tip_presence_read_ran_on_hardware_so_it_stays_quiet(self):
-    # The 8-head's tip-presence sensor was read on the robot.
-    flex, head = await self._flex_head8()
-    with self.assertRaises(AssertionError):
-      with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
-        await head.get_tip_presence()
 
 
 if __name__ == "__main__":

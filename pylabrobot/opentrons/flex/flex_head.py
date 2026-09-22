@@ -29,22 +29,20 @@ In-place operations and explicit positioning leave the head where requested.
 
 import logging
 import math
+import warnings
 from typing import (
   TYPE_CHECKING,
   Any,
   Dict,
-  FrozenSet,
   List,
   Optional,
   Sequence,
-  Set,
   Tuple,
   Union,
   cast,
 )
 
 from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
-from pylabrobot.opentrons.flex.flex_wire import UNTESTED_HARDWARE_WARNING
 from pylabrobot.opentrons.flex.pipette_defaults import FlowRates, flow_rates
 from pylabrobot.opentrons.operations import OperationLock, instrument_operation
 from pylabrobot.opentrons.tracking import track_liquid_transfer
@@ -78,10 +76,6 @@ class _FlexHead:
   need to build robot-server command params.
   """
 
-  # Op names confirmed on real Flex hardware; every op outside this set
-  # triggers the one-time untested-hardware notice.
-  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset()
-
   def __init__(
     self,
     flex: "Flex",
@@ -101,7 +95,6 @@ class _FlexHead:
     # describing the head does not have to re-read /instruments to get it.
     self.max_volume = max_volume
     self._channel_tips: List[Optional[Tip]] = [None] * channels
-    self._untested_hardware_warned: Set[str] = set()
     # The labware id the pipette last pipetted over, or None when its position is
     # unknown (start of run, after a jog or a trash drop). Used to arc high only
     # when a pipetting move crosses to a different slot -- see _travel_guard.
@@ -149,18 +142,6 @@ class _FlexHead:
     )
     self._current_labware_id = labware_id
 
-  def _warn_untested_hardware(self, op: str) -> None:
-    """Log a one-time notice when an op has no real-hardware verification.
-
-    Coverage is op-scoped: ops in ``_HARDWARE_VERIFIED_OPS`` never log, and
-    every other op logs once, so a run that touches several unverified ops
-    names all of them rather than only whichever ran first.
-    """
-    if op in self._HARDWARE_VERIFIED_OPS or op in self._untested_hardware_warned:
-      return
-    self._untested_hardware_warned.add(op)
-    logger.warning(UNTESTED_HARDWARE_WARNING, type(self).__name__, op)
-
   def get_mounted_tips(self) -> List[Optional[Tip]]:
     """Per-channel tip state (Case-2: no private-attribute peeking by consumers).
 
@@ -204,7 +185,8 @@ class _FlexHead:
     bottom, so the next draw needs priming: see ``prepare_to_aspirate``. No
     trackers are involved.
     """
-    self._warn_untested_hardware("blow_out")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.blow_out has not been tested on hardware.", stacklevel=2)
     rate = flow_rate if flow_rate is not None else self.default_flow_rates().blow_out
     await self.flex._execute_command(
       "blowOutInPlace", {"pipetteId": self.pipette_id, "flowRate": rate}
@@ -372,7 +354,8 @@ class _FlexHead:
     the first time anything moved the plunger without going through this
     driver.
     """
-    self._warn_untested_hardware("prepare_to_aspirate")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.prepare_to_aspirate has not been tested on hardware.", stacklevel=2)
     self._require_mounted_tip()
     await self.flex._execute_command("prepareToAspirate", {"pipetteId": self.pipette_id})
 
@@ -701,7 +684,8 @@ class _FlexHead:
     the nozzle when no tip is mounted. The Flex's robot frame coincides with
     the deck frame, so the reported position needs no conversion.
     """
-    self._warn_untested_hardware("position")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.position has not been tested on hardware.", stacklevel=2)
     return await self._run.get_position(self.pipette_id)
 
   @instrument_operation
@@ -724,7 +708,8 @@ class _FlexHead:
     ``minimum_z_height`` (mm) defaults to the traversal height, so a lateral
     jog arcs over deck labware; ``speed`` is in mm/s (robot default if None).
     """
-    self._warn_untested_hardware("move_to")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.move_to has not been tested on hardware.", stacklevel=2)
     if x is None and y is None and z is None:
       raise ValueError("move_to: supply at least one of x, y, z.")
     if x is None or y is None or z is None:
@@ -767,7 +752,8 @@ class _FlexHead:
     is required: the target is the tip bottom when one is mounted, the nozzle
     when none is.
     """
-    self._warn_untested_hardware("move_to_well")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.move_to_well has not been tested on hardware.", stacklevel=2)
     if origin not in _WELL_ORIGINS:
       raise ValueError(f"origin must be one of {sorted(_WELL_ORIGINS)}, got {origin!r}")
     labware_id, well_name = await self._well_target(target)
@@ -794,7 +780,8 @@ class _FlexHead:
     Relative to the head's current position, so unlike :meth:`move_to` it
     needs no reading first.
     """
-    self._warn_untested_hardware("move_relative")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.move_relative has not been tested on hardware.", stacklevel=2)
     if axis not in _MOVE_AXES:
       raise ValueError(f"axis must be one of {sorted(_MOVE_AXES)}, got {axis!r}")
     await self.flex._execute_command(
@@ -816,7 +803,10 @@ class _FlexHead:
     An addressable area is somewhere the deck itself provides: a trash bin, a
     waste chute, a staging slot. Named, so the robot resolves the position.
     """
-    self._warn_untested_hardware("move_to_addressable_area")
+    if self.channels == 96:
+      warnings.warn(
+        "FlexHead96.move_to_addressable_area has not been tested on hardware.", stacklevel=2
+      )
     o = offset or Coordinate(0, 0, 0)
     params: Dict[str, Any] = {
       "pipetteId": self.pipette_id,
@@ -847,7 +837,8 @@ class _FlexHead:
     naming no well leaves the robot no safe height to prime at. See
     ``prepare_to_aspirate``.
     """
-    self._warn_untested_hardware("aspirate_in_place")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.aspirate_in_place has not been tested on hardware.", stacklevel=2)
     self._require_mounted_tip()
     rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
     await self._execute_draw(
@@ -874,7 +865,8 @@ class _FlexHead:
     caller owns the position" means the caller owes it a good one, not that
     any position will do.
     """
-    self._warn_untested_hardware("dispense_in_place")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.dispense_in_place has not been tested on hardware.", stacklevel=2)
     self._require_mounted_tip()
     rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
     params: Dict[str, Any] = {
@@ -895,7 +887,8 @@ class _FlexHead:
     (uL/s) defaults to the aspirate default. Refuses an unprimed plunger the
     same way ``aspirate_in_place`` does. No tracker is involved.
     """
-    self._warn_untested_hardware("air_gap_in_place")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.air_gap_in_place has not been tested on hardware.", stacklevel=2)
     self._require_mounted_tip()
     rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
     await self._execute_draw(
@@ -912,7 +905,8 @@ class _FlexHead:
     One reading per pipette, not per channel. ``has_tip_on_hardware()`` is
     the same reading as a bool. ``None`` when the command reports no status.
     """
-    self._warn_untested_hardware("get_tip_presence")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.get_tip_presence has not been tested on hardware.", stacklevel=2)
     return await self._read_tip_presence()
 
   @instrument_operation
@@ -924,7 +918,8 @@ class _FlexHead:
     reports and leaves the judgement to the caller, this one raises the
     mismatch from the robot side, so it reads as a checkpoint in a sequence.
     """
-    self._warn_untested_hardware("verify_tip_presence")
+    if self.channels == 96:
+      warnings.warn("FlexHead96.verify_tip_presence has not been tested on hardware.", stacklevel=2)
     if not isinstance(expected_state, bool):
       raise TypeError("expected_state must be a bool")
     await self.flex._execute_command(
@@ -940,7 +935,10 @@ class _FlexHead:
     low-volume mode, which this picks for the volume given. Call it before
     picking up tips: the robot refuses a mode change while a tip is attached.
     """
-    self._warn_untested_hardware("configure_for_volume")
+    if self.channels == 96:
+      warnings.warn(
+        "FlexHead96.configure_for_volume has not been tested on hardware.", stacklevel=2
+      )
     await self.flex._execute_command(
       "configureForVolume", {"pipetteId": self.pipette_id, "volume": volume}
     )
@@ -963,7 +961,10 @@ class _FlexHead:
     tip is stranded on the nozzle and this call is the way off. Guarding on it
     made the escape hatch refuse in the only situation it exists for.
     """
-    self._warn_untested_hardware("unsafe_drop_tip_in_place")
+    if self.channels == 96:
+      warnings.warn(
+        "FlexHead96.unsafe_drop_tip_in_place has not been tested on hardware.", stacklevel=2
+      )
     await self.flex._execute_command("unsafe/dropTipInPlace", {"pipetteId": self.pipette_id})
     self._channel_tips = [None] * self.channels
 
@@ -979,7 +980,10 @@ class _FlexHead:
     recovery it exists for. Leaves the plunger past
     its dispense bottom, so the next draw needs priming.
     """
-    self._warn_untested_hardware("unsafe_blow_out_in_place")
+    if self.channels == 96:
+      warnings.warn(
+        "FlexHead96.unsafe_blow_out_in_place has not been tested on hardware.", stacklevel=2
+      )
     await self.flex._execute_command(
       "unsafe/blowOutInPlace",
       {"pipetteId": self.pipette_id, "flowRate": flow_rate},
@@ -1082,36 +1086,8 @@ class FlexHead1(_FlexHead):
 
   Verified on a real single-channel Flex (p50, robot-server API 9.1.1):
   motion, tip pickup and drop, liquid probe, in-place pipetting and volume
-  mode, all against the hardware tip-presence sensor. Ops outside
-  ``_HARDWARE_VERIFIED_OPS`` still log the one-time untested-hardware notice.
+  mode, all against the hardware tip-presence sensor.
   """
-
-  # Confirmed on a p50 single channel. Base-class ops are listed here rather
-  # than on _FlexHead because the other heads have not been run on hardware.
-  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
-    {
-      "air_gap_in_place",
-      "aspirate_in_place",
-      "blow_out",
-      "configure_for_volume",
-      "dispense_in_place",
-      "drop_tips",
-      "get_tip_presence",
-      "liquid_probe",
-      "move_relative",
-      "move_to",
-      "move_to_addressable_area",
-      "move_to_well",
-      "pick_up_tips",
-      "position",
-      "prepare_to_aspirate",
-      "touch_tip",
-      "try_liquid_probe",
-      "unsafe_blow_out_in_place",
-      "unsafe_drop_tip_in_place",
-      "verify_tip_presence",
-    }
-  )
 
   @instrument_operation
   async def pick_up_tips(
@@ -1129,7 +1105,6 @@ class FlexHead1(_FlexHead):
     committed only if that verification passes, rolled back (with no
     ``_channel_tips`` mutation) if the sensor reports a missed pickup.
     """
-    self._warn_untested_hardware("pick_up_tips")
     if self._channel_tips[0] is not None:
       raise OpentronsError(
         "HasTipError",
@@ -1174,7 +1149,6 @@ class FlexHead1(_FlexHead):
     commit, ``_confirm_tips_cleared()`` checks the hardware tip-presence
     sensor and logs a warning (does not raise) if it still reports a tip.
     """
-    self._warn_untested_hardware("drop_tips")
 
     if isinstance(target, Trash):
       await self._execute_trash_drop(target)
@@ -1228,7 +1202,7 @@ class FlexHead1(_FlexHead):
     aspirate raises before any hardware motion. The head primes at traversal
     height before descending to the PLR cavity floor plus clearance.
     """
-    self._warn_untested_hardware("aspirate")
+    warnings.warn("FlexHead1.aspirate has not been tested on hardware.", stacklevel=2)
     self._require_mounted_tip()
     staged_trackers = self._container_trackers(target)
     await self._pipette(
@@ -1250,7 +1224,7 @@ class FlexHead1(_FlexHead):
     stage -> validate -> wire -> commit/rollback with ``add_liquid`` staged
     BEFORE the wire command.
     """
-    self._warn_untested_hardware("dispense")
+    warnings.warn("FlexHead1.dispense has not been tested on hardware.", stacklevel=2)
     self._require_mounted_tip()
     staged_trackers = self._container_trackers(target)
     await self._pipette(
@@ -1271,7 +1245,6 @@ class FlexHead1(_FlexHead):
     ``_touch_tip_params``). Requires a mounted tip, checked before any wire
     command. No trackers are involved.
     """
-    self._warn_untested_hardware("touch_tip")
     self._require_mounted_tip()
     labware_id, well_name = await self._well_target(well)
     await self.flex._execute_command(
@@ -1286,7 +1259,6 @@ class FlexHead1(_FlexHead):
     (checked before any wire command). Raises ``OpentronsError`` if no
     liquid is found; use ``try_liquid_probe`` for the non-raising variant.
     """
-    self._warn_untested_hardware("liquid_probe")
     self._require_mounted_tip()
     parent = self._require_itemized_parent(well)
     labware_id = await self.flex._ensure_labware_loaded(parent)
@@ -1296,7 +1268,6 @@ class FlexHead1(_FlexHead):
   @instrument_operation
   async def try_liquid_probe(self, well: Well) -> Optional[float]:
     """Like ``liquid_probe`` but return ``None`` instead of raising when no liquid is found."""
-    self._warn_untested_hardware("try_liquid_probe")
     self._require_mounted_tip()
     parent = self._require_itemized_parent(well)
     labware_id = await self.flex._ensure_labware_loaded(parent)
@@ -1327,47 +1298,11 @@ class FlexHead8(_FlexHead):
   ALL mode if a prior single-tip op left the layout otherwise
   (``_ensure_all_mode``).
 
-  Hardware-verified operations are listed in ``_HARDWARE_VERIFIED_OPS``.
   Coordinate motion, position reads, priming, tip handling and plate air
   transfers have been exercised on the p1000 multi-channel Flex. Air tests
   establish command sequencing and motion, not liquid-volume accuracy.
   Tip-presence sensing can report absent for a physically seated single tip.
-  Operations outside the verified set log a one-time warning.
   """
-
-  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
-    {
-      "air_gap_in_place",
-      "aspirate",
-      "aspirate_container",
-      "aspirate_in_place",
-      "aspirate_single",
-      "blow_out",
-      "configure_for_volume",
-      "dispense",
-      "dispense_container",
-      "dispense_in_place",
-      "dispense_single",
-      "drop_single_tip",
-      "drop_tips",
-      "get_tip_presence",
-      "liquid_probe",
-      "move_to",
-      "move_to_addressable_area",
-      "move_relative",
-      "move_to_well",
-      "position",
-      "prepare_to_aspirate",
-      "pick_up_partial",
-      "pick_up_single_tip",
-      "pick_up_tips",
-      "touch_tip",
-      "try_liquid_probe",
-      "unsafe_blow_out_in_place",
-      "unsafe_drop_tip_in_place",
-      "verify_tip_presence",
-    }
-  )
 
   def __init__(
     self,
@@ -1588,7 +1523,6 @@ class FlexHead8(_FlexHead):
     ``configureNozzleLayout`` is emitted here (no tip is on yet, so the engine
     accepts it); the ``pickUpTip`` is anchored at the well under the primary nozzle.
     """
-    self._warn_untested_hardware("pick_up_partial")
     ordered = sorted(use_channels)
     top = self.channels - 1
     if ordered[-1] == top:  # front-anchored partial (includes H1)
@@ -1685,7 +1619,6 @@ class FlexHead8(_FlexHead):
     ``_channel_tips`` mutation) if the sensor reports a missed pickup. Only spots
     that actually had a tip are staged (None-skip).
     """
-    self._warn_untested_hardware("pick_up_tips")
 
     for i, spot in enumerate(spots):
       if spot.has_tip() and self._channel_tips[i] is not None:
@@ -1743,7 +1676,6 @@ class FlexHead8(_FlexHead):
     a tip is on -- so resetting first would make this op, the only one that
     can clear a cherry-picked tip, need the tip already gone.
     """
-    self._warn_untested_hardware("drop_tips")
 
     if isinstance(target, Trash):
       await self._execute_trash_drop(target)
@@ -1919,7 +1851,6 @@ class FlexHead8(_FlexHead):
     overhang the adjacent slot's labware -- all before any wire command. The
     well's own tracker is staged with ``volume``.
     """
-    self._warn_untested_hardware("aspirate")
     self._active_single_channel()
     parent = self._require_itemized_parent(well)
     well_name = parent.get_child_identifier(well)
@@ -1981,7 +1912,6 @@ class FlexHead8(_FlexHead):
     hardware fans it to all 8 nozzles. One ``Well.tracker`` is staged per well
     whose channel holds a tip (None-skip), before the wire command.
     """
-    self._warn_untested_hardware("aspirate")
     self._require_mounted_tip()
     if not wells:
       raise ValueError("aspirate: the target well sequence is empty.")
@@ -2009,7 +1939,6 @@ class FlexHead8(_FlexHead):
     raises before any hardware motion. The head primes at traversal height
     before descending to the PLR cavity floor plus clearance.
     """
-    self._warn_untested_hardware("aspirate")
     self._require_mounted_tip()
     if not isinstance(plate, Plate):
       raise OpentronsError("Invalid target", "Pipetting requires a Plate")
@@ -2075,7 +2004,6 @@ class FlexHead8(_FlexHead):
   ) -> None:
     """Dispense to one well with the mounted single nozzle -- the mirror of
     :meth:`_aspirate_single_well`."""
-    self._warn_untested_hardware("dispense")
     self._active_single_channel()
     parent = self._require_itemized_parent(well)
     well_name = parent.get_child_identifier(well)
@@ -2093,7 +2021,6 @@ class FlexHead8(_FlexHead):
     liquid_height: Optional[float],
   ) -> None:
     """Dispense a PLR-native column (a list of wells) -- one anchored ``dispense``."""
-    self._warn_untested_hardware("dispense")
     self._require_mounted_tip()
     if not wells:
       raise ValueError("dispense: the target well sequence is empty.")
@@ -2119,7 +2046,6 @@ class FlexHead8(_FlexHead):
     command, so an infeasible dispense (e.g. ``TooLittleVolumeError``)
     raises before any hardware motion.
     """
-    self._warn_untested_hardware("dispense")
     self._require_mounted_tip()
     if not isinstance(plate, Plate):
       raise OpentronsError("Invalid target", "Pipetting requires a Plate")
@@ -2149,7 +2075,6 @@ class FlexHead8(_FlexHead):
     a tip draws ``volume``, so the container's single tracker is staged with
     the total and settled as one op.
     """
-    self._warn_untested_hardware("aspirate_container")
     self._require_mounted_tip()
     self._require_span_fits_container(container, 0.0, _EIGHT_CHANNEL_Y_SPAN, offset)
     await self._ensure_all_mode()
@@ -2178,7 +2103,6 @@ class FlexHead8(_FlexHead):
     Mirrors ``aspirate_container``: same addressing, same pre-wire guards,
     and the container's single tracker staged with the total.
     """
-    self._warn_untested_hardware("dispense_container")
     self._require_mounted_tip()
     self._require_span_fits_container(container, 0.0, _EIGHT_CHANNEL_Y_SPAN, offset)
     await self._ensure_all_mode()
@@ -2208,7 +2132,6 @@ class FlexHead8(_FlexHead):
     a mounted tip and a valid column, both checked before any wire command,
     plus ALL nozzle mode. No trackers are involved.
     """
-    self._warn_untested_hardware("touch_tip")
     self._require_mounted_tip()
     well_name, _ = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
@@ -2228,7 +2151,6 @@ class FlexHead8(_FlexHead):
     no liquid is found; use ``try_liquid_probe`` for the non-raising
     variant.
     """
-    self._warn_untested_hardware("liquid_probe")
     self._require_mounted_tip()
     well_name, _ = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
@@ -2238,7 +2160,6 @@ class FlexHead8(_FlexHead):
   @instrument_operation
   async def try_liquid_probe(self, plate: Plate, column: int) -> Optional[float]:
     """Like ``liquid_probe`` but return ``None`` instead of raising when no liquid is found."""
-    self._warn_untested_hardware("try_liquid_probe")
     self._require_mounted_tip()
     well_name, _ = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
@@ -2467,7 +2388,6 @@ class FlexHead8(_FlexHead):
     channel already holds one. Then stage -> validate -> wire -> verify ->
     commit/rollback, as in ``pick_up_tips``.
     """
-    self._warn_untested_hardware("pick_up_single_tip")
     if primary_nozzle not in _SINGLE_NOZZLES:
       raise ValueError(
         f"primary_nozzle={primary_nozzle!r}: an 8-channel Flex can anchor a "
@@ -2526,7 +2446,6 @@ class FlexHead8(_FlexHead):
     tracker, same as the column ``aspirate``, and leaves any plunger priming
     to the robot for the same reason.
     """
-    self._warn_untested_hardware("aspirate_single")
     await self._ensure_anchored_on_mounted_channel()
     self._require_reach_in_single_layout(plate, well)
     staged_trackers = self._container_trackers(plate.get_item(well))
@@ -2543,7 +2462,6 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float] = None,
   ) -> None:
     """Dispense to a single well with the currently mounted single tip."""
-    self._warn_untested_hardware("dispense_single")
     await self._ensure_anchored_on_mounted_channel()
     self._require_reach_in_single_layout(plate, well)
     staged_trackers = self._container_trackers(plate.get_item(well))
@@ -2559,7 +2477,6 @@ class FlexHead8(_FlexHead):
     checks the hardware tip-presence sensor and logs a warning (does not
     raise) if it still reports a tip.
     """
-    self._warn_untested_hardware("drop_single_tip")
     channel = self._active_single_channel()
     await self._ensure_anchored_on_mounted_channel()
     await self._execute_trash_drop(trash)
@@ -2630,7 +2547,7 @@ class FlexHead96(_FlexHead):
     missed pickup. Only spots that actually had a tip are staged
     (None-skip).
     """
-    self._warn_untested_hardware("pick_up_tips")
+    warnings.warn("FlexHead96.pick_up_tips has not been tested on hardware.", stacklevel=2)
     spots = self._check_full_coverage(tip_rack)
 
     for i, spot in enumerate(spots):
@@ -2683,7 +2600,7 @@ class FlexHead96(_FlexHead):
     checks the hardware tip-presence sensor and logs a warning (does not
     raise) if it still reports a tip.
     """
-    self._warn_untested_hardware("drop_tips")
+    warnings.warn("FlexHead96.drop_tips has not been tested on hardware.", stacklevel=2)
 
     if isinstance(target, Trash):
       await self._execute_trash_drop(target)
@@ -2740,7 +2657,7 @@ class FlexHead96(_FlexHead):
     command. The head primes at traversal height, descends using PLR
     coordinates, aspirates in place, and retracts vertically.
     """
-    self._warn_untested_hardware("aspirate")
+    warnings.warn("FlexHead96.aspirate has not been tested on hardware.", stacklevel=2)
     self._require_mounted_tip()
     if isinstance(target, Plate):
       anchor: Container = target.get_item(self._ANCHOR_WELL_NAME)
@@ -2770,7 +2687,7 @@ class FlexHead96(_FlexHead):
     ``add_liquid`` staged per tip-holding channel for a plate and the total
     staged against a container's single tracker.
     """
-    self._warn_untested_hardware("dispense")
+    warnings.warn("FlexHead96.dispense has not been tested on hardware.", stacklevel=2)
     self._require_mounted_tip()
     if isinstance(target, Plate):
       anchor: Container = target.get_item(self._ANCHOR_WELL_NAME)
@@ -2799,7 +2716,7 @@ class FlexHead96(_FlexHead):
     a mounted tip and a 96-position plate, both checked before any wire
     command. No trackers are involved.
     """
-    self._warn_untested_hardware("touch_tip")
+    warnings.warn("FlexHead96.touch_tip has not been tested on hardware.", stacklevel=2)
     self._require_mounted_tip()
     self._check_full_coverage(plate)
     labware_id = await self.flex._ensure_labware_loaded(plate)
