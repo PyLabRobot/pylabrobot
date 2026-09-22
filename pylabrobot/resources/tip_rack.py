@@ -185,7 +185,7 @@ class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
     )
 
   @property
-  def _available(self) -> bool:
+  def _available_for_tip_handling(self) -> bool:
     """Whether nothing, a lid or another rack in its stack, sits on top of this rack."""
     if self.lid is not None:
       return False
