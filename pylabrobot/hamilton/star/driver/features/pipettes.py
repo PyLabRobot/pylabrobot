@@ -21,7 +21,11 @@ from typing import (
 )
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
-from pylabrobot.hamilton.star.driver.errors import channels_that_faulted
+from pylabrobot.hamilton.star.driver.errors import (
+  NoTeachInSignalError,
+  STARFirmwareError,
+  channels_that_faulted,
+)
 from pylabrobot.hamilton.star.driver.lock import CHANNEL_MODULE_LETTERS, _FirmwareLock
 from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
 from pylabrobot.resources.coordinate import Coordinate
@@ -117,6 +121,8 @@ class PipettesConfiguration:
   """Each level is `level * 5000` increments/s2: 231.5, 463.0, 694.5, 926.0 mm/s2."""
   y_drive_current_limit_range: Tuple[int, int] = (0, 7)
   clld_detection_edge_range: Tuple[int, int] = (0, 1_023)
+  clld_detection_drop_range: Tuple[int, int] = (0, 1_023)
+  lld_post_detection_distance_range_increments: Tuple[int, int] = (0, 9_999)
 
   # -- what a channel's own Z drive accepts, for the moves addressed to the channel itself --
   z_drive_speed_range_increments: Tuple[int, int] = (20, 15_000)
@@ -1633,6 +1639,18 @@ class Pipettes:
   # Probing
   # ----------------------------------------
 
+  def _found_nothing(self, error: STARFirmwareError, module: str) -> bool:
+    """Whether a firmware error says only that a cLLD search reached its end without detecting.
+
+    The master answers that with error 12, a channel with trace 70.
+    """
+    return bool(error.errors) and all(
+      isinstance(e, NoTeachInSignalError)
+      if module == "C0"
+      else e.raw_module == module and e.trace_information == 70
+      for e in error.errors.values()
+    )
+
   # -- x probing (capacitive only) --------------------------------------------------------------
 
   async def _unchecked_fw_probe_x_using_clld(self, end_position: float, read_timeout: int = 240):
@@ -1653,14 +1671,13 @@ class Pipettes:
     self,
     channel_idx: int,
     direction: Literal["left", "right"],
+    *,
     search_end_position: Optional[float] = None,
     post_detection_distance: float = 2.0,
     tip_bottom_diameter: float = 1.2,
     read_timeout: int = 240,
-  ) -> float:
+  ) -> Optional[float]:
     """Probe a conductive surface along X with a channel's cLLD, from where the arm stands.
-
-    XL does not answer whether cLLD triggered: reaching the end reads as a detection.
 
     Args:
       channel_idx: which channel, 0-indexed from the back.
@@ -1672,7 +1689,7 @@ class Pipettes:
       read_timeout: how long to wait for the search, in s.
 
     Returns:
-      The surface's X in mm, rounded to 0.1 mm.
+      The surface's X in mm, rounded to 0.1 mm, or None if the search found nothing.
 
     Raises:
       ValueError: If an argument is out of range, or the search end lies behind the arm.
@@ -1701,7 +1718,13 @@ class Pipettes:
     if direction == "left" and not here > search_end_position:
       raise ValueError(f"search_end_position={search_end_position} is not left of x={here}")
 
-    await self._unchecked_fw_probe_x_using_clld(search_end_position, read_timeout=read_timeout)
+    found = True
+    try:
+      await self._unchecked_fw_probe_x_using_clld(search_end_position, read_timeout=read_timeout)
+    except STARFirmwareError as error:
+      if not self._found_nothing(error, "C0"):
+        raise
+      found = False
     detected = round(await self.request_x_position(), 1)
 
     # Back away, so a carrier moved later does not drag against the tip.
@@ -1711,7 +1734,7 @@ class Pipettes:
     else:
       await self.move_to_x_position(detected - post_detection_distance)
       surface = detected + tip_bottom_diameter / 2
-    return round(surface, 1)
+    return round(surface, 1) if found else None
 
   # -- y probing (capacitive only) --------------------------------------------------------------
 
@@ -1750,6 +1773,7 @@ class Pipettes:
     self,
     channel_idx: int,
     direction: Literal["forward", "backward"],
+    *,
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
     search_speed: float = 10.0,
@@ -1758,10 +1782,8 @@ class Pipettes:
     current_limit: int = 7,
     post_detection_distance: float = 2.0,
     tip_bottom_diameter: float = 1.2,
-  ) -> float:
+  ) -> Optional[float]:
     """Probe a conductive surface along Y with a channel's cLLD, never past its neighbours.
-
-    YL does not answer whether cLLD triggered: reaching the end reads as a detection.
 
     Args:
       channel_idx: which channel, 0-indexed from the back.
@@ -1778,7 +1800,7 @@ class Pipettes:
         1.2 is the teaching needle's.
 
     Returns:
-      The surface's Y in mm, rounded to 0.1 mm.
+      The surface's Y in mm, rounded to 0.1 mm, or None if the search found nothing.
 
     Raises:
       ValueError: If an argument is out of range, or the search end lies behind the channel.
@@ -1835,14 +1857,20 @@ class Pipettes:
       if not lowest <= checked <= highest:
         raise ValueError(f"{name} must be between {lowest} and {highest}, is {checked}")
 
-    await self._unchecked_fw_probe_y_using_clld(
-      channel_idx,
-      end_position=end_increments,
-      detection_edge=detection_edge,
-      search_speed=speed_increments,
-      acceleration_level=acceleration_level,
-      current_limit=current_limit,
-    )
+    found = True
+    try:
+      await self._unchecked_fw_probe_y_using_clld(
+        channel_idx,
+        end_position=end_increments,
+        detection_edge=detection_edge,
+        search_speed=speed_increments,
+        acceleration_level=acceleration_level,
+        current_limit=current_limit,
+      )
+    except STARFirmwareError as error:
+      if not self._found_nothing(error, self.channel_id(channel_idx)):
+        raise
+      found = False
     detected = await self.request_y_position(channel_idx)
 
     # Back away from the surface, no further than the neighbour behind the move allows.
@@ -1856,9 +1884,159 @@ class Pipettes:
         channel_idx, detected + min(post_detection_distance, high - detected)
       )
       surface = detected - tip_bottom_diameter / 2
-    return round(surface, 1)
+    return round(surface, 1) if found else None
 
   # -- z probing (capacitive, pressure, force) --------------------------------------------------
+
+  async def _unchecked_fw_probe_z_using_clld(
+    self,
+    channel: int,
+    end_position: int,
+    start_position: int,
+    search_speed: int,
+    acceleration: int,
+    detection_edge: int,
+    detection_drop: int,
+    post_detection_trajectory: int,
+    post_detection_distance: int,
+  ):
+    """Lower one channel until its cLLD triggers, as given, in Z increments. `Px ZL`.
+
+    Args:
+      channel: 0-indexed from the back.
+      end_position: stop disc height it goes no lower than (`zh`).
+      start_position: stop disc height the search starts from (`zc`).
+      search_speed: increments/s (`zl`).
+      acceleration: thousands of increments/s2 (`zr`).
+      detection_edge: edge steepness on detection, 0 to 1023 (`gt`).
+      detection_drop: offset after the edge, 0 to 1023 (`gl`).
+      post_detection_trajectory: 0 moves down after detection, 1 up (`zj`).
+      post_detection_distance: how far it moves after detection (`zi`).
+    """
+    await self._driver.send_command(
+      module=self.channel_id(channel),
+      command="ZL",
+      zh=f"{end_position:05}",
+      zc=f"{start_position:05}",
+      zl=f"{search_speed:05}",
+      zr=f"{acceleration:03}",
+      gt=f"{detection_edge:04}",
+      gl=f"{detection_drop:04}",
+      zj=post_detection_trajectory,
+      zi=f"{post_detection_distance:04}",
+    )
+
+  async def request_last_lld_heights(self) -> List[float]:
+    """Request the height each channel last detected liquid at, by cLLD or pLLD. `C0 RL`.
+
+    Returns:
+      The heights in mm, back to front.
+    """
+    resp = await self._driver.send_command(module="C0", command="RL", fmt="lh#### (n)")
+    return [increments / 10 for increments in cast(List[int], resp["lh"])]
+
+  async def probe_z_using_clld(
+    self,
+    channel_idx: int,
+    *,
+    search_end_position: float = 99.98,
+    search_start_position: Optional[float] = None,
+    search_speed: float = 10.0,
+    acceleration: float = 800.0,
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_distance: float = 2.0,
+    move_channels_to_safe_pos_after: bool = False,
+  ) -> Optional[float]:
+    """Lower a channel's tip until its cLLD triggers, and read the height it detected at.
+
+    On a firmware error the channels go to Z safety first, then it is raised or, for a search
+    that found nothing, None returned.
+
+    Args:
+      channel_idx: which channel, 0-indexed from the back.
+      search_end_position: lowest tip bottom height, in mm.
+      search_start_position: tip bottom height to search from, in mm. As high as the tip goes
+        when None.
+      search_speed: in mm/s.
+      acceleration: in mm/s2.
+      detection_edge: cLLD edge steepness, 0 to 1023.
+      detection_drop: offset after the edge, 0 to 1023.
+      post_detection_trajectory: 0 moves down after detection, 1 up.
+      post_detection_distance: how far it moves after detection, in mm.
+      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards.
+
+    Returns:
+      The height the channel detected at, in mm, or None if the search found nothing.
+
+    Raises:
+      RuntimeError: If the channel carries no tip.
+      ValueError: If an argument is out of range.
+    """
+    self._require_channel(channel_idx)
+    if not (await self.sense_tip_presence())[channel_idx]:
+      raise RuntimeError(f"no tip mounted on channel {channel_idx}")
+    c = self.configuration
+    lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
+
+    # The search runs on the stop disc, which sits the overhang above the tip bottom.
+    overhang = round(await self.request_tip_overhang(channel_idx), 1)
+    top = highest - overhang
+    if search_start_position is None:
+      search_start_position = top
+    if search_end_position < lowest:
+      raise ValueError(
+        f"search_end_position must be at least {lowest} mm, is {search_end_position}"
+      )
+    if not search_end_position <= search_start_position <= top:
+      raise ValueError(
+        f"search_start_position must be between {search_end_position} and {top} mm, "
+        f"is {search_start_position}"
+      )
+    if post_detection_trajectory not in (0, 1):
+      raise ValueError(f"post_detection_trajectory must be 0 or 1, is {post_detection_trajectory}")
+    end = c.z_drive_mm_to_increments(search_end_position + overhang)
+    start = c.z_drive_mm_to_increments(round(search_start_position + overhang, 2))
+    speed = c.z_drive_mm_to_increments(search_speed)
+    ramp = c.z_drive_acceleration_mm_to_increments(acceleration)
+    distance = c.z_drive_mm_to_increments(post_detection_distance)
+    for checked, (low, high), name in (
+      (end, c.z_range_increments, "search end, in increments,"),
+      (start, c.z_range_increments, "search start, in increments,"),
+      (speed, c.z_drive_speed_range_increments, "search_speed, in increments/s,"),
+      (ramp, c.z_drive_acceleration_range_increments, "acceleration, in 1000 increments/s2,"),
+      (detection_edge, c.clld_detection_edge_range, "detection_edge"),
+      (detection_drop, c.clld_detection_drop_range, "detection_drop"),
+      (
+        distance,
+        c.lld_post_detection_distance_range_increments,
+        "post_detection_distance, in increments,",
+      ),
+    ):
+      if not low <= checked <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {checked}")
+
+    try:
+      await self._unchecked_fw_probe_z_using_clld(
+        channel_idx,
+        end_position=end,
+        start_position=start,
+        search_speed=speed,
+        acceleration=ramp,
+        detection_edge=detection_edge,
+        detection_drop=detection_drop,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_distance=distance,
+      )
+    except STARFirmwareError as error:
+      await self.move_to_safe_z()
+      if not self._found_nothing(error, self.channel_id(channel_idx)):
+        raise
+      return None
+    if move_channels_to_safe_pos_after:
+      await self.move_to_safe_z()
+    return (await self.request_last_lld_heights())[channel_idx]
 
   async def _unchecked_fw_probe_z_using_ztouch(
     self,

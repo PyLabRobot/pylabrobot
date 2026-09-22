@@ -4,6 +4,7 @@ from typing import Any, List, Optional, Tuple
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
+from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes, PipettesConfiguration
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
@@ -439,6 +440,99 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.sent, [f"P2YLya{end:05}gt0010gl0000yv0216yr4yw7"])
     self.moves.assert_awaited_once_with(1, 252.0)
     self.assertEqual(y, 249.4)
+
+  async def test_z_firmware(self):
+    await self.pipettes._unchecked_fw_probe_z_using_clld(0, 9320, 31200, 932, 75, 10, 2, 1, 186)
+    self.assertEqual(self.sent, ["P1ZLzh09320zc31200zl00932zr075gt0010gl0002zj1zi0186"])
+
+  def _mount_a_tip(self, overhang: float):
+    self.pipettes.sense_tip_presence = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=[1] * self.pipettes.num_channels
+    )
+    self.pipettes.request_tip_overhang = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=overhang
+    )
+    self.pipettes.move_to_safe_z = self.moves  # type: ignore[method-assign]
+
+  async def test_z_probe_searches_from_the_top_on_the_stop_disc_and_reads_the_height(self):
+    self._mount_a_tip(51.9)
+    answer = self.pipettes._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      await answer(module=module, command=command, **kwargs)
+      return {"lh": [1234] * self.pipettes.num_channels}
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+    z = await self.pipettes.probe_z_using_clld(1)
+    end = self.pipettes.configuration.z_drive_mm_to_increments(99.98 + 51.9)
+    self.assertEqual(self.sent, [f"P2ZLzh{end:05}zc31200zl00932zr075gt0010gl0002zj1zi0186", "C0RL"])
+    self.assertEqual(z, 123.4)
+    self.moves.assert_not_awaited()
+
+  async def test_z_probe_goes_to_safe_z_on_a_firmware_error(self):
+    self._mount_a_tip(51.9)
+
+    async def failing(module: str, command: str, **kwargs: Any):
+      raise STARFirmwareError(errors={}, raw_response="")
+
+    self.pipettes._driver.send_command = failing  # type: ignore[assignment]
+    with self.assertRaises(STARFirmwareError):
+      await self.pipettes.probe_z_using_clld(0)
+    self.moves.assert_awaited_once()
+
+  def _answer_the_search_with(self, command: str, reply: str):
+    """Answer `command` with the firmware error `reply` parses to; record everything."""
+    recorded = self.pipettes._driver.send_command
+    searched = command
+
+    async def answering(module: str, command: str, **kwargs: Any):
+      await recorded(module=module, command=command, **kwargs)
+      if command == searched:
+        check_fw_string_error(reply)
+      return {"lh": [0] * self.pipettes.num_channels}
+
+    self.pipettes._driver.send_command = answering  # type: ignore[assignment]
+
+  async def test_x_probe_that_finds_nothing_backs_away_and_answers_none(self):
+    self._answer_the_search_with("XL", "C0XLid0001er12/00")
+    self.pipettes.request_x_position = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      side_effect=[300.0, 200.0]
+    )
+    self.pipettes.move_to_x_position = self.moves  # type: ignore[method-assign]
+    self.assertIsNone(await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0))
+    self.moves.assert_awaited_once_with(202.0)
+
+  async def test_y_probe_that_finds_nothing_backs_away_and_answers_none(self):
+    self._answer_the_search_with("YL", "P2YLid0001er70")
+    ys = [400.0, 300.0, 200.0, 100.0, 90.0, 80.0, 70.0, 60.0][: self.pipettes.num_channels]
+    self.pipettes.request_y_positions = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=ys
+    )
+    self.pipettes.move_to_y_position = self.moves  # type: ignore[method-assign]
+    self.assertIsNone(await self.pipettes.probe_y_using_clld(1, "forward"))
+    self.moves.assert_awaited_once()
+
+  async def test_z_probe_that_finds_nothing_goes_to_safe_z_and_answers_none(self):
+    self._mount_a_tip(51.9)
+    self._answer_the_search_with("ZL", "P2ZLid0001er70")
+    self.assertIsNone(await self.pipettes.probe_z_using_clld(1))
+    self.moves.assert_awaited_once()
+    self.assertNotIn("C0RL", self.sent)
+
+  async def test_z_probe_raises_any_other_channel_error(self):
+    self._mount_a_tip(51.9)
+    self._answer_the_search_with("ZL", "P2ZLid0001er99")
+    with self.assertRaises(STARFirmwareError):
+      await self.pipettes.probe_z_using_clld(1)
+    self.moves.assert_awaited_once()
+
+  async def test_z_probe_refuses_a_channel_without_a_tip(self):
+    self.pipettes.sense_tip_presence = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=[0] * self.pipettes.num_channels
+    )
+    with self.assertRaises(RuntimeError):
+      await self.pipettes.probe_z_using_clld(0)
+    self.assertEqual(self.sent, [])
 
   async def test_y_probe_refuses_a_start_past_the_neighbour(self):
     ys = [400.0, 300.0, 200.0, 100.0, 90.0, 80.0, 70.0, 60.0][: self.pipettes.num_channels]
