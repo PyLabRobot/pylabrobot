@@ -387,6 +387,67 @@ class TestZTouchFirmware(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.sent, ["P1ZHzb28142za13983zv11652zr075zu00466cg001cf010"])
 
 
+class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
+  """`C0 XL` and `Px YL` as legacy sends them, and what the probes make of the positions read."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+
+    async def recorded(
+      module: str, command: str, fmt: Optional[Any] = None, read_timeout: float = 0, **kwargs: Any
+    ):
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+    self.moves = unittest.mock.AsyncMock()
+
+  async def test_x_firmware(self):
+    await self.pipettes._unchecked_fw_probe_x_using_clld(134.0)
+    self.assertEqual(self.sent, ["C0XLxs01340"])
+
+  async def test_y_firmware(self):
+    await self.pipettes._unchecked_fw_probe_y_using_clld(0, 2160, 10, 216, 4, 7)
+    self.assertEqual(self.sent, ["P1YLya02160gt0010gl0000yv0216yr4yw7"])
+
+  async def test_x_probe_searches_backs_away_and_corrects_for_the_tip(self):
+    reads = unittest.mock.AsyncMock(side_effect=[300.0, 250.04])
+    self.pipettes.request_x_position = reads  # type: ignore[method-assign]
+    self.pipettes.move_to_x_position = self.moves  # type: ignore[method-assign]
+    x = await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0)
+    self.assertEqual(self.sent, ["C0XLxs02000"])
+    self.moves.assert_awaited_once_with(252.0)
+    self.assertEqual(x, 249.4)
+
+  async def test_x_probe_refuses_an_end_behind_the_arm(self):
+    self.pipettes.request_x_position = unittest.mock.AsyncMock(return_value=300.0)  # type: ignore[method-assign]
+    with self.assertRaises(ValueError):
+      await self.pipettes.probe_x_using_clld(0, "right", search_end_position=200.0)
+    self.assertEqual(self.sent, [])
+
+  async def test_y_probe_searches_to_the_neighbour_by_default(self):
+    ys = [400.0, 300.0, 200.0, 100.0, 90.0, 80.0, 70.0, 60.0][: self.pipettes.num_channels]
+    after = list(ys)
+    after[1] = 250.0
+    self.pipettes.request_y_positions = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      side_effect=[ys, ys, after]
+    )
+    self.pipettes.move_to_y_position = self.moves  # type: ignore[method-assign]
+    front = 200.0 + self.pipettes._min_spacing_between(1, 2)
+    y = await self.pipettes.probe_y_using_clld(1, "forward")
+    end = self.pipettes.configuration.y_drive_mm_to_increments(front)
+    self.assertEqual(self.sent, [f"P2YLya{end:05}gt0010gl0000yv0216yr4yw7"])
+    self.moves.assert_awaited_once_with(1, 252.0)
+    self.assertEqual(y, 249.4)
+
+  async def test_y_probe_refuses_a_start_past_the_neighbour(self):
+    ys = [400.0, 300.0, 200.0, 100.0, 90.0, 80.0, 70.0, 60.0][: self.pipettes.num_channels]
+    self.pipettes.request_y_positions = unittest.mock.AsyncMock(return_value=ys)  # type: ignore[method-assign]
+    with self.assertRaises(ValueError):
+      await self.pipettes.probe_y_using_clld(1, "forward", search_start_position=399.0)
+    self.assertEqual(self.sent, [])
+
+
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
   """A v1 device plans with `pylabrobot.lib.liquid_handling`, from its own minimum channel spacing."""
 
