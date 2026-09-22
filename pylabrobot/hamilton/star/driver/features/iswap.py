@@ -1673,24 +1673,17 @@ class iSWAP:
         raise RuntimeError("the rotation drive's stops were not read; have you called `setup()`?")
       if angle not in c.rotation_drive_slots:
         raise ValueError(f"{angle!r} is not one of the stops {c.rotation_drive_slots}")
-      if angle == "home":
-        increments = predefined_positions.home
-      elif angle == "left":
-        increments = predefined_positions.left
-      elif angle == "front":
-        increments = predefined_positions.front
-      elif angle == "right":
-        increments = predefined_positions.right
-      elif angle == "parking":
-        increments = predefined_positions.parking
-      elif angle == "extra_1":
-        increments = predefined_positions.extra_1
-      elif angle == "extra_2":
-        increments = predefined_positions.extra_2
-      elif angle == "extra_3":
-        increments = predefined_positions.extra_3
-      else:
-        increments = predefined_positions.extra_4
+      increments = {
+        "home": predefined_positions.home,
+        "left": predefined_positions.left,
+        "front": predefined_positions.front,
+        "right": predefined_positions.right,
+        "parking": predefined_positions.parking,
+        "extra_1": predefined_positions.extra_1,
+        "extra_2": predefined_positions.extra_2,
+        "extra_3": predefined_positions.extra_3,
+        "extra_4": predefined_positions.extra_4,
+      }[angle]
     else:
       increments = c.rotation_drive_angle_to_increments(angle)
     low, high = c.rotation_range_increments
@@ -1808,24 +1801,17 @@ class iSWAP:
         raise RuntimeError("the wrist drive's stops were not read; have you called `setup()`?")
       if angle not in c.wrist_drive_slots:
         raise ValueError(f"{angle!r} is not one of the stops {c.wrist_drive_slots}")
-      if angle == "home":
-        increments = stops.home
-      elif angle == "right":
-        increments = stops.right
-      elif angle == "straight":
-        increments = stops.straight
-      elif angle == "left":
-        increments = stops.left
-      elif angle == "reverse":
-        increments = stops.reverse
-      elif angle == "parking":
-        increments = stops.parking
-      elif angle == "extra_1":
-        increments = stops.extra_1
-      elif angle == "extra_2":
-        increments = stops.extra_2
-      else:
-        increments = stops.extra_3
+      increments = {
+        "home": stops.home,
+        "right": stops.right,
+        "straight": stops.straight,
+        "left": stops.left,
+        "reverse": stops.reverse,
+        "parking": stops.parking,
+        "extra_1": stops.extra_1,
+        "extra_2": stops.extra_2,
+        "extra_3": stops.extra_3,
+      }[angle]
     else:
       increments = c.wrist_deg_to_increments(angle)
     low, high = c.wrist_range_increments
