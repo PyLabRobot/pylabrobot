@@ -21,6 +21,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Resource.rotate`, `rotate_to` and `rotated` take an optional `pivot_coordinate`: a point in the resource's own frame that stays where it is, so a resource can turn about its centre, an edge, or any other point rather than only about its origin. `location` carries by however far the turn moved that point. Raises `NoLocationError` when the resource has no location, since there is nothing to carry. (#1249)
 - `LinkBody` (`pylabrobot.resources.LinkBody`): one rigid member of a manipulator, an ordinary resource whose origin is a corner and which carries its `proximal_joint` and `distal_joint` as coordinates within it. The link is the line between the two joints and `length` is the distance, `None` on a member that ends the chain. A member turns about its proximal joint rather than its origin. (#1249)
 - `MechanicalGripper` (`pylabrobot.resources.MechanicalGripper`): a `LinkBody` that ends the chain, holding what it takes between two fingers. Its far end is a `tool_center_point` rather than a joint, it is sized to its body because `jaw_width` moves the fingers, and the jaws straddle the grip centre. (#1249)
+- Agilent BioTek 405 TS washer (`pylabrobot.agilent.biotek.lhc.Washer405TS`), MultiFlo (`MultiFlo`) and MultiFlo FX (`MultiFloFX`) dispensers, alongside the EL406 in one shared package: one device model, wire protocol and protocol-file format, with per-model differences expressed as configuration. Each model exposes the capability objects its fitted hardware supports (`PlateWasher`, `SyringeDispenser`, `PeristalticDispenser`) and reads the options the instrument has fitted on `setup()`.
+- `.LHC` protocol files can be read, checked and run (`pylabrobot.agilent.biotek.lhc.Protocol`, `read`, `write`), including comparing the instrument settings a file records against the instrument in front of you (`compare_settings`).
+- Serial transport for these instruments alongside FTDI, chosen by the port string.
+- Strip washing, 1536-well washing and peristaltic wash dispense/aspirate operations, and a public `get_status()` reporting the instrument's run state and activity.
+- User guide notebooks for the 405 TS, EL406, MultiFlo and MultiFlo FX (`docs/user_guide/agilent/`).
 
 ### Changed
 
@@ -29,6 +34,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).
+
+### Changed
+
+- Agilent BioTek EL406 moved from `pylabrobot.agilent.biotek.el406.EL406` to `pylabrobot.agilent.biotek.lhc.EL406`. Its operations take the step objects each operation is defined by (`...protocols.steps.steps`) and the parameter groups they are built from (`...steps.step_parts`) rather than long flat keyword lists -- `wash()` went from 39 keyword arguments to nine. Every step is checked against the settings read at `setup()` before anything moves, and plate geometry is resolved from the PyLabRobot `Plate` resource instead of being passed per command.
+
+### Removed
+
+- `pylabrobot.agilent.biotek.el406`, replaced by `pylabrobot.agilent.biotek.lhc`.
 
 ## 0.2.1
 
