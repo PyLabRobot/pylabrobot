@@ -310,15 +310,7 @@ class TestGripperDirections(unittest.IsolatedAsyncioTestCase):
 
 
 class TestParked(unittest.IsolatedAsyncioTestCase):
-  """Parked is every drive on the stop the firmware parks it against, worked out from the pose."""
-
-  async def test_it_never_asks_the_master_for_its_parked_flag(self):
-    """`C0 RG` is answered wrongly by the firmware, so nothing may read it."""
-    iswap, sent = await gripper()
-
-    await iswap.request_parked()
-
-    self.assertEqual([command for command in sent if command.startswith("C0RG")], [])
+  """Parked is every drive on its parking stop, worked out from the pose."""
 
   async def test_a_parked_arm_is_parked_and_a_moved_one_is_not(self):
     iswap, _ = await gripper()

@@ -2947,28 +2947,26 @@ class iSWAP:
   # -- parking ---------------------------------------------------------------
 
   async def request_parked(self, tolerance_increments: int = 2) -> bool:
-    """Whether the arm stands parked: every drive on the stop the firmware parks it against.
+    """Whether the arm is parked, judged from where its drives are.
 
-    Worked out from where the drives are rather than asked for: the master answers a parked flag of
-    its own, `C0 RG`, and that answer is wrong, so nothing here reads it. Each drive's stored table
-    carries the position it parks at, read at setup, and the arm is parked when every drive sits on
-    its own. The gripper's table has no parking stop, so its home is taken instead: parking closes
-    the jaws to it.
-
-    X is not part of it. No table carries an X stop and parking does not drive the carriage, so the
-    arm parks wherever along the rail it stands.
-    Z only has to be at or above its stop: parking lifts to the park's traverse height and retracts
-    there, so a parked arm stands as high as it was parked from.
+    Each drive is checked against the parking stop in its stored table, which setup reads:
+    - Y must be on its stop.
+    - Z must be at or above its stop, because parking retracts at the traverse height.
+    - The elbow must be on its stop.
+    - The wrist must be on its stop.
+    - The jaws must be at their home position. The gripper's table has no parking stop, and
+      parking closes the jaws to home.
+    - X is not checked. No table stores an X stop, and parking doesn't move the carriage.
 
     Args:
-      tolerance_increments: how far off its stop a drive may sit and still count as on it, in that
-        drive's own increments.
+      tolerance_increments: how far a drive may be from its stop and still count as parked, in
+        that drive's increments.
 
     Returns:
-      True when every drive is on its parking stop.
+      True if every checked drive is at its parking position.
 
     Raises:
-      RuntimeError: If a drive's stored table was not read, so where it parks is unknown.
+      RuntimeError: If a drive's stored table was not read, so its parking stop is unknown.
     """
     c = self.configuration
     joints = await self.request_joint_state()
