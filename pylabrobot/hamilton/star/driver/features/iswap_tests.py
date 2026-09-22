@@ -1,10 +1,11 @@
 import math
 import unittest
 from typing import Any, List, Optional, Tuple, cast
+from unittest.mock import AsyncMock
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
-from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
+from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPAxis
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
@@ -55,6 +56,67 @@ def moves(sent: List[str]) -> List[str]:
     for command in sent
     if command[:4] in ("R0YA", "R0ZA", "R0PA", "R0GA") or command[:4] in ("C0JY", "C0JZ")
   ]
+
+
+class TestParking(unittest.IsolatedAsyncioTestCase):
+  """Whether the drives are in the positions parking leaves them in."""
+
+  async def test_the_arm_is_parked_when_every_drive_is_at_its_parking_position(self):
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    assert (
+      c.rotation_drive_predefined_y_positions_increments is not None
+      and c.rotation_drive_predefined_z_positions_increments is not None
+      and c.rotation_drive_predefined_increments is not None
+      and c.wrist_drive_predefined_increments is not None
+      and c.gripper_drive_predefined_increments is not None
+    )
+
+    iswap.request_joint_state = AsyncMock(
+      return_value={
+        iSWAPAxis.Y: c.y_increments_to_mm(
+          c.rotation_drive_predefined_y_positions_increments["parking"]
+        ),
+        iSWAPAxis.Z: c.z_increments_to_mm(
+          c.rotation_drive_predefined_z_positions_increments["parking"]
+        )
+        + c.rotation_drive_z_offset_above_finger,
+        iSWAPAxis.ROTATION: c.rotation_drive_increments_to_angle(
+          c.rotation_drive_predefined_increments["parking"]
+        ),
+        iSWAPAxis.WRIST: c.wrist_increments_to_deg(c.wrist_drive_predefined_increments["parking"]),
+        iSWAPAxis.GRIPPER: c.gripper_increments_to_mm(
+          c.gripper_drive_predefined_increments["home"]
+        ),
+      }
+    )
+
+    self.assertTrue(await iswap.request_parked())
+
+  async def test_the_arm_is_not_parked_when_a_drive_is_moved(self):
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    assert c.rotation_drive_predefined_y_positions_increments is not None
+    joints = await iswap.request_joint_state()
+    joints[iSWAPAxis.Y] = c.y_increments_to_mm(
+      c.rotation_drive_predefined_y_positions_increments["parking"] - 10
+    )
+    iswap.request_joint_state = AsyncMock(return_value=joints)
+
+    self.assertFalse(await iswap.request_parked())
+
+  async def test_z_above_the_parking_position_is_still_parked(self):
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    assert c.rotation_drive_predefined_z_positions_increments is not None
+    joints = await iswap.request_joint_state()
+    joints[iSWAPAxis.Z] = (
+      c.z_increments_to_mm(c.rotation_drive_predefined_z_positions_increments["parking"] + 10)
+      + c.rotation_drive_z_offset_above_finger
+    )
+    iswap.request_joint_state = AsyncMock(return_value=joints)
+
+    self.assertTrue(await iswap.request_parked())
 
 
 class TestJawMoves(unittest.IsolatedAsyncioTestCase):

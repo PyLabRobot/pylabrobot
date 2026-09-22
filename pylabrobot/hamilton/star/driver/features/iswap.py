@@ -2970,58 +2970,61 @@ class iSWAP:
     """
     c = self.configuration
     joints = await self.request_joint_state()
-    drives: List[Tuple[str, Optional[Dict[str, int]], str, Callable[[int], float], float, bool]] = [
-      (
-        "the rotation drive's Y",
-        c.rotation_drive_predefined_y_positions_increments,
-        "parking",
-        c.y_increments_to_mm,
-        joints[iSWAPAxis.Y],
-        False,
-      ),
-      (
-        "the rotation drive's Z",
-        c.rotation_drive_predefined_z_positions_increments,
-        "parking",
-        c.z_increments_to_mm,
-        joints[iSWAPAxis.Z] - c.rotation_drive_z_offset_above_finger,
-        True,
-      ),
-      (
-        "the rotation drive",
-        c.rotation_drive_predefined_increments,
-        "parking",
-        c.rotation_drive_increments_to_angle,
-        joints[iSWAPAxis.ROTATION],
-        False,
-      ),
-      (
-        "the wrist drive",
-        c.wrist_drive_predefined_increments,
-        "parking",
-        c.wrist_increments_to_deg,
-        joints[iSWAPAxis.WRIST],
-        False,
-      ),
-      (
-        "the gripper drive",
-        c.gripper_drive_predefined_increments,
-        "home",
-        c.gripper_increments_to_mm,
-        joints[iSWAPAxis.GRIPPER],
-        False,
-      ),
-    ]
 
-    for what, table, slot, to_units, position, at_least in drives:
+    def at_stop(
+      what: str,
+      table: Optional[Dict[str, int]],
+      slot: str,
+      to_units: Callable[[int], float],
+      position: float,
+      at_least: bool = False,
+    ) -> bool:
       if table is None:
         raise RuntimeError(f"{what}'s stored table was not read; have you called `star.setup()`?")
-      stop = table[slot]
-      tolerance = abs(to_units(stop + tolerance_increments) - to_units(stop))
-      below = to_units(stop) - position > tolerance
-      if below if at_least else abs(position - to_units(stop)) > tolerance:
-        return False
-    return True
+      stop = to_units(table[slot])
+      tolerance = abs(to_units(table[slot] + tolerance_increments) - stop)
+      return stop - position <= tolerance if at_least else abs(position - stop) <= tolerance
+
+    return all(
+      [
+        at_stop(
+          "the rotation drive's Y",
+          c.rotation_drive_predefined_y_positions_increments,
+          "parking",
+          c.y_increments_to_mm,
+          joints[iSWAPAxis.Y],
+        ),
+        at_stop(
+          "the rotation drive's Z",
+          c.rotation_drive_predefined_z_positions_increments,
+          "parking",
+          c.z_increments_to_mm,
+          joints[iSWAPAxis.Z] - c.rotation_drive_z_offset_above_finger,
+          at_least=True,
+        ),
+        at_stop(
+          "the rotation drive",
+          c.rotation_drive_predefined_increments,
+          "parking",
+          c.rotation_drive_increments_to_angle,
+          joints[iSWAPAxis.ROTATION],
+        ),
+        at_stop(
+          "the wrist drive",
+          c.wrist_drive_predefined_increments,
+          "parking",
+          c.wrist_increments_to_deg,
+          joints[iSWAPAxis.WRIST],
+        ),
+        at_stop(
+          "the gripper drive",
+          c.gripper_drive_predefined_increments,
+          "home",
+          c.gripper_increments_to_mm,
+          joints[iSWAPAxis.GRIPPER],
+        ),
+      ]
+    )
 
   async def _unchecked_fw_park(self, traverse_height: Optional[float] = None):
     """Close the gripper and park the arm. Nothing is guarded and nothing is recorded.
