@@ -25,6 +25,7 @@ pylabrobot.opentrons.OpentronsAPI
       ~OpentronsAPI.get_command
       ~OpentronsAPI.get_connected_modules
       ~OpentronsAPI.get_health
+      ~OpentronsAPI.get_instruments
       ~OpentronsAPI.get_mounted_pipettes
       ~OpentronsAPI.get_run
       ~OpentronsAPI.get_runs

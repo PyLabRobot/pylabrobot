@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.create\_run
+==========================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. automethod:: Flex.create_run

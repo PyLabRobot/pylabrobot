@@ -627,22 +627,25 @@ or add pipette retractions. The owning device sequences those operations.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.drop_tip.html#pylabrobot.opentrons.OpentronsRun.drop_tip" title="pylabrobot.opentrons.OpentronsRun.drop_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_tip</span></code></a>(pipette_id, labware_id, well_name, ...)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.get_position.html#pylabrobot.opentrons.OpentronsRun.get_position" title="pylabrobot.opentrons.OpentronsRun.get_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_position</span></code></a>(pipette_id)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.execute.html#pylabrobot.opentrons.OpentronsRun.execute" title="pylabrobot.opentrons.OpentronsRun.execute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">execute</span></code></a>(command_type, params[, wait, timeout])</p></td>
+<td><p>Submit once and return a typed receipt or confirmed command result.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.get_position.html#pylabrobot.opentrons.OpentronsRun.get_position" title="pylabrobot.opentrons.OpentronsRun.get_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_position</span></code></a>(pipette_id)</p></td>
 <td><p>Read the nozzle or mounted tip's critical point through savePosition.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.load_labware.html#pylabrobot.opentrons.OpentronsRun.load_labware" title="pylabrobot.opentrons.OpentronsRun.load_labware"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_labware</span></code></a>(identity, slot, labware_id, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.load_labware.html#pylabrobot.opentrons.OpentronsRun.load_labware" title="pylabrobot.opentrons.OpentronsRun.load_labware"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_labware</span></code></a>(identity, slot, labware_id, ...)</p></td>
+<td><p>Load a definition at a deck/staging location and return its run ID.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.load_pipette.html#pylabrobot.opentrons.OpentronsRun.load_pipette" title="pylabrobot.opentrons.OpentronsRun.load_pipette"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_pipette</span></code></a>(name, mount)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.load_pipette.html#pylabrobot.opentrons.OpentronsRun.load_pipette" title="pylabrobot.opentrons.OpentronsRun.load_pipette"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_pipette</span></code></a>(name, mount)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.move_to.html#pylabrobot.opentrons.OpentronsRun.move_to" title="pylabrobot.opentrons.OpentronsRun.move_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to</span></code></a>(pipette_id, location[, speed, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.move_to.html#pylabrobot.opentrons.OpentronsRun.move_to" title="pylabrobot.opentrons.OpentronsRun.move_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to</span></code></a>(pipette_id, location[, speed, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.pick_up_tip.html#pylabrobot.opentrons.OpentronsRun.pick_up_tip" title="pylabrobot.opentrons.OpentronsRun.pick_up_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tip</span></code></a>(pipette_id, labware_id, ...)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.pick_up_tip.html#pylabrobot.opentrons.OpentronsRun.pick_up_tip" title="pylabrobot.opentrons.OpentronsRun.pick_up_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tip</span></code></a>(pipette_id, labware_id, ...)</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.stop.html#pylabrobot.opentrons.OpentronsRun.stop" title="pylabrobot.opentrons.OpentronsRun.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OpentronsRun.stop.html#pylabrobot.opentrons.OpentronsRun.stop" title="pylabrobot.opentrons.OpentronsRun.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
 <td><p>Wait for this run to stop; retain active state until shutdown is confirmed.</p></td>
 </tr>
 </tbody>

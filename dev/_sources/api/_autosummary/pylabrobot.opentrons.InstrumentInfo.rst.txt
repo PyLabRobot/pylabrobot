@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.InstrumentInfo
+===================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: InstrumentInfo
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InstrumentInfo.channels
+      ~InstrumentInfo.maximum_volume
+      ~InstrumentInfo.minimum_volume
+      ~InstrumentInfo.mount
+      ~InstrumentInfo.instrument_type
+      ~InstrumentInfo.name
+      ~InstrumentInfo.model
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InstrumentInfo.__init__
+      ~InstrumentInfo.from_response
+   
+   

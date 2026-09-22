@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.set\_rail\_lights
+================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. automethod:: Flex.set_rail_lights

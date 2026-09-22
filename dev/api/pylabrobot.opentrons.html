@@ -581,37 +581,6 @@
                   
   <section id="pylabrobot-opentrons-package">
 <h1>pylabrobot.opentrons package<a class="headerlink" href="#pylabrobot-opentrons-package" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">OT2</span></code> owns the connection, active run, deck, and mounted pipettes. Use
-<code class="docutils literal notranslate"><span class="pre">connect()</span></code> for health and discovery queries without starting a run or moving
-the robot; <code class="docutils literal notranslate"><span class="pre">setup()</span></code> also loads the pipettes into a run and optionally homes.
-Queries return fresh values without changing the driver’s session state.</p>
-<p>Each mount is an <code class="docutils literal notranslate"><span class="pre">OT2SingleChannelPipette</span></code> or <code class="docutils literal notranslate"><span class="pre">OT2_8ChannelPipette</span></code>, selected
-from the discovered model. Both share motion, command execution, and transactional
-tracking. Single-channel pipettes take one tip spot or container; eight-channel
-pipettes take targets in nozzle order, with a shared volume per mounted tip.</p>
-<p>Eight-channel pickup accepts one to eight consecutive tip spots in a single rack
-column, mapped to nozzles starting at 0. For example,
-<code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">pipette.pick_up_tips(rack[&quot;E1:H1&quot;])</span></code> mounts four tips on nozzles 0-3.
-Occupied tip spots under the remaining nozzles always reject the pickup. Include
-every tip the head would pick up in the selection, or clear the extra spots first.
-All declared tips are committed together after the command succeeds.</p>
-<p><code class="docutils literal notranslate"><span class="pre">pipette.tips</span></code> contains the mounted tips in consecutive nozzle order starting at 0.
-Liquid operations and rack drops require one target per mounted tip in that order.
-<code class="docutils literal notranslate"><span class="pre">return_tips()</span></code> returns every mounted tip to its pickup spot.</p>
-<p>Tip pickup and return/drop validate the nominal PLR target against the mount’s
-reach before sending commands. Eight-channel reach checks subtract the reference
-nozzle’s Y offset from <code class="docutils literal notranslate"><span class="pre">OT2RobotGeometry.channel_y_offsets()</span></code> to evaluate the
-head center; command coordinates still address the reference nozzle.
-Eight-channel pickup also checks other deck
-labware against the full nozzle span, padded by 5 mm in XY and 10 mm below the
-nozzle engagement height. Rotated resources and overhanging child resources
-are included. This conservative destination check does not validate the travel
-path or model the complete pipette body. The full eight-nozzle footprint is checked
-even for partial pickups.</p>
-<p><code class="docutils literal notranslate"><span class="pre">OpentronsAPI</span></code> contains the named HTTP endpoints and response parsing.
-<code class="docutils literal notranslate"><span class="pre">OpentronsRun</span></code> provides command primitives and waits for their completion.
-Both use the device’s <code class="docutils literal notranslate"><span class="pre">pylabrobot.io.HTTP</span></code> transport. Pipette operations own
-resource tracking and retraction to traversal height.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2.html#pylabrobot.opentrons.OT2" title="pylabrobot.opentrons.OT2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2</span></code></a></p></td>
@@ -638,6 +607,12 @@ resource tracking and retraction to traversal height.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.ModuleInfo.html#pylabrobot.opentrons.ModuleInfo" title="pylabrobot.opentrons.ModuleInfo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModuleInfo</span></code></a></p></td>
 <td><p>The identity of a connected module.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.InstrumentInfo.html#pylabrobot.opentrons.InstrumentInfo" title="pylabrobot.opentrons.InstrumentInfo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InstrumentInfo</span></code></a></p></td>
+<td><p>A physical Flex instrument, independent of a run's loaded IDs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.find_ot2_ip.html#pylabrobot.opentrons.find_ot2_ip" title="pylabrobot.opentrons.find_ot2_ip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_ot2_ip</span></code></a></p></td>
+<td><p>Find one OT-2 via live mDNS with the same selection rules as Flex.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsError.html#pylabrobot.opentrons.OpentronsError" title="pylabrobot.opentrons.OpentronsError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsError</span></code></a></p></td>
 <td><p>An Opentrons operation could not be completed.</p></td>
 </tr>
@@ -653,6 +628,48 @@ resource tracking and retraction to traversal height.</p>
 </tbody>
 </table>
 </div>
+<section id="flex">
+<h2>Flex<a class="headerlink" href="#flex" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.flex.Flex.html#pylabrobot.opentrons.flex.Flex" title="pylabrobot.opentrons.flex.Flex"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Flex</span></code></a></p></td>
+<td><p>Opentrons Flex liquid handler, over the robot-server HTTP API.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.flex.find_flex_ip.html#pylabrobot.opentrons.flex.find_flex_ip" title="pylabrobot.opentrons.flex.find_flex_ip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_flex_ip</span></code></a></p></td>
+<td><p>Find one Flex via live mDNS; optionally select its exact advertised name.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="heads">
+<h2>Heads<a class="headerlink" href="#heads" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.flex.flex_head.FlexHead1.html#pylabrobot.opentrons.flex.flex_head.FlexHead1" title="pylabrobot.opentrons.flex.flex_head.FlexHead1"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexHead1</span></code></a></p></td>
+<td><p>Single-channel pipette head, well-addressed.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.flex.flex_head.FlexHead8.html#pylabrobot.opentrons.flex.flex_head.FlexHead8" title="pylabrobot.opentrons.flex.flex_head.FlexHead8"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexHead8</span></code></a></p></td>
+<td><p>8-channel pipette head, column-addressed (anchor-well fan-out).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.flex.flex_head.FlexHead96.html#pylabrobot.opentrons.flex.flex_head.FlexHead96" title="pylabrobot.opentrons.flex.flex_head.FlexHead96"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexHead96</span></code></a></p></td>
+<td><p>96-channel pipette head, whole-plate-addressed (anchor-well fan-out).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="gripper">
+<h2>Gripper<a class="headerlink" href="#gripper" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.flex.flex_gripper.FlexGripper.html#pylabrobot.opentrons.flex.flex_gripper.FlexGripper" title="pylabrobot.opentrons.flex.flex_gripper.FlexGripper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexGripper</span></code></a></p></td>
+<td><p>The Opentrons Flex gripper (extension mount).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 </section>
 
 
@@ -693,6 +710,20 @@ resource tracking and retraction to traversal height.</p>
                 <dialog id="pst-secondary-sidebar-modal"></dialog>
                 <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#flex">Flex</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#heads">Heads</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gripper">Gripper</a></li>
+</ul>
+  </nav></div>
 
   <div class="sidebar-secondary-item">
 

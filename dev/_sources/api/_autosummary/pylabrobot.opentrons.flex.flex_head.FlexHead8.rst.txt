@@ -1,0 +1,57 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.flex.flex\_head.FlexHead8
+==============================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. autoclass:: FlexHead8
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexHead8.__init__
+      ~FlexHead8.air_gap_in_place
+      ~FlexHead8.aspirate
+      ~FlexHead8.aspirate_container
+      ~FlexHead8.aspirate_in_place
+      ~FlexHead8.aspirate_single
+      ~FlexHead8.blow_out
+      ~FlexHead8.configure_for_volume
+      ~FlexHead8.default_flow_rates
+      ~FlexHead8.discard_tips
+      ~FlexHead8.dispense
+      ~FlexHead8.dispense_container
+      ~FlexHead8.dispense_in_place
+      ~FlexHead8.dispense_single
+      ~FlexHead8.drop_single_tip
+      ~FlexHead8.drop_tips
+      ~FlexHead8.get_mounted_tips
+      ~FlexHead8.get_tip_presence
+      ~FlexHead8.has_tip_on_hardware
+      ~FlexHead8.liquid_probe
+      ~FlexHead8.move_relative
+      ~FlexHead8.move_to
+      ~FlexHead8.move_to_addressable_area
+      ~FlexHead8.move_to_well
+      ~FlexHead8.pick_up_single_tip
+      ~FlexHead8.pick_up_tips
+      ~FlexHead8.position
+      ~FlexHead8.prepare_to_aspirate
+      ~FlexHead8.reachable_single_nozzles
+      ~FlexHead8.touch_tip
+      ~FlexHead8.try_liquid_probe
+      ~FlexHead8.unsafe_blow_out_in_place
+      ~FlexHead8.unsafe_drop_tip_in_place
+      ~FlexHead8.verify_tip_presence
+   
+   

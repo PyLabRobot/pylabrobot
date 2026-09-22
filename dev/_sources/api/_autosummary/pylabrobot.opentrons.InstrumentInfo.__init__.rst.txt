@@ -1,0 +1,6 @@
+pylabrobot.opentrons.InstrumentInfo.\_\_init\_\_
+================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: InstrumentInfo.__init__

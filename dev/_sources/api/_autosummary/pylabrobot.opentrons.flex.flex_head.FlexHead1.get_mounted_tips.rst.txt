@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead1.get\_mounted\_tips
+=================================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead1.get_mounted_tips

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_gripper.FlexGripper.move\_labware
+=================================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_gripper
+
+.. automethod:: FlexGripper.move_labware

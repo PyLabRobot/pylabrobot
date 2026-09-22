@@ -1,0 +1,6 @@
+﻿pylabrobot.opentrons.find\_ot2\_ip
+==================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autofunction:: find_ot2_ip

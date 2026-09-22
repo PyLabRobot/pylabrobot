@@ -1,0 +1,29 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.flex.flex\_gripper.FlexGripper
+===================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_gripper
+
+.. autoclass:: FlexGripper
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexGripper.__init__
+      ~FlexGripper.grip
+      ~FlexGripper.move_labware
+      ~FlexGripper.move_to
+      ~FlexGripper.open_jaw
+      ~FlexGripper.ungrip
+   
+   

@@ -34,6 +34,7 @@ pylabrobot.opentrons.OpentronsRun
       ~OpentronsRun.discard_tip_in_fixed_trash
       ~OpentronsRun.dispense_in_place
       ~OpentronsRun.drop_tip
+      ~OpentronsRun.execute
       ~OpentronsRun.get_position
       ~OpentronsRun.load_labware
       ~OpentronsRun.load_pipette

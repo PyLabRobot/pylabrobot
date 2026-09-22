@@ -1699,6 +1699,21 @@
     "oem": "https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers"
   },
   {
+    "id": "opentrons-flex",
+    "vendor": "Opentrons",
+    "name": "Flex",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling"
+    ],
+    "status": "basic",
+    "api": "pylabrobot.opentrons.Flex",
+    "api_version": "v1",
+    "code_slug": "opentrons/flex",
+    "doc_slug": "opentrons/flex/hello-world",
+    "notes": "Hardware verification is operation-specific; 1-channel and 96-channel heads remain unverified."
+  },
+  {
     "id": "opentrons-heater-shaker",
     "vendor": "Opentrons",
     "name": "Heater-Shaker Module",

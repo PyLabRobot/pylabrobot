@@ -1,0 +1,6 @@
+pylabrobot.opentrons.InstrumentInfo.maximum\_volume
+===================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: InstrumentInfo.maximum_volume
