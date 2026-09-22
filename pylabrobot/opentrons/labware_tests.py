@@ -4,12 +4,10 @@ from unittest.mock import AsyncMock
 from pylabrobot.opentrons.labware import (
   LabwareRegistry,
   build_tip_rack_definition,
-  declared_labware_identity,
 )
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import LabwareIdentity
-from pylabrobot.resources import Resource
-from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_20ul, set_opentrons_labware
+from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_20ul
 
 
 class LabwareRegistryTests(unittest.IsolatedAsyncioTestCase):
@@ -70,12 +68,6 @@ class LabwareRegistryTests(unittest.IsolatedAsyncioTestCase):
 
 
 class LabwareConversionTests(unittest.TestCase):
-  def test_declared_identity_survives_resource_serialization(self):
-    resource = Resource("custom", 10, 10, 10)
-    set_opentrons_labware(resource, "my_plate", namespace="my_lab", version=2)
-    restored = Resource.deserialize(resource.serialize())
-    self.assertEqual(declared_labware_identity(restored), LabwareIdentity("my_lab", "my_plate", 2))
-
   def test_definition_building_does_not_change_the_resource_or_its_tips(self) -> None:
     rack = opentrons_96_filtertiprack_20ul("rack")
     tip = rack.get_item("A1").get_tip()

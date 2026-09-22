@@ -15,6 +15,10 @@ from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack
 
 _OFFICIAL_TIP_RACKS = {
+  "opentrons_flex_96_tiprack_50ul": "opentrons_flex_96_tiprack_50ul",
+  "opentrons_flex_96_filtertiprack_50ul": "opentrons_flex_96_filtertiprack_50ul",
+  "opentrons_flex_96_tiprack_200ul": "opentrons_flex_96_tiprack_200ul",
+  "opentrons_flex_96_tiprack_1000ul": "opentrons_flex_96_tiprack_1000ul",
   "Opentrons OT-2 96 Filter Tip Rack 10 µL": "opentrons_96_filtertiprack_10ul",
   "Opentrons OT-2 96 Filter Tip Rack 20 µL": "opentrons_96_filtertiprack_20ul",
   "Opentrons OT-2 96 Filter Tip Rack 200 µL": "opentrons_96_filtertiprack_200ul",
@@ -30,28 +34,6 @@ def official_tip_rack_identity(tip_rack: TipRack) -> Optional[LabwareIdentity]:
   """Look up a rack's official definition identity for its calibration data."""
   load_name = _OFFICIAL_TIP_RACKS.get(tip_rack.model or "")
   return LabwareIdentity("opentrons", load_name, 1) if load_name is not None else None
-
-
-def declared_labware_identity(resource: Resource) -> Optional[LabwareIdentity]:
-  """Read the explicit, serialized identity chosen for a resource."""
-  metadata = resource.metadata.get("opentrons_labware")
-  if metadata is None:
-    return None
-  if not isinstance(metadata, dict):
-    raise ValueError("opentrons_labware metadata must be an object")
-  namespace, load_name, version = (
-    metadata.get(key) for key in ("namespace", "load_name", "version")
-  )
-  if (
-    not isinstance(namespace, str)
-    or not namespace
-    or not isinstance(load_name, str)
-    or not load_name
-  ):
-    raise ValueError("Opentrons labware namespace and load_name must be non-empty strings")
-  if not isinstance(version, int) or isinstance(version, bool) or version < 1:
-    raise ValueError("Opentrons labware version must be a positive integer")
-  return LabwareIdentity(namespace, load_name, version)
 
 
 def build_tip_rack_definition(tip_rack: TipRack, tip: Tip, load_name: str) -> Dict[str, Any]:

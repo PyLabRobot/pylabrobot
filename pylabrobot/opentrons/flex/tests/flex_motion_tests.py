@@ -22,7 +22,6 @@ from pylabrobot.opentrons.flex.flex_head import FlexHead8, _FlexHead
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
@@ -518,7 +517,6 @@ class TestMoveToWell(unittest.TestCase):
   def _flex_with_plate(self):
     flex, api = _flex_with_gripper()
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat", version=2)
     flex.deck.assign_child_at_slot(plate, "C1")
     return flex, api, plate
 

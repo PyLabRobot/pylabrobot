@@ -29,7 +29,6 @@ from pylabrobot.resources import (
   set_volume_tracking,
 )
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 from pylabrobot.resources.resource import Resource
@@ -56,7 +55,6 @@ def _make_trough(
     material_z_thickness=1.0,
     max_volume=max_volume,
   )
-  set_opentrons_labware(trough, "nest_1_reservoir_195ml")
   return trough
 
 
@@ -868,7 +866,6 @@ class TestLiquidOpsRequireAMountedTip(unittest.TestCase):
   @staticmethod
   def _plate(flex: Flex):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(plate, "C2")
     for well in plate.get_all_items():
       well.tracker.set_volume(100.0)

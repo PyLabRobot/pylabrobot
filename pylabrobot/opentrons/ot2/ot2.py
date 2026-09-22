@@ -9,7 +9,6 @@ from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
 from pylabrobot.opentrons.labware import (
   LabwareRegistry,
   build_tip_rack_definition,
-  declared_labware_identity,
   official_tip_rack_identity,
 )
 from pylabrobot.opentrons.operations import OperationLock
@@ -211,7 +210,7 @@ class OT2:
     if registry.is_loaded(tip_rack):
       identity = registry.get(tip_rack).identity
     else:
-      identity = declared_labware_identity(tip_rack) or official_tip_rack_identity(tip_rack)
+      identity = official_tip_rack_identity(tip_rack)
       if identity is None:
         identity = LabwareIdentity("pylabrobot", uuid.uuid4().hex, 1)
         definition = build_tip_rack_definition(tip_rack, tip, identity.load_name)

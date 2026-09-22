@@ -26,7 +26,6 @@ from pylabrobot.resources import (
   set_tip_tracking,
   set_volume_tracking,
 )
-from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
@@ -41,7 +40,6 @@ def _make_trough(name: str = "trough") -> Container:
     material_z_thickness=1.0,
     max_volume=195000.0,
   )
-  set_opentrons_labware(trough, "nest_1_reservoir_195ml")
   return trough
 
 
@@ -56,7 +54,6 @@ def _flex_head8() -> Tuple[Flex, AsyncMock, FlexHead8]:
 
 def _plate_on(flex: Flex, slot: str = "C2"):
   plate = cor_96_wellplate_360uL_Fb(name="plate")
-  set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
   flex.deck.assign_child_at_slot(plate, slot)
   return plate
 

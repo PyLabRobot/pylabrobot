@@ -17,7 +17,6 @@ from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb
-from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 
 
@@ -58,7 +57,6 @@ class TestUnconditionalTiprackFloor(unittest.TestCase):
   def test_short_labware_does_not_lower_the_floor(self):
     deck = FlexDeck()
     plate = cor_96_wellplate_360uL_Fb(name="plate")  # ~14 mm tall, well below a rack
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     deck.assign_child_at_slot(plate, "C2")
     self.assertAlmostEqual(traversal_z(deck), 109.0)
 
@@ -71,7 +69,6 @@ class TestComputedTraversalPlane(unittest.TestCase):
     flex, api, head = _flex_head8()
     try:
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       expected = traversal_z(flex.deck)
@@ -99,7 +96,6 @@ class TestTrashDropArcsHighEnough(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       trash = flex.deck.get_trash_area()
@@ -140,7 +136,6 @@ class TestBetweenSlotArcGuard(unittest.TestCase):
     flex, api, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     for w in plate.get_all_items():

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 from pylabrobot.opentrons import FlexHead8
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb, no_volume_tracking
-from pylabrobot.resources.opentrons import flex_96_filtertiprack_50ul, set_opentrons_labware
+from pylabrobot.resources.opentrons import flex_96_filtertiprack_50ul
 
 
 class PipettingPrimitivesTests(unittest.IsolatedAsyncioTestCase):
@@ -79,7 +79,6 @@ class PipettingPrimitivesTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_missing_cavity_floor_is_rejected_before_motion(self):
     """Never guess a cavity floor from an Opentrons load name."""
-    set_opentrons_labware(self.plate, "corning_96_wellplate_360ul_flat", version=2)
     for well in self.plate.column(0):
       well._material_z_thickness = None
     with self.assertRaisesRegex(ValueError, "material_z_thickness"), no_volume_tracking():

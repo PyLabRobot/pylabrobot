@@ -21,7 +21,6 @@ from pylabrobot.resources import (
   set_volume_tracking,
 )
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
@@ -79,7 +78,6 @@ class TestBlowOut(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       for well in plate.get_all_items():
@@ -101,7 +99,6 @@ class TestBlowOut(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       well = plate.get_item("B3")
@@ -131,7 +128,6 @@ class TestBlowOut(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack96")
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       for well in plate.get_all_items():
@@ -171,7 +167,6 @@ class TestTouchTipHead1(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -195,7 +190,6 @@ class TestTouchTipHead1(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -215,7 +209,6 @@ class TestTouchTipHead1(unittest.TestCase):
     flex, api, head = _flex_head1()
     try:
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       n_before = api.submit_command.await_count
@@ -246,7 +239,6 @@ class TestTouchTipHead8(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -264,7 +256,6 @@ class TestTouchTipHead8(unittest.TestCase):
     flex, api, head = _flex_head8()
     try:
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       n_before = api.submit_command.await_count
@@ -296,7 +287,6 @@ class TestTouchTipHead96(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack96")
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -332,7 +322,6 @@ class TestTouchTipHead96(unittest.TestCase):
     flex, api, head = _flex_head96()
     try:
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(plate, "C2")
 
       n_before = api.submit_command.await_count
@@ -364,7 +353,6 @@ class TestLiquidProbeHead1(unittest.TestCase):
     flex, api, head = _flex_head1(**api_kwargs)
     rack = flex_96_tiprack_50ul(name="rack1")
     plate = cor_96_wellplate_360uL_Fb(name="plate1")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     return flex, api, head, rack, plate
@@ -491,7 +479,6 @@ class TestLiquidProbeHead1(unittest.TestCase):
       assert isinstance(head, FlexHead1)
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -528,7 +515,6 @@ class TestLiquidProbeHead1(unittest.TestCase):
       assert isinstance(head, FlexHead1)
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -573,7 +559,6 @@ class TestLiquidProbeHead8(unittest.TestCase):
     flex, api, head = _flex_head8(**api_kwargs)
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     return flex, api, head, rack, plate
@@ -635,7 +620,6 @@ class TestHead8ColumnValidation(unittest.TestCase):
     flex, api, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     return flex, api, head, rack, plate
@@ -789,7 +773,6 @@ class TestWellPositionOffsets(unittest.TestCase):
     flex, api, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     for well in plate.get_all_items():
@@ -1016,7 +999,6 @@ class TestSingleNozzleLayout(unittest.TestCase):
   def test_reconfiguring_the_layout_while_a_tip_is_mounted_is_refused(self):
     flex, api, head, rack = self._bench()
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(plate, "C2")
     try:
       asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))

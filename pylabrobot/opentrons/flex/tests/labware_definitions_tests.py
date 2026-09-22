@@ -43,7 +43,7 @@ from pylabrobot.resources import (
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import hamilton_1_trough_60mL_Vb
-from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_200ul, set_opentrons_labware
+from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_200ul
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 from pylabrobot.resources.rotation import Rotation
@@ -819,44 +819,21 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_official_name_labware_loads_with_zero_uploads(self):
+  def test_official_tip_rack_loads_with_zero_uploads(self):
     flex, api = _flex_with_api()
     asyncio.run(flex.setup())
     try:
-      plate = _plate()
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
-      flex.deck.assign_child_at_slot(plate, "C1")
-      asyncio.run(flex._ensure_labware_loaded(plate))
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
+      asyncio.run(flex._ensure_labware_loaded(rack))
 
       self.assertEqual(api.define_labware.await_count, 0)
       load_cmds = _load_labware_commands(api)
       self.assertEqual(len(load_cmds), 1)
       params = load_cmds[0].args[2]
       self.assertEqual(params["namespace"], "opentrons")
-      self.assertEqual(params["loadName"], "corning_96_wellplate_360ul_flat")
-      # This resource declares no ot_version, and revision 1 is the only one
-      # every robot is guaranteed to hold, so that is what goes out.
+      self.assertEqual(params["loadName"], "opentrons_flex_96_tiprack_50ul")
       self.assertEqual(params["version"], 1)
-    finally:
-      asyncio.run(flex.stop())
-
-  def test_version_falls_back_to_1_and_a_resource_can_override_it(self):
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      rack = _tip_rack()
-      set_opentrons_labware(rack, "opentrons_flex_96_tiprack_50ul")
-      flex.deck.assign_child_at_slot(rack, "C1")
-      asyncio.run(flex._ensure_labware_loaded(rack))
-
-      pinned = _plate(name="pinned plate")
-      set_opentrons_labware(pinned, "corning_96_wellplate_360ul_flat")
-      pinned.metadata["opentrons_labware"]["version"] = 4
-      flex.deck.assign_child_at_slot(pinned, "C2")
-      asyncio.run(flex._ensure_labware_loaded(pinned))
-
-      versions = [c.args[2]["version"] for c in _load_labware_commands(api)]
-      self.assertEqual(versions, [1, 4])
     finally:
       asyncio.run(flex.stop())
 

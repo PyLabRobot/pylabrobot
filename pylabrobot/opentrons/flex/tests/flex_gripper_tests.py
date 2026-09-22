@@ -19,7 +19,7 @@ from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.opentrons.types import CommandInfo
 from pylabrobot.resources import Resource, cor_96_wellplate_360uL_Fb
-from pylabrobot.resources.opentrons import set_opentrons_labware
+from pylabrobot.resources.opentrons import flex_96_tiprack_50ul
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.plate import Plate
 
@@ -37,7 +37,6 @@ def _flex_with_gripper(**api_kwargs) -> Tuple[Flex, AsyncMock]:
 
 def _plate(name: str = "plate") -> Plate:
   plate = cor_96_wellplate_360uL_Fb(name=name)
-  set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
   return plate
 
 
@@ -190,13 +189,13 @@ class TestGripDistanceDiscarded(unittest.TestCase):
     flex, api = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
-      plate = _plate()  # resolves to an official Opentrons load name
-      flex.deck.assign_child_at_slot(plate, "C1")
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
       gripper = flex.gripper
       assert gripper is not None
 
       with self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING") as logs:
-        asyncio.run(gripper.move_labware(plate, "C2", grip_distance_from_top=5.0))
+        asyncio.run(gripper.move_labware(rack, "C2", grip_distance_from_top=5.0))
 
       # Nothing is uploaded, so there is nowhere to put the requested height:
       # the robot grips at the catalogue definition's own.
@@ -205,7 +204,7 @@ class TestGripDistanceDiscarded(unittest.TestCase):
       self.assertEqual(load_cmds[0].args[2]["namespace"], "opentrons")
       self.assertTrue(any("grip_distance_from_top=5.0" in line for line in logs.output))
       self.assertTrue(
-        any("corning_96_wellplate_360ul_flat" in line for line in logs.output),
+        any("opentrons_flex_96_tiprack_50ul" in line for line in logs.output),
         logs.output,
       )
     finally:

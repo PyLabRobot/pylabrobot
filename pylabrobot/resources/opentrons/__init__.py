@@ -1,5 +1,3 @@
-from pylabrobot.resources.opentrons.labware import set_opentrons_labware
-
 from .deck import OTDeck
 from .flex_deck import FlexDeck
 from .flex_tip_racks import *

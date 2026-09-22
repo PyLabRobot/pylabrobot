@@ -16,12 +16,10 @@ from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
 from pylabrobot.opentrons.flex.tests.liquid_test_utils import pipetting_location
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
-from pylabrobot.opentrons.labware import declared_labware_identity
-from pylabrobot.opentrons.types import CommandInfo, LabwareIdentity
+from pylabrobot.opentrons.types import CommandInfo
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import TooLittleLiquidError
-from pylabrobot.resources.opentrons import set_opentrons_labware
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
@@ -339,7 +337,6 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -391,7 +388,6 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -464,7 +460,6 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       trash = flex.deck.get_trash_area()
@@ -516,7 +511,6 @@ class TestFlexHead8PrepareToAspirate(unittest.TestCase):
     flex, api, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
     flex.deck.assign_child_at_slot(rack, "C1")
     flex.deck.assign_child_at_slot(plate, "C2")
     for well in plate.get_all_items():
@@ -601,7 +595,6 @@ class TestFlexHead8PickupOrigin(unittest.TestCase):
       try:
         rack = flex_96_tiprack_50ul(name="rack")
         plate = cor_96_wellplate_360uL_Fb(name="plate")
-        set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
         flex.deck.assign_child_at_slot(rack, "C1")
         flex.deck.assign_child_at_slot(plate, "C2")
         for well in plate.get_all_items():
@@ -636,7 +629,6 @@ class TestFlexHead8TransactionalTrackers(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -752,7 +744,6 @@ class TestFlexHead8SingleOpFlowRateAndNoneSkip(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -779,7 +770,6 @@ class TestFlexHead8SingleOpFlowRateAndNoneSkip(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack")
       plate = cor_96_wellplate_360uL_Fb(name="plate")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -983,7 +973,6 @@ class TestFlexHead1Ops(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
       plate = cor_96_wellplate_360uL_Fb(name="plate1")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -1122,7 +1111,6 @@ class TestFlexHead96Ops(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack96")
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
       for well in plate.get_all_items():
@@ -1151,7 +1139,6 @@ class TestFlexHead96Ops(unittest.TestCase):
     try:
       rack = flex_96_tiprack_50ul(name="rack96")
       plate = cor_96_wellplate_360uL_Fb(name="plate96")
-      set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
@@ -1238,57 +1225,6 @@ class TrashAddressableAreaTests(unittest.TestCase):
         head._trash_addressable_area(trash)
     finally:
       asyncio.run(flex.stop())
-
-
-class DeclaredIdentityTests(unittest.TestCase):
-  """How a PLR resource resolves to an Opentrons load name."""
-
-  def test_a_declared_load_name_is_what_the_resource_loads_by(self):
-    plate = cor_96_wellplate_360uL_Fb(name="anything at all")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
-    identity = declared_labware_identity(plate)
-    assert identity is not None
-    self.assertEqual(identity.load_name, "corning_96_wellplate_360ul_flat")
-    self.assertEqual(identity.version, 1)
-
-  def test_the_revision_is_the_resource_s_to_declare_too(self):
-    # Revision 1 is the only one every robot holds, so a caller who wants a
-    # later one (for its gripper grip height) has to say so.
-    plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "corning_96_wellplate_360ul_flat")
-    plate.metadata["opentrons_labware"]["version"] = 2
-    self.assertEqual(
-      declared_labware_identity(plate),
-      LabwareIdentity("opentrons", "corning_96_wellplate_360ul_flat", 2),
-    )
-
-  def test_a_declared_name_is_passed_through_rather_than_checked_against_a_list(self):
-    # The robot resolves against its own shipped definitions AND a lab's own
-    # uploads, so any list here would be wrong for somebody's robot.
-    plate = cor_96_wellplate_360uL_Fb(name="plate")
-    set_opentrons_labware(plate, "a_lab_uploaded_this_one_themselves")
-    identity = declared_labware_identity(plate)
-    assert identity is not None
-    self.assertEqual(identity.load_name, "a_lab_uploaded_this_one_themselves")
-    self.assertEqual(identity.version, 1)
-
-  def test_a_resource_declaring_nothing_asks_for_a_synthesized_definition(self):
-    plate = cor_96_wellplate_360uL_Fb(name="plate")
-    self.assertIsNone(declared_labware_identity(plate))
-
-  def test_the_model_never_decides_the_load_name(self):
-    # A PLR model is not an Opentrons load name, and sending one that merely
-    # looks like a load name would load the wrong labware. Declaring is the rule.
-    plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.model = "corning_96_wellplate_360ul_flat"
-    self.assertIsNone(declared_labware_identity(plate))
-
-  def test_the_instance_name_never_decides_the_load_name(self):
-    # It is a user-chosen label, so naming a plate after a tip rack must not
-    # load a tip rack.
-    plate = cor_96_wellplate_360uL_Fb(name="flex_96_tiprack_50ul")
-    plate.model = None
-    self.assertIsNone(declared_labware_identity(plate))
 
 
 if __name__ == "__main__":

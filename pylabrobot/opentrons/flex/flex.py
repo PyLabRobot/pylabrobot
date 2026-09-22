@@ -13,7 +13,7 @@ from pylabrobot.opentrons.flex.flex_wire import (
   ROBOT_AXES,
   _require_robot_commands,
 )
-from pylabrobot.opentrons.labware import LabwareRegistry, declared_labware_identity
+from pylabrobot.opentrons.labware import LabwareRegistry, official_tip_rack_identity
 from pylabrobot.opentrons.labware_definitions import (
   build_container_definition,
   build_movable_labware_definition,
@@ -53,7 +53,7 @@ def _not_pipettable_error(resource: Resource) -> OpentronsError:
     "Cannot build an Opentrons labware definition",
     f"'{resource.name}' ({type(resource).__name__}) has no Opentrons load name, and a "
     "definition can only be built from the geometry of a Plate, TipRack, or Container. "
-    "Use set_opentrons_labware(resource, load_name) to choose an official definition. The gripper can still "
+    "The gripper can still "
     "move it -- only pipetting needs real well geometry.",
   )
 
@@ -524,7 +524,7 @@ class Flex:
     slot = self.deck.get_slot(resource)
     if slot is None:
       raise OpentronsError("Resource not on deck", f"'{name}' is not on a deck slot.")
-    identity = declared_labware_identity(resource)
+    identity = official_tip_rack_identity(resource) if isinstance(resource, TipRack) else None
     if registry.is_loaded(resource):
       binding = registry.get(resource)
       await registry.load(resource, slot, identity or binding.identity)
