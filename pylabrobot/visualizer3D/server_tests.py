@@ -9,6 +9,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional
 
 import websockets
+from websockets.typing import Origin
 
 from pylabrobot.resources import does_volume_tracking, set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
@@ -198,7 +199,9 @@ class AccessTests(unittest.IsolatedAsyncioTestCase):
       f"http://{socket.gethostname()}.local:{self.viewer.fs_port}",
       "http://10.60.2.36:1338",
     ):
-      ws = await websockets.connect(self.ws(self.viewer.token), origin=origin, max_size=None)
+      ws = await websockets.connect(
+        self.ws(self.viewer.token), origin=Origin(origin), max_size=None
+      )
       self.assertEqual(json.loads(await ws.recv())["event"], "scene")
       await ws.close()
 
@@ -208,7 +211,7 @@ class AccessTests(unittest.IsolatedAsyncioTestCase):
     )
     try:
       with urllib.request.urlopen(request) as response:
-        return response.status
+        return int(response.status)
     except urllib.error.HTTPError as error:
       return error.code
 
