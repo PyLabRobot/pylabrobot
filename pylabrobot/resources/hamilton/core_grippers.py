@@ -94,7 +94,7 @@ def prep_core_gripper_holder(name: str = "core_gripper_holder") -> HamiltonCoreG
   flat_z = 3.0
   tool_top = flat_z + 30.0
   front = hamilton_core_gripper_tool(name=_tool_name(name, "front"))
-  pick_up = front.pick_up_location
+  pick_up = front.pick_up_location or front.get_anchor("c", "c", "t")
   holder.assign_child_resource(
     front,
     location=Coordinate(
@@ -168,7 +168,7 @@ def hamilton_core_gripper_1000ul_5ml_on_waste(
   # 235.0 with the base at 200.5.
   tool_top = 34.5
   front = hamilton_core_gripper_tool(name=_tool_name(name, "front"))
-  pick_up = front.pick_up_location
+  pick_up = front.pick_up_location or front.get_anchor("c", "c", "t")
   grippers.assign_child_resource(
     front,
     location=Coordinate(

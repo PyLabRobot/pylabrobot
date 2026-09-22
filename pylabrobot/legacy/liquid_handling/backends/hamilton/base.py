@@ -36,6 +36,8 @@ T = TypeVar("T")
 
 # What the firmware's tip type table calls the CO-RE grip tool (cat. 186100).
 CORE_GRIPPER_TIP_TYPE_INDEX = 14
+# The grip tool's model, which its index is kept under.
+_CORE_GRIPPER_TOOL_MODEL = hamilton_core_gripper_tool.__name__
 
 logger = logging.getLogger("pylabrobot")
 
@@ -96,9 +98,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self._waiting_tasks: List[HamiltonTask] = []
     # The firmware's own table already carries the CO-RE grip tool at index 14, so that index is
     # taken rather than handed out to a tip, which would overwrite the grip tool.
-    self._tip_type_indices: Dict[Tuple[object, ...], int] = {
-      hamilton_core_gripper_tool().kind(): CORE_GRIPPER_TIP_TYPE_INDEX
-    }
+    self._tip_type_indices: Dict[str, int] = {_CORE_GRIPPER_TOOL_MODEL: CORE_GRIPPER_TIP_TYPE_INDEX}
 
   def __setattr__(self, name: str, value: Any) -> None:
     if name == "allow_firmware_planning":
@@ -128,7 +128,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
       )
     self._waiting_tasks.clear()
-    self._tip_type_indices = {hamilton_core_gripper_tool().kind(): CORE_GRIPPER_TIP_TYPE_INDEX}
+    self._tip_type_indices = {_CORE_GRIPPER_TOOL_MODEL: CORE_GRIPPER_TIP_TYPE_INDEX}
     await self.io.stop()
 
   def serialize(self) -> dict:
@@ -447,9 +447,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     start and are never redefined.
     """
 
-    kind = tool.kind()
+    model = tool.model
+    if model is None:
+      raise ValueError("Tip model must be defined to assign a tip type index.")
 
-    if kind not in self._tip_type_indices:
+    if model not in self._tip_type_indices:
       taken = set(self._tip_type_indices.values())
       ttti = next((i for i in range(1, 100) if i not in taken), None)
       if ttti is None:
@@ -467,22 +469,26 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         tip_size=tool.tip_size,
         pickup_method=tool.pickup_method,
       )
-      self._tip_type_indices[kind] = ttti
+      self._tip_type_indices[model] = ttti
 
-    return self._tip_type_indices[kind]
+    return self._tip_type_indices[model]
 
   def _get_hamilton_tip(self, tip_spots: List[TipSpot]) -> HamiltonTip:
     """Get the single tip type for all tip spots. If it does not exist or is not a HamiltonTip,
     raise an error."""
-    tips = [tip_spot.get_tip() for tip_spot in tip_spots]
-    if len({tip.kind() for tip in tips}) > 1:
-      raise ValueError("Cannot mix tips with different tip types.")
+    tips: List[HamiltonTip] = []
+    for tip_spot in tip_spots:
+      tip = tip_spot.get_tip()
+      if not isinstance(tip, HamiltonTip):
+        raise ValueError(f"Tip {tip} is not a HamiltonTip.")
+      if tip.model is None:
+        raise ValueError("Tip models must be defined for comparison.")
+      tips.append(tip)
     if len(tips) == 0:
       raise ValueError("No tips specified.")
-    tip = tips[0]
-    if not isinstance(tip, HamiltonTip):
-      raise ValueError(f"Tip {tip} is not a HamiltonTip.")
-    return tip
+    if len({tip.model for tip in tips}) > 1:
+      raise ValueError("Cannot mix tips with different tip types.")
+    return tips[0]
 
   async def send_raw_command(
     self,

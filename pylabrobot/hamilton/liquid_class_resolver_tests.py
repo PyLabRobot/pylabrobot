@@ -57,8 +57,9 @@ def test_resolve_auto_non_hamilton_tip_is_none():
 
 def test_resolve_auto_hamilton_tip_matches_get_star():
   tip = HamiltonTip(
+    name="tip",
     has_filter=False,
-    total_tip_length=59.9,
+    size_z=59.9,
     maximal_volume=300.0,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
@@ -85,8 +86,9 @@ def test_resolve_custom_lookup():
     return custom
 
   tip = HamiltonTip(
+    name="tip",
     has_filter=False,
-    total_tip_length=59.9,
+    size_z=59.9,
     maximal_volume=300.0,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,

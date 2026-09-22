@@ -2312,7 +2312,7 @@ def test_the_height_tips_are_taken_at_does_not_depend_on_how_long_they_are():
       p.send_command = record  # type: ignore[method-assign]
       await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
       (pick,) = [c for c in sent if isinstance(c, PrepCmd.PrepPickUpTips)]
-      lengths.add(rack.get_item("A1").make_tip().total_tip_length)
+      lengths.add(rack.get_item("A1").make_tip().get_size_z())
       heights.add(pick.tip_positions[0].z_position)
       await p.stop()
 
@@ -2351,7 +2351,7 @@ def test_the_teaching_needle_is_taken_where_the_device_takes_it():
 
     # And the needle stands where it stood: its body from the block's hole to 8 mm proud of its top.
     body = needle.make_tip()
-    assert needle.get_location_wrt(deck).z - (body.total_tip_length - body.collar_height) == 23.85
+    assert needle.get_location_wrt(deck).z - (body.get_size_z() - body.collar_height) == 23.85
     await p.stop()
 
   _run(_t())
@@ -2678,7 +2678,7 @@ def test_z_is_where_the_device_reports_it_at_the_bottom_of_what_a_channel_carrie
     await pipettes.pick_up_tips(rack["A1"], use_channels=[0])
     tip = pipettes.get_mounted_tip(0)
     assert tip is not None
-    below = tip.total_tip_length - tip.fitting_depth
+    below = tip.get_size_z() - tip.fitting_depth
     pipettes.update_location_by_reference_point(0, z=100.0)
     assert _shaft_end_z(p, 0) == pytest.approx(100.0 + below)
     point = pipettes.get_reference_point_location(0)

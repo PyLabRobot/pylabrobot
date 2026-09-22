@@ -1234,7 +1234,7 @@ class Pipettes:
     shaft = self.shaft(channel)
     mounted = shaft.tip if shaft is not None and shaft.has_tip() else None
     if isinstance(mounted, Tip):
-      return float(mounted.total_tip_length - mounted.fitting_depth)
+      return float(mounted.get_size_z() - mounted.fitting_depth)
     if mounted is not None:
       return float(PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS.length)
     return 0.0
@@ -3264,14 +3264,14 @@ class Pipettes:
     if any(
       t.maximal_volume != tip0.maximal_volume
       or t.has_filter != tip0.has_filter
-      or (t.total_tip_length - t.fitting_depth) != (tip0.total_tip_length - tip0.fitting_depth)
+      or (t.get_size_z() - t.fitting_depth) != (tip0.get_size_z() - tip0.fitting_depth)
       for t in tips
     ):
       raise ValueError("All tip spots must use the same tip type")
     tip_definition = PrepCmd.TipPickupParameters(
       default_values=False,
       volume=tip0.maximal_volume,
-      length=tip0.total_tip_length - tip0.fitting_depth,
+      length=tip0.get_size_z() - tip0.fitting_depth,
       tip_type=PrepCmd.TipTypes.StandardVolume,
       has_filter=tip0.has_filter,
       is_needle=tip0.maximal_volume == 0,  # a needle is closed: it holds no liquid
@@ -3517,7 +3517,7 @@ class Pipettes:
         loc = waste.get_location_wrt(self.deck, "c", "c", "t")
         # The device's waste position is where the tip's end goes, down its chute, while a drop is
         # sent the height the collar rests at - the tip's length above that end.
-        loc = Coordinate(loc.x, loc.y, loc.z + tip.total_tip_length - tip.collar_height)
+        loc = Coordinate(loc.x, loc.y, loc.z + tip.get_size_z() - tip.collar_height)
       else:
         loc = dest.get_location_wrt(self._require_deck(), "c", "c", "t") + off
       locations[ch] = loc
@@ -3856,7 +3856,7 @@ class Pipettes:
     z_fluid = fill_in_defaults(z_fluid, [g.liquid_surface for g in well_geometry])
     z_air = fill_in_defaults(z_air, [g.z_air for g in well_geometry])
     z_final = fill_in_defaults(
-      z_final, [raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops]
+      z_final, [raw_traverse - (op.tip.get_size_z() - op.tip.fitting_depth) for op in ops]
     )
     z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, [2.0] * n)
 

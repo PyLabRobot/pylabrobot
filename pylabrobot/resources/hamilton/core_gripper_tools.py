@@ -18,7 +18,7 @@ class HamiltonCoreGripperTool(HeadTool):
 
   def __init__(
     self,
-    name: Optional[str],
+    name: str,
     size_x: float,
     size_y: float,
     size_z: float,
@@ -66,7 +66,7 @@ class HamiltonCoreGripperTool(HeadTool):
     }
 
 
-def hamilton_core_gripper_tool(name: Optional[str] = None) -> HamiltonCoreGripperTool:
+def hamilton_core_gripper_tool(name: str) -> HamiltonCoreGripperTool:
   """Hamilton CO-RE grip tool, for 1000 uL channels.
 
   Hamilton cat. no.: 186100 (firmware tip type 14)

@@ -1357,7 +1357,7 @@ class PrepDriver:
     found = HamiltonTip(
       name=f"attached at setup ({attached.label})",
       has_filter=attached.has_filter,
-      total_tip_length=attached.length + TIP_FITTING_DEPTH,
+      size_z=attached.length + TIP_FITTING_DEPTH,
       maximal_volume=attached.volume,
       nominal_volume=attached.volume,
       tip_size=TipSize.STANDARD_VOLUME,

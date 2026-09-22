@@ -10,7 +10,6 @@ from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.head_tool import HeadTool, move_tool, release_named_tool
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_tracking import does_tip_tracking
-from pylabrobot.serializer import deserialize
 
 from .itemized_resource import ItemizedResource
 from .lid import Lid
@@ -42,10 +41,11 @@ def resting_location(holder: Resource, tip: Tip) -> Coordinate:
     The tip's location, relative to the spot.
   """
   collar_height = tip.collar_height if tip.has_collar_height else 0.0
+  pick_up_location = tip.pick_up_location or tip.get_anchor("c", "c", "t")
   return Coordinate(
-    x=holder.get_size_x() / 2 - tip.pick_up_location.x,
-    y=holder.get_size_y() / 2 - tip.pick_up_location.y,
-    z=collar_height - tip.pick_up_location.z,
+    x=holder.get_size_x() / 2 - pick_up_location.x,
+    y=holder.get_size_y() / 2 - pick_up_location.y,
+    z=collar_height - pick_up_location.z,
   )
 
 
@@ -195,20 +195,7 @@ class TipSpot(Resource):
   def make_tip(self) -> Tip:
     """Create a new tip instance for this spot and assign it a unique name."""
 
-    # use introspection to see if _make_tip_func has a name parameter
-    if "name" in self._make_tip_func.__code__.co_varnames:
-      tip = self._make_tip_func(self._get_next_tip_name())
-    else:
-      warnings.warn(
-        "The make_tip function should accept a 'name' parameter to assign unique names to tips.",
-        DeprecationWarning,
-      )
-      tip = self._make_tip_func()  # type: ignore # ignore type check for deprecated behavior
-      if not tip.is_named:
-        tip.name = self._get_next_tip_name()
-        tip.tracker.thing = tip.name
-
-    return tip
+    return self._make_tip_func(self._get_next_tip_name())
 
   # -- legacy ------------------------------------------------------------------------------------
   # TODO: Remove >2026-12. The legacy liquid handler's view of this spot, with its pending
@@ -254,7 +241,7 @@ class TipSpot(Resource):
 
     def make_tip(name: str) -> Tip:
       tip_data_with_name = {**tip_data, "name": name}
-      return cast(Tip, deserialize(tip_data_with_name, allow_marshal=allow_marshal))
+      return Tip.deserialize(tip_data_with_name, allow_marshal=allow_marshal)
 
     return cls(
       name=data["name"],

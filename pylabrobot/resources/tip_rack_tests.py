@@ -3,7 +3,8 @@ from typing import cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError
-from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL
+from pylabrobot.resources.hamilton import HamiltonTip, hamilton_96_tiprack_300uL, hamilton_tip_300uL
+from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
@@ -16,7 +17,14 @@ class SimpleTipRack(TipRack):
       name="A1",
       size_x=1.0,
       size_y=1.0,
-      make_tip=lambda name: Tip(False, 10.0, 10.0, 1.0, name=name),
+      make_tip=lambda name: Tip(
+        name=name,
+        has_filter=False,
+        maximal_volume=10.0,
+        fitting_depth=1.0,
+        diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
+        size_z=10.0,
+      ),
     )
     spot.location = Coordinate(0.0, 0.0, 0.0)
     ordered_items = {"A1": spot}
@@ -68,7 +76,7 @@ class TipSpotHoldsItsTip(unittest.TestCase):
   def test_a_tip_rests_by_its_collar(self):
     """The tip's top is its collar height above the spot."""
     tip = self.spot.get_tip()
-    self.assertEqual(tip.location, Coordinate(-0.5, -0.5, tip.collar_height - tip.total_tip_length))
+    self.assertEqual(tip.location, Coordinate(-0.5, -0.5, tip.collar_height - tip.get_size_z()))
 
   def test_taking_the_tip_out_leaves_the_spot_empty(self):
     tip = self.spot.get_tip()
@@ -105,7 +113,7 @@ class TipSpotHoldsItsTipInTheTree(unittest.TestCase):
     tip = self.spot.unassign_tip()
     self.spot.assign_tip(tip)
     self.assertIs(self.spot.tip, tip)
-    self.assertEqual(tip.location, Coordinate(-0.5, -0.5, tip.collar_height - tip.total_tip_length))
+    self.assertEqual(tip.location, Coordinate(-0.5, -0.5, tip.collar_height - tip.get_size_z()))
 
   def test_a_tip_mounted_on_a_shaft_in_the_same_tree_leaves_its_spot(self):
     from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
@@ -146,3 +154,19 @@ class TipSpotHoldsItsTipInTheTree(unittest.TestCase):
     other = self.rack.get_item("B1").unassign_tip()
     with self.assertRaises(HasTipError):
       self.spot.assign_child_resource(other, location=Coordinate.zero())
+
+  def test_deserialize_prototype_with_resource_state(self):
+    """A restored spot constructs named tips from a resource prototype."""
+    spot = TipSpot("spot", 9, 9, make_tip=hamilton_tip_300uL)
+    data = spot.serialize()
+    data["prototype_tip"]["rotation"] = {"type": "Rotation", "x": 0, "y": 0, "z": 90}
+    data["prototype_tip"]["metadata"] = {"batch": "example"}
+    data["prototype_tip"]["location"] = Coordinate(1, 2, 3).serialize()
+
+    restored = TipSpot.deserialize(data)
+    first, second = restored.make_tip(), restored.make_tip()
+    self.assertIsInstance(first, HamiltonTip)
+    self.assertNotEqual(first.name, second.name)
+    self.assertEqual(first.rotation.z, 90)
+    self.assertEqual(first.metadata, {"batch": "example"})
+    self.assertIsNone(first.location)

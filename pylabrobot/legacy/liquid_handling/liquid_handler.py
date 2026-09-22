@@ -2997,7 +2997,7 @@ class LiquidHandler(Resource, Machine):
       for i in range(0, len(list_l), chunk_size):
         yield list_l[i : i + chunk_size]
 
-    clusters_by_model: Dict[Tuple[object, ...], List[Tuple[TipRack, int]]] = {}
+    clusters_by_model: Dict[str, List[Tuple[TipRack, int]]] = {}
 
     for idx, tip_rack in enumerate(tip_racks):
       # Only consider partially-filled tip_racks
@@ -3010,10 +3010,13 @@ class LiquidHandler(Resource, Machine):
         tip_spot for has_tip, tip_spot in zip(tip_status, tip_rack.get_all_items()) if has_tip
       ]
 
-      # Identify model by what kind of tip it is
-      current_model = tipspots_w_tips[0].tracker.get_tip().kind()
+      current_model = tipspots_w_tips[0].tracker.get_tip().model
+      if current_model is None or any(
+        tip_spot.tracker.get_tip().model is None for tip_spot in tipspots_w_tips[1:]
+      ):
+        raise ValueError("Tip models must be defined for consolidation.")
       if not all(
-        tip_spot.tracker.get_tip().kind() == current_model for tip_spot in tipspots_w_tips[1:]
+        tip_spot.tracker.get_tip().model == current_model for tip_spot in tipspots_w_tips[1:]
       ):
         raise ValueError(
           f"Tip rack {tip_rack.name} has mixed tip models, cannot consolidate: "

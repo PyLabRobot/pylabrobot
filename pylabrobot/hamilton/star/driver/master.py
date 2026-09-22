@@ -167,7 +167,7 @@ class STARDriver:
     self.firmware: Dict[str, str] = {}
     # Which table index each tip type was written to. The table is volatile, so this is
     # rebuilt per session as tips are first used.
-    self._tip_type_indices: Dict[Tuple[object, ...], int] = {}
+    self._tip_type_indices: Dict[str, int] = {}
 
     # Subsystems. Each reads what it needs off `configuration`, so they are usable once setup has
     # run and raise a clear error before that. Each arm appears only if setup finds one installed.
@@ -1055,10 +1055,12 @@ class STARDriver:
       Its index in the device's tip type table.
 
     Raises:
-      ValueError: If the table is full.
+      ValueError: If the tip model is undefined or the table is full.
     """
-    kind = tip.kind()
-    if kind not in self._tip_type_indices:
+    model = tip.model
+    if model is None:
+      raise ValueError("Tip model must be defined to assign a tip type index.")
+    if model not in self._tip_type_indices:
       # The first free entry, as legacy takes them, skipping the one the CO-RE grip tool is
       # picked up by: writing a tip there would change what the grip tool is to the device.
       taken = set(self._tip_type_indices.values()) | {CORE_GRIPPER_TIP_TYPE_INDEX}
@@ -1068,7 +1070,7 @@ class STARDriver:
       await self.define_tip_needle(
         tip_type_table_index=index,
         has_filter=tip.has_filter,
-        tip_length=tip.total_tip_length - tip.fitting_depth,
+        tip_length=tip.get_size_z() - tip.fitting_depth,
         # Floored at 1.0 uL so a teaching or probe needle with no capacity registers the way the
         # firmware's own non-pipetting tools do. It does not affect pickup, which goes by length
         # and collar.
@@ -1076,8 +1078,8 @@ class STARDriver:
         tip_size=tip.tip_size,
         pickup_method=tip.pickup_method,
       )
-      self._tip_type_indices[kind] = index
-    return self._tip_type_indices[kind]
+      self._tip_type_indices[model] = index
+    return self._tip_type_indices[model]
 
   # ----------------------------------------
   # Discovery and initialization

@@ -935,7 +935,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
         default_values=False,
         id=255,
         volume=mounted.maximal_volume,
-        length=mounted.total_tip_length - mounted.fitting_depth,
+        length=mounted.get_size_z() - mounted.fitting_depth,
         tip_type=int(PrepCmd.TipTypes.StandardVolume),
         has_filter=mounted.has_filter,
         is_needle=mounted.maximal_volume == 0,

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional, Tuple, cast
 
-from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import serialize
+
+from .coordinate import Coordinate
+from .resource import Resource
 
 
 def _without_names(value: object) -> Any:
@@ -57,83 +58,44 @@ def release_named_tool(root: Resource, name: str, keep: Optional[Resource] = Non
 
 
 class HeadTool(Resource):
-  """Something a channel picks up and carries: a tip, a needle, a gripper tool.
+  """A tool that a liquid handling channel picks up and carries: a tip, a needle, a gripper tool.
 
-  The channel enters the tool's opening at `pick_up_location` and reaches `fitting_depth` into it.
   Tools that are interchangeable for a backend have equal :meth:`kind`, whatever their names.
 
   Attributes:
-    fitting_depth: the overlap between the tool and the channel, in mm
+    fitting_depth: the overlap between the tool and the channel, in mm.
   """
 
   def __init__(
     self,
-    name: Optional[str],
+    name: str,
     size_x: float,
     size_y: float,
     size_z: float,
     fitting_depth: float,
-    collar_height: Optional[float] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
+    collar_height: Optional[float] = None,
   ):
-    """Initialize a head tool.
+    """Initialize a tool with an optional pickup location relative to its origin.
 
     Args:
-      name: the tool's name. A tool created without one can be named once, before it is used.
-      size_x: size of the tool's envelope in the x direction, in mm.
-      size_y: size of the tool's envelope in the y direction, in mm.
-      size_z: size of the tool's envelope in the z direction, in mm.
-      fitting_depth: the overlap between the tool and the channel, in mm.
       collar_height: the height of the tool's collar, in mm.
-      category: the category of the tool.
-      model: the model of the tool.
-      pick_up_location: the centre of the top of the opening the channel enters, relative to the
-        tool's left front bottom corner. Defaults to the centre of the tool's top.
     """
-
+    if not isinstance(name, str):
+      raise TypeError("HeadTool name must be a string.")
     super().__init__(
-      name=name or "",
+      name=name,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
       category=category,
       model=model,
     )
-    self._is_named = name is not None
     self.fitting_depth = fitting_depth
+    self.pick_up_location = pick_up_location
     self._collar_height = collar_height
-    self.pick_up_location = (
-      pick_up_location
-      if pick_up_location is not None
-      else Coordinate(x=size_x / 2, y=size_y / 2, z=size_z)
-    )
-
-  @property
-  def name(self) -> str:
-    """Get the name of this tool."""
-    return self._name
-
-  @name.setter
-  def name(self, name: str) -> None:
-    """Name a tool that was created without a name.
-
-    Raises:
-      AttributeError: If the tool already has a name. Like any resource, a named tool keeps its name.
-    """
-    if self._is_named:
-      raise AttributeError(
-        f"cannot rename {self._name!r} to {name!r}: a resource's name is its identifier and is fixed "
-        "once it is set."
-      )
-    self._name = name
-    self._is_named = True
-
-  @property
-  def is_named(self) -> bool:
-    """Whether this tool has a name."""
-    return self._is_named
 
   @property
   def collar_height(self) -> float:
@@ -147,18 +109,28 @@ class HeadTool(Resource):
     """Whether this tool states the height of its collar."""
     return self._collar_height is not None
 
+  def __eq__(self, other: object) -> bool:
+    """Compare resource fields and the tool's fit, collar and pickup location."""
+    return (
+      isinstance(other, HeadTool)
+      and super().__eq__(other)
+      and self.fitting_depth == other.fitting_depth
+      and self.pick_up_location == other.pick_up_location
+      and self._collar_height == other._collar_height
+    )
+
   def kind(self) -> Tuple[object, ...]:
-    """The tool's serialized form without names: equal for tools of the same kind."""
-    return cast(Tuple[object, ...], _without_names(self.serialize()))
+    """The tool without its name or place: equal for tools of the same kind."""
+    data = self.serialize()
+    for held_by_the_holder in ("location", "parent_name"):
+      data.pop(held_by_the_holder, None)
+    return cast(Tuple[object, ...], _without_names(data))
 
   def serialize(self) -> dict:
-    """Serialize the tool, without its location, which its holder determines."""
-    data = {
+    """Serialize the tool's resource fields, fitting depth, collar height and pickup location."""
+    return {
       **super().serialize(),
       "fitting_depth": self.fitting_depth,
       "collar_height": self._collar_height,
       "pick_up_location": serialize(self.pick_up_location),
     }
-    for held_by_the_holder in ("location", "parent_name"):
-      data.pop(held_by_the_holder, None)
-    return data

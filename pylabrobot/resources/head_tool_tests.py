@@ -1,7 +1,5 @@
 import unittest
-from typing import Any, Dict
 
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import (
   HamiltonCoreGripperTool,
   hamilton_core_gripper_tool,
@@ -14,40 +12,21 @@ from pylabrobot.serializer import deserialize, serialize
 class HeadToolTests(unittest.TestCase):
   """Tests for the head tools a channel can carry."""
 
-  def test_pick_up_location_defaults_to_top_centre(self):
-    tip = Tip(False, 59.9, 400.0, 8.0, name="test_tip", size_x=8.2, size_y=8.2)
-    self.assertEqual(tip.pick_up_location, Coordinate(4.1, 4.1, 59.9))
-
   def test_hamilton_tip_diameter_follows_tip_size(self):
-    from pylabrobot.resources.hamilton import (
-      hamilton_teaching_needle_5000uL,
-      hamilton_tip_10uL,
-      hamilton_tip_300uL_filter,
-      hamilton_tip_5000uL,
-    )
+    from pylabrobot.resources.hamilton import hamilton_tip_10uL, hamilton_tip_300uL_filter
 
     for creator in (hamilton_tip_10uL, hamilton_tip_300uL_filter, hamilton_tip_1000uL):
       tip = creator(name="tip")
       self.assertEqual((tip.get_size_x(), tip.get_size_y()), (8.2, 8.2))
-      self.assertEqual(tip.pick_up_location, Coordinate(4.1, 4.1, tip.total_tip_length))
-    for creator in (hamilton_tip_5000uL, hamilton_teaching_needle_5000uL):
-      tip = creator(name="tip")
-      self.assertEqual((tip.get_size_x(), tip.get_size_y()), (16.4, 16.4))
 
   def test_hamilton_collar_height_follows_tip_size(self):
-    from pylabrobot.resources.hamilton import (
-      hamilton_tip_10uL,
-      hamilton_tip_300uL,
-      hamilton_tip_5000uL,
-    )
+    from pylabrobot.resources.hamilton import hamilton_tip_10uL, hamilton_tip_300uL
     from pylabrobot.resources.imcs.tip_racks import imcs_tip_1000uL
 
     self.assertEqual(hamilton_tip_10uL(name="tip").collar_height, 6.0)
     self.assertEqual(hamilton_tip_300uL(name="tip").collar_height, 8.0)
     self.assertEqual(hamilton_tip_1000uL(name="tip").collar_height, 10.0)
-    self.assertEqual(imcs_tip_1000uL().collar_height, 10.0)
-    with self.assertRaises(ValueError):
-      hamilton_tip_5000uL(name="tip").collar_height
+    self.assertEqual(imcs_tip_1000uL("tip").collar_height, 10.0)
 
   def test_a_grip_tool_states_what_a_tip_states(self):
     """A machine is told about a grip tool through the same fields as a tip, so it states them."""
@@ -63,38 +42,9 @@ class HeadToolTests(unittest.TestCase):
     self.assertEqual(a.kind(), b.kind())
 
   def test_tips_that_differ_are_different_kinds(self):
-    a = Tip(False, 59.9, 400.0, 8.0, name="a")
-    b = Tip(True, 59.9, 360.0, 8.0, name="b")
+    a = Tip("a", 8.2, 59.9, False, 400.0, 8.0)
+    b = Tip("b", 8.2, 59.9, True, 360.0, 8.0)
     self.assertNotEqual(a.kind(), b.kind())
-
-  def test_tip_size_z_must_match_length(self):
-    with self.assertRaises(ValueError):
-      Tip(False, 59.9, 400.0, 8.0, name="test_tip", size_z=50.0)
-
-  def test_deserialize_tip_without_resource_fields(self):
-    """A tip serialized before tips were resources still deserializes."""
-    legacy: Dict[str, Any] = {
-      "type": "Tip",
-      "name": "test_tip",
-      "total_tip_length": 59.9,
-      "has_filter": False,
-      "nominal_volume": 300.0,
-      "maximal_volume": 400.0,
-      "fitting_depth": 8.0,
-    }
-    tip = deserialize(legacy)
-    self.assertIsInstance(tip, Tip)
-    self.assertEqual(tip.get_size_z(), 59.9)
-    self.assertEqual(tip.name, "test_tip")
-
-  def test_unnamed_tool_can_be_named_once(self):
-    tool = hamilton_core_gripper_tool()
-    self.assertFalse(tool.is_named)
-    tool.name = "core_gripper_tool"
-    self.assertTrue(tool.is_named)
-    self.assertEqual(tool.name, "core_gripper_tool")
-    with self.assertRaises(AttributeError):
-      tool.name = "other"
 
   def test_core_gripper_tool_serialize(self):
     tool = hamilton_core_gripper_tool(name="core_gripper_tool")
