@@ -44,7 +44,7 @@ _GRIPPER_MAX_FORCE = 30.0
 class FlexGripper:
   """The Opentrons Flex gripper (extension mount).
 
-  Constructed by ``Flex._model_setup()`` when instrument discovery
+  Constructed by ``Flex.initialize()`` when instrument discovery
   reports a gripper; access it as ``flex.gripper``.
 
   The Flex gripper has NO rotation capability (a hardware limitation, not a

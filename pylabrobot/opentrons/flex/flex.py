@@ -262,7 +262,7 @@ class Flex:
     """
     if not self._connected:
       raise RuntimeError("The Flex is not connected")
-    await self._cancel_run()
+    await self.cancel_run()
     receipt = await self._api.create_run()
     self.run_id = receipt.id
     self._run = OpentronsRun(
@@ -280,7 +280,53 @@ class Flex:
   @serialized
   async def initialize(self) -> None:
     """Discover what is mounted and compose the heads. Moves nothing."""
-    await self._model_setup()
+    # Discover ALL mounted pipettes and compose the matching head per mount.
+    # Discovery is re-runnable: drop whatever a previous setup composed rather
+    # than stacking a second set of heads onto dead pipette ids.
+    self.left = self.right = self.head96 = None
+    self.gripper = None
+    self._heads.clear()
+
+    instruments_data = await self.get_instruments()
+    pipettes = self._parse_pipettes(instruments_data)
+
+    if not pipettes:
+      raise OpentronsError("No pipette detected", f"{self.host}:{self.port}")
+
+    if any(pip.channels == 96 for pip in pipettes) and len(pipettes) > 1:
+      raise OpentronsError(
+        "Impossible instrument combination",
+        "A 96-channel head cannot be mounted alongside another pipette on a Flex.",
+      )
+
+    for pip in pipettes:
+      pipette_id = await self._require_run().load_pipette(pip.pipette_name, cast(Mount, pip.mount))
+      head_cls = _CHANNELS_TO_HEAD.get(pip.channels)
+      if head_cls is None:
+        raise OpentronsError(
+          "Unsupported pipette channel count",
+          f"{pip.channels} channels (mount '{pip.mount}') has no matching FlexHead.",
+        )
+      head = head_cls(self, pip.mount, pipette_id, pip.channels, pip.pipette_model, pip.max_volume)
+
+      if pip.channels == 96:
+        self.head96 = head
+      elif pip.mount == "left":
+        self.left = head
+      elif pip.mount == "right":
+        self.right = head
+      else:
+        raise OpentronsError("Unknown mount", f"mount '{pip.mount}' is neither 'left' nor 'right'.")
+      self._heads.append(head)
+
+    # The gripper (extension mount) is optional: compose it when discovery
+    # reports one, leave ``self.gripper`` None otherwise.
+    gripper_model = next(
+      (i.model for i in instruments_data if i.instrument_type == "gripper"), None
+    )
+    if gripper_model is not None:
+      self.gripper = FlexGripper(self, gripper_model)
+      logger.info("Discovered gripper on the extension mount (model: %s)", gripper_model)
 
   @serialized
   async def cancel_run(self) -> None:
@@ -289,18 +335,6 @@ class Flex:
     Safe with no run open. This, not ``disconnect``, is what frees local
     control: the run is what the robot holds, and it outlives our link.
     """
-    await self._cancel_run()
-
-  @serialized
-  async def disconnect(self) -> None:
-    """Drop the link, moving nothing. Cancels an open run first."""
-    await self._cancel_run()
-    if self._connected:
-      await self.io.stop()
-      self._connected = False
-
-  async def _cancel_run(self) -> None:
-    """Cancel the current run. Safe to call if no run is active."""
     if self._run is not None:
       await self._run.stop()
     self._run = None
@@ -309,6 +343,14 @@ class Flex:
     self.left = self.right = self.head96 = None
     self.gripper = None
     self._heads.clear()
+
+  @serialized
+  async def disconnect(self) -> None:
+    """Drop the link, moving nothing. Cancels an open run first."""
+    await self.cancel_run()
+    if self._connected:
+      await self.io.stop()
+      self._connected = False
 
   def _require_run(self) -> OpentronsRun:
     """Return the active run or reject commands outside a control session."""
@@ -443,59 +485,6 @@ class Flex:
         )
       )
     return pipettes
-
-  async def _model_setup(self) -> None:
-    """Discover and compose heads. Homing is setup()'s own step, so that a
-    caller can ask what is mounted without moving the robot."""
-    # Discover ALL mounted pipettes and compose the matching head per mount.
-    # Discovery is re-runnable: drop whatever a previous setup composed rather
-    # than stacking a second set of heads onto dead pipette ids.
-    self.left = self.right = self.head96 = None
-    self.gripper = None
-    self._heads.clear()
-
-    instruments_data = await self.get_instruments()
-    pipettes = self._parse_pipettes(instruments_data)
-
-    if not pipettes:
-      raise OpentronsError("No pipette detected", f"{self.host}:{self.port}")
-
-    if any(pip.channels == 96 for pip in pipettes) and len(pipettes) > 1:
-      raise OpentronsError(
-        "Impossible instrument combination",
-        "A 96-channel head cannot be mounted alongside another pipette on a Flex.",
-      )
-
-    for pip in pipettes:
-      pipette_id = await self._require_run().load_pipette(pip.pipette_name, cast(Mount, pip.mount))
-      head_cls = _CHANNELS_TO_HEAD.get(pip.channels)
-      if head_cls is None:
-        raise OpentronsError(
-          "Unsupported pipette channel count",
-          f"{pip.channels} channels (mount '{pip.mount}') has no matching FlexHead.",
-        )
-      head = head_cls(self, pip.mount, pipette_id, pip.channels, pip.pipette_model, pip.max_volume)
-
-      if pip.channels == 96:
-        self.head96 = head
-      elif pip.mount == "left":
-        self.left = head
-      elif pip.mount == "right":
-        self.right = head
-      else:
-        raise OpentronsError("Unknown mount", f"mount '{pip.mount}' is neither 'left' nor 'right'.")
-      self._heads.append(head)
-
-    # The gripper (extension mount) is optional: compose it when discovery
-    # reports one, leave ``self.gripper`` None otherwise.
-    gripper_model = self._parse_gripper(instruments_data)
-    if gripper_model is not None:
-      self.gripper = FlexGripper(self, gripper_model)
-      logger.info("Discovered gripper on the extension mount (model: %s)", gripper_model)
-
-  def _parse_gripper(self, instruments: Tuple[InstrumentInfo, ...]) -> Optional[str]:
-    """Return the discovered gripper model, if one is installed."""
-    return next((i.model for i in instruments if i.instrument_type == "gripper"), None)
 
   # --- Deck-scoped labware loading ---
 

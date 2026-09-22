@@ -137,7 +137,7 @@ class _FlexHead:
       return
     if labware_id == self._current_labware_id:
       return
-    await self._execute(
+    await self.flex._execute_command(
       "moveToWell",
       {
         "pipetteId": self.pipette_id,
@@ -206,7 +206,9 @@ class _FlexHead:
     """
     self._warn_untested_hardware("blow_out")
     rate = flow_rate if flow_rate is not None else self.default_flow_rates().blow_out
-    await self._execute("blowOutInPlace", {"pipetteId": self.pipette_id, "flowRate": rate})
+    await self.flex._execute_command(
+      "blowOutInPlace", {"pipetteId": self.pipette_id, "flowRate": rate}
+    )
 
   @instrument_operation
   async def has_tip_on_hardware(self) -> Optional[bool]:
@@ -233,7 +235,7 @@ class _FlexHead:
     return None
 
   async def _read_tip_presence(self) -> Optional[str]:
-    result = await self._execute("getTipPresence", {"pipetteId": self.pipette_id})
+    result = await self.flex._execute_command("getTipPresence", {"pipetteId": self.pipette_id})
     return cast(Optional[str], result.get("result", {}).get("status"))
 
   async def _verify_tips_seated(self) -> None:
@@ -293,7 +295,7 @@ class _FlexHead:
     """
     try:
       await self._travel_guard(params)
-      await self._execute(command_type, params)
+      await self.flex._execute_command(command_type, params)
     except BaseException:
       for tracker in staged_trackers:
         tracker.rollback()
@@ -323,7 +325,7 @@ class _FlexHead:
     """
     try:
       await self._travel_guard(params)
-      await self._execute(command_type, params)
+      await self.flex._execute_command(command_type, params)
     except BaseException:
       for tracker in staged_trackers:
         tracker.rollback()
@@ -342,7 +344,7 @@ class _FlexHead:
     is to lift clear and prime by hand.
     """
     try:
-      return await self._execute(command_type, params)
+      return await self.flex._execute_command(command_type, params)
     except OpentronsCommandError as e:
       if e.error_type != _NOT_READY_TO_ASPIRATE:
         raise
@@ -372,7 +374,7 @@ class _FlexHead:
     """
     self._warn_untested_hardware("prepare_to_aspirate")
     self._require_mounted_tip()
-    await self._execute("prepareToAspirate", {"pipetteId": self.pipette_id})
+    await self.flex._execute_command("prepareToAspirate", {"pipetteId": self.pipette_id})
 
   def _trash_addressable_area(self, trash: Trash) -> str:
     """The movable-trash addressable area for the slot this trash sits in."""
@@ -397,7 +399,7 @@ class _FlexHead:
     its own arc height from only the labware it has been told is loaded, which
     can travel too low and clip a rack the robot was never told about.
     """
-    await self._execute(
+    await self.flex._execute_command(
       "moveToAddressableAreaForDropTip",
       {
         "pipetteId": self.pipette_id,
@@ -406,7 +408,7 @@ class _FlexHead:
         "minimumZHeight": self.flex.traversal_height,
       },
     )
-    await self._execute("dropTipInPlace", {"pipetteId": self.pipette_id})
+    await self.flex._execute_command("dropTipInPlace", {"pipetteId": self.pipette_id})
     # Now over the trash, not a slot's labware: the next pipetting move arcs high.
     self._current_labware_id = None
 
@@ -504,7 +506,7 @@ class _FlexHead:
         f"The nozzle layout cannot change while channel(s) {held} hold a tip; the robot "
         "refuses the reconfiguration. Drop the mounted tip(s) first.",
       )
-    await self._execute(
+    await self.flex._execute_command(
       "configureNozzleLayout",
       {"pipetteId": self.pipette_id, "configurationParams": configuration_params},
     )
@@ -582,10 +584,6 @@ class _FlexHead:
     if z is None:
       raise OpentronsError("LiquidNotFoundError", f"liquid_probe found no liquid in {where}.")
     return z
-
-  async def _execute(self, command_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
-    """Issue a robot-server command through the owning device's shared transport."""
-    return await self.flex._execute_command(command_type, params)
 
   @staticmethod
   def _require_itemized_parent(item: Resource) -> ItemizedResource:
@@ -691,7 +689,7 @@ class _FlexHead:
       raise ValueError("Cannot retract from a non-finite reported position")
     distance = self.flex.traversal_height - position.z
     if distance > 0:
-      await self._execute(
+      await self.flex._execute_command(
         "moveRelative", {"pipetteId": self.pipette_id, "axis": "z", "distance": distance}
       )
 
@@ -743,7 +741,7 @@ class _FlexHead:
     }
     if speed is not None:
       params["speed"] = speed
-    await self._execute("moveToCoordinates", params)
+    await self.flex._execute_command("moveToCoordinates", params)
     # A raw jog leaves the pipette at an arbitrary point: the next pipetting move
     # can no longer assume it is over its last labware, so make it arc high.
     self._current_labware_id = None
@@ -786,7 +784,7 @@ class _FlexHead:
     }
     if speed is not None:
       params["speed"] = speed
-    await self._execute("moveToWell", params)
+    await self.flex._execute_command("moveToWell", params)
 
   @instrument_operation
   async def move_relative(self, axis: str, distance: float) -> None:
@@ -799,7 +797,7 @@ class _FlexHead:
     self._warn_untested_hardware("move_relative")
     if axis not in _MOVE_AXES:
       raise ValueError(f"axis must be one of {sorted(_MOVE_AXES)}, got {axis!r}")
-    await self._execute(
+    await self.flex._execute_command(
       "moveRelative",
       {"pipetteId": self.pipette_id, "axis": axis, "distance": distance},
     )
@@ -831,7 +829,7 @@ class _FlexHead:
     }
     if speed is not None:
       params["speed"] = speed
-    await self._execute("moveToAddressableArea", params)
+    await self.flex._execute_command("moveToAddressableArea", params)
 
   # --- In-place pipetting (acts where the head already is) ---
 
@@ -886,7 +884,7 @@ class _FlexHead:
     }
     if push_out is not None:
       params["pushOut"] = push_out
-    await self._execute("dispenseInPlace", params)
+    await self.flex._execute_command("dispenseInPlace", params)
 
   @instrument_operation
   async def air_gap_in_place(self, volume: float, flow_rate: Optional[float] = None) -> None:
@@ -929,7 +927,7 @@ class _FlexHead:
     self._warn_untested_hardware("verify_tip_presence")
     if not isinstance(expected_state, bool):
       raise TypeError("expected_state must be a bool")
-    await self._execute(
+    await self.flex._execute_command(
       "verifyTipPresence",
       {"pipetteId": self.pipette_id, "expectedState": "present" if expected_state else "absent"},
     )
@@ -943,7 +941,9 @@ class _FlexHead:
     picking up tips: the robot refuses a mode change while a tip is attached.
     """
     self._warn_untested_hardware("configure_for_volume")
-    await self._execute("configureForVolume", {"pipetteId": self.pipette_id, "volume": volume})
+    await self.flex._execute_command(
+      "configureForVolume", {"pipetteId": self.pipette_id, "volume": volume}
+    )
 
   # --- Recovery ops ---
 
@@ -964,7 +964,7 @@ class _FlexHead:
     made the escape hatch refuse in the only situation it exists for.
     """
     self._warn_untested_hardware("unsafe_drop_tip_in_place")
-    await self._execute("unsafe/dropTipInPlace", {"pipetteId": self.pipette_id})
+    await self.flex._execute_command("unsafe/dropTipInPlace", {"pipetteId": self.pipette_id})
     self._channel_tips = [None] * self.channels
 
   @instrument_operation
@@ -980,7 +980,7 @@ class _FlexHead:
     its dispense bottom, so the next draw needs priming.
     """
     self._warn_untested_hardware("unsafe_blow_out_in_place")
-    await self._execute(
+    await self.flex._execute_command(
       "unsafe/blowOutInPlace",
       {"pipetteId": self.pipette_id, "flowRate": flow_rate},
     )
@@ -1274,7 +1274,9 @@ class FlexHead1(_FlexHead):
     self._warn_untested_hardware("touch_tip")
     self._require_mounted_tip()
     labware_id, well_name = await self._well_target(well)
-    await self._execute("touchTip", self._touch_tip_params(labware_id, well_name, radius, offset))
+    await self.flex._execute_command(
+      "touchTip", self._touch_tip_params(labware_id, well_name, radius, offset)
+    )
 
   @instrument_operation
   async def liquid_probe(self, well: Well) -> float:
@@ -2211,7 +2213,9 @@ class FlexHead8(_FlexHead):
     well_name, _ = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    await self._execute("touchTip", self._touch_tip_params(labware_id, well_name, radius, offset))
+    await self.flex._execute_command(
+      "touchTip", self._touch_tip_params(labware_id, well_name, radius, offset)
+    )
 
   @instrument_operation
   async def liquid_probe(self, plate: Plate, column: int) -> float:
@@ -2799,6 +2803,6 @@ class FlexHead96(_FlexHead):
     self._require_mounted_tip()
     self._check_full_coverage(plate)
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    await self._execute(
+    await self.flex._execute_command(
       "touchTip", self._touch_tip_params(labware_id, self._ANCHOR_WELL_NAME, radius, offset)
     )

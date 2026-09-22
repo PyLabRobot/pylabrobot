@@ -66,7 +66,7 @@ class FlexTransactionTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_cancellation_rolls_back_all_trackers(self):
     """Cancellation while issuing a command restores pending bookkeeping."""
-    with patch.object(self.head, "_execute", AsyncMock(side_effect=asyncio.CancelledError)):
+    with patch.object(self.flex, "_execute_command", AsyncMock(side_effect=asyncio.CancelledError)):
       with self.assertRaises(asyncio.CancelledError):
         await self.head.aspirate(self.plate.column(0), volume=20, flow_rate=10)
     self.assertTrue(all(w.tracker.get_used_volume() == 100 for w in self.plate.column(0)))
