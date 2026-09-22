@@ -11,6 +11,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import NoLocationError
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
+from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
 
@@ -457,9 +458,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Z_GRAB_LIMIT = 285
 
     def check_z_height(resource: Resource):
-      # What the device carries belongs up there: it rides above the deck by design, and nothing
-      # traverses or grabs it, so the warnings below say nothing about it.
-      if resource.category in ("x_arm", "head96"):
+      # What the device carries, including a tool on a channel, is above the deck by design.
+      if resource.category in ("x_arm", "head96") or isinstance(resource, HeadTool):
         return
 
       try:

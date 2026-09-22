@@ -1410,8 +1410,8 @@ class NimbusBackend(HamiltonTCPBackend):
     Z positions and traverse height are calculated from the resource locations and tip
     properties if not explicitly provided:
     - minimum_traverse_height_at_beginning_of_a_command: Uses deck z_max if not provided
-    - z_start_offset: Calculated as max(resource Z) + max(tip total_tip_length)
-    - z_stop_offset: Calculated as max(resource Z) + max(tip total_tip_length - tip fitting_depth)
+    - z_start_offset: Calculated as max(resource Z) + max(tip size_z)
+    - z_stop_offset: Calculated as max(resource Z) + max(tip size_z - tip fitting_depth)
 
     Args:
       ops: List of Pickup operations, one per channel
@@ -1625,15 +1625,15 @@ class NimbusBackend(HamiltonTCPBackend):
       if not isinstance(tip_rack, EmbeddedTipRack):
         raise TypeError("Tip rack must be an EmbeddedTipRack")
 
-      total_tip_length = ops[0].tip.total_tip_length
-      if any(op.tip.total_tip_length != total_tip_length for op in ops):
-        raise ValueError("All tips must have the same total_tip_length")
+      size_z = ops[0].tip.get_size_z()
+      if any(op.tip.get_size_z() != size_z for op in ops):
+        raise ValueError("All tips must have the same size_z")
 
       collar_height = ops[0].tip.collar_height
       if any(op.tip.collar_height != collar_height for op in ops):
         raise ValueError("All tips must have the same collar_height")
 
-      end_position_mm = max_z_hamilton - total_tip_length + collar_height
+      end_position_mm = max_z_hamilton - size_z + collar_height
       begin_position_mm = end_position_mm + 10.0  # I think 10mm might be the collar height
 
       begin_tip_deposit_process = self._fill_by_channels(

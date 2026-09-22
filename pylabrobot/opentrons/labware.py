@@ -54,7 +54,7 @@ def build_tip_rack_definition(tip_rack: TipRack, tip: Tip, load_name: str) -> Di
         else "irregular"
       ),
       "isTiprack": True,
-      "tipLength": tip.total_tip_length,
+      "tipLength": tip.get_size_z(),
       "tipOverlap": tip.fitting_depth,
       "loadName": load_name,
       "isMagneticModuleCompatible": False,
@@ -75,7 +75,7 @@ def build_tip_rack_definition(tip_rack: TipRack, tip: Tip, load_name: str) -> Di
     },
     "wells": {
       well_names[child.name]: {
-        "depth": tip.total_tip_length,
+        "depth": tip.get_size_z(),
         "x": cast(Coordinate, child.location).x + child.get_absolute_size_x() / 2,
         "y": cast(Coordinate, child.location).y + child.get_absolute_size_y() / 2,
         "z": cast(Coordinate, child.location).z,

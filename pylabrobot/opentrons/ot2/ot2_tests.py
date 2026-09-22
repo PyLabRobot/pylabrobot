@@ -794,6 +794,19 @@ class OT2MultiChannelTests(unittest.IsolatedAsyncioTestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
+  async def test_pickup_rejects_missing_or_mixed_models_before_commands(self) -> None:
+    """A tip type is its model, and every nozzle must have a defined matching model."""
+    last_tip = self.column[-1].get_tip()
+    for model in (None, "different_tip_model"):
+      with self.subTest(model=model):
+        last_tip.model = model
+        before = len(self.io.calls)
+        with self.assertRaises(ValueError):
+          await self.pipette.pick_up_tips(self.column)
+        self.assertEqual(len(self.io.calls), before)
+        self.assertTrue(all(spot.has_tip() for spot in self.column))
+        self.assertFalse(self.pipette.has_tip)
+
   async def test_setup_selects_the_concrete_class_on_either_mount(self) -> None:
     """Discovery selects a class from the pipette model, independently of its mount."""
     self.assertIsInstance(self.pipette, _OT2Pipette)

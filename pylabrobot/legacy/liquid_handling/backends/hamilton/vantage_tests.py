@@ -395,7 +395,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(parsed["tz"], [1371])
 
   async def test_nested_tip_rack_drop(self):
-    """Nested rack spots specify the tip-end height directly."""
+    """Nested rack spots, like embedded ones, are where the collar rests; discard uses the tip end."""
     rack = hamilton_96_tiprack_50uL_NTR("nested_tips")
     self.deck.assign_child_resource(rack, location=Coordinate(100, 200, 150))
     spot = rack.get_item("A1")
@@ -404,8 +404,9 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
     command = next(cmd for cmd in self.mockVantage.commands if cmd.startswith("A1PMTR"))
     parsed = parse_vantage_fw_string(command, DROP_TIP_FORMAT)
-    self.assertEqual(parsed["tp"], [1735])
-    self.assertEqual(parsed["tz"], [1635])
+    # spot 150 + 55, less the 50.4 mm tip below its 8 mm collar
+    self.assertEqual(parsed["tp"], [1726])
+    self.assertEqual(parsed["tz"], [1626])
 
   async def test_aspirate(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])  # pick up tips first

@@ -20,6 +20,7 @@ from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import NoLocationError, ResourceNotFoundError
+from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
 from pylabrobot.resources.plate_adapter import PlateAdapter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
@@ -1097,7 +1098,12 @@ class TestResourceMetadata(unittest.TestCase):
         size_x=10,
         size_y=10,
         make_tip=lambda name: Tip(
-          name=name, has_filter=False, maximal_volume=10, fitting_depth=1, total_tip_length=10
+          name=name,
+          has_filter=False,
+          maximal_volume=10,
+          fitting_depth=1,
+          diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
+          size_z=10,
         ),
         metadata=meta,
       ),

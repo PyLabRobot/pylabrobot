@@ -38,7 +38,7 @@ class OT2MotionTests(unittest.IsolatedAsyncioTestCase):
     self.column = self.rack["A1:H1"]
     self.primary = self.column[0].get_location_wrt(self.deck, "c", "c", "b")
     tip = self.column[0].get_tip()
-    self.nozzle_z = self.primary.z + tip.total_tip_length - tip.fitting_depth
+    self.nozzle_z = self.primary.z + tip.get_size_z() - tip.fitting_depth
 
   async def asyncTearDown(self) -> None:
     """Close the fake run and restore tracking switches."""
