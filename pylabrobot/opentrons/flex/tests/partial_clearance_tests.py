@@ -86,7 +86,7 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_rack_can_clear_at_high_operation_z(self):
     """Tip racks use geometry too; their type alone cannot block a high operation."""
-    obstacle = TipRack("tips_B2", 127.76, 85.48, 99, ordered_items={})
+    obstacle = TipRack("obstacle_rack_B2", 127.76, 85.48, 99, ordered_items={})
     self.flex.deck.assign_child_at_slot(obstacle, "B2")
     with no_volume_tracking():
       await self.head.aspirate(

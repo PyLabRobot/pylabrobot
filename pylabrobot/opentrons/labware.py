@@ -43,10 +43,10 @@ _TROUGH_BOTTOM_SHAPES = {
 }
 
 _OFFICIAL_TIP_RACKS = {
-  "opentrons_flex_96_tiprack_50ul": "opentrons_flex_96_tiprack_50ul",
-  "opentrons_flex_96_filtertiprack_50ul": "opentrons_flex_96_filtertiprack_50ul",
-  "opentrons_flex_96_tiprack_200ul": "opentrons_flex_96_tiprack_200ul",
-  "opentrons_flex_96_tiprack_1000ul": "opentrons_flex_96_tiprack_1000ul",
+  "Opentrons Flex 96 Tip Rack 50 µL": "opentrons_flex_96_tiprack_50ul",
+  "Opentrons Flex 96 Filter Tip Rack 50 µL": "opentrons_flex_96_filtertiprack_50ul",
+  "Opentrons Flex 96 Tip Rack 200 µL": "opentrons_flex_96_tiprack_200ul",
+  "Opentrons Flex 96 Tip Rack 1000 µL": "opentrons_flex_96_tiprack_1000ul",
   "Opentrons OT-2 96 Filter Tip Rack 10 µL": "opentrons_96_filtertiprack_10ul",
   "Opentrons OT-2 96 Filter Tip Rack 20 µL": "opentrons_96_filtertiprack_20ul",
   "Opentrons OT-2 96 Filter Tip Rack 200 µL": "opentrons_96_filtertiprack_200ul",

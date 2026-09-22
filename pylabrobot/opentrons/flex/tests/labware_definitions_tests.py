@@ -45,7 +45,12 @@ from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import hamilton_1_trough_60mL_Vb
 from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_200ul
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
-from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
+from pylabrobot.resources.opentrons.flex_tip_racks import (
+  flex_96_filtertiprack_50ul,
+  flex_96_tiprack_50ul,
+  flex_96_tiprack_200ul,
+  flex_96_tiprack_1000ul,
+)
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -836,22 +841,32 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_official_tip_rack_loads_with_zero_uploads(self):
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      rack = flex_96_tiprack_50ul(name="rack")
-      flex.deck.assign_child_at_slot(rack, "C1")
-      asyncio.run(flex._ensure_labware_loaded(rack))
+    for factory, load_name in (
+      (flex_96_tiprack_50ul, "opentrons_flex_96_tiprack_50ul"),
+      (flex_96_filtertiprack_50ul, "opentrons_flex_96_filtertiprack_50ul"),
+      (flex_96_tiprack_200ul, "opentrons_flex_96_tiprack_200ul"),
+      (flex_96_tiprack_1000ul, "opentrons_flex_96_tiprack_1000ul"),
+    ):
+      for with_tips in (False, True):
+        with self.subTest(load_name=load_name, with_tips=with_tips):
+          flex, api = _flex_with_api()
+          asyncio.run(flex.setup())
+          try:
+            rack = factory(name="rack", with_tips=with_tips)
+            self.assertEqual(rack.num_items, 96)
+            self.assertTrue(all(spot.has_tip() == with_tips for spot in rack.get_all_items()))
+            flex.deck.assign_child_at_slot(rack, "C1")
+            asyncio.run(flex._ensure_labware_loaded(rack))
 
-      self.assertEqual(api.define_labware.await_count, 0)
-      load_cmds = _load_labware_commands(api)
-      self.assertEqual(len(load_cmds), 1)
-      params = load_cmds[0].args[2]
-      self.assertEqual(params["namespace"], "opentrons")
-      self.assertEqual(params["loadName"], "opentrons_flex_96_tiprack_50ul")
-      self.assertEqual(params["version"], 1)
-    finally:
-      asyncio.run(flex.stop())
+            api.define_labware.assert_not_awaited()
+            load_cmds = _load_labware_commands(api)
+            self.assertEqual(len(load_cmds), 1)
+            params = load_cmds[0].args[2]
+            self.assertEqual(params["namespace"], "opentrons")
+            self.assertEqual(params["loadName"], load_name)
+            self.assertEqual(params["version"], 1)
+          finally:
+            asyncio.run(flex.stop())
 
   def test_container_uploads_single_cavity_definition(self):
     flex, api = _flex_with_api()
