@@ -1,0 +1,39 @@
+﻿:orphan:
+
+pylabrobot.lib.liquid\_handling.tip\_consolidation
+==================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.tip_consolidation
+
+.. automodule:: pylabrobot.lib.liquid_handling.tip_consolidation
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      plan_tip_consolidation
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: class.rst
+   
+      TipTransferBatch
+   
+   
+
+   
+   
+   

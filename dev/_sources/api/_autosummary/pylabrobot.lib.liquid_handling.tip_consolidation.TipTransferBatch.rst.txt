@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.tip\_consolidation.TipTransferBatch
+===================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.tip_consolidation
+
+.. autoclass:: TipTransferBatch
