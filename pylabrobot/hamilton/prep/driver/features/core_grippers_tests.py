@@ -44,6 +44,7 @@ def _make_grippers(deck: PrepDeck, stub_pick_and_drop: bool = True) -> Tuple[Cor
   those two calls themselves asks for them whole, and reads the command that was sent instead.
   """
   pipettes = SimpleNamespace(
+    configuration=SimpleNamespace(channels=[]),  # no reported windows
     num_channels=2,
     move_to_safe_z=AsyncMock(),
     move_tool_bottom_to_z_positions=AsyncMock(),

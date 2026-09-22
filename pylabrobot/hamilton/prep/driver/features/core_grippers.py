@@ -28,6 +28,9 @@ JAW_OPEN_EXTRA = 3.97
 # With a Z speed, how far above the let-go a held plate is lowered at it: PrepDropPlate makes its
 # own Z move at ~133 mm/s whatever is set, so it is left this much.
 FIRMWARE_Z_LEG = 1.0
+# How far inside a channel's reported Y window an open jaw must stay: the front one stalled opening
+# to 0.49 mm inside it.
+JAW_Y_MARGIN = 0.6
 
 
 class CoreGrippers:
@@ -239,6 +242,27 @@ class CoreGrippers:
     await self._pipettes.move_tool_bottom_to_z_positions(
       {channel: minimum_traverse_height_end for channel in range(self._pipettes.num_channels)}
     )
+
+  def _check_jaws_open_within_reach(self, y: float, width: float, y_clearance: float) -> None:
+    """Raise unless both jaws, open around a resource centred at `y`, stay inside their channels'
+    Y windows by `JAW_Y_MARGIN`."""
+    half = (width + JAW_OPEN_EXTRA) / 2 + y_clearance
+    for channel, target, side in (
+      (self._back_channel, y + half, 1),
+      (self._front_channel, y - half, -1),
+    ):
+      channels = self._pipettes.configuration.channels
+      window = channels[channel].y_range if channel < len(channels) else None
+      if window is None:
+        continue
+      edge = window[1] - JAW_Y_MARGIN if side == 1 else window[0] + JAW_Y_MARGIN
+      if (target - edge) * side > 0:
+        fits = y_clearance - (target - edge) * side
+        raise ValueError(
+          f"channel {channel}'s jaw would open to y={target:.2f}, past {edge:.2f}, "
+          f"{JAW_Y_MARGIN} mm inside its reach [{window[0]:.1f}, {window[1]:.1f}]: a y_clearance "
+          f"of at most {max(fits, 0.0):.2f} fits"
+        )
 
   async def _move_jaws_to_z(self, z: float, speed: float) -> None:
     """Move both jaws to `z` together at `speed`, in mm and mm/s (MoveZAbsolute)."""
@@ -701,6 +725,7 @@ class CoreGrippers:
       on_gripped: called once the jaws have closed, before they rise.
     """
     self._require_mounted()
+    self._check_jaws_open_within_reach(location.y, resource_width, y_clearance)
     await self._raise_to_traverse(minimum_traverse_height_start)
     # Over the plate first, jaws open, so the pick-up is straight down: left to itself the
     # firmware dives across the deck (to 73 mm). 0 raises nothing: they are already
@@ -790,6 +815,7 @@ class CoreGrippers:
     """
     if self._holding_resource_width is None:
       raise RuntimeError("Not holding anything")
+    self._check_jaws_open_within_reach(location.y, self._holding_resource_width, y_clearance)
     # The firmware lowers it as part of letting go.
     async with self._temporary_z_drive_acceleration(z_acceleration):
       await self._raise_to_traverse(minimum_traverse_height_start)
