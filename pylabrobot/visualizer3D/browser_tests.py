@@ -84,11 +84,14 @@ class Browser:
     """
     self._id += 1
     await self._socket.send(json.dumps({"id": self._id, "method": method, "params": params or {}}))
-    async with asyncio.timeout(timeout):
+
+    async def reply() -> Any:
       while True:
         message = json.loads(await self._socket.recv())
         if message.get("id") == self._id:
           return message
+
+    return await asyncio.wait_for(reply(), timeout)
 
   async def open(self, url: str) -> None:
     await self._call("Page.enable")
