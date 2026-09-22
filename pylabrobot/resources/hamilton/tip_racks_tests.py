@@ -26,9 +26,6 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_1000uL_filter,
   hamilton_96_tiprack_1000uL_filter_ultrawide,
   hamilton_96_tiprack_1000uL_filter_wide,
-  hamilton_96_tiprack_standard,
-  hamilton_tip_300uL,
-  hamilton_tiprack_standard,
 )
 from pylabrobot.resources.tip_rack import StandingTipRack, TipRack
 
@@ -59,11 +56,6 @@ class HamiltonTipSpotTests(unittest.TestCase):
     check_tip_spot_h1(hamilton_96_tiprack_10uL_NTR(name="tr"), ntr_loc)
     check_tip_spot_h1(hamilton_96_tiprack_50uL_NTR(name="tr"), ntr_loc)
     check_tip_spot_h1(hamilton_96_tiprack_300uL_NTR(name="tr"), ntr_loc)
-
-  def test_the_old_standard_rack_name_still_works(self):
-    with self.assertWarns(DeprecationWarning):
-      old = hamilton_tiprack_standard(name="tr", make_tip=hamilton_tip_300uL)
-    self.assertEqual(old, hamilton_96_tiprack_standard(name="tr", make_tip=hamilton_tip_300uL))
 
 
 class HamiltonTipRackSerializationTests(unittest.TestCase):
