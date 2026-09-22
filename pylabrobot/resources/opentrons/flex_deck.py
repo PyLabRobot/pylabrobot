@@ -23,22 +23,6 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.trash import Trash
 
-# OT-2 slot number → Flex slot identifier mapping
-_OT2_TO_FLEX = {
-  1: "D1",
-  2: "D2",
-  3: "D3",
-  4: "C1",
-  5: "C2",
-  6: "C3",
-  7: "B1",
-  8: "B2",
-  9: "B3",
-  10: "A1",
-  11: "A2",
-  12: "A3",
-}
-
 # Valid slot pattern: A-D followed by 1-4
 _SLOT_PATTERN = re.compile(r"^[A-D][1-4]$")
 
@@ -133,21 +117,6 @@ class FlexDeck(Deck):
     slot = slot.upper()
     if _SLOT_PATTERN.match(slot):
       return slot
-
-    # Check if user passed an OT-2 integer slot
-    try:
-      ot2_slot = int(slot)
-      if 1 <= ot2_slot <= 12:
-        flex_slot = _OT2_TO_FLEX[ot2_slot]
-        raise ValueError(
-          f"'{slot}' looks like an OT-2 slot number. "
-          f"The Flex uses letter-number identifiers: "
-          f"slot {ot2_slot} on OT-2 is '{flex_slot}' on the Flex. "
-          f"Use deck.assign_child_at_slot(resource, slot='{flex_slot}')."
-        )
-    except ValueError as e:
-      if "OT-2" in str(e):
-        raise
 
     raise ValueError(
       f"Invalid slot identifier '{slot}'. "
@@ -289,19 +258,6 @@ class FlexDeck(Deck):
   def get_trash_area96(self) -> Trash:
     # The Flex has one movable trash bin; the 96 head discards into the same bin as the others.
     return self.get_trash_area()
-
-  # --- OT-2 Conversion ---
-
-  @staticmethod
-  def ot2_slot_to_flex(ot2_slot: int) -> str:
-    """Convert an OT-2 slot number to the Flex equivalent.
-
-    Useful for migrating protocols. E.g., 5 → "C2".
-    """
-    if ot2_slot not in _OT2_TO_FLEX:
-      mapping = ", ".join(f"{k}→{v}" for k, v in sorted(_OT2_TO_FLEX.items()))
-      raise ValueError(f"OT-2 slot must be 1–12, got {ot2_slot}. Full mapping: {mapping}")
-    return _OT2_TO_FLEX[ot2_slot]
 
   # --- Collision Detection ---
 
