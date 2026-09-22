@@ -1,4 +1,4 @@
-"""Tests for Flex device shell + head composition (Task 2).
+"""Tests for Flex device shell + head composition.
 
 Drives ``Flex.setup()`` with an injected ``AsyncMock`` (no
 network) reporting a configurable mounted pipette, and asserts discovery
@@ -179,9 +179,7 @@ class TestHeadDiscovery(unittest.IsolatedAsyncioTestCase):
 
 
 class TestNoDoubleLoad(unittest.IsolatedAsyncioTestCase):
-  """Regression for the double-``loadPipette`` bug (base ``setup()`` used to
-  discover+load the first mount, then ``_model_setup()`` loaded it again).
-  """
+  """Setup loads each discovered pipette exactly once."""
 
   async def test_single_pipette_is_loaded_exactly_once(self):
     flex, api = _flex_with_api(self, [("p50_multi_flex", 8, 1.0, 50.0, "left")])
@@ -285,7 +283,7 @@ async def _flex_head8(
 
 
 class TestFlexHead8ColumnOps(unittest.IsolatedAsyncioTestCase):
-  """Task 3: column ops send exactly ONE wire command anchored at the
+  """Column ops send exactly ONE wire command anchored at the
   column's A-row well; the hardware fans it out to all 8 physical channels;
   trackers commit only for wells/spots the head actually actuated.
   """
@@ -469,18 +467,14 @@ class TestFlexHead8PrepareToAspirate(unittest.IsolatedAsyncioTestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  async def _bench(self):
-    flex, api, head = await _flex_head8(self)
-    rack = flex_96_tiprack_50ul(name="rack")
-    plate = cor_96_wellplate_360uL_Fb(name="plate")
-    flex.deck.assign_child_at_slot(rack, "C1")
-    flex.deck.assign_child_at_slot(plate, "C2")
-    for well in plate.get_all_items():
-      well.tracker.set_volume(100.0)
-    return flex, api, head, rack, plate
-
   async def asyncSetUp(self):
-    self.flex, self.api, self.head, self.rack, self.plate = await self._bench()
+    self.flex, self.api, self.head = await _flex_head8(self)
+    self.rack = flex_96_tiprack_50ul(name="rack")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
+    self.flex.deck.assign_child_at_slot(self.rack, "C1")
+    self.flex.deck.assign_child_at_slot(self.plate, "C2")
+    for well in self.plate.get_all_items():
+      well.tracker.set_volume(100.0)
 
   async def test_prepare_is_sent_before_each_aspiration(self):
     await self.head.pick_up_tips(self.rack, column=0)
@@ -521,7 +515,7 @@ class TestFlexHead8PrepareToAspirate(unittest.IsolatedAsyncioTestCase):
 
 
 class TestFlexHead8PickupOrigin(unittest.IsolatedAsyncioTestCase):
-  """Task 3 fix #2: tip-pickup offsets must use wellLocation.origin == 'top',
+  """Tip-pickup offsets must use wellLocation.origin == 'top',
   not the 'bottom' origin used for aspirate/dispense."""
 
   async def test_pick_up_tips_offset_uses_top_origin(self):
@@ -558,7 +552,7 @@ class TestFlexHead8PickupOrigin(unittest.IsolatedAsyncioTestCase):
 
 
 class TestFlexHead8TransactionalTrackers(unittest.IsolatedAsyncioTestCase):
-  """Task 3 fix #3: infeasible tracker operations must raise BEFORE any wire
+  """Infeasible tracker operations must raise BEFORE any wire
   command is sent, and must not leave trackers mutated."""
 
   def setUp(self):
@@ -593,7 +587,7 @@ class TestFlexHead8TransactionalTrackers(unittest.IsolatedAsyncioTestCase):
 
 
 class TestFlexHead8DoublePickupGuard(unittest.IsolatedAsyncioTestCase):
-  """Task 3 fix #4: picking up onto an already-occupied channel must raise
+  """Picking up onto an already-occupied channel must raise
   OpentronsError rather than silently overwrite head state."""
 
   def setUp(self):
@@ -627,8 +621,7 @@ class TestFlexHead8DoublePickupGuard(unittest.IsolatedAsyncioTestCase):
 
 
 class TestFlexHead8EnsureAllModeReset(unittest.IsolatedAsyncioTestCase):
-  """Task 3 fix #5: a column op directly after a single-tip pickup (no
-  intervening drop) must emit a configureNozzleLayout(ALL) reset first."""
+  """Column pickup resets the nozzle layout to ALL after a single tip is cleared."""
 
   async def test_column_op_after_single_pickup_resets_nozzle_layout(self):
     flex, api, head = await _flex_head8(self)
@@ -636,9 +629,8 @@ class TestFlexHead8EnsureAllModeReset(unittest.IsolatedAsyncioTestCase):
     flex.deck.assign_child_at_slot(rack, "C1")
 
     await head.pick_up_single_tip(rack, well="A1")
-    # Simulate the mounted single tip having been cleared through a path
-    # not under test here, so the column op's occupied-channel guard
-    # (fix #4) doesn't fire -- isolating the nozzle-layout reset (fix #5).
+    # Clear the mounted tip so the occupied-channel guard allows us to
+    # exercise the nozzle-layout reset.
     head._channel_tips = [None] * head.channels
     self.assertEqual(head._nozzle_layout, "SINGLE")
 
@@ -660,8 +652,8 @@ class TestFlexHead8EnsureAllModeReset(unittest.IsolatedAsyncioTestCase):
 
 
 class TestFlexHead8SingleOpFlowRateAndNoneSkip(unittest.IsolatedAsyncioTestCase):
-  """Task 3 fix #7: aspirate_single/dispense_single accept a flow_rate
-  override, and a partially-filled column pickup leaves missing-tip
+  """Single-tip liquid operations accept a flow_rate override,
+  and a partially-filled column pickup leaves missing-tip
   channels' wells untouched (None-skip) on a later column aspirate."""
 
   def setUp(self):
@@ -725,10 +717,7 @@ class TestFlexHead8SingleOpFlowRateAndNoneSkip(unittest.IsolatedAsyncioTestCase)
 
 
 class TestFlexHead8HardwareTipPresence(unittest.IsolatedAsyncioTestCase):
-  """Task 5: the Flex hardware tip-presence sensor (one bool per pipette,
-  via /instruments -> state.tipDetected) is the aggregate authority used to
-  verify a pickup seated a tip and to confirm a drop cleared it.
-  """
+  """The getTipPresence command verifies pickup seating and tip clearance."""
 
   def setUp(self):
     set_tip_tracking(True)
@@ -861,7 +850,7 @@ async def _flex_head96(
 
 
 class TestFlexHead1Ops(unittest.IsolatedAsyncioTestCase):
-  """Task 5: FlexHead1 (single-channel, well-addressed) reuses the FlexHead8
+  """FlexHead1 (single-channel, well-addressed) reuses the FlexHead8
   transactional stage -> wire -> verify -> commit/rollback flow and hardware
   tip-presence machinery, addressing exactly one well/tip spot per command
   instead of a whole column.
@@ -959,7 +948,7 @@ class TestFlexHead1Ops(unittest.IsolatedAsyncioTestCase):
 
 
 class TestFlexHead96Ops(unittest.IsolatedAsyncioTestCase):
-  """Task 5: FlexHead96 (96 fixed nozzles, whole-plate-addressed) reuses the
+  """FlexHead96 (96 fixed nozzles, whole-plate-addressed) reuses the
   FlexHead8 transactional stage -> wire -> verify -> commit/rollback flow and
   hardware tip-presence machinery, fanning ONE command out to all 96
   channels anchored at well "A1".

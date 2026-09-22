@@ -26,6 +26,7 @@ from pylabrobot.opentrons.types import (
   InstrumentInfo,
   LabwareIdentity,
   ModuleInfo,
+  Mount,
   PipetteInfo,
   RobotInfo,
   RunInfo,
@@ -341,8 +342,6 @@ class Flex:
             head.mount,
             exc_info=True,
           )
-    for head in reversed(self._heads):
-      await head._on_stop()
     # Home inside the run (before cancelling it) so the gantry parks in a known
     # pose; a failure here must not block the release that follows.
     try:
@@ -445,15 +444,6 @@ class Flex:
       )
     return pipettes
 
-  async def _load_pipette(self, pipette_name: str, mount: str) -> str:
-    """Load a pipette through the shared run executor and return its run-scoped ID."""
-    result = await self._execute_command(
-      "loadPipette", {"pipetteName": pipette_name, "mount": mount}
-    )
-    pipette_id = result.get("result", {}).get("pipetteId", "")
-    logger.info("Loaded pipette %s on %s mount -> ID: %s", pipette_name, mount, pipette_id)
-    return cast(str, pipette_id)
-
   async def _model_setup(self) -> None:
     """Discover and compose heads. Homing is setup()'s own step, so that a
     caller can ask what is mounted without moving the robot."""
@@ -477,7 +467,7 @@ class Flex:
       )
 
     for pip in pipettes:
-      pipette_id = await self._load_pipette(pip.pipette_name, pip.mount)
+      pipette_id = await self._require_run().load_pipette(pip.pipette_name, cast(Mount, pip.mount))
       head_cls = _CHANNELS_TO_HEAD.get(pip.channels)
       if head_cls is None:
         raise OpentronsError(
@@ -495,9 +485,6 @@ class Flex:
       else:
         raise OpentronsError("Unknown mount", f"mount '{pip.mount}' is neither 'left' nor 'right'.")
       self._heads.append(head)
-
-    for head in self._heads:
-      await head._on_setup()
 
     # The gripper (extension mount) is optional: compose it when discovery
     # reports one, leave ``self.gripper`` None otherwise.
@@ -535,10 +522,7 @@ class Flex:
       )
       return binding.labware_id
     if identity is None:
-      namespace, load_name, version = await self._define_custom_labware(
-        resource, grip_distance_from_top, allow_stub
-      )
-      identity = LabwareIdentity(namespace, load_name, version)
+      identity = await self._define_custom_labware(resource, grip_distance_from_top, allow_stub)
     else:
       _warn_grip_distance_discarded(
         name,
@@ -723,16 +707,12 @@ class Flex:
     resource: Resource,
     grip_distance_from_top: Optional[float] = None,
     allow_stub: bool = False,
-  ) -> Tuple[str, str, int]:
+  ) -> LabwareIdentity:
     """Upload a geometry-derived definition for labware with no official Opentrons definition.
 
-    Returns the uploaded definition's (namespace, load_name, version), parsed
-    from the robot-server's ``definitionUri`` so the subsequent ``loadLabware``
-    references exactly what the server stored. The parsed identity is cached
-    (separately from ``_loaded_labware``) until the labware leaves the deck or
-    a new run starts, so repeat calls within a stay on deck skip the
-    re-upload -- which also means ``grip_distance_from_top`` only shapes the
-    FIRST upload.
+    Return the server's definition identity, cached until the labware leaves
+    the deck or a new run starts. ``grip_distance_from_top`` only affects the
+    first upload.
     """
     registry = self._require_labware()
     identity = registry.definition(resource)
@@ -740,12 +720,12 @@ class Flex:
       _warn_grip_distance_discarded(
         resource.name, grip_distance_from_top, "its custom definition was already uploaded"
       )
-      return identity.namespace, identity.load_name, identity.version
+      return identity
     definition = self._build_labware_definition(resource, grip_distance_from_top, allow_stub)
     identity = await registry.define(resource, definition)
     if not _has_pipettable_geometry(resource):
       self._stub_labware.add(id(resource))
-    return identity.namespace, identity.load_name, identity.version
+    return identity
 
   @staticmethod
   def _build_labware_definition(

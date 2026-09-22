@@ -144,7 +144,7 @@ class _FlexHead:
         "labwareId": labware_id,
         "wellName": well_name,
         "wellLocation": {"origin": "top", "offset": {"x": 0, "y": 0, "z": 0}},
-        "minimumZHeight": self._traversal_height(),
+        "minimumZHeight": self.flex.traversal_height,
       },
     )
     self._current_labware_id = labware_id
@@ -403,7 +403,7 @@ class _FlexHead:
         "pipetteId": self.pipette_id,
         "addressableAreaName": self._trash_addressable_area(trash),
         "alternateDropLocation": True,
-        "minimumZHeight": self._traversal_height(),
+        "minimumZHeight": self.flex.traversal_height,
       },
     )
     await self._execute("dropTipInPlace", {"pipetteId": self.pipette_id})
@@ -469,7 +469,7 @@ class _FlexHead:
     if not all(math.isfinite(v) for v in (position.x, position.y, position.z)):
       raise ValueError("Pipetting coordinates must be finite")
     self._check_pipetting_clearance(target, position)
-    clearance = max(self._traversal_height(), position.z)
+    clearance = max(self.flex.traversal_height, position.z)
     tip_trackers = [tip.tracker for tip in self._channel_tips if tip is not None]
     sources, destinations = (
       (container_trackers, tip_trackers)
@@ -568,9 +568,8 @@ class _FlexHead:
 
     On real hardware a no-liquid probe FAILS the command with the defined
     "liquidNotFound" error, so the wire failure is caught and translated;
-    the absent-``z_position`` success path additionally covers transports
-    that succeed without a result (e.g. ``ChatterboxTransport``). Other wire
-    failures re-raise untranslated.
+    a successful response without ``z_position`` also means no liquid was
+    found. Other command failures propagate unchanged.
     """
     try:
       z = await self._probe_z("liquidProbe", labware_id, well_name)
@@ -583,12 +582,6 @@ class _FlexHead:
     if z is None:
       raise OpentronsError("LiquidNotFoundError", f"liquid_probe found no liquid in {where}.")
     return z
-
-  async def _on_setup(self) -> None:
-    """Hook for head-specific post-discovery setup. Default: no-op."""
-
-  async def _on_stop(self) -> None:
-    """Hook for head-specific teardown. Default: no-op."""
 
   async def _execute(self, command_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """Issue a robot-server command through the owning device's shared transport."""
@@ -686,17 +679,6 @@ class _FlexHead:
 
   # --- Direct head motion (teaching / recovery jog) ---
 
-  def _traversal_height(self) -> float:
-    """The computed tip-safe travel plane for a lateral jog over this deck.
-
-    ``max(labware tops) + arc margin`` (``checks.traversal_z``), tip-end framed
-    (the frame ``minimumZHeight`` already uses), computed from the resource model
-    -- so the arc adapts to what is actually on the deck instead of a fixed magic
-    number that is both wasteful over short labware and unsafe under anything
-    taller.
-    """
-    return self.flex.traversal_height
-
   async def _retract_to_traversal_height(self) -> None:
     """Raise vertically after a completed operation; never lower or move laterally.
 
@@ -722,9 +704,7 @@ class _FlexHead:
     the deck frame, so the reported position needs no conversion.
     """
     self._warn_untested_hardware("position")
-    result = await self._execute("savePosition", {"pipetteId": self.pipette_id})
-    pos = result["result"]["position"]
-    return Coordinate(pos["x"], pos["y"], pos["z"])
+    return await self._run.get_position(self.pipette_id)
 
   @instrument_operation
   async def move_to(
@@ -758,7 +738,7 @@ class _FlexHead:
       "pipetteId": self.pipette_id,
       "coordinates": {"x": x, "y": y, "z": z},
       "minimumZHeight": (
-        minimum_z_height if minimum_z_height is not None else self._traversal_height()
+        minimum_z_height if minimum_z_height is not None else self.flex.traversal_height
       ),
     }
     if speed is not None:
@@ -801,7 +781,7 @@ class _FlexHead:
       "wellName": well_name,
       "wellLocation": {"origin": origin, "offset": {"x": o.x, "y": o.y, "z": o.z}},
       "minimumZHeight": (
-        minimum_z_height if minimum_z_height is not None else self._traversal_height()
+        minimum_z_height if minimum_z_height is not None else self.flex.traversal_height
       ),
     }
     if speed is not None:
@@ -846,7 +826,7 @@ class _FlexHead:
       "offset": {"x": o.x, "y": o.y, "z": o.z},
       "stayAtHighestPossibleZ": stay_at_max_height,
       "minimumZHeight": (
-        minimum_z_height if minimum_z_height is not None else self._traversal_height()
+        minimum_z_height if minimum_z_height is not None else self.flex.traversal_height
       ),
     }
     if speed is not None:

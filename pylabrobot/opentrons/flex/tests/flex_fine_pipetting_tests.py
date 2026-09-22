@@ -537,16 +537,12 @@ class TestHead8ColumnValidation(unittest.IsolatedAsyncioTestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  async def _bench(self):
-    flex, api, head = await _flex_head8(self)
-    rack = flex_96_tiprack_50ul(name="rack")
-    plate = cor_96_wellplate_360uL_Fb(name="plate")
-    flex.deck.assign_child_at_slot(rack, "C1")
-    flex.deck.assign_child_at_slot(plate, "C2")
-    return flex, api, head, rack, plate
-
   async def asyncSetUp(self):
-    self.flex, self.api, self.head, self.rack, self.plate = await self._bench()
+    self.flex, self.api, self.head = await _flex_head8(self)
+    self.rack = flex_96_tiprack_50ul(name="rack")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
+    self.flex.deck.assign_child_at_slot(self.rack, "C1")
+    self.flex.deck.assign_child_at_slot(self.plate, "C2")
 
   async def test_out_of_range_columns_reject_every_op_with_zero_wire_commands(self):
     await self.head.pick_up_tips(self.rack, column=0)  # the trio needs mounted tips
@@ -671,16 +667,15 @@ class TestWellPositionOffsets(unittest.IsolatedAsyncioTestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  async def _bench(self):
-    flex, api, head = await _flex_head8(self)
+  async def asyncSetUp(self):
+    self.flex, self.api, self.head = await _flex_head8(self)
     rack = flex_96_tiprack_50ul(name="rack")
-    plate = cor_96_wellplate_360uL_Fb(name="plate")
-    flex.deck.assign_child_at_slot(rack, "C1")
-    flex.deck.assign_child_at_slot(plate, "C2")
-    for well in plate.get_all_items():
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
+    self.flex.deck.assign_child_at_slot(rack, "C1")
+    self.flex.deck.assign_child_at_slot(self.plate, "C2")
+    for well in self.plate.get_all_items():
       well.tracker.set_volume(100.0)
-    await head.pick_up_tips(rack, column=0)
-    return flex, api, head, plate
+    await self.head.pick_up_tips(rack, column=0)
 
   def _aspirate_well_location(self, api: AsyncMock, plate) -> dict:
     aspirate_cmds = [
@@ -689,9 +684,6 @@ class TestWellPositionOffsets(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(aspirate_cmds), 1)
     well_location = pipetting_location(api, plate.get_item("A1"))
     return well_location
-
-  async def asyncSetUp(self):
-    self.flex, self.api, self.head, self.plate = await self._bench()
 
   async def test_lateral_offset_on_a_plate_column_keeps_the_bottom_clearance(self):
     await self.head.aspirate(self.plate, column=0, volume=10, offset=Coordinate(x=1, y=2))
@@ -1411,14 +1403,10 @@ class TestUnsafeRecoveryOps(unittest.IsolatedAsyncioTestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  async def _bench(self):
-    flex, api, head = await _flex_head8(self)
-    rack = flex_96_tiprack_50ul(name="rack")
-    flex.deck.assign_child_at_slot(rack, "C1")
-    return flex, api, head, rack
-
   async def asyncSetUp(self):
-    self.flex, self.api, self.head, self.rack = await self._bench()
+    self.flex, self.api, self.head = await _flex_head8(self)
+    self.rack = flex_96_tiprack_50ul(name="rack")
+    self.flex.deck.assign_child_at_slot(self.rack, "C1")
 
   async def test_unsafe_drop_tip_in_place_sends_pipette_id_and_clears_mounted_tips(self):
     await self.head.pick_up_tips(self.rack, column=0)

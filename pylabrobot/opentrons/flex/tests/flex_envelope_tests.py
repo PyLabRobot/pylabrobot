@@ -125,24 +125,20 @@ class TestBetweenSlotArcGuard(unittest.IsolatedAsyncioTestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  async def _setup(self):
+  async def asyncSetUp(self):
     from pylabrobot.resources import cor_96_wellplate_360uL_Fb
     from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
-    flex, api, head = await _flex_head8(self)
-    rack = flex_96_tiprack_50ul(name="rack")
-    plate = cor_96_wellplate_360uL_Fb(name="plate")
-    flex.deck.assign_child_at_slot(rack, "C1")
-    flex.deck.assign_child_at_slot(plate, "C2")
-    for w in plate.get_all_items():
+    self.flex, self.api, self.head = await _flex_head8(self)
+    self.rack = flex_96_tiprack_50ul(name="rack")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
+    self.flex.deck.assign_child_at_slot(self.rack, "C1")
+    self.flex.deck.assign_child_at_slot(self.plate, "C2")
+    for w in self.plate.get_all_items():
       w.tracker.set_volume(100.0)
-    return flex, api, head, rack, plate
 
   def _coordinate_moves(self, api):
     return [c for c in api.submit_command.await_args_list if c.args[1] == "moveToCoordinates"]
-
-  async def asyncSetUp(self):
-    self.flex, self.api, self.head, self.rack, self.plate = await self._setup()
 
   async def test_crossing_to_a_new_slot_arcs_high_first(self):
     await self.head.pick_up_tips(self.rack, column=0)  # over the rack (C1)

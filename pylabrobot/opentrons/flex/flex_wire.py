@@ -25,7 +25,7 @@ OFFLINE_API_VERSION = "dry-run"
 # everywhere; each module logs it through its own logger.
 UNTESTED_HARDWARE_WARNING = (
   "%s.%s is coded but NOT YET VERIFIED on real Opentrons Flex hardware -- "
-  "tested only against ChatterboxTransport/simulated transport. Verify behavior "
+  "tested only with mocks or simulation. Verify behavior "
   "on real hardware before relying on it in a production protocol."
 )
 
@@ -65,9 +65,9 @@ def _require_robot_commands(command: str, api_version: Optional[str]) -> None:
   version an unreleased source checkout carries, including the simulated
   robot-server) and runs current code, so it passes -- but a build cut off a
   real tag reports that tag plus a dev suffix ("8.1.0.dev5"), which is gated
-  on the tag like any release. ``ChatterboxTransport``'s offline "dry-run"
-  sentinel passes too; it reaches no robot at all. Any other unparseable
-  version raises rather than silently passing the gate.
+  on the tag like any release. The offline tests' "dry-run" sentinel passes
+  too. Any other unparseable version raises rather than silently passing
+  the gate.
   """
   if api_version is None:
     raise OpentronsError(
