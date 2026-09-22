@@ -10,6 +10,7 @@ simulated makes itself known: override the method that sends it, on the feature 
 """
 
 import copy
+import dataclasses
 import datetime
 import logging
 from typing import Any, Dict, List, Literal, Optional, Tuple, cast
@@ -749,24 +750,20 @@ class SimulatedISWAP(_Simulated, iSWAP):
     # tables back into the stops and link lengths, so an iSWAP configured differently answers
     # differently. Each table carries its drive's stops, then that link's length in tenths.
     declared = self._declared
+    stops: Any
     if table == "py":
       stops, length = declared.rotation_drive_predefined_y_positions_increments, None
-      names: Tuple[str, ...] = declared.rotation_drive_y_slots
     elif table == "pz":
       stops, length = declared.rotation_drive_predefined_z_positions_increments, None
-      names = declared.rotation_drive_z_slots
     elif table == "pg":
       stops, length = declared.gripper_drive_predefined_increments, None
-      names = declared.gripper_drive_slots
     elif table == "pw":
       stops, length = declared.rotation_drive_predefined_increments, declared.link_1_length
-      names = declared.rotation_drive_slots
     else:
       stops, length = declared.wrist_drive_predefined_increments, declared.tool_length
-      names = declared.wrist_drive_slots
     if stops is None:
       raise RuntimeError(f"the simulated iSWAP has no {table} table; set it on its configuration")
-    rendered = [stops[name] for name in names]
+    rendered = list(dataclasses.astuple(stops))
     return rendered if length is None else rendered + [round(length * 10)]
 
   async def initialize(self):

@@ -78,21 +78,17 @@ class TestParking(unittest.IsolatedAsyncioTestCase):
       new=AsyncMock(
         return_value={
           iSWAPAxis.Y: c.y_increments_to_mm(
-            c.rotation_drive_predefined_y_positions_increments["parking"]
+            c.rotation_drive_predefined_y_positions_increments.parking
           ),
           iSWAPAxis.Z: c.z_increments_to_mm(
-            c.rotation_drive_predefined_z_positions_increments["parking"]
+            c.rotation_drive_predefined_z_positions_increments.parking
           )
           + c.rotation_drive_z_offset_above_finger,
           iSWAPAxis.ROTATION: c.rotation_drive_increments_to_angle(
-            c.rotation_drive_predefined_increments["parking"]
+            c.rotation_drive_predefined_increments.parking
           ),
-          iSWAPAxis.WRIST: c.wrist_increments_to_deg(
-            c.wrist_drive_predefined_increments["parking"]
-          ),
-          iSWAPAxis.GRIPPER: c.gripper_increments_to_mm(
-            c.gripper_drive_predefined_increments["home"]
-          ),
+          iSWAPAxis.WRIST: c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.parking),
+          iSWAPAxis.GRIPPER: c.gripper_increments_to_mm(c.gripper_drive_predefined_increments.home),
         }
       ),
     ):
@@ -104,7 +100,7 @@ class TestParking(unittest.IsolatedAsyncioTestCase):
     assert c.rotation_drive_predefined_y_positions_increments is not None
     joints = await iswap.request_joint_state()
     joints[iSWAPAxis.Y] = c.y_increments_to_mm(
-      c.rotation_drive_predefined_y_positions_increments["parking"] - 10
+      c.rotation_drive_predefined_y_positions_increments.parking - 10
     )
     with patch.object(iswap, "request_joint_state", new=AsyncMock(return_value=joints)):
       self.assertFalse(await iswap.request_parked())
@@ -115,7 +111,7 @@ class TestParking(unittest.IsolatedAsyncioTestCase):
     assert c.rotation_drive_predefined_z_positions_increments is not None
     joints = await iswap.request_joint_state()
     joints[iSWAPAxis.Z] = (
-      c.z_increments_to_mm(c.rotation_drive_predefined_z_positions_increments["parking"] + 10)
+      c.z_increments_to_mm(c.rotation_drive_predefined_z_positions_increments.parking + 10)
       + c.rotation_drive_z_offset_above_finger
     )
     with patch.object(iswap, "request_joint_state", new=AsyncMock(return_value=joints)):
@@ -270,8 +266,10 @@ class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(await iswap.rotation_drive_request_y_position(), c.rotation_drive_y_max)
     for stop in ("left", "right"):
-      angle = c.rotation_drive_increments_to_angle(c.rotation_drive_predefined_increments[stop])
-      straight = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments["straight"])
+      angle = c.rotation_drive_increments_to_angle(
+        c.rotation_drive_predefined_increments.position(stop)
+      )
+      straight = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.straight)
       iswap._check_pose_reachable(angle, straight)
 
   async def test_a_pose_that_reaches_behind_the_rail_is_still_refused(self):
@@ -282,8 +280,8 @@ class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
     assert c.rotation_drive_predefined_increments is not None
     assert c.wrist_drive_predefined_increments is not None
 
-    angle = c.rotation_drive_increments_to_angle(c.rotation_drive_predefined_increments["right"])
-    wrist = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments["left"])
+    angle = c.rotation_drive_increments_to_angle(c.rotation_drive_predefined_increments.right)
+    wrist = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.left)
     with self.assertRaises(ValueError):
       iswap._check_pose_reachable(angle, wrist)
 
@@ -364,12 +362,12 @@ class TestGripperDirections(unittest.IsolatedAsyncioTestCase):
     c = iswap.configuration
     assert c.rotation_drive_predefined_increments is not None
     assert c.wrist_drive_predefined_increments is not None
-    stored = {c.wrist_drive_predefined_increments[name] for name, _ in c.WRIST_STOP_ANGLES}
+    stored = {c.wrist_drive_predefined_increments.position(name) for name, _ in c.WRIST_STOP_ANGLES}
 
     for rotation in ("left", "front", "right"):
       for direction in ("right", "back", "left", "front"):
         increments = iswap._resolve_gripper_direction_increments(
-          direction, c.rotation_drive_predefined_increments[rotation]
+          direction, c.rotation_drive_predefined_increments.position(rotation)
         )
         self.assertIn(increments, stored, f"{rotation}/{direction}")
 
