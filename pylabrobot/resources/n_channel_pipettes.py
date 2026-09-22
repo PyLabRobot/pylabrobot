@@ -112,7 +112,7 @@ class TipMountingShaft(Resource):
     """
     if self.has_tip():
       raise RuntimeError(f"{self.name} is already carrying {self.children[0].name}")
-    grip = tip.pick_up_location.rotated(tip.rotation)
+    grip = (tip.pick_up_location or tip.get_anchor("c", "c", "t")).rotated(tip.rotation)
     location = Coordinate(
       x=self.get_size_x() / 2 - grip.x,
       y=self.get_size_y() / 2 - grip.y,
@@ -138,11 +138,11 @@ class TipMountingShaft(Resource):
     self.unassign_child_resource(tip)
     return tip
 
-  def tip_bottom(self) -> Coordinate:
-    """Where the bottom of what this shaft carries is, relative to the shaft's end."""
+  def tip_bottom(self) -> Optional[Coordinate]:
+    """The carried tool's bottom relative to the shaft's end, or None if empty."""
     tip = self.tip
     if tip is None:
-      return Coordinate.zero()
+      return None
     return Coordinate(0.0, 0.0, cast(Coordinate, tip.location).z)
 
   def serialize(self) -> dict:

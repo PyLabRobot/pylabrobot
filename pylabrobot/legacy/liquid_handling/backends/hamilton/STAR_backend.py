@@ -6201,7 +6201,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
 
-    ttti = await self.get_or_assign_tip_type_index(tool or hamilton_core_gripper_tool())
+    ttti = await self.get_or_assign_tip_type_index(
+      tool or hamilton_core_gripper_tool(name="core_gripper_tool")
+    )
 
     command_output = await self.send_command(
       module="C0",
@@ -13627,7 +13629,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if tip_len is None:
       # currently a bug, will be fixed in the future
       # reverted to previous implementation
-      # tip_len = self.head[channel_idx].get_tip().total_tip_length
+      # tip_len = self.head[channel_idx].get_tip().get_size_z()
       tip_len = await self.request_tip_len_on_channel(channel_idx)
 
     if start_pos_search is None:

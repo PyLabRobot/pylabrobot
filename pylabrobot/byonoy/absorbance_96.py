@@ -84,21 +84,19 @@ class ByonoyAbsorbanceBaseUnit(Resource):
     self.plate_holder = _ByonoyAbsorbanceReaderPlateHolder(
       name=self.name + "_plate_holder",
       size_x=127.76,
-      size_y=85.59,
+      size_y=85.48,
       size_z=0,
-      child_location=Coordinate(x=22.5, y=5.0, z=16.0),
       pedestal_size_z=0,
     )
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+    self.assign_child_resource(self.plate_holder, location=Coordinate(x=22.5, y=5.0, z=16.0))
 
     self.illumination_unit_holder = ResourceHolder(
       name=self.name + "_illumination_unit_holder",
       size_x=size_x,
       size_y=size_y,
       size_z=0,
-      child_location=Coordinate(x=0, y=0, z=14.1),
     )
-    self.assign_child_resource(self.illumination_unit_holder, location=Coordinate.zero())
+    self.assign_child_resource(self.illumination_unit_holder, location=Coordinate(x=0, y=0, z=14.1))
 
   def assign_child_resource(
     self, resource: Resource, location: Optional[Coordinate], reassign: bool = True

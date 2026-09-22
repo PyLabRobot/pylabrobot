@@ -5,6 +5,7 @@ from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
   TIP_CAR_480BC_A00,
+  TIP_CAR_NTR_A00,
   STARDeck,
   TIP_CAR_72_4mlTF_C00,
   TIP_CAR_96BC_5mlT_A00,
@@ -117,7 +118,7 @@ class StandardTipCarrierTests(unittest.TestCase):
     ]:
       with self.subTest(carrier=carrier_fn.__name__):
         carrier = carrier_fn("carrier")
-        carrier[0] = rack = rack_fn("rack")
+        carrier[0] = rack = rack_fn("rack", with_tips=False)
         self.assertEqual(rack.location, Coordinate.zero())
 
 
@@ -260,3 +261,14 @@ class NestedTipCarrierTests(unittest.TestCase):
         rack = rack_fn("rack")
         tip = rack.get_item("A1").get_tip()
         self.assertAlmostEqual(tip.get_location_wrt(rack).z, tip_end, delta=0.15)
+
+  def test_the_carrier_stands_29_mm_above_its_sites(self):
+    carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")
+    self.assertEqual(carrier.get_size_z(), 58.0)
+    for site in carrier.sites.values():
+      self.assertEqual(carrier.get_size_z() - site.location.z, 29.0)
+
+  def test_the_old_carrier_name_still_works(self):
+    with self.assertWarns(DeprecationWarning):
+      old = TIP_CAR_NTR_A00("carrier")
+    self.assertEqual(old, hamilton_tip_carrier_L5_ntr_a00("carrier"))

@@ -10,10 +10,9 @@ from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.head_tool import HeadTool, move_tool, release_named_tool
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_tracking import does_tip_tracking
-from pylabrobot.serializer import deserialize
 
 from .itemized_resource import ItemizedResource
-from .lid import Lid
+from .lid import Lid, Liddable
 from .resource import Resource
 from .resource_stack import ResourceStack
 
@@ -42,10 +41,11 @@ def resting_location(holder: Resource, tip: Tip) -> Coordinate:
     The tip's location, relative to the spot.
   """
   collar_height = tip.collar_height if tip.has_collar_height else 0.0
+  pick_up = tip.pick_up_location or tip.get_anchor("c", "c", "t")
   return Coordinate(
-    x=holder.get_size_x() / 2 - tip.pick_up_location.x,
-    y=holder.get_size_y() / 2 - tip.pick_up_location.y,
-    z=collar_height - tip.pick_up_location.z,
+    x=holder.get_size_x() / 2 - pick_up.x,
+    y=holder.get_size_y() / 2 - pick_up.y,
+    z=collar_height - pick_up.z,
   )
 
 
@@ -195,20 +195,7 @@ class TipSpot(Resource):
   def make_tip(self) -> Tip:
     """Create a new tip instance for this spot and assign it a unique name."""
 
-    # use introspection to see if _make_tip_func has a name parameter
-    if "name" in self._make_tip_func.__code__.co_varnames:
-      tip = self._make_tip_func(self._get_next_tip_name())
-    else:
-      warnings.warn(
-        "The make_tip function should accept a 'name' parameter to assign unique names to tips.",
-        DeprecationWarning,
-      )
-      tip = self._make_tip_func()  # type: ignore # ignore type check for deprecated behavior
-      if not tip.is_named:
-        tip.name = self._get_next_tip_name()
-        tip.tracker.thing = tip.name
-
-    return tip
+    return self._make_tip_func(self._get_next_tip_name())
 
   # -- legacy ------------------------------------------------------------------------------------
   # TODO: Remove >2026-12. The legacy liquid handler's view of this spot, with its pending
@@ -254,7 +241,7 @@ class TipSpot(Resource):
 
     def make_tip(name: str) -> Tip:
       tip_data_with_name = {**tip_data, "name": name}
-      return cast(Tip, deserialize(tip_data_with_name, allow_marshal=allow_marshal))
+      return Tip.deserialize(tip_data_with_name, allow_marshal=allow_marshal)
 
     return cls(
       name=data["name"],
@@ -316,7 +303,7 @@ def tip_origin(tip: Tip, root: Resource) -> Optional[TipSpot]:
   return spot if isinstance(spot, TipSpot) else None
 
 
-class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
+class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
   """Tip rack for disposable tips."""
 
   def __init__(
@@ -366,10 +353,9 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     )
 
   @property
-  def _available(self) -> bool:
+  def _available_for_tip_handling(self) -> bool:
     """Whether nothing, a lid or another rack in its stack, sits on top of this rack."""
-    # A rack's spots are assigned when it is made; anything put on the rack comes after them.
-    if len(self.children) > 0 and isinstance(self.children[-1], Lid):
+    if self.lid is not None:
       return False
     stack = self.parent
     return not (
@@ -534,6 +520,7 @@ class StandingTipRack(TipRack):
     model: Optional[str] = None,
     with_tips: bool = True,
     metadata: Optional[Mapping[str, Any]] = None,
+    frame_height: Optional[float] = None,
     stacking_z_height: Optional[float] = None,
   ):
     super().__init__(
@@ -547,6 +534,7 @@ class StandingTipRack(TipRack):
       model=model,
       with_tips=with_tips,
       metadata=metadata,
+      frame_height=frame_height,
     )
     self.stacking_z_height = stacking_z_height
 
@@ -558,7 +546,11 @@ class StandingTipRack(TipRack):
     )
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "stacking_z_height": self.stacking_z_height}
+    return {
+      **super().serialize(),
+      "frame_height": self._frame_height,
+      "stacking_z_height": self.stacking_z_height,
+    }
 
 
 class NestedTipRack(StandingTipRack):
@@ -577,6 +569,7 @@ class NestedTipRack(StandingTipRack):
     model: Optional[str] = None,
     with_tips: bool = True,
     metadata: Optional[Mapping[str, Any]] = None,
+    frame_height: Optional[float] = None,
   ):
     warnings.warn(
       "NestedTipRack is deprecated, use StandingTipRack with a stacking_z_height instead",
@@ -594,6 +587,7 @@ class NestedTipRack(StandingTipRack):
       model=model,
       with_tips=with_tips,
       metadata=metadata,
+      frame_height=frame_height,
       stacking_z_height=stacking_z_height,
     )
 
@@ -605,6 +599,6 @@ class NestedTipRack(StandingTipRack):
   ):
     if isinstance(resource, NestedTipRack):
       location = location or Coordinate(0, 0, cast(float, self.stacking_z_height))
-    else:
+    elif not isinstance(resource, Lid):
       assert location is not None, "Location must be specified if resource is not a NestedTipRack."
     return super().assign_child_resource(resource, location=location, reassign=reassign)

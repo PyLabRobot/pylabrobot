@@ -80,4 +80,4 @@ class TipRackAvailableTests(unittest.TestCase):
       Lid("lid", size_x=127.76, size_y=85.48, size_z=5, nesting_z_height=0),
       location=Coordinate(0, 0, 55),
     )
-    self.assertFalse(rack._available)
+    self.assertFalse(rack._available_for_tip_handling)

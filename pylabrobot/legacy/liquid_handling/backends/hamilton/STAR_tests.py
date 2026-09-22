@@ -50,7 +50,12 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
-from pylabrobot.resources.hamilton import STARDeck, STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.resources.hamilton import (
+  STARDeck,
+  STARLetDeck,
+  hamilton_96_tiprack_300uL_filter,
+  hamilton_core_gripper_tool,
+)
 
 from .STAR_backend import (
   CommandSyntaxError,
@@ -672,6 +677,21 @@ class STARCommandCatcher(STARBackend):
 
   async def stop(self):
     self.stop_finished = True
+
+
+class TestSTARCoreGripperRegistration(unittest.IsolatedAsyncioTestCase):
+  """Grippers require an existing firmware definition."""
+
+  async def test_gripper_uses_existing_definition_and_refuses_registration(self):
+    backend = STARCommandCatcher()
+    tool = hamilton_core_gripper_tool("gripper")
+    self.assertEqual(await backend.get_or_assign_tip_type_index(tool), 14)
+    self.assertEqual(backend.commands, [])
+
+    backend._tip_type_indices.clear()
+    with self.assertRaisesRegex(AssertionError, "No firmware definition for CO-RE gripper"):
+      await backend.get_or_assign_tip_type_index(tool)
+    self.assertEqual(backend.commands, [])
 
 
 class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
@@ -2403,7 +2423,7 @@ class TestSTAR96TipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
 
 class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
-  """Firmware sent for Hamilton tip racks matches what Hamilton's own software sends."""
+  """The firmware commands sent for Hamilton tip racks, checked command by command."""
 
   async def asyncSetUp(self):
     self.backend = STARBackend()

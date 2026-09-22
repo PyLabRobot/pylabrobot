@@ -325,12 +325,12 @@ def _check_no_lid(resource: Resource, action: str) -> None:
   )
 
 
-def _check_tip_racks_available(resources: Sequence[Resource], action: str) -> None:
+def _check_tip_racks_available(resources: Sequence[TipSpot], action: str) -> None:
   """Raise if a lid or another tip rack sits on a rack behind ``resources``, checking each rack once.
   ``action`` is a verb phrase for the error."""
   racks = {id(r.parent): r.parent for r in resources if isinstance(r.parent, TipRack)}
   for rack in racks.values():
-    if not rack._available:
+    if not rack._available_for_tip_handling:
       raise ValueError(f"Cannot {action} {rack.name!r}: something is stacked on top of it.")
 
 
@@ -865,7 +865,7 @@ class LiquidHandler(Resource, Machine):
     not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, (TipSpot, Trash))]
     if len(not_tip_spots) > 0:
       raise TypeError(f"Resources must be `TipSpot`s or Trash, got {not_tip_spots}")
-    _check_tip_racks_available(tip_spots, "drop tips to")
+    _check_tip_racks_available([ts for ts in tip_spots if isinstance(ts, TipSpot)], "drop tips to")
 
     # fix arguments
     use_channels = use_channels or self._default_use_channels or list(range(len(tip_spots)))

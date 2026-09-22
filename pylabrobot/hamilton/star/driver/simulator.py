@@ -188,9 +188,12 @@ class SimulatedPipettes(_Simulated, Pipettes):
     shaft = self._shaft(channel)
     if shaft is None:
       return 0.0
+    bottom = shaft.tip_bottom()
+    if bottom is None:
+      return 0.0
     if isinstance(shaft.tip, HamiltonCoreGripperTool):
-      return shaft.tip.total_length - shaft.tip.fitting_depth
-    return -shaft.tip_bottom().z
+      return -bottom.z - shaft.tip.grip_line_height
+    return -bottom.z
 
   def _modelled_y(self, channel: int) -> float:
     """Where the model has one channel along Y, in mm.
@@ -518,7 +521,8 @@ class _SimulatedHead(_Simulated, Head):
       # Channel A1, at the bottom of whatever it carries, as the master reports it.
       shaft = self.resource.get_item(HEAD_REFERENCE_SHAFT)
       a1 = shaft.get_location_wrt(deck)
-      z = a1.z + shaft.tip_bottom().z
+      bottom = shaft.tip_bottom()
+      z = a1.z + (bottom.z if bottom is not None else 0.0)
       return (
         {
           "xs": abs(round(a1.x * 10)),

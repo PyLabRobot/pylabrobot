@@ -68,7 +68,7 @@ def hamilton_96_tiprack_ntr(
     size_y=85.48,
     size_z=55.0,  # the top face, where the collars rest
     model=hamilton_96_tiprack_ntr.__name__,
-    # The stacking height Hamilton's software reports. TODO: measure a nest on the instrument.
+    # Not yet measured on the instrument.
     stacking_z_height=16.0,
     ordered_items=create_ordered_items_2d(
       TipSpot,
@@ -88,9 +88,6 @@ def hamilton_96_tiprack_ntr(
     ),
     with_tips=with_tips,
   )
-
-
-# # # # # # # # # # 10 ul Tips # # # # # # # # # #
 
 
 def _hamilton_96_tiprack_raised(
@@ -144,8 +141,8 @@ def hamilton_96_tiprack_raised_core_i(
   name: str, make_tip: TipCreator, with_tips: bool = True
 ) -> EmbeddedTipRack:
   """Hamilton cat. no.: 182040
-  Raised CO-RE I tip rack: the generation before `hamilton_96_tiprack_raised_core_ii`,
-  holding its tips 3.5 mm lower.
+  Raised CO-RE I tip rack: the generation before `hamilton_96_tiprack_raised_core_ii`, holding its
+  tips 3.5 mm lower. Its body is not measured.
   """
   return _hamilton_96_tiprack_raised(
     name=name,

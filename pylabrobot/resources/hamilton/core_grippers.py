@@ -6,7 +6,10 @@ import warnings
 from typing import List
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.hamilton.core_gripper_tools import hamilton_core_gripper_tool
+from pylabrobot.resources.hamilton.core_gripper_tools import (
+  HamiltonCoreGripperTool,
+  hamilton_core_gripper_tool,
+)
 from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 
@@ -56,6 +59,20 @@ class HamiltonCoreGrippers(Resource):
     """Everything but the tools parked here, which are state."""
     return [child for child in self.children if not isinstance(child, HeadTool)]
 
+  @property
+  def front_tool(self) -> HamiltonCoreGripperTool:
+    """The front tool parked in this holder."""
+    tool = self.get_resource(_tool_name(self.name, "front"))
+    assert isinstance(tool, HamiltonCoreGripperTool)
+    return tool
+
+  @property
+  def back_tool(self) -> HamiltonCoreGripperTool:
+    """The back tool parked in this holder."""
+    tool = self.get_resource(_tool_name(self.name, "back"))
+    assert isinstance(tool, HamiltonCoreGripperTool)
+    return tool
+
   def serialize(self):
     """Serialize the grippers. The tools parked here are state, not serialized children."""
     data = {
@@ -94,7 +111,7 @@ def prep_core_gripper_holder(name: str = "core_gripper_holder") -> HamiltonCoreG
   flat_z = 3.0
   tool_top = flat_z + 30.0
   front = hamilton_core_gripper_tool(name=_tool_name(name, "front"))
-  pick_up = front.pick_up_location
+  pick_up = front.pick_up_location or front.get_anchor("c", "c", "t")
   holder.assign_child_resource(
     front,
     location=Coordinate(
@@ -134,7 +151,7 @@ def hamilton_core_gripper_1000ul_at_waste(
   # left outer edge of rack is 22.5mm
   # front outer edge of rack is 9.5mm
 
-  return HamiltonCoreGrippers(
+  mount = HamiltonCoreGrippers(
     name=name,
     size_x=45,  # from venus
     size_y=45,  # from venus
@@ -143,6 +160,15 @@ def hamilton_core_gripper_1000ul_at_waste(
     front_channel_y_center=0 + 9.5,
     model=hamilton_core_gripper_1000ul_at_waste.__name__,
   )
+  mount.assign_child_resource(
+    hamilton_core_gripper_tool(name=_tool_name(name, "front")),
+    location=Coordinate(x=-18.0, y=5.25, z=-2.0),
+  )
+  mount.assign_child_resource(
+    hamilton_core_gripper_tool(name=_tool_name(name, "back")),
+    location=Coordinate(x=-18.0, y=31.25, z=-2.0),
+  )
+  return mount
 
 
 def hamilton_core_gripper_1000ul_5ml_on_waste(
@@ -168,7 +194,7 @@ def hamilton_core_gripper_1000ul_5ml_on_waste(
   # 235.0 with the base at 200.5.
   tool_top = 34.5
   front = hamilton_core_gripper_tool(name=_tool_name(name, "front"))
-  pick_up = front.pick_up_location
+  pick_up = front.pick_up_location or front.get_anchor("c", "c", "t")
   grippers.assign_child_resource(
     front,
     location=Coordinate(

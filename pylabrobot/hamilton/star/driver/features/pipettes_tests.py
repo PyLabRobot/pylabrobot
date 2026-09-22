@@ -608,7 +608,7 @@ class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
     """Part of a tip is up inside the channel, so the overhang is its length less its fitting."""
     self.shaft.mount_tip(self.tip)
     overhang = await self.pipettes.request_tip_overhang(0)
-    self.assertAlmostEqual(overhang, self.tip.total_tip_length - self.tip.fitting_depth, places=1)
+    self.assertAlmostEqual(overhang, self.tip.get_size_z() - self.tip.fitting_depth, places=1)
 
   async def test_the_grip_tool_reaches_to_its_grip_line_as_the_firmware_counts_it(self):
     """The firmware counts the grip tool to its grip line, 30 mm, not to its 32 mm bottom."""
@@ -616,6 +616,9 @@ class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
 
     self.shaft.mount_tip(hamilton_core_gripper_tool(name="grip"))
     self.assertAlmostEqual(await self.pipettes.request_tip_overhang(0), 30.0 - 8.0, places=1)
+    await self.pipettes.move_tool_bottom_to_z_positions({0: 200.0})
+    self.assertAlmostEqual(await self.pipettes.request_stop_disc_z_position(0), 222.0, places=1)
+    self.assertAlmostEqual(await self.pipettes.request_tool_bottom_z_position(0), 200.0, places=1)
 
   async def test_moving_the_tip_end_puts_the_stop_disc_an_overhang_higher(self):
     self.shaft.mount_tip(self.tip)
@@ -623,9 +626,7 @@ class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
     z = (low + high) / 2 - 20
     await self.pipettes.move_tool_bottom_to_z_positions({0: z})
     stop_disc = await self.pipettes.request_stop_disc_z_position(0)
-    self.assertAlmostEqual(
-      stop_disc - z, self.tip.total_tip_length - self.tip.fitting_depth, places=1
-    )
+    self.assertAlmostEqual(stop_disc - z, self.tip.get_size_z() - self.tip.fitting_depth, places=1)
 
 
 async def channels_over_a_rack() -> Tuple[Pipettes, Any, List[str]]:
@@ -695,7 +696,7 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     await pipettes.pick_up_tips([rack.get_item("A1")])
     bottom = await pipettes.request_tool_bottom_z_position(0)
     stop_disc = await pipettes.request_stop_disc_z_position(0)
-    self.assertAlmostEqual(stop_disc - bottom, tip.total_tip_length - tip.fitting_depth, places=1)
+    self.assertAlmostEqual(stop_disc - bottom, tip.get_size_z() - tip.fitting_depth, places=1)
 
   async def test_a_returned_tip_is_back_in_its_spot(self):
     pipettes, rack, sent = await channels_over_a_rack()

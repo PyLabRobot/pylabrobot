@@ -2,9 +2,7 @@
 
 import unittest
 
-from pylabrobot.resources import Coordinate, Lid, Plate, Resource, StandingTipRack, TipSpot
-from pylabrobot.resources.hamilton import hamilton_tip_50uL
-from pylabrobot.resources.utils import create_ordered_items_2d
+from pylabrobot.resources import Coordinate, Lid, Plate, Resource, StandingTipRack
 
 from .resource_stack import ResourceStack
 
@@ -182,28 +180,37 @@ class ResourceStackTipRackNestingTests(unittest.TestCase):
       size_x=10,
       size_y=10,
       size_z=55,
-      ordered_items=create_ordered_items_2d(
-        TipSpot,
-        num_items_x=1,
-        num_items_y=1,
-        dx=1,
-        dy=1,
-        dz=55,
-        item_dx=9,
-        item_dy=9,
-        size_x=7.2,
-        size_y=7.2,
-        make_tip=hamilton_tip_50uL,
-        name_prefix=name,
-      ),
-      with_tips=False,
+      ordered_items={},
       stacking_z_height=stacking_z_height,
     )
 
-  def test_without_stacking_z_height_no_nesting(self):
+  def _stack(self, *racks):
     stack = ResourceStack("s", "z")
     stack.location = Coordinate.zero()
-    stack.assign_child_resource(self._rack("r1"))
-    stack.assign_child_resource(self._rack("r2"))
+    for rack in racks:
+      stack.assign_child_resource(rack)
+    return stack
+
+  def test_without_stacking_z_height_no_nesting(self):
+    stack = self._stack(self._rack("r1"), self._rack("r2"))
     self.assertEqual(stack.get_size_z(), 110)
     self.assertEqual(stack.get_top_item().get_absolute_location(), Coordinate(0, 0, 55))
+
+  def test_two_racks_nest(self):
+    stack = self._stack(self._rack("r1", 16), self._rack("r2", 16))
+    # height = size_z + (N-1) * stacking_z_height = 55 + 16
+    self.assertEqual(stack.get_size_z(), 71)
+    self.assertEqual(stack.get_top_item().get_absolute_location(), Coordinate(0, 0, 16))
+
+  def test_no_nesting_onto_a_rack_with_a_lid(self):
+    lower = self._rack("lower", 16)
+    lower.lid = Lid("lid", size_x=10, size_y=10, size_z=10, nesting_z_height=2)
+    stack = self._stack(lower, self._rack("upper", 16))
+    # lower occupies size_z + lid overhang = 55 + (10 - 2) = 63; upper sits on the lid.
+    self.assertEqual(stack.get_top_item().get_absolute_location(), Coordinate(0, 0, 63))
+    self.assertEqual(stack.get_size_z(), 118)
+
+  def test_a_rack_does_not_nest_into_a_plate(self):
+    plate = Plate("plate", size_x=10, size_y=10, size_z=10, ordered_items={}, stacking_z_height=4)
+    stack = self._stack(plate, self._rack("rack", 16))
+    self.assertEqual(stack.get_top_item().get_absolute_location(), Coordinate(0, 0, 10))

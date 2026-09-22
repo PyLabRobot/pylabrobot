@@ -97,7 +97,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     # The firmware's own table already carries the CO-RE grip tool at index 14, so that index is
     # taken rather than handed out to a tip, which would overwrite the grip tool.
     self._tip_type_indices: Dict[Tuple[object, ...], int] = {
-      hamilton_core_gripper_tool().kind(): CORE_GRIPPER_TIP_TYPE_INDEX
+      hamilton_core_gripper_tool(name="core_gripper_tool").kind(): CORE_GRIPPER_TIP_TYPE_INDEX
     }
 
   def __setattr__(self, name: str, value: Any) -> None:
@@ -128,7 +128,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
       )
     self._waiting_tasks.clear()
-    self._tip_type_indices = {hamilton_core_gripper_tool().kind(): CORE_GRIPPER_TIP_TYPE_INDEX}
+    self._tip_type_indices = {
+      hamilton_core_gripper_tool(name="core_gripper_tool").kind(): CORE_GRIPPER_TIP_TYPE_INDEX
+    }
     await self.io.stop()
 
   def serialize(self) -> dict:
@@ -448,6 +450,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     """
 
     kind = tool.kind()
+
+    if isinstance(tool, HamiltonCoreGripperTool):
+      assert kind in self._tip_type_indices, "No firmware definition for CO-RE gripper."
+      return self._tip_type_indices[kind]
 
     if kind not in self._tip_type_indices:
       taken = set(self._tip_type_indices.values())

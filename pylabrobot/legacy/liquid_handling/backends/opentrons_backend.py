@@ -247,7 +247,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
         "format": "96Standard",
         "isTiprack": True,
         # should we get the tip length from calibration on the robot? /calibration/tip_length
-        "tipLength": tip.total_tip_length,
+        "tipLength": tip.get_size_z(),
         "tipOverlap": tip.fitting_depth,
         "loadName": self.get_ot_name(tip_rack.name),
         "isMagneticModuleCompatible": False,  # do we really care? If yes, store.
@@ -381,7 +381,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if tip_rack.name not in self._tip_racks:
       await self._assign_tip_rack(tip_rack, op.tip)
 
-    offset_z += op.tip.total_tip_length
+    offset_z += op.tip.get_size_z()
 
     self._ot.lh.pick_up_tip(
       labware_id=self.get_ot_name(tip_rack.name),

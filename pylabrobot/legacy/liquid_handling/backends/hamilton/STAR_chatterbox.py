@@ -482,7 +482,7 @@ class STARChatterboxBackend(STARBackend):
       NoTipError: If no tip is present on the channel (via tip tracker).
     """
     tip = self.head[channel_idx].get_tip()
-    return tip.total_tip_length
+    return tip.get_size_z()
 
   async def position_channels_in_y_direction(self, ys, make_space=True):
     logger.info("positioning channels in y: %s make_space: %s", ys, make_space)

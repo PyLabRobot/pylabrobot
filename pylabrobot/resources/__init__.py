@@ -28,6 +28,7 @@ from .eppendorf import *
 from .errors import ResourceNotFoundError
 from .greiner import *
 from .hamilton import *
+from .head_tool import HeadTool
 from .itemized_resource import ItemizedResource
 from .lid import Lid, Liddable
 from .liquid import Liquid
