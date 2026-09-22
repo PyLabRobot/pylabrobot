@@ -9,7 +9,6 @@ definition's namespace/loadName/version, that the run-scoped caches reset
 with the run, and that official-name labware keeps loading with zero uploads.
 """
 
-import asyncio
 import unittest
 import uuid
 from typing import Optional, Tuple
@@ -546,19 +545,24 @@ class TestBuildMovableLabwareDefinition(unittest.TestCase):
 
 
 def _flex_with_api(
+  test_case: unittest.IsolatedAsyncioTestCase,
   api: Optional[AsyncMock] = None,
 ) -> Tuple[Flex, AsyncMock]:
   api = api or make_api(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
   flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
+  test_case.addAsyncCleanup(flex.disconnect)
   return flex, api
 
 
-def _flex_head8_with_gripper() -> Tuple[Flex, AsyncMock, FlexHead8]:
+async def _flex_head8_with_gripper(
+  test_case: unittest.IsolatedAsyncioTestCase,
+) -> Tuple[Flex, AsyncMock, FlexHead8]:
   """A set-up Flex with an 8-channel head AND a gripper, so one bench can
   drive both the gripper-intent and pipetting-intent load paths."""
   api = make_api(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")], gripper=True)
   flex = make_flex(deck=FlexDeck(), host="localhost", api=api)
-  asyncio.run(flex.setup())
+  test_case.addAsyncCleanup(flex.disconnect)
+  await flex.setup()
   head = flex.left
   assert isinstance(head, FlexHead8)
   return flex, api, head
@@ -568,279 +572,242 @@ def _load_labware_commands(api: AsyncMock) -> list:
   return [c for c in api.submit_command.await_args_list if c.args[1] == "loadLabware"]
 
 
-def _mount_tips(flex: Flex, head: FlexHead8) -> None:
+async def _mount_tips(flex: Flex, head: FlexHead8) -> None:
   """Pick up a column of tips, so a liquid op reaches past the mounted-tip guard."""
   rack = flex_96_tiprack_50ul(name=f"tips for {head.mount}")
   flex.deck.assign_child_at_slot(rack, "D1")
-  asyncio.run(head.pick_up_tips(rack, column=0))
+  await head.pick_up_tips(rack, column=0)
 
 
-class TestUnbuildableLabwareGuard(unittest.TestCase):
+class TestUnbuildableLabwareGuard(unittest.IsolatedAsyncioTestCase):
   """Labware no well-bearing definition can be built from is gripper-movable
   but never pipettable: the movable stub's single fake well is zero-depth and
   sits at the labware's own bottom, so pipetting it would drive a tip at the
   deck. Pipetting callers are refused before any wire command."""
 
-  def test_pipetting_a_tube_rack_raises_before_any_wire_command(self):
-    flex, api, head = _flex_head8_with_gripper()
-    try:
-      rack = _tube_rack()
-      flex.deck.assign_child_at_slot(rack, "C1")
-      _mount_tips(flex, head)
+  async def asyncSetUp(self):
+    self.flex, self.api, self.head = await _flex_head8_with_gripper(self)
 
-      commands_before = api.submit_command.await_count
-      with self.assertRaises(OpentronsError):
-        # An untyped script can hand a rack to a Plate parameter; that is
-        # exactly the caller this guard exists for.
-        asyncio.run(head.aspirate(rack, column=0, volume=20))  # type: ignore[arg-type]
+  async def test_pipetting_a_tube_rack_raises_before_any_wire_command(self):
+    rack = _tube_rack()
+    self.flex.deck.assign_child_at_slot(rack, "C1")
+    await _mount_tips(self.flex, self.head)
 
-      self.assertEqual(api.define_labware.await_count, 0)
-      self.assertEqual(api.submit_command.await_count, commands_before)
-    finally:
-      asyncio.run(flex.stop())
+    commands_before = self.api.submit_command.await_count
+    with self.assertRaises(OpentronsError):
+      # An untyped script can hand a rack to a Plate parameter; that is
+      # exactly the caller this guard exists for.
+      await self.head.aspirate(rack, column=0, volume=20)  # type: ignore[arg-type]
 
-  def test_gripper_move_of_the_same_rack_still_works(self):
-    flex, api, head = _flex_head8_with_gripper()
-    try:
-      rack = _tube_rack()
-      flex.deck.assign_child_at_slot(rack, "C1")
-      gripper = flex.gripper
-      assert gripper is not None
+    self.assertEqual(self.api.define_labware.await_count, 0)
+    self.assertEqual(self.api.submit_command.await_count, commands_before)
 
-      asyncio.run(gripper.move_labware(rack, "C2"))
+  async def test_gripper_move_of_the_same_rack_still_works(self):
+    rack = _tube_rack()
+    self.flex.deck.assign_child_at_slot(rack, "C1")
+    gripper = self.flex.gripper
+    assert gripper is not None
 
-      self.assertEqual(api.define_labware.await_count, 1)
-      self.assertEqual(
-        [c.args[1] for c in api.define_labware.await_args_list][0]["wells"]["A1"]["depth"], 0
-      )
-      self.assertEqual(flex.deck.get_slot(rack), "C2")
-    finally:
-      asyncio.run(flex.stop())
+    await gripper.move_labware(rack, "C2")
 
-  def test_pipetting_after_a_gripper_move_still_raises_on_the_load_cache_hit(self):
+    self.assertEqual(self.api.define_labware.await_count, 1)
+    self.assertEqual(
+      [c.args[1] for c in self.api.define_labware.await_args_list][0]["wells"]["A1"]["depth"], 0
+    )
+    self.assertEqual(self.flex.deck.get_slot(rack), "C2")
+
+  async def test_pipetting_after_a_gripper_move_still_raises_on_the_load_cache_hit(self):
     # The load cache returns before any type dispatch, so the stub-loaded
     # names are tracked separately for the pipetting refusal to see them.
-    flex, api, head = _flex_head8_with_gripper()
-    try:
-      rack = _tube_rack()
-      flex.deck.assign_child_at_slot(rack, "C1")
-      gripper = flex.gripper
-      assert gripper is not None
-      asyncio.run(gripper.move_labware(rack, "C2"))
-      _mount_tips(flex, head)
+    rack = _tube_rack()
+    self.flex.deck.assign_child_at_slot(rack, "C1")
+    gripper = self.flex.gripper
+    assert gripper is not None
+    await gripper.move_labware(rack, "C2")
+    await _mount_tips(self.flex, self.head)
 
-      commands_before = api.submit_command.await_count
-      with self.assertRaises(OpentronsError):
-        asyncio.run(head.aspirate(rack, column=0, volume=20))  # type: ignore[arg-type]
+    commands_before = self.api.submit_command.await_count
+    with self.assertRaises(OpentronsError):
+      await self.head.aspirate(rack, column=0, volume=20)  # type: ignore[arg-type]
 
-      self.assertEqual(api.submit_command.await_count, commands_before)
-    finally:
-      asyncio.run(flex.stop())
+    self.assertEqual(self.api.submit_command.await_count, commands_before)
 
-  def test_off_deck_clears_the_stub_record(self):
-    flex, api, head = _flex_head8_with_gripper()
-    try:
-      rack = _tube_rack()
-      flex.deck.assign_child_at_slot(rack, "C1")
-      gripper = flex.gripper
-      assert gripper is not None
-      asyncio.run(gripper.move_labware(rack, "C2"))
-      self.assertIn(id(rack), flex._stub_labware)
+  async def test_off_deck_clears_the_stub_record(self):
+    rack = _tube_rack()
+    self.flex.deck.assign_child_at_slot(rack, "C1")
+    gripper = self.flex.gripper
+    assert gripper is not None
+    await gripper.move_labware(rack, "C2")
+    self.assertIn(id(rack), self.flex._stub_labware)
 
-      asyncio.run(flex.labware_moved_off_deck(rack))
-      self.assertNotIn(id(rack), flex._stub_labware)
-    finally:
-      asyncio.run(flex.stop())
+    await self.flex.labware_moved_off_deck(rack)
+    self.assertNotIn(id(rack), self.flex._stub_labware)
 
 
-class TestCustomLabwareLoadFlow(unittest.TestCase):
+class TestCustomLabwareLoadFlow(unittest.IsolatedAsyncioTestCase):
   """_ensure_labware_loaded uploads a definition for labware with no official name."""
 
-  def test_plate_without_official_name_uploads_then_loads(self):
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      plate = _plate()
-      flex.deck.assign_child_at_slot(plate, "C1")
-      asyncio.run(flex._ensure_labware_loaded(plate))
+  async def test_plate_without_official_name_uploads_then_loads(self):
+    flex, api = _flex_with_api(self)
+    await flex.setup()
+    plate = _plate()
+    flex.deck.assign_child_at_slot(plate, "C1")
+    await flex._ensure_labware_loaded(plate)
 
-      self.assertEqual(api.define_labware.await_count, 1)
-      definition = [c.args[1] for c in api.define_labware.await_args_list][0]
-      load_cmds = _load_labware_commands(api)
-      self.assertEqual(len(load_cmds), 1)
-      params = load_cmds[0].args[2]
-      # loadLabware must reference exactly the uploaded definition's identity.
-      self.assertEqual(params["namespace"], definition["namespace"])
-      self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
-      self.assertEqual(params["version"], definition["version"])
-      self.assertEqual(params["namespace"], "pylabrobot")
-      self.assertEqual(params["version"], 1)
-      self.assertEqual(params["location"], {"slotName": "C1"})
-    finally:
-      asyncio.run(flex.stop())
+    self.assertEqual(api.define_labware.await_count, 1)
+    definition = [c.args[1] for c in api.define_labware.await_args_list][0]
+    load_cmds = _load_labware_commands(api)
+    self.assertEqual(len(load_cmds), 1)
+    params = load_cmds[0].args[2]
+    # loadLabware must reference exactly the uploaded definition's identity.
+    self.assertEqual(params["namespace"], definition["namespace"])
+    self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
+    self.assertEqual(params["version"], definition["version"])
+    self.assertEqual(params["namespace"], "pylabrobot")
+    self.assertEqual(params["version"], 1)
+    self.assertEqual(params["location"], {"slotName": "C1"})
 
-  def test_load_into_a_staging_slot_uses_the_addressable_area_form(self):
+  async def test_load_into_a_staging_slot_uses_the_addressable_area_form(self):
     # The robot-server's DeckSlotName covers only the A1-D3 grid, so the
     # column-4 staging slots ride a different location key.
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      plate = _plate()
-      flex.deck.assign_child_at_slot(plate, "A4")
-      asyncio.run(flex._ensure_labware_loaded(plate))
+    flex, api = _flex_with_api(self)
+    await flex.setup()
+    plate = _plate()
+    flex.deck.assign_child_at_slot(plate, "A4")
+    await flex._ensure_labware_loaded(plate)
 
-      params = _load_labware_commands(api)[0].args[2]
-      self.assertEqual(params["location"], {"addressableAreaName": "A4"})
-    finally:
-      asyncio.run(flex.stop())
+    params = _load_labware_commands(api)[0].args[2]
+    self.assertEqual(params["location"], {"addressableAreaName": "A4"})
 
-  def test_second_use_hits_cache_no_second_upload_or_load(self):
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      plate = _plate()
-      flex.deck.assign_child_at_slot(plate, "C1")
-      first = asyncio.run(flex._ensure_labware_loaded(plate))
-      second = asyncio.run(flex._ensure_labware_loaded(plate))
+  async def test_second_use_hits_cache_no_second_upload_or_load(self):
+    flex, api = _flex_with_api(self)
+    await flex.setup()
+    plate = _plate()
+    flex.deck.assign_child_at_slot(plate, "C1")
+    first = await flex._ensure_labware_loaded(plate)
+    second = await flex._ensure_labware_loaded(plate)
 
-      self.assertEqual(first, second)
-      self.assertEqual(api.define_labware.await_count, 1)
-      self.assertEqual(len(_load_labware_commands(api)), 1)
-    finally:
-      asyncio.run(flex.stop())
+    self.assertEqual(first, second)
+    self.assertEqual(api.define_labware.await_count, 1)
+    self.assertEqual(len(_load_labware_commands(api)), 1)
 
-  def test_reload_after_off_deck_reuploads_definition(self):
+  async def test_reload_after_off_deck_reuploads_definition(self):
     # The definition-identity cache is evicted with the departed labware: a
     # different same-named resource re-added later must not inherit the old
     # geometry, so the re-add re-uploads.
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      plate = _plate()
-      flex.deck.assign_child_at_slot(plate, "C1")
-      asyncio.run(flex._ensure_labware_loaded(plate))
-      asyncio.run(flex.labware_moved_off_deck(plate))
-      self.assertIsNone(flex._require_labware().definition(plate))
+    flex, api = _flex_with_api(self)
+    await flex.setup()
+    plate = _plate()
+    flex.deck.assign_child_at_slot(plate, "C1")
+    await flex._ensure_labware_loaded(plate)
+    await flex.labware_moved_off_deck(plate)
+    self.assertIsNone(flex._require_labware().definition(plate))
 
-      flex.deck.assign_child_at_slot(plate, "D2")
-      asyncio.run(flex._ensure_labware_loaded(plate))
+    flex.deck.assign_child_at_slot(plate, "D2")
+    await flex._ensure_labware_loaded(plate)
 
-      self.assertEqual(api.define_labware.await_count, 2)
-      load_cmds = _load_labware_commands(api)
-      self.assertEqual(len(load_cmds), 2)
-      self.assertEqual(load_cmds[1].args[2]["location"], {"slotName": "D2"})
-      self.assertNotEqual(load_cmds[0].args[2]["loadName"], load_cmds[1].args[2]["loadName"])
-    finally:
-      asyncio.run(flex.stop())
+    self.assertEqual(api.define_labware.await_count, 2)
+    load_cmds = _load_labware_commands(api)
+    self.assertEqual(len(load_cmds), 2)
+    self.assertEqual(load_cmds[1].args[2]["location"], {"slotName": "D2"})
+    self.assertNotEqual(load_cmds[0].args[2]["loadName"], load_cmds[1].args[2]["loadName"])
 
-  def test_second_setup_clears_run_scoped_caches(self):
+  async def test_second_setup_clears_run_scoped_caches(self):
     # labwareIds and uploaded definitions are both run-scoped server-side, so
     # a new run (new setup) must re-upload and re-load.
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      plate = _plate()
-      flex.deck.assign_child_at_slot(plate, "C1")
-      asyncio.run(flex._ensure_labware_loaded(plate))
-      self.assertEqual(api.define_labware.await_count, 1)
+    flex, api = _flex_with_api(self)
+    await flex.setup()
+    plate = _plate()
+    flex.deck.assign_child_at_slot(plate, "C1")
+    await flex._ensure_labware_loaded(plate)
+    self.assertEqual(api.define_labware.await_count, 1)
 
-      asyncio.run(flex.disconnect())
-      asyncio.run(flex.setup())  # new run
-      self.assertFalse(flex._require_labware().is_loaded(plate))
-      self.assertIsNone(flex._require_labware().definition(plate))
+    await flex.disconnect()
+    await flex.setup()  # new run
+    self.assertFalse(flex._require_labware().is_loaded(plate))
+    self.assertIsNone(flex._require_labware().definition(plate))
 
-      asyncio.run(flex._ensure_labware_loaded(plate))
-      self.assertEqual(api.define_labware.await_count, 2)
-      self.assertEqual(len(_load_labware_commands(api)), 2)
-    finally:
-      asyncio.run(flex.stop())
+    await flex._ensure_labware_loaded(plate)
+    self.assertEqual(api.define_labware.await_count, 2)
+    self.assertEqual(len(_load_labware_commands(api)), 2)
 
-  def test_failed_upload_leaves_caches_clean_and_retry_works(self):
+  async def test_failed_upload_leaves_caches_clean_and_retry_works(self):
     flex, api = _flex_with_api(
-      make_api(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
+      self, make_api(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
     )
-    asyncio.run(flex.setup())
-    try:
-      plate = _plate()
-      flex.deck.assign_child_at_slot(plate, "C1")
+    await flex.setup()
+    plate = _plate()
+    flex.deck.assign_child_at_slot(plate, "C1")
 
-      with (
-        patch.object(api, "define_labware", AsyncMock(side_effect=RuntimeError("upload failed"))),
-        self.assertRaises(RuntimeError),
-      ):
-        asyncio.run(flex._ensure_labware_loaded(plate))
-      self.assertIsNone(flex._require_labware().definition(plate))
-      self.assertFalse(flex._require_labware().is_loaded(plate))
+    with (
+      patch.object(api, "define_labware", AsyncMock(side_effect=RuntimeError("upload failed"))),
+      self.assertRaises(RuntimeError),
+    ):
+      await flex._ensure_labware_loaded(plate)
+    self.assertIsNone(flex._require_labware().definition(plate))
+    self.assertFalse(flex._require_labware().is_loaded(plate))
 
-      asyncio.run(flex._ensure_labware_loaded(plate))
-      self.assertEqual(api.define_labware.await_count, 1)
-      self.assertEqual(len(_load_labware_commands(api)), 1)
-      self.assertTrue(flex._require_labware().is_loaded(plate))
-    finally:
-      asyncio.run(flex.stop())
+    await flex._ensure_labware_loaded(plate)
+    self.assertEqual(api.define_labware.await_count, 1)
+    self.assertEqual(len(_load_labware_commands(api)), 1)
+    self.assertTrue(flex._require_labware().is_loaded(plate))
 
-  def test_failed_load_leaves_no_labware_id_and_retry_reuses_definition(self):
+  async def test_failed_load_leaves_no_labware_id_and_retry_reuses_definition(self):
     flex, api = _flex_with_api(
-      make_api(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
+      self, make_api(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
     )
-    asyncio.run(flex.setup())
-    try:
-      plate = _plate()
-      flex.deck.assign_child_at_slot(plate, "C1")
+    await flex.setup()
+    plate = _plate()
+    flex.deck.assign_child_at_slot(plate, "C1")
 
-      with (
-        patch.object(
-          api,
-          "get_command",
-          AsyncMock(return_value=CommandInfo("failed", {}, {"detail": "load failed"})),
-        ),
-        self.assertRaises(OpentronsCommandError),
-      ):
-        asyncio.run(flex._ensure_labware_loaded(plate))
-      self.assertFalse(flex._require_labware().is_loaded(plate))
+    with (
+      patch.object(
+        api,
+        "get_command",
+        AsyncMock(return_value=CommandInfo("failed", {}, {"detail": "load failed"})),
+      ),
+      self.assertRaises(OpentronsCommandError),
+    ):
+      await flex._ensure_labware_loaded(plate)
+    self.assertFalse(flex._require_labware().is_loaded(plate))
 
-      asyncio.run(flex._ensure_labware_loaded(plate))
-      # The upload succeeded the first time, so the retry re-loads without a
-      # duplicate upload.
-      self.assertEqual(api.define_labware.await_count, 1)
-      self.assertEqual(len(_load_labware_commands(api)), 2)
-      self.assertTrue(flex._require_labware().is_loaded(plate))
-    finally:
-      asyncio.run(flex.stop())
+    await flex._ensure_labware_loaded(plate)
+    # The upload succeeded the first time, so the retry re-loads without a
+    # duplicate upload.
+    self.assertEqual(api.define_labware.await_count, 1)
+    self.assertEqual(len(_load_labware_commands(api)), 2)
+    self.assertTrue(flex._require_labware().is_loaded(plate))
 
-  def test_definition_cache_hit_logs_the_ignored_grip_distance(self):
+  async def test_definition_cache_hit_logs_the_ignored_grip_distance(self):
     # The upload survives a failed load, so the retry reuses the stored
     # definition -- and the grip height it already carries.
     flex, api = _flex_with_api(
-      make_api(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
+      self, make_api(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
     )
-    asyncio.run(flex.setup())
-    try:
-      plate = _plate()
-      flex.deck.assign_child_at_slot(plate, "C1")
-      with (
-        patch.object(
-          api,
-          "get_command",
-          AsyncMock(return_value=CommandInfo("failed", {}, {"detail": "load failed"})),
-        ),
-        self.assertRaises(OpentronsCommandError),
-      ):
-        asyncio.run(flex._ensure_labware_loaded(plate, grip_distance_from_top=4.0))
+    await flex.setup()
+    plate = _plate()
+    flex.deck.assign_child_at_slot(plate, "C1")
+    with (
+      patch.object(
+        api,
+        "get_command",
+        AsyncMock(return_value=CommandInfo("failed", {}, {"detail": "load failed"})),
+      ),
+      self.assertRaises(OpentronsCommandError),
+    ):
+      await flex._ensure_labware_loaded(plate, grip_distance_from_top=4.0)
 
-      with self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING") as logs:
-        asyncio.run(flex._ensure_labware_loaded(plate, grip_distance_from_top=8.0))
+    with self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING") as logs:
+      await flex._ensure_labware_loaded(plate, grip_distance_from_top=8.0)
 
-      self.assertEqual(api.define_labware.await_count, 1)
-      self.assertEqual(
-        [c.args[1] for c in api.define_labware.await_args_list][0]["gripHeightFromLabwareBottom"],
-        10.0,
-      )
-      self.assertTrue(any("grip_distance_from_top=8.0" in line for line in logs.output))
-    finally:
-      asyncio.run(flex.stop())
+    self.assertEqual(api.define_labware.await_count, 1)
+    self.assertEqual(
+      [c.args[1] for c in api.define_labware.await_args_list][0]["gripHeightFromLabwareBottom"],
+      10.0,
+    )
+    self.assertTrue(any("grip_distance_from_top=8.0" in line for line in logs.output))
 
-  def test_official_tip_rack_loads_with_zero_uploads(self):
+  async def test_official_tip_rack_loads_with_zero_uploads(self):
     for factory, load_name in (
       (flex_96_tiprack_50ul, "opentrons_flex_96_tiprack_50ul"),
       (flex_96_filtertiprack_50ul, "opentrons_flex_96_filtertiprack_50ul"),
@@ -849,75 +816,63 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
     ):
       for with_tips in (False, True):
         with self.subTest(load_name=load_name, with_tips=with_tips):
-          flex, api = _flex_with_api()
-          asyncio.run(flex.setup())
-          try:
-            rack = factory(name="rack", with_tips=with_tips)
-            self.assertEqual(rack.num_items, 96)
-            self.assertTrue(all(spot.has_tip() == with_tips for spot in rack.get_all_items()))
-            flex.deck.assign_child_at_slot(rack, "C1")
-            asyncio.run(flex._ensure_labware_loaded(rack))
+          flex, api = _flex_with_api(self)
+          await flex.setup()
+          rack = factory(name="rack", with_tips=with_tips)
+          self.assertEqual(rack.num_items, 96)
+          self.assertTrue(all(spot.has_tip() == with_tips for spot in rack.get_all_items()))
+          flex.deck.assign_child_at_slot(rack, "C1")
+          await flex._ensure_labware_loaded(rack)
 
-            api.define_labware.assert_not_awaited()
-            load_cmds = _load_labware_commands(api)
-            self.assertEqual(len(load_cmds), 1)
-            params = load_cmds[0].args[2]
-            self.assertEqual(params["namespace"], "opentrons")
-            self.assertEqual(params["loadName"], load_name)
-            self.assertEqual(params["version"], 1)
-          finally:
-            asyncio.run(flex.stop())
+          api.define_labware.assert_not_awaited()
+          load_cmds = _load_labware_commands(api)
+          self.assertEqual(len(load_cmds), 1)
+          params = load_cmds[0].args[2]
+          self.assertEqual(params["namespace"], "opentrons")
+          self.assertEqual(params["loadName"], load_name)
+          self.assertEqual(params["version"], 1)
 
-  def test_container_uploads_single_cavity_definition(self):
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      trough = _trough()
-      flex.deck.assign_child_at_slot(trough, "B1")
-      asyncio.run(flex._ensure_labware_loaded(trough))
+  async def test_container_uploads_single_cavity_definition(self):
+    flex, api = _flex_with_api(self)
+    await flex.setup()
+    trough = _trough()
+    flex.deck.assign_child_at_slot(trough, "B1")
+    await flex._ensure_labware_loaded(trough)
 
-      self.assertEqual(api.define_labware.await_count, 1)
-      definition = [c.args[1] for c in api.define_labware.await_args_list][0]
-      self.assertEqual(list(definition["wells"]), ["A1"])
-      params = _load_labware_commands(api)[0].args[2]
-      self.assertEqual(params["namespace"], "pylabrobot")
-      self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
-    finally:
-      asyncio.run(flex.stop())
+    self.assertEqual(api.define_labware.await_count, 1)
+    definition = [c.args[1] for c in api.define_labware.await_args_list][0]
+    self.assertEqual(list(definition["wells"]), ["A1"])
+    params = _load_labware_commands(api)[0].args[2]
+    self.assertEqual(params["namespace"], "pylabrobot")
+    self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
 
-  def test_tip_rack_without_official_name_uploads_tiprack_definition(self):
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      rack = _tip_rack()
-      flex.deck.assign_child_at_slot(rack, "C1")
-      asyncio.run(flex._ensure_labware_loaded(rack))
+  async def test_tip_rack_without_official_name_uploads_tiprack_definition(self):
+    flex, api = _flex_with_api(self)
+    await flex.setup()
+    rack = _tip_rack()
+    flex.deck.assign_child_at_slot(rack, "C1")
+    await flex._ensure_labware_loaded(rack)
 
-      self.assertEqual(api.define_labware.await_count, 1)
-      definition = api.define_labware.await_args.args[1]
-      self.assertTrue(definition["parameters"]["isTiprack"])
-      params = _load_labware_commands(api)[0].args[2]
-      self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
-    finally:
-      asyncio.run(flex.stop())
+    self.assertEqual(api.define_labware.await_count, 1)
+    definition = api.define_labware.await_args.args[1]
+    self.assertTrue(definition["parameters"]["isTiprack"])
+    params = _load_labware_commands(api)[0].args[2]
+    self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
 
-  def test_bare_resource_uploads_movable_stub(self):
+  async def test_bare_resource_uploads_movable_stub(self):
     # A resource that is not a Plate/TipRack/Container routes to the
     # non-pipettable movable stub, which only allow_stub callers may ask for.
-    flex, api = _flex_with_api()
-    asyncio.run(flex.setup())
-    try:
-      widget = Resource(name="widget", size_x=100.0, size_y=90.0, size_z=20.0)
-      flex.deck.assign_child_at_slot(widget, "C1")
-      asyncio.run(flex._ensure_labware_loaded(widget, allow_stub=True, grip_distance_from_top=5.0))
+    flex, api = _flex_with_api(self)
+    await flex.setup()
+    widget = Resource(name="widget", size_x=100.0, size_y=90.0, size_z=20.0)
+    flex.deck.assign_child_at_slot(widget, "C1")
+    await flex._ensure_labware_loaded(widget, allow_stub=True, grip_distance_from_top=5.0)
 
-      self.assertEqual(api.define_labware.await_count, 1)
-      definition = [c.args[1] for c in api.define_labware.await_args_list][0]
-      self.assertEqual(definition["ordering"], [["A1"]])
-      self.assertEqual(definition["wells"]["A1"]["depth"], 0)
-      self.assertEqual(definition["gripHeightFromLabwareBottom"], 15.0)  # 20 - 5
-      params = _load_labware_commands(api)[0].args[2]
-      self.assertEqual(params["namespace"], "pylabrobot")
-      self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
-    finally:
-      asyncio.run(flex.stop())
+    self.assertEqual(api.define_labware.await_count, 1)
+    definition = [c.args[1] for c in api.define_labware.await_args_list][0]
+    self.assertEqual(definition["ordering"], [["A1"]])
+    self.assertEqual(definition["wells"]["A1"]["depth"], 0)
+    self.assertEqual(definition["gripHeightFromLabwareBottom"], 15.0)  # 20 - 5
+    params = _load_labware_commands(api)[0].args[2]
+    self.assertEqual(params["namespace"], "pylabrobot")
+    self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
