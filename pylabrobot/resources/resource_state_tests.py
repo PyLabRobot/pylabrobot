@@ -22,9 +22,9 @@ from pylabrobot.resources.well import Well, WellBottomType
 
 def _tip(name: str = "t") -> Tip:
   return Tip(
+    diameter=5.0,
     has_filter=False,
     size_z=50,
-    diameter=8.2,
     maximal_volume=200,
     fitting_depth=10,
     name=name,

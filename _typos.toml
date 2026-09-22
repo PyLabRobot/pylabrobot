@@ -48,6 +48,13 @@ tranformation = "tranformation"
 # three.js material vocabulary, used in the 3D viewer's own code as the library spells it.
 metalness = "metalness"
 
+[default.extend-identifiers]
+# Prep firmware interface names, spelled as its firmware trees name them.
+IYAxis = "IYAxis"
+IYDrive = "IYDrive"
+IZAxis = "IZAxis"
+IZDrive = "IZDrive"
+
 [files]
 extend-exclude = [
     "*.ipynb",

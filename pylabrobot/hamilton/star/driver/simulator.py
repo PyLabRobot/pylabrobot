@@ -183,7 +183,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
   def _below_stop_disc(self, channel: int) -> float:
     """How far a channel's lowest point sits below its stop disc, in mm, as the firmware counts it.
 
-    The firmware counts the CO-RE grip tool to its grip line, `total_length` below its top.
+    The firmware counts the CO-RE grip tool to its grip line, `grip_line_height` above its bottom.
     """
     shaft = self._shaft(channel)
     if shaft is None:

@@ -201,10 +201,9 @@ class TipTracker(SerializableMixin):
   def load_state(self, state: dict) -> None:
     """Load a saved tip tracker state."""
 
-    tip = Tip.deserialize(state["tip"]) if state.get("tip") is not None else None
-    pending_tip = (
-      Tip.deserialize(state["pending_tip"]) if state.get("pending_tip") is not None else None
-    )
+    tip_data, pending_tip_data = state.get("tip"), state.get("pending_tip")
+    tip = Tip.deserialize(tip_data) if tip_data is not None else None
+    pending_tip = Tip.deserialize(pending_tip_data) if pending_tip_data is not None else None
     self._put(pending_tip)
     same = (tip is None) == (pending_tip is None) and (
       tip is None or tip.serialize() == cast(Tip, pending_tip).serialize()
