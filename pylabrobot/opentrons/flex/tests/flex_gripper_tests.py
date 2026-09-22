@@ -173,7 +173,7 @@ class TestMoveLabware(unittest.TestCase):
       self.assertEqual(definition["gripHeightFromLabwareBottom"], 15.0)  # 20 - 5
       load_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "loadLabware"]
       self.assertEqual(load_cmds[0].args[2]["namespace"], "pylabrobot")
-      self.assertEqual(load_cmds[0].args[2]["loadName"], "lid_stack_2196eb")
+      self.assertEqual(load_cmds[0].args[2]["loadName"], definition["parameters"]["loadName"])
       move_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "moveLabware"]
       self.assertEqual(len(move_cmds), 1)
       self.assertEqual(flex.deck.get_slot(lid), "C2")

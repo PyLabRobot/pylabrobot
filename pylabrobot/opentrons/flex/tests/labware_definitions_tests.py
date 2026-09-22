@@ -11,6 +11,7 @@ with the run, and that official-name labware keeps loading with zero uploads.
 
 import asyncio
 import unittest
+import uuid
 from typing import Optional, Tuple
 from unittest.mock import AsyncMock, patch
 
@@ -23,7 +24,6 @@ from pylabrobot.opentrons.labware import (
   build_movable_labware_definition,
   build_plate_definition,
   build_tip_rack_definition,
-  container_footprint,
 )
 from pylabrobot.opentrons.types import CommandInfo
 from pylabrobot.resources import (
@@ -179,21 +179,28 @@ def _tube_rack(name: str = "tube rack") -> TubeRack:
 
 
 class TestDefinitionLoadNames(unittest.TestCase):
-  """Load names are the sanitized PLR name plus a digest of the raw name, so
-  distinct names that sanitize identically never share a definitionUri."""
+  """Generated definitions have unique identities and readable display names."""
 
-  def test_load_name_is_sanitized_name_plus_digest(self):
-    definition = build_plate_definition(_plate())
-    self.assertEqual(definition["parameters"]["loadName"], "black_plate_1_e2a464")
-
-  def test_colliding_sanitized_names_get_distinct_load_names(self):
-    a = build_plate_definition(_plate(name="My Plate"))
-    b = build_plate_definition(_plate(name="my plate"))
-    self.assertEqual(a["parameters"]["loadName"], "my_plate_3f2f85")
-    self.assertEqual(b["parameters"]["loadName"], "my_plate_1aa3c7")
-    self.assertNotEqual(a["parameters"]["loadName"], b["parameters"]["loadName"])
-    for definition in (a, b):
-      self.assertRegex(definition["parameters"]["loadName"], r"^[a-z0-9._]+$")
+  def test_same_named_resources_get_distinct_uuid_load_names(self):
+    for kind, build in (
+      ("plate", lambda: build_plate_definition(_plate(name="Shared name"))),
+      ("container", lambda: build_container_definition(_trough(name="Shared name"))),
+      ("stub", lambda: build_movable_labware_definition(Resource("Shared name", 100, 90, 20))),
+      ("OT-2 tips", lambda: build_tip_rack_definition(_tip_rack(name="Shared name"))),
+      (
+        "Flex tips",
+        lambda: build_tip_rack_definition(_tip_rack(name="Shared name"), for_flex=True),
+      ),
+    ):
+      with self.subTest(kind=kind):
+        first = build()
+        second = build()
+        self.assertNotEqual(first["parameters"]["loadName"], second["parameters"]["loadName"])
+        for definition in (first, second):
+          load_name = definition["parameters"]["loadName"]
+          self.assertEqual(uuid.UUID(load_name).version, 4)
+          self.assertEqual(uuid.UUID(load_name).hex, load_name)
+          self.assertEqual(definition["metadata"]["displayName"], "Shared name")
 
 
 class TestBuildPlateDefinition(unittest.TestCase):
@@ -206,7 +213,6 @@ class TestBuildPlateDefinition(unittest.TestCase):
     self.assertEqual(definition["schemaVersion"], 2)
     self.assertEqual(definition["metadata"]["displayCategory"], "wellPlate")
     self.assertEqual(definition["metadata"]["displayName"], "Black Plate-1")
-    self.assertEqual(definition["parameters"]["loadName"], "black_plate_1_e2a464")
     self.assertFalse(definition["parameters"]["isTiprack"])
     self.assertEqual(
       definition["dimensions"],
@@ -260,10 +266,10 @@ class TestBuildPlateDefinition(unittest.TestCase):
   def test_plate_without_material_thickness_is_refused(self):
     # No cavity floor to anchor liquid ops at, and no safe default: falling
     # back to zero is what aims them at the plastic.
-    with self.assertRaises(ValueError) as caught:
+    with self.assertRaises(NotImplementedError) as caught:
       build_plate_definition(_plate(material_z_thickness=None))
     self.assertIn("material_z_thickness", str(caught.exception))
-    self.assertIn("Black Plate-1", str(caught.exception))
+    self.assertIn("well_A1", str(caught.exception))
 
   def test_rotated_plate_is_refused(self):
     # An Opentrons definition positions wells from the slot's front-left
@@ -330,7 +336,7 @@ class TestBuildTipRackDefinition(unittest.TestCase):
     definition = build_tip_rack_definition(rack, rack.get_item("A1").get_tip(), "custom")
 
     self.assertAlmostEqual(definition["wells"]["A1"]["diameter"], 7.0710678118654755)
-    self.assertEqual(definition["metadata"]["displayName"], "custom")
+    self.assertEqual(definition["metadata"]["displayName"], rack.name)
     self.assertEqual(definition["parameters"]["loadName"], "custom")
     self.assertEqual(definition["groups"][0]["metadata"], {})
 
@@ -341,7 +347,6 @@ class TestBuildTipRackDefinition(unittest.TestCase):
     self.assertTrue(definition["parameters"]["isTiprack"])
     self.assertEqual(definition["parameters"]["tipLength"], 50.0)
     self.assertEqual(definition["parameters"]["tipOverlap"], 8.0)
-    self.assertEqual(definition["parameters"]["loadName"], "hamilton_tips_300_0558ff")
 
   def test_full_rack_format_is_96standard(self):
     definition = build_tip_rack_definition(_tip_rack(num_items_x=12, num_items_y=8), for_flex=True)
@@ -410,7 +415,6 @@ class TestBuildContainerDefinition(unittest.TestCase):
     definition = build_container_definition(_trough())
     self.assertEqual(definition["namespace"], "pylabrobot")
     self.assertEqual(definition["metadata"]["displayCategory"], "reservoir")
-    self.assertEqual(definition["parameters"]["loadName"], "hamilton_trough_9544de")
     self.assertEqual(definition["ordering"], [["A1"]])
     self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 0, "z": 0})
     self.assertEqual(
@@ -447,7 +451,7 @@ class TestBuildContainerDefinition(unittest.TestCase):
     self.assertAlmostEqual(well["z"] + well["depth"], definition["dimensions"]["zDimension"])
 
   def test_container_without_material_thickness_is_refused(self):
-    with self.assertRaises(ValueError) as caught:
+    with self.assertRaises(NotImplementedError) as caught:
       build_container_definition(_trough(material_z_thickness=None))
     self.assertIn("material_z_thickness", str(caught.exception))
     self.assertIn("hamilton trough", str(caught.exception))
@@ -471,17 +475,14 @@ class TestBuildContainerDefinition(unittest.TestCase):
     )
 
   def test_rotated_cavity_uploads_the_shared_deck_frame_footprint(self):
-    # The uploaded rectangle and the ops' fit guard must read the same
-    # helper, or a rotated cavity is guarded on the wrong axis.
+    # A 90-degree rotation swaps the container's dimensions in the deck frame.
     trough = _trough()
     trough.rotation = Rotation(z=90)
     definition = build_container_definition(trough)
-    cavity_x, cavity_y = container_footprint(trough)
-    self.assertEqual((cavity_x, cavity_y), (80.0, 120.0))
-    self.assertEqual(definition["dimensions"]["xDimension"], cavity_x)
-    self.assertEqual(definition["dimensions"]["yDimension"], cavity_y)
-    self.assertEqual(definition["wells"]["A1"]["xDimension"], cavity_x)
-    self.assertEqual(definition["wells"]["A1"]["yDimension"], cavity_y)
+    self.assertEqual(definition["dimensions"]["xDimension"], 80.0)
+    self.assertEqual(definition["dimensions"]["yDimension"], 120.0)
+    self.assertEqual(definition["wells"]["A1"]["xDimension"], 80.0)
+    self.assertEqual(definition["wells"]["A1"]["yDimension"], 120.0)
 
   def test_center_multichannel_quirk_matches_shipped_reservoirs(self):
     # Every shipped Opentrons 1-well reservoir carries this quirk; the engine
@@ -503,7 +504,6 @@ class TestBuildMovableLabwareDefinition(unittest.TestCase):
     resource = Resource(name="lid stack", size_x=100.0, size_y=90.0, size_z=20.0)
     definition = build_movable_labware_definition(resource, grip_distance_from_top=5.0)
     self.assertEqual(definition["namespace"], "pylabrobot")
-    self.assertEqual(definition["parameters"]["loadName"], "lid_stack_2196eb")
     self.assertEqual(definition["ordering"], [["A1"]])
     self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 0, "z": 0})
     self.assertEqual(
@@ -669,7 +669,6 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
       self.assertEqual(params["version"], definition["version"])
       self.assertEqual(params["namespace"], "pylabrobot")
-      self.assertEqual(params["loadName"], "black_plate_1_e2a464")
       self.assertEqual(params["version"], 1)
       self.assertEqual(params["location"], {"slotName": "C1"})
     finally:
@@ -725,6 +724,7 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       load_cmds = _load_labware_commands(api)
       self.assertEqual(len(load_cmds), 2)
       self.assertEqual(load_cmds[1].args[2]["location"], {"slotName": "D2"})
+      self.assertNotEqual(load_cmds[0].args[2]["loadName"], load_cmds[1].args[2]["loadName"])
     finally:
       asyncio.run(flex.stop())
 
@@ -866,7 +866,7 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       self.assertEqual(list(definition["wells"]), ["A1"])
       params = _load_labware_commands(api)[0].args[2]
       self.assertEqual(params["namespace"], "pylabrobot")
-      self.assertEqual(params["loadName"], "hamilton_trough_9544de")
+      self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
     finally:
       asyncio.run(flex.stop())
 
@@ -879,11 +879,10 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       asyncio.run(flex._ensure_labware_loaded(rack))
 
       self.assertEqual(api.define_labware.await_count, 1)
-      self.assertTrue(
-        [c.args[1] for c in api.define_labware.await_args_list][0]["parameters"]["isTiprack"]
-      )
+      definition = api.define_labware.await_args.args[1]
+      self.assertTrue(definition["parameters"]["isTiprack"])
       params = _load_labware_commands(api)[0].args[2]
-      self.assertEqual(params["loadName"], "hamilton_tips_300_0558ff")
+      self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
     finally:
       asyncio.run(flex.stop())
 
@@ -904,6 +903,6 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       self.assertEqual(definition["gripHeightFromLabwareBottom"], 15.0)  # 20 - 5
       params = _load_labware_commands(api)[0].args[2]
       self.assertEqual(params["namespace"], "pylabrobot")
-      self.assertEqual(params["loadName"], "widget_ff700e")
+      self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
     finally:
       asyncio.run(flex.stop())

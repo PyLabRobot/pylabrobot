@@ -1,8 +1,6 @@
 """PLR labware conversion and bindings scoped to one Opentrons run."""
 
-import hashlib
 import math
-import re
 import uuid
 from dataclasses import dataclass, replace
 from typing import Any, Dict, Optional, Tuple, cast
@@ -79,14 +77,14 @@ def build_tip_rack_definition(
   Defaults to OT-2's diagonal tip-spot diameter and empty group metadata.
   ``for_flex`` uses the spot width as the diameter and adds group metadata.
   Rotated racks or spots and tips seated below the rack's base are rejected.
-  If omitted, the tip comes from A1 and the load name from the resource name.
+  If omitted, the tip comes from A1 and the load name is a random UUID.
   ``grip_distance_from_top`` adds a gripper height to the definition.
   """
   _require_unrotated(tip_rack)
   if tip is None:
     tip = tip_rack.get_item("A1").make_tip()
   if load_name is None:
-    load_name = _definition_load_name(tip_rack)
+    load_name = uuid.uuid4().hex
   tip_spots = tip_rack.get_all_items()
   well_names = {spot.name: tip_rack.get_child_identifier(spot) for spot in tip_spots}
   for spot in tip_spots:
@@ -105,7 +103,7 @@ def build_tip_rack_definition(
     "version": _VERSION,
     "namespace": _NAMESPACE,
     "metadata": {
-      "displayName": tip_rack.name if for_flex else load_name,
+      "displayName": tip_rack.name,
       "displayCategory": "tipRack",
       "displayVolumeUnits": "µL",
     },
@@ -253,18 +251,6 @@ class LabwareRegistry:
     self._definitions.pop(id(resource), None)
 
 
-def _definition_load_name(resource: Resource) -> str:
-  """Sanitized resource name plus a short digest of the raw name.
-
-  Opentrons load names must match ``^[a-z0-9._]+$`` while PLR names are
-  unrestricted, so distinct names can sanitize identically; the digest keeps
-  their definitions from silently sharing one ``definitionUri``.
-  """
-  sanitized = re.sub(r"[^a-z0-9._]", "_", resource.name.lower())
-  digest = hashlib.sha1(resource.name.encode()).hexdigest()[:6]
-  return f"{sanitized}_{digest}"
-
-
 def _format_from_grid(num_items_x: int, num_items_y: int) -> str:
   """The SBS formats the robot-server recognizes; anything else is irregular."""
   if (num_items_x, num_items_y) == (12, 8):
@@ -272,47 +258,6 @@ def _format_from_grid(num_items_x: int, num_items_y: int) -> str:
   if (num_items_x, num_items_y) == (24, 16):
     return "384Standard"
   return "irregular"
-
-
-def container_footprint(container: Container) -> Tuple[float, float]:
-  """The container's x/y bounding box in the deck frame, as the robot sees it.
-
-  This is the OUTER footprint, an upper bound on the cavity: PLR containers
-  carry their overall size, not their cavity's, so a trough's real cavity is
-  narrower than what this returns by the wall thickness on each side. Ops that
-  reason about whether a nozzle array fits, and the uploaded definition's own
-  well, both read this so they can never disagree.
-
-  Rotation-aware: a rotated container (or one under a rotated parent) presents
-  its bounding box to the robot, which has no notion of PLR's rotation, so
-  this must be read rather than the container's own
-  ``get_size_x``/``get_size_y``.
-  """
-  return container.get_absolute_size_x(), container.get_absolute_size_y()
-
-
-def _cavity_floor_z(container: Container) -> float:
-  """The height of the cavity floor above the container's own bottom.
-
-  ``Container.material_z_thickness`` is optional in PLR and raises when it was
-  never declared. There is no safe default: falling back to zero would put the
-  Opentrons well floor at the labware's outer base and aim every default
-  aspirate a wall thickness INTO the plastic, so an undeclared thickness is
-  refused instead.
-  """
-  try:
-    return container.material_z_thickness
-  except NotImplementedError as e:
-    # Name the plate the caller passed, not the individual well, when the
-    # container sits in one; a bare container (a trough) names itself.
-    owner = container.parent if isinstance(container.parent, Plate) else container
-    raise ValueError(
-      f"'{owner.name}' does not declare material_z_thickness, so the height of its "
-      "cavity floor above its base is unknown. An Opentrons definition anchors liquid "
-      "ops at that floor, so building one would aim them at the labware's outer base "
-      "instead. Give the resource a material_z_thickness, or an official Opentrons "
-      "load name."
-    ) from e
 
 
 def _require_unrotated(resource: Resource) -> None:
@@ -370,7 +315,7 @@ def _plate_well(well: Well) -> dict:
     "depth": well.get_size_z(),
     "x": location.x + well.get_size_x() / 2,
     "y": location.y + well.get_size_y() / 2,
-    "z": location.z + _cavity_floor_z(well),
+    "z": location.z + well.material_z_thickness,
     "totalLiquidVolume": well.max_volume,
     **_well_shape(well),
   }
@@ -390,8 +335,9 @@ def build_plate_definition(plate: Plate, grip_distance_from_top: Optional[float]
   its default mid-height.
 
   Raises:
-    ValueError: If the plate (or a well) is rotated, or a well does not
-      declare the wall thickness its cavity floor is measured from.
+    ValueError: If the plate or a well is rotated.
+    NotImplementedError: If a well does not declare the wall thickness its
+      cavity floor is measured from.
   """
   _require_unrotated(plate)
   wells = plate.get_all_items()
@@ -409,7 +355,7 @@ def build_plate_definition(plate: Plate, grip_distance_from_top: Optional[float]
     "parameters": {
       "format": _format_from_grid(plate.num_items_x, plate.num_items_y),
       "isTiprack": False,
-      "loadName": _definition_load_name(plate),
+      "loadName": uuid.uuid4().hex,
       "isMagneticModuleCompatible": False,
     },
     "ordering": reshape_2d(well_names, (plate.num_items_x, plate.num_items_y)),
@@ -449,16 +395,16 @@ def build_container_definition(
   The cavity floor sits the container's wall thickness above its base, and the
   cavity depth shrinks by the same amount, so the well's top stays at the
   container's real rim (``z + depth == zDimension``, as on every shipped
-  Opentrons reservoir). The well's x/y footprint is the container's OUTER one
-  (see ``container_footprint``): PLR carries no cavity x/y to narrow it with.
+  Opentrons reservoir). The well's x/y footprint is the container's outer
+  bounding box in the deck frame; PLR carries no cavity x/y to narrow it with.
 
   Raises:
-    ValueError: If the container does not declare the wall thickness its
+    NotImplementedError: If the container does not declare the wall thickness its
       cavity floor is measured from.
   """
-  size_x, size_y = container_footprint(container)
+  size_x = container.get_absolute_size_x()
+  size_y = container.get_absolute_size_y()
   size_z = container.get_absolute_size_z()
-  floor_z = _cavity_floor_z(container)
   definition: dict = {
     "schemaVersion": _SCHEMA_VERSION,
     "version": _VERSION,
@@ -473,7 +419,7 @@ def build_container_definition(
       "format": "irregular",
       "quirks": ["centerMultichannelOnWells"],
       "isTiprack": False,
-      "loadName": _definition_load_name(container),
+      "loadName": uuid.uuid4().hex,
       "isMagneticModuleCompatible": False,
     },
     "ordering": [["A1"]],
@@ -481,10 +427,10 @@ def build_container_definition(
     "dimensions": {"xDimension": size_x, "yDimension": size_y, "zDimension": size_z},
     "wells": {
       "A1": {
-        "depth": size_z - floor_z,
+        "depth": size_z - container.material_z_thickness,
         "x": size_x / 2,
         "y": size_y / 2,
-        "z": floor_z,
+        "z": container.material_z_thickness,
         "shape": "rectangular",
         "xDimension": size_x,
         "yDimension": size_y,
@@ -527,7 +473,7 @@ def build_movable_labware_definition(
     "parameters": {
       "format": "irregular",
       "isTiprack": False,
-      "loadName": _definition_load_name(resource),
+      "loadName": uuid.uuid4().hex,
       "isMagneticModuleCompatible": False,
     },
     "ordering": [["A1"]],

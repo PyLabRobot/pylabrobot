@@ -46,7 +46,6 @@ from typing import (
 from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.flex.flex_wire import UNTESTED_HARDWARE_WARNING
 from pylabrobot.opentrons.flex.pipette_defaults import FlowRates, flow_rates
-from pylabrobot.opentrons.labware import container_footprint
 from pylabrobot.opentrons.operations import OperationLock, instrument_operation
 from pylabrobot.opentrons.tracking import track_liquid_transfer
 from pylabrobot.resources import (
@@ -670,7 +669,8 @@ class _FlexHead:
     passes -- PLR carries no cavity x/y to check against.
     """
     o = offset if offset is not None else Coordinate.zero()
-    cavity_x, cavity_y = container_footprint(container)
+    cavity_x = container.get_absolute_size_x()
+    cavity_y = container.get_absolute_size_y()
     required_x = x_span + 2 * abs(o.x)
     required_y = y_span + 2 * abs(o.y)
     if required_x > cavity_x or required_y > cavity_y:

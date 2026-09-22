@@ -1,7 +1,6 @@
 """OT-2 lifecycle, deck ownership, and physical pipette discovery."""
 
 import math
-import uuid
 from typing import List, Optional, Tuple, Union
 
 from pylabrobot.io.http import HTTP
@@ -205,16 +204,15 @@ class OT2:
     if slot is None:
       raise ValueError("tip rack must be assigned directly to an OT-2 deck slot")
     registry = self._require_labware()
-    definition = None
     identity: Optional[LabwareIdentity]
     if registry.is_loaded(tip_rack):
       identity = registry.get(tip_rack).identity
     else:
       identity = official_tip_rack_identity(tip_rack)
       if identity is None:
-        identity = LabwareIdentity("pylabrobot", uuid.uuid4().hex, 1)
-        definition = build_tip_rack_definition(tip_rack, tip, identity.load_name)
-    await registry.load(tip_rack, str(slot), identity, definition)
+        definition = build_tip_rack_definition(tip_rack, tip)
+        identity = await registry.define(tip_rack, definition)
+    await registry.load(tip_rack, str(slot), identity)
 
   def _deck_to_robot_frame(self, location: Coordinate) -> Coordinate:
     return location - self.deck.slot_locations[0]

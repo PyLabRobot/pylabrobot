@@ -173,12 +173,8 @@ class OpentronsRun:
         raise OpentronsCommandTimeout(self.id, command_id, command_type)
       await asyncio.sleep(self.command_poll_interval)
 
-  async def _execute(self, command_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
-    """Execute a named primitive and return its result payload."""
-    return (await self.execute(command_type, params)).result
-
   async def load_pipette(self, name: str, mount: Mount) -> str:
-    result = await self._execute("loadPipette", {"pipetteName": name, "mount": mount})
+    result = (await self.execute("loadPipette", {"pipetteName": name, "mount": mount})).result
     return _string(result, "pipetteId")
 
   async def define_labware(self, definition: Dict[str, Any]) -> LabwareIdentity:
@@ -198,18 +194,18 @@ class OpentronsRun:
     }
     if labware_id is not None:
       params["labwareId"] = labware_id
-    result = await self._execute("loadLabware", params)
+    result = (await self.execute("loadLabware", params)).result
     return labware_id if labware_id is not None else _string(result, "labwareId")
 
   async def pick_up_tip(
     self, pipette_id: str, labware_id: str, well_name: str, offset: Coordinate
   ) -> None:
-    await self._execute("pickUpTip", _well_params(pipette_id, labware_id, well_name, offset))
+    await self.execute("pickUpTip", _well_params(pipette_id, labware_id, well_name, offset))
 
   async def drop_tip(
     self, pipette_id: str, labware_id: str, well_name: str, offset: Coordinate
   ) -> None:
-    await self._execute("dropTip", _well_params(pipette_id, labware_id, well_name, offset))
+    await self.execute("dropTip", _well_params(pipette_id, labware_id, well_name, offset))
 
   async def move_to(
     self,
@@ -228,11 +224,11 @@ class OpentronsRun:
       params["minimumZHeight"] = minimum_z_height
     if speed is not None:
       params["speed"] = speed
-    await self._execute("moveToCoordinates", params)
+    await self.execute("moveToCoordinates", params)
 
   async def get_position(self, pipette_id: str) -> Coordinate:
     """Read the nozzle or mounted tip's critical point through savePosition."""
-    result = await self._execute("savePosition", {"pipetteId": pipette_id})
+    result = (await self.execute("savePosition", {"pipetteId": pipette_id})).result
     position = _object(result.get("position"))
     axes = [position.get(axis) for axis in ("x", "y", "z")]
     if not all(isinstance(axis, (float, int)) and math.isfinite(axis) for axis in axes):
@@ -240,12 +236,12 @@ class OpentronsRun:
     return Coordinate(x=position["x"], y=position["y"], z=position["z"])
 
   async def aspirate_in_place(self, pipette_id: str, volume: float, flow_rate: float) -> None:
-    await self._execute(
+    await self.execute(
       "aspirateInPlace", {"pipetteId": pipette_id, "volume": volume, "flowRate": flow_rate}
     )
 
   async def dispense_in_place(self, pipette_id: str, volume: float, flow_rate: float) -> None:
-    await self._execute(
+    await self.execute(
       "dispenseInPlace",
       {"pipetteId": pipette_id, "volume": volume, "flowRate": flow_rate, "pushOut": 0.0},
     )
@@ -253,7 +249,7 @@ class OpentronsRun:
   async def discard_tip_in_fixed_trash(self, pipette_id: str, offset: Coordinate) -> None:
     """Drop in OT-2 fixed trash using the command form supported by this run's server."""
     if _version_at_least(self.software_version, "7.1.0"):
-      await self._execute(
+      await self.execute(
         "moveToAddressableAreaForDropTip",
         {
           "pipetteId": pipette_id,
@@ -262,6 +258,6 @@ class OpentronsRun:
           "alternateDropLocation": False,
         },
       )
-      await self._execute("dropTipInPlace", {"pipetteId": pipette_id})
+      await self.execute("dropTipInPlace", {"pipetteId": pipette_id})
     else:
       await self.drop_tip(pipette_id, "fixedTrash", "A1", offset)
