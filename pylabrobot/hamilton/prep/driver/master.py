@@ -437,6 +437,9 @@ class PrepDriver:
         await self._create_capability_resources()
 
       if any(tips) and plate_held:
+        attached = await self.pipettes.request_attached_tip_information(tips.index(True))
+        if attached is not None and attached.is_tool and self.core_grippers is not None:
+          await self.core_grippers._adopt_mounted_tools()
         logger.warning(
           "the device records a plate gripped, so the tools stay on: lower it onto a free spot with "
           "`pipettes.move_tool_bottom_to_z_positions` (both channels together), let go with "

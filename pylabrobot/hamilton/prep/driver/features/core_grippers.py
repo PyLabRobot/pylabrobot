@@ -541,6 +541,30 @@ class CoreGrippers:
         holder.assign_child_resource(tool, location=location)
     self._parked_tools = []
 
+  async def _mount_tools_in_the_model(self, tools: List[HeadTool]) -> List[int]:
+    """Move the tools from their holder onto the channels in the model. The channels they went on."""
+    # A taken tool rides where the channel rides, as a tip does. The back channel takes the rear tool.
+    deck = self._deck
+    self._parked_tools = [(tool, tool.parent, tool.location) for tool in tools]
+    rear_first = sorted(tools, key=lambda tool: tool.get_location_wrt(deck, y="c").y)
+    taken = []
+    for channel, tool in zip((self._back_channel, self._front_channel), reversed(rear_first)):
+      shaft = self._pipettes.shaft(channel)
+      if shaft is not None:
+        shaft.mount_tip(tool)
+        taken.append(channel)
+    # Read once the tools are on the model: Z is reported at their jaws.
+    await self._pipettes._record_where_they_stopped()
+    return taken
+
+  async def _adopt_mounted_tools(self) -> None:
+    """Take into the model tools the device already has on the channels, as at a reconnect."""
+    holder = self._driver.core_gripper_holder
+    tools = [] if holder is None else [c for c in holder.children if isinstance(c, HeadTool)]
+    if tools:
+      await self._mount_tools_in_the_model(tools)
+    self._tools_mounted = True
+
   async def pick_up_tools(self) -> None:
     """Take the tools out of the holder the deck carries and onto the channels.
 
@@ -571,17 +595,7 @@ class CoreGrippers:
       tool_seek=engage + 10.0,
     )
 
-    # A taken tool rides where the channel rides, as a tip does. The back channel takes the rear tool.
-    self._parked_tools = [(tool, tool.parent, tool.location) for tool in tools]
-    rear_first = sorted(tools, key=lambda tool: tool.get_location_wrt(deck, y="c").y)
-    taken = []
-    for channel, tool in zip((self._back_channel, self._front_channel), reversed(rear_first)):
-      shaft = self._pipettes.shaft(channel)
-      if shaft is not None:
-        shaft.mount_tip(tool)
-        taken.append(channel)
-    # Read once the tools are on the model: Z is reported at their jaws.
-    await self._pipettes._record_where_they_stopped()
+    taken = await self._mount_tools_in_the_model(tools)
 
     # The command returning is not the tools being on: asked of the device, once per mount.
     missing = [channel for channel in taken if not await self.request_tool_attached(channel)]
