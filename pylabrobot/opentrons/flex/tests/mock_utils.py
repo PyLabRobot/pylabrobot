@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 from pylabrobot.io.http import HTTP
 from pylabrobot.opentrons import Flex, OpentronsAPI
+from pylabrobot.opentrons.flex.flex_wire import OFFLINE_API_VERSION
 from pylabrobot.opentrons.types import (
   CommandInfo,
   InstrumentInfo,
@@ -12,7 +13,6 @@ from pylabrobot.opentrons.types import (
   RobotInfo,
   RunInfo,
 )
-from pylabrobot.opentrons.version import OFFLINE_API_VERSION
 from pylabrobot.resources.opentrons import FlexDeck
 
 _MODELS = {

@@ -2,8 +2,9 @@
 
 import asyncio
 import math
+import re
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from pylabrobot.io.http import HTTPError
 from pylabrobot.opentrons.api import OpentronsAPI
@@ -14,10 +15,27 @@ from pylabrobot.opentrons.errors import (
   OpentronsProtocolError,
 )
 from pylabrobot.opentrons.types import CommandInfo, LabwareIdentity, Mount, _object, _string
-from pylabrobot.opentrons.version import version_at_least as _version_at_least
 from pylabrobot.resources.coordinate import Coordinate
 
 COMMAND_POLL_HEADROOM = 30.0
+
+
+def _version_tuple(version: str) -> Tuple[int, ...]:
+  parts = []
+  for part in version.split("."):
+    match = re.match(r"\d+", part)
+    if match is None:
+      break
+    parts.append(int(match.group()))
+  if not parts:
+    raise ValueError(f"Unrecognized robot software version {version!r}")
+  return tuple(parts)
+
+
+def _version_at_least(version: str, required: str) -> bool:
+  actual, minimum = _version_tuple(version), _version_tuple(required)
+  width = max(len(actual), len(minimum))
+  return actual + (0,) * (width - len(actual)) >= minimum + (0,) * (width - len(minimum))
 
 
 def slot_wire_location(slot: str) -> Dict[str, str]:

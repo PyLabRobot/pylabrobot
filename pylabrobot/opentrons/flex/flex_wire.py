@@ -13,9 +13,13 @@ heads) for them.
 from typing import FrozenSet, Optional
 
 from pylabrobot.opentrons.flex.errors import OpentronsError
-from pylabrobot.opentrons.run import slot_wire_location  # noqa: F401
-from pylabrobot.opentrons.version import OFFLINE_API_VERSION, version_at_least
-from pylabrobot.opentrons.version import version_tuple as _version_tuple
+from pylabrobot.opentrons.run import (
+  _version_at_least,
+  _version_tuple,
+  slot_wire_location,  # noqa: F401
+)
+
+OFFLINE_API_VERSION = "dry-run"
 
 # Shared by the heads and the gripper so the notice reads identically
 # everywhere; each module logs it through its own logger.
@@ -82,7 +86,7 @@ def _require_robot_commands(command: str, api_version: Optional[str]) -> None:
     ) from None
   if not any(version) and "dev" in api_version:
     return
-  if not version_at_least(api_version, _ROBOT_COMMANDS_MIN_VERSION):
+  if not _version_at_least(api_version, _ROBOT_COMMANDS_MIN_VERSION):
     raise OpentronsError(
       "Robot software too old",
       f"{command} requires Opentrons robot software {_ROBOT_COMMANDS_MIN_VERSION} or newer, "
