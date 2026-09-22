@@ -50,7 +50,7 @@ GRIPPER_DECK_DIRECTIONS: Dict[str, float] = {
 
 RECORDED_FIRMWARE_PREFIX = "4."
 
-# The rotation drive's own dimensions, in mm. Module constants rather than field defaults alone,
+# The elbow drive's own dimensions, in mm. Module constants rather than field defaults alone,
 # because the front limit below is worked out from them before any configuration exists.
 ELBOW_DRIVE_DIAMETER = 30.5
 ELBOW_DRIVE_SAFETY_RADIUS = 90.0
@@ -68,7 +68,7 @@ ASSUMED_ARM_FRONT_LIMIT = 6.0
 def elbow_front_limit(
   arm_front_limit: float, channel_widths: Sequence[float], swept_radius: float
 ) -> float:
-  """How far forward the rotation drive can be brought, in mm.
+  """How far forward the elbow can be brought, in mm.
 
   Not the arm's own front limit: the channels ride in front of the drive on the same rail, and the
   drive stops behind the backmost of them however far forward they are packed. Packed is what this
@@ -104,7 +104,7 @@ class iSWAPAxis(enum.IntEnum):
   """The iSWAP's addressable axes, as `request_joint_state` keys.
 
   Units are the axis's own: the prismatic axes and the gripper in mm, the two revolute drives in
-  degrees. `Z` is the rotation drive's bottom, which sits above the gripper finger plane by
+  degrees. `Z` is the elbow's bottom, which sits above the gripper finger plane by
   `iSWAPConfiguration.elbow_z_offset_above_finger`, so it is not the grip centre's Z.
   """
 
@@ -142,7 +142,7 @@ class iSWAPPose:
   """
 
   elbow_joint_location: Coordinate
-  """Where the rotation drive is: the joint link 1 turns about."""
+  """Where the elbow is: the joint link 1 turns about."""
   wrist_joint_location: Coordinate
   """Link 1's far end, which is the joint link 2 turns about. Which way link 1 lies is not stated:
   it is the direction from `elbow_joint_location` to here, and nothing has needed it."""
@@ -298,13 +298,13 @@ class iSWAPConfiguration:
   firmware_date: Optional[datetime.date] = None
 
   link_1_length: Optional[float] = None
-  """rotation joint (joint 1) to the wrist joint (joint 2); default: 138.0 mm."""
+  """elbow joint (joint 1) to the wrist joint (joint 2); default: 138.0 mm."""
   tool_length: Optional[float] = None
   """wrist joint (joint 2) to the gripper finger centre, in mm. default: 138.0 mm."""
 
   # -- X --
   elbow_x_offset: Optional[float] = None
-  """Deck X distance from the X-arm carriage reference point to the rotation drive (mm). Stored in
+  """Deck X distance from the X-arm carriage reference point to the elbow (mm). Stored in
   master EEPROM. The Hamilton factory default is 34.0 mm."""
 
   # -- Y --
@@ -313,10 +313,10 @@ class iSWAPConfiguration:
 
   # -- Z --
   elbow_predefined_z_positions_increments: Optional[iSWAPZPositions] = None
-  """Each Z stop the rotation drive is calibrated against, in increments of the finger plane.
+  """Each Z stop the elbow is calibrated against, in increments of the finger plane.
   Read by discovery; the defaults are factory values, not one unit's calibration."""
 
-  # -- rotation drive --
+  # -- elbow drive --
   elbow_drive_predefined_increments: Optional[iSWAPElbowPositions] = None
 
   # -- wrist drive --
@@ -335,30 +335,30 @@ class iSWAPConfiguration:
   y_range_increments: Tuple[int, int] = (0, 14_000)
   y_mm_per_increment: float = 0.046302083
   y_speed_range_increments: Tuple[int, int] = (50, 8_000)  # increments/sec
-  # Speeds run under the documented defaults - Y 68%, rotation 44%, wrist 41% - these swing a plate.
+  # Speeds run under the documented defaults - Y 68%, elbow 44%, wrist 41% - these swing a plate.
   y_speed_default_increments: int = 4_751
   y_current_limit_default: int = 7
   y_acceleration_level_default: int = 2
   elbow_drive_diameter: float = ELBOW_DRIVE_DIAMETER
-  """How wide the rotation drive is, in mm."""
+  """How wide the elbow drive is, in mm."""
 
   elbow_drive_safety_radius: float = ELBOW_DRIVE_SAFETY_RADIUS
   """How far past the drive's own edge anything it carries reaches, in mm. A clearance that holds
-  at every rotation angle is the drive's radius plus this."""
+  at every elbow angle is the drive's radius plus this."""
 
   elbow_y_min: float = elbow_front_limit(
     ASSUMED_ARM_FRONT_LIMIT,
     [ASSUMED_CHANNEL_WIDTH] * ASSUMED_CHANNELS,
     ELBOW_DRIVE_DIAMETER / 2 + ELBOW_DRIVE_SAFETY_RADIUS,
   )
-  """How far forward the rotation drive can be brought, in mm: the front stop the channels leave it.
+  """How far forward the elbow can be brought, in mm: the front stop the channels leave it.
 
   The one bound here that is not the drive's own. Defaulted for the assumed twelve-channel arm, so
   a driver that has not read a device still has a limit rather than none, and overwritten with the
   arm's own channels by `iSWAP.declare_front_limit` at discovery."""
 
   elbow_drive_size_z: float = 120.0
-  """How tall to model the rotation drive, in mm. Not read from anywhere: how far the drive extends
+  """How tall to model the elbow drive, in mm. Not read from anywhere: how far the drive extends
   is not something the device reports."""
 
   # -- Z --
@@ -370,10 +370,10 @@ class iSWAPConfiguration:
   z_acceleration_default_increments: int = 60
   z_current_limit_default: int = 6
   elbow_z_offset_above_finger: float = 13.0
-  """How far the rotation drive's lowest point sits above the finger plane, in mm. Z is calibrated
+  """How far the elbow's lowest point sits above the finger plane, in mm. Z is calibrated
   to the finger plane, so a position read or commanded is that plane's plus this."""
 
-  # -- rotation drive (joint 1) --
+  # -- elbow drive (joint 1) --
   elbow_range_increments: Tuple[int, int] = (-30_032, 30_032)
   elbow_deg_per_increment: float = 0.00309619077
   elbow_speed_range_increments: Tuple[int, int] = (20, 75_000)  # increments/sec
@@ -442,7 +442,7 @@ class iSWAPConfiguration:
 
   @property
   def elbow_z_range(self) -> Tuple[float, float]:
-    """How far the rotation drive's bottom travels along Z, in mm, lowest first.
+    """How far the elbow's bottom travels along Z, in mm, lowest first.
 
     Derived from the drive's documented area of operation, not probed: unlike a head, the iSWAP
     has no command that finds its own limit.
@@ -460,7 +460,7 @@ class iSWAPConfiguration:
 
   @property
   def elbow_drive_swept_radius(self) -> float:
-    """How far from the rotation drive's centre anything it carries can reach, in mm.
+    """How far from the elbow drive's centre anything it carries can reach, in mm.
 
     The drive and its arm are treated as one circle, so a clearance measured against it holds
     whichever way the arm happens to be turned.
@@ -468,7 +468,7 @@ class iSWAPConfiguration:
     return self.elbow_drive_diameter / 2 + self.elbow_drive_safety_radius
 
   def elbow_drive_increments_to_angle(self, increments: int) -> float:
-    """A rotation-drive angle in degrees, from increments, against the calibrated stops.
+    """An elbow-drive angle in degrees, from increments, against the calibrated stops.
 
     Piecewise linear rather than one slope: `left` to `front` spans -90 to 0 degrees and `front`
     to `right` spans 0 to +90, each against the stops this device reports, so they read back as
@@ -485,16 +485,14 @@ class iSWAPConfiguration:
     """
     predefined_positions = self.elbow_drive_predefined_increments
     if predefined_positions is None:
-      raise RuntimeError(
-        "the rotation drive's stops were not read; have you called `star.setup()`?"
-      )
+      raise RuntimeError("the elbow drive's stops were not read; have you called `star.setup()`?")
     front = predefined_positions.front
     if increments < front:
       return -90.0 * (front - increments) / (front - predefined_positions.left)
     return 90.0 * (increments - front) / (predefined_positions.right - front)
 
   def elbow_drive_angle_to_increments(self, angle: float) -> int:
-    """A rotation-drive angle in increments, from degrees, against the calibrated stops.
+    """An elbow-drive angle in increments, from degrees, against the calibrated stops.
 
     The inverse of `elbow_drive_increments_to_angle`, piecewise on the same two segments, so
     -90, 0 and +90 land exactly on the stops this device reports.
@@ -510,9 +508,7 @@ class iSWAPConfiguration:
     """
     predefined_positions = self.elbow_drive_predefined_increments
     if predefined_positions is None:
-      raise RuntimeError(
-        "the rotation drive's stops were not read; have you called `star.setup()`?"
-      )
+      raise RuntimeError("the elbow drive's stops were not read; have you called `star.setup()`?")
     front = predefined_positions.front
     if angle < 0:
       return round(front - (angle / -90.0) * (front - predefined_positions.left))
@@ -591,19 +587,19 @@ class iSWAPConfiguration:
   # against the stops. Acceleration is counted in thousands of increments.
 
   def elbow_deg_per_sec_to_increments(self, deg_per_sec: float) -> int:
-    """A rotation-drive speed in increments/s, from degrees/s."""
+    """An elbow-drive speed in increments/s, from degrees/s."""
     return round(deg_per_sec / self.elbow_deg_per_increment)
 
   def elbow_increments_to_deg_per_sec(self, increments: int) -> float:
-    """A rotation-drive speed in degrees/s, from increments/s."""
+    """An elbow-drive speed in degrees/s, from increments/s."""
     return round(increments * self.elbow_deg_per_increment, 2)
 
   def elbow_deg_per_sec2_to_increments(self, deg_per_sec2: float) -> int:
-    """A rotation-drive acceleration in thousands of increments/s2, from degrees/s2."""
+    """An elbow-drive acceleration in thousands of increments/s2, from degrees/s2."""
     return round(deg_per_sec2 / self.elbow_deg_per_increment / 1000)
 
   def elbow_increments_to_deg_per_sec2(self, increments: int) -> float:
-    """A rotation-drive acceleration in degrees/s2, from thousands of increments/s2."""
+    """An elbow-drive acceleration in degrees/s2, from thousands of increments/s2."""
     return round(increments * 1000 * self.elbow_deg_per_increment, 2)
 
   def wrist_deg_per_sec_to_increments(self, deg_per_sec: float) -> int:
@@ -639,12 +635,12 @@ class iSWAPConfiguration:
 
   @property
   def elbow_speed_default(self) -> float:
-    """Rotation-drive speed a move uses when the caller names none (deg/s)."""
+    """Elbow-drive speed a move uses when the caller names none (deg/s)."""
     return self.elbow_increments_to_deg_per_sec(self.elbow_speed_default_increments)
 
   @property
   def elbow_acceleration_default(self) -> float:
-    """Rotation-drive acceleration a move uses when the caller names none (deg/s2)."""
+    """Elbow-drive acceleration a move uses when the caller names none (deg/s2)."""
     return self.elbow_increments_to_deg_per_sec2(self.elbow_acceleration_default_increments)
 
   @property
@@ -768,7 +764,7 @@ class iSWAP:
     return resp.split("rf")[-1], parse_firmware_version_date(resp)
 
   async def elbow_request_x_offset(self) -> float:
-    """Request the X distance from the X-arm carriage centre to the rotation drive.
+    """Request the X distance from the X-arm carriage centre to the elbow.
 
     Stored in the master's own memory, as the 96-head's offset is.
 
@@ -779,7 +775,7 @@ class iSWAP:
     return cast(int, resp["kg"]) / 10.0
 
   async def elbow_drive_request_positions(self) -> iSWAPElbowPositions:
-    """Request the rotation drive's stored position table.
+    """Request the elbow drive's stored position table.
 
     The device returns ten signed slots. Nine are positions and the tenth is link 1's length, so
     both are recorded here rather than costing a second read of the same table.
@@ -822,7 +818,7 @@ class iSWAP:
     return {name: c.y_increments_to_mm(slot) for name, slot in zip(iSWAPYPositions.SLOTS, slots)}
 
   async def request_link_1_length(self) -> float:
-    """Request the distance from the rotation joint to the wrist joint.
+    """Request the distance from the elbow joint to the wrist joint.
 
     Returns:
       Length in mm.
@@ -838,10 +834,10 @@ class iSWAP:
     return round((await self._request_slots("pt"))[9] / 10, 1)
 
   async def elbow_request_predefined_z_positions(self) -> Dict[str, float]:
-    """Read the Z stops the rotation drive is calibrated against, in mm on the deck.
+    """Read the Z stops the elbow is calibrated against, in mm on the deck.
 
     The stored table rather than where the drive is now. Its ten slots are all positions, unlike
-    the rotation and wrist tables whose tenth slot carries an arm length. The device holds them as
+    the elbow and wrist tables whose tenth slot carries an arm length. The device holds them as
     the finger plane, so each is offset to the drive's bottom the way
     `elbow_request_z_position` reports it, and the two are then in the same terms.
 
@@ -912,7 +908,7 @@ class iSWAP:
     await self.declare_front_limit()
 
   async def declare_front_limit(self) -> None:
-    """Work out how far forward the rotation drive can be brought, and record it.
+    """Work out how far forward the elbow can be brought, and record it.
 
     The drive's back stop is its own and is read with the rest of its stored table. Its front stop
     is not: the channels ride in front of it on the same rail, so how far forward it goes is a fact
@@ -957,13 +953,13 @@ class iSWAP:
 
     The carriage is what the arm is mounted on, so the arm's angle is carried there and anything
     hung off it - the links, and what they hold - turns with it. Stated as the deck angle link 1
-    lies along, which is the rotation drive's own angle less ninety degrees, so a resource's
+    lies along, which is the elbow drive's own angle less ninety degrees, so a resource's
     rotation reads in the frame every other resource is placed in.
 
     Does nothing until there is a resource to record it on.
 
     Args:
-      angle: the rotation drive's angle, in degrees, as it reports it.
+      angle: the elbow drive's angle, in degrees, as it reports it.
     """
     if self.resource is None:
       return
@@ -974,7 +970,7 @@ class iSWAP:
       self.link_1.rotate_to(z=angle - 90.0, pivot_coordinate=self.link_1.proximal_joint)
 
   def elbow_get_reference_point_location(self) -> Optional[Coordinate]:
-    """Where the model has the rotation drive's reference point, in mm on the deck.
+    """Where the model has the elbow's reference point, in mm on the deck.
 
     The inverse of `update_location_by_reference_point`: it converts a reported position into a
     location, and this converts a location back into the position that would be reported. X is
@@ -1004,7 +1000,7 @@ class iSWAP:
     return None if self.resource is None else self.resource.wrist_drive_angle
 
   def elbow_drive_get_angle(self) -> Optional[float]:
-    """Which way the model has the arm pointing, as the rotation drive reports it.
+    """Which way the model has the arm pointing, as the elbow drive reports it.
 
     Read from what the drive last reported, not converted back out of the resource's `rotation`:
     that is a deck angle about a different axis, so recovering a drive angle from it would be
@@ -1065,7 +1061,7 @@ class iSWAP:
   def update_location_by_reference_point(
     self, y: Optional[float] = None, z: Optional[float] = None
   ) -> None:
-    """Record where the rotation drive is on the resource that models it.
+    """Record where the elbow is on the resource that models it.
 
     Y and Z only: the drive rides the arm, so its resource is a child of the arm's and follows it
     in X without anything having to record that. The drives report the point the resource states as
@@ -1095,7 +1091,7 @@ class iSWAP:
     )
 
   def _check_reachable(self, axis: Literal["x", "y", "z"], value: float) -> None:
-    """Raise if the rotation drive cannot be sent where it is being asked to go.
+    """Raise if the elbow cannot be sent where it is being asked to go.
 
     The one gate every position passes through. What the iSWAP is allowed to do is decided in one
     place: travel limits now, and whatever else has to hold before it moves as it is added.
@@ -1106,7 +1102,7 @@ class iSWAP:
 
     Args:
       axis: which axis - `x` along the rail, `y` across the deck, `z` up.
-      value: where the rotation drive would be sent, in mm.
+      value: where the elbow would be sent, in mm.
 
     Raises:
       ValueError: If the drive cannot reach it.
@@ -1139,8 +1135,7 @@ class iSWAP:
 
     if not low <= value <= high:
       raise ValueError(
-        f"{axis} must be between {round(low, 1)} and {round(high, 1)} mm for the rotation drive, "
-        f"is {value}"
+        f"{axis} must be between {round(low, 1)} and {round(high, 1)} mm for the elbow, is {value}"
       )
 
   # ----------------------------------------
@@ -1150,31 +1145,29 @@ class iSWAP:
   # -- x position --------------------------------------------------------------------------------
 
   async def elbow_request_x_position(self) -> float:
-    """Read where the rotation drive is along X, in deck mm.
+    """Read where the elbow is along X, in deck mm.
 
     Returns:
-      The rotation drive's X in mm.
+      The elbow's X in mm.
 
     Raises:
       RuntimeError: If the drive's X offset was not read.
     """
     offset = self.configuration.elbow_x_offset
     if offset is None:
-      raise RuntimeError(
-        "the rotation drive's X offset was not read; have you called `star.setup()`?"
-      )
+      raise RuntimeError("the elbow's X offset was not read; have you called `star.setup()`?")
     return round(await self.arm.request_position() - offset, 2)
 
   # -- y position --------------------------------------------------------------------------------
 
   async def elbow_request_y_position(self) -> float:
-    """Read where the rotation drive is along Y, in deck mm.
+    """Read where the elbow is along Y, in deck mm.
 
-    The Y carriage the rotation joint is mounted on, not the gripper finger's Y: where the finger
-    is depends on the rotation and wrist angles as well. `request_pose` is what resolves those.
+    The Y carriage the elbow joint is mounted on, not the gripper finger's Y: where the finger
+    is depends on the elbow and wrist angles as well. `request_pose` is what resolves those.
 
     Returns:
-      The rotation drive's Y in mm.
+      The elbow's Y in mm.
     """
     resp = await self._driver.send_command(module="R0", command="RY", fmt="ry##### (n)")
     # Two counters come back, the firmware's and the hardware's. The hardware one is read. Rounded
@@ -1211,7 +1204,7 @@ class iSWAP:
     acceleration_level: Optional[int] = None,
     current_limit: Optional[int] = None,
   ):
-    """Drive the rotation drive to an absolute Y. Nothing is guarded and nothing is recorded.
+    """Drive the elbow to an absolute Y. Nothing is guarded and nothing is recorded.
 
     Args:
       y_increments: where the drive is to go, in the increments it counts in.
@@ -1243,7 +1236,7 @@ class iSWAP:
     acceleration_level: Optional[int] = None,
     current_limit: Optional[int] = None,
   ):
-    """Move the rotation drive along Y. This moves it.
+    """Move the elbow along Y. This moves it.
 
     The backmost channel is what the drive can run into, so how far back it may go depends on
     where that channel is. The drive and its arm are treated as one circle of
@@ -1251,7 +1244,7 @@ class iSWAP:
     arm is turned.
 
     Args:
-      y: where to put the rotation drive, in mm.
+      y: where to put the elbow, in mm.
       make_space: whether the channels may be moved aside when the backmost is where the drive
         needs to be. Off by default; making space raises them to Z safety first.
       speed: how fast, in mm/s.
@@ -1381,7 +1374,7 @@ class iSWAP:
     """Make sure the backmost channel is out of the way before the drive travels to `y`.
 
     Args:
-      y: where the rotation drive is going, in mm.
+      y: where the elbow is going, in mm.
       make_space: whether the channels may be moved to make that space.
 
     Raises:
@@ -1429,13 +1422,13 @@ class iSWAP:
     await pipettes.move_to_y_positions({0: target_y}, make_space=True)
 
   async def elbow_request_z_position(self) -> float:
-    """Read where the rotation drive's lowest point is along Z.
+    """Read where the elbow's lowest point is along Z.
 
     The drive reports two counters, the firmware's and the hardware's. The hardware counter is
     the one read, as legacy reads it.
 
     Returns:
-      The rotation drive's bottom Z in mm.
+      The elbow's bottom Z in mm.
     """
     resp = await self._driver.send_command(module="R0", command="RZ", fmt="rz##### (n)")
     finger_plane = self.configuration.z_increments_to_mm(cast(List[int], resp["rz"])[1])
@@ -1450,7 +1443,7 @@ class iSWAP:
     acceleration_increments: Optional[int] = None,
     current_limit: Optional[int] = None,
   ):
-    """Drive the rotation drive to an absolute Z. Nothing is guarded and nothing is recorded.
+    """Drive the elbow to an absolute Z. Nothing is guarded and nothing is recorded.
 
     The drive is calibrated to the gripper finger plane, so what it counts is that plane's height
     rather than the drive's own: `elbow_move_to_z_position` is what takes the offset out.
@@ -1484,10 +1477,10 @@ class iSWAP:
     acceleration: Optional[float] = None,
     current_limit: Optional[int] = None,
   ):
-    """Move the rotation drive's lowest point to a Z position. This moves it.
+    """Move the elbow's lowest point to a Z position. This moves it.
 
     Args:
-      z: where to put the rotation drive's bottom, in mm.
+      z: where to put the elbow's bottom, in mm.
       speed: how fast, in mm/s.
       acceleration: how hard, in mm/s2.
       current_limit: the motor current limit, 0 to 7.
@@ -1557,7 +1550,7 @@ class iSWAP:
       current_limit: the motor current limit, 0 to 7.
 
     Returns:
-      The rotation drive's bottom Z once there, in mm.
+      The elbow's bottom Z once there, in mm.
     """
     c = self.configuration
     if speed is None:
@@ -1582,7 +1575,7 @@ class iSWAP:
   # Rotational Movement
   # ----------------------------------------
 
-  # -- rotation, wrist and gripper --------------------------------------------
+  # -- elbow, wrist and gripper --------------------------------------------
   # -- both joints, which the drive command carries together -----------------------
 
   async def _unchecked_fw_joint_drives_rotate_increments(
@@ -1599,18 +1592,18 @@ class iSWAP:
     """Drive both joints to absolute increments. Nothing is guarded and nothing is recorded.
 
     The lowest command there is here: it takes what the drives count in and sends it. Both joints
-    go in one command because they move together - the wrist rides the rotation drive, so sending
+    go in one command because they move together - the wrist rides the elbow drive, so sending
     them separately turns the arm and then corrects the wrist, sweeping a path neither target
     describes. A caller that means to move one holds the other at where it already is.
 
     Args:
-      elbow_increments: where the rotation drive is to go, signed.
+      elbow_increments: where the elbow drive is to go, signed.
       wrist_increments: where the wrist drive is to go, signed.
-      elbow_speed_increments: max velocity of the rotation drive, in increments/s.
+      elbow_speed_increments: max velocity of the elbow drive, in increments/s.
       wrist_speed_increments: max velocity of the wrist drive, in increments/s.
-      elbow_acceleration_increments: for the rotation drive, in thousands of increments/s2.
+      elbow_acceleration_increments: for the elbow drive, in thousands of increments/s2.
       wrist_acceleration_increments: for the wrist drive, in thousands of increments/s2.
-      elbow_current_limit: the rotation motor's current limit.
+      elbow_current_limit: the elbow motor's current limit.
       wrist_current_limit: the wrist motor's current limit.
     """
     c = self.configuration
@@ -1640,7 +1633,7 @@ class iSWAP:
     )
 
   def _resolve_elbow_increments(self, angle: Union[str, float]) -> int:
-    """A rotation stop's name or an angle, as the increments the drive counts in.
+    """An elbow stop's name or an angle, as the increments the drive counts in.
 
     Args:
       angle: a named stop, or degrees from the calibrated front stop.
@@ -1656,7 +1649,7 @@ class iSWAP:
     if isinstance(angle, str):
       predefined_positions = c.elbow_drive_predefined_increments
       if predefined_positions is None:
-        raise RuntimeError("the rotation drive's stops were not read; have you called `setup()`?")
+        raise RuntimeError("the elbow drive's stops were not read; have you called `setup()`?")
       if angle not in iSWAPElbowPositions.SLOTS:
         raise ValueError(f"{angle!r} is not one of the stops {iSWAPElbowPositions.SLOTS}")
       increments = {
@@ -1680,7 +1673,7 @@ class iSWAP:
     return increments
 
   def _resolve_elbow_absolute_increments(self, angle: Union[str, float]) -> int:
-    """Where link 1 is to point on the deck, as the increments the rotation drive counts in.
+    """Where link 1 is to point on the deck, as the increments the elbow drive counts in.
 
     The drive turns link 1 and nothing else, so the deck angle and the drive's own differ by the
     quarter turn between the drive's front stop and the deck's +x, and a stop's name means the
@@ -1719,7 +1712,7 @@ class iSWAP:
 
     Args:
       angle: a direction in `GRIPPER_DECK_DIRECTIONS`, or degrees on the deck.
-      elbow_increments: where the rotation drive will be, in its own increments.
+      elbow_increments: where the elbow drive will be, in its own increments.
 
     Returns:
       Where the wrist drive is to go, in increments.
@@ -1747,7 +1740,7 @@ class iSWAP:
     wrist_deg = (deck_angle - link_1_deck_angle + straight + 180.0) % 360.0 - 180.0
     increments = c.wrist_deg_to_increments(wrist_deg)
     # A stop's own angle converts back to the increment this arm stores for it, so a named
-    # direction off a named rotation lands there without being pushed. What is left is rounding:
+    # direction off a named elbow stop lands there without being pushed. What is left is rounding:
     # an angle a hair off a stop takes the stop, which is the tolerance legacy used.
     for stored, _ in (
       (c.wrist_drive_predefined_increments.right, -135.0),
@@ -1825,7 +1818,7 @@ class iSWAP:
     """Rotate one or both iSWAP joints to absolute angles in a single motion. This moves the arm.
 
     Each joint takes either angle, and a stop's name means the same in both: `relative` is the
-    drive's own frame, `absolute` is the deck. They differ for a float - the rotation drive reads
+    drive's own frame, `absolute` is the deck. They differ for a float - the elbow drive reads
     zero at its front stop, a quarter turn from the deck's +x, and the wrist reads from its own
     zero and turns with link 1 under it. A joint given neither angle holds where it is, read from
     the drive rather than assumed.
@@ -1836,7 +1829,7 @@ class iSWAP:
     Collision risk: the whole arm sweeps, and the path is neither joint's alone.
 
     Args:
-      elbow_relative_angle: where the rotation drive is to sit - `left`, `front` or `right` - or
+      elbow_relative_angle: where the elbow drive is to sit - `left`, `front` or `right` - or
         degrees signed from its front stop. Mutually exclusive with `elbow_absolute_angle`.
       elbow_absolute_angle: where link 1 is to point on the deck - `left`, `front` or `right` -
         or degrees on the deck. Mutually exclusive with `elbow_relative_angle`.
@@ -1881,7 +1874,7 @@ class iSWAP:
     if wrist_current_limit is None:
       wrist_current_limit = c.wrist_current_limit_default
     for relative, absolute, joint, own_frame in (
-      (elbow_relative_angle, elbow_absolute_angle, "rotation", "rotation drive"),
+      (elbow_relative_angle, elbow_absolute_angle, "elbow", "elbow drive"),
       (gripper_relative_angle, gripper_absolute_angle, "gripper", "wrist drive"),
     ):
       if relative is not None and absolute is not None:
@@ -2029,7 +2022,7 @@ class iSWAP:
     have not been read.
 
     Args:
-      elbow_angle: the rotation drive's angle, in degrees.
+      elbow_angle: the elbow drive's angle, in degrees.
       gripper_relative_angle: the wrist drive's angle, in degrees.
       y: where the drive would be, in mm. Where the model has it when None.
 
@@ -2083,7 +2076,7 @@ class iSWAP:
     read - a check that cannot be made must not look like one that passed.
 
     Args:
-      elbow_angle: where the rotation drive is being sent, in degrees.
+      elbow_angle: where the elbow drive is being sent, in degrees.
       gripper_relative_angle: where the wrist is being sent, in degrees.
       y: where the drive is being sent, in mm. Where the model has it when None, which is what a
         rotation leaves it at; a Y move carries the pose to a new Y without turning either joint.
@@ -2111,14 +2104,14 @@ class iSWAP:
     ):
       if point.y > y_max:
         raise ValueError(
-          f"rotation {elbow_angle:.2f} deg with the wrist at {gripper_relative_angle:.2f}{at} would put the "
-          f"{what} at y {point.y:.1f} mm, behind the {y_max:.1f} mm the rotation drive itself "
+          f"elbow {elbow_angle:.2f} deg with the wrist at {gripper_relative_angle:.2f}{at} would put the "
+          f"{what} at y {point.y:.1f} mm, behind the {y_max:.1f} mm the elbow itself "
           f"reaches - the X-arm runs across the back of the deck there. Turn the arm the other "
           f"way, or move the drive forward first"
         )
       if point.y < front:
         raise ValueError(
-          f"rotation {elbow_angle:.2f} deg with the wrist at {gripper_relative_angle:.2f}{at} would put the "
+          f"elbow {elbow_angle:.2f} deg with the wrist at {gripper_relative_angle:.2f}{at} would put the "
           f"{what} at y {point.y:.1f} mm, in front of the {front:.1f} mm the arm reaches with the "
           f"drive at its own front stop of {y_min:.1f} mm - the channels ride in front of it and "
           f"it stops behind them. Turn the arm the other way, or move the drive back first"
@@ -2136,10 +2129,10 @@ class iSWAP:
     except Exception:
       logger.warning("could not read where the iSWAP's joints stopped; its model is stale")
 
-  # -- rotation drive --------------------------------------------------------------
+  # -- elbow drive --------------------------------------------------------------
 
   async def elbow_drive_request_angle(self) -> float:
-    """Read the rotation drive's angle, signed from the calibrated front stop.
+    """Read the elbow drive's angle, signed from the calibrated front stop.
 
     Returns:
       The angle in degrees.
@@ -2151,7 +2144,7 @@ class iSWAP:
     return angle
 
   async def _elbow_drive_request_increments(self) -> int:
-    """Reads the rotation drive's position in the increments the drive counts in.
+    """Reads the elbow drive's position in the increments the drive counts in.
 
     Returns:
       int: The drive's position, in increments.
@@ -2166,7 +2159,7 @@ class iSWAP:
     acceleration: Optional[float] = None,
     current_limit: Optional[int] = None,
   ):
-    """Turn the rotation drive to an angle, holding the wrist where it is. This moves the arm.
+    """Turn the elbow drive to an angle, holding the wrist where it is. This moves the arm.
 
     A caller for `rotate_to_angles`, which is where the move and the model update live. The wrist
     is left to hold where it is, so one command carries both joints.
@@ -2226,7 +2219,7 @@ class iSWAP:
     acceleration: Optional[float] = None,
     current_limit: Optional[int] = None,
   ):
-    """Turn the wrist to an angle, holding the rotation drive where it is. This moves the arm.
+    """Turn the wrist to an angle, holding the elbow drive where it is. This moves the arm.
 
     The mirror of `elbow_drive_rotate_to_angle`, and the same one move underneath.
 
@@ -2927,14 +2920,14 @@ class iSWAP:
   ) -> iSWAPPose:
     """Where a joint state puts the gripper. Pure arithmetic: nothing is read.
 
-    One link off the rotation drive, and whatever is bolted to its far end. Link 1 leaves the drive
-    at the rotation angle; the tool leaves the wrist at that plus however far the wrist is turned
+    One link off the elbow drive, and whatever is bolted to its far end. Link 1 leaves the drive
+    at the elbow angle; the tool leaves the wrist at that plus however far the wrist is turned
     from straight. Angles are signed
     counter-clockwise seen from above, and a yaw of 0 points along +x, deck-right.
 
     Args:
       joints: the joint state, as `request_joint_state` returns it.
-      link_1_length: rotation joint to wrist joint, in mm - the arm's own.
+      link_1_length: elbow joint to wrist joint, in mm - the arm's own.
       tool_center_point_distance: wrist joint to the point the end-effector is programmed against,
         in mm - the tool's own, which the gripper reports as its `tool_center_point`.
       wrist_straight_angle: what the wrist reports when it is straight, in degrees.
@@ -2972,8 +2965,8 @@ class iSWAP:
     """Ask the master where the gripper's tool centre point is. Nothing is guarded.
 
     The master answers from what it tracks rather than from the drives, and it has only been
-    measured right with both joints at predefined stops. Away from them it answers the rotation
-    drive's own position, which is wrong by however far the arm reaches - 275 mm with the links
+    measured right with both joints at predefined stops. Away from them it answers the elbow's
+    own position, which is wrong by however far the arm reaches - 275 mm with the links
     extended. `request_pose` reads the drives and runs the kinematics, and is what anything
     relying on the answer should call.
 

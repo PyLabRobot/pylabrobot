@@ -41,7 +41,7 @@ class iSWAPHead(Resource):
       reference_point: the point the drives report, from the left front bottom corner.
       category: what kind of resource this is.
       model: which drive this is.
-      elbow_drive_angle: the rotation drive's angle as last read, as `serialize` writes it.
+      elbow_drive_angle: the elbow drive's angle as last read, as `serialize` writes it.
       wrist_drive_angle: the wrist drive's angle as last read, as `serialize` writes it.
     """
     super().__init__(
@@ -50,7 +50,7 @@ class iSWAPHead(Resource):
     self.reference_point = reference_point
     self.elbow_drive_angle: Optional[float] = elbow_drive_angle
     self.wrist_drive_angle: Optional[float] = wrist_drive_angle
-    """Which way the rotation drive reports the arm points, in degrees, or None until it is read.
+    """Which way the elbow drive reports the arm points, in degrees, or None until it is read.
 
     Kept in the drive's own terms, as it reports them. `rotation` carries the same fact rendered
     for the deck, which is neither the same reference nor the same axis: degrees there are the
@@ -76,7 +76,7 @@ class iSWAPHead(Resource):
 # to the plate it holds. They are measured against the height the Z drive reports, which is the
 # same plane `elbow_z_offset_above_finger` is measured from - and the model agrees with
 # it independently, since the pads' underside comes out exactly that far below. Link 1's joint is
-# below its member because the rotation drive's column stands under the arm.
+# below its member because the elbow drive's column stands under the arm.
 LINK_1_BODY_SIZE = (163.4, 25.5, 15.3)
 LINK_1_JOINT = Coordinate(12.7, 12.75, -20.3)
 GRIPPER_BODY_SIZE = (59.0, 90.0, 20.3)
@@ -88,7 +88,7 @@ GRIPPER_FINGER_LOCATION = GRIPPER_JOINT + Coordinate(6.5, 0.0, 4.0)
 GRIPPER_PAD_SIZE = (37.0, 4.0, 17.0)
 GRIPPER_PAD_LOCATION = Coordinate(109.0, 1.5, -17.0)
 
-# How far the rotation drive's own column stands above the height the Z drive reports, in mm. The
+# How far the elbow drive's own column stands above the height the Z drive reports, in mm. The
 # arm hangs below that: the drive reports where the material it carries is, not where its column
 # begins. The column stands on link 1 with nothing between them, so this follows link 1's own top
 # rather than being stated again - the two cannot drift apart.
@@ -193,7 +193,7 @@ def iswap_gripper(
 
 
 def iswap_link_1(name: str, length: float) -> LinkBody:
-  """The first member: the rotation joint to the wrist joint, with the arm bolted to it.
+  """The first member: the elbow joint to the wrist joint, with the arm bolted to it.
 
   Args:
     name: what to call this one.

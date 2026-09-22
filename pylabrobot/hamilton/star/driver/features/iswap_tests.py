@@ -167,9 +167,9 @@ class TestYMoves(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(moves(sent), [])
 
   async def test_a_y_move_that_carries_the_arm_behind_the_rail_is_refused(self):
-    """The arm rides the carriage, so moving it back carries the pose with it. Turned to rotation
+    """The arm rides the carriage, so moving it back carries the pose with it. Turned to elbow
     -90 deg with the wrist at -140 deg, the grip centre stands clear with the drive at 450 mm, and
-    137 mm behind the rotation drive's back stop once the drive is there."""
+    137 mm behind the elbow's back stop once the elbow is there."""
     iswap, sent = await gripper()
     c = iswap.configuration
     assert c.elbow_y_max is not None
@@ -194,7 +194,7 @@ class TestYMoves(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len([m for m in moves(sent) if m.startswith("R0YA")]), 1)
 
   async def test_only_park_puts_the_arm_in_its_parking_position(self):
-    """The parking pose leaves the wrist joint behind the rotation drive's back stop, which only the
+    """The parking pose leaves the wrist joint behind the elbow's back stop, which only the
     park command may do. A parked arm moves forward along Y, and is refused a move to the back stop
     that would leave it in that pose."""
     iswap, sent = await gripper()
@@ -284,7 +284,7 @@ class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
       iswap._check_pose_reachable(angle, wrist)
 
   async def test_a_grip_centre_just_in_front_of_the_rail_is_allowed(self):
-    """Rotation -3.5 deg with the wrist at 121 deg puts the grip centre 6.2 mm in front of the
+    """Elbow -3.5 deg with the wrist at 121 deg puts the grip centre 6.2 mm in front of the
     carriage's back stop. Measuring the tool from the gripper's corner rather than its wrist put it
     6.2 mm behind, and refused a pose the arm can reach."""
     iswap, _ = await gripper()
@@ -351,7 +351,7 @@ class TestGripperDirections(unittest.IsolatedAsyncioTestCase):
   """Where a named gripper direction sends the wrist."""
 
   async def test_every_named_pose_lands_on_a_stored_stop(self):
-    """Three rotation stops against four directions, each resolving to one of the four increments
+    """Three elbow stops against four directions, each resolving to one of the four increments
     this arm stores for its wrist. Nothing is pushed there: the conversion interpolates against the
     same stops, so a stop's own angle converts back to its own increment. A conversion anchored on
     the motor's zero instead would miss two of the four by around a degree, which is more than a

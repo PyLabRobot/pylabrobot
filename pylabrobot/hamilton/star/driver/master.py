@@ -1676,7 +1676,7 @@ class STARDriver:
         head.update_location_by_reference_point(y=y, z=z)
 
   async def _create_iswap_resource(self) -> None:
-    """Put each iSWAP's rotation drive on the arm it rides, where it is.
+    """Put each iSWAP's elbow on the arm it rides, where it is.
 
     A child of the arm's resource, not of the deck, so it follows the arm in X with nothing keeping
     the two in step. One already on the arm is reused, and repeated setups do not duplicate it.
@@ -1706,7 +1706,7 @@ class STARDriver:
       if resource is None:
         if c.elbow_x_offset is None:
           raise RuntimeError(
-            "the iSWAP rotation drive's X offset was not read; have you called `star.setup()`?"
+            "the iSWAP elbow's X offset was not read; have you called `star.setup()`?"
           )
         # How tall to model the column: nothing reports it, and what the device shows is its top
         # standing level with the tops of the channel bodies when the drive is fully retracted.
@@ -1753,7 +1753,7 @@ class STARDriver:
   ) -> Tuple[Optional[LinkBody], Optional[MechanicalGripper]]:
     """Hang the arm off the carriage: one link, and the gripper it carries.
 
-    Link 1 turns on the rotation drive; the gripper turns on the wrist that link 1 carries, so it
+    Link 1 turns on the elbow drive; the gripper turns on the wrist that link 1 carries, so it
     is a child of link 1 and its angle is measured from it. Where each points is written by
     `elbow_drive_update_angle` and `wrist_drive_update_angle`. What is already there is reused.
 

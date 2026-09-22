@@ -656,7 +656,7 @@ class SimulatedISWAP(_Simulated, iSWAP):
           )
         stops = (await self._request_slots("pw"))[: len(iSWAPElbowPositions.SLOTS)]
         parked = stops[iSWAPElbowPositions.SLOTS.index("parking")]
-        return {"rw": parked}, "the rotation drive's parking stop"
+        return {"rw": parked}, "the elbow drive's parking stop"
 
       if command == "RY":
         point = self.elbow_get_reference_point_location()
@@ -665,10 +665,10 @@ class SimulatedISWAP(_Simulated, iSWAP):
           # of the stored table rather than a position written down here.
           stops = (await self._request_slots("py"))[: len(iSWAPYPositions.SLOTS)]
           parked = stops[iSWAPYPositions.SLOTS.index("parking")]
-          return {"ry": [parked, parked]}, "the rotation drive's parking stop"
+          return {"ry": [parked, parked]}, "the elbow's parking stop"
         increments = c.y_mm_to_increments(point.y)
         # Two counters come back, the firmware's and the hardware's; the read takes the hardware.
-        return {"ry": [increments, increments]}, "where the model has the rotation drive along Y"
+        return {"ry": [increments, increments]}, "where the model has the elbow along Y"
 
       if command == "RZ":
         point = self.elbow_get_reference_point_location()
@@ -677,9 +677,9 @@ class SimulatedISWAP(_Simulated, iSWAP):
           # of the stored table rather than a height written down here.
           stops = (await self._request_slots("pz"))[: len(iSWAPZPositions.SLOTS)]
           parked = stops[iSWAPZPositions.SLOTS.index("parking")]
-          return {"rz": [parked, parked]}, "the rotation drive's parking stop"
+          return {"rz": [parked, parked]}, "the elbow's parking stop"
         increments = c.z_mm_to_increments(point.z - c.elbow_z_offset_above_finger)
-        return {"rz": [increments, increments]}, "where the model has the rotation drive along Z"
+        return {"rz": [increments, increments]}, "where the model has the elbow along Z"
       if command == "RT":
         angle = self.wrist_drive_get_angle()
         if angle is not None:
