@@ -342,8 +342,6 @@ class TestParked(unittest.IsolatedAsyncioTestCase):
     c = iswap.configuration
     await iswap.park()
 
-    # Seated on the model rather than moved to: the parking stop is past the far end of the Y the
-    # drive takes commands for, so it cannot be sent there.
     assert c.rotation_drive_predefined_y_positions_increments is not None
     stop = c.rotation_drive_predefined_y_positions_increments["parking"]
     iswap.update_location_by_reference_point(y=c.y_increments_to_mm(stop + 2))

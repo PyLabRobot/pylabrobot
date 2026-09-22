@@ -2970,8 +2970,6 @@ class iSWAP:
     """
     c = self.configuration
     joints = await self.request_joint_state()
-    # Each drive, its table, the slot its stop is in, what reads its position, and whether it may
-    # stand above that stop rather than on it.
     drives: List[Tuple[str, Optional[Dict[str, int]], str, Callable[[int], float], float, bool]] = [
       (
         "the rotation drive's Y",
@@ -3019,8 +3017,6 @@ class iSWAP:
       if table is None:
         raise RuntimeError(f"{what}'s stored table was not read; have you called `star.setup()`?")
       stop = table[slot]
-      # The tolerance is in increments, so it is taken across the same increments it allows: a
-      # conversion need not be linear, and the rotation drive's is not.
       tolerance = abs(to_units(stop + tolerance_increments) - to_units(stop))
       below = to_units(stop) - position > tolerance
       if below if at_least else abs(position - to_units(stop)) > tolerance:
