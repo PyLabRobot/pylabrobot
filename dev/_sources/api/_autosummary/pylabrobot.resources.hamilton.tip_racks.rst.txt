@@ -47,6 +47,7 @@ pylabrobot.resources.hamilton.tip\_racks
       hamilton_96_tiprack_ntr
       hamilton_96_tiprack_raised_core_i
       hamilton_96_tiprack_raised_core_ii
+      hamilton_96_tiprack_standard
       hamilton_tiprack_standard
    
    
