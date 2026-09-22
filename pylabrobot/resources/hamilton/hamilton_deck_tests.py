@@ -1,6 +1,7 @@
 import textwrap
 import unittest
 from typing import cast
+from unittest.mock import patch
 
 from pylabrobot.resources import Coordinate, Deck, Resource, TipRack
 from pylabrobot.resources.corning import (
@@ -15,6 +16,7 @@ from pylabrobot.resources.hamilton import (
   STARLetDeck,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
+  hamilton_tip_300uL,
 )
 from pylabrobot.resources.stanley.cups import (
   StanleyCup_QUENCHER_FLOWSTATE_TUMBLER,
@@ -218,6 +220,24 @@ class HamiltonDeckTests(unittest.TestCase):
         "careful when grabbing this resource.",
       ],
     )
+
+  def test_height_check_applies_to_deck_tools_but_not_device_siblings(self):
+    device = Resource("star", size_x=1700, size_y=800, size_z=900)
+    deck = STARDeck()
+    device.assign_child_resource(deck, location=Coordinate(110, 100, 80))
+    shelf = Resource("shelf", size_x=20, size_y=20, size_z=10)
+    deck.assign_child_resource(shelf, location=Coordinate(100, 100, 200))
+    tip = hamilton_tip_300uL(name="high_tip")
+    with self.assertLogs("pylabrobot.resources.hamilton.hamilton_decks", level="WARNING") as log:
+      shelf.assign_child_resource(tip, location=Coordinate(0, 0, 100))
+    self.assertEqual(len(log.output), 2)
+    self.assertTrue(all("high_tip" in line for line in log.output))
+
+    tip.unassign()
+    with patch("pylabrobot.resources.hamilton.hamilton_decks.logger.warning") as warning:
+      device.assign_child_resource(tip, location=Coordinate(100, 100, 400))
+      deck._check_safe_z_height(tip)
+    self.assertEqual(warning.call_args_list, [])
 
   def test_core_gripper_holder_on_the_waste_block_as_probed(self):
     # Probed on a STAR: the holder's top is at 220.0 and it is 19.5 mm tall, so it stands at 200.5.

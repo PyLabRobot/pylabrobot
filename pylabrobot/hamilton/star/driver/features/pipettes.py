@@ -241,7 +241,7 @@ class Pipettes:
     """
     self._driver = driver
     # One resource per channel, in channel order, when the driver was given a deck. Setup puts them
-    # on the arm; the reads keep them in step. Without a deck the list stays empty.
+    # on the device; the arm and channel reads keep them in step. Without a deck the list stays empty.
     self.resources: List[Resource] = []
     self.configuration = configuration or PipettesConfiguration()
     # The height the channels travel at when a command names none, in mm. Legacy STARBackend's
@@ -460,8 +460,7 @@ class Pipettes:
     """Where the model has a channel's reference point, in mm on the deck.
 
     The inverse of `update_location_by_reference_point`: it converts a reported position into a
-    location, and this converts a location back into the position that would be reported. X is
-    the arm's, so it is carried through unread.
+    location, and this converts a location back into the position that would be reported.
 
     Args:
       channel: which channel, 0-indexed from the back.
@@ -476,30 +475,37 @@ class Pipettes:
     if resource.location is None or resource.parent is None:
       return None
     return (
-      resource.location + resource.parent.get_location_wrt(deck) + self._reference_anchor(resource)
+      resource.get_absolute_location()
+      - deck.get_absolute_location()
+      + self._reference_anchor(resource)
     )
 
   def update_location_by_reference_point(
-    self, channel: int, y: Optional[float] = None, z: Optional[float] = None
+    self,
+    channel: int,
+    y: Optional[float] = None,
+    z: Optional[float] = None,
+    *,
+    x: Optional[float] = None,
   ) -> None:
     """Record where a channel is on the resource that models it.
 
-    Y and Z only. A channel rides the arm, so its resource is a child of the arm's and follows it
-    in X with nothing recording that. A resource is located by its left front bottom corner, and
-    each axis differs from the reported position by the channel's reference point.
+    The arm supplies X and each channel supplies Y and Z. A resource is located by its left front
+    bottom corner, and each axis differs from the reported position by the channel's reference point.
 
     The channel states that point, because it is not a corner of the box: the drives report the
     stop disc, the shaft a tip mounts on, which hangs below the body. A channel stating nothing
     falls back to its anchors, the same point when it carries no shaft.
 
     Both drives answer in the deck's frame, while a resource's location is measured from its
-    parent, the arm. The arm's position is taken out before either is recorded. Does nothing when
+    parent. The parent's position is taken out before each is recorded. Does nothing when
     the driver was given no deck to model into.
 
     Args:
       channel: which channel, 0-indexed from the back.
       y: where it is now, in mm on the deck. Left as it was when None.
       z: where its stop disc is now, in mm on the deck. Left as it was when None.
+      x: where the arm's reference point is now, in mm on the deck. Left as it was when None.
     """
     deck = self._driver.deck
     if channel >= len(self.resources) or deck is None:
@@ -507,12 +513,17 @@ class Pipettes:
     resource = self.resources[channel]
     if resource.location is None or resource.parent is None:
       return
-    here, on_the_arm = resource.location, resource.parent.get_location_wrt(deck)
+    here = resource.location
+    parent_on_deck = (
+      -deck.get_location_wrt(resource.parent)
+      if deck.is_in_subtree_of(resource.parent)
+      else resource.parent.get_location_wrt(deck)
+    )
     anchor = self._reference_anchor(resource)
     resource.location = Coordinate(
-      here.x,
-      here.y if y is None else y - on_the_arm.y - anchor.y,
-      here.z if z is None else z - on_the_arm.z - anchor.z,
+      here.x if x is None else x - parent_on_deck.x - anchor.x,
+      here.y if y is None else y - parent_on_deck.y - anchor.y,
+      here.z if z is None else z - parent_on_deck.z - anchor.z,
     )
 
   @staticmethod
@@ -726,8 +737,7 @@ class Pipettes:
     """Request where along X the channels are, in deck mm.
 
     The channels have no X drive. They ride the arm and sit at its reference point, and this asks
-    the arm. Nothing is recorded: each channel's resource is a child of the arm's and follows it
-    in X.
+    the arm. The arm records the position on its own resource and on each channel.
 
     Returns:
       The position in mm.
