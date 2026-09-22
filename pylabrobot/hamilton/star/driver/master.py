@@ -35,7 +35,7 @@ from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfiguration
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.hamilton.star.resource_model import (
-  ROTATION_DRIVE_COLUMN_ABOVE_REPORTED_Z,
+  ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z,
   iswap_gripper,
   iswap_head,
   iswap_link_1,
@@ -334,9 +334,9 @@ class STARDriver:
             low.append(f"{arm.side} {name} at {z:.1f} mm, safe is {safe:.1f} mm")
       iswap = arm.iswap
       if iswap is not None:
-        safe = iswap.configuration.rotation_drive_z_range[1]
+        safe = iswap.configuration.elbow_z_range[1]
         try:
-          z = await iswap.rotation_drive_request_z_position()
+          z = await iswap.elbow_request_z_position()
         except Exception:
           low.append(f"{arm.side} iSWAP (where it is could not be read)")
         else:
@@ -391,7 +391,7 @@ class STARDriver:
         # The arm is the same hazard as the rest: parking retracts it, and an arm left low is
         # driven through whatever it is over on the way home.
         if arm.iswap is not None:
-          safe_z_moves.append(arm.iswap.rotation_drive_move_to_safe_z_height())
+          safe_z_moves.append(arm.iswap.elbow_move_to_safe_z_height())
       if self.autoload is not None:
         safe_z_moves.append(self.autoload.wheel_move_to_safe_z())
 
@@ -1676,7 +1676,7 @@ class STARDriver:
         head.update_location_by_reference_point(y=y, z=z)
 
   async def _create_iswap_resource(self) -> None:
-    """Put each iSWAP's rotation drive on the arm it rides, where it is.
+    """Put each iSWAP's elbow on the arm it rides, where it is.
 
     A child of the arm's resource, not of the deck, so it follows the arm in X with nothing keeping
     the two in step. One already on the arm is reused, and repeated setups do not duplicate it.
@@ -1696,17 +1696,17 @@ class STARDriver:
       iswap = arm.iswap
       c = iswap.configuration
       # Read before it has a resource to read into, as the head's are.
-      y = await iswap.rotation_drive_request_y_position()
-      z = await iswap.rotation_drive_request_z_position()
-      angle = await iswap.rotation_drive_request_angle()
+      y = await iswap.elbow_request_y_position()
+      z = await iswap.elbow_request_z_position()
+      angle = await iswap.elbow_drive_request_angle()
       existing = next(
         (child for child in arm.resource.children if child.name == "iswap_head"), None
       )
       resource = existing if isinstance(existing, iSWAPHead) else None
       if resource is None:
-        if c.rotation_drive_x_offset is None:
+        if c.elbow_x_offset is None:
           raise RuntimeError(
-            "the iSWAP rotation drive's X offset was not read; have you called `star.setup()`?"
+            "the iSWAP elbow's X offset was not read; have you called `star.setup()`?"
           )
         # How tall to model the column: nothing reports it, and what the device shows is its top
         # standing level with the tops of the channel bodies when the drive is fully retracted.
@@ -1718,22 +1718,22 @@ class STARDriver:
         ]
         retracted_base = (
           c.z_increments_to_mm(c.z_range_increments[1])
-          + c.rotation_drive_z_offset_above_finger
-          + ROTATION_DRIVE_COLUMN_ABOVE_REPORTED_Z
+          + c.elbow_z_offset_above_finger
+          + ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z
         )
         resource = iswap_head(
           name="iswap_head",
-          diameter=c.rotation_drive_diameter,
-          size_z=round(max(tops) - retracted_base, 1) if tops else c.rotation_drive_size_z,
+          diameter=c.elbow_drive_diameter,
+          size_z=round(max(tops) - retracted_base, 1) if tops else c.elbow_drive_size_z,
         )
-        # The drive sits `rotation_drive_x_offset` left of the point the drive tracks the arm by,
+        # The drive sits `elbow_x_offset` left of the point the drive tracks the arm by,
         # and the arm is located by its own left edge, so it lands that far left of the reference
         # point.
         anchor = resource.reference_point
         arm.resource.assign_child_resource(
           resource,
           location=Coordinate(
-            arm.configuration.reference_point_from_left - c.rotation_drive_x_offset - anchor.x,
+            arm.configuration.reference_point_from_left - c.elbow_x_offset - anchor.x,
             0.0,
             0.0,
           ),
@@ -1741,7 +1741,7 @@ class STARDriver:
       iswap.resource = resource
       iswap.link_1, iswap.gripper = self._create_iswap_arm(resource, c)
       iswap.update_location_by_reference_point(y=y, z=z)
-      iswap.rotation_drive_update_angle(angle)
+      iswap.elbow_drive_update_angle(angle)
       iswap.wrist_drive_update_angle(await iswap.wrist_drive_request_angle())
       # And how far the jaws stand open, which the read records, so the model starts in step with
       # the arm rather than at whatever width the gripper was built holding.
@@ -1753,9 +1753,9 @@ class STARDriver:
   ) -> Tuple[Optional[LinkBody], Optional[MechanicalGripper]]:
     """Hang the arm off the carriage: one link, and the gripper it carries.
 
-    Link 1 turns on the rotation drive; the gripper turns on the wrist that link 1 carries, so it
+    Link 1 turns on the elbow drive; the gripper turns on the wrist that link 1 carries, so it
     is a child of link 1 and its angle is measured from it. Where each points is written by
-    `rotation_drive_update_angle` and `wrist_drive_update_angle`. What is already there is reused.
+    `elbow_drive_update_angle` and `wrist_drive_update_angle`. What is already there is reused.
 
     Args:
       resource: the carriage they hang from.
@@ -1785,7 +1785,7 @@ class STARDriver:
         name="iswap_gripper",
         # The Z drive is calibrated to the finger plane and reports its own bottom, so the grip
         # centre is that far below the wrist the gripper hangs from.
-        tool_center_point=Coordinate(c.tool_length, 0.0, -c.rotation_drive_z_offset_above_finger),
+        tool_center_point=Coordinate(c.tool_length, 0.0, -c.elbow_z_offset_above_finger),
         jaw_range=(
           c.gripper_increments_to_mm(c.gripper_range_increments[0]),
           c.gripper_increments_to_mm(c.gripper_range_increments[1]),

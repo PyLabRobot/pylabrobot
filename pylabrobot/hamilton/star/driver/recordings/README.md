@@ -80,7 +80,7 @@ grows a second head is one more entry, with no change to the format.
   been read off any device, so its offsets and drive defaults live in `simulator.py`.
 
   Some fields break this rule knowingly: the iSWAP's
-  `rotation_drive_predefined_z_positions_increments`, the 96-head's
+  `elbow_predefined_z_positions_increments`, the 96-head's
   `predefined_y_positions_increments` and `predefined_z_positions_increments`, and the whole of
   the 384-head, which no device has been read for at all. Each carries its drive's documented
   defaults rather than a reading, because a simulated device has to answer where it parks and
@@ -128,9 +128,9 @@ may be one that does not report the token rather than one that is legacy. Confir
 device before trusting the field on an FM.
 
 **Three stored tables are documented defaults rather than readings.** The iSWAP's
-`rotation_drive_predefined_z_positions_increments` and the 96-head's two predefined tables were
+`elbow_predefined_z_positions_increments` and the 96-head's two predefined tables were
 never read off a device, for the reason given above. Each has a reader that records what came
-back - `rotation_drive_request_predefined_z_positions`, `request_predefined_y_positions` and
+back - `elbow_request_predefined_z_positions`, `request_predefined_y_positions` and
 `request_predefined_z_positions` - so one call apiece on a device makes them real.
 
 **Two more identity facts are still unread.** A recording says which device answered and what it
