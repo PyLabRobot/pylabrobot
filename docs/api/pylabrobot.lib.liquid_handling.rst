@@ -3,7 +3,7 @@
 pylabrobot.lib.liquid_handling package
 ======================================
 
-Shared channel positioning and pipette batch planning for liquid-handling devices.
+Shared channel positioning, pipette batch planning, and tip consolidation planning.
 
 .. autosummary::
   :toctree: _autosummary
@@ -13,3 +13,4 @@ Shared channel positioning and pipette batch planning for liquid-handling device
     channel_positioning
     errors
     pipette_batch_scheduling
+    tip_consolidation

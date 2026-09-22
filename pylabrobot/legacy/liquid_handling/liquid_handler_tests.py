@@ -521,6 +521,31 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
 
+  async def test_consolidate_tip_inventory(self):
+    """Execute library-planned transfers through the normal tracked tip operations."""
+    self.tip_rack.set_tip_state([index >= 86 for index in range(96)])
+    self.backend.can_pick_up_tip.side_effect = lambda channel, tip: channel in [1, 3, 5]
+    tips = [spot.tracker.get_tip() for spot in self.tip_rack.get_all_items()[86:]]
+    set_tip_tracking(True)
+    try:
+      await self.lh.consolidate_tip_inventory([self.tip_rack])
+      self.assertEqual(
+        [spot.has_tip() for spot in self.tip_rack.get_all_items()],
+        [True] * 10 + [False] * 86,
+      )
+      self.assertEqual(
+        [spot.tracker.get_tip() for spot in self.tip_rack.get_all_items()[:10]], tips
+      )
+      self.assertFalse(any(tracker.has_tip for tracker in self.lh.head.values()))
+      self.assertEqual(self.backend.pick_up_tips.call_count, 4)
+      self.assertEqual(self.backend.drop_tips.call_count, 4)
+      self.assertEqual(
+        [call.kwargs["use_channels"] for call in self.backend.pick_up_tips.call_args_list],
+        [[1, 3, 5], [1, 3, 5], [1, 3, 5], [1]],
+      )
+    finally:
+      set_tip_tracking(False)
+
   async def test_offsets_tips(self):
     tip_spot = self.tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
