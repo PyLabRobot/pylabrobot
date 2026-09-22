@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import (
   TYPE_CHECKING,
   Callable,
+  ClassVar,
   Dict,
   List,
   Literal,
@@ -156,6 +157,18 @@ class iSWAPPose:
 
 @dataclasses.dataclass(frozen=True)
 class iSWAPYPositions:
+  SLOTS: ClassVar[Tuple[str, ...]] = (
+    "home",
+    "lower_limit",
+    "upper_limit",
+    "parking",
+    "pre_parking",
+    "extra_1",
+    "extra_2",
+    "extra_3",
+    "extra_4",
+    "extra_5",
+  )
   home: int
   lower_limit: int
   upper_limit: int
@@ -170,6 +183,18 @@ class iSWAPYPositions:
 
 @dataclasses.dataclass(frozen=True)
 class iSWAPZPositions:
+  SLOTS: ClassVar[Tuple[str, ...]] = (
+    "home",
+    "parking",
+    "extra_1",
+    "extra_2",
+    "extra_3",
+    "extra_4",
+    "extra_5",
+    "extra_6",
+    "extra_7",
+    "extra_8",
+  )
   home: int
   parking: int
   extra_1: int
@@ -184,6 +209,17 @@ class iSWAPZPositions:
 
 @dataclasses.dataclass(frozen=True)
 class iSWAPRotationPositions:
+  SLOTS: ClassVar[Tuple[str, ...]] = (
+    "home",
+    "left",
+    "front",
+    "right",
+    "parking",
+    "extra_1",
+    "extra_2",
+    "extra_3",
+    "extra_4",
+  )
   home: int
   left: int
   front: int
@@ -197,6 +233,17 @@ class iSWAPRotationPositions:
 
 @dataclasses.dataclass(frozen=True)
 class iSWAPWristPositions:
+  SLOTS: ClassVar[Tuple[str, ...]] = (
+    "home",
+    "right",
+    "straight",
+    "left",
+    "reverse",
+    "parking",
+    "extra_1",
+    "extra_2",
+    "extra_3",
+  )
   home: int
   right: int
   straight: int
@@ -210,6 +257,18 @@ class iSWAPWristPositions:
 
 @dataclasses.dataclass(frozen=True)
 class iSWAPGripperPositions:
+  SLOTS: ClassVar[Tuple[str, ...]] = (
+    "home",
+    "extra_1",
+    "closed",
+    "plate_type_1",
+    "plate_type_2",
+    "plate_type_3",
+    "plate_type_4",
+    "plate_type_5",
+    "plate_type_6",
+    "plate_type_7",
+  )
   home: int
   extra_1: int
   closed: int
@@ -249,91 +308,20 @@ class iSWAPConfiguration:
   master EEPROM. The Hamilton factory default is 34.0 mm."""
 
   # -- Y --
-  rotation_drive_y_slots: Tuple[str, ...] = (
-    "home",
-    "lower_limit",
-    "upper_limit",
-    "parking",
-    "pre_parking",
-    "extra_1",
-    "extra_2",
-    "extra_3",
-    "extra_4",
-    "extra_5",
-  )
-  """What the Y carriage's stored table holds, slot by slot. All position, and no arm length."""
-
   rotation_drive_predefined_y_positions_increments: Optional[iSWAPYPositions] = None
   """Each Y stop the carriage is calibrated against, in increments."""
 
   # -- Z --
-  rotation_drive_z_slots: Tuple[str, ...] = (
-    "home",
-    "parking",
-    "extra_1",
-    "extra_2",
-    "extra_3",
-    "extra_4",
-    "extra_5",
-    "extra_6",
-    "extra_7",
-    "extra_8",
-  )
-  """The same for the rotation drive's Z: ten stops, all position, no arm length."""
-
   rotation_drive_predefined_z_positions_increments: Optional[iSWAPZPositions] = None
   """Each Z stop the rotation drive is calibrated against, in increments of the finger plane.
   Read by discovery; the defaults are factory values, not one unit's calibration."""
 
   # -- rotation drive --
-  rotation_drive_slots: Tuple[str, ...] = (
-    "home",
-    "left",
-    "front",
-    "right",
-    "parking",
-    "extra_1",
-    "extra_2",
-    "extra_3",
-    "extra_4",
-  )
-  """What the rotation drive's stored table holds, slot by slot. The tenth slot is the arm length,
-  read separately. The extra slots are addressable but have no documented meaning."""
-
   rotation_drive_predefined_increments: Optional[iSWAPRotationPositions] = None
 
   # -- wrist drive --
-  wrist_drive_slots: Tuple[str, ...] = (
-    "home",
-    "right",
-    "straight",
-    "left",
-    "reverse",
-    "parking",
-    "extra_1",
-    "extra_2",
-    "extra_3",
-  )
-  """The same for the wrist twist drive."""
-
   wrist_drive_predefined_increments: Optional[iSWAPWristPositions] = None
   # -- gripper drive --
-  gripper_drive_slots: Tuple[str, ...] = (
-    "home",
-    "extra_1",
-    "closed",
-    "plate_type_1",
-    "plate_type_2",
-    "plate_type_3",
-    "plate_type_4",
-    "plate_type_5",
-    "plate_type_6",
-    "plate_type_7",
-  )
-  """What the gripper drive's stored table holds, slot by slot: all jaw width, no arm length. One
-  slot stands for both home and parking, seven are the widths a plate type is gripped at, and the
-  second has no documented meaning - its default is the top of the drive's range."""
-
   gripper_drive_predefined_increments: Optional[iSWAPGripperPositions] = None
   """Each jaw width the gripper is calibrated against, in increments. Read by discovery; the
   defaults are factory values, not one unit's calibration."""
@@ -833,7 +821,7 @@ class iSWAP:
     c = self.configuration
     slots = await self._request_slots("py")
     c.rotation_drive_predefined_y_positions_increments = iSWAPYPositions(*slots)
-    return {name: c.y_increments_to_mm(slot) for name, slot in zip(c.rotation_drive_y_slots, slots)}
+    return {name: c.y_increments_to_mm(slot) for name, slot in zip(iSWAPYPositions.SLOTS, slots)}
 
   async def request_link_1_length(self) -> float:
     """Request the distance from the rotation joint to the wrist joint.
@@ -863,14 +851,14 @@ class iSWAP:
     documented meaning.
 
     Returns:
-      Each stop in mm, keyed as `configuration.rotation_drive_z_slots` names them.
+      Each stop in mm, keyed by the position-table field names.
     """
     c = self.configuration
     slots = await self._request_slots("pz")
     c.rotation_drive_predefined_z_positions_increments = iSWAPZPositions(*slots)
     return {
       name: round(c.z_increments_to_mm(increments) + c.rotation_drive_z_offset_above_finger, 1)
-      for name, increments in zip(c.rotation_drive_z_slots, slots)
+      for name, increments in zip(iSWAPZPositions.SLOTS, slots)
     }
 
   async def gripper_drive_request_widths(self) -> Dict[str, float]:
@@ -884,14 +872,14 @@ class iSWAP:
     arm read for it once carries the table from then on.
 
     Returns:
-      Each width in mm, keyed as `configuration.gripper_drive_slots` names them.
+      Each width in mm, keyed by the position-table field names.
     """
     c = self.configuration
     slots = await self._request_slots("pg")
     c.gripper_drive_predefined_increments = iSWAPGripperPositions(*slots)
     return {
       name: c.gripper_increments_to_mm(increments)
-      for name, increments in zip(c.gripper_drive_slots, slots)
+      for name, increments in zip(iSWAPGripperPositions.SLOTS, slots)
     }
 
   async def _request_slots(self, table: str) -> List[int]:
@@ -1657,7 +1645,7 @@ class iSWAP:
     """A rotation stop's name or an angle, as the increments the drive counts in.
 
     Args:
-      angle: a stop in `configuration.rotation_drive_slots`, or degrees from the calibrated front stop.
+      angle: a named stop, or degrees from the calibrated front stop.
 
     Returns:
       Where the drive is to go, in increments.
@@ -1671,8 +1659,8 @@ class iSWAP:
       predefined_positions = c.rotation_drive_predefined_increments
       if predefined_positions is None:
         raise RuntimeError("the rotation drive's stops were not read; have you called `setup()`?")
-      if angle not in c.rotation_drive_slots:
-        raise ValueError(f"{angle!r} is not one of the stops {c.rotation_drive_slots}")
+      if angle not in iSWAPRotationPositions.SLOTS:
+        raise ValueError(f"{angle!r} is not one of the stops {iSWAPRotationPositions.SLOTS}")
       increments = {
         "home": predefined_positions.home,
         "left": predefined_positions.left,
@@ -1701,7 +1689,7 @@ class iSWAP:
     same in either frame.
 
     Args:
-      angle: a stop in `configuration.rotation_drive_slots`, or degrees on the deck.
+      angle: a named stop, or degrees on the deck.
 
     Returns:
       Where the drive is to go, in increments.
@@ -1785,7 +1773,7 @@ class iSWAP:
     """A wrist stop's name or an angle, as the increments the drive counts in.
 
     Args:
-      angle: a stop in `configuration.wrist_drive_slots`, or degrees from the drive's own zero.
+      angle: a named stop, or degrees from the drive's own zero.
 
     Returns:
       Where the drive is to go, in increments.
@@ -1799,8 +1787,8 @@ class iSWAP:
       stops = c.wrist_drive_predefined_increments
       if stops is None:
         raise RuntimeError("the wrist drive's stops were not read; have you called `setup()`?")
-      if angle not in c.wrist_drive_slots:
-        raise ValueError(f"{angle!r} is not one of the stops {c.wrist_drive_slots}")
+      if angle not in iSWAPWristPositions.SLOTS:
+        raise ValueError(f"{angle!r} is not one of the stops {iSWAPWristPositions.SLOTS}")
       increments = {
         "home": stops.home,
         "right": stops.right,
@@ -2186,7 +2174,7 @@ class iSWAP:
     is left to hold where it is, so one command carries both joints.
 
     Args:
-      angle: a stop named in `configuration.rotation_drive_slots`, or degrees signed from the
+      angle: a named stop, or degrees signed from the
         calibrated front stop.
       speed [deg/sec]: max angular velocity.
       acceleration [deg/sec^2]: max angular acceleration.
@@ -2245,7 +2233,7 @@ class iSWAP:
     The mirror of `rotation_drive_rotate_to_angle`, and the same one move underneath.
 
     Args:
-      angle: one of the stops in `configuration.wrist_drive_slots` - `straight`, `left`, `right`, `reverse`,
+      angle: one of the named wrist stops - `straight`, `left`, `right`, `reverse`,
         `parking` - which goes to the increment this arm stores for it, or degrees signed from the
         drive's own zero.
       speed [deg/sec]: max angular velocity.
