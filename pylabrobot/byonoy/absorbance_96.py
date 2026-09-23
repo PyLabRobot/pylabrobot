@@ -56,6 +56,26 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
     super().check_can_drop_resource_here(resource, reassign=reassign)
 
 
+class _ByonoyAbsorbanceIlluminationUnitHolder(ResourceHolder):
+  """Illumination unit holder: blocks drops onto a plate taller than the unit clears."""
+
+  # The tallest plate, lid included, the illumination unit goes on over.
+  MAX_PLATE_SIZE_Z = 16.0
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    base = self.parent
+    assert isinstance(base, ByonoyAbsorbanceBaseUnit)
+    plate = base.plate_holder.resource
+    if plate is not None:
+      top = plate.get_highest_known_point() - base.plate_holder.get_absolute_location().z
+      if top > self.MAX_PLATE_SIZE_Z:
+        raise RuntimeError(
+          f"Cannot drop resource {resource.name} onto {self.name}: {plate.name} stands {top:.2f} mm "
+          f"tall, above the {self.MAX_PLATE_SIZE_Z:.2f} mm the illumination unit clears."
+        )
+    super().check_can_drop_resource_here(resource, reassign=reassign)
+
+
 class ByonoyAbsorbanceBaseUnit(Resource):
   def __init__(
     self,
@@ -90,7 +110,7 @@ class ByonoyAbsorbanceBaseUnit(Resource):
     )
     self.assign_child_resource(self.plate_holder, location=Coordinate(x=22.5, y=5.0, z=16.0))
 
-    self.illumination_unit_holder = ResourceHolder(
+    self.illumination_unit_holder = _ByonoyAbsorbanceIlluminationUnitHolder(
       name=self.name + "_illumination_unit_holder",
       size_x=size_x,
       size_y=size_y,
