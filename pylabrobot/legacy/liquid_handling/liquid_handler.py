@@ -1249,13 +1249,6 @@ class LiquidHandler(Resource, Machine):
       )
     ]
 
-    # queue the operations on the resource (source) and mounted tips (destination) trackers
-    for op in aspirations:
-      if does_volume_tracking():
-        if not op.resource.tracker.is_disabled:
-          op.resource.tracker.remove_liquid(op.volume)
-        op.tip.tracker.add_liquid(volume=op.volume)
-
     extras = self._check_args(
       self.backend.aspirate,
       backend_kwargs,
@@ -1265,9 +1258,15 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # actually aspirate the liquid
+    # actually aspirate the liquid. The trackers are queued inside the try, so a tracker that
+    # refuses an operation rolls every channel back below, just like a backend error.
     error: Optional[Exception] = None
     try:
+      for op in aspirations:
+        if does_volume_tracking():
+          if not op.resource.tracker.is_disabled:
+            op.resource.tracker.remove_liquid(op.volume)
+          op.tip.tracker.add_liquid(volume=op.volume)
       await self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
     except Exception as e:
       error = e
@@ -1450,13 +1449,6 @@ class LiquidHandler(Resource, Machine):
       )
     ]
 
-    # queue the operations on the resource (source) and mounted tips (destination) trackers
-    for op in dispenses:
-      if does_volume_tracking():
-        if not op.resource.tracker.is_disabled:
-          op.resource.tracker.add_liquid(volume=op.volume)
-        op.tip.tracker.remove_liquid(op.volume)
-
     # fix the backend kwargs
     extras = self._check_args(
       self.backend.dispense,
@@ -1467,9 +1459,15 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # actually dispense the liquid
+    # actually dispense the liquid. The trackers are queued inside the try, so a tracker that
+    # refuses an operation rolls every channel back below, just like a backend error.
     error: Optional[Exception] = None
     try:
+      for op in dispenses:
+        if does_volume_tracking():
+          if not op.resource.tracker.is_disabled:
+            op.resource.tracker.add_liquid(volume=op.volume)
+          op.tip.tracker.remove_liquid(op.volume)
       await self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
     except Exception as e:
       error = e

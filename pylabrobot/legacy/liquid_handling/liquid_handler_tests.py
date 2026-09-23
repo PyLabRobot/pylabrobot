@@ -44,6 +44,8 @@ from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
+  TooLittleLiquidError,
+  TooLittleVolumeError,
 )
 from pylabrobot.resources.hamilton import (
   STARLetDeck,
@@ -1425,6 +1427,38 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     await self.lh.aspirate([well], vols=[10])
     await self.lh.dispense([well], vols=[10])
     self.assertEqual(well.tracker.volume, 10)
+
+  async def test_aspirate_refused_by_one_tracker_leaves_no_channel_queued(self):
+    wells = self.plate["A1:D1"]
+    for well, volume in zip(wells, [30, 30, 30, 21]):
+      well.tracker.set_volume(volume)
+    await self.lh.pick_up_tips(self.tip_rack["A1:D1"], use_channels=[0, 1, 2, 3])
+
+    with self.assertRaises(TooLittleLiquidError):
+      await self.lh.aspirate(wells, vols=[10, 10, 10, 21.5], use_channels=[0, 1, 2, 3])
+
+    self.assertEqual([w.tracker.get_used_volume() for w in wells], [30, 30, 30, 21])
+    self.assertEqual(
+      [self.lh.head[c].get_tip().tracker.get_used_volume() for c in range(4)], [0] * 4
+    )
+    self.backend.aspirate.assert_not_called()
+
+  async def test_dispense_refused_by_one_tracker_leaves_no_channel_queued(self):
+    sources, destinations = self.plate["A1:D1"], self.plate["A2:D2"]
+    for well in sources:
+      well.tracker.set_volume(30)
+    destinations[3].tracker.set_volume(355)
+    await self.lh.pick_up_tips(self.tip_rack["A1:D1"], use_channels=[0, 1, 2, 3])
+    await self.lh.aspirate(sources, vols=[10] * 4, use_channels=[0, 1, 2, 3])
+
+    with self.assertRaises(TooLittleVolumeError):
+      await self.lh.dispense(destinations, vols=[10] * 4, use_channels=[0, 1, 2, 3])
+
+    self.assertEqual([w.tracker.get_used_volume() for w in destinations], [0, 0, 0, 355])
+    self.assertEqual(
+      [self.lh.head[c].get_tip().tracker.get_used_volume() for c in range(4)], [10] * 4
+    )
+    self.backend.dispense.assert_not_called()
 
   async def test_mix_volume_tracking(self):
     for i in range(8):
