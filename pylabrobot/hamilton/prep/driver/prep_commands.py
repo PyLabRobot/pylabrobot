@@ -1623,7 +1623,7 @@ class TipPositionParameters:
     comparable to Nimbus/Vantage). z_seek_offset: additive mm on top of
     computed default (None = 0).
     """
-    z = loc.z + tip.total_tip_length - tip.fitting_depth
+    z = loc.z + tip.get_size_z() - tip.fitting_depth
     z_seek = z + tip.fitting_depth + 5.0 + (z_seek_offset or 0.0)
     return cls(
       default_values=False,
@@ -1668,14 +1668,14 @@ class TipDropParameters:
   ) -> TipDropParameters:
     """Build from an op location and tip (drop).
 
-    z_position uses (total_tip_length - fitting_depth) so the tip bottom lands
+    z_position uses (size_z - fitting_depth) so the tip bottom lands
     at the spot surface (consistent with STAR and with pickup).
-    z_seek default: loc.z + total_tip_length + 5mm so tip bottom clears adjacent tips during
+    z_seek default: loc.z + size_z + 5mm so tip bottom clears adjacent tips during
     lateral approach. z_seek_offset: additive mm on top of computed default
     (None = 0).
     """
-    z = loc.z + (tip.total_tip_length - tip.fitting_depth)
-    z_seek = loc.z + tip.total_tip_length + 2.0 + (z_seek_offset or 0.0)
+    z = loc.z + (tip.get_size_z() - tip.fitting_depth)
+    z_seek = loc.z + tip.get_size_z() + 2.0 + (z_seek_offset or 0.0)
     return cls(
       default_values=False,
       channel=channel,

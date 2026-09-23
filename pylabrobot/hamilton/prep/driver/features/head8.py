@@ -371,7 +371,7 @@ class Head8:
     tip_definition = PrepCmd.TipPickupParameters(
       default_values=False,
       volume=tip.maximal_volume,
-      length=tip.total_tip_length - tip.fitting_depth,
+      length=tip.get_size_z() - tip.fitting_depth,
       tip_type=PrepCmd.TipTypes.StandardVolume,
       has_filter=tip.has_filter,
       is_needle=False,
@@ -996,7 +996,7 @@ class Head8:
 
     traverse_z = self._resolve_traverse_height()
     final_z_resolved = (
-      z_final if z_final is not None else traverse_z - (tip.total_tip_length - tip.fitting_depth)
+      z_final if z_final is not None else traverse_z - (tip.get_size_z() - tip.fitting_depth)
     )
 
     if container is not None:
@@ -1209,7 +1209,7 @@ class Head8:
 
     traverse_z = self._resolve_traverse_height()
     final_z_resolved = (
-      z_final if z_final is not None else traverse_z - (tip.total_tip_length - tip.fitting_depth)
+      z_final if z_final is not None else traverse_z - (tip.get_size_z() - tip.fitting_depth)
     )
 
     if container is not None:

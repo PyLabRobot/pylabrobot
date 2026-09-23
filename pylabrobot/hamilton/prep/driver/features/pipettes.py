@@ -2749,14 +2749,14 @@ class Pipettes:
     if any(
       t.maximal_volume != tip0.maximal_volume
       or t.has_filter != tip0.has_filter
-      or (t.total_tip_length - t.fitting_depth) != (tip0.total_tip_length - tip0.fitting_depth)
+      or (t.get_size_z() - t.fitting_depth) != (tip0.get_size_z() - tip0.fitting_depth)
       for t in tips
     ):
       raise ValueError("All tip spots must use the same tip type")
     tip_definition = PrepCmd.TipPickupParameters(
       default_values=False,
       volume=tip0.maximal_volume,
-      length=tip0.total_tip_length - tip0.fitting_depth,
+      length=tip0.get_size_z() - tip0.fitting_depth,
       tip_type=PrepCmd.TipTypes.StandardVolume,
       has_filter=tip0.has_filter,
       is_needle=False,
@@ -2816,7 +2816,7 @@ class Pipettes:
     """Drop tips to tip spots or trash.
 
     The arm moves to z_seek during lateral XY approach (tip is on pipette, so tip
-    bottom is at z_seek - (total_tip_length - fitting_depth)). z_position uses
+    bottom is at z_seek - (size_z - fitting_depth)). z_position uses
     fitting depth so the tip bottom lands at the spot surface; default z_seek =
     z_position + 10mm so the tip bottom stays above adjacent tips in the rack.
     """
@@ -3027,7 +3027,7 @@ class Pipettes:
     z_fluid = fill_in_defaults(z_fluid, [g.liquid_surface for g in well_geometry])
     z_air = fill_in_defaults(z_air, [g.z_air for g in well_geometry])
     z_final = fill_in_defaults(
-      z_final, [raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops]
+      z_final, [raw_traverse - (op.tip.get_size_z() - op.tip.fitting_depth) for op in ops]
     )
     z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, [2.0] * n)
 

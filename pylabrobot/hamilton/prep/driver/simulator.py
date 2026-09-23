@@ -770,7 +770,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
         default_values=False,
         id=0 if tip is None else 1,
         volume=0.0 if tip is None else tip.maximal_volume,
-        length=0.0 if tip is None else tip.total_tip_length - tip.fitting_depth,
+        length=0.0 if tip is None else tip.get_size_z() - tip.fitting_depth,
         tip_type=0 if tip is None else int(PrepCmd.TipTypes.StandardVolume),
         has_filter=False if tip is None else tip.has_filter,
         is_needle=False,
