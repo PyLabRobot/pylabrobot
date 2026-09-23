@@ -1,0 +1,6 @@
+pylabrobot.hamilton.prep.Prep
+=============================
+
+.. currentmodule:: pylabrobot.hamilton.prep
+
+.. autofunction:: Prep

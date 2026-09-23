@@ -1,0 +1,6 @@
+pylabrobot.hamilton.transport.tcp.HoiError
+==========================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.tcp
+
+.. autoexception:: HoiError

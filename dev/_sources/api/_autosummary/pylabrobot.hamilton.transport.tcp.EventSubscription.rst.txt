@@ -1,0 +1,6 @@
+pylabrobot.hamilton.transport.tcp.EventSubscription
+===================================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.tcp
+
+.. autoclass:: EventSubscription

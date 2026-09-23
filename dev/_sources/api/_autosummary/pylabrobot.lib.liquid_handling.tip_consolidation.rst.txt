@@ -3,7 +3,7 @@
 pylabrobot.lib.liquid\_handling.tip\_consolidation
 ==================================================
 
-.. currentmodule:: pylabrobot.lib.liquid_handling.tip_consolidation
+.. currentmodule:: pylabrobot.lib.liquid_handling
 
 .. automodule:: pylabrobot.lib.liquid_handling.tip_consolidation
 

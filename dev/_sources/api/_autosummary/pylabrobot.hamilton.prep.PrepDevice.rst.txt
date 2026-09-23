@@ -1,0 +1,6 @@
+pylabrobot.hamilton.prep.PrepDevice
+===================================
+
+.. currentmodule:: pylabrobot.hamilton.prep
+
+.. autoclass:: PrepDevice

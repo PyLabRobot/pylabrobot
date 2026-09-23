@@ -3,7 +3,7 @@
 pylabrobot.lib.liquid\_handling.pipette\_batch\_scheduling
 ==========================================================
 
-.. currentmodule:: pylabrobot.lib.liquid_handling.pipette_batch_scheduling
+.. currentmodule:: pylabrobot.lib.liquid_handling
 
 .. automodule:: pylabrobot.lib.liquid_handling.pipette_batch_scheduling
 

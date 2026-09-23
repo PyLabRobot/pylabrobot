@@ -3,7 +3,7 @@
 pylabrobot.lib.liquid\_handling.channel\_positioning
 ====================================================
 
-.. currentmodule:: pylabrobot.lib.liquid_handling.channel_positioning
+.. currentmodule:: pylabrobot.lib.liquid_handling
 
 .. automodule:: pylabrobot.lib.liquid_handling.channel_positioning
 
