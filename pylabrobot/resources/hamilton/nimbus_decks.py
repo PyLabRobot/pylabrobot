@@ -12,12 +12,32 @@ import warnings
 from typing import Any, Dict, List, Literal, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
 from pylabrobot.serializer import serialize
 
 logger = logging.getLogger(__name__)
+
+
+def nimbus_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
+  """CORE gripper rack for Nimbus decks, co-located with the waste block.
+
+  Derived from measured Hamilton coordinates on the default Nimbus8 deck:
+    Front paddle (ch_last): Ham(557.352, -293.030, 147.559) -> PLR y = 70.800
+    Back paddle  (ch1):     Ham(557.352, -263.820, 147.559) -> PLR y = 100.010
+    Resource center placed at PLR(708.862, 85.405, 147.559).
+  """
+  return HamiltonCoreGrippers(
+    name="core_grippers",
+    back_channel_y_center=14.605,
+    front_channel_y_center=-14.605,
+    size_x=20.0,
+    size_y=30.0,
+    size_z=25.0,
+    model="nimbus_core_gripper_1000ul_at_waste",
+  )
 
 
 class NimbusDeck(HamiltonDeck):
