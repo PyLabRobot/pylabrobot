@@ -147,7 +147,7 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
   _ERROR_NAMES = ABS96_ERROR_NAMES
 
   def __init__(self, name: str = "byonoy_absorbance_96") -> None:
-    ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base")
+    ByonoyAbsorbanceBaseUnit.__init__(self, name=name)
     ByonoyDriver.__init__(
       self, pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96"
     )
@@ -355,7 +355,7 @@ def byonoy_a96a_parking_unit(name: str) -> ByonoyAbsorbanceBaseUnit:
 
 def byonoy_a96a(name: str, assign: bool = True) -> Tuple[ByonoyAbsorbance96, Resource]:
   """Create a full Byonoy A96A setup (reader + illumination unit)."""
-  reader = byonoy_a96a_detection_unit(name=name + "_reader")
+  reader = byonoy_a96a_detection_unit(name=name)
   illumination_unit = byonoy_a96a_illumination_unit(name=name + "_illumination_unit")
   if assign:
     reader.illumination_unit_holder.assign_child_resource(illumination_unit)
