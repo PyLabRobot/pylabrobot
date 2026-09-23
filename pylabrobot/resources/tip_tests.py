@@ -34,6 +34,7 @@ class TipTests(unittest.TestCase):
       {
         "type": "Tip",
         "name": "test_tip",
+        "category": "tip",
         "diameter": TIP_DIAMETER[TipSize.STANDARD_VOLUME],
         "size_z": 10.0,
         "pick_up_location": None,
@@ -70,6 +71,7 @@ class TipTests(unittest.TestCase):
       {
         "type": "HamiltonTip",
         "name": "test_tip",
+        "category": "tip",
         "diameter": 8.2,
         "pick_up_location": None,
         "has_filter": False,

@@ -59,10 +59,26 @@ class ShaftHoldsItsTip(unittest.TestCase):
       ),
     )
 
-  def test_an_empty_shaft_differs_from_one_carrying_a_tip(self):
+  def test_a_turned_tool_is_still_taken_by_its_pick_up_location(self):
+    """A tool parked facing the other way is picked up by the same point on it, so that point -
+    not its origin, which the turn has moved to the far corner - lands on the shaft's axis."""
+    tool = hamilton_core_gripper_tool(name="grip")
+    tool.rotate(z=180)
+    self.shaft.mount_tip(tool)
+
+    assert tool.location is not None
+    assert tool.pick_up_location is not None
+    grip = tool.location + tool.pick_up_location.rotated(tool.rotation)
+    self.assertEqual(
+      Coordinate(grip.x, grip.y, 0),
+      Coordinate(self.shaft.get_size_x() / 2, self.shaft.get_size_y() / 2, 0),
+    )
+    self.assertEqual(grip.z, tool.fitting_depth)
+
+  def test_an_empty_shaft_equals_one_carrying_a_tip(self):
     other = TipMountingShaft(name="shaft", tip_pickup_mode="core")
     self.shaft.mount_tip(self.tip)
-    self.assertNotEqual(self.shaft, other)
+    self.assertEqual(self.shaft, other)
 
 
 if __name__ == "__main__":

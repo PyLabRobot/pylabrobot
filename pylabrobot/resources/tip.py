@@ -30,7 +30,7 @@ class Tip(HeadTool):
     fitting_depth: float,
     nominal_volume: Optional[float] = None,
     collar_height: Optional[float] = None,
-    category: Optional[str] = None,
+    category: str = "tip",
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
   ):
@@ -82,6 +82,11 @@ class Tip(HeadTool):
     if self._collar_height is None:
       raise ValueError(f"collar_height is not defined for this tip: {self!r}")
     return self._collar_height
+
+  @property
+  def has_collar_height(self) -> bool:
+    """Whether this tip specifies a collar height."""
+    return self._collar_height is not None
 
 
 TipCreator = Callable[[str], Tip]

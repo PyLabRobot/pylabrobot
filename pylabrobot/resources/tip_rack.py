@@ -3,16 +3,50 @@ from __future__ import annotations
 import warnings
 from abc import ABCMeta
 from collections import OrderedDict
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Union, cast
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.errors import HasTipError, NoTipError
+from pylabrobot.resources.head_tool import HeadTool, move_tool, release_named_tool
 from pylabrobot.resources.tip import Tip, TipCreator
-from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
+from pylabrobot.resources.tip_tracking import does_tip_tracking
 
 from .itemized_resource import ItemizedResource
 from .lid import Lid, Liddable
 from .resource import Resource
 from .resource_stack import ResourceStack
+
+if TYPE_CHECKING:
+  from pylabrobot.legacy.tip_tracker import TipTracker
+
+
+def _legacy_tracker(spot: "TipSpot") -> "TipTracker":
+  """The legacy liquid handler's tracker for a spot: a view on its tip in the tree.
+
+  TODO: Remove >2026-12, with the methods on `TipSpot` and `TipRack` that use it.
+  """
+  from pylabrobot.legacy.tip_tracker import tip_spot_tracker
+
+  return tip_spot_tracker(spot)
+
+
+def resting_location(holder: Resource, tip: Tip) -> Coordinate:
+  """Where a tip rests in a tip spot: centred on it, its pick-up location `collar_height` above.
+
+  Args:
+    holder: the spot.
+    tip: the tip resting in it.
+
+  Returns:
+    The tip's location, relative to the spot.
+  """
+  collar_height = tip.collar_height if tip.has_collar_height else 0.0
+  pick_up = tip.pick_up_location or tip.get_anchor("c", "c", "t")
+  return Coordinate(
+    x=holder.get_size_x() / 2 - pick_up.x,
+    y=holder.get_size_y() / 2 - pick_up.y,
+    z=collar_height - pick_up.z,
+  )
 
 
 class TipSpot(Resource):
@@ -53,14 +87,103 @@ class TipSpot(Resource):
       category=category,
       metadata=metadata,
     )
-    self.tracker = TipTracker(thing="Tip spot")
     self.parent: Optional["TipRack"] = None
 
     self._tip_counter: int = 0
 
     self._make_tip_func = make_tip
 
-    self.tracker.register_callback(self._state_updated)
+    # Whether this spot gives up and takes back tips, with tip tracking on. The tip itself is state
+    # of the tree: this spot's child.
+    self.tip_tracking_enabled = True
+
+  def comparable_children(self) -> List[Resource]:
+    """Everything but the tip it is holding, which is state."""
+    return [child for child in self.children if not isinstance(child, HeadTool)]
+
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True,
+  ):
+    """Assign a child. A tip assigned here is this spot's tip.
+
+    A tip given no location rests by its collar.
+
+    Raises:
+      HasTipError: If a tip is assigned to a spot already holding a different one.
+    """
+    if isinstance(resource, Tip):
+      held = self.tip
+      if held is not None and held is not resource:
+        raise HasTipError(f"{self.name} already holds {held.name}")
+      if location is None:
+        location = resting_location(self, resource)
+    super().assign_child_resource(resource, location=location, reassign=reassign)
+
+  @property
+  def tip(self) -> Optional[Tip]:
+    """The tip this spot holds in the resource tree, or None if it holds none.
+
+    Read from the tree alone, not from the tracker: a tip moved onto a channel is no longer here.
+    """
+    return next((child for child in self.children if isinstance(child, Tip)), None)
+
+  @property
+  def tracks_tips(self) -> bool:
+    """Whether what this spot holds is tracked: tip tracking is on, and not disabled for this spot.
+
+    A tracked spot gives up the tip it holds when one is picked up, and takes one back when one is
+    dropped into it. An untracked spot is left as it is: it hands out a fresh tip every time, as a
+    spot does with tip tracking off.
+    """
+    return does_tip_tracking() and self.tip_tracking_enabled
+
+  def disable_tip_tracking(self) -> None:
+    """Leave this spot as it is whatever is picked up from it or dropped into it."""
+    self.tip_tracking_enabled = False
+
+  def enable_tip_tracking(self) -> None:
+    """Track this spot again, when tip tracking is on."""
+    self.tip_tracking_enabled = True
+
+  def tip_for_pickup(self) -> Tip:
+    """The tip a channel picking up from this spot collects.
+
+    Raises:
+      NoTipError: If the spot is tracked and holds no tip.
+    """
+    if not self.tracks_tips:
+      return self.make_tip()
+    if self.tip is None:
+      raise NoTipError(f"{self.name} holds no tip")
+    return self.tip
+
+  def assign_tip(self, tip: Tip) -> None:
+    """Put a tip in this spot, resting by its collar, wherever it was before.
+
+    Raises:
+      HasTipError: If the spot already holds a tip.
+    """
+    if self.tip is not None:
+      raise HasTipError(f"{self.name} already holds a tip")
+    move_tool(tip, lambda: self.assign_child_resource(tip, location=resting_location(self, tip)))
+
+  def unassign_tip(self) -> Tip:
+    """Take the tip out of this spot.
+
+    Returns:
+      The tip, which belongs to nothing until it is assigned elsewhere.
+
+    Raises:
+      NoTipError: If the spot holds no tip.
+    """
+    tip = self.tip
+    if tip is None:
+      raise NoTipError(f"{self.name} holds no tip")
+    self.unassign_child_resource(tip)
+    return tip
 
   def _get_next_tip_name(self) -> str:
     """Generate a unique name for the next tip originating from this spot."""
@@ -74,30 +197,42 @@ class TipSpot(Resource):
 
     return self._make_tip_func(self._get_next_tip_name())
 
+  # -- legacy ------------------------------------------------------------------------------------
+  # TODO: Remove >2026-12. The legacy liquid handler's view of this spot, with its pending
+  # operations: `tip`, `tip_for_pickup`, `assign_tip` and `unassign_tip` read and move the tree.
+
+  @property
+  def tracker(self) -> "TipTracker":
+    """Deprecated: the legacy liquid handler's tracker for this spot. Use `tip`."""
+    return _legacy_tracker(self)
+
   def get_tip(self) -> Tip:
-    """Get a tip from the tip spot."""
+    """Deprecated: get a tip from the tip spot. Use `tip` or `tip_for_pickup`."""
 
     # Tracker will raise an error if there is no tip. We spawn a new tip if tip tracking is disabled
-    tracks = does_tip_tracking() and not self.tracker.is_disabled
-    if not self.tracker.has_tip and not tracks:
-      self.tracker.add_tip(self.make_tip(), origin=self)
+    tracker = _legacy_tracker(self)
+    tracks = does_tip_tracking() and not tracker.is_disabled
+    if not tracker.has_tip and not tracks:
+      tracker.add_tip(self.make_tip(), origin=self)
 
-    return self.tracker.get_tip()
+    return tracker.get_tip()
 
   def has_tip(self) -> bool:
-    """Check if the tip spot has a tip."""
-    return self.tracker.has_tip
+    """Deprecated: check if the tip spot has a tip. Use `tip`."""
+    return _legacy_tracker(self).has_tip
 
   def empty(self) -> None:
-    """Empty the tip spot."""
-    self.tracker.remove_tip()
+    """Deprecated: empty the tip spot. Use `unassign_tip`."""
+    _legacy_tracker(self).remove_tip()
 
   def serialize(self) -> dict:
-    """Serialize the tip spot."""
-    return {
+    """Serialize the tip spot. Its tip is state, not a serialized child."""
+    data = {
       **super().serialize(),
       "prototype_tip": self.make_tip().serialize(),
     }
+    data.pop("children", None)
+    return data
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False) -> TipSpot:
@@ -119,12 +254,24 @@ class TipSpot(Resource):
     )
 
   def serialize_state(self) -> Dict[str, Any]:
-    return {**super().serialize_state(), **self.tracker.serialize()}
+    """This spot's state, with the tip it holds in the tree: `tip`, `tip_state` and `pending_tip`.
+
+    `pending_tip` is the tip held now. `tip` is the same one, unless the legacy liquid handler has an
+    operation on this spot it has not yet committed.
+    """
+    return {**super().serialize_state(), **_legacy_tracker(self).serialize()}
 
   def load_state(self, state: Dict[str, Any]):
+    """Load this spot's state: the saved `pending_tip` goes into it, as this spot's child.
+
+    A tool of the same name held elsewhere in the same tree, on a channel say, gives way first.
+    """
     super().load_state(state)
     tracker_state = {k: v for k, v in state.items() if k != "rotation"}
-    self.tracker.load_state(tracker_state)
+    pending = tracker_state.get("pending_tip")
+    if pending is not None:
+      release_named_tool(self.get_root(), pending["name"], keep=self.tip)
+    _legacy_tracker(self).load_state(tracker_state)
 
   def get_identifier(self) -> str:
     """Get the (canonical) identifier, like `"A1"` of the tip spot in the parent tip rack. If the
@@ -134,6 +281,26 @@ class TipSpot(Resource):
       raise ValueError("TipSpot must be in a tip rack to get its identifier.")
 
     return self.parent.get_child_identifier(self)
+
+
+def tip_origin(tip: Tip, root: Resource) -> Optional[TipSpot]:
+  """The tip spot a tip was made by, looked up in a tree.
+
+  A spot names each tip it makes after itself, `rack_tipspot_A1#0` say, so the name leads back to it
+  wherever the tip is now.
+
+  Args:
+    tip: the tip.
+    root: the tree to look for the spot in, a deck say.
+
+  Returns:
+    The spot, or None if the tip's name names no spot in `root`.
+  """
+  spot_name, separator, _ = tip.name.rpartition("#")
+  if not separator or not root.has_resource(spot_name):
+    return None
+  spot = root.get_resource(spot_name)
+  return spot if isinstance(spot, TipSpot) else None
 
 
 class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
@@ -236,21 +403,40 @@ class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
       should_have = cast(Dict[Union[int, str], bool], tips)  # type?
 
     for identifier, should_have_tip in should_have.items():
-      if should_have_tip and not self.get_item(identifier).has_tip():
-        spot = self.get_item(identifier)
-        spot.tracker.add_tip(spot.make_tip(), origin=spot, commit=True)
-      elif not should_have_tip and self.get_item(identifier).has_tip():
-        self.get_item(identifier).tracker.remove_tip(commit=True)
+      spot = self.get_item(identifier)
+      tracker = _legacy_tracker(spot)
+      if should_have_tip and not tracker.has_tip:
+        tracker.add_tip(spot.make_tip(), origin=spot, commit=True)
+      elif not should_have_tip and tracker.has_tip:
+        tracker.remove_tip(commit=True)
+
+  def disable_tip_tracking(self) -> None:
+    """Disable tip tracking for every spot in this tip rack."""
+    for item in self.get_all_items():
+      item.disable_tip_tracking()
+
+  def enable_tip_tracking(self) -> None:
+    """Enable tip tracking for every spot in this tip rack."""
+    for item in self.get_all_items():
+      item.enable_tip_tracking()
 
   def disable_tip_trackers(self) -> None:
-    """Disable tip tracking for all tips in this tip rack."""
-    for item in self.get_all_items():
-      item.tracker.disable()
+    """Deprecated: use `disable_tip_tracking`. TODO: Remove >2026-12"""
+    warnings.warn(
+      "TipRack.disable_tip_trackers is deprecated. Use 'disable_tip_tracking' instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    self.disable_tip_tracking()
 
   def enable_tip_trackers(self) -> None:
-    """Enable tip tracking for all tips in this tip rack."""
-    for item in self.get_all_items():
-      item.tracker.enable()
+    """Deprecated: use `enable_tip_tracking`. TODO: Remove >2026-12"""
+    warnings.warn(
+      "TipRack.enable_tip_trackers is deprecated. Use 'enable_tip_tracking' instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    self.enable_tip_tracking()
 
   def empty(self):
     """Empty the tip rack. This is useful when tip tracking is enabled and you are modifying
