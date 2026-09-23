@@ -1,93 +1,48 @@
 import unittest
-from typing import List
+from typing import cast
+from unittest.mock import AsyncMock, call
 
 from pylabrobot.generic import SerialBarcodeScanner
+from pylabrobot.io.testing import fake_serial
 
 
-class FakeSerialIO:
-  def __init__(self, chunks: List[bytes]):
-    self.chunks = chunks
-    self.writes: List[bytes] = []
-    self.port = "COM_TEST"
-    self.timeout: float = 1
-    self.setup_called = False
-    self.stop_called = False
-    self.reset_input_buffer_called = False
-
-  async def setup(self):
-    self.setup_called = True
-
-  async def stop(self):
-    self.stop_called = True
-
-  async def read(self, num_bytes: int = 1) -> bytes:
-    del num_bytes
-    if len(self.chunks) == 0:
-      return b""
-    return self.chunks.pop(0)
-
-  async def write(self, data: bytes):
-    self.writes.append(data)
-
-  async def reset_input_buffer(self):
-    self.reset_input_buffer_called = True
-
-  def get_read_timeout(self) -> float:
-    return self.timeout
-
-  def set_read_timeout(self, timeout: float) -> None:
-    self.timeout = timeout
-
-  def temporary_timeout(self, timeout: float):
-    fake = self
-
-    class TemporaryTimeout:
-      def __enter__(self):
-        self.original_timeout = fake.timeout
-        fake.timeout = timeout
-
-      def __exit__(self, exc_type, exc_value, traceback):
-        fake.timeout = self.original_timeout
-
-    return TemporaryTimeout()
-
-
-def make_scanner(chunks: List[bytes]) -> SerialBarcodeScanner:
+def make_scanner(incoming: bytes) -> SerialBarcodeScanner:
+  """Create a scanner with the supplied bytes waiting on its serial transport."""
   scanner = SerialBarcodeScanner(port="COM_TEST")
-  scanner.io = FakeSerialIO(chunks)  # type: ignore[assignment]
+  scanner.io = fake_serial(incoming=incoming, port="COM_TEST")  # type: ignore[assignment]
   return scanner
 
 
 class TestSerialBarcodeScanner(unittest.IsolatedAsyncioTestCase):
   async def test_read_line_carriage_return(self):
-    scanner = make_scanner([b"1", b"2", b"3", b"\r"])
+    scanner = make_scanner(b"123\r")
 
     self.assertEqual(await scanner.read_line(timeout=1), "123")
 
   async def test_read_line_newline(self):
-    scanner = make_scanner([b"A", b"B", b"C", b"\n"])
+    scanner = make_scanner(b"ABC\n")
 
     self.assertEqual(await scanner.read_line(timeout=1), "ABC")
 
   async def test_read_line_timeout_before_data(self):
-    scanner = make_scanner([])
+    scanner = make_scanner(b"")
 
     self.assertEqual(await scanner.read_line(timeout=0), "")
 
   async def test_read_line_rejects_negative_timeout(self):
-    scanner = make_scanner([])
+    scanner = make_scanner(b"")
 
     with self.assertRaises(ValueError):
       await scanner.read_line(timeout=-1)
 
   async def test_reset_input_buffer(self):
-    scanner = make_scanner([])
+    scanner = make_scanner(b"")
 
     await scanner.reset_input_buffer()
 
-    fake_io = scanner.io
-    assert isinstance(fake_io, FakeSerialIO)
-    self.assertTrue(fake_io.reset_input_buffer_called)
+    reset_input_buffer = cast(AsyncMock, scanner.io.reset_input_buffer)
+    reset_input_buffer.assert_awaited_once_with()
+    self.assertEqual(reset_input_buffer.call_count, reset_input_buffer.await_count)
 
   def test_rejects_empty_terminators(self):
     with self.assertRaises(ValueError):
@@ -102,8 +57,7 @@ class TestSerialBarcodeScanner(unittest.IsolatedAsyncioTestCase):
       SerialBarcodeScanner(port="COM_TEST", max_line_length=0)
 
   async def test_scan_barcode(self):
-    scanner = SerialBarcodeScanner(port="COM_TEST")
-    scanner.io = FakeSerialIO([b"2", b"2", b"6", b"\r"])  # type: ignore[assignment]
+    scanner = make_scanner(b"226\r")
 
     barcode = await scanner.scan_barcode(
       read_time=1,
@@ -117,7 +71,7 @@ class TestSerialBarcodeScanner(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(barcode.position_on_resource, "right")
 
   async def test_scan_barcode_returns_none_on_timeout(self):
-    scanner = make_scanner([])
+    scanner = make_scanner(b"")
 
     self.assertIsNone(await scanner.scan_barcode(read_time=0))
 
@@ -127,25 +81,25 @@ class TestSerialBarcodeScanner(unittest.IsolatedAsyncioTestCase):
       trigger_command=b"TRIGGER\r",
       untrigger_command=b"UNTRIGGER\r",
     )
-    scanner.io = FakeSerialIO([b"1", b"2", b"3", b"\r"])  # type: ignore[assignment]
+    scanner.io = fake_serial(incoming=b"123\r", port="COM_TEST")  # type: ignore[assignment]
 
     barcode = await scanner.scan_barcode(read_time=1)
 
     assert barcode is not None
     self.assertEqual(barcode.data, "123")
-    fake_io = scanner.io
-    assert isinstance(fake_io, FakeSerialIO)
-    self.assertEqual(fake_io.writes, [b"TRIGGER\r", b"UNTRIGGER\r"])
+    write = cast(AsyncMock, scanner.io.write)
+    self.assertEqual(write.await_args_list, [call(b"TRIGGER\r"), call(b"UNTRIGGER\r")])
+    self.assertEqual(write.call_count, write.await_count)
 
   async def test_scan_barcode_rejects_negative_read_time(self):
-    scanner = make_scanner([])
+    scanner = make_scanner(b"")
 
     with self.assertRaises(ValueError):
       await scanner.scan_barcode(read_time=-1)
 
   async def test_setup_scan_stop(self):
     scanner = SerialBarcodeScanner(port="COM_TEST")
-    fake_io = FakeSerialIO([b"X", b"Y", b"Z", b"\r"])
+    fake_io = fake_serial(incoming=b"XYZ\r", port="COM_TEST")
     scanner.io = fake_io  # type: ignore[assignment]
 
     await scanner.setup()
@@ -156,8 +110,10 @@ class TestSerialBarcodeScanner(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(barcode.data, "XYZ")
     self.assertEqual(barcode.symbology, "Code 39")
     self.assertEqual(barcode.position_on_resource, "bottom")
-    self.assertTrue(fake_io.setup_called)
-    self.assertTrue(fake_io.stop_called)
+    fake_io.setup.assert_awaited_once_with()
+    self.assertEqual(fake_io.setup.call_count, fake_io.setup.await_count)
+    fake_io.stop.assert_awaited_once_with()
+    self.assertEqual(fake_io.stop.call_count, fake_io.stop.await_count)
 
 
 if __name__ == "__main__":
