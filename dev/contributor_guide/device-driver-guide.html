@@ -628,6 +628,18 @@
 <li><p><strong>Prefer string <code class="docutils literal notranslate"><span class="pre">Literal[...]</span></code> over enums</strong>, especially anything user-facing. A <code class="docutils literal notranslate"><span class="pre">Literal[&quot;standard&quot;,</span> <span class="pre">&quot;head&quot;,</span> <span class="pre">&quot;pump&quot;]</span></code> argument plus an internal dict mapping to wire codes reads better at the call site than an enum import. <code class="docutils literal notranslate"><span class="pre">IntEnum</span></code> is fine in narrow internal cases (e.g. a fixed set of wire/register codes never exposed to callers).</p></li>
 <li><p><strong>API docs:</strong> add <code class="docutils literal notranslate"><span class="pre">docs/api/pylabrobot.&lt;vendor&gt;.rst</span></code> plus a line in <code class="docutils literal notranslate"><span class="pre">docs/api/pylabrobot.rst</span></code>.</p></li>
 </ul>
+<section id="share-nothing-between-device-drivers">
+<h3>Share nothing between device drivers<a class="headerlink" href="#share-nothing-between-device-drivers" title="Link to this heading">#</a></h3>
+<p>Each driver stands alone: one device’s package never imports another’s. What more than one device needs goes in
+<code class="docutils literal notranslate"><span class="pre">pylabrobot.lib</span></code>, which imports no device and nothing from <code class="docutils literal notranslate"><span class="pre">pylabrobot.legacy</span></code>:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">pylabrobot.lib.liquid_handling</span></code></strong> plans pipetting for any multi-channel pipette device: where channels go
+inside a container (<code class="docutils literal notranslate"><span class="pre">channel_positioning.compute_channel_offsets</span></code>) and which channels can reach their targets in
+one X/Y move (<code class="docutils literal notranslate"><span class="pre">pipette_batch_scheduling.plan_batches</span></code>). It is pure and synchronous. The device supplies its
+per-channel minimum spacing and executes the plan with its own moves; <code class="docutils literal notranslate"><span class="pre">hamilton/prep/driver/features/pipettes_tests.py</span></code> and
+<code class="docutils literal notranslate"><span class="pre">hamilton/star/driver/features/pipettes_tests.py</span></code> show the pattern.</p></li>
+</ul>
+</section>
 <section id="idempotent-public-api">
 <h3>Idempotent public API<a class="headerlink" href="#idempotent-public-api" title="Link to this heading">#</a></h3>
 <p>The public surface must expose <strong>no non-idempotent commands.</strong> If the hardware only offers a raw toggle/flip, keep it private (<code class="docutils literal notranslate"><span class="pre">_toggle_x</span></code>) and expose move-to-state methods (<code class="docutils literal notranslate"><span class="pre">move_x_out</span></code> / <code class="docutils literal notranslate"><span class="pre">move_x_in</span></code>) that read current state, act only if needed, then confirm. This keeps the API safe to call repeatedly — the caller states intent (“be open”), not a blind toggle.</p>
@@ -718,6 +730,7 @@
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#understand-the-device">1. Understand the device</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#structure-the-driver">2. Structure the driver</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#share-nothing-between-device-drivers">Share nothing between device drivers</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#idempotent-public-api">Idempotent public API</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#unverified-drivers">Unverified drivers</a></li>
 </ul>

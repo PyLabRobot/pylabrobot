@@ -24,6 +24,17 @@ Keep it small and idiomatic to PyLabRobot.
 - **Prefer string `Literal[...]` over enums**, especially anything user-facing. A `Literal["standard", "head", "pump"]` argument plus an internal dict mapping to wire codes reads better at the call site than an enum import. `IntEnum` is fine in narrow internal cases (e.g. a fixed set of wire/register codes never exposed to callers).
 - **API docs:** add `docs/api/pylabrobot.<vendor>.rst` plus a line in `docs/api/pylabrobot.rst`.
 
+### Share nothing between device drivers
+
+Each driver stands alone: one device's package never imports another's. What more than one device needs goes in
+`pylabrobot.lib`, which imports no device and nothing from `pylabrobot.legacy`:
+
+- **`pylabrobot.lib.liquid_handling`** plans pipetting for any multi-channel pipette device: where channels go
+  inside a container (`channel_positioning.compute_channel_offsets`) and which channels can reach their targets in
+  one X/Y move (`pipette_batch_scheduling.plan_batches`). It is pure and synchronous. The device supplies its
+  per-channel minimum spacing and executes the plan with its own moves; `hamilton/prep/driver/features/pipettes_tests.py` and
+  `hamilton/star/driver/features/pipettes_tests.py` show the pattern.
+
 ### Idempotent public API
 
 The public surface must expose **no non-idempotent commands.** If the hardware only offers a raw toggle/flip, keep it private (`_toggle_x`) and expose move-to-state methods (`move_x_out` / `move_x_in`) that read current state, act only if needed, then confirm. This keeps the API safe to call repeatedly — the caller states intent ("be open"), not a blind toggle.
