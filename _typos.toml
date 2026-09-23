@@ -54,6 +54,9 @@ IZ = "IZ"
 # glTF material property, the name three.js and the glTF spec use for it.
 metalness = "metalness"
 
+# "unparseable" is an accepted English variant used by the Opentrons version parser.
+unparseable = "unparseable"
+
 [files]
 extend-exclude = [
     "*.ipynb"

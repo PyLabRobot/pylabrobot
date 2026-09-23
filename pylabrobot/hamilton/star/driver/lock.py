@@ -2,6 +2,10 @@ import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Tuple
 
+# The letters a channel's module is addressed by, in order from the back.
+CHANNEL_MODULE_LETTERS = "123456789ABCDEFG"
+CHANNEL_MODULES: Tuple[str, ...] = tuple("P" + letter for letter in CHANNEL_MODULE_LETTERS)
+
 
 class _FirmwareLock:
   """Coordinates firmware commands by the subsystem they drive.
@@ -19,8 +23,8 @@ class _FirmwareLock:
   answers them while a command is in flight.
   """
 
-  # The pipetting channels are the one subsystem that is not a single module: P1 to PG share a
-  # mutex, because the device drives them as a set here.
+  # Each channel module has its own mutex, so commands to different channels run together.
+  # `CHANNELS` is every one of them: what a C0 command driving the channels takes.
   CHANNELS = "channels"
   AUTOLOAD = "I0"
 
@@ -28,8 +32,8 @@ class _FirmwareLock:
   EVERY_SUBSYSTEM = "every subsystem"
   EVERY_SUBSYSTEM_BUT_THE_AUTOLOAD = "every subsystem but the autoload"
 
-  _SUBSYSTEMS = ("C0", "X0", "H0", "D0", "R0", AUTOLOAD, CHANNELS)
-  _WITHOUT_THE_AUTOLOAD = ("C0", "X0", "H0", "D0", "R0", CHANNELS)
+  _SUBSYSTEMS: Tuple[str, ...] = ("C0", "X0", "H0", "D0", "R0", AUTOLOAD) + CHANNEL_MODULES
+  _WITHOUT_THE_AUTOLOAD: Tuple[str, ...] = ("C0", "X0", "H0", "D0", "R0") + CHANNEL_MODULES
 
   def __init__(self):
     self._locks = {name: asyncio.Lock() for name in self._SUBSYSTEMS}
@@ -47,8 +51,6 @@ class _FirmwareLock:
     Returns:
       The subsystem key.
     """
-    if module.startswith("P"):
-      return cls.CHANNELS
     return module if module in cls._SUBSYSTEMS else cls.EVERY_SUBSYSTEM
 
   @asynccontextmanager
@@ -62,6 +64,8 @@ class _FirmwareLock:
     names: Tuple[str, ...]
     if key == self.EVERY_SUBSYSTEM_BUT_THE_AUTOLOAD:
       names = self._WITHOUT_THE_AUTOLOAD
+    elif key == self.CHANNELS:
+      names = CHANNEL_MODULES
     else:
       resolved = key if key == self.EVERY_SUBSYSTEM else self.subsystem_of(key)
       names = self._SUBSYSTEMS if resolved == self.EVERY_SUBSYSTEM else (resolved,)

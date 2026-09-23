@@ -14,8 +14,10 @@ from pylabrobot.opentrons.errors import (
   OpentronsError,
   OpentronsProtocolError,
 )
-from pylabrobot.opentrons.types import LabwareIdentity, Mount, _object, _string
+from pylabrobot.opentrons.types import CommandInfo, LabwareIdentity, Mount, _object, _string
 from pylabrobot.resources.coordinate import Coordinate
+
+COMMAND_POLL_HEADROOM = 30.0
 
 
 def _version_tuple(version: str) -> Tuple[int, ...]:
@@ -34,6 +36,11 @@ def _version_at_least(version: str, required: str) -> bool:
   actual, minimum = _version_tuple(version), _version_tuple(required)
   width = max(len(actual), len(minimum))
   return actual + (0,) * (width - len(actual)) >= minimum + (0,) * (width - len(minimum))
+
+
+def slot_wire_location(slot: str) -> Dict[str, str]:
+  """Encode a standard deck slot or Flex staging area."""
+  return {"addressableAreaName": slot} if slot in {"A4", "B4", "C4", "D4"} else {"slotName": slot}
 
 
 def _coordinates(location: Coordinate) -> Dict[str, float]:
@@ -117,17 +124,38 @@ class OpentronsRun:
         await asyncio.sleep(self.command_poll_interval)
       self._active = False
 
-  async def _execute(self, command_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+  async def execute(
+    self,
+    command_type: str,
+    params: Dict[str, Any],
+    wait: bool = True,
+    timeout: Optional[float] = None,
+  ) -> CommandInfo:
+    """Submit once and return a typed receipt or confirmed command result.
+
+    The configured timeout can be overridden per command. Liquid transfers
+    receive enough time for their volume/flow rate plus polling headroom.
+    A timeout leaves completion unknown and never resubmits the command.
+    """
     self._require_active()
+    duration = self.command_timeout if timeout is None else timeout
+    if not math.isfinite(duration) or duration <= 0:
+      raise ValueError("timeout must be finite and greater than zero")
+    volume, rate = params.get("volume"), params.get("flowRate")
+    if isinstance(volume, (int, float)) and isinstance(rate, (int, float)):
+      if math.isfinite(volume) and math.isfinite(rate) and rate > 0:
+        duration = max(duration, abs(volume) / rate + COMMAND_POLL_HEADROOM)
     command_id = await self._api.submit_command(self.id, command_type, params)
-    deadline = time.monotonic() + self.command_timeout
+    if not wait:
+      return CommandInfo(status="queued", result={}, error={}, id=command_id)
+    deadline = time.monotonic() + duration
     while True:
       try:
         command = await self._api.get_command(self.id, command_id)
       except TimeoutError as error:
         raise OpentronsCommandTimeout(self.id, command_id, command_type) from error
       if command.status == "succeeded":
-        return command.result
+        return CommandInfo(command.status, command.result, command.error, command_id)
       if command.status == "failed":
         raise OpentronsCommandError(
           self.id,
@@ -146,7 +174,7 @@ class OpentronsRun:
       await asyncio.sleep(self.command_poll_interval)
 
   async def load_pipette(self, name: str, mount: Mount) -> str:
-    result = await self._execute("loadPipette", {"pipetteName": name, "mount": mount})
+    result = (await self.execute("loadPipette", {"pipetteName": name, "mount": mount})).result
     return _string(result, "pipetteId")
 
   async def define_labware(self, definition: Dict[str, Any]) -> LabwareIdentity:
@@ -154,29 +182,30 @@ class OpentronsRun:
     return await self._api.define_labware(self.id, definition)
 
   async def load_labware(
-    self, identity: LabwareIdentity, slot: str, labware_id: str, display_name: str
-  ) -> None:
-    await self._execute(
-      "loadLabware",
-      {
-        "location": {"slotName": slot},
-        "loadName": identity.load_name,
-        "namespace": identity.namespace,
-        "version": identity.version,
-        "labwareId": labware_id,
-        "displayName": display_name,
-      },
-    )
+    self, identity: LabwareIdentity, slot: str, labware_id: Optional[str], display_name: str
+  ) -> str:
+    """Load a definition at a deck/staging location and return its run ID."""
+    params: Dict[str, Any] = {
+      "location": slot_wire_location(slot),
+      "loadName": identity.load_name,
+      "namespace": identity.namespace,
+      "version": identity.version,
+      "displayName": display_name,
+    }
+    if labware_id is not None:
+      params["labwareId"] = labware_id
+    result = (await self.execute("loadLabware", params)).result
+    return labware_id if labware_id is not None else _string(result, "labwareId")
 
   async def pick_up_tip(
     self, pipette_id: str, labware_id: str, well_name: str, offset: Coordinate
   ) -> None:
-    await self._execute("pickUpTip", _well_params(pipette_id, labware_id, well_name, offset))
+    await self.execute("pickUpTip", _well_params(pipette_id, labware_id, well_name, offset))
 
   async def drop_tip(
     self, pipette_id: str, labware_id: str, well_name: str, offset: Coordinate
   ) -> None:
-    await self._execute("dropTip", _well_params(pipette_id, labware_id, well_name, offset))
+    await self.execute("dropTip", _well_params(pipette_id, labware_id, well_name, offset))
 
   async def move_to(
     self,
@@ -195,11 +224,11 @@ class OpentronsRun:
       params["minimumZHeight"] = minimum_z_height
     if speed is not None:
       params["speed"] = speed
-    await self._execute("moveToCoordinates", params)
+    await self.execute("moveToCoordinates", params)
 
   async def get_position(self, pipette_id: str) -> Coordinate:
     """Read the nozzle or mounted tip's critical point through savePosition."""
-    result = await self._execute("savePosition", {"pipetteId": pipette_id})
+    result = (await self.execute("savePosition", {"pipetteId": pipette_id})).result
     position = _object(result.get("position"))
     axes = [position.get(axis) for axis in ("x", "y", "z")]
     if not all(isinstance(axis, (float, int)) and math.isfinite(axis) for axis in axes):
@@ -207,12 +236,12 @@ class OpentronsRun:
     return Coordinate(x=position["x"], y=position["y"], z=position["z"])
 
   async def aspirate_in_place(self, pipette_id: str, volume: float, flow_rate: float) -> None:
-    await self._execute(
+    await self.execute(
       "aspirateInPlace", {"pipetteId": pipette_id, "volume": volume, "flowRate": flow_rate}
     )
 
   async def dispense_in_place(self, pipette_id: str, volume: float, flow_rate: float) -> None:
-    await self._execute(
+    await self.execute(
       "dispenseInPlace",
       {"pipetteId": pipette_id, "volume": volume, "flowRate": flow_rate, "pushOut": 0.0},
     )
@@ -220,7 +249,7 @@ class OpentronsRun:
   async def discard_tip_in_fixed_trash(self, pipette_id: str, offset: Coordinate) -> None:
     """Drop in OT-2 fixed trash using the command form supported by this run's server."""
     if _version_at_least(self.software_version, "7.1.0"):
-      await self._execute(
+      await self.execute(
         "moveToAddressableAreaForDropTip",
         {
           "pipetteId": pipette_id,
@@ -229,6 +258,6 @@ class OpentronsRun:
           "alternateDropLocation": False,
         },
       )
-      await self._execute("dropTipInPlace", {"pipetteId": pipette_id})
+      await self.execute("dropTipInPlace", {"pipetteId": pipette_id})
     else:
       await self.drop_tip(pipette_id, "fixedTrash", "A1", offset)

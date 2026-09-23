@@ -78,7 +78,7 @@ class HeadConfiguration:
   firmware_date: Optional[datetime.date] = None
   x_offset: Optional[float] = None
   """Deck X distance from the X-arm carriage center to head channel A1 (mm), read from
-  master EEPROM at setup. Mirrors the iSWAP's rotation-drive x-offset."""
+  master EEPROM at setup. Mirrors the iSWAP's elbow x-offset."""
 
   channel_pitch: float = 9.0
   channel_columns: int = 12
@@ -476,7 +476,7 @@ class Head:
     """Request the X distance from the X-arm carriage center to head channel A1.
 
     Stored in the master EEPROM and read with the generic master-EEPROM read, mirroring the
-    iSWAP's rotation-drive offset. Needed to derive the carriage X from a target A1 X.
+    iSWAP's elbow X offset. Needed to derive the carriage X from a target A1 X.
 
     Returns:
       The offset in mm.

@@ -56,6 +56,26 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
     super().check_can_drop_resource_here(resource, reassign=reassign)
 
 
+class _ByonoyAbsorbanceIlluminationUnitHolder(ResourceHolder):
+  """Illumination unit holder: blocks drops onto a plate taller than the unit clears."""
+
+  # The tallest plate, lid included, the illumination unit goes on over.
+  MAX_PLATE_SIZE_Z = 16.0
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    base = self.parent
+    assert isinstance(base, ByonoyAbsorbanceBaseUnit)
+    plate = base.plate_holder.resource
+    if plate is not None:
+      top = plate.get_highest_known_point() - base.plate_holder.get_absolute_location().z
+      if top > self.MAX_PLATE_SIZE_Z:
+        raise RuntimeError(
+          f"Cannot drop resource {resource.name} onto {self.name}: {plate.name} stands {top:.2f} mm "
+          f"tall, above the {self.MAX_PLATE_SIZE_Z:.2f} mm the illumination unit clears."
+        )
+    super().check_can_drop_resource_here(resource, reassign=reassign)
+
+
 class ByonoyAbsorbanceBaseUnit(Resource):
   def __init__(
     self,
@@ -90,7 +110,7 @@ class ByonoyAbsorbanceBaseUnit(Resource):
     )
     self.assign_child_resource(self.plate_holder, location=Coordinate(x=22.5, y=5.0, z=16.0))
 
-    self.illumination_unit_holder = ResourceHolder(
+    self.illumination_unit_holder = _ByonoyAbsorbanceIlluminationUnitHolder(
       name=self.name + "_illumination_unit_holder",
       size_x=size_x,
       size_y=size_y,
@@ -127,7 +147,7 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
   _ERROR_NAMES = ABS96_ERROR_NAMES
 
   def __init__(self, name: str = "byonoy_absorbance_96") -> None:
-    ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base")
+    ByonoyAbsorbanceBaseUnit.__init__(self, name=name)
     ByonoyDriver.__init__(
       self, pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96"
     )
@@ -335,7 +355,7 @@ def byonoy_a96a_parking_unit(name: str) -> ByonoyAbsorbanceBaseUnit:
 
 def byonoy_a96a(name: str, assign: bool = True) -> Tuple[ByonoyAbsorbance96, Resource]:
   """Create a full Byonoy A96A setup (reader + illumination unit)."""
-  reader = byonoy_a96a_detection_unit(name=name + "_reader")
+  reader = byonoy_a96a_detection_unit(name=name)
   illumination_unit = byonoy_a96a_illumination_unit(name=name + "_illumination_unit")
   if assign:
     reader.illumination_unit_holder.assign_child_resource(illumination_unit)
