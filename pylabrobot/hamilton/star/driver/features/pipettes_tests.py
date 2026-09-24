@@ -566,6 +566,12 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self.pipettes.request_y_positions = reads  # type: ignore[method-assign]
     self.pipettes.move_to_y_position = self.moves  # type: ignore[method-assign]
 
+  async def test_dispensing_drive_read(self):
+    reads = unittest.mock.AsyncMock(return_value={"rd": 1067})
+    self.pipettes._driver.send_command = reads  # type: ignore[method-assign]
+    self.assertEqual(await self.pipettes.dispensing_drive_request_uL_position(2), 50.0)
+    reads.assert_awaited_once_with(module="P3", command="RD", fmt="rd#####")
+
   async def test_x_firmware(self):
     await self.pipettes._unchecked_fw_probe_x_using_clld(134.0)
     self.assertEqual(self.sent, ["C0XLxs01340"])
@@ -1069,6 +1075,22 @@ class TestLiquidProbingInSimulation(unittest.IsolatedAsyncioTestCase):
 
   async def asyncTearDown(self):
     await self.driver.stop()
+
+  async def test_the_pistons_stand_where_the_simulator_has_them(self):
+    # Initialization read them once already.
+    self.assertEqual(self.pipettes.piston_positions, [0.0] * 8)
+    self.assertEqual(await self.pipettes.dispensing_drives_request_uL_positions(), [0.0] * 8)
+    self.driver.dispensing_drive_uL[0] = 50.0
+    self.driver.dispensing_drive_uL[1] = 20.0
+    self.assertEqual(await self.pipettes.dispensing_drive_request_uL_position(0), 50.0)
+    self.assertEqual(self.pipettes.piston_positions[0], 50.0)
+    # Asking for some channels answers None for the others and leaves their record alone.
+    self.pipettes.piston_positions[0] = 99.0
+    self.assertEqual(
+      await self.pipettes.dispensing_drives_request_uL_positions([1, 3]),
+      [None, 20.0, None, 0.0, None, None, None, None],
+    )
+    self.assertEqual(self.pipettes.piston_positions[:2], [99.0, 20.0])
 
   def _surface(self, well) -> float:
     """Where the tracker's water stands in `well`, in mm on the deck, by the well's own model."""

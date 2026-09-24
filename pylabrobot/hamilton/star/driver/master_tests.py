@@ -319,7 +319,13 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
     )
     with recorded_moves() as moves:
       await star.setup()
-    return list(moves)
+    # The autoload is its own unit and comes up alongside the arm's features, so where its two
+    # steps fall among theirs is the event loop's business; that it homes after the device is not.
+    autoload = [move for move in moves if "autoload" in move]
+    self.assertEqual(autoload, ["II autoload", "autoload park"])
+    if "VI device" in moves:
+      self.assertGreater(moves.index("II autoload"), moves.index("VI device"))
+    return [move for move in moves if "autoload" not in move]
 
   async def test_everything_already_up(self):
     self.assertEqual(
@@ -330,8 +336,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "ZA channels to safe Z",
         "iSWAP park",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 
@@ -345,8 +349,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "iSWAP park",
         "EI 96-head",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 
@@ -362,8 +364,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "ZA channels to safe Z",
         "iSWAP park",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 
@@ -424,8 +424,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "iSWAP park",
         "EI 96-head",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 

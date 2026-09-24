@@ -347,6 +347,8 @@ class Pipettes:
     # One resource per channel, in channel order, when the driver was given a deck. Setup puts them
     # on the arm; the reads keep them in step. Without a deck the list stays empty.
     self.resources: List[Resource] = []
+    # Where each piston stands, in uL, by channel, as last read; empty until a piston is read.
+    self.piston_positions: List[float] = []
     self.configuration = configuration or PipettesConfiguration()
     # The height the channels travel at when a command names none, in mm. Legacy STARBackend's
     # channel traversal height.
@@ -809,6 +811,8 @@ class Pipettes:
     # `z_position_at_end_of_a_command`. Read both back, or the model has them where they were.
     await self._record_where_they_stopped("y")
     await self._record_where_they_stopped("z")
+    # Initialization homes the pistons as well: the first read of where they stand comes here.
+    await self.dispensing_drives_request_uL_positions()
     return resp
 
   def _min_pair_spacing(self, i: int, j: int) -> float:
@@ -1758,6 +1762,46 @@ class Pipettes:
     """
     async with self._temporary_z_drive_profile(speed=speed, acceleration=acceleration):
       await self.probe_z_max()
+
+  # -- dispensing drive position -------------------------------------------------------------------
+
+  async def dispensing_drive_request_uL_position(self, channel: int) -> float:
+    """Read where one channel's dispensing drive stands, in uL, and record it. `Px RD`.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The piston's position in uL, 0.0 at rest; air and liquid alike. Kept on `piston_positions`.
+    """
+    self._require_channel(channel)
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel), command="RD", fmt="rd#####"
+    )
+    uL = self.configuration.dispensing_drive_increments_to_uL(cast(int, resp["rd"]))
+    # The channels not read yet stand at rest, where initialization leaves every piston.
+    self.piston_positions += [0.0] * (self.num_channels - len(self.piston_positions))
+    self.piston_positions[channel] = uL
+    return uL
+
+  async def dispensing_drives_request_uL_positions(
+    self, channels: Optional[List[int]] = None
+  ) -> List[Optional[float]]:
+    """Read where the dispensing drives stand, in uL, the channels together, and record them.
+
+    Args:
+      channels: which channels, 0-indexed from the back. Every channel when None.
+
+    Returns:
+      One entry per channel of the device: the piston's position in uL, 0.0 at rest, air and
+      liquid alike, for a channel asked; None for one not asked, whose record is left alone.
+    """
+    asked = list(range(self.num_channels)) if channels is None else channels
+    read = await asyncio.gather(*(self.dispensing_drive_request_uL_position(ch) for ch in asked))
+    positions: List[Optional[float]] = [None] * self.num_channels
+    for channel, uL in zip(asked, read):
+      positions[channel] = uL
+    return positions
 
   # -- x and y together ----------------------------------------------------------------------------
 
