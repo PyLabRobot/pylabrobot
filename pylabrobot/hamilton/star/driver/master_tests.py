@@ -145,6 +145,43 @@ class TestSimulation(unittest.IsolatedAsyncioTestCase):
       STARSimulationDriver()
 
 
+class TestTipTypeTable(unittest.IsolatedAsyncioTestCase):
+  """Each tip model gets one entry in the device's tip type table, never the grip tool's."""
+
+  def setUp(self):
+    self.driver = master.STARDriver.__new__(master.STARDriver)
+    self.driver._tip_type_indices = {}
+    self.define = unittest.mock.AsyncMock()
+    self.driver.define_tip_needle = self.define  # type: ignore[method-assign]
+
+  async def test_tips_of_one_kind_share_one_index(self):
+    from pylabrobot.resources.hamilton import hamilton_tip_10uL, hamilton_tip_300uL
+
+    assign = self.driver.get_or_assign_tip_type_index
+    a = await assign(hamilton_tip_300uL(name="rack_A1#0"))
+    b = await assign(hamilton_tip_300uL(name="rack_B1#0"))
+    c = await assign(hamilton_tip_10uL(name="rack_C1#0"))
+    self.assertEqual((a, b, c), (1, 1, 2))
+    self.assertEqual(self.define.await_count, 2)
+
+  async def test_the_grip_tool_s_entry_is_skipped(self):
+    from pylabrobot.resources.hamilton import hamilton_tip_300uL
+
+    self.driver._tip_type_indices = {f"model_{i}": i for i in range(1, 14)}
+    index = await self.driver.get_or_assign_tip_type_index(hamilton_tip_300uL(name="tip"))
+    self.assertEqual(index, 15)
+    self.assertEqual(self.define.await_args_list[0].kwargs["tip_type_table_index"], 15)
+
+  async def test_a_full_table_is_refused_before_anything_is_written(self):
+    from pylabrobot.resources.hamilton import hamilton_tip_300uL
+
+    free = [i for i in range(1, 100) if i != master.CORE_GRIPPER_TIP_TYPE_INDEX]
+    self.driver._tip_type_indices = {f"model_{i}": i for i in free}
+    with self.assertRaisesRegex(ValueError, "the tip type table is full: 98 tip types"):
+      await self.driver.get_or_assign_tip_type_index(hamilton_tip_300uL(name="tip"))
+    self.define.assert_not_awaited()
+
+
 def keys_no_field_reads(saved: dict, configuration: object) -> List[str]:
   """What a saved configuration holds that reading it back leaves out, nested ones included.
 
@@ -391,6 +428,29 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "autoload park",
       ],
     )
+
+
+class TestChannelResources(unittest.IsolatedAsyncioTestCase):
+  """A channel is modelled by a resource of its own, and the list of them runs channel by channel."""
+
+  async def test_a_channel_without_a_width_is_refused_rather_than_skipped(self):
+    """Skipping one would put every later channel's resource one out of step with its channel."""
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    await driver.setup()
+    pipettes = driver.pipettes
+    assert pipettes is not None
+    channels = [resource.name for resource in pipettes.resources]
+    self.assertEqual(
+      channels,
+      [driver._component_name(f"pipette_channel_{channel}") for channel in range(len(channels))],
+    )
+
+    pipettes.configuration.channels[2].width = None
+    for resource in list(pipettes.resources):
+      resource.parent.unassign_child_resource(resource)  # type: ignore[union-attr]
+    with self.assertRaises(RuntimeError):
+      await driver._create_pipette_resources()
+    await driver.stop()
 
 
 class TestEveryConfiguration(unittest.IsolatedAsyncioTestCase):

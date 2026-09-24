@@ -12,6 +12,7 @@ from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMountingShaft
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.tip import Tip
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.features.x_arm import XArm
@@ -550,6 +551,33 @@ class Pipettes:
       channel.get_absolute_size_y() / 2,
       -shaft.get_absolute_size_z(),
     )
+
+  # -- what the model has on each channel --------------------------------------------------------
+
+  def shaft(self, channel: int) -> Optional[TipMountingShaft]:
+    """The mounting shaft modelling a channel, or None while nothing models it.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+    """
+    if channel >= len(self.resources):
+      return None
+    return next(
+      (child for child in self.resources[channel].children if isinstance(child, TipMountingShaft)),
+      None,
+    )
+
+  def get_mounted_tip(self, channel: int) -> Optional[Tip]:
+    """The tip the model has on a channel, or None if it carries none.
+
+    What the model says, not what the device senses: `sense_tip_presence` asks the channels.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+    """
+    shaft = self.shaft(channel)
+    tip = shaft.tip if shaft is not None else None
+    return tip if isinstance(tip, Tip) else None
 
   # -- channel initialization ------------------------------------------------
 
