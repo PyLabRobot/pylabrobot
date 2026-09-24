@@ -6,7 +6,10 @@ from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
 from pylabrobot.hamilton.star.driver.features.head import Head, HeadConfiguration
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton.tip_creators import HamiltonTip
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.tip import Tip
+from pylabrobot.resources.tip_rack import TipRack
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.master import STARDriver
@@ -71,14 +74,6 @@ class Head96Configuration(HeadConfiguration):
   # what the Y drive itself reaches, and narrower than the initialization command's own window, so
   # it is stated here rather than taken from `y_range`.
   tip_command_y_range: Tuple[float, float] = (108.0, 560.0)
-
-  # How far the tips a rack holds stand proud of it once mounted, by tip size. The head has to
-  # descend by the tip's length past its fitting depth to seat it, and the two odd sizes need a
-  # correction on top.
-  tip_engage_correction_low_volume: float = 2.0
-  tip_engage_correction_other: float = -2.0
-  # How far above a tip rack's own top the head releases tips onto it, in mm.
-  tip_drop_clearance: float = 1.45
 
   # Where the dispensing drive is sent before tips are collected off a rack, as a piston volume in
   # uL. The device does not lower the drive itself, so a head left with its piston up would
@@ -287,6 +282,60 @@ class Head96(Head):
 
   # -- dispensing drive --------------------------------------------------------------------------
 
+  async def move_dispensing_drive_to_position(
+    self,
+    volume: float,
+    speed: Optional[float] = None,
+    stop_speed: float = 0.0,
+    acceleration: Optional[float] = None,
+    current_limit: int = 15,
+    read_timeout: int = 30,
+  ):
+    """Move the dispensing drive to an absolute piston position. This moves it.
+
+    Args:
+      volume: where to send the piston, as the volume it would hold, in uL.
+      speed: how fast, in uL/s. Defaults to `configuration.dispensing_drive_speed_default`.
+      stop_speed: what to slow to at the end, in uL/s.
+      acceleration: how hard, in uL/s2. Defaults to
+        `configuration.dispensing_drive_acceleration_default`.
+      current_limit: the motor current limit.
+      read_timeout: how long to wait for the device to answer, in seconds.
+
+    Raises:
+      ValueError: If an argument is outside what the drive accepts.
+    """
+    c = self.configuration
+    if speed is None:
+      speed = c.dispensing_drive_speed_default
+    if acceleration is None:
+      acceleration = c.dispensing_drive_acceleration_default
+
+    for value, (low, high), name in (
+      (volume, c.dispensing_drive_range, "volume"),
+      (speed, c.dispensing_drive_speed_range, "speed"),
+      (stop_speed, (0.0, c.dispensing_drive_speed_range[1]), "stop_speed"),
+      (acceleration, c.dispensing_drive_acceleration_range, "acceleration"),
+    ):
+      if not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {value}")
+    low_limit, high_limit = c.current_limit_range
+    if not low_limit <= current_limit <= high_limit:
+      raise ValueError(
+        f"current_limit must be between {low_limit} and {high_limit}, is {current_limit}"
+      )
+
+    return await self._driver.send_command(
+      module=c.module,
+      command="DQ",
+      dq=f"{c.dispensing_drive_uL_to_increments(volume):05}",
+      dv=f"{c.dispensing_drive_uL_to_increments(speed):05}",
+      du=f"{c.dispensing_drive_uL_to_increments(stop_speed):05}",
+      dr=f"{c.dispensing_drive_uL_to_increments(acceleration):06}",
+      dw=f"{current_limit:02}",
+      read_timeout=read_timeout,
+    )
+
   # ----------------------------------------
   # Tip pickup and drop
   # ----------------------------------------
@@ -372,6 +421,151 @@ class Head96(Head):
     if not low <= location.y <= high:
       raise ValueError(f"y must be between {low} and {high}, is {location.y}")
 
+  async def _record_after_tip_command(self) -> None:
+    """Read back where a tip command left the arm and the head, and record it."""
+    if self.arm is not None:
+      await self.arm.request_position()
+    await self.request_y_position()
+    await self.request_z_position()
+
   # -- pickup ------------------------------------------------------------------------------------
 
+  async def pick_up_tips(
+    self,
+    tip_rack: TipRack,
+    offset: Optional[Coordinate] = None,
+    tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
+    minimum_height_command_end: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+  ) -> None:
+    """Pick up a rack of tips on the whole head, as legacy's `pick_up_tips96`. `C0 EP`.
+
+    Head channel A1 goes to the centre of spot A1, at the spot's Z. Once the device has picked them
+    up, the tip in each spot is mounted on the shaft of the channel with the spot's index.
+
+    Args:
+      tip_rack: a 96 tip rack. Spots without a tip give none.
+      offset: added to spot A1's centre, in mm.
+      tip_pickup_method: `from_rack` sends the dispensing drive down first, since the device does
+        not; `from_waste` and `full_blowout` move the plunger up before mounting.
+      minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
+      minimum_traverse_height_start: in mm.
+        `configuration.traversal_z_position` when None.
+
+    Raises:
+      ValueError: If the rack does not have 96 spots or holds no tips, or a position cannot be
+        reached.
+      TypeError: If its tips are not Hamilton tips.
+      RuntimeError: If the driver was given no deck.
+    """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    if tip_rack.num_items != 96:
+      raise ValueError("Tip rack must have 96 tips")
+    tips = [
+      spot.tip_for_pickup() if not spot.tracks_tips or spot.tip is not None else None
+      for spot in tip_rack.get_all_items()
+    ]
+    prototypical_tip = next((tip for tip in tips if tip is not None), None)
+    if prototypical_tip is None:
+      raise ValueError("No tips found in the tip rack.")
+    if not isinstance(prototypical_tip, HamiltonTip):
+      raise TypeError("Tip type must be HamiltonTip.")
+    tip_type_index = await self._driver.get_or_assign_tip_type_index(prototypical_tip)
+
+    location = tip_rack.get_item("A1").get_location_wrt(deck, x="c", y="c", z="b") + (
+      offset or Coordinate.zero()
+    )
+    traverse_z, end_z = self._resolve_tip_command_heights(
+      minimum_traverse_height_start, minimum_height_command_end
+    )
+    self._check_tip_command(location, traverse_z, end_z, skip_z=True)
+
+    if tip_pickup_method == "from_rack":
+      await self.move_dispensing_drive_to_position(
+        self.configuration.dispensing_drive_position_before_rack_pickup
+      )
+    await self._driver.send_command(
+      module="C0",
+      command="EP",
+      subsystem=self.configuration.module,
+      xs=f"{abs(round(location.x * 10)):05}",
+      xd=0 if location.x >= 0 else 1,
+      yh=f"{round(location.y * 10):04}",
+      tt=f"{tip_type_index:02}",
+      wu={"from_rack": 0, "from_waste": 1, "full_blowout": 2}[tip_pickup_method],
+      za=f"{round(location.z * 10):04}",
+      zh=f"{round(traverse_z * 10):04}",
+      ze=f"{round(end_z * 10):04}",
+    )
+
+    if self.resource is not None:
+      for shaft, tip in zip(self.resource.get_all_items(), tips):
+        if tip is not None:
+          shaft.mount_tip(tip)
+    await self._record_after_tip_command()
+
   # -- drop --------------------------------------------------------------------------------------
+
+  async def drop_tips(
+    self,
+    resource: Resource,
+    offset: Optional[Coordinate] = None,
+    minimum_height_command_end: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+  ) -> None:
+    """Drop the head's tips into a tip rack or anywhere else, as legacy's `drop_tips96`. `C0 ER`.
+
+    Into a tip rack, head channel A1 goes to the centre of spot A1, at the spot's Z, and each
+    channel's tip goes into the spot with its index. Anywhere else, the head is centred over the
+    resource, and the tips belong to nothing afterwards.
+
+    Args:
+      resource: a 96 tip rack, or anything else, such as the trash.
+      offset: added to where the head goes, in mm.
+      minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
+      minimum_traverse_height_start: in mm.
+        `configuration.traversal_z_position` when None.
+
+    Raises:
+      ValueError: If a tip rack does not have 96 spots, or a position cannot be reached.
+      RuntimeError: If the driver was given no deck.
+    """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    if isinstance(resource, TipRack):
+      if resource.num_items != 96:
+        raise ValueError("Tip rack must have 96 tips")
+      location = resource.get_item("A1").get_location_wrt(deck, x="c", y="c", z="b")
+    else:
+      location = self._position_centred_in(resource)
+    location += offset or Coordinate.zero()
+    traverse_z, end_z = self._resolve_tip_command_heights(
+      minimum_traverse_height_start, minimum_height_command_end
+    )
+    self._check_tip_command(location, traverse_z, end_z, skip_z=True)
+
+    await self._driver.send_command(
+      module="C0",
+      command="ER",
+      subsystem=self.configuration.module,
+      xs=f"{abs(round(location.x * 10)):05}",
+      xd=0 if location.x >= 0 else 1,
+      yh=f"{round(location.y * 10):04}",
+      za=f"{round(location.z * 10):04}",
+      zh=f"{round(traverse_z * 10):04}",
+      ze=f"{round(end_z * 10):04}",
+    )
+
+    if self.resource is not None:
+      for i, shaft in enumerate(self.resource.get_all_items()):
+        if not shaft.has_tip():
+          continue
+        tip = shaft.release_tip()
+        if isinstance(resource, TipRack) and isinstance(tip, Tip):
+          spot = resource.get_item(i)
+          if spot.tracks_tips:
+            spot.assign_tip(tip)
+    await self._record_after_tip_command()
