@@ -364,7 +364,7 @@ class STARDriver:
     autoload = self.autoload
     if autoload is not None:
       try:
-        at_safe_z = await autoload.wheel_is_at_safe_z()
+        at_safe_z = await autoload.wheel_is_at_safe_z(tolerance=tolerance)
       except Exception:
         low.append("autoload wheel (where it is could not be read)")
       else:

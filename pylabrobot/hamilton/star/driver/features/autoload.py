@@ -775,16 +775,21 @@ class Autoload:
       await self._request_drive_position("RZ", digits=4)
     )
 
-  async def wheel_is_at_safe_z(self) -> bool:
+  async def wheel_is_at_safe_z(self, tolerance: float = 0.5) -> bool:
     """Request whether the carrier-handling wheel is at its safe Z, the start of its Z travel.
 
+    Args:
+      tolerance: how far below the start of its travel still counts as being there, in mm. What
+        the drive answers is its hardware counter, which comes to rest a step or two past the
+        position it was sent to.
+
     Returns:
-      True if the wheel reads the first increment of `z_drive_range_increments`.
+      True if the wheel stands no further than `tolerance` below the first increment of
+      `z_drive_range_increments`.
     """
-    return (
-      await self._request_drive_position("RZ", digits=4)
-      == self.configuration.z_drive_range_increments[0]
-    )
+    c = self.configuration
+    below = await self._request_drive_position("RZ", digits=4) - c.z_drive_range_increments[0]
+    return c.z_drive_increments_to_mm(below) <= tolerance
 
   async def wheel_move_to_safe_z(self) -> float:
     """Move the carrier-handling wheel to its safe Z, and read where that put it.
