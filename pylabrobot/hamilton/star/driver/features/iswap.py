@@ -1158,6 +1158,39 @@ class iSWAP:
       raise RuntimeError("the elbow's X offset was not read; have you called `star.setup()`?")
     return round(await self.arm.request_position() - offset, 2)
 
+  async def elbow_move_to_x_position(
+    self,
+    x: float,
+    acceleration_level: int = 3,
+    current_limit: int = 7,
+    settle_reads: int = 20,
+  ):
+    """Move the elbow along X. The whole arm travels, with everything else it carries.
+
+    The iSWAP has no X drive. It rides the arm and sits `configuration.elbow_x_offset` left of the
+    carriage reference point, so the arm is sent to the carriage position that puts the elbow at `x`.
+
+    Args:
+      x: where to put the elbow, in deck mm.
+      acceleration_level: how hard to accelerate, 1 to 4.
+      current_limit: the motor current limit, 1 to 7.
+      settle_reads: how many reads to take before calling the arm stopped.
+
+    Raises:
+      ValueError: If the elbow cannot reach it.
+      RuntimeError: If the drive's X offset or the arm's travel was not read.
+    """
+    self._check_reachable("x", x)
+    offset = self.configuration.elbow_x_offset
+    if offset is None:
+      raise RuntimeError("the elbow's X offset was not read; have you called `star.setup()`?")
+    return await self.arm.move_to_x_position(
+      round(x + offset, 2),
+      acceleration_level=acceleration_level,
+      current_limit=current_limit,
+      settle_reads=settle_reads,
+    )
+
   # -- y position --------------------------------------------------------------------------------
 
   async def elbow_request_y_position(self) -> float:
@@ -1297,15 +1330,15 @@ class iSWAP:
     await self._make_space_for_y(y, make_space=make_space)
 
     try:
+      # Where the move is going, recorded as it is sent: on the answer the model would already be a
+      # whole move behind the device. The read below still has the last word.
+      self.update_location_by_reference_point(y=y)
       resp = await self._unchecked_fw_elbow_move_to_y_position_increments(
         y_increments=c.y_mm_to_increments(y),
         speed_increments=speed_increments,
         acceleration_level=acceleration_level,
         current_limit=current_limit,
       )
-      # What was asked for, recorded as soon as the move answers, so the model holds it even if
-      # the read below cannot be taken.
-      self.update_location_by_reference_point(y=y)
       return resp
     finally:
       # And then what the drive says, which is the last word either way. A move that stopped part
@@ -1519,15 +1552,15 @@ class iSWAP:
 
     finger_plane = z - c.elbow_z_offset_above_finger
     try:
+      # Where the move is going, recorded as it is sent: on the answer the model would already be a
+      # whole move behind the device. The read below still has the last word.
+      self.update_location_by_reference_point(z=z)
       resp = await self._unchecked_fw_elbow_move_to_z_position_increments(
         z_increments=c.z_mm_to_increments(finger_plane),
         speed_increments=speed_increments,
         acceleration_increments=acceleration_increments,
         current_limit=current_limit,
       )
-      # What was asked for, recorded as soon as the move answers, so the model holds it even if
-      # the read below cannot be taken.
-      self.update_location_by_reference_point(z=z)
       return resp
     finally:
       # And then what the drive says, which is the last word either way.
@@ -1992,6 +2025,10 @@ class iSWAP:
       )
 
     try:
+      # Where the move is going, recorded as it is sent: on the answer the model would already be a
+      # whole move behind the device. The read below still has the last word.
+      self.elbow_drive_update_angle(c.elbow_drive_increments_to_angle(elbow))
+      self.wrist_drive_update_angle(c.wrist_increments_to_deg(wrist))
       resp = await self._unchecked_fw_joint_drives_rotate_increments(
         elbow_increments=elbow,
         wrist_increments=wrist,
@@ -2002,10 +2039,6 @@ class iSWAP:
         elbow_current_limit=elbow_current_limit,
         wrist_current_limit=wrist_current_limit,
       )
-      # What was asked for, recorded before anything is read: a move that answered has arrived,
-      # and the model says so even if the reads below cannot be taken.
-      self.elbow_drive_update_angle(c.elbow_drive_increments_to_angle(elbow))
-      self.wrist_drive_update_angle(c.wrist_increments_to_deg(wrist))
       return resp
     finally:
       # And then what the drives say, which is the last word either way. A move that stopped part
@@ -2460,15 +2493,15 @@ class iSWAP:
         )
 
     try:
+      # Where the move is going, recorded as it is sent: on the answer the model would already be a
+      # whole move behind the device. The read below still has the last word.
+      self.gripper_update_width(width)
       resp = await self._unchecked_fw_gripper_move_to_jaw_position_increments(
         increments=width_increments,
         speed_increments=speed_increments,
         acceleration_increments=acceleration_increments,
         current_limit=current_limit,
       )
-      # What was asked for, recorded as soon as the move answers, so the model holds it even if
-      # the read below cannot be taken.
-      self.gripper_update_width(width)
       return resp
     finally:
       # And then what the drive says, which is the last word. This one stalls: sent the full sweep
