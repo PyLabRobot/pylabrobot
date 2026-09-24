@@ -1565,11 +1565,11 @@ class STARDriver:
     await self._create_iswap_resource()
 
   async def _create_pipette_resources(self) -> None:
-    """Put a resource on the arm for each pipetting channel, where it is.
+    """Put each pipetting channel directly on the device, where it is.
 
     One resource per channel, not one for the block: the channels share the arm's X but each has
-    its own Y and Z. They are children of the arm's resource, as the 96-head is. Channels already
-    on the arm are reused, and repeated setups do not duplicate them.
+    its own Y and Z. The device owns the channels alongside its deck. A standalone driver with
+    a parentless deck keeps them on the arm. Repeated setups reuse the channels.
 
     Each carries a `TipMountingShaft` at its lower end. A collected tip becomes a child of the
     shaft, not of the channel.
@@ -1579,6 +1579,7 @@ class STARDriver:
     arm = next((a for a in self.arms if a.pipettes is not None), None)
     if arm is None or arm.pipettes is None or arm.resource is None:
       return
+    owner = self.deck.parent if self.deck.parent is not None else arm.resource
 
     # One per channel the device reported at discovery, not a count assumed here.
     c = arm.pipettes.configuration
@@ -1592,7 +1593,13 @@ class STARDriver:
 
     for channel in range(len(c.channels)):
       name = f"pipette_channel_{channel}"
-      resource = next((r for r in arm.resource.children if r.name == name), None)
+      resource = next((r for r in owner.children if r.name == name), None)
+      if resource is None and owner is not arm.resource:
+        resource = next((r for r in arm.resource.children if r.name == name), None)
+        if resource is not None:
+          location = resource.get_location_wrt(owner)
+          resource.unassign()
+          owner.assign_child_resource(resource, location=location)
       if resource is None:
         width = c.channels[channel].width
         if width is None:
@@ -1610,9 +1617,10 @@ class STARDriver:
         # arm's reference point is not the middle of it: the part is wider than the width the drive
         # reports, and reaches further right than the point it counts from.
         anchor = resource.get_anchor(x=arm.pipettes.configuration.x_reference_anchor)
-        arm.resource.assign_child_resource(
+        owner.assign_child_resource(
           resource,
-          location=Coordinate(arm.configuration.reference_point_from_left - anchor.x, 0.0, 0.0),
+          location=arm.resource.get_location_wrt(owner)
+          + Coordinate(arm.configuration.reference_point_from_left - anchor.x, 0.0, 0.0),
         )
       arm.pipettes.add_tip_mounting_shaft(resource)
       arm.pipettes.resources.append(resource)
@@ -1712,7 +1720,7 @@ class STARDriver:
         # standing level with the tops of the channel bodies when the drive is fully retracted.
         # Both heights are taken on the deck, so neither needs the arm taking out.
         tops = [
-          ch.get_location_wrt(self.deck).z + ch.get_size_z()
+          ch.get_absolute_location().z - self.deck.get_absolute_location().z + ch.get_size_z()
           for ch in (arm.pipettes.resources if arm.pipettes is not None else [])
           if ch.location is not None
         ]

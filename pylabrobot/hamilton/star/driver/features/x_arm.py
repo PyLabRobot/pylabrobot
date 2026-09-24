@@ -431,6 +431,9 @@ class XArm:
       self.resource.location.y,
       self.resource.location.z,
     )
+    if self.pipettes is not None:
+      for channel in range(len(self.pipettes.resources)):
+        self.pipettes.update_location_by_reference_point(channel, x=x)
 
   # -- x motion --------------------------------------------------------------
 

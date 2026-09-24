@@ -11,7 +11,6 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import NoLocationError
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
-from pylabrobot.resources.head_tool import HeadTool
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
 
@@ -451,15 +450,25 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     }
 
   def _check_safe_z_height(self, resource: Resource):
-    """Check for this resource, and all its children, that the z location is not too high."""
+    """Check the height of resources belonging to this deck's layout."""
+
+    if not resource.is_in_subtree_of(self):
+      return
+
+    # Arms and heads are modelled under the deck. Prune their hardware subtrees even when a
+    # callback arrives for a child assigned after the arm or head was created.
+    ancestor: Optional[Resource] = resource
+    while ancestor is not self and ancestor is not None:
+      if ancestor.category in ("x_arm", "head96"):
+        return
+      ancestor = ancestor.parent
 
     # TODO: maybe these are parameters per HamiltonDeck that we can take as attributes.
     Z_MOVEMENT_LIMIT = 245
     Z_GRAB_LIMIT = 285
 
     def check_z_height(resource: Resource):
-      # What the device carries, including a tool on a channel, is above the deck by design.
-      if resource.category in ("x_arm", "head96") or isinstance(resource, HeadTool):
+      if resource.category in ("x_arm", "head96"):
         return
 
       try:
