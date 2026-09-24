@@ -336,7 +336,7 @@ class STARDriver:
         else:
           low += [
             f"{arm.side} channel {channel} at {z:.1f} mm, safe is {safe:.1f} mm"
-            for channel, z in positions.items()
+            for channel, z in enumerate(positions)
             if z < safe - tolerance
           ]
       for head, name in ((arm.head96, "head96"), (arm.head384, "head384")):
@@ -1263,7 +1263,7 @@ class STARDriver:
           # head's does.
           reached = await arm.pipettes.probe_z_max()
           c = arm.pipettes.configuration
-          c.z_range = (c.z_range[0], min(reached.values()))
+          c.z_range = (c.z_range[0], min(reached))
         # A head is retracted whatever its own status says: the retract is what keeps it clear
         # of the iSWAP, which shares the arm's X drive and moves while features initialize.
         for head in (arm.head96, arm.head384):
@@ -1389,7 +1389,9 @@ class STARDriver:
       # One ceiling for all of them, since one window is what `_check_reachable` holds every
       # channel to. The floor is left as it stands: nothing here measures how low they go.
       c = arm.pipettes.configuration
-      c.z_range = (c.z_range[0], min(reached.values()))
+      c.z_range = (c.z_range[0], min(reached))
+      # The drives keep what an earlier session wrote until a power cycle; every run starts here.
+      await arm.pipettes._set_default_drive_parameters()
 
     if arm.iswap is not None and "iswap" in skipped:
       logger.debug("iSWAP: initializing it was skipped")

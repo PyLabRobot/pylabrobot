@@ -7,10 +7,7 @@ from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes, PipettesConfiguration
-from pylabrobot.hamilton.star.driver.simulator import (
-  SIMULATED_CHANNEL_Y_SPEED,
-  STARSimulationDriver,
-)
+from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.hamilton import STARDeck
 
 
@@ -154,7 +151,7 @@ class TestPositionInZDirection(unittest.IsolatedAsyncioTestCase):
     pipettes = await simulated_channels()
     floor, ceiling = pipettes.configuration.z_range
 
-    self.assertEqual(ceiling, min((await pipettes.probe_z_max()).values()))
+    self.assertEqual(ceiling, min(await pipettes.probe_z_max()))
     self.assertEqual(floor, PipettesConfiguration().z_range[0])
 
   async def test_probing_reads_the_channels_and_changes_nothing(self):
@@ -169,6 +166,182 @@ class TestPositionInZDirection(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(pipettes.configuration.z_range, (floor + 10.0, 300.0))
     self.assertEqual(len(reached), len(pipettes.configuration.channels))
+
+  async def test_the_z_reads_answer_a_list_by_channel(self):
+    """Each read answers one position per channel, back to front."""
+    pipettes = await simulated_channels()
+    stop_discs = await pipettes.request_stop_disc_z_positions()
+    lowest = await pipettes._unchecked_fw_request_lowest_z_positions()
+    for reached in (stop_discs, lowest, await pipettes.probe_z_max()):
+      self.assertIsInstance(reached, list)
+      self.assertEqual(len(reached), pipettes.num_channels)
+    self.assertEqual(stop_discs[3], await pipettes.request_stop_disc_z_position(3))
+
+
+class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
+  """A channel's stored Y/Z speed and acceleration: read with `Px RA`, written with `Px AA`."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+
+    async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      return {"zr": 75, "zv": 12000, "yv": 6000, "yr": 4} if command == "RA" else None
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_request(self):
+    self.assertEqual(await self.pipettes.request_z_acceleration(0), 804.6)
+    self.assertEqual(await self.pipettes.request_z_speed(0), 128.73)
+    self.assertEqual(self.sent, ["P1RArazr", "P1RArazv"])
+
+  async def test_set(self):
+    await self.pipettes._set_z_acceleration(1, 800.0)
+    await self.pipettes._set_z_speed(1, 50.0)
+    self.assertEqual(self.sent, ["P2AAzr075", "P2AAzv04661"])
+
+  async def test_refused_sends_nothing(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes._set_drive_parameter(0, "xv", 100.0)
+    with self.assertRaises(ValueError):
+      await self.pipettes._set_z_acceleration(0, 2000.0)
+    with self.assertRaises(ValueError):
+      await self.pipettes._set_z_speed(0, 200.0)
+    with self.assertRaises(ValueError):
+      await self.pipettes._set_z_speed(8, 100.0)
+    self.assertEqual(self.sent, [])
+
+  async def test_the_allowed_ranges_are_the_drives_in_mm(self):
+    c = self.pipettes.configuration
+    self.assertEqual(c.y_speed_range, (0.93, 370.42))
+    self.assertEqual(c.z_speed_range, (0.21, 160.91))
+    self.assertEqual(c.z_acceleration_range, (53.6, 1609.1))
+    self.assertEqual(c.y_drive_acceleration_level_range, (1, 4))
+
+  async def test_profile_sets_then_puts_back_the_defaults(self):
+    async with self.pipettes._temporary_z_drive_profile(
+      speed=50.0, acceleration=150.0, channels=[7]
+    ):
+      self.assertEqual(self.sent, ["P8AAzv04661", "P8AAzr014"])
+    self.assertEqual(self.sent[2:], ["P8AAzv11652", "P8AAzr075"])
+
+  async def test_profile_puts_back_when_the_block_raises(self):
+    with self.assertRaises(RuntimeError):
+      async with self.pipettes._temporary_z_drive_profile(acceleration=150.0, channels=[7]):
+        raise RuntimeError("the block")
+    self.assertEqual(self.sent, ["P8AAzr014", "P8AAzr075"])
+
+  async def test_request_y(self):
+    self.assertEqual(await self.pipettes.request_y_speed(7), 277.81)
+    self.assertEqual(await self.pipettes.request_y_acceleration_level(7), 4)
+    self.assertEqual(self.sent, ["P8RArayv", "P8RArayr"])
+
+  async def test_set_y(self):
+    await self.pipettes._set_y_speed(7, 250.0)
+    await self.pipettes._set_y_acceleration_level(7, 1)
+    self.assertEqual(self.sent, ["P8AAyv5399", "P8AAyr1"])
+
+  async def test_refused_y_sends_nothing(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes._set_y_acceleration_level(7, 5)
+    with self.assertRaises(ValueError):
+      await self.pipettes._set_y_speed(7, 400.0)
+    self.assertEqual(self.sent, [])
+
+  async def test_y_profile_sets_then_puts_back_the_defaults(self):
+    async with self.pipettes._temporary_y_drive_profile(
+      speed=46.3, acceleration_level=1, channels=[7]
+    ):
+      self.assertEqual(self.sent, ["P8AAyv1000", "P8AAyr1"])
+    self.assertEqual(self.sent[2:], ["P8AAyv5399", "P8AAyr3"])
+
+  async def test_profile_touches_only_the_named_channels(self):
+    async with self.pipettes._temporary_y_drive_profile(acceleration_level=1, channels=[6, 7]):
+      pass
+    self.assertEqual(self.sent, ["P7AAyr1", "P8AAyr1", "P7AAyr3", "P8AAyr3"])
+
+
+class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
+  """Setup writes the driver's defaults into every channel, whatever an earlier session left."""
+
+  async def test_every_channel_holds_the_defaults_after_setup(self):
+    pipettes = await simulated_channels()
+    for channel in range(pipettes.num_channels):
+      self.assertEqual(await pipettes.request_y_speed(channel), 249.98)
+      self.assertEqual(await pipettes.request_y_acceleration_level(channel), 3)
+      self.assertEqual(await pipettes.request_z_speed(channel), 125.0)
+      self.assertEqual(await pipettes.request_z_acceleration(channel), 804.6)
+
+  async def test_setup_writes_four_per_channel(self):
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    sent: List[str] = []
+    answer = driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      if command == "AA":
+        sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      return await answer(module=module, command=command, **kwargs)
+
+    driver.send_command = recorded  # type: ignore[assignment]
+    await driver.setup()
+    written = [command for command in sent if command[0] == "P"]
+    self.assertEqual(len(written), 32)
+    self.assertEqual(written[:4], ["P1AAyv5399", "P1AAyr3", "P1AAzv11652", "P1AAzr075"])
+
+  async def test_a_repeated_setup_puts_back_what_a_session_changed(self):
+    pipettes = await simulated_channels()
+    await pipettes._set_z_speed(2, 50.0)
+    await pipettes._set_y_acceleration_level(2, 1)
+    await pipettes._driver.setup()
+    self.assertEqual(await pipettes.request_z_speed(2), 125.0)
+    self.assertEqual(await pipettes.request_y_acceleration_level(2), 3)
+
+  async def test_a_channel_move_writes_what_it_moved_with(self):
+    pipettes = await simulated_channels()
+    z = pipettes.configuration.z_range[1]
+    await pipettes.move_stop_disc_to_z_position(0, z, speed=100.0, acceleration=300.0)
+    self.assertEqual(await pipettes.request_z_speed(0), 100.0)
+    self.assertEqual(await pipettes.request_z_acceleration(0), 300.4)
+
+
+class TestSafeZ(unittest.IsolatedAsyncioTestCase):
+  """Safe Z is the firmware's own move under a Z profile."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+    answer = self.pipettes._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      wire = {k: v for k, v in kwargs.items() if len(k) == 2 and not isinstance(v, list)}
+      if command in ("ZA", "AA"):
+        self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      return await answer(module=module, command=command, **kwargs)
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_safe_z_is_one_command(self):
+    await self.pipettes.move_to_safe_z()
+    self.assertEqual(self.sent, ["C0ZA"])
+
+  async def test_safe_z_at_a_speed_holds_it_for_the_move(self):
+    await self.pipettes.move_to_safe_z(speed=50.0)
+    self.assertEqual(
+      self.sent,
+      [f"P{i}AAzv04661" for i in "12345678"] + ["C0ZA"] + [f"P{i}AAzv11652" for i in "12345678"],
+    )
+
+  async def test_a_failed_safe_z_still_puts_back_the_speed(self):
+    async def refused() -> List[float]:
+      raise RuntimeError("the probe")
+
+    self.pipettes.probe_z_max = refused  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError):
+      await self.pipettes.move_to_safe_z(speed=50.0)
+    self.assertEqual(
+      self.sent, [f"P{i}AAzv04661" for i in "12345678"] + [f"P{i}AAzv11652" for i in "12345678"]
+    )
 
 
 class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
@@ -382,6 +555,18 @@ class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(await self.pipettes.request_stop_disc_z_position(0), 222.0, places=1)
     self.assertAlmostEqual(await self.pipettes.request_tool_bottom_z_position(0), 200.0, places=1)
 
+  async def test_the_tip_bottoms_answer_a_list_by_channel(self):
+    from pylabrobot.resources.hamilton import hamilton_tip_300uL
+    from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
+
+    for channel, resource in enumerate(self.pipettes.resources):
+      shaft = next(child for child in resource.children if isinstance(child, TipMountingShaft))
+      shaft.mount_tip(hamilton_tip_300uL(name=f"tip_{channel}"))
+    bottoms = await self.pipettes.request_tool_bottom_z_positions()
+    self.assertIsInstance(bottoms, list)
+    self.assertEqual(len(bottoms), self.pipettes.num_channels)
+    self.assertEqual(bottoms[5], await self.pipettes.request_tool_bottom_z_position(5))
+
   async def test_moving_the_tip_end_puts_the_stop_disc_an_overhang_higher(self):
     self.shaft.mount_tip(self.tip)
     low, high = self.pipettes.configuration.z_range
@@ -444,7 +629,7 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
     await pipettes.request_y_positions()
     self.sleep.assert_awaited_once()
     self.assertAlmostEqual(
-      self.sleep.await_args_list[0].args[0], 30.0 / SIMULATED_CHANNEL_Y_SPEED, places=3
+      self.sleep.await_args_list[0].args[0], 30.0 / Pipettes.default_y_speed, places=3
     )
 
   async def test_nothing_is_waited_when_the_device_keeps_no_time(self):
