@@ -1,12 +1,13 @@
+import asyncio
 import math
 import unittest
-from typing import Any, List, Optional, Tuple, cast
+from typing import Any, Callable, Coroutine, List, Optional, Tuple, cast
 from unittest.mock import AsyncMock, patch
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPAxis
-from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.hamilton.star.driver.simulator import SimulatedISWAP, STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.hamilton import STARDeck
@@ -88,7 +89,7 @@ class TestParking(unittest.IsolatedAsyncioTestCase):
         }
       ),
     ):
-      self.assertTrue(await iswap.request_parked())
+      self.assertTrue(await iswap.request_is_parked())
 
   async def test_the_arm_is_not_parked_when_a_drive_is_moved(self):
     iswap, _ = await gripper()
@@ -99,7 +100,7 @@ class TestParking(unittest.IsolatedAsyncioTestCase):
       c.elbow_predefined_y_positions_increments.parking - 10
     )
     with patch.object(iswap, "request_joint_state", new=AsyncMock(return_value=joints)):
-      self.assertFalse(await iswap.request_parked())
+      self.assertFalse(await iswap.request_is_parked())
 
   async def test_z_above_the_parking_position_is_still_parked(self):
     iswap, _ = await gripper()
@@ -111,7 +112,7 @@ class TestParking(unittest.IsolatedAsyncioTestCase):
       + c.elbow_z_offset_above_finger
     )
     with patch.object(iswap, "request_joint_state", new=AsyncMock(return_value=joints)):
-      self.assertTrue(await iswap.request_parked())
+      self.assertTrue(await iswap.request_is_parked())
 
 
 class TestJawMoves(unittest.IsolatedAsyncioTestCase):
@@ -375,6 +376,254 @@ class TestGripperDirections(unittest.IsolatedAsyncioTestCase):
       for direction in ("right", "back", "left", "front"):
         increments = iswap._resolve_gripper_direction_increments(direction, elbow_increments)
         self.assertIn(increments, stored, f"{elbow}/{direction}")
+
+
+class TestParked(unittest.IsolatedAsyncioTestCase):
+  """Parked is every drive on the stop the firmware parks it against, worked out from the pose."""
+
+  async def test_it_never_asks_the_master_for_its_parked_flag(self):
+    """`C0 RG` is answered wrongly by the firmware, so nothing may read it."""
+    iswap, sent = await gripper()
+
+    await iswap.request_is_parked()
+
+    self.assertEqual([command for command in sent if command.startswith("C0RG")], [])
+
+  async def test_a_parked_arm_is_parked_and_a_moved_one_is_not(self):
+    iswap, _ = await gripper()
+    c = iswap.configuration
+
+    await iswap.park()
+    self.assertTrue(await iswap.request_is_parked())
+
+    assert c.elbow_predefined_y_positions_increments is not None
+    await iswap.elbow_move_to_y_position(
+      c.y_increments_to_mm(c.elbow_predefined_y_positions_increments.parking) - 50.0
+    )
+    self.assertFalse(await iswap.request_is_parked())
+
+  async def test_the_jaws_are_part_of_it(self):
+    """Parking closes them, and the gripper's table names that stop its home."""
+    iswap, _ = await gripper()
+    c = iswap.configuration
+
+    await iswap.park()
+    assert c.gripper_drive_predefined_increments is not None
+    home = c.gripper_increments_to_mm(c.gripper_drive_predefined_increments.home)
+    await iswap.gripper_move_to_jaw_position(home + 5.0)
+
+    self.assertFalse(await iswap.request_is_parked())
+
+  async def test_a_drive_within_the_tolerance_still_counts_as_parked(self):
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    await iswap.park()
+
+    # Seated on the model rather than moved to: the parking stop is past the far end of the Y the
+    # drive takes commands for, so it cannot be sent there.
+    assert c.elbow_predefined_y_positions_increments is not None
+    stop = c.elbow_predefined_y_positions_increments.parking
+    iswap.update_location_by_reference_point(y=c.y_increments_to_mm(stop + 2))
+    self.assertTrue(await iswap.request_is_parked())
+    iswap.update_location_by_reference_point(y=c.y_increments_to_mm(stop + 20))
+    self.assertFalse(await iswap.request_is_parked())
+
+  async def test_a_parked_arm_above_its_z_stop_is_parked_and_below_it_is_not(self):
+    """Parked from 284 mm, the device stands at `rz` 26660 against a stop of 25400."""
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    await iswap.park()
+    assert c.elbow_predefined_z_positions_increments is not None
+    stop = c.elbow_predefined_z_positions_increments.parking
+    offset = c.elbow_z_offset_above_finger
+
+    iswap.update_location_by_reference_point(z=c.z_increments_to_mm(stop + 1260) + offset)
+    self.assertTrue(await iswap.request_is_parked())
+    iswap.update_location_by_reference_point(z=c.z_increments_to_mm(stop - 20) + offset)
+    self.assertFalse(await iswap.request_is_parked())
+
+
+class TestElbowXMoves(unittest.IsolatedAsyncioTestCase):
+  """The elbow has no X drive of its own: the arm carries it, offset from the carriage."""
+
+  async def test_the_arm_is_sent_where_it_puts_the_elbow(self):
+    """The recorded elbow sits 32.8 mm left of the carriage, so an elbow at 400 is the arm at
+    432.8."""
+    iswap, sent = await gripper()
+
+    await iswap.elbow_move_to_x_position(400.0)
+
+    self.assertEqual(sent, ["X0XPla04328lr3lw7"])
+    self.assertEqual(await iswap.elbow_request_x_position(), 400.0)
+
+  async def test_an_x_the_elbow_cannot_reach_is_refused_before_anything_moves(self):
+    iswap, sent = await gripper()
+    x_range = iswap.arm.configuration.x_range
+    offset = iswap.configuration.elbow_x_offset
+    assert x_range is not None and offset is not None
+
+    for x in (x_range[0] - offset - 1.0, x_range[1] - offset + 1.0):
+      with self.subTest(x=x), self.assertRaises(ValueError):
+        await iswap.elbow_move_to_x_position(x)
+
+    self.assertEqual(sent, [])
+
+  async def test_without_the_elbow_x_offset_nothing_moves(self):
+    iswap, sent = await gripper()
+    iswap.configuration.elbow_x_offset = None
+
+    with self.assertRaises(RuntimeError):
+      await iswap.elbow_move_to_x_position(400.0)
+
+    self.assertEqual(sent, [])
+
+
+class TestTheModelDuringAMove(unittest.IsolatedAsyncioTestCase):
+  """The model holds a move's target while it runs, and what the drive reads once it is over."""
+
+  async def asyncSetUp(self):
+    iswap, self.sent = await gripper()
+    self.iswap = cast(SimulatedISWAP, iswap)
+    c = iswap.configuration
+    assert c.wrist_drive_predefined_increments is not None
+    straight = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.straight)
+    elbow = iswap.elbow_drive_get_angle()
+    assert elbow is not None
+    # Forward of the Y the carriage stands at after setup, where the wrist may turn straight.
+    await iswap.elbow_move_to_y_position(577.39)
+    # Y, Z, the joints and the jaws: the command each move sends, the reads that follow it, the
+    # move itself, where it goes, and where the model has that drive.
+    self.drives: List[
+      Tuple[
+        str,
+        str,
+        Tuple[Tuple[str, str], ...],
+        Callable[[], Coroutine[Any, Any, Any]],
+        Any,
+        Callable[[], Any],
+      ]
+    ] = [
+      (
+        "y",
+        "_unchecked_fw_elbow_move_to_y_position_increments",
+        (("R0", "RY"),),
+        lambda: iswap.elbow_move_to_y_position(527.39),
+        527.39,
+        lambda: cast(Coordinate, iswap.elbow_get_reference_point_location()).y,
+      ),
+      (
+        "z",
+        "_unchecked_fw_elbow_move_to_z_position_increments",
+        (("R0", "RZ"),),
+        lambda: iswap.elbow_move_to_z_position(250.0),
+        250.0,
+        lambda: cast(Coordinate, iswap.elbow_get_reference_point_location()).z,
+      ),
+      (
+        "joints",
+        "_unchecked_fw_joint_drives_rotate_increments",
+        (("R0", "RW"), ("R0", "RT")),
+        lambda: iswap.rotate_to_angles(
+          elbow_relative_angle=elbow, gripper_relative_angle="straight", raise_features=False
+        ),
+        (elbow, straight),
+        lambda: (iswap.elbow_drive_get_angle(), iswap.wrist_drive_get_angle()),
+      ),
+      (
+        "jaws",
+        "_unchecked_fw_gripper_move_to_jaw_position_increments",
+        (("R0", "RG"),),
+        lambda: iswap.gripper_move_to_jaw_position(80.0),
+        80.0,
+        lambda: cast(MechanicalGripper, iswap.gripper).jaw_width,
+      ),
+    ]
+
+  async def standing_still(self, reads: Tuple[Tuple[str, str], ...]):
+    """A stand-in for the simulated drive's answers that has it read where it stands now.
+
+    The simulator answers a read from the model, which a move has already set to its target; a
+    drive that never got there reads where it was instead.
+    """
+    answer = self.iswap.answer
+    frozen = {read: await answer(*read) for read in reads}
+
+    async def device(module: str, command: str, **kwargs: Any):
+      if (module, command) in frozen:
+        return frozen[(module, command)]
+      return await answer(module, command, **kwargs)
+
+    return device
+
+  async def test_the_target_is_on_the_model_while_the_move_runs(self):
+    for name, command, _, move, target, model in self.drives:
+      with self.subTest(drive=name):
+        seen: List[Any] = []
+
+        async def sent(**_: Any):
+          seen.append(model())
+
+        with patch.object(self.iswap, command, new=sent):
+          await move()
+
+        self.assertEqual(seen, [target])
+
+  async def test_a_move_that_fails_is_recorded_where_the_drive_reads(self):
+    for name, command, reads, move, target, model in self.drives:
+      with self.subTest(drive=name):
+        before = model()
+        with (
+          patch.object(self.iswap, "answer", new=await self.standing_still(reads)),
+          patch.object(self.iswap, command, new=AsyncMock(side_effect=RuntimeError("stall"))),
+          self.assertRaisesRegex(RuntimeError, "stall"),
+        ):
+          await move()
+
+        self.assertEqual(model(), before)
+        self.assertNotEqual(model(), target)
+
+  async def test_a_move_whose_read_fails_keeps_its_target(self):
+    for name, _, reads, move, target, model in self.drives:
+      with self.subTest(drive=name):
+        answer = self.iswap.answer
+        before = len(moves(self.sent))
+
+        # Only the reads after the move: some moves read their drive before they choose a command.
+        async def unreadable(module: str, command: str, **kwargs: Any):
+          if (module, command) in reads and len(moves(self.sent)) > before:
+            raise RuntimeError("no answer")
+          return await answer(module, command, **kwargs)
+
+        with (
+          patch.object(self.iswap, "answer", new=unreadable),
+          self.assertLogs("pylabrobot", level="WARNING"),
+        ):
+          await move()
+
+        self.assertEqual(model(), target)
+
+  async def test_a_cancelled_move_is_recorded_where_the_drive_reads(self):
+    for name, command, reads, move, target, model in self.drives:
+      with self.subTest(drive=name):
+        before = model()
+        running = asyncio.Event()
+
+        async def hangs(**_: Any):
+          running.set()
+          await asyncio.Event().wait()
+
+        with (
+          patch.object(self.iswap, "answer", new=await self.standing_still(reads)),
+          patch.object(self.iswap, command, new=hangs),
+        ):
+          task = asyncio.create_task(move())
+          await running.wait()
+          self.assertEqual(model(), target)
+          task.cancel()
+          with self.assertRaises(asyncio.CancelledError):
+            await task
+
+        self.assertEqual(model(), before)
 
 
 class TestSafeZ(unittest.IsolatedAsyncioTestCase):
