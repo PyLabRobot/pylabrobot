@@ -781,7 +781,7 @@ class Pipettes:
       ValueError: If the channels cannot reach it.
     """
     self._check_reachable("x", x)
-    return await self.arm.move_x(
+    return await self.arm.move_to_x_position(
       x,
       acceleration_level=acceleration_level,
       current_limit=current_limit,

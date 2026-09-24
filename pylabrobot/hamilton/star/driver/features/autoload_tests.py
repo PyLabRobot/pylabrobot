@@ -76,7 +76,7 @@ class TestAFailedSledMoveRaisesTheWheel(unittest.IsolatedAsyncioTestCase):
     middle = c.to_deck_frame(c.x_drive_increments_to_mm((low + high) // 2))
 
     with patch(LOWERED, 10.0), self.assertRaises(DriveFault):
-      await feature.move_x(middle)
+      await feature.move_to_x_position(middle)
 
     self.assertIn("C0IV", after(sent, "I0XA"))
 

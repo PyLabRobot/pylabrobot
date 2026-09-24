@@ -810,7 +810,7 @@ class Head:
       raise RuntimeError("this head is not on either arm; have you called `star.setup()`?")
     if self.configuration.x_offset is None:
       raise RuntimeError("the head's X offset was not read; have you called `star.setup()`?")
-    return await arm.move_x(
+    return await arm.move_to_x_position(
       round(x + self.configuration.x_offset, 2),
       acceleration_level=acceleration_level,
       current_limit=current_limit,

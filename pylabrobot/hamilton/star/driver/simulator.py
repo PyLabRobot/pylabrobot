@@ -9,10 +9,12 @@ Nothing reaches the wire. `send_command` raises, which is how a command that has
 simulated makes itself known: override the method that sends it, on the feature that owns it.
 """
 
+import asyncio
 import copy
 import dataclasses
 import datetime
 import logging
+import math
 from typing import Any, Dict, List, Literal, Optional, Tuple, cast
 
 from pylabrobot.hamilton.protocol.text.framing import (
@@ -80,6 +82,10 @@ SIMULATED_COVER_POSITION: CoverPosition = "closed"
 
 # The three inputs on the cover connector: the cover input, and two whose meaning is not known.
 SIMULATED_COVER_INPUTS = (True, False, False)
+
+# How fast a channel crosses along Y, in mm/s, for the time a simulated move takes. The Y move names
+# an acceleration level rather than a speed, so this is the one speed its time is counted at.
+SIMULATED_CHANNEL_Y_SPEED = 250.0
 
 # What its scanner reads. A simulated deck holds no carriers, so nothing.
 SIMULATED_BARCODE: Optional[str] = None
@@ -168,6 +174,19 @@ class SimulatedPipettes(_Simulated, Pipettes):
     await super().initialize(*args, **kwargs)
     self.device.tips_mounted = [False] * len(self.device.tips_mounted)
 
+  @staticmethod
+  def _get_travel_time(distance: float, speed: float, acceleration: Optional[float]) -> float:
+    """How long a move of `distance` takes at `speed`, speeding up and slowing down at
+    `acceleration`, in seconds. With no acceleration stated it is the cruise alone."""
+    distance = abs(distance)
+    if distance == 0.0:
+      return 0.0
+    if acceleration is None:
+      return distance / speed
+    if distance * acceleration < speed * speed:  # never reaches cruise
+      return 2 * math.sqrt(distance / acceleration)
+    return distance / speed + speed / acceleration
+
   def _shaft(self, channel: int) -> Optional[TipMountingShaft]:
     """The mounting shaft that models a channel, or None while nothing models it yet."""
     if channel >= len(self.resources):
@@ -224,6 +243,29 @@ class SimulatedPipettes(_Simulated, Pipettes):
     """
     point = self.get_reference_point_location(channel)
     return self.configuration.z_range[1] if point is None else point.z
+
+  def update_location_by_reference_point(
+    self, channel: int, y: Optional[float] = None, z: Optional[float] = None
+  ) -> None:
+    """Record where a channel is, and charge the device for the time the drives would take.
+
+    A simulated device answers at once, so a run is over before anything watching it has been given
+    a turn. What a move would have taken is owed here and waited out before the next command, which
+    paces a run without any command pretending to be slow in itself.
+    """
+    if self.device.simulate_motion_time:
+      c = self.configuration
+      self.device.owe_motion_time(
+        self._get_travel_time(
+          0.0 if y is None else y - self._modelled_y(channel), SIMULATED_CHANNEL_Y_SPEED, None
+        ),
+        self._get_travel_time(
+          0.0 if z is None else z - self._modelled_z(channel),
+          c.z_drive_speed_default,
+          c.z_drive_acceleration_default,
+        ),
+      )
+    super().update_location_by_reference_point(channel, y=y, z=z)
 
   async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
     """What a read of the channels answers, taken from the model.
@@ -955,7 +997,7 @@ class SimulatedAutoload(_Simulated, Autoload):
     await self.recorded("C0", "CT", subsystem="I0", cp=f"{track:02}")
     return False
 
-  async def move_x(
+  async def move_to_x_position(
     self,
     x: float,
     speed: Optional[float] = None,
@@ -965,7 +1007,7 @@ class SimulatedAutoload(_Simulated, Autoload):
     # A simulated drive goes exactly where it is told. The real one is read back afterwards, which
     # is what `Autoload` relies on, so the position has to be true here before that read happens or
     # the read returns the position the sled started at and it never moves.
-    resp = await super().move_x(
+    resp = await super().move_to_x_position(
       x, speed=speed, acceleration_ramp=acceleration_ramp, current_limit=current_limit
     )
     self.update_location_by_reference_point(x)
@@ -990,8 +1032,8 @@ class SimulatedAutoload(_Simulated, Autoload):
     self.device.initialized["I0"] = True
 
   async def move_to_track(self, track: int, *args, **kwargs):
-    # As `move_x` records where a position move put the sled, so this records where a track move
-    # did. The deck is what knows where a track is.
+    # As `move_to_x_position` records where a position move put the sled, so this records where a
+    # track move did. The deck is what knows where a track is.
     await super().move_to_track(track, *args, **kwargs)
     # A simulated device is built with a deck or refuses to be built at all, so there is one.
     deck = cast(HamiltonDeck, self.device.deck)
@@ -1004,6 +1046,8 @@ class STARSimulationDriver(STARDriver):
   def __init__(
     self,
     tips_mounted: Optional[List[bool]] = None,
+    simulate_motion_time: bool = False,
+    motion_time_scale: float = 0.25,
     deck: Optional[HamiltonDeck] = None,
     initialized: bool = False,
     left_side_panel_installed: bool = False,
@@ -1013,6 +1057,9 @@ class STARSimulationDriver(STARDriver):
     Args:
       tips_mounted: one entry per channel, `True` where a tip sits on the channel. Defaults to no
         tips on any of them.
+      simulate_motion_time: whether a command that moves the channels takes the time the drives
+        would take, so a run can be followed rather than being over at once.
+      motion_time_scale: the share of that time a move takes when it does.
       deck: the deck to reflect this device into. Required: a simulated device has no firmware
         to ask, so the resource model is the only thing it can answer from.
       initialized: whether the device and its modules report themselves already initialized. One
@@ -1069,6 +1116,11 @@ class STARSimulationDriver(STARDriver):
     if len(tips_mounted) != channels:
       raise ValueError(f"tips_mounted has {len(tips_mounted)} entries, expected {channels}")
     self.tips_mounted = list(tips_mounted)
+    self.simulate_motion_time = simulate_motion_time
+    self.motion_time_scale = motion_time_scale
+    # What the drives would still be doing, in seconds: the longest move recorded since the last
+    # command, waited out before the next one goes.
+    self._motion_owed = 0.0
 
     # What each module says when asked whether it is initialized, and where things are.
     self.initialized = {module: initialized for module in ("C0", "I0", "R0", "H0")}
@@ -1159,6 +1211,18 @@ class STARSimulationDriver(STARDriver):
     await super()._pre_initialize(read_timeout=read_timeout)
     self.initialized["C0"] = True
 
+  async def pay_motion_time(self) -> None:
+    """Wait out what the moves recorded since the last wait would have taken. Nothing owed, nothing
+    waited, so this costs nothing on a device that is not keeping time."""
+    owed, self._motion_owed = self._motion_owed, 0.0
+    if owed:
+      await asyncio.sleep(owed * self.motion_time_scale)
+
+  def owe_motion_time(self, *seconds: float) -> None:
+    """Charge the device for a move, in seconds. The longest one owed stands: the drives move at
+    once, so a command takes as long as its slowest axis."""
+    self._motion_owed = max(self._motion_owed, *seconds)
+
   def _describe_link(self) -> str:
     return "simulation (no link)"
 
@@ -1227,6 +1291,7 @@ class STARSimulationDriver(STARDriver):
       num_channels=self.num_channels if carries_a_list else 0,
       **kwargs,
     )
+    await self.pay_motion_time()
     answered = await self._answer(module, command, **kwargs)
     if answered is None:
       self._log_exchange(cmd, None)
