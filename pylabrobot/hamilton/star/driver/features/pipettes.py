@@ -28,6 +28,7 @@ from pylabrobot.hamilton.star.driver.errors import (
   channels_that_faulted,
 )
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
+from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import ChannelBatch, plan_batches
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -36,7 +37,7 @@ from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipDropMetho
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMountingShaft
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipSpot
+from pylabrobot.resources.tip_rack import TipSpot, tip_origin
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.features.x_arm import XArm
@@ -2756,3 +2757,73 @@ class Pipettes:
           dropped[channel] and tip is not None and isinstance(place, TipSpot) and place.tracks_tips
         ):
           place.assign_tip(tip)
+
+  async def return_tips(self, use_channels: Optional[List[int]] = None, **kwargs) -> None:
+    """Put each channel's tip back in the tip spot it was picked up from, as legacy does.
+
+    The spot is found from the tip itself: a spot names the tips it makes after itself.
+
+    Args:
+      use_channels: which channels. Of these, only those carrying a tip return one. Every channel,
+        when None.
+      kwargs: passed on to `drop_tips`.
+
+    Raises:
+      RuntimeError: If no channel carries a tip, or a tip's spot is not on the deck.
+    """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    channels = range(self.num_channels) if use_channels is None else use_channels
+    spots: List[TipSpot] = []
+    carrying: List[int] = []
+    for channel in sorted(channels):
+      tip = self.get_mounted_tip(channel)
+      if tip is None:
+        continue
+      spot = tip_origin(tip, deck)
+      if spot is None:
+        raise RuntimeError(
+          f"the spot channel {channel}'s tip {tip.name} came from is not on the deck"
+        )
+      spots.append(spot)
+      carrying.append(channel)
+    if not spots:
+      raise RuntimeError("No tips have been picked up.")
+    await self.drop_tips(spots, use_channels=carrying, **kwargs)
+
+  async def discard_tips(
+    self,
+    use_channels: Optional[List[int]] = None,
+    offsets: Optional[List[Coordinate]] = None,
+    **kwargs,
+  ) -> None:
+    """Discard each channel's tip into the deck's waste, spread across it as legacy spreads them.
+
+    Args:
+      use_channels: which channels. Every channel the model has a tip on, when None.
+      offsets: added to where each channel is spread to, in mm.
+      kwargs: passed on to `drop_tips`.
+    """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    if use_channels is None:
+      use_channels = [
+        channel for channel in range(self.num_channels) if self.get_mounted_tip(channel) is not None
+      ]
+    if not use_channels:
+      return
+    trash = deck.get_trash_area()
+    spread = compute_channel_offsets(trash, num_channels=len(use_channels), spread="tight")
+    offsets = (
+      spread if offsets is None else [offset + extra for offset, extra in zip(offsets, spread)]
+    )
+    # The waste is a place, not a spot: each tip is let go over it and belongs to nothing after.
+    over_the_waste = trash.get_location_wrt(deck, x="c", y="c", z="b")
+    await self.drop_tips(
+      [over_the_waste] * len(use_channels),
+      use_channels=use_channels,
+      offsets=offsets,
+      **kwargs,
+    )
