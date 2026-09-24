@@ -48,6 +48,7 @@ from pylabrobot.io.usb import USB
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
+from pylabrobot.resources.hamilton.star_decks import HamiltonSTARDeck
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.manipulator import LinkBody
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
@@ -82,6 +83,20 @@ def _range(values: Optional[Tuple[float, float]]) -> str:
 
 class STARDriver:
   """Interface for the Hamilton STARDriver."""
+
+  def _deck_component_name(self, name: str) -> str:
+    """Resolve a built-in deck resource without changing its existing name."""
+    if isinstance(self.deck, HamiltonSTARDeck):
+      return self.deck.get_component_name(name)
+    return name
+
+  def _component_name(self, name: str) -> str:
+    """Name discovered components after the device carrying the deck, or the standalone deck."""
+    if self.deck is not None and self.deck.parent is not None:
+      device = self.deck.parent
+      if device.category == "device":
+        return f"{device.name}_{name}"
+    return self._deck_component_name(name)
 
   def __init__(
     self,
@@ -1388,10 +1403,10 @@ class STARDriver:
         name == "head96"
         and head.configuration.tip_discard_location is None
         and self.deck is not None
-        and self.deck.has_resource("trash_core96")
+        and self.deck.has_resource(self._deck_component_name("trash_core96"))
       ):
         head.configuration.tip_discard_location = cast(Head96, head)._position_centred_in(
-          self.deck.get_resource("trash_core96")
+          self.deck.get_resource(self._deck_component_name("trash_core96"))
         )
       if not await self.request_initialization_status(head.configuration.module):
         if head.configuration.tip_discard_location is None:
@@ -1553,7 +1568,7 @@ class STARDriver:
         logger.warning("the %s X-arm reported no width, so it is not modelled", arm.side)
         continue
       arm.resource = self.deck.get_or_create_x_arm(
-        name=f"{arm.side}_x_arm",
+        name=self._component_name(f"{arm.side}_x_arm"),
         x=await arm.request_position(),
         size_x=a.size_x,
         reference_point_from_left=a.reference_point_from_left,
@@ -1591,7 +1606,7 @@ class STARDriver:
     zs = await arm.pipettes._unchecked_fw_request_lowest_z_positions()
 
     for channel in range(len(c.channels)):
-      name = f"pipette_channel_{channel}"
+      name = self._component_name(f"pipette_channel_{channel}")
       resource = next((r for r in arm.resource.children if r.name == name), None)
       if resource is None:
         width = c.channels[channel].width
@@ -1644,6 +1659,7 @@ class STARDriver:
       ):
         if head is None:
           continue
+        name = self._component_name(name)
         c = head.configuration
         # Where the head is, read before it has a resource to read from: the drive answers on a
         # device, and a simulated one falls back to where it rests rather than reporting back the
@@ -1699,9 +1715,8 @@ class STARDriver:
       y = await iswap.elbow_request_y_position()
       z = await iswap.elbow_request_z_position()
       angle = await iswap.elbow_drive_request_angle()
-      existing = next(
-        (child for child in arm.resource.children if child.name == "iswap_head"), None
-      )
+      name = self._component_name("iswap_head")
+      existing = next((child for child in arm.resource.children if child.name == name), None)
       resource = existing if isinstance(existing, iSWAPHead) else None
       if resource is None:
         if c.elbow_x_offset is None:
@@ -1722,7 +1737,7 @@ class STARDriver:
           + ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z
         )
         resource = iswap_head(
-          name="iswap_head",
+          name=name,
           diameter=c.elbow_drive_diameter,
           size_z=round(max(tops) - retracted_base, 1) if tops else c.elbow_drive_size_z,
         )
@@ -1747,9 +1762,8 @@ class STARDriver:
       # the arm rather than at whatever width the gripper was built holding.
       await iswap.gripper_request_width()
 
-  @staticmethod
   def _create_iswap_arm(
-    resource: iSWAPHead, c: iSWAPConfiguration
+    self, resource: iSWAPHead, c: iSWAPConfiguration
   ) -> Tuple[Optional[LinkBody], Optional[MechanicalGripper]]:
     """Hang the arm off the carriage: one link, and the gripper it carries.
 
@@ -1769,7 +1783,7 @@ class STARDriver:
       return None, None
     link_1 = next((child for child in resource.children if isinstance(child, LinkBody)), None)
     if link_1 is None:
-      link_1 = iswap_link_1(name="iswap_link_1", length=c.link_1_length)
+      link_1 = iswap_link_1(name=self._component_name("iswap_link_1"), length=c.link_1_length)
       # A member's origin is a corner, so it is placed by where its joint has to land: the joint
       # goes on the drive's reference point, and the corner falls wherever that puts it.
       resource.assign_child_resource(
@@ -1782,7 +1796,7 @@ class STARDriver:
       # How far the jaws travel is the gripper drive's own window, converted, rather than a
       # measurement of the fingers: what the drive accepts is what the jaws do.
       gripper = iswap_gripper(
-        name="iswap_gripper",
+        name=self._component_name("iswap_gripper"),
         # The Z drive is calibrated to the finger plane and reports its own bottom, so the grip
         # centre is that far below the wrist the gripper hangs from.
         tool_center_point=Coordinate(c.tool_length, 0.0, -c.elbow_z_offset_above_finger),
@@ -1814,9 +1828,11 @@ class STARDriver:
       return
     x = await self.autoload.request_x_position()
     self.autoload.resource = self.deck.get_or_create_autoload_sled(
-      name="autoload_sled",
+      name=self._component_name("autoload_sled"),
       x=x,
       reference_point_from_left=self.autoload.configuration.reference_point_from_sled_left_edge,
     )
     self.autoload.update_location_by_reference_point(x)
-    self.deck.get_or_create_autoload_loading_tray(name="autoload_loading_tray")
+    self.deck.get_or_create_autoload_loading_tray(
+      name=self._component_name("autoload_loading_tray")
+    )
