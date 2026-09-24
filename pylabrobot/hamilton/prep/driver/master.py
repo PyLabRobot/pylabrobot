@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-import random
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import (
+  Any,
+  AsyncIterator,
+  Dict,
+  List,
+  Optional,
+  Tuple,
+  TypeVar,
+  Union,
+)
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
@@ -37,6 +44,7 @@ from .errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from .features.calibration import Calibration
 from .features.core_grippers import CoreGripperArm, CoreGrippers
 from .features.head8 import Head8
+from .features.lights import Lights
 from .features.method import MethodLifecycle
 from .features.pipettes import Pipettes
 from .features.x_arm import XArm
@@ -279,6 +287,7 @@ class PrepDriver:
     self.pipettes: Optional[Pipettes] = None
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
+    self.lights: Optional[Lights] = None
     # How long to wait for a command's answer, in seconds. A command that takes longer than any
     # this device performs is one it is not going to answer, and a caller waiting on it cannot halt
     # the device or say so. Initializing names its own.
@@ -331,6 +340,14 @@ class PrepDriver:
       # 1. What is on the other end, and what does it carry?
       logger.debug("[PHASE 1] Discovery")
       await self.discover()
+
+      # The light as early as the device's method table allows, so the deck says the device is
+      # working for all of the initializing and bringing up that is left. A colour, not an
+      # animation: the host drives every frame down this same connection, and setup keeps it busy.
+      if self.lights is None and await self.request_deck_light_installed():
+        self.lights = Lights(self)
+      if self.lights is not None:
+        await self.lights.set_color("turquoise")
 
       # 2. Bring the device to a known state.
       logger.debug("[PHASE 2] Device initialization")
@@ -467,7 +484,8 @@ class PrepDriver:
   async def stop(self, skip_raise_to_z_safety: bool = False):
     """Close the link, leaving the device safe to move laterally.
 
-    The device keeps its state; only this driver lets go of it. Every pipetting channel is moved up to Z safety
+    The device keeps its state, but not the deck light: it is darkened, since a colour stands on
+    the device with nobody holding it. Only this driver lets go. Every pipetting channel is moved up to Z safety
     first, and where the channels stopped is read back: a driver that let go with a channel low would leave the
     next lateral move to crash it. The 8-channel head is not raised: no move of its Z alone is known.
 
@@ -511,6 +529,13 @@ class PrepDriver:
         await self.pipettes._on_stop()
       if self.head8 is not None:
         await self.head8._on_stop()
+      if self.lights is not None:
+        # A colour stands on the device without a host to hold it, so a driver that let go mid-hold
+        # would leave the deck lit for good.
+        try:
+          await self.lights.turn_off()
+        except Exception:
+          logger.warning("could not darken the deck light", exc_info=True)
       await self._close()
       self._setup_finished = False
 
@@ -1362,29 +1387,66 @@ class PrepDriver:
   # Deck light
   # ----------------------------------------
 
-  async def request_deck_light(self) -> Tuple[int, int, int, int]:
-    result = await self.send_command(PrepCmd.PrepGetDeckLight())
-    if result is None:
-      raise ValueError("No response from GetDeckLight.")
-    return (result.white, result.red, result.green, result.blue)
+  async def request_deck_light_installed(self) -> bool:
+    """Request whether this device has a deck light, by whether its firmware declares one.
 
-  async def set_deck_light(self, white: int, red: int, green: int, blue: int) -> None:
-    await self.send_command(PrepCmd.PrepSetDeckLight(white=white, red=red, green=green, blue=blue))
-
-  async def disco_mode(self) -> None:
-    """Easter egg: cycle deck lights then restore previous state."""
-    white, red, green, blue = await self.request_deck_light()
+    What the light stands at, and how to set it, is `lights`, built at setup if this answers True.
+    """
     try:
-      for _ in range(69):
-        await self.set_deck_light(
-          white=random.randint(1, 255),
-          red=random.randint(1, 255),
-          green=random.randint(1, 255),
-          blue=random.randint(1, 255),
-        )
-        await asyncio.sleep(0.1)
-    finally:
-      await self.set_deck_light(white=white, red=red, green=green, blue=blue)
+      await self.request_method_by_name(MLPREP_OBJECT_PATH, "SetDeckLight")
+    except (RuntimeError, PrepMethodNotFoundError):
+      return False
+    return True
+
+  # ----------------------------------------
+  # Error lighting
+  # ----------------------------------------
+
+  async def signal_error(self, duration: Optional[float] = 8.0, wait: bool = False) -> None:
+    """Pulse the deck red, if this device has a light to say it with.
+
+    It says that something went wrong, and is not part of what went wrong: it never raises, and a
+    device with no light does nothing at all.
+
+    Args:
+      duration: how many seconds to pulse for, or None to pulse until the light is turned off or
+        set to something else, leaving the deck lit after the error.
+      wait: hold until the pulse is over and the deck is dark. The pulse otherwise runs in the
+        background, which is what a notebook or a running protocol wants; a script that exits the
+        moment it raises takes its event loop with it, and needs this to show anything.
+
+    Raises:
+      ValueError: If `wait` is asked of a pulse with no duration, which would never return.
+    """
+    if wait and duration is None:
+      raise ValueError("a pulse with no duration never ends, so it cannot be waited on")
+    if self.lights is None:
+      return
+    try:
+      await self.lights.animate_error_pulse(duration=duration)
+      if wait:
+        await self.lights.wait_for_animation()
+    except Exception:
+      logger.debug("could not signal an error on the deck light", exc_info=True)
+
+  @asynccontextmanager
+  async def error_lighting(
+    self, duration: Optional[float] = 8.0, wait: bool = False
+  ) -> AsyncIterator[None]:
+    """Pulse the deck red when something inside raises, and let it raise on.
+
+    Nothing is caught or hidden: the error carries on to whoever was going to handle it.
+
+    Args:
+      duration: how many seconds to pulse for, or None to leave the deck pulsing after the error,
+        until the light is turned off or set to something else.
+      wait: as `signal_error`.
+    """
+    try:
+      yield
+    except Exception:
+      await self.signal_error(duration=duration, wait=wait)
+      raise
 
   # ----------------------------------------
   # Speed scales
