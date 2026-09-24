@@ -154,14 +154,14 @@ def prep_core_gripper_mount(name: str = "core_grippers") -> HamiltonCoreGrippers
   )
 
 
-def hamilton_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
+def hamilton_core_gripper_1000ul_at_waste(name: str = "core_grippers") -> HamiltonCoreGrippers:
   # inner hole diameter is 8.6mm
   # distance from base of rack to outer base of containers: -7mm
   # left outer edge of rack is 22.5mm
   # front outer edge of rack is 9.5mm
 
   mount = HamiltonCoreGrippers(
-    name="core_grippers",
+    name=name,
     size_x=45,  # from venus
     size_y=45,  # from venus
     size_z=24,  # from venus
@@ -180,14 +180,14 @@ def hamilton_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
   return mount
 
 
-def hamilton_core_gripper_1000ul_5ml_on_waste() -> HamiltonCoreGrippers:
+def hamilton_core_gripper_1000ul_5ml_on_waste(name: str = "core_grippers") -> HamiltonCoreGrippers:
   # distance from base of rack to outer base of containers: 0mm
   # inner hole diameter is 8.6mm
   # left outer edge of rack is 19.5mm
   # front outer edge of rack is 39.5mm
 
   mount = HamiltonCoreGrippers(
-    name="core_grippers",
+    name=name,
     size_x=39,  # from venus
     size_y=61,  # from venus
     size_z=19.5,  # measured

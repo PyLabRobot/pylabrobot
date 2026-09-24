@@ -3,6 +3,7 @@
 from typing import Literal, Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.errors import ResourceNotFoundError
 from pylabrobot.resources.hamilton.core_grippers import (
   hamilton_core_gripper_1000ul_5ml_on_waste,
   hamilton_core_gripper_1000ul_at_waste,
@@ -22,6 +23,10 @@ class HamiltonSTARDeck(HamiltonDeck):
   """Base class for a Hamilton STAR(let) deck."""
 
   _rails_beyond_tracks = 2
+
+  def get_component_name(self, name: str) -> str:
+    """Name a built-in component after this deck; the default standalone deck keeps short names."""
+    return name if self.name == "deck" else f"{self.name}_{name}"
 
   def __init__(
     self,
@@ -66,14 +71,18 @@ class HamiltonSTARDeck(HamiltonDeck):
 
     if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
-      trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
+      trash96 = Trash(
+        self.get_component_name("trash_core96"), size_x=122.4, size_y=82.6, size_z=0
+      )  # size of tiprack
       self.assign_child_resource(
         resource=trash96,
         location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=216.4),
       )
 
     if with_waste_block:
-      waste_block = Resource(name="waste_block", size_x=30, size_y=445.2, size_z=100)
+      waste_block = Resource(
+        name=self.get_component_name("waste_block"), size_x=30, size_y=445.2, size_z=100
+      )
       self.assign_child_resource(
         waste_block,
         location=Coordinate(x=self.track_to_location(self.num_tracks + 1).x, y=115.0, z=100),
@@ -83,7 +92,9 @@ class HamiltonSTARDeck(HamiltonDeck):
       # only run if the waste block is actually assigned.
       if with_trash:
         if with_waste_block:
-          waste_block_x = self.get_resource("waste_block").get_location_wrt(self).x
+          waste_block_x = (
+            self.get_resource(self.get_component_name("waste_block")).get_location_wrt(self).x
+          )
         else:
           # Fallback: anchor to the rightmost rail when no waste block is present.
           waste_block_x = self.track_to_location(self.num_tracks + 1).x
@@ -91,14 +102,14 @@ class HamiltonSTARDeck(HamiltonDeck):
         trash_x = waste_block_x + 25
 
         self.assign_child_resource(
-          resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
+          resource=Trash(self.get_component_name("trash"), size_x=0, size_y=241.2, size_z=0),
           location=Coordinate(x=trash_x, y=190.6, z=137.1),
         )
 
       if with_teaching_rack:
         tip_spots = [
           TipSpot(
-            name=f"teaching_tip_rack_tip_spot_{i}",
+            name=self.get_component_name(f"teaching_tip_rack_tip_spot_{i}"),
             size_x=9.0,
             size_y=9.0,
             size_z=0,
@@ -111,7 +122,7 @@ class HamiltonSTARDeck(HamiltonDeck):
           ts.location = Coordinate(x=0, y=7 * 9 - 9 * i, z=75.0)
 
         teaching_tip_rack = TipRack(
-          name="teaching_tip_rack",
+          name=self.get_component_name("teaching_tip_rack"),
           size_x=9,
           size_y=9 * 8,
           size_z=50.4,
@@ -131,13 +142,13 @@ class HamiltonSTARDeck(HamiltonDeck):
     if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if self.num_tracks == STAR_NUM_TRACKS else 798
       waste_block.assign_child_resource(
-        hamilton_core_gripper_1000ul_at_waste(),
+        hamilton_core_gripper_1000ul_at_waste(name=self.get_component_name("core_grippers")),
         location=Coordinate(x=x, y=105.550 - 26 - 9.5, z=205) - waste_block.location,
       )
     elif core_grippers == "1000uL-5mL-on-waste":  # "on waste"
       x = 1337.5 if self.num_tracks == STAR_NUM_TRACKS else 797.5
       waste_block.assign_child_resource(
-        hamilton_core_gripper_1000ul_5ml_on_waste(),
+        hamilton_core_gripper_1000ul_5ml_on_waste(name=self.get_component_name("core_grippers")),
         location=Coordinate(x=x, y=125 - 18 - 21.5, z=200.5)  # probed
         - waste_block.location,
       )
@@ -154,12 +165,20 @@ class HamiltonSTARDeck(HamiltonDeck):
     x = 100.0 + (track - 1) * _TRACK_WIDTH
     return Coordinate(x=x, y=63, z=100)
 
+  def get_trash_area(self) -> Trash:
+    """Return this deck's pipette waste area."""
+    name = self.get_component_name("trash")
+    if not self.has_resource(name):
+      raise ResourceNotFoundError("Trash area not found")
+    return cast(Trash, self.get_resource(name))
+
   def get_trash_area96(self) -> Trash:
-    if not self.has_resource("trash_core96"):
+    name = self.get_component_name("trash_core96")
+    if not self.has_resource(name):
       raise RuntimeError(
         "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
       )
-    return cast(Trash, self.get_resource("trash_core96"))
+    return cast(Trash, self.get_resource(name))
 
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas and the waste block."""
@@ -168,7 +187,7 @@ class HamiltonSTARDeck(HamiltonDeck):
       resource = self.get_resource(resource_name)
       if isinstance(resource, Trash) and not include_trash:
         continue
-      if resource.name == "waste_block":
+      if resource.name == self.get_component_name("waste_block"):
         continue
       resource.unassign()
 
@@ -181,10 +200,12 @@ def STARLetDeck(
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
+  name: str = "deck",
 ) -> HamiltonSTARDeck:
   """Create a new STARLet deck."""
 
   return HamiltonSTARDeck(
+    name=name,
     num_tracks=30,
     size_x=1005.0,
     size_y=653.5,
@@ -205,10 +226,12 @@ def STARDeck(
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
+  name: str = "deck",
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck."""
 
   return HamiltonSTARDeck(
+    name=name,
     num_tracks=54,
     size_x=1545.0,
     size_y=653.5,
@@ -237,6 +260,7 @@ def STARPlusDeck(
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
+  name: str = "deck",
 ) -> HamiltonSTARDeck:
   """Create a new STARplus deck.
 
@@ -244,6 +268,7 @@ def STARPlusDeck(
   """
 
   return HamiltonSTARDeck(
+    name=name,
     num_tracks=76,
     size_x=2040.0,
     size_y=653.5,

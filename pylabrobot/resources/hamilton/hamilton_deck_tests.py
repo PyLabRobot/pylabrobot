@@ -13,6 +13,7 @@ from pylabrobot.resources.hamilton import (
   HamiltonDeck,
   STARDeck,
   STARLetDeck,
+  STARPlusDeck,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
 )
@@ -251,3 +252,33 @@ class HamiltonDeckTests(unittest.TestCase):
         self.assertEqual(len(restored_mount.children), 2)
         self.assertEqual(restored_mount.front_tool, mount.front_tool)
         self.assertEqual(restored_mount.back_tool, mount.back_tool)
+
+  def test_named_decks_preserve_accessories_when_saved_and_cleared(self):
+    """Named deck accessories remain discoverable after serialization and deck clearing."""
+    for factory in (STARDeck, STARLetDeck, STARPlusDeck):
+      for grippers in ("1000uL-at-waste", "1000uL-5mL-on-waste"):
+        with self.subTest(factory=factory.__name__, grippers=grippers):
+          deck = factory(name="custom_deck", core_grippers=grippers)
+          self.assertTrue(
+            all(child.name.startswith("custom_deck_") for child in deck.get_all_children())
+          )
+          self.assertEqual(deck.get_trash_area().name, "custom_deck_trash")
+          self.assertEqual(deck.get_trash_area96().name, "custom_deck_trash_core96")
+          mount = deck.get_resource("custom_deck_core_grippers")
+          assert isinstance(mount, HamiltonCoreGrippers)
+          self.assertEqual(mount.front_tool.name, "custom_deck_core_grippers_front")
+          self.assertEqual(mount.back_tool.name, "custom_deck_core_grippers_back")
+          restored = Resource.deserialize(deck.serialize())
+          restored.load_all_state(deck.serialize_all_state())
+          self.assertEqual(
+            sorted(child.name for child in restored.get_all_children()),
+            sorted(child.name for child in deck.get_all_children()),
+          )
+          self.assertEqual(restored.get_resource(mount.name).serialize(), mount.serialize())
+          plate = cor_96_wellplate_360uL_Fb("user_plate")
+          deck.assign_child_resource(plate, track=1)
+          deck.clear()
+          self.assertFalse(deck.has_resource("user_plate"))
+          self.assertIs(deck.get_resource(mount.name), mount)
+          self.assertEqual(deck.get_trash_area().name, "custom_deck_trash")
+          self.assertEqual(deck.get_trash_area96().name, "custom_deck_trash_core96")

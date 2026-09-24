@@ -144,6 +144,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.barcode import Barcode, Barcode1DSymbology
 from pylabrobot.resources.hamilton import (
+  HamiltonSTARDeck,
   HamiltonTip,
   TipDropMethod,
   TipPickupMethod,
@@ -6118,9 +6119,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
+  def _get_core_gripper_mount(self) -> HamiltonCoreGrippers:
+    """Find the CoRe gripper mount on a default or named STAR deck."""
+    name = (
+      self.deck.get_component_name("core_grippers")
+      if isinstance(self.deck, HamiltonSTARDeck)
+      else "core_grippers"
+    )
+    mount = self.deck.get_resource(name)
+    assert isinstance(mount, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    return mount
+
   def _get_core_front_back(self):
-    core_grippers = self.deck.get_resource("core_grippers")
-    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    core_grippers = self._get_core_gripper_mount()
     back_channel_y_center = int(
       (
         core_grippers.get_location_wrt(self.deck).y
@@ -6145,8 +6156,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   def _get_core_x(self) -> float:
     """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
-    core_grippers = self.deck.get_resource("core_grippers")
-    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    core_grippers = self._get_core_gripper_mount()
     return core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x
 
   async def get_core(self, p1: int, p2: int):
@@ -6185,8 +6195,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
 
-    core_grippers = self.deck.get_resource("core_grippers")
-    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    core_grippers = self._get_core_gripper_mount()
     front_tool, back_tool = core_grippers.front_tool, core_grippers.back_tool
     if front_tool.model != back_tool.model:
       raise ValueError("CO-RE gripper tools must have the same model.")

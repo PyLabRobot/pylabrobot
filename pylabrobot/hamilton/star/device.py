@@ -234,7 +234,7 @@ class STARDevice(Resource):
     if left_side_panel_installed:
       self.assign_child_resource(
         Resource(
-          name="left_side_panel",
+          name=f"{self.name}_left_side_panel",
           size_x=SIDE_PANEL_SIZE[0],
           size_y=SIDE_PANEL_SIZE[1],
           size_z=SIDE_PANEL_SIZE[2],
@@ -248,7 +248,7 @@ class STARDevice(Resource):
       # To the left, hung so its top and its back are level with the device's.
       self.assign_child_resource(
         Resource(
-          name="left_extension_housing",
+          name=f"{self.name}_left_extension_housing",
           size_x=EXTENSION_HOUSING_SIZE[0],
           size_y=EXTENSION_HOUSING_SIZE[1],
           size_z=EXTENSION_HOUSING_SIZE[2],
@@ -371,9 +371,13 @@ def STAR(
   extension_housing: bool = True,
   left_side_panel_installed: bool = False,
 ) -> STARDevice:
-  """A full-size STAR, on a full-size STAR deck."""
+  """A full-size STAR, on a full-size STAR deck.
+
+  The default deck and built-in components take their names from `name`. A supplied deck keeps
+  its existing resource names.
+  """
   if deck is None:
-    deck = STARDeck()
+    deck = STARDeck(name=f"{name}_deck")
   if simulation and driver is None and declared_configuration_json is None:
     declared_configuration_json = RECORDING_STAR
   if driver is None:
@@ -408,9 +412,13 @@ def STARLet(
   extension_housing: bool = True,
   left_side_panel_installed: bool = False,
 ) -> STARDevice:
-  """A STARlet, on a STARlet deck."""
+  """A STARlet, on a STARlet deck.
+
+  The default deck and built-in components take their names from `name`. A supplied deck keeps
+  its existing resource names.
+  """
   if deck is None:
-    deck = STARLetDeck()
+    deck = STARLetDeck(name=f"{name}_deck")
   if simulation and driver is None and declared_configuration_json is None:
     declared_configuration_json = RECORDING_STARLET
   if driver is None:
@@ -447,6 +455,9 @@ def STARPlus(
 ) -> STARDevice:
   """A STARplus, on a STARplus deck.
 
+  The default deck and built-in components take their names from `name`. A supplied deck keeps
+  its existing resource names.
+
   The width is measured on the manufacturer's own model, as the other two frames are. Its deck is
   derived, as `STARPlusDeck` works through, because there is no
   STARplus here to read one from, so its 78 rails should be confirmed against a real device.
@@ -455,7 +466,7 @@ def STARPlus(
     The device, on a STARplus deck.
   """
   if deck is None:
-    deck = STARPlusDeck()
+    deck = STARPlusDeck(name=f"{name}_deck")
   if simulation and driver is None and declared_configuration_json is None:
     declared_configuration_json = RECORDING_STARPLUS
   if driver is None:
