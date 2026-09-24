@@ -6,6 +6,7 @@ from typing import Optional
 from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
 from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.prep.driver.features.head8 import Head8
+from pylabrobot.hamilton.prep.driver.features.lights import Lights
 from pylabrobot.hamilton.prep.driver.features.method import MethodLifecycle
 from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.prep.driver.features.x_arm import XArm
@@ -133,6 +134,11 @@ class PrepDevice(Resource):
   def core_grippers(self) -> Optional[CoreGrippers]:
     """The CoRe gripper."""
     return self.driver.core_grippers
+
+  @property
+  def lights(self) -> Optional[Lights]:
+    """The deck light, on a device that has one."""
+    return self.driver.lights
 
   @property
   def method(self) -> Optional[MethodLifecycle]:
