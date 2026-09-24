@@ -33,6 +33,7 @@ from pylabrobot.legacy.liquid_handling.strictness import (
 from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading import PlateReader
 from pylabrobot.legacy.tilting.tilter import Tilter
+from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.lib.liquid_handling.channel_positioning import (
   compute_channel_offsets,
 )
@@ -52,7 +53,6 @@ from pylabrobot.resources import (
   Tip,
   TipRack,
   TipSpot,
-  TipTracker,
   Trash,
   Well,
   does_tip_tracking,
