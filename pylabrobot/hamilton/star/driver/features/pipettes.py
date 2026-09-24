@@ -4,8 +4,20 @@ import asyncio
 import datetime
 import logging
 import math
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Tuple, cast
+from typing import (
+  TYPE_CHECKING,
+  Any,
+  AsyncIterator,
+  Dict,
+  Iterable,
+  List,
+  Literal,
+  Optional,
+  Tuple,
+  cast,
+)
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import NoTeachInSignalError, STARFirmwareError
@@ -116,6 +128,10 @@ class PipettesConfiguration:
   increments per second squared, unlike the positions and speeds beside it."""
   z_drive_current_limit_range: Tuple[int, int] = (0, 7)
   z_drive_current_limit_default: int = 3
+  drive_parameters: Dict[str, int] = field(
+    default_factory=lambda: {"zv": 5, "zr": 3, "yv": 4, "yr": 1}
+  )
+  """The stored drive parameters a channel reads and writes, and their widths on the wire."""
 
   z_range: Tuple[float, float] = (99.98, 334.7)
   """The Z window the channels reach, in mm, lowest first.
@@ -153,6 +169,12 @@ class PipettesConfiguration:
   def z_drive_acceleration_mm_to_increments(self, mm: float) -> int:
     """A Z-drive acceleration in increments, from mm/s2."""
     return round(mm / (self.z_drive_mm_per_increment * 1000))
+
+  @property
+  def y_speed_range(self) -> Tuple[float, float]:
+    """Y-drive speed window (mm/s)."""
+    low, high = self.y_drive_speed_range_increments
+    return (self.y_drive_increments_to_mm(low), self.y_drive_increments_to_mm(high))
 
   @property
   def z_speed_range(self) -> Tuple[float, float]:
@@ -242,6 +264,15 @@ class Pipettes:
   `configuration` holds what every channel shares, and one entry per channel in
   `configuration.channels`.
   """
+
+  # Y speed when the caller names none, in mm/s.
+  default_y_speed: float = 250.0
+  # Y acceleration level when the caller names none, 1 (gentlest) to 4.
+  default_y_acceleration_level: int = 3
+  # Z speed when the caller names none, in mm/s.
+  default_z_speed: float = 125.0
+  # Z acceleration when the caller names none, in mm/s2.
+  default_z_acceleration: float = 800.0
 
   def __init__(self, driver: "STARDriver", configuration: Optional[PipettesConfiguration] = None):
     """
@@ -757,6 +788,267 @@ class Pipettes:
     if not low <= value <= high:
       raise ValueError(f"{axis} must be between {low} and {high} mm, is {value}")
 
+  # -- Memory of Speed & Acceleration --------------------------------------------------------------
+
+  # -- the raw register access these share --
+
+  def _require_drive_parameter(self, parameter: str) -> int:
+    """The wire width of a channel's stored drive parameter.
+
+    Args:
+      parameter: `yv`/`zv` for Y/Z speed, `yr` for Y acceleration level, `zr` for Z acceleration.
+
+    Returns:
+      Its digits on the wire.
+
+    Raises:
+      ValueError: If it is none of these.
+    """
+    widths = self.configuration.drive_parameters
+    if parameter not in widths:
+      raise ValueError(f"unknown drive parameter {parameter!r}, expected one of {tuple(widths)}")
+    return widths[parameter]
+
+  def _drive_parameter_to_increments(self, parameter: str, value: float) -> int:
+    """A stored drive parameter in what the drive counts in, from mm/s, mm/s2 or a level."""
+    c = self.configuration
+    if parameter == "yv":
+      return c.y_drive_mm_to_increments(value)
+    if parameter == "yr":
+      return int(value)
+    if parameter == "zv":
+      return c.z_drive_mm_to_increments(value)
+    return c.z_drive_acceleration_mm_to_increments(value)
+
+  def _drive_parameter_to_mm(self, parameter: str, increments: int) -> float:
+    """A stored drive parameter in mm/s, mm/s2 or a level, from what the drive counts in."""
+    c = self.configuration
+    if parameter == "yv":
+      return c.y_drive_increments_to_mm(increments)
+    if parameter == "yr":
+      return increments
+    if parameter == "zv":
+      return c.z_drive_increments_to_mm(increments)
+    return c.z_drive_acceleration_increments_to_mm(increments)
+
+  async def _request_drive_parameter(self, channel: int, parameter: str) -> float:
+    """Request a channel's stored drive parameter (`Px RA`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      parameter: `yv`/`zv` for Y/Z speed, `yr` for Y acceleration level, `zr` for Z acceleration.
+
+    Returns:
+      The value in mm/s, mm/s2, or a level for `yr`.
+
+    Raises:
+      ValueError: If the channel or parameter does not exist.
+    """
+    self._require_channel(channel)
+    width = self._require_drive_parameter(parameter)
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel), command="RA", ra=parameter, fmt=f"{parameter}{'#' * width}"
+    )
+    return self._drive_parameter_to_mm(parameter, cast(int, resp[parameter]))
+
+  async def _set_drive_parameter(self, channel: int, parameter: str, value: float) -> None:
+    """Write a channel's stored drive parameter (`Px AA`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      parameter: `yv`/`zv` for Y/Z speed, `yr` for Y acceleration level, `zr` for Z acceleration.
+      value: in mm/s, mm/s2, or a level for `yr`.
+
+    Raises:
+      ValueError: If the channel, parameter or value is out of range.
+    """
+    self._require_channel(channel)
+    width = self._require_drive_parameter(parameter)
+    c = self.configuration
+    low, high = {
+      "yv": c.y_speed_range,
+      "yr": c.y_drive_acceleration_level_range,
+      "zv": c.z_speed_range,
+      "zr": c.z_acceleration_range,
+    }[parameter]
+    if not low <= value <= high:
+      raise ValueError(f"{parameter} must be between {low} and {high}, is {value}")
+    increments = self._drive_parameter_to_increments(parameter, value)
+    written: Dict[str, Any] = {parameter: f"{increments:0{width}}"}
+    await self._driver.send_command(module=self.channel_id(channel), command="AA", **written)
+
+  @asynccontextmanager
+  async def _temporary_drive_profile(
+    self, values: Dict[str, Optional[float]], channels: Optional[List[int]]
+  ) -> AsyncIterator[None]:
+    """Set stored drive parameters for the enclosed block, then put back the defaults.
+
+    Args:
+      values: value per parameter; None leaves that parameter.
+      channels: which channels, 0-indexed from the back. All of them when None.
+    """
+    channels = list(range(self.num_channels)) if channels is None else list(channels)
+    wanted = [(p, v) for p, v in values.items() if v is not None]
+    defaults: Dict[str, float] = {
+      "yv": self.default_y_speed,
+      "yr": self.default_y_acceleration_level,
+      "zv": self.default_z_speed,
+      "zr": self.default_z_acceleration,
+    }
+    written: List[Tuple[int, str]] = []
+    try:
+      for channel in channels:
+        for parameter, value in wanted:
+          await self._set_drive_parameter(channel, parameter, value)
+          written.append((channel, parameter))
+      yield
+    finally:
+      for channel, parameter in written:
+        try:
+          await self._set_drive_parameter(channel, parameter, defaults[parameter])
+        except Exception:
+          logger.warning(
+            "could not put channel %s's %s back to %s", channel, parameter, defaults[parameter]
+          )
+
+  # ---- y -----------------------------------------------------------------------------------------
+
+  async def request_y_speed(self, channel: int) -> float:
+    """Request the Y speed a channel's drive holds (`Px RA yv`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The speed in mm/s.
+    """
+    return await self._request_drive_parameter(channel, "yv")
+
+  async def request_y_acceleration_level(self, channel: int) -> int:
+    """Request the Y acceleration level a channel's drive holds (`Px RA yr`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The level, 1 (gentlest) to 4.
+    """
+    return int(await self._request_drive_parameter(channel, "yr"))
+
+  async def _set_y_speed(self, channel: int, speed: float) -> None:
+    """Write the Y speed a channel's drive holds (`Px AA yv`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      speed: in mm/s.
+
+    Raises:
+      ValueError: If the channel or speed is out of range.
+    """
+    await self._set_drive_parameter(channel, "yv", speed)
+
+  async def _set_y_acceleration_level(self, channel: int, level: int) -> None:
+    """Write the Y acceleration level a channel's drive holds (`Px AA yr`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      level: 1 (gentlest) to 4.
+
+    Raises:
+      ValueError: If the channel or level is out of range.
+    """
+    await self._set_drive_parameter(channel, "yr", level)
+
+  @asynccontextmanager
+  async def _temporary_y_drive_profile(
+    self,
+    speed: Optional[float] = None,
+    acceleration_level: Optional[int] = None,
+    channels: Optional[List[int]] = None,
+  ) -> AsyncIterator[None]:
+    """Set the channels' Y speed and acceleration level for the enclosed block, then the defaults.
+
+    Args:
+      speed: in mm/s, or None to leave it.
+      acceleration_level: 1 (gentlest) to 4, or None to leave it.
+      channels: which channels, 0-indexed from the back. All of them when None.
+    """
+    async with self._temporary_drive_profile({"yv": speed, "yr": acceleration_level}, channels):
+      yield
+
+  # ---- z -----------------------------------------------------------------------------------------
+
+  async def request_z_speed(self, channel: int) -> float:
+    """Request the Z speed a channel's drive holds (`Px RA zv`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The speed in mm/s.
+    """
+    return await self._request_drive_parameter(channel, "zv")
+
+  async def request_z_acceleration(self, channel: int) -> float:
+    """Request the Z acceleration a channel's drive holds (`Px RA zr`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The acceleration in mm/s2.
+    """
+    return await self._request_drive_parameter(channel, "zr")
+
+  async def _set_z_speed(self, channel: int, speed: float) -> None:
+    """Write the Z speed a channel's drive holds (`Px AA zv`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      speed: in mm/s.
+
+    Raises:
+      ValueError: If the channel or speed is out of range.
+    """
+    await self._set_drive_parameter(channel, "zv", speed)
+
+  async def _set_z_acceleration(self, channel: int, acceleration: float) -> None:
+    """Write the Z acceleration a channel's drive holds (`Px AA zr`).
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      acceleration: in mm/s2.
+
+    Raises:
+      ValueError: If the channel or acceleration is out of range.
+    """
+    await self._set_drive_parameter(channel, "zr", acceleration)
+
+  @asynccontextmanager
+  async def _temporary_z_drive_profile(
+    self,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    channels: Optional[List[int]] = None,
+  ) -> AsyncIterator[None]:
+    """Set the channels' Z speed and acceleration for the enclosed block, then the defaults.
+
+    Args:
+      speed: in mm/s, or None to leave it.
+      acceleration: in mm/s2, or None to leave it.
+      channels: which channels, 0-indexed from the back. All of them when None.
+    """
+    async with self._temporary_drive_profile({"zv": speed, "zr": acceleration}, channels):
+      yield
+
+  async def _set_default_drive_parameters(self) -> None:
+    """Write the driver's Y and Z defaults into every channel's drive (`Px AA`)."""
+    for channel in range(self.num_channels):
+      await self._set_y_speed(channel, self.default_y_speed)
+      await self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
+      await self._set_z_speed(channel, self.default_z_speed)
+      await self._set_z_acceleration(channel, self.default_z_acceleration)
+
   # -- x position --------------------------------------------------------------------------------
 
   async def request_x_position(self) -> float:
@@ -976,26 +1268,24 @@ class Pipettes:
     return resp
 
   # -- z position --------------------------------------------------------------------------------
-  async def _unchecked_fw_request_lowest_z_positions(self) -> Dict[int, float]:
+  async def _unchecked_fw_request_lowest_z_positions(self) -> List[float]:
     """Read where every channel is along Z, without recording it.
 
     The reading alone. `request_tool_bottom_z_positions` is the one that also records it on the resources.
 
     Returns:
-      The position of each channel in mm, keyed by channel, 0-indexed from the back.
+      The position of each channel in mm, by channel, 0-indexed from the back.
     """
     resp = await self._driver.send_command(module="C0", command="RZ", fmt="rz#### (n)")
-    return {
-      channel: increments / 10 for channel, increments in enumerate(cast(List[int], resp["rz"]))
-    }
+    return [round(increments / 10, 1) for increments in cast(List[int], resp["rz"])]
 
-  async def request_tool_bottom_z_positions(self) -> Dict[int, float]:
+  async def request_tool_bottom_z_positions(self) -> List[float]:
     """Read where the bottom of the tip on every channel is.
 
     Every channel has to carry one. Records each channel's stop disc on the resource modelling it.
 
     Returns:
-      The bottom of each channel's tip in mm, keyed by channel, 0-indexed from the back.
+      The bottom of each channel's tip in mm, by channel, 0-indexed from the back.
 
     Raises:
       ValueError: If any channel carries no tip.
@@ -1030,16 +1320,15 @@ class Pipettes:
     await self.request_stop_disc_z_position(channel)
     return tip_bottom
 
-  async def request_stop_disc_z_positions(self) -> Dict[int, float]:
+  async def request_stop_disc_z_positions(self) -> List[float]:
     """Read where every channel's stop disc is.
 
     Returns:
-      Each channel's stop disc in mm, keyed by channel, 0-indexed from the back.
+      Each channel's stop disc in mm, by channel, 0-indexed from the back.
     """
-    return {
-      channel: await self.request_stop_disc_z_position(channel)
-      for channel in range(self.num_channels)
-    }
+    return [
+      await self.request_stop_disc_z_position(channel) for channel in range(self.num_channels)
+    ]
 
   async def request_stop_disc_z_position(self, channel: int) -> float:
     """Read where one channel's stop disc is, regardless of whether a tool (e.g. tip,
@@ -1103,12 +1392,13 @@ class Pipettes:
       What the command answered.
     """
     positions = await self._unchecked_fw_request_lowest_z_positions()
-    positions.update(zs)
+    for channel, z in zs.items():
+      positions[channel] = z
     return await self._driver.send_command(
       module="C0",
       command="JZ",
       subsystem=_FirmwareLock.CHANNELS,
-      zp=[f"{round(z * 10):04}" for z in positions.values()],
+      zp=[f"{round(z * 10):04}" for z in positions],
     )
 
   async def move_tool_bottom_to_z_positions(self, zs: Dict[int, float]):
@@ -1275,41 +1565,36 @@ class Pipettes:
       # neither position describes, and this read is also how a successful move is recorded.
       await self._record_where_they_stopped("z", [channel])
 
-  async def probe_z_max(self) -> Dict[int, float]:
+  async def probe_z_max(self) -> List[float]:
     """Raises single-channel pipettes to Z safety and reads their stop discs z-positions.
 
     Informs the max of `configuration.z_range` during setup.
 
     Returns:
-      List[float]: The z-positions of each channel's stop disc, in mm, keyed by channel.
+      The z-positions of each channel's stop disc, in mm, by channel.
     """
     await self._driver.send_command(module="C0", command="ZA", subsystem=_FirmwareLock.CHANNELS)
 
     positions = await self.request_stop_disc_z_positions()
-    reached = list(positions.values())
-    if max(reached) - min(reached) > self.configuration.z_drive_increments_to_mm(1):
+    # Only the bare channels are compared: with a tip or tool on, the drive rises to its very top.
+    presence = await self.sense_tip_presence()
+    bare = [z for channel, z in enumerate(positions) if not presence[channel]]
+    if bare and max(bare) - min(bare) > self.configuration.z_drive_increments_to_mm(1):
       logger.warning("the channels came to rest at different heights: %s", positions)
 
     return positions
 
-  async def move_to_safe_z(self) -> List[float]:
-    """Move every channel up to its safe Z: the top of the window setup probed.
+  async def move_to_safe_z(
+    self, speed: Optional[float] = None, acceleration: Optional[float] = None
+  ) -> None:
+    """Raise every channel to Z safety together (`C0 ZA`), whatever is mounted.
 
-    Nothing may move in X or Y while a channel is low, so this is the precondition for any lateral
-    move and it runs often. An ordinary Z move to a known height, not a command of its own, so it
-    is bounded and keeps the model current like any other move. With no window probed yet there is
-    no height to aim at, and the firmware's own safety move establishes one instead.
-
-    Returns:
-      Where each channel's stop disc came to rest, in mm, back to front.
+    Args:
+      speed: in mm/s, held by the drives for the move. The stored speed when None.
+      acceleration: in mm/s2, held by the drives for the move. The stored one when None.
     """
-    z_range = self.configuration.z_range
-
-    await self._unchecked_fw_move_lowest_point_to_z_positions(
-      {channel: z_range[1] for channel in range(self.num_channels)}
-    )
-
-    return list((await self._unchecked_fw_request_lowest_z_positions()).values())
+    async with self._temporary_z_drive_profile(speed=speed, acceleration=acceleration):
+      await self.probe_z_max()
 
   # -- spreading -----------------------------------------------------------------------------------
 

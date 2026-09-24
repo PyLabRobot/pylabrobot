@@ -83,9 +83,8 @@ SIMULATED_COVER_POSITION: CoverPosition = "closed"
 # The three inputs on the cover connector: the cover input, and two whose meaning is not known.
 SIMULATED_COVER_INPUTS = (True, False, False)
 
-# How fast a channel crosses along Y, in mm/s, for the time a simulated move takes. The Y move names
-# an acceleration level rather than a speed, so this is the one speed its time is counted at.
-SIMULATED_CHANNEL_Y_SPEED = 250.0
+# What a channel's drive holds after a power cycle, as the device read.
+SIMULATED_CHANNEL_DRIVE_PARAMETERS = {"zv": 12_000, "zr": 75, "yv": 6_000, "yr": 4}
 
 # What its scanner reads. A simulated deck holds no carriers, so nothing.
 SIMULATED_BARCODE: Optional[str] = None
@@ -254,15 +253,14 @@ class SimulatedPipettes(_Simulated, Pipettes):
     paces a run without any command pretending to be slow in itself.
     """
     if self.device.simulate_motion_time:
-      c = self.configuration
       self.device.owe_motion_time(
         self._get_travel_time(
-          0.0 if y is None else y - self._modelled_y(channel), SIMULATED_CHANNEL_Y_SPEED, None
+          0.0 if y is None else y - self._modelled_y(channel), self.default_y_speed, None
         ),
         self._get_travel_time(
           0.0 if z is None else z - self._modelled_z(channel),
-          c.z_drive_speed_default,
-          c.z_drive_acceleration_default,
+          self.default_z_speed,
+          self.default_z_acceleration,
         ),
       )
     super().update_location_by_reference_point(channel, y=y, z=z)
@@ -321,12 +319,26 @@ class SimulatedPipettes(_Simulated, Pipettes):
         f"where the model has channel {channel}'s stop disc",
       )
 
+    # A channel's drive keeps what `AA` writes, and what its own `ZA` moves with.
+    stored = self.device.channel_drive_parameters.setdefault(
+      channel, dict(SIMULATED_CHANNEL_DRIVE_PARAMETERS)
+    )
+    if command in ("AA", "ZA"):
+      for parameter in stored:
+        if parameter in kwargs:
+          stored[parameter] = int(kwargs[parameter])
+      return None
+
+    if command == "RA" and kwargs.get("ra") in stored:
+      parameter = kwargs["ra"]
+      return {parameter: stored[parameter]}, f"what channel {channel}'s drive holds"
+
     return None
 
-  async def probe_z_max(self) -> Dict[int, float]:
+  async def probe_z_max(self) -> List[float]:
     # The firmware retract inside the probe is what puts the channels at their ceiling, and the
     # probe reads them back before it returns, so the model is written before the read rather
-    # than after. `move_to_safe_z` needs no override: it is an ordinary move, recorded below.
+    # than after. `move_to_safe_z` runs this probe, so it needs no override of its own.
     for channel in range(self.num_channels):
       self.update_location_by_reference_point(channel, z=self.configuration.z_range[1])
     return await super().probe_z_max()
@@ -1121,6 +1133,8 @@ class STARSimulationDriver(STARDriver):
     # What the drives would still be doing, in seconds: the longest move recorded since the last
     # command, waited out before the next one goes.
     self._motion_owed = 0.0
+    # What each channel's drive holds, by channel; filled from the power-on values when first asked.
+    self.channel_drive_parameters: Dict[int, Dict[str, int]] = {}
 
     # What each module says when asked whether it is initialized, and where things are.
     self.initialized = {module: initialized for module in ("C0", "I0", "R0", "H0")}
