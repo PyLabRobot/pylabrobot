@@ -69,6 +69,23 @@ answer.
 | `prep_PRPAA1087_v1_2_2_firmware_tree.json` | PRPAA1087, MLPrep Runtime V1.2.2.444. The default. |
 | `prep_PRPBD1394_v3_0_20_firmware_tree.json` | PRPBD1394, MLPrep Runtime V3.0.20.675. |
 
+### Enums and structs
+
+A tree records what each object declares as types, beside its methods: `enums` maps each enum's
+names to its values, `structs` each struct's fields to their wire types. Without them a field typed
+as an enum on the wire is a bare number, and what else it could be is a question only the device can
+answer.
+
+They are read off a device into an existing tree by
+
+```
+python tools/record_prep_firmware_types.py 192.168.100.102 \
+  pylabrobot/hamilton/prep/driver/recordings/prep_PRPAA1087_v1_2_2_firmware_tree.json
+```
+
+which reads only, and leaves every other key as it was. An object that declares none has neither
+key. Trees recorded before this have neither, and load as they always did.
+
 Selected with `firmware_tree_json`:
 
 ```python

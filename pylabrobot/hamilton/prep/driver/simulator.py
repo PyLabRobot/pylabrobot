@@ -66,7 +66,8 @@ SIMULATED_LINK = "[simulation]"
 
 _RECORDINGS = os.path.join(os.path.dirname(__file__), "recordings")
 
-# PRPAA1087 as it saved itself, on MLPrep Runtime V1.2.2. What a simulated Prep is unless told otherwise.
+# The recorded device as it saved itself (MLPrep Runtime V1.2.2): a simulated Prep unless told
+# otherwise.
 RECORDING_PREP = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2.json")
 # The same, declared with an 8-channel head. No device with one has been recorded.
 RECORDING_PREP_HEAD8 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_head8.json")
