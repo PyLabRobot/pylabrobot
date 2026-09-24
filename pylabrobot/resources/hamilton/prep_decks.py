@@ -29,6 +29,10 @@ class PrepDeck(Deck):
   This is **not** a :class:`HamiltonSTARDeck` (rails/teaching rack layout differ).
   """
 
+  def get_component_name(self, name: str) -> str:
+    """Qualify a built-in component name with this deck's optional device prefix."""
+    return name if self._name_prefix is None else f"{self._name_prefix}_{name}"
+
   def __init__(
     self,
     name: str = "deck",
@@ -38,7 +42,15 @@ class PrepDeck(Deck):
     origin: Coordinate = Coordinate.zero(),
     category: str = "deck",
     with_core_grippers: bool = False,
+    name_prefix: Optional[str] = None,
   ):
+    """Build a deck, optionally prefixing its built-in components with a device name.
+
+    Args:
+      name_prefix: prefix for component names, without a trailing underscore. None keeps
+        standalone component names. The deck itself keeps its explicitly supplied name.
+    """
+    self._name_prefix = name_prefix
     super().__init__(
       name=name, size_x=size_x, size_y=size_y, size_z=size_z, origin=origin, category=category
     )
@@ -48,7 +60,7 @@ class PrepDeck(Deck):
         x = column * 140
         y = row * 95.125
         spot = ResourceHolder(
-          name=f"spot_{column}_{row}",
+          name=self.get_component_name(f"spot_{column}_{row}"),
           size_x=127.76,
           size_y=92,
           size_z=12.5,
@@ -63,7 +75,9 @@ class PrepDeck(Deck):
     # Where tips are dropped, as on the STAR's waste block, carrying the liquid waste trough, the
     # teaching needle and the CoRe gripper mount. From the deck's front edge at Y -3 to 2 mm in
     # front of the gripper mount's back edge (Y 286.5).
-    waste_block = Trash(name="waste_block", size_x=13, size_y=287.5, size_z=73)
+    waste_block = Trash(
+      name=self.get_component_name("waste_block"), size_x=13, size_y=287.5, size_z=73
+    )
     self.assign_child_resource(waste_block, location=Coordinate(280.3, -3, 0))
 
     # The liquid waste trough, part of the standard deck. As wide as the waste block, and filling
@@ -74,7 +88,7 @@ class PrepDeck(Deck):
     liquid_waste_size_y = 214.29 - (-3 + tip_drop_size_y)
     liquid_waste_size_z = waste_block.get_absolute_size_z() / 2
     liquid_waste_container = Trough(
-      name="liquid_waste_container",
+      name=self.get_component_name("liquid_waste_container"),
       size_x=waste_block.get_absolute_size_x(),
       size_y=liquid_waste_size_y,
       size_z=liquid_waste_size_z,
@@ -91,7 +105,7 @@ class PrepDeck(Deck):
     # PRPAA1087's 6 x 6 mm deck site (DeckConfiguration); the driver moves it to the connected
     # device's at setup. Z is not measured.
     teaching_tip_spot = TipSpot(
-      name="teaching_tip",
+      name=self.get_component_name("teaching_tip"),
       size_x=6.0,
       size_y=6.0,
       make_tip=hamilton_teaching_needle_300uL,
@@ -107,13 +121,14 @@ class PrepDeck(Deck):
       # From the Prep PR (#1196), at (290, 266.5, 62.5) on the deck; not measured on a device. The
       # device reports no gripper position.
       waste_block.assign_child_resource(
-        prep_core_gripper_mount(), location=Coordinate(9.7, 269.5, 62.5)
+        prep_core_gripper_mount(name=self.get_component_name("core_grippers")),
+        location=Coordinate(9.7, 269.5, 62.5),
       )
 
     # PRPAA1087's waste sites (DeckConfiguration); the driver moves them to the connected device's at setup.
     for waste_name, y_pos in [("waste_rear", 30.0), ("waste_front", 10.0), ("waste_mph", 112.0)]:
       waste = Trash(
-        name=waste_name,
+        name=self.get_component_name(waste_name),
         size_x=6.0,
         size_y=6.0,
         size_z=0.0,
@@ -123,6 +138,10 @@ class PrepDeck(Deck):
         waste,
         location=Coordinate(x=287.0, y=y_pos, z=68.4),
       )
+
+  def serialize(self) -> dict:
+    """Serialize the deck and its component naming prefix."""
+    return {**super().serialize(), "name_prefix": self._name_prefix}
 
   def get_or_create_x_arm(
     self,

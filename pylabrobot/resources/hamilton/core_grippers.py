@@ -136,7 +136,7 @@ class HamiltonCoreGrippers(Resource):
     }
 
 
-def prep_core_gripper_mount() -> HamiltonCoreGrippers:
+def prep_core_gripper_mount(name: str = "core_grippers") -> HamiltonCoreGrippers:
   """CORE gripper mount for PREP decks. Assign at Coordinate(290, 266.5, 62).
 
   Physical rear paddle at (290, 257.5, 62), front at (290, 275.5, 62).
@@ -144,7 +144,7 @@ def prep_core_gripper_mount() -> HamiltonCoreGrippers:
   (front_channel_position_y, rear_channel_position_y) so the correct paddle is used.
   """
   return HamiltonCoreGrippers(
-    name="core_grippers",
+    name=name,
     back_channel_y_center=9.0,
     front_channel_y_center=-9.0,
     size_x=20.0,

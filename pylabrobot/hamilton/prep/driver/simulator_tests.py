@@ -14,8 +14,9 @@ from pylabrobot.hamilton.prep.driver.simulator import (
   RECORDING_PREP_HEAD8,
 )
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
-from pylabrobot.resources import Coordinate
-from pylabrobot.resources.hamilton import PrepDeck
+from pylabrobot.resources import Coordinate, Resource
+from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
+from pylabrobot.resources.trash import Trash
 
 
 def test_firmware_tree_is_selectable():
@@ -89,13 +90,16 @@ def test_initializes_once_when_switched_on():
   asyncio.run(_run())
 
 
-def test_setup_places_the_teaching_needle_and_waste_positions_where_the_device_reports_them():
+@pytest.mark.parametrize("name_prefix", [None, "prep_a"])
+def test_setup_places_the_teaching_needle_and_waste_positions_where_the_device_reports_them(
+  name_prefix,
+):
   """The deck's defaults give way to the device's deck and waste sites at setup."""
 
   async def _run() -> None:
-    deck = PrepDeck()
-    needle = deck.get_resource("teaching_tip")
-    waste = deck.get_resource("waste_front")
+    deck = PrepDeck(name_prefix=name_prefix)
+    needle = deck.get_resource(deck.get_component_name("teaching_tip"))
+    waste = deck.get_resource(deck.get_component_name("waste_front"))
     assert needle.location is not None
     height = needle.location.z
     needle.location = Coordinate(0.0, 0.0, height)
@@ -159,5 +163,53 @@ def test_the_arm_reference_line_spans_the_channels_combined_y_ranges():
       (min(r[0] for r in ranges), max(r[1] for r in ranges))
     )
     await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_named_preps_share_a_resource_tree_and_reuse_their_components():
+  """Each device owns distinct names, including resources created during repeated setup."""
+
+  async def _run() -> None:
+    bench = Resource(name="bench", size_x=2000, size_y=1000, size_z=1000)
+    for index, name in enumerate(("prep_a", "prep_b")):
+      prep = Prep(name=name, simulation=True)
+      assert prep.deck.name == f"{name}_deck"
+      assert all(child.name.startswith(f"{name}_") for child in prep.get_all_children())
+      bench.assign_child_resource(prep, location=Coordinate(index * 600, 0, 0))
+      await prep.setup()
+      assert prep.x_arm is not None and prep.x_arm.resource is not None
+      assert prep.pipettes is not None
+      assert prep.x_arm.resource.name == f"{name}_x_arm"
+      assert prep.pipettes.resources[0].name == f"{name}_pipette_channel_0"
+      components = prep.get_all_children()
+      assert all(child.name.startswith(f"{name}_") for child in components)
+      assert all(bench.get_resource(child.name) is child for child in components)
+      await prep.stop()
+      await prep.setup()
+      assert [id(child) for child in prep.get_all_children()] == [id(child) for child in components]
+      await prep.stop()
+
+  asyncio.run(_run())
+
+
+def test_named_prep_drops_tips_at_its_own_waste_positions():
+  """Tip disposal resolves prefixed waste names while caller-provided labware keeps its name."""
+
+  async def _run() -> None:
+    prep = Prep(name="prep_a", simulation=True)
+    rack = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    prep.deck[3] = rack
+    await prep.setup()
+    assert prep.pipettes is not None
+    await prep.pipettes.pick_up_tips(
+      [rack.get_item("A1"), rack.get_item("B1")], use_channels=[0, 1]
+    )
+    waste = prep.deck.get_resource("prep_a_waste_block")
+    assert isinstance(waste, Trash)
+    await prep.pipettes.drop_tips([waste, waste], use_channels=[0, 1])
+    assert all(tip is None for tip in prep.pipettes.get_mounted_tips())
+    assert prep.get_resource("tips") is rack
+    await prep.stop()
 
   asyncio.run(_run())
