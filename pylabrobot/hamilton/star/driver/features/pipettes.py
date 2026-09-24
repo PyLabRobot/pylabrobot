@@ -335,6 +335,7 @@ class Pipettes:
     CAPACITIVE = 1
     PRESSURE = 2
     DUAL = 3
+    ZTOUCH = 4
 
   class PressureLLDMode(enum.Enum):
     """What a pressure search stops at: the liquid, or the foam and then the liquid under it."""
@@ -4488,3 +4489,108 @@ class Pipettes:
         break
       pressures.extend(values)
     return TADMCurve(measurement_id, operation, had_error, pressures)
+
+  # ----------------------------------------
+  # Liquid handling
+  # ----------------------------------------
+
+  # -- aspirating ---------------------------------------------------------------------------------
+
+  async def _unchecked_fw_aspirate(
+    self,
+    tip_pattern: List[bool],
+    aspiration_type: List[int],
+    x_positions: List[int],
+    y_positions: List[int],
+    minimum_traverse_height_start: int,
+    minimum_z_end_position: int,
+    lld_search_height: List[int],
+    clot_detection_height: List[int],
+    liquid_surface_no_lld: List[int],
+    pull_out_distance_transport_air: List[int],
+    second_section_height: List[int],
+    second_section_ratio: List[int],
+    minimum_height: List[int],
+    immersion_depth: List[int],
+    immersion_depth_direction: List[int],
+    surface_following_distance: List[int],
+    aspiration_volumes: List[int],
+    aspiration_speed: List[int],
+    transport_air_volume: List[int],
+    blow_out_air_volume: List[int],
+    pre_wetting_volume: List[int],
+    lld_mode: List[int],
+    clld_sensitivity: List[int],
+    plld_sensitivity: List[int],
+    aspirate_position_above_z_touch_off: List[int],
+    detection_height_difference_for_dual_lld: List[int],
+    swap_speed: List[int],
+    settling_time: List[int],
+    mix_volume: List[int],
+    mix_cycles: List[int],
+    mix_position_from_liquid_surface: List[int],
+    mix_speed: List[int],
+    mix_surface_following_distance: List[int],
+    limit_curve_index: List[int],
+    tadm_algorithm: bool,
+    recording_mode: int,
+    use_2nd_section_aspiration: List[bool],
+    retract_height_over_2nd_section_to_empty_tip: List[int],
+    dispensation_speed_during_emptying_tip: List[int],
+    dosing_drive_speed_during_2nd_section_search: List[int],
+    z_drive_speed_during_2nd_section_search: List[int],
+    cup_upper_edge: List[int],
+    read_timeout: int = 300,
+  ):
+    """Send the aspiration as it is given: heights and distances in tenths of a millimetre,
+    volumes in tenths of a microlitre, speeds in tenths per second, times in tenths of a second,
+    one value per channel of the pattern. `C0 AS`."""
+    return await self._driver.send_command(
+      module="C0",
+      command="AS",
+      subsystem=_FirmwareLock.CHANNELS,
+      tip_pattern=tip_pattern,
+      read_timeout=read_timeout,
+      at=[f"{at:01}" for at in aspiration_type],
+      tm=tip_pattern,
+      xp=[f"{xp:05}" for xp in x_positions],
+      yp=[f"{yp:04}" for yp in y_positions],
+      th=f"{minimum_traverse_height_start:04}",
+      te=f"{minimum_z_end_position:04}",
+      lp=[f"{lp:04}" for lp in lld_search_height],
+      ch=[f"{ch:03}" for ch in clot_detection_height],
+      zl=[f"{zl:04}" for zl in liquid_surface_no_lld],
+      po=[f"{po:04}" for po in pull_out_distance_transport_air],
+      zu=[f"{zu:04}" for zu in second_section_height],
+      zr=[f"{zr:05}" for zr in second_section_ratio],
+      zx=[f"{zx:04}" for zx in minimum_height],
+      ip=[f"{ip:04}" for ip in immersion_depth],
+      it=[f"{it}" for it in immersion_depth_direction],
+      fp=[f"{fp:04}" for fp in surface_following_distance],
+      av=[f"{av:05}" for av in aspiration_volumes],
+      as_=[f"{as_:04}" for as_ in aspiration_speed],
+      ta=[f"{ta:03}" for ta in transport_air_volume],
+      ba=[f"{ba:04}" for ba in blow_out_air_volume],
+      oa=[f"{oa:03}" for oa in pre_wetting_volume],
+      lm=[f"{lm}" for lm in lld_mode],
+      ll=[f"{ll}" for ll in clld_sensitivity],
+      lv=[f"{lv}" for lv in plld_sensitivity],
+      zo=[f"{zo:03}" for zo in aspirate_position_above_z_touch_off],
+      ld=[f"{ld:02}" for ld in detection_height_difference_for_dual_lld],
+      de=[f"{de:04}" for de in swap_speed],
+      wt=[f"{wt:02}" for wt in settling_time],
+      mv=[f"{mv:05}" for mv in mix_volume],
+      mc=[f"{mc:02}" for mc in mix_cycles],
+      mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
+      ms=[f"{ms:04}" for ms in mix_speed],
+      mh=[f"{mh:04}" for mh in mix_surface_following_distance],
+      gi=[f"{gi:03}" for gi in limit_curve_index],
+      gj=tadm_algorithm,
+      gk=recording_mode,
+      lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
+      ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
+      sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
+      se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
+      sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
+      io=[f"{io:04}" for io in cup_upper_edge],
+    )
