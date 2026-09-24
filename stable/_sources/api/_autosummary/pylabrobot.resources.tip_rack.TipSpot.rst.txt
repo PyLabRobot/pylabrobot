@@ -17,6 +17,9 @@ pylabrobot.resources.tip\_rack.TipSpot
    
       ~TipSpot.location
       ~TipSpot.name
+      ~TipSpot.tip
+      ~TipSpot.tracker
+      ~TipSpot.tracks_tips
    
    
 
@@ -30,6 +33,7 @@ pylabrobot.resources.tip\_rack.TipSpot
       ~TipSpot.__init__
       ~TipSpot.assign_child_by_anchor
       ~TipSpot.assign_child_resource
+      ~TipSpot.assign_tip
       ~TipSpot.at
       ~TipSpot.center
       ~TipSpot.centers
@@ -41,7 +45,9 @@ pylabrobot.resources.tip\_rack.TipSpot
       ~TipSpot.deregister_will_assign_resource_callback
       ~TipSpot.deregister_will_unassign_resource_callback
       ~TipSpot.deserialize
+      ~TipSpot.disable_tip_tracking
       ~TipSpot.empty
+      ~TipSpot.enable_tip_tracking
       ~TipSpot.find_resource
       ~TipSpot.find_resources
       ~TipSpot.get_absolute_location
@@ -82,7 +88,9 @@ pylabrobot.resources.tip\_rack.TipSpot
       ~TipSpot.serialize
       ~TipSpot.serialize_all_state
       ~TipSpot.serialize_state
+      ~TipSpot.tip_for_pickup
       ~TipSpot.unassign
       ~TipSpot.unassign_child_resource
+      ~TipSpot.unassign_tip
    
    

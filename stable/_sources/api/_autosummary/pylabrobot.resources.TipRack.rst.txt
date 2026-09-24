@@ -51,8 +51,10 @@ pylabrobot.resources.TipRack
       ~TipRack.deregister_will_unassign_resource_callback
       ~TipRack.deserialize
       ~TipRack.disable_tip_trackers
+      ~TipRack.disable_tip_tracking
       ~TipRack.empty
       ~TipRack.enable_tip_trackers
+      ~TipRack.enable_tip_tracking
       ~TipRack.fill
       ~TipRack.find_resource
       ~TipRack.find_resources

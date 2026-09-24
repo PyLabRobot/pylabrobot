@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.unassign\_tip
+====================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.unassign_tip

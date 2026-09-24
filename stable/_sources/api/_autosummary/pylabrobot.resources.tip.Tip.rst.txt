@@ -16,6 +16,7 @@ pylabrobot.resources.tip.Tip
       :toctree: .
    
       ~Tip.collar_height
+      ~Tip.has_collar_height
       ~Tip.location
       ~Tip.name
    
