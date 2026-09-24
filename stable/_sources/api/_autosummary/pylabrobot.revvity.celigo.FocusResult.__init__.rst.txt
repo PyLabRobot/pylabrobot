@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FocusResult.\_\_init\_\_
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FocusResult.__init__

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2.connect
+================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2.connect

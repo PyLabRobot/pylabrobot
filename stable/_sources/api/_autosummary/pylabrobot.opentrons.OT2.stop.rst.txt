@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2.stop
+=============================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2.stop

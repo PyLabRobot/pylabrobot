@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoHardwareConfig.external\_camera\_control
+========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoHardwareConfig.external_camera_control

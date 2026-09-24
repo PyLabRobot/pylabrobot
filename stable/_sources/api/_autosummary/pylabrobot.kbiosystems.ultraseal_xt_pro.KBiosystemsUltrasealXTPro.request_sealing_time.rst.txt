@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_xt\_pro.KBiosystemsUltrasealXTPro.request\_sealing\_time
+==========================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
+
+.. automethod:: KBiosystemsUltrasealXTPro.request_sealing_time

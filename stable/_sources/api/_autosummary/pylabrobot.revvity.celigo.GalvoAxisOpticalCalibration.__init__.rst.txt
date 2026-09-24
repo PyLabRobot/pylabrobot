@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoAxisOpticalCalibration.\_\_init\_\_
+==================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: GalvoAxisOpticalCalibration.__init__

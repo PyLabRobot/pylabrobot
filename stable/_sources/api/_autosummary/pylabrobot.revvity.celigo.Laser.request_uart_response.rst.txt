@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Laser.request\_uart\_response
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Laser.request_uart_response

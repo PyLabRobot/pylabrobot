@@ -1,0 +1,6 @@
+pylabrobot.big\_bear.orbital\_shaker.BigBearOrbitalShaker.stop\_shaking
+=======================================================================
+
+.. currentmodule:: pylabrobot.big_bear.orbital_shaker
+
+.. automethod:: BigBearOrbitalShaker.stop_shaking

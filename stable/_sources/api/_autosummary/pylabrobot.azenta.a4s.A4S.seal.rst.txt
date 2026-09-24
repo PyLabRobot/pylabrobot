@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4S.seal
+==============================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. automethod:: A4S.seal

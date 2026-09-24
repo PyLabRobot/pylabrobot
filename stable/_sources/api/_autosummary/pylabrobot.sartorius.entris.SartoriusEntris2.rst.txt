@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.sartorius.entris.SartoriusEntris2
+============================================
+
+.. currentmodule:: pylabrobot.sartorius.entris
+
+.. autoclass:: SartoriusEntris2
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SartoriusEntris2.__init__
+      ~SartoriusEntris2.get_model
+      ~SartoriusEntris2.get_serial_number
+      ~SartoriusEntris2.measure_weight
+      ~SartoriusEntris2.send_command
+      ~SartoriusEntris2.setup
+      ~SartoriusEntris2.stop
+      ~SartoriusEntris2.tare
+      ~SartoriusEntris2.zero
+   
+   

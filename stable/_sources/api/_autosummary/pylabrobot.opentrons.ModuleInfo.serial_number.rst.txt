@@ -1,0 +1,6 @@
+pylabrobot.opentrons.ModuleInfo.serial\_number
+==============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: ModuleInfo.serial_number

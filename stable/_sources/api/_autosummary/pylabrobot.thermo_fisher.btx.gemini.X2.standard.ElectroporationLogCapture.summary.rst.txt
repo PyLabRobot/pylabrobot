@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationLogCapture.summary
+==================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoattribute:: ElectroporationLogCapture.summary

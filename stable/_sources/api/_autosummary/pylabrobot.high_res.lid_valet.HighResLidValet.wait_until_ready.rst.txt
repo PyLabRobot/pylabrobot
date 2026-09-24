@@ -1,0 +1,6 @@
+pylabrobot.high\_res.lid\_valet.HighResLidValet.wait\_until\_ready
+==================================================================
+
+.. currentmodule:: pylabrobot.high_res.lid_valet
+
+.. automethod:: HighResLidValet.wait_until_ready

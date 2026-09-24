@@ -1,0 +1,29 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.control\_box.InhecoTECControlBox
+==================================================
+
+.. currentmodule:: pylabrobot.inheco.control_box
+
+.. autoclass:: InhecoTECControlBox
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoTECControlBox.__init__
+      ~InhecoTECControlBox.reset_action_display
+      ~InhecoTECControlBox.send_command
+      ~InhecoTECControlBox.set_touchscreen
+      ~InhecoTECControlBox.setup
+      ~InhecoTECControlBox.stop
+   
+   

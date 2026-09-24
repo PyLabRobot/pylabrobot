@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.enabled
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.enabled

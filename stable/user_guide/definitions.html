@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Definitions &#8212; PyLabRobot 0.2.1 documentation</title>
+    <title>Definitions &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -27,57 +27,68 @@
   </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
-<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+  <link href="../_static/styles/theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=bbd25712" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=c92e449a" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=ed9dfa64" />
   
   <!-- So that users can add custom icons -->
-  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="../_static/scripts/fontawesome.js?digest=cb8930eaaf36d9849b67"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
-<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67" />
 
-    <script src="../_static/documentation_options.js?v=37f418d5"></script>
+    <script src="../_static/documentation_options.js?v=3ce10a4d"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/plr_devices.js?v=ba1a2da2"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/definitions';</script>
     <script>
-        DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
+        DOCUMENTATION_OPTIONS.theme_version = '0.21.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
-    <script src="../_static/plr_cards.js?v=0d03ad13"></script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/graphviz.js?v=0710df9f"></script>
+    <script src="../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/definitions.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Liquid Handling" href="00_liquid-handling/_liquid-handling.html" />
-    <link rel="prev" title="Supported Machines" href="machines.html" />
+    <link rel="next" title="Generic devices" href="generic/index.html" />
+    <link rel="prev" title="Devices that need testing" href="needs-testing.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="0.2.1" />
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
   </head>
-  
-  
-  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
-
+  <body data-default-mode="">
   
   
   <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
   
   <div id="pst-scroll-pixel-helper"></div>
   
   <button type="button" class="btn rounded-pill" id="pst-back-to-top">
     <i class="fa-solid fa-arrow-up"></i>Back to top</button>
-
+  
+  
+  
   
   <dialog id="pst-search-dialog">
     
@@ -103,7 +114,7 @@
 </div>
 
   
-    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
 <div class="bd-header__inner bd-page-width">
   <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
     <span class="fa-solid fa-bars"></span>
@@ -174,13 +185,6 @@
   </a>
 </li>
 
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
-    API
-  </a>
-</li>
-
             <li class="nav-item dropdown">
                 <button class="btn dropdown-toggle nav-item" type="button"
                 data-bs-toggle="dropdown" aria-expanded="false"
@@ -189,6 +193,20 @@
                 </button>
                 <ul id="pst-nav-more-links" class="dropdown-menu">
                     
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
 <li class=" ">
   <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
     Community
@@ -237,11 +255,18 @@
       
         <div class="navbar-item">
 
-<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
-  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
-  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
-  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
-</button></div>
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
       
         <div class="navbar-item"><ul class="navbar-icon-links"
     aria-label="Icon Links">
@@ -254,8 +279,7 @@
           
           
           
-          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">X</span></a>
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
         </li>
         <li class="nav-item">
           
@@ -266,8 +290,7 @@
           
           
           
-          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">GitHub</span></a>
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
         </li>
         <li class="nav-item">
           
@@ -278,8 +301,7 @@
           
           
           
-          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">YouTube</span></a>
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
         </li>
         <li class="nav-item">
           
@@ -290,8 +312,7 @@
           
           
           
-          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">Bluesky</span></a>
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
         </li>
 </ul></div>
       
@@ -375,6 +396,13 @@
 
 
 <li class="nav-item ">
+  <a class="nav-link nav-internal" href="../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
   <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
     Community
   </a>
@@ -412,11 +440,18 @@
         
           <div class="navbar-item">
 
-<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
-  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
-  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
-  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
-</button></div>
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
         
           <div class="navbar-item"><ul class="navbar-icon-links"
     aria-label="Icon Links">
@@ -429,8 +464,7 @@
           
           
           
-          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">X</span></a>
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
         </li>
         <li class="nav-item">
           
@@ -441,8 +475,7 @@
           
           
           
-          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">GitHub</span></a>
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
         </li>
         <li class="nav-item">
           
@@ -453,8 +486,7 @@
           
           
           
-          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">YouTube</span></a>
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
         </li>
         <li class="nav-item">
           
@@ -465,8 +497,7 @@
           
           
           
-          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">Bluesky</span></a>
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
         </li>
 </ul></div>
         
@@ -475,134 +506,189 @@
   </div>
   
     <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
         <div class="sidebar-primary-item">
+
 <nav class="bd-docs-nav bd-links"
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="_getting-started/installation.html">Installation</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="_getting-started/plr-architecture.html">How PLR Works</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="_getting-started/units.html">Default Units</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1"><a class="reference internal" href="_getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started/units.html">Default Units</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="needs-testing.html">Devices that need testing</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Definitions</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="generic/index.html">Generic devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="generic/line-barcode-scanner/hello-world.html">Line-oriented serial barcode scanners</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="00_liquid-handling/_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="00_liquid-handling/hamilton-star/_hamilton-star.html">Hamilton STAR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/basic.html">Getting started with liquid handling on a Hamilton STAR(let)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/96head.html">Using the 96 head</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/autoload_and_1d_barcode_reader.html">Using the autoload &amp; 1D barcode reader</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/iswap-module.html">iSWAP Module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/star_lld.html">Liquid level detection on Hamilton STAR(let)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/y-probing.html">Y-probing</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/z-probing.html">Z-probing</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/foil.html">Foil</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/debug.html">Debugging STAR issues</a></li>
-<li class="toctree-l3 has-children"><a class="reference internal" href="00_liquid-handling/hamilton-star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l4"><a class="reference internal" href="00_liquid-handling/hamilton-star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
-<li class="toctree-l4"><a class="reference internal" href="00_liquid-handling/hamilton-star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
-<li class="toctree-l4"><a class="reference internal" href="00_liquid-handling/hamilton-star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
-<li class="toctree-l4"><a class="reference internal" href="00_liquid-handling/hamilton-star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
-</ul>
-</details></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/hamilton-liquid-classes.html">Using “Hamilton Liquid Classes” with Pylabrobot</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/core-grippers.html">Co-Re Grippers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-star/surface-following.html">Surface following</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2"><a class="reference internal" href="00_liquid-handling/hamilton-vantage/_hamilton-vantage.html">Hamilton Vantage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="00_liquid-handling/hamilton-prep/_hamilton-prep.html">Hamilton Prep</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="00_liquid-handling/opentrons/ot2/ot2.html">Opentrons OT-2</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/opentrons/ot2/hello-world.html">OT-2 Hello World</a></li>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/opentrons/ot2/ot2-simulator.html">OT-2 Simulator with Visualizer</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2"><a class="reference internal" href="00_liquid-handling/tecan-evo/_tecan-evo.html">Tecan EVO</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="00_liquid-handling/plate-washing/plate-washing.html">Plate Washing</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/plate-washing/biotek-el406.html">BioTek EL406</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="00_liquid-handling/pumps/_pumps.html">Pumps</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/pumps/cole-parmer-masterflex.html">Cole Parmer Masterflex</a></li>
-</ul>
-</details></li>
 <li class="toctree-l2"><a class="reference internal" href="00_liquid-handling/moving-channels-around.html">Manually moving channels around</a></li>
 <li class="toctree-l2"><a class="reference internal" href="00_liquid-handling/tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="00_liquid-handling/mixing.html">Mixing</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="01_material-handling/_material-handling.html">Material Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="01_material-handling/arms/_arm.html">Arm</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3 has-children"><a class="reference internal" href="01_material-handling/arms/c_scara/_scara.html">SCARA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l4"><a class="reference internal" href="01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.html">PreciseFlex PF400 and PF3400 robots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="00_liquid-handling/container_no_go_zones.html">Container No-Go Zones</a></li>
 </ul>
 </details></li>
 </ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="01_material-handling/centrifuge/_centrifuge.html">Centrifuges</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/centrifuge/agilent_vspin.html">Agilent VSpin</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="01_material-handling/heating_shaking/heating_shaking.html">Heater Shakers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/heating_shaking/inheco.html">Inheco ThermoShake</a></li>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/heating_shaking/hamilton.html">Hamilton Heater Shaker</a></li>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/heating_shaking/qinstruments.html">QInstruments BioShake</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="01_material-handling/fans/fans.html">Fans (Air Filtration Systems)</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/fans/hamilton_hepa_scap.html">Hamilton HEPA Fan</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="01_material-handling/sealers/sealers.html">Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/sealers/a4s.html">Azenta a4S</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="01_material-handling/temperature-controllers/temperature-controllers.html">Temperature Controllers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/temperature-controllers/ot-temperature-controller.html">Opentrons Temperature Module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/temperature-controllers/hamilton-heater-cooler.html">Hamilton Heater Cooler (HHC)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/temperature-controllers/inheco.html">Hello World, Inheco CPAC!</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="01_material-handling/storage/storage.html">Storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/storage/cytomat.html">TFS Cytomat Series</a></li>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/storage/inheco/incubator_shaker.html">Inheco Incubator (Shaker)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/storage/inheco/scila.html">Inheco SCILA</a></li>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/storage/liconic.html">Liconic STX Series</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2"><a class="reference internal" href="01_material-handling/tilting.html">Tilting</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="01_material-handling/thermocycling/thermocycling.html">Thermocycling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="01_material-handling/thermocycling/inheco-odtc.html">Inheco ODTC</a></li>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agilent/plateloc/hello-world.html">Agilent PlateLoc</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
+<li class="toctree-l3"><a class="reference internal" href="agilent/vspin/state-machine.html">VSpin and Access2 state machine</a></li>
+<li class="toctree-l3"><a class="reference internal" href="agilent/vspin/events.html">VSpin and Access2 events</a></li>
 </ul>
 </details></li>
 </ul>
 </details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="02_analytical/_analytical.html">Analytical</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="02_analytical/flow-cytometers/_flow-cytometers.html">Flow Cytometers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/flow-cytometers/beckman-coulter-cytoflex.html">Beckman CytoFLEX</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="azenta/index.html">Azenta</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="azenta/fluidx/intellixcap96/hello-world.html">FluidX IntelliXcap 96</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="02_analytical/plate-reading/plate-reading.html">Plate reading</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/plate-reading/bmg-clariostar.html">BMG Labtech CLARIOstar (Plus)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/plate-reading/byonoy/absorbance.html">Byonoy Absorbance 96 Automate</a></li>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/plate-reading/byonoy/luminescence.html">Byonoy Luminescence 96 Automate</a></li>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/plate-reading/byonoy.html">Byonoy Absorbance 96 Automate</a></li>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/plate-reading/cytation.html">Cytation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/plate-reading/pico.html">ImageXpress Pico</a></li>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/plate-reading/synergyh1.html">Synergy H1</a></li>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/plate-reading/tecan-spark.html">Tecan Spark 20M</a></li>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/plate-reading/tecan-infinite.html">Tecan Infinite 200 PRO</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="big_bear/index.html">BigBear</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="big_bear/orbital-shaker/hello-world.html">BigBear Orbital Shaker</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="02_analytical/scales/scales.html">Scales</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="02_analytical/scales/mettler-toledo-WXS205SDU.html">Mettler Toledo Precision Scales</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="brooks/index.html">Brooks</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="brooks/precise_flex/hello-world.html">Brooks PreciseFlex PF400 / PF3400</a></li>
+<li class="toctree-l2"><a class="reference internal" href="brooks/precise_flex/events.html">PreciseFlex events</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="byonoy/index.html">Byonoy</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="byonoy/absorbance_96/hello-world.html">Byonoy Absorbance 96</a></li>
+<li class="toctree-l2"><a class="reference internal" href="byonoy/luminescence_96/hello-world.html">Byonoy Luminescence 96 — lab guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="byonoy/luminescence_96/led_bar.html">Byonoy L96 — LED bar</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="cole_parmer/index.html">Cole-Parmer</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="cole_parmer/genogrinder/hello-world.html">Cole-Parmer GenoGrinder (fka SPEX GenoGrinder)</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="curiox/index.html">Curiox</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="curiox/curiox-ht2000/hello-world.html">Curiox Laminar Wash HT2000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="hamilton/index.html">Hamilton</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="hamilton/star/index.html">Hamilton STAR and STARlet</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="hamilton/star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="hamilton/star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="hamilton/star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="hamilton/star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="hamilton/star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="hamilton/star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="hamilton/prep/index.html">Prep</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="00_liquid-handling/hamilton-prep/prep_basic_demo.html">Hamilton Prep: getting started</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="high_res/sample-storage/index.html">Sample storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="high_res/sample-storage/ambistore/hello-world.html">HighRes AmbiStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="high_res/sample-storage/steristore/hello-world.html">HighRes SteriStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="high_res/sample-storage/tundrastore/hello-world.html">HighRes TundraStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="high_res/sample-storage/events.html">Sample-storage events</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="inheco/cpac/hello-world.html">Inheco CPAC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inheco/incubator_shaker/hello-world.html">Inheco Incubator Shaker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inheco/odtc/hello-world.html">Inheco ODTC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inheco/scila/hello-world.html">Inheco SCILA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inheco/thermoshake/hello-world.html">Inheco ThermoShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="kbioscience/index.html">KBioscience</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="kbioscience/kube/hello-world.html">KBioscience KUBE</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="kbiosystems/index.html">KBiosystems</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="kbiosystems/ultraseal-epro/hello-world.html">KBiosystems Ultraseal ePRO</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kbiosystems/ultraseal-pro/hello-world.html">KBiosystems Ultraseal PRO (formerly WASP)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kbiosystems/ultraseal-xt-pro/hello-world.html">KBiosystems Ultraseal XT Pro</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="li_cor/index.html">LI-COR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="li_cor/odyssey/hello-world.html">LI-COR Odyssey Classic</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="mettler_toledo/index.html">Mettler Toledo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="mettler_toledo/scales/hello-world.html">Mettler Toledo MT-SICS scales</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="micronic/index.html">Micronic</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="micronic/code_reader/hello-world.html">Micronic RD235 Code Reader</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="molecular_devices/index.html">Molecular Devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="molecular_devices/spectramax/hello-world.html">Molecular Devices SpectraMax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="molecular_devices/imageXpress/pico.html">ImageXpress Pico</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="opentrons/index.html">Opentrons</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="opentrons/ot2/hello-world.html">Opentrons OT-2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="opentrons/flex/hello-world.html">Opentrons Flex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="qinstruments/index.html">QInstruments</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="qinstruments/bioshake/hello-world.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="revvity/index.html">Revvity</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="revvity/celigo/index.html">Celigo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="revvity/celigo/hello-world.html">Celigo hello world</a></li>
+<li class="toctree-l3"><a class="reference internal" href="revvity/celigo/advanced-imaging.html">Advanced imaging and coordinates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="revvity/celigo/scan-planning.html">Scan specifications and planning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="revvity/celigo/components-and-diagnostics.html">Hardware components and diagnostics</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="sartorius/index.html">Sartorius</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="sartorius/entris2/hello-world.html">Sartorius Entris II</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="thermo_fisher/index.html">Thermo Fisher</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="thermo_fisher/alps/index.html">ALPS Heat Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="thermo_fisher/alps/alps300/hello-world.html">Thermo Scientific ALPS 300</a></li>
+<li class="toctree-l3"><a class="reference internal" href="thermo_fisher/alps/alps3000/hello-world.html">Thermo Scientific ALPS 3000</a></li>
+<li class="toctree-l3"><a class="reference internal" href="thermo_fisher/alps/alps5000/hello-world.html">Thermo Scientific ALPS 5000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="thermo_fisher/btx/index.html">BTX</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="thermo_fisher/btx/gemini/X2/installation.html">BTX Gemini X2 installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="thermo_fisher/btx/gemini/X2/hello-world.html">BTX Gemini X2</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="thermo_fisher/nanodrop_1000/index.html">Thermo Fisher NanoDrop 1000</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="thermo_fisher/nanodrop_1000/setup.html">NanoDrop 1000 setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="thermo_fisher/nanodrop_1000/hello-world.html">Thermo Fisher NanoDrop 1000</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="ufactory/index.html">UFACTORY</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="ufactory/xarm6/hello-world.html">UFACTORY xArm 6</a></li>
 </ul>
 </details></li>
 </ul>
@@ -610,6 +696,14 @@
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
 <li class="toctree-l1"><a class="reference internal" href="machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="machine-agnostic-features/event-bus.html">EventBus</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="machine-agnostic-features/event-bus/machine-lifecycle.html">Machine lifecycle events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="machine-agnostic-features/event-bus/incubator.html">Incubator events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="machine-agnostic-features/event-bus/liquid-handler.html">LiquidHandler events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="machine-agnostic-features/event-bus/thermal-and-shaking.html">Shaker and environmental-controller events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="machine-agnostic-features/event-bus/diagnostic-transports.html">Diagnostic transport events</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
 <li class="toctree-l1"><a class="reference internal" href="machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -619,6 +713,7 @@
 </details></li>
 <li class="toctree-l1"><a class="reference internal" href="machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
 <li class="toctree-l1"><a class="reference internal" href="machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="machine-agnostic-features/manual-operator.html">Operator actions</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
 <ul class="nav bd-sidenav">
@@ -712,20 +807,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="machines.html"
+       href="needs-testing.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Supported Machines</p>
+        <p class="prev-next-title">Devices that need testing</p>
       </div>
     </a>
     <a class="right-next"
-       href="00_liquid-handling/_liquid-handling.html"
+       href="generic/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Liquid Handling</p>
+        <p class="prev-next-title">Generic devices</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -757,13 +852,13 @@
 </div>
 
   <div class="sidebar-secondary-item">
-  <div role="note" aria-label="source link">
-    <h3>This Page</h3>
-    <ul class="this-page-menu">
-      <li><a href="../_sources/user_guide/definitions.md.txt"
-            rel="nofollow">Show Source</a></li>
-    </ul>
-   </div></div>
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/user_guide/definitions.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
 
 </div></div>
               
@@ -778,8 +873,8 @@
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
-<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67"></script>
 
   <footer class="bd-footer">
 <div class="bd-footer__inner bd-page-width">
@@ -813,7 +908,7 @@
         <div class="footer-item">
 <p class="theme-version">
   <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
-  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.21.0.
 </p></div>
       
     </div>

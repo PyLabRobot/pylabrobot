@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.find\_smallest\_site\_for\_plate
+=================================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.find_smallest_site_for_plate

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterMapEntry.\_\_init\_\_
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FilterMapEntry.__init__

@@ -1,0 +1,6 @@
+pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbanceBaseUnit.\_\_init\_\_
+======================================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. automethod:: ByonoyAbsorbanceBaseUnit.__init__

@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILA.named
+=========================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILA.named

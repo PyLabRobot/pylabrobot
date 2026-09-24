@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.mode\_enable\_motor\_slave\_to\_encoder
+===================================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.mode_enable_motor_slave_to_encoder

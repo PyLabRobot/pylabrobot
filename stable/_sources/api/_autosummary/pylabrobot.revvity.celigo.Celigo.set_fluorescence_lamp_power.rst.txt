@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.set\_fluorescence\_lamp\_power
+===============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.set_fluorescence_lamp_power

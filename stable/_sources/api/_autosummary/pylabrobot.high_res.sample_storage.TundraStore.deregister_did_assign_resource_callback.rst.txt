@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.deregister\_did\_assign\_resource\_callback
+============================================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.deregister_did_assign_resource_callback

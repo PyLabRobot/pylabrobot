@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps3000.ALPS3000Status.Busy
+===========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps3000
+
+.. autoattribute:: ALPS3000Status.Busy

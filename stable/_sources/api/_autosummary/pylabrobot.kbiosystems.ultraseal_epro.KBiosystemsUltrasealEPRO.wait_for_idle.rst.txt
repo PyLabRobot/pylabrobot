@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.KBiosystemsUltrasealEPRO.wait\_for\_idle
+===============================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. automethod:: KBiosystemsUltrasealEPRO.wait_for_idle

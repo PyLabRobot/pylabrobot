@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2Driver.state
+============================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoproperty:: Access2Driver.state

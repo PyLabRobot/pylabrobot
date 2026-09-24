@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.AnalogInputConfig
+===========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: AnalogInputConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AnalogInputConfig.config_version
+      ~AnalogInputConfig.controller_index
+      ~AnalogInputConfig.channel
+      ~AnalogInputConfig.enabled
+      ~AnalogInputConfig.invert
+      ~AnalogInputConfig.io_name
+      ~AnalogInputConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AnalogInputConfig.__init__
+      ~AnalogInputConfig.from_element
+   
+   

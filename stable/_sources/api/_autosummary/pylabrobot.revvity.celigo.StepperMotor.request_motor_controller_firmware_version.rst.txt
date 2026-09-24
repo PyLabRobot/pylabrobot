@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.StepperMotor.request\_motor\_controller\_firmware\_version
+====================================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: StepperMotor.request_motor_controller_firmware_version

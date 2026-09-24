@@ -1,0 +1,44 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.Axis
+====================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: Axis
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Axis.real
+      ~Axis.imag
+      ~Axis.numerator
+      ~Axis.denominator
+      ~Axis.BASE
+      ~Axis.SHOULDER
+      ~Axis.ELBOW
+      ~Axis.WRIST
+      ~Axis.GRIPPER
+      ~Axis.RAIL
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Axis.conjugate
+      ~Axis.bit_length
+      ~Axis.bit_count
+      ~Axis.as_integer_ratio
+      ~Axis.__init__
+   
+   

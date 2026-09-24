@@ -1,0 +1,41 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.CeligoConfig
+======================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: CeligoConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CeligoConfig.channels
+      ~CeligoConfig.magnification
+      ~CeligoConfig.hardware
+      ~CeligoConfig.channel_descriptors
+      ~CeligoConfig.channels_by_magnification
+      ~CeligoConfig.calibration
+      ~CeligoConfig.hardware_defaults
+      ~CeligoConfig.galvo_calibrations
+      ~CeligoConfig.galvo_optical_calibration
+      ~CeligoConfig.navigation
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CeligoConfig.__init__
+      ~CeligoConfig.from_install
+   
+   

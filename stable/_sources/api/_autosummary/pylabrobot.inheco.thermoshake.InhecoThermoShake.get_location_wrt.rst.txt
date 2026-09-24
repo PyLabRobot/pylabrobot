@@ -1,0 +1,6 @@
+pylabrobot.inheco.thermoshake.InhecoThermoShake.get\_location\_wrt
+==================================================================
+
+.. currentmodule:: pylabrobot.inheco.thermoshake
+
+.. automethod:: InhecoThermoShake.get_location_wrt

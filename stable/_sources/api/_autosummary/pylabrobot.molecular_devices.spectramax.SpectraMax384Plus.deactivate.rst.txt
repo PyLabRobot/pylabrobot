@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectraMax384Plus.deactivate
+=====================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: SpectraMax384Plus.deactivate

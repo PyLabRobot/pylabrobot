@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.get\_absolute\_location
+==============================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.get_absolute_location

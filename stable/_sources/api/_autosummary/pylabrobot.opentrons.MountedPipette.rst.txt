@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.MountedPipette
+===================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: MountedPipette
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MountedPipette.model
+      ~MountedPipette.serial_number
+      ~MountedPipette.mount
+      ~MountedPipette.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MountedPipette.__init__
+   
+   

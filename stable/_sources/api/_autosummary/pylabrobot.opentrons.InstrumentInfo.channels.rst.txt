@@ -1,0 +1,6 @@
+pylabrobot.opentrons.InstrumentInfo.channels
+============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: InstrumentInfo.channels

@@ -1,0 +1,944 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>ContainerRack &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_devices.css?v=c92e449a" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=cb8930eaaf36d9849b67"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67" />
+
+    <script src="../../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/plr_devices.js?v=ba1a2da2"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'resources/itemized-resource/container-rack/container-rack';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.21.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/graphviz.js?v=0710df9f"></script>
+    <script src="../../../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/resources/itemized-resource/container-rack/container-rack.html" />
+    <link rel="icon" href="../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="ResourceHolder" href="../../resource-holder/resource-holder.html" />
+    <link rel="prev" title="TipSpot" href="../tiprack/tip-spot.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html">Resources Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../custom-resources.html">Defining custom resources</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Ontology</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../carrier/carrier.html">Carrier</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../carrier/mfx-carrier/mfx_carrier.html">MFXCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../carrier/plate-carrier/plate_carrier.html">PlateCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../carrier/tip-carrier/tip-carrier.html">TipCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../carrier/trough-carrier/trough-carrier.html">TroughCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../container/container.html">Container</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../container/petri-dish/petri-dish.html">PetriDish</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../container/trough/trough.html">Trough</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../container/tube/tube.html">Tube</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../container/well/well.html">Well</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../deck/deck.html">Deck</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../itemized-resource.html">ItemizedResource</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="../plate/plate.html">Plates</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../plate/definition-plate.html">Tutorial: Plate Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../plate/plate-quadrants.html">Tutorial: Plate Quadrants</a></li>
+</ul>
+</details></li>
+
+<li class="toctree-l2 has-children"><a class="reference internal" href="../tiprack/tiprack.html">TipRack</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../tiprack/tip-spot.html">TipSpot</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">ContainerRack</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../resource-holder/resource-holder.html">ResourceHolder</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../resource-holder/plate-holder.html">PlateHolder</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../plate-adapter/plate-adapter.html">PlateAdapter</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../resource-stack/resource-stack.html">ResourceStack</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Library</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../library/agenbio.html">Agenbio</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/agilent.html">Agilent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/alpaqua.html">Alpaqua Engineering, LLC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/azenta.html">Azenta</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/bioer.html">BioER</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/biorad.html">Biorad</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/boekel.html">Boekel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/celltreat.html">CellTreat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/cellvis.html">Cellvis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/corning.html">Corning Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/eppendorf.html">Eppendorf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/falcon.html">Falcon</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="../../library/greiner.html">Greiner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/hamilton.html">Hamilton STAR “ML_STAR”</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/imcs.html">IMCS</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/nest.html">Wuxi Nest</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/opentrons.html">Opentrons</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/perkin_elmer.html">Perkin Elmer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/pioreactor.html">Pioreactor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/porvair.html">Porvair</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/revvity.html">Revvity</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/sergi.html">Sergi Lab Supplies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/thermo_fisher.html">Thermo Fisher Scientific Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library/vwr.html">VWR</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../library/diy/index.html">DIY Resources</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../library/diy/grindbio.html">GrindBio</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../library/diy/davidnedrud.html">Designs by David Nedrud</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Resource Management System</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../itemized-resource.html" class="nav-link">ItemizedResource</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">ContainerRack</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="containerrack">
+<h1>ContainerRack<a class="headerlink" href="#containerrack" title="Link to this heading">#</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">ContainerRack</span></code> models a movable rack with positions that can each hold one resource, such as a tube.
+Each position is a <a class="reference internal" href="../../resource-holder/resource-holder.html"><span class="std std-doc">ResourceHolder</span></a>, which stays in the
+rack when its contents are removed. A rack can be partly filled or completely empty.</p>
+<p>The resource hierarchy is:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>ContainerRack
+└── ResourceHolder (one per position)
+    └── Resource (present when the position is occupied)
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ContainerRack</span></code> inherits the position lookup methods of
+<a class="reference internal" href="../itemized-resource.html"><span class="std std-doc">ItemizedResource</span></a> and adds methods for working with the contents of those
+positions. Its dimensions and layout are configurable; it does not require a particular footprint.</p>
+<section id="create-a-rack">
+<h2>Create a rack<a class="headerlink" href="#create-a-rack" title="Link to this heading">#</a></h2>
+<p>This example creates an empty rack with two rows and three columns. The dimensions are illustrative,
+in millimeters. Use measured dimensions when defining your own labware.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContainerRack</span><span class="p">,</span> <span class="n">Tube</span><span class="p">,</span> <span class="n">create_ordered_items_2d</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.resource_holder</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResourceHolder</span>
+
+<span class="n">rack</span> <span class="o">=</span> <span class="n">ContainerRack</span><span class="p">(</span>
+  <span class="n">name</span><span class="o">=</span><span class="s2">"sample_rack"</span><span class="p">,</span>
+  <span class="n">size_x</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span>
+  <span class="n">size_y</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+  <span class="n">size_z</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+  <span class="n">ordered_items</span><span class="o">=</span><span class="n">create_ordered_items_2d</span><span class="p">(</span>
+    <span class="n">ResourceHolder</span><span class="p">,</span>
+    <span class="n">num_items_x</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">num_items_y</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">dx</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">dy</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">dz</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">item_dx</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+    <span class="n">item_dy</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+    <span class="n">size_x</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+    <span class="n">size_y</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+    <span class="n">size_z</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">name_prefix</span><span class="o">=</span><span class="s2">"sample_rack"</span><span class="p">,</span>
+  <span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ordered_items</span></code> must contain at least one holder. The helper creates holders with positions relative
+to the rack and assigns identifiers <code class="docutils literal notranslate"><span class="pre">A1</span></code>, <code class="docutils literal notranslate"><span class="pre">B1</span></code>, <code class="docutils literal notranslate"><span class="pre">A2</span></code>, <code class="docutils literal notranslate"><span class="pre">B2</span></code>, <code class="docutils literal notranslate"><span class="pre">A3</span></code>, <code class="docutils literal notranslate"><span class="pre">B3</span></code>, in that order. Row A is at the
+back of the rack (larger y); column 1 is at the left (smaller x).</p>
+<p><code class="docutils literal notranslate"><span class="pre">dx</span></code>, <code class="docutils literal notranslate"><span class="pre">dy</span></code>, and <code class="docutils literal notranslate"><span class="pre">dz</span></code> locate the leftmost, frontmost holder’s origin relative to the rack.
+<code class="docutils literal notranslate"><span class="pre">item_dx</span></code> and <code class="docutils literal notranslate"><span class="pre">item_dy</span></code> give the spacing between holder origins. Each holder also has a
+<code class="docutils literal notranslate"><span class="pre">child_location</span></code>, which defaults to <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">0,</span> <span class="pre">0)</span></code> and determines where its contents sit relative to it.</p>
+</section>
+<section id="fill-positions">
+<h2>Fill positions<a class="headerlink" href="#fill-positions" title="Link to this heading">#</a></h2>
+<p>Assign a resource to a position with <code class="docutils literal notranslate"><span class="pre">rack[identifier]</span> <span class="pre">=</span> <span class="pre">resource</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tube</span> <span class="o">=</span> <span class="n">Tube</span><span class="p">(</span>
+  <span class="n">name</span><span class="o">=</span><span class="s2">"sample_1"</span><span class="p">,</span>
+  <span class="n">size_x</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+  <span class="n">size_y</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+  <span class="n">size_z</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span>
+  <span class="n">max_volume</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">rack</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">]</span> <span class="o">=</span> <span class="n">tube</span>
+
+<span class="k">assert</span> <span class="n">rack</span><span class="o">.</span><span class="n">has_container</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span>
+<span class="k">assert</span> <span class="ow">not</span> <span class="n">rack</span><span class="o">.</span><span class="n">has_container</span><span class="p">(</span><span class="s2">"B1"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This assigns the tube as a child of the holder at A1. Assigning another resource to A1 replaces the
+existing contents in the resource model. These operations describe the layout; they do not command
+a robot to move anything.</p>
+<p>To fill several positions, supply a list or tuple with one resource per position. The endpoints of
+the string range <code class="docutils literal notranslate"><span class="pre">&quot;A2:A3&quot;</span></code> are included:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tubes</span> <span class="o">=</span> <span class="p">[</span>
+  <span class="n">Tube</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"sample_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">max_volume</span><span class="o">=</span><span class="mi">5000</span><span class="p">)</span>
+  <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="p">]</span>
+<span class="n">rack</span><span class="p">[</span><span class="s2">"A2:A3"</span><span class="p">]</span> <span class="o">=</span> <span class="n">tubes</span>
+</pre></div>
+</div>
+<p>The base <code class="docutils literal notranslate"><span class="pre">ContainerRack</span></code> accepts any <code class="docutils literal notranslate"><span class="pre">Resource</span></code>. For a rack whose contents must be tubes, use
+<code class="docutils literal notranslate"><span class="pre">TubeRack</span></code>, its specialization that checks the assigned resource type.</p>
+</section>
+<section id="access-holders-and-containers">
+<h2>Access holders and containers<a class="headerlink" href="#access-holders-and-containers" title="Link to this heading">#</a></h2>
+<p>Use <code class="docutils literal notranslate"><span class="pre">get_item()</span></code> to retrieve a holder and <code class="docutils literal notranslate"><span class="pre">get_container()</span></code> to retrieve its contents.
+Bracket lookup always returns a list of holders, even for a single position:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">holder</span> <span class="o">=</span> <span class="n">rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">rack</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">]</span> <span class="o">==</span> <span class="p">[</span><span class="n">holder</span><span class="p">]</span>
+<span class="k">assert</span> <span class="n">holder</span><span class="o">.</span><span class="n">resource</span> <span class="ow">is</span> <span class="n">tube</span>
+<span class="k">assert</span> <span class="n">rack</span><span class="o">.</span><span class="n">get_container</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span> <span class="ow">is</span> <span class="n">tube</span>
+
+<span class="k">assert</span> <span class="n">rack</span><span class="o">.</span><span class="n">get_containers</span><span class="p">(</span><span class="s2">"A2:A3"</span><span class="p">)</span> <span class="o">==</span> <span class="n">tubes</span>
+<span class="k">assert</span> <span class="n">rack</span><span class="o">.</span><span class="n">row_containers</span><span class="p">(</span><span class="s2">"A"</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">tube</span><span class="p">,</span> <span class="o">*</span><span class="n">tubes</span><span class="p">]</span>
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">rack</span><span class="o">.</span><span class="n">get_occupied_containers</span><span class="p">())</span> <span class="o">==</span> <span class="mi">3</span>
+</pre></div>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Method</p></th>
+<th class="head"><p>Result</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">has_container(&quot;A1&quot;)</span></code></p></td>
+<td><p>Whether a known position is occupied.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">get_container(&quot;A1&quot;)</span></code></p></td>
+<td><p>The resource at one position.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">get_containers(&quot;A2:A3&quot;)</span></code></p></td>
+<td><p>The resources at the selected positions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">row_containers(&quot;A&quot;)</span></code></p></td>
+<td><p>The resources in a row; row indices can also be zero-based integers.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">column_containers(0)</span></code></p></td>
+<td><p>The resources in a column, using a zero-based index.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">get_all_containers()</span></code></p></td>
+<td><p>The resources at every position, in rack order.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">get_occupied_containers()</span></code></p></td>
+<td><p>The resources at occupied positions, skipping empty positions.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The retrieval methods raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> if any requested position is empty, except
+<code class="docutils literal notranslate"><span class="pre">get_occupied_containers()</span></code>. For example, <code class="docutils literal notranslate"><span class="pre">get_all_containers()</span></code> would raise for the partly filled
+rack above. Check <code class="docutils literal notranslate"><span class="pre">has_container()</span></code> before retrieving an individual position that may be empty.</p>
+<p>For an irregular layout, you can supply your own dictionary of positioned <code class="docutils literal notranslate"><span class="pre">ResourceHolder</span></code> objects
+with identifiers such as <code class="docutils literal notranslate"><span class="pre">&quot;primary&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;backup&quot;</span></code>. Single-position lookup and assignment work with
+these names. Row, column, and string-range selection require Excel-style identifiers such as <code class="docutils literal notranslate"><span class="pre">A1</span></code>.</p>
+</section>
+<section id="remove-containers">
+<h2>Remove containers<a class="headerlink" href="#remove-containers" title="Link to this heading">#</a></h2>
+<p>Unassign a container to remove it from its holder. Use <code class="docutils literal notranslate"><span class="pre">empty()</span></code> to remove all containers while
+keeping the rack and its holders:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rack</span><span class="o">.</span><span class="n">get_container</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">unassign</span><span class="p">()</span>
+<span class="k">assert</span> <span class="ow">not</span> <span class="n">rack</span><span class="o">.</span><span class="n">has_container</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span>
+
+<span class="n">rack</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+<span class="k">assert</span> <span class="n">rack</span><span class="o">.</span><span class="n">get_occupied_containers</span><span class="p">()</span> <span class="o">==</span> <span class="p">[]</span>
+<span class="k">assert</span> <span class="n">rack</span><span class="o">.</span><span class="n">num_items</span> <span class="o">==</span> <span class="mi">6</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">empty()</span></code> removes resources from the modeled rack; it does not empty liquid from the containers.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../tiprack/tip-spot.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">TipSpot</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../../resource-holder/resource-holder.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">ResourceHolder</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#create-a-rack">Create a rack</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fill-positions">Fill positions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#access-holders-and-containers">Access holders and containers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#remove-containers">Remove containers</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/resources/itemized-resource/container-rack/container-rack.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../../_sources/resources/itemized-resource/container-rack/container-rack.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.21.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

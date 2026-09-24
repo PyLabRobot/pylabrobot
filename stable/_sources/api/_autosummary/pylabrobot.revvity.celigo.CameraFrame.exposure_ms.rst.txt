@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CameraFrame.exposure\_ms
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CameraFrame.exposure_ms

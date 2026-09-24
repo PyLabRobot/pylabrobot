@@ -1,0 +1,6 @@
+pylabrobot.inheco.thermoshake.InhecoThermoShake.name
+====================================================
+
+.. currentmodule:: pylabrobot.inheco.thermoshake
+
+.. autoproperty:: InhecoThermoShake.name

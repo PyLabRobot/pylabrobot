@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.SelfTestReport.\_\_init\_\_
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: SelfTestReport.__init__

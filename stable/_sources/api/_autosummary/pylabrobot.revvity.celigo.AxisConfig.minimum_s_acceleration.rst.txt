@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AxisConfig.minimum\_s\_acceleration
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AxisConfig.minimum_s_acceleration

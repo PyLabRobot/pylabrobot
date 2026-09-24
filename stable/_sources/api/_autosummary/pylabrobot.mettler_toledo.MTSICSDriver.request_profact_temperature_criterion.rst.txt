@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.request\_profact\_temperature\_criterion
+================================================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.request_profact_temperature_criterion

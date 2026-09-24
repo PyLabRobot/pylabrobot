@@ -1,0 +1,6 @@
+pylabrobot.opentrons.InstrumentInfo.instrument\_type
+====================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: InstrumentInfo.instrument_type

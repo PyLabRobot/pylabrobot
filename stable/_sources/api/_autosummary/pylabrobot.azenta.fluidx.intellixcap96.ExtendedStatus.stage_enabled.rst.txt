@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.ExtendedStatus.stage\_enabled
+====================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoattribute:: ExtendedStatus.stage_enabled

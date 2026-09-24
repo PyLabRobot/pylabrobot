@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.get\_default\_child\_location
+===============================================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.get_default_child_location

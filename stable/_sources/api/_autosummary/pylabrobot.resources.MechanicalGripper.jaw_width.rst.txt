@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.jaw\_width
+=================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: MechanicalGripper.jaw_width

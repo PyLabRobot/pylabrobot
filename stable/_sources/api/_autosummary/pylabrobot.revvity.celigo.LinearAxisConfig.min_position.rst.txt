@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.min\_position
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.min_position

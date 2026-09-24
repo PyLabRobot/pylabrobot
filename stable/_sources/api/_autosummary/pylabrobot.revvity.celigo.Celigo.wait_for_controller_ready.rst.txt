@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.wait\_for\_controller\_ready
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.wait_for_controller_ready

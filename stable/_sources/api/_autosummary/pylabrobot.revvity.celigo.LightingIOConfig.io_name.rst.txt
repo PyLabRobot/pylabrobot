@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LightingIOConfig.io\_name
+===================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LightingIOConfig.io_name

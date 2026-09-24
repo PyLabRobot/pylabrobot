@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.HardwareDefaultConfig.source\_path
+============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: HardwareDefaultConfig.source_path

@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.deserialize
+=========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: LinkBody.deserialize

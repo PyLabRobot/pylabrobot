@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationProtocol
+========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoclass:: ElectroporationProtocol
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationProtocol.capacitance_uf
+      ~ElectroporationProtocol.duration_us
+      ~ElectroporationProtocol.pulse_count
+      ~ElectroporationProtocol.pulse_interval_seconds
+      ~ElectroporationProtocol.resistance_ohms
+      ~ElectroporationProtocol.protocol_type
+      ~ElectroporationProtocol.pulse_amplitude_volts
+      ~ElectroporationProtocol.gap_mm
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationProtocol.__init__
+      ~ElectroporationProtocol.as_parameters
+      ~ElectroporationProtocol.from_dict
+   
+   

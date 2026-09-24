@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectrumSettings.step
+==============================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoattribute:: SpectrumSettings.step

@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.unassign\_child\_resource
+================================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.unassign_child_resource

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ControllerStatus.extended\_status
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ControllerStatus.extended_status

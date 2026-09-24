@@ -1,4 +1,6 @@
-﻿pylabrobot.utils.positions
+﻿:orphan:
+
+pylabrobot.utils.positions
 ==========================
 
 .. currentmodule:: pylabrobot.utils

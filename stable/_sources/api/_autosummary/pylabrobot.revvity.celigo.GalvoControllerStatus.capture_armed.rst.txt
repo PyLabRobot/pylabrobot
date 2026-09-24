@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoControllerStatus.capture\_armed
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoControllerStatus.capture_armed

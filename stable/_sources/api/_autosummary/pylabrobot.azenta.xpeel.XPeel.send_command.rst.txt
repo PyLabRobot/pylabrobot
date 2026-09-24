@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.send\_command
+===========================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.send_command

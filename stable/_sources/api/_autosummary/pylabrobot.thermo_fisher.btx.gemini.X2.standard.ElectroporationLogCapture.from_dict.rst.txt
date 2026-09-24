@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationLogCapture.from\_dict
+=====================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. automethod:: ElectroporationLogCapture.from_dict

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.\_\_init\_\_
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CalibrationConfig.__init__

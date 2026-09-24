@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoCamera.capture
+==============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CeligoCamera.capture

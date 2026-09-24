@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4SStatus.remaining\_time
+===============================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. autoattribute:: A4SStatus.remaining_time

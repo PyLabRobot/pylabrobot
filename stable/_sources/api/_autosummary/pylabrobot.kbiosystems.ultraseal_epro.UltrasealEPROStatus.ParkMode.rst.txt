@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.UltrasealEPROStatus.ParkMode
+===================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. autoattribute:: UltrasealEPROStatus.ParkMode

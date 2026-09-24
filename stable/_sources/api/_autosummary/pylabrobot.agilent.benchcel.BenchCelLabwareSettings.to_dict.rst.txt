@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCelLabwareSettings.to\_dict
+============================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCelLabwareSettings.to_dict

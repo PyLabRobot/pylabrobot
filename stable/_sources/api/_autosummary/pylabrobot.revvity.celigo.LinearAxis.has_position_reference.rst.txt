@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxis.has\_position\_reference
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: LinearAxis.has_position_reference

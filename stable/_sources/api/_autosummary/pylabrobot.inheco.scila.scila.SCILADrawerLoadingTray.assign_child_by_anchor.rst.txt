@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILADrawerLoadingTray.assign\_child\_by\_anchor
+==============================================================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILADrawerLoadingTray.assign_child_by_anchor

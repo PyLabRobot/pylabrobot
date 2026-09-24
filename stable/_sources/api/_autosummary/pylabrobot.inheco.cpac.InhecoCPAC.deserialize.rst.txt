@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.deserialize
+=============================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.deserialize

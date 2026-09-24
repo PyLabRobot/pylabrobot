@@ -1,0 +1,6 @@
+pylabrobot.byonoy.luminescence\_96.LuminescenceResult.temperature
+=================================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. autoattribute:: LuminescenceResult.temperature

@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.KUBEStatus.denominator
+==================================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. autoattribute:: KUBEStatus.denominator

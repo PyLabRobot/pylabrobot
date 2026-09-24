@@ -1,0 +1,6 @@
+pylabrobot.resources.TipRack.frame\_height
+==========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: TipRack.frame_height

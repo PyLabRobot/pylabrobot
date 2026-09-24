@@ -1,0 +1,6 @@
+pylabrobot.inheco.thermoshake.InhecoThermoShake.serialize\_state
+================================================================
+
+.. currentmodule:: pylabrobot.inheco.thermoshake
+
+.. automethod:: InhecoThermoShake.serialize_state

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationRunResult.rsi\_result
+=====================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoattribute:: ElectroporationRunResult.rsi_result

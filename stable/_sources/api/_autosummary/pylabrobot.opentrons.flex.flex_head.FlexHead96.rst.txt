@@ -1,0 +1,48 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.flex.flex\_head.FlexHead96
+===============================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. autoclass:: FlexHead96
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexHead96.__init__
+      ~FlexHead96.air_gap_in_place
+      ~FlexHead96.aspirate
+      ~FlexHead96.aspirate_in_place
+      ~FlexHead96.blow_out
+      ~FlexHead96.configure_for_volume
+      ~FlexHead96.default_flow_rates
+      ~FlexHead96.discard_tips
+      ~FlexHead96.dispense
+      ~FlexHead96.dispense_in_place
+      ~FlexHead96.drop_tips
+      ~FlexHead96.get_mounted_tips
+      ~FlexHead96.get_tip_presence
+      ~FlexHead96.has_tip_on_hardware
+      ~FlexHead96.move_relative
+      ~FlexHead96.move_to
+      ~FlexHead96.move_to_addressable_area
+      ~FlexHead96.move_to_well
+      ~FlexHead96.pick_up_tips
+      ~FlexHead96.position
+      ~FlexHead96.prepare_to_aspirate
+      ~FlexHead96.touch_tip
+      ~FlexHead96.unsafe_blow_out_in_place
+      ~FlexHead96.unsafe_drop_tip_in_place
+      ~FlexHead96.verify_tip_presence
+   
+   

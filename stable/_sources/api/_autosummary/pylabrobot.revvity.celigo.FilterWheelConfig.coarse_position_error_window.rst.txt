@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.coarse\_position\_error\_window
+===========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.coarse_position_error_window

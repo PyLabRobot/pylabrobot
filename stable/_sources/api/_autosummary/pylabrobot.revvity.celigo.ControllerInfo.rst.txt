@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.ControllerInfo
+========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: ControllerInfo
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ControllerInfo.device_index
+      ~ControllerInfo.firmware_version
+      ~ControllerInfo.uart_buffer_length
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ControllerInfo.__init__
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.rotated
+==============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.rotated

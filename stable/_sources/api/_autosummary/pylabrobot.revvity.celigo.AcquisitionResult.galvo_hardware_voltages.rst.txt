@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AcquisitionResult.galvo\_hardware\_voltages
+=====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AcquisitionResult.galvo_hardware_voltages

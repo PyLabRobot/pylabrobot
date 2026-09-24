@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.stop
+============================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.stop

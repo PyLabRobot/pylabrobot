@@ -1,0 +1,6 @@
+pylabrobot.opentrons.RobotInfo.firmware\_version
+================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: RobotInfo.firmware_version

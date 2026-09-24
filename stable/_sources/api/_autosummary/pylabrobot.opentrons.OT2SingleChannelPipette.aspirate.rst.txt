@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2SingleChannelPipette.aspirate
+=====================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2SingleChannelPipette.aspirate

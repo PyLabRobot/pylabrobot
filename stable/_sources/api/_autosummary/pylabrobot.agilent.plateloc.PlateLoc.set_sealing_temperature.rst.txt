@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLoc.set\_sealing\_temperature
+==============================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. automethod:: PlateLoc.set_sealing_temperature

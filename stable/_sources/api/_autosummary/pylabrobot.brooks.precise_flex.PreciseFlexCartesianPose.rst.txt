@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexCartesianPose
+========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexCartesianPose
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexCartesianPose.orientation
+      ~PreciseFlexCartesianPose.rail_position
+      ~PreciseFlexCartesianPose.wrist
+      ~PreciseFlexCartesianPose.location
+      ~PreciseFlexCartesianPose.rotation
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexCartesianPose.__init__
+   
+   

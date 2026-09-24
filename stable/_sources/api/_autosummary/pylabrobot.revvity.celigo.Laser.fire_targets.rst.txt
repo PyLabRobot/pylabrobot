@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Laser.fire\_targets
+=============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Laser.fire_targets

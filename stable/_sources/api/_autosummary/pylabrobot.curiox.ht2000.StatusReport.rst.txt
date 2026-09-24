@@ -1,0 +1,24 @@
+﻿:orphan:
+
+
+pylabrobot.curiox.ht2000.StatusReport
+=====================================
+
+.. currentmodule:: pylabrobot.curiox.ht2000
+
+.. autoclass:: StatusReport
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~StatusReport.__init__
+   
+   

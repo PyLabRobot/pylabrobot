@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.request\_all\_stacker\_sensor\_statuses
+==============================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.request_all_stacker_sensor_statuses

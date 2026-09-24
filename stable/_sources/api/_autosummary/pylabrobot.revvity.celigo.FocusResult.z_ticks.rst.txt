@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FocusResult.z\_ticks
+==============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FocusResult.z_ticks

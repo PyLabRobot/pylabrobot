@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.gemini\_x2.BTXGeminiX2.PLATE\_HANDLER\_RESET\_STATE\_UNKNOWN
+====================================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.gemini_x2
+
+.. autoattribute:: BTXGeminiX2.PLATE_HANDLER_RESET_STATE_UNKNOWN

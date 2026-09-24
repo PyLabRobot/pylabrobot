@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.move\_conveyor\_in
+================================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.move_conveyor_in

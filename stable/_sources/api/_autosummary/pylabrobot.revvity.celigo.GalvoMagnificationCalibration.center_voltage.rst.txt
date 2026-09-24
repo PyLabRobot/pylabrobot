@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoMagnificationCalibration.center\_voltage
+=======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoMagnificationCalibration.center_voltage

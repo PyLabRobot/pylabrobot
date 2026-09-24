@@ -1,0 +1,6 @@
+pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbanceBaseUnit.copy
+==============================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. automethod:: ByonoyAbsorbanceBaseUnit.copy

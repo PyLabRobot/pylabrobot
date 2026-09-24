@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.pipettes
+=======================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. autoproperty:: Flex.pipettes

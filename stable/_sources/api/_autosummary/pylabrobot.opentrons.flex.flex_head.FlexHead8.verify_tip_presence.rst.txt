@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead8.verify\_tip\_presence
+====================================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead8.verify_tip_presence

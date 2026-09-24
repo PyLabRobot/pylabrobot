@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.serialize\_state
+==========================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.serialize_state

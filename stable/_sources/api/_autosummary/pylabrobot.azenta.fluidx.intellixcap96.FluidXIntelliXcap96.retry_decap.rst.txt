@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.FluidXIntelliXcap96.retry\_decap
+=======================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. automethod:: FluidXIntelliXcap96.retry_decap

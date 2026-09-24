@@ -1,0 +1,28 @@
+﻿:orphan:
+
+
+pylabrobot.micronic.code\_reader.driver.MicronicRD235
+=====================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.driver
+
+.. autoclass:: MicronicRD235
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MicronicRD235.__init__
+      ~MicronicRD235.scan_rack
+      ~MicronicRD235.scan_rack_id
+      ~MicronicRD235.setup
+      ~MicronicRD235.stop
+   
+   

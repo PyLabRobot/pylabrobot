@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.stop
+=====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.stop

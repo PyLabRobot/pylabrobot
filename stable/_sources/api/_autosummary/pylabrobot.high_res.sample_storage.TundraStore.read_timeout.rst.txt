@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.read\_timeout
+==============================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoproperty:: TundraStore.read_timeout

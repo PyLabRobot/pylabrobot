@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoHardwareConfig.laser\_nd\_filter\_wheel
+=======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoHardwareConfig.laser_nd_filter_wheel

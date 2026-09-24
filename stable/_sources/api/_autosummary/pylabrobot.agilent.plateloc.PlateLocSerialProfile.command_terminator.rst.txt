@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLocSerialProfile.command\_terminator
+=====================================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoattribute:: PlateLocSerialProfile.command_terminator

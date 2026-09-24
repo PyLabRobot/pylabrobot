@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLocSerialProfile.read\_delay
+=============================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoattribute:: PlateLocSerialProfile.read_delay

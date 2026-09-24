@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.camera\_filter
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: Celigo.camera_filter

@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_pro.UltrasealPROStatus.\_\_init\_\_
+=====================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_pro
+
+.. automethod:: UltrasealPROStatus.__init__

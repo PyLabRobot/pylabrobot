@@ -1,0 +1,6 @@
+﻿pylabrobot.opentrons.OpentronsCommandTimeout
+============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoexception:: OpentronsCommandTimeout

@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.spectramax.SpectrumSettings
+=========================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoclass:: SpectrumSettings
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SpectrumSettings.excitation_emission_type
+      ~SpectrumSettings.start_wavelength
+      ~SpectrumSettings.step
+      ~SpectrumSettings.num_steps
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SpectrumSettings.__init__
+   
+   

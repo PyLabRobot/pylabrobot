@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.save\_state\_to\_file
+===============================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.save_state_to_file

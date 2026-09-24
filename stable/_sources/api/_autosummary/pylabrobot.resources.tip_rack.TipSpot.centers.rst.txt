@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.centers
+==============================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.centers

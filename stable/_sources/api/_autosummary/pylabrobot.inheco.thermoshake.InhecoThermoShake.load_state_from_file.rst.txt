@@ -1,0 +1,6 @@
+pylabrobot.inheco.thermoshake.InhecoThermoShake.load\_state\_from\_file
+=======================================================================
+
+.. currentmodule:: pylabrobot.inheco.thermoshake
+
+.. automethod:: InhecoThermoShake.load_state_from_file

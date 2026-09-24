@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.positive\_limit
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.positive_limit

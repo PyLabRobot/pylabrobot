@@ -1,0 +1,27 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.imageXpress.pico.pico.WellBottomType
+==================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. autoclass:: WellBottomType
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~WellBottomType.FLAT
+      ~WellBottomType.U
+      ~WellBottomType.V
+      ~WellBottomType.UNKNOWN
+   
+   
+
+   
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.serialize\_all\_state
+===================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: LinkBody.serialize_all_state

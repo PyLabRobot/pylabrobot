@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.config\_version
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.config_version

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.controller\_index
+============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.controller_index

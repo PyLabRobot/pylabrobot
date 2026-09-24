@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_xt\_pro.KBiosystemsUltrasealXTPro.STATUS\_MESSAGES
+====================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
+
+.. autoattribute:: KBiosystemsUltrasealXTPro.STATUS_MESSAGES

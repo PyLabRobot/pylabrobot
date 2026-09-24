@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LightingIOConfig.max\_voltage
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LightingIOConfig.max_voltage

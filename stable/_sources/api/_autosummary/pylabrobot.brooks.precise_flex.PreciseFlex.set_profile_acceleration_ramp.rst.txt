@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.set\_profile\_acceleration\_ramp
+============================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.set_profile_acceleration_ramp

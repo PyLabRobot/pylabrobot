@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.close\_stacker\_clamps
+=============================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.close_stacker_clamps

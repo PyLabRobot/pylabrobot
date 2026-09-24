@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.request\_update\_rate
+=============================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.request_update_rate

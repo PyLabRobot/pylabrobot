@@ -1,0 +1,6 @@
+pylabrobot.inheco.thermoshake.InhecoThermoShake.get\_anchor
+===========================================================
+
+.. currentmodule:: pylabrobot.inheco.thermoshake
+
+.. automethod:: InhecoThermoShake.get_anchor

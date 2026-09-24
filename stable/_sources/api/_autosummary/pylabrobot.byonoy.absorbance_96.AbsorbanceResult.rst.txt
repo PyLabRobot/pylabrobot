@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.byonoy.absorbance\_96.AbsorbanceResult
+=================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autoclass:: AbsorbanceResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AbsorbanceResult.data
+      ~AbsorbanceResult.wavelength
+      ~AbsorbanceResult.temperature
+      ~AbsorbanceResult.timestamp
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AbsorbanceResult.__init__
+   
+   

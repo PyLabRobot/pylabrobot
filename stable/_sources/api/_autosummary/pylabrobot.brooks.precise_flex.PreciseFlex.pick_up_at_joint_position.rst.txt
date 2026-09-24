@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.pick\_up\_at\_joint\_position
+=========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.pick_up_at_joint_position

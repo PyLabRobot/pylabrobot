@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.get\_anchor
+==================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.get_anchor

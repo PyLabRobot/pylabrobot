@@ -1,0 +1,6 @@
+pylabrobot.cole\_parmer.genogrinder.GenoGrinder.request\_clamp\_state
+=====================================================================
+
+.. currentmodule:: pylabrobot.cole_parmer.genogrinder
+
+.. automethod:: GenoGrinder.request_clamp_state

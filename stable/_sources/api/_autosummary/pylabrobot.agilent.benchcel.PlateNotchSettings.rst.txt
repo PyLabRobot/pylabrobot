@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.benchcel.PlateNotchSettings
+==============================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoclass:: PlateNotchSettings
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateNotchSettings.a1_notch
+      ~PlateNotchSettings.bottom_left_notch
+      ~PlateNotchSettings.bottom_right_notch
+      ~PlateNotchSettings.check_orientation
+      ~PlateNotchSettings.top_right_notch
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateNotchSettings.__init__
+   
+   

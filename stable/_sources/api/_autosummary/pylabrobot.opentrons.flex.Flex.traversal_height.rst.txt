@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.traversal\_height
+================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. autoproperty:: Flex.traversal_height

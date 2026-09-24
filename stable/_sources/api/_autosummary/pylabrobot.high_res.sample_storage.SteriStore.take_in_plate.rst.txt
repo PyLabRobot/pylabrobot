@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.take\_in\_plate
+===============================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.take_in_plate

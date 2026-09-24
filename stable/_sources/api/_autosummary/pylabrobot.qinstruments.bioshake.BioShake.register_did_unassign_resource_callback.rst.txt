@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.register\_did\_unassign\_resource\_callback
+=====================================================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.register_did_unassign_resource_callback

@@ -1,0 +1,48 @@
+﻿:orphan:
+
+
+pylabrobot.azenta.a4s.A4S
+=========================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. autoclass:: A4S
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~A4S.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~A4S.__init__
+      ~A4S.close
+      ~A4S.deactivate
+      ~A4S.open
+      ~A4S.read_message
+      ~A4S.request_current_temperature
+      ~A4S.request_remaining_time
+      ~A4S.request_status
+      ~A4S.seal
+      ~A4S.send_command
+      ~A4S.set_heater
+      ~A4S.set_temperature
+      ~A4S.set_time
+      ~A4S.setup
+      ~A4S.stop
+      ~A4S.system_reset
+      ~A4S.wait_for_shuttle_open_sensor
+      ~A4S.wait_for_status
+   
+   

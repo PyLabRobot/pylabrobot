@@ -1,0 +1,6 @@
+pylabrobot.resources.PetriDish.lid
+==================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: PetriDish.lid

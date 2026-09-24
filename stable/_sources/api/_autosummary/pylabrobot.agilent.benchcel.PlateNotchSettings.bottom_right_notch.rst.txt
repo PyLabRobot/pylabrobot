@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.PlateNotchSettings.bottom\_right\_notch
+===================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoattribute:: PlateNotchSettings.bottom_right_notch

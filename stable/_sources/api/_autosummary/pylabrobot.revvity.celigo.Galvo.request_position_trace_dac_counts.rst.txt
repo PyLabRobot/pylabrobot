@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Galvo.request\_position\_trace\_dac\_counts
+=====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Galvo.request_position_trace_dac_counts

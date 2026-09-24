@@ -1,0 +1,6 @@
+﻿pylabrobot.byonoy.absorbance\_96.byonoy\_a96a\_parking\_unit
+============================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autofunction:: byonoy_a96a_parking_unit

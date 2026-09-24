@@ -1,0 +1,6 @@
+pylabrobot.micronic.code\_reader.scanner.Scanner.\_\_init\_\_
+=============================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.scanner
+
+.. automethod:: Scanner.__init__

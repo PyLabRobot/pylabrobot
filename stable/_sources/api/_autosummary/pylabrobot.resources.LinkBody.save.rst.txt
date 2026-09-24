@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.save
+==================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: LinkBody.save

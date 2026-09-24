@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead8.move\_to\_well
+=============================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead8.move_to_well

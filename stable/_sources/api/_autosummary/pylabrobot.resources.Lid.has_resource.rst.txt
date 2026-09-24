@@ -1,0 +1,6 @@
+pylabrobot.resources.Lid.has\_resource
+======================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Lid.has_resource

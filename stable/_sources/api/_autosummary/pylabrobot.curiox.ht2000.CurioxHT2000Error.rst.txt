@@ -1,0 +1,6 @@
+﻿pylabrobot.curiox.ht2000.CurioxHT2000Error
+==========================================
+
+.. currentmodule:: pylabrobot.curiox.ht2000
+
+.. autoexception:: CurioxHT2000Error

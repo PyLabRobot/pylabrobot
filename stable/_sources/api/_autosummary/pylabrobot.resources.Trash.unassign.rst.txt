@@ -1,0 +1,6 @@
+pylabrobot.resources.Trash.unassign
+===================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trash.unassign

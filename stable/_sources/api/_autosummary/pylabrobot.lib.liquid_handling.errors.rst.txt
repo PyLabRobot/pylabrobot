@@ -1,0 +1,31 @@
+﻿:orphan:
+
+pylabrobot.lib.liquid\_handling.errors
+======================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling
+
+.. automodule:: pylabrobot.lib.liquid_handling.errors
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Exceptions
+
+   .. autosummary::
+      :toctree:
+   
+      ChannelsDoNotFitError
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.assign\_child\_resource
+=========================================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.assign_child_resource

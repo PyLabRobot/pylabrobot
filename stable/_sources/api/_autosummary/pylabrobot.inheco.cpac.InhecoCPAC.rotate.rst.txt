@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.rotate
+========================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.rotate

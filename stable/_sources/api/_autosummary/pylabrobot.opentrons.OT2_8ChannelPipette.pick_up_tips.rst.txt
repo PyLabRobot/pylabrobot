@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2\_8ChannelPipette.pick\_up\_tips
+========================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2_8ChannelPipette.pick_up_tips

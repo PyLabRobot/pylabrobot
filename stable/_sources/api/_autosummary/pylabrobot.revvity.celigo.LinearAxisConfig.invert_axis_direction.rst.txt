@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.invert\_axis\_direction
+==================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.invert_axis_direction

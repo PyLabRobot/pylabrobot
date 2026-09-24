@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoHardwareConfig.x\_axis
+======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoHardwareConfig.x_axis

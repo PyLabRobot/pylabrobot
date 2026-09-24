@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.KBiosystemsUltrasealEPRO.set\_force\_mode
+================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. automethod:: KBiosystemsUltrasealEPRO.set_force_mode

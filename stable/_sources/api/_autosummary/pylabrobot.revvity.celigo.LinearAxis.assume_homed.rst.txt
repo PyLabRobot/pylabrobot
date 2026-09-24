@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxis.assume\_homed
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: LinearAxis.assume_homed

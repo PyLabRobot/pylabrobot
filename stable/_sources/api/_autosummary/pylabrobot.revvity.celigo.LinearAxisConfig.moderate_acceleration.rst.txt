@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.moderate\_acceleration
+=================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.moderate_acceleration

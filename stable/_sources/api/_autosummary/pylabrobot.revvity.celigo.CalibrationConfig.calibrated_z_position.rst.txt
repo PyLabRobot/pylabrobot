@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.calibrated\_z\_position
+===================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.calibrated_z_position

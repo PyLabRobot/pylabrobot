@@ -1,0 +1,6 @@
+pylabrobot.resources.ItemizedResource.find\_resource
+====================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ItemizedResource.find_resource

@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.read\_stable\_weight
+============================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.read_stable_weight

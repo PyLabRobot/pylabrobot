@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.rotate
+===================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. automethod:: Tip.rotate

@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.check\_can\_drop\_resource\_here
+=========================================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.check_can_drop_resource_here

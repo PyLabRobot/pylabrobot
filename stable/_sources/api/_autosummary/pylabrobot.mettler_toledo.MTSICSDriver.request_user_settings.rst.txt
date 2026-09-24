@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.request\_user\_settings
+===============================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.request_user_settings

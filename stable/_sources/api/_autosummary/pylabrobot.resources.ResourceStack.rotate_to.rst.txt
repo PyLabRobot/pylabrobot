@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceStack.rotate\_to
+=============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceStack.rotate_to

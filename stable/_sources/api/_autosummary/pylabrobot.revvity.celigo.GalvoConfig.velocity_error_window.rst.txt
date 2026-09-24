@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoConfig.velocity\_error\_window
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoConfig.velocity_error_window

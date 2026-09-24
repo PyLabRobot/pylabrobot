@@ -1,0 +1,64 @@
+﻿:orphan:
+
+
+pylabrobot.high\_res.lid\_valet.HighResLidValet
+===============================================
+
+.. currentmodule:: pylabrobot.high_res.lid_valet
+
+.. autoclass:: HighResLidValet
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HighResLidValet.num_nests
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HighResLidValet.__init__
+      ~HighResLidValet.change_setting
+      ~HighResLidValet.clear_abort
+      ~HighResLidValet.delid
+      ~HighResLidValet.home
+      ~HighResLidValet.lid
+      ~HighResLidValet.list_commands
+      ~HighResLidValet.reboot
+      ~HighResLidValet.request_all_states
+      ~HighResLidValet.request_command_help
+      ~HighResLidValet.request_command_info
+      ~HighResLidValet.request_command_status
+      ~HighResLidValet.request_detailed_version
+      ~HighResLidValet.request_errors
+      ~HighResLidValet.request_firmware_version
+      ~HighResLidValet.request_has_lid
+      ~HighResLidValet.request_history
+      ~HighResLidValet.request_home_offset
+      ~HighResLidValet.request_is_busy
+      ~HighResLidValet.request_raw_settings
+      ~HighResLidValet.request_settings
+      ~HighResLidValet.request_state
+      ~HighResLidValet.request_version
+      ~HighResLidValet.reset
+      ~HighResLidValet.revert_settings
+      ~HighResLidValet.save_cvm
+      ~HighResLidValet.save_settings
+      ~HighResLidValet.send_command
+      ~HighResLidValet.set_purge
+      ~HighResLidValet.set_vacuum
+      ~HighResLidValet.setup
+      ~HighResLidValet.stop
+      ~HighResLidValet.wait_until_ready
+      ~HighResLidValet.wave
+   
+   

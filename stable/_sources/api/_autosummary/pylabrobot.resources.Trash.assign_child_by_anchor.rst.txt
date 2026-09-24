@@ -1,0 +1,6 @@
+pylabrobot.resources.Trash.assign\_child\_by\_anchor
+====================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trash.assign_child_by_anchor

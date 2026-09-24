@@ -1,0 +1,6 @@
+pylabrobot.resources.biorad.plates.biorad\_384\_wellplate\_50uL\_Vb
+===================================================================
+
+.. currentmodule:: pylabrobot.resources.biorad.plates
+
+.. autofunction:: biorad_384_wellplate_50uL_Vb

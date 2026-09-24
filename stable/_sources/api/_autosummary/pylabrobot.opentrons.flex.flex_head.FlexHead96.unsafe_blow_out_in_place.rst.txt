@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead96.unsafe\_blow\_out\_in\_place
+============================================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead96.unsafe_blow_out_in_place

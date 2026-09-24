@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.opentrons.load
+﻿:orphan:
+
+pylabrobot.resources.opentrons.load
 ===================================
 
 .. currentmodule:: pylabrobot.resources.opentrons

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.home\_imaging\_axes
+====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.home_imaging_axes

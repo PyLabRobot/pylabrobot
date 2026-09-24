@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.ItemizedResource
+﻿:orphan:
+
+
+pylabrobot.resources.ItemizedResource
 =====================================
 
 .. currentmodule:: pylabrobot.resources
@@ -15,6 +18,7 @@
       ~ItemizedResource.item_dx
       ~ItemizedResource.item_dy
       ~ItemizedResource.items
+      ~ItemizedResource.location
       ~ItemizedResource.name
       ~ItemizedResource.num_items
       ~ItemizedResource.num_items_x
@@ -44,6 +48,8 @@
       ~ItemizedResource.deregister_will_assign_resource_callback
       ~ItemizedResource.deregister_will_unassign_resource_callback
       ~ItemizedResource.deserialize
+      ~ItemizedResource.find_resource
+      ~ItemizedResource.find_resources
       ~ItemizedResource.get_absolute_location
       ~ItemizedResource.get_absolute_rotation
       ~ItemizedResource.get_absolute_size_x
@@ -64,6 +70,7 @@
       ~ItemizedResource.get_size_x
       ~ItemizedResource.get_size_y
       ~ItemizedResource.get_size_z
+      ~ItemizedResource.has_resource
       ~ItemizedResource.index_of_item
       ~ItemizedResource.is_in_subtree_of
       ~ItemizedResource.load_all_state
@@ -77,6 +84,7 @@
       ~ItemizedResource.register_will_assign_resource_callback
       ~ItemizedResource.register_will_unassign_resource_callback
       ~ItemizedResource.rotate
+      ~ItemizedResource.rotate_to
       ~ItemizedResource.rotated
       ~ItemizedResource.row
       ~ItemizedResource.save

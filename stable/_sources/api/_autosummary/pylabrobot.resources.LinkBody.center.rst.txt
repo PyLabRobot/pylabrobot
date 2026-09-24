@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.center
+====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: LinkBody.center

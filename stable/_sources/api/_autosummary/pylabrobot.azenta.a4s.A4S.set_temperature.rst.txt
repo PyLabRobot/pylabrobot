@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4S.set\_temperature
+==========================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. automethod:: A4S.set_temperature

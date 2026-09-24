@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.request\_is\_safety\_interlock\_open
+=====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.request_is_safety_interlock_open

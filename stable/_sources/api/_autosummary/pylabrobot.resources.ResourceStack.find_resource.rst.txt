@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceStack.find\_resource
+=================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceStack.find_resource

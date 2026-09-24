@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck.compute\_right\_track\_of\_carrier
+=============================================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.hamilton_decks
+
+.. automethod:: HamiltonDeck.compute_right_track_of_carrier

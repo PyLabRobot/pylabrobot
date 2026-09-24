@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.IOConfig.from\_element
+================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: IOConfig.from_element

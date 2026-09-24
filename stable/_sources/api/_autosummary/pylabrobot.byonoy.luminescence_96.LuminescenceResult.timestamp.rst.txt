@@ -1,0 +1,6 @@
+pylabrobot.byonoy.luminescence\_96.LuminescenceResult.timestamp
+===============================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. autoattribute:: LuminescenceResult.timestamp

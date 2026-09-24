@@ -1,0 +1,6 @@
+pylabrobot.resources.Trough.lid
+===============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: Trough.lid

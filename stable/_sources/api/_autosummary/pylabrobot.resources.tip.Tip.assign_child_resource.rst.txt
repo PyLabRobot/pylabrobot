@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.assign\_child\_resource
+====================================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. automethod:: Tip.assign_child_resource

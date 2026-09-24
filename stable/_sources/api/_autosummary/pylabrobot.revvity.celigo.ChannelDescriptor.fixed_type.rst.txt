@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ChannelDescriptor.fixed\_type
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ChannelDescriptor.fixed_type

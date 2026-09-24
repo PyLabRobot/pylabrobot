@@ -1,0 +1,6 @@
+﻿pylabrobot.qinstruments.bioshake.ColdPlate
+==========================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. autofunction:: ColdPlate

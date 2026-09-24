@@ -1,0 +1,59 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.flex.Flex
+==============================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. autoclass:: Flex
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Flex.left_pipette
+      ~Flex.pipettes
+      ~Flex.right_pipette
+      ~Flex.software_version
+      ~Flex.traversal_height
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Flex.__init__
+      ~Flex.add_comment
+      ~Flex.attach_deck
+      ~Flex.cancel_run
+      ~Flex.connect
+      ~Flex.create_run
+      ~Flex.disconnect
+      ~Flex.get_health
+      ~Flex.get_instruments
+      ~Flex.get_runs
+      ~Flex.home
+      ~Flex.initialize
+      ~Flex.labware_moved_off_deck
+      ~Flex.list_connected_modules
+      ~Flex.move_axes_relative
+      ~Flex.move_axes_to
+      ~Flex.reload_labware
+      ~Flex.retract_axis
+      ~Flex.send_command
+      ~Flex.set_rail_lights
+      ~Flex.set_status_bar
+      ~Flex.setup
+      ~Flex.stop
+      ~Flex.sync_tips_to_robot
+      ~Flex.wait_for_duration
+   
+   

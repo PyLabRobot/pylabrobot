@@ -1,0 +1,6 @@
+pylabrobot.li\_cor.odyssey.OdysseyClassic.last\_status\_http
+============================================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. autoproperty:: OdysseyClassic.last_status_http

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.NavigationConfig.max\_galvo\_deflection\_y\_mm
+========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: NavigationConfig.max_galvo_deflection_y_mm

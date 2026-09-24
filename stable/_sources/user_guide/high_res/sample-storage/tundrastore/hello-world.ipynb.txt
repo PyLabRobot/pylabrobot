@@ -1,0 +1,386 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "intro",
+   "metadata": {},
+   "source": [
+    "# HighRes TundraStore\n",
+    "\n",
+    "```{device-card} highres-tundrastore\n",
+    "```\n",
+    "\n",
+    "| Property | Value |\n",
+    "| --- | --- |\n",
+    "| Model | TundraStore |\n",
+    "| Transport | TCP, port 1000 |\n",
+    "| Environment | −20 to 4 °C; temperature-dependent humidity |\n",
+    "| Driver support | Work in progress; not hardware-verified |\n",
+    "\n",
+    "```{warning}\n",
+    "TundraStore support has not been verified against TundraStore hardware. Validate temperature, humidity, and motion in a controlled setup.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "protocol",
+   "metadata": {},
+   "source": [
+    "## How it talks\n",
+    "\n",
+    "The store exposes a line-oriented TCP service. Each command receives an acknowledgement, optional data, and one completion status. The driver validates the echoed command and command ID and closes the connection if a timeout or malformed response makes the stream unsafe to reuse."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "physical-setup",
+   "metadata": {},
+   "source": [
+    "## Physical setup\n",
+    "\n",
+    "Connect the store to a dedicated Ethernet interface. Supply clean dry air above 80 psi before homing or moving pneumatic doors. The factory service is normally `192.168.127.60:1000` and also answers at `10.253.253.253:1000`. Give the host interface an address on the corresponding isolated subnet, without a default gateway.\n",
+    "\n",
+    "The example inventory below represents one known plate physically present in stacker 1, slot 1. It builds all 24 slots from example `getstackerdimensions` values. Replace the rack count, zero offsets, slot heights, and slot counts with the layout reported by the actual machine before running motion."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "inventory-text",
+   "metadata": {},
+   "source": [
+    "## Describe the physical inventory\n",
+    "\n",
+    "`high_res_stacker` uses the measured HighRes stacker footprint and creates one holder per reported slot. The `racks` mapping keys are the physical stacker numbers reported by the device, which may be sparse. Carrier spots are zero-based in PLR and map to one-based device slots. The reported slot height is also the physical safety constraint used when selecting a destination."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "inventory-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.high_res.sample_storage import TundraStore, high_res_stacker\n",
+    "from pylabrobot.resources import Coordinate, Plate, Well\n",
+    "\n",
+    "rack = high_res_stacker(\n",
+    "  name=\"stacker_1\",\n",
+    "  zero_offset=0.0,\n",
+    "  slot_height=22.867,\n",
+    "  slot_count=24,\n",
+    ")\n",
+    "site = rack.sites[0]\n",
+    "well = Well(name=\"A1\", size_x=8, size_y=8, size_z=10)\n",
+    "well.location = Coordinate(10, 10, 2)\n",
+    "plate = Plate(\n",
+    "  name=\"plate_1\",\n",
+    "  size_x=127.76,\n",
+    "  size_y=85.48,\n",
+    "  size_z=14,\n",
+    "  ordered_items={\"A1\": well},\n",
+    ")\n",
+    "site.assign_child_resource(plate)\n",
+    "racks = {1: rack}"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "connect-text",
+   "metadata": {},
+   "source": [
+    "## Connect\n",
+    "\n",
+    "`setup()` connects, reads version and environmental information where applicable, and discovers the actual transfer nests. It does not home unless `home=True` is passed."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "connect-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "store = TundraStore(host=\"192.168.127.60\", name=\"tundrastore\", racks=racks)\n",
+    "await store.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "version-text",
+   "metadata": {},
+   "source": [
+    "## Read version information\n",
+    "\n",
+    "Confirm that the expected device answered."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "version-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "version = await store.request_version()\n",
+    "print(version)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "nests-text",
+   "metadata": {},
+   "source": [
+    "## Inspect transfer nests\n",
+    "\n",
+    "Compare the live sensor report with `store.nests`. Assign a `Plate` resource to any physically occupied nest before transfer operations."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "nests-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "nest_status = await store.request_nest_status()\n",
+    "print(nest_status)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "fetch-text",
+   "metadata": {},
+   "source": [
+    "## Fetch a plate\n",
+    "\n",
+    "This example moves the known plate from stacker 1, slot 1 to the first transfer nest. The driver requires that nest's live sensor to report clear."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "fetch-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "plate = await store.fetch_plate_to_loading_tray(\"plate_1\", tray_index=0)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "nest-transfer-text",
+   "metadata": {},
+   "source": [
+    "## Transfer between nests\n",
+    "\n",
+    "If the machine reports at least two nests, move the plate from the first to the second. Both live sensors and PLR bookkeeping are validated before motion."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "nest-transfer-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "plate = await store.transfer_plate_between_nests(\n",
+    "  source_tray_index=0, destination_tray_index=1\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "take-in-text",
+   "metadata": {},
+   "source": [
+    "## Return the plate to storage\n",
+    "\n",
+    "Move the plate from the second nest back to the smallest free site that is tall enough for it."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "take-in-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "plate = await store.take_in_plate(tray_index=1, site=\"smallest\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "barcode-text",
+   "metadata": {},
+   "source": [
+    "## Scan a barcode\n",
+    "\n",
+    "Barcode scans require every transfer nest to be physically clear. `EMPTY` means no readable barcode, not necessarily no plate."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "barcode-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "barcodes = await store.request_stacker_barcodes(1, slot=1)\n",
+    "print(barcodes)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "open-doors-text",
+   "metadata": {},
+   "source": [
+    "## Open robot doors\n",
+    "\n",
+    "Ensure the carousel and automation interface are clear. If firmware reports an error, the driver waits for every robot door to reach the final open state."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "open-doors-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await store.open_all_doors()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "close-doors-text",
+   "metadata": {},
+   "source": [
+    "## Close robot doors\n",
+    "\n",
+    "Close and reseal the robot-access doors."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "close-doors-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await store.close_all_doors()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "park-text",
+   "metadata": {},
+   "source": [
+    "## Verify or recover the parked state\n",
+    "\n",
+    "Recovery refuses to move while the spatula sensor reports a plate. Otherwise it retracts and homes only when the store is not safely parked. Recovery proves that the mechanism is parked, but it cannot prove where a plate ended up after a timeout, cancellation, abort, or motion fault. In that case `store.unresolved_transfer` remains set and further plate moves are blocked. Inspect its source and destination, inspect the machine, then call `await store.resolve_unresolved_transfer(\"source\")`, `await store.resolve_unresolved_transfer(\"destination\")`, or `await store.resolve_unresolved_transfer(\"unassigned\")`. Nest choices are checked against live sensors; selecting a stacker endpoint is operator confirmation because stacker slots have no non-destructive presence sensor."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "park-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "if not await store.request_is_parked():\n",
+    "  recovered = await store.recover()\n",
+    "  if not recovered:\n",
+    "    raise RuntimeError(\"Store did not recover to a parked state\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "environment-1-text",
+   "metadata": {},
+   "source": [
+    "## Read environmental state\n",
+    "\n",
+    "Read the installed channels and current temperature and humidity. Humidity is returned as a fraction."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "environment-1-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "environment = await store.environment.refresh()\n",
+    "temperature = await store.environment.request_current_temperature()\n",
+    "humidity = await store.environment.request_current_humidity()\n",
+    "print(temperature, humidity, environment)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "environment-2-text",
+   "metadata": {},
+   "source": [
+    "## Confirm environmental setpoints\n",
+    "\n",
+    "This writes the existing targets back unchanged, exercising validation without changing the requested conditions."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "environment-2-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "temperature_target = await store.environment.request_target_temperature()\n",
+    "await store.environment.set_temperature(temperature_target)\n",
+    "humidity_target = await store.environment.request_target_humidity()\n",
+    "await store.environment.set_humidity(humidity_target)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "stop-text",
+   "metadata": {},
+   "source": [
+    "## Disconnect\n",
+    "\n",
+    "Close the TCP connection when the workflow is finished."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "stop-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await store.stop()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "reference",
+   "metadata": {},
+   "source": [
+    "## Reference\n",
+    "\n",
+    "See the [sample-storage overview](../index.md) and [event reference](../events.md) for the full API."
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.10"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

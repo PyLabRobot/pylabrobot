@@ -1,0 +1,6 @@
+pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbanceBaseUnit.at
+============================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. automethod:: ByonoyAbsorbanceBaseUnit.at

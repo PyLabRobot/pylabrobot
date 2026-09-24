@@ -1,0 +1,6 @@
+pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbanceBaseUnit.rotate\_to
+====================================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. automethod:: ByonoyAbsorbanceBaseUnit.rotate_to

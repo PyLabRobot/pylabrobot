@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.wait\_for\_duration
+==================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. automethod:: Flex.wait_for_duration

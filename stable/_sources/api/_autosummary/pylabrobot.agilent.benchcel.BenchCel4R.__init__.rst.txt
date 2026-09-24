@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.\_\_init\_\_
+===================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.__init__

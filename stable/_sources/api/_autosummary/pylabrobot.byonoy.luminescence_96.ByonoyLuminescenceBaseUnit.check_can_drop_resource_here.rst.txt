@@ -1,0 +1,6 @@
+pylabrobot.byonoy.luminescence\_96.ByonoyLuminescenceBaseUnit.check\_can\_drop\_resource\_here
+==============================================================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. automethod:: ByonoyLuminescenceBaseUnit.check_can_drop_resource_here

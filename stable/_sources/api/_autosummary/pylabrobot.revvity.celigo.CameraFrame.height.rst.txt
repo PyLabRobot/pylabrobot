@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CameraFrame.height
+============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CameraFrame.height

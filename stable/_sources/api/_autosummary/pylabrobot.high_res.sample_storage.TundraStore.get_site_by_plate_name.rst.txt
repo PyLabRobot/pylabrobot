@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.get\_site\_by\_plate\_name
+===========================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.get_site_by_plate_name

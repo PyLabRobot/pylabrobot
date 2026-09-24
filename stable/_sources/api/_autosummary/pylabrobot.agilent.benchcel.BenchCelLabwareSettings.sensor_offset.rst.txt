@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCelLabwareSettings.sensor\_offset
+==================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoattribute:: BenchCelLabwareSettings.sensor_offset

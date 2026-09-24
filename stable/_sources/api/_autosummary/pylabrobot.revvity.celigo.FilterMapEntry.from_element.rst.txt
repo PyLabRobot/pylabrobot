@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterMapEntry.from\_element
+======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FilterMapEntry.from_element

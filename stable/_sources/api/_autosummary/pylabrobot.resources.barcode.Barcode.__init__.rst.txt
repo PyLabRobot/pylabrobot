@@ -1,0 +1,6 @@
+pylabrobot.resources.barcode.Barcode.\_\_init\_\_
+=================================================
+
+.. currentmodule:: pylabrobot.resources.barcode
+
+.. automethod:: Barcode.__init__

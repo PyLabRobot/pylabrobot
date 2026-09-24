@@ -1,0 +1,6 @@
+pylabrobot.inheco.thermoshake.InhecoThermoShake.has\_resource
+=============================================================
+
+.. currentmodule:: pylabrobot.inheco.thermoshake
+
+.. automethod:: InhecoThermoShake.has_resource

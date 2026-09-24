@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.\_\_init\_\_
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: LinearAxisConfig.__init__

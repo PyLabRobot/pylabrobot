@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ChannelDescriptor.calibration\_index
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ChannelDescriptor.calibration_index

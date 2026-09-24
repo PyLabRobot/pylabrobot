@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead96.blow\_out
+=========================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead96.blow_out

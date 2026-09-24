@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.list\_connected\_modules
+=======================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. automethod:: Flex.list_connected_modules

@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.DigitalIOConfig
+=========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: DigitalIOConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DigitalIOConfig.config_version
+      ~DigitalIOConfig.io_type
+      ~DigitalIOConfig.bit_index
+      ~DigitalIOConfig.invert
+      ~DigitalIOConfig.enabled
+      ~DigitalIOConfig.io_name
+      ~DigitalIOConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DigitalIOConfig.__init__
+      ~DigitalIOConfig.from_element
+   
+   

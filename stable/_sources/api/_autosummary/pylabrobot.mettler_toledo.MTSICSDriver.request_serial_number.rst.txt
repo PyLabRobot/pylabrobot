@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.request\_serial\_number
+===============================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.request_serial_number

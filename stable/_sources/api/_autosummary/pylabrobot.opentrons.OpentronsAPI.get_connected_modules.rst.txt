@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.get\_connected\_modules
+=========================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.get_connected_modules

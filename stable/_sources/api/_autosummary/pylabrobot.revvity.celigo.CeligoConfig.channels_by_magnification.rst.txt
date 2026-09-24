@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoConfig.channels\_by\_magnification
+==================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoConfig.channels_by_magnification

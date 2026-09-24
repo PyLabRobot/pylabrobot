@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.KBiosystemsUltrasealEPRO.\_\_init\_\_
+============================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. automethod:: KBiosystemsUltrasealEPRO.__init__

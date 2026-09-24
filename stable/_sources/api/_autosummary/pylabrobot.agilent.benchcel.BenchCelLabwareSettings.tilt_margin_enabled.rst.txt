@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCelLabwareSettings.tilt\_margin\_enabled
+=========================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoattribute:: BenchCelLabwareSettings.tilt_margin_enabled

@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.move\_to\_teachpoint
+===========================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.move_to_teachpoint

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.lid\_valet.HighResLidValet.\_\_init\_\_
+============================================================
+
+.. currentmodule:: pylabrobot.high_res.lid_valet
+
+.. automethod:: HighResLidValet.__init__

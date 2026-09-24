@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.resolve\_unresolved\_transfer
+==============================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.resolve_unresolved_transfer

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.serialize\_all\_state
+====================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.serialize_all_state

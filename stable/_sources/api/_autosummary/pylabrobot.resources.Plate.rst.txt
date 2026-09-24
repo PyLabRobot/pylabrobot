@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.Plate
+﻿:orphan:
+
+
+pylabrobot.resources.Plate
 ==========================
 
 .. currentmodule:: pylabrobot.resources
@@ -16,6 +19,7 @@
       ~Plate.item_dy
       ~Plate.items
       ~Plate.lid
+      ~Plate.location
       ~Plate.name
       ~Plate.num_items
       ~Plate.num_items_x
@@ -47,6 +51,8 @@
       ~Plate.deserialize
       ~Plate.disable_volume_trackers
       ~Plate.enable_volume_trackers
+      ~Plate.find_resource
+      ~Plate.find_resources
       ~Plate.get_absolute_location
       ~Plate.get_absolute_rotation
       ~Plate.get_absolute_size_x
@@ -72,6 +78,7 @@
       ~Plate.get_well
       ~Plate.get_wells
       ~Plate.has_lid
+      ~Plate.has_resource
       ~Plate.index_of_item
       ~Plate.is_in_subtree_of
       ~Plate.load_all_state
@@ -85,6 +92,7 @@
       ~Plate.register_will_assign_resource_callback
       ~Plate.register_will_unassign_resource_callback
       ~Plate.rotate
+      ~Plate.rotate_to
       ~Plate.rotated
       ~Plate.row
       ~Plate.save

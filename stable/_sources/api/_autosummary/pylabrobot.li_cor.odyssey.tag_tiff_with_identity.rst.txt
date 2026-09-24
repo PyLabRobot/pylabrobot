@@ -1,0 +1,6 @@
+﻿pylabrobot.li\_cor.odyssey.tag\_tiff\_with\_identity
+====================================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. autofunction:: tag_tiff_with_identity

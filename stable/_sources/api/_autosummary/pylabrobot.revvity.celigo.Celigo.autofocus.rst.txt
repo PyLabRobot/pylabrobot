@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.autofocus
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.autofocus

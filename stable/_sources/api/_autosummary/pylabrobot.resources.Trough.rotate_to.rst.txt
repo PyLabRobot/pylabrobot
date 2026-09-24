@@ -1,0 +1,6 @@
+pylabrobot.resources.Trough.rotate\_to
+======================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trough.rotate_to

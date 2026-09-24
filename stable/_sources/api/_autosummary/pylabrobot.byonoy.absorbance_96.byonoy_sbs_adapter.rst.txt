@@ -1,0 +1,6 @@
+﻿pylabrobot.byonoy.absorbance\_96.byonoy\_sbs\_adapter
+=====================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autofunction:: byonoy_sbs_adapter

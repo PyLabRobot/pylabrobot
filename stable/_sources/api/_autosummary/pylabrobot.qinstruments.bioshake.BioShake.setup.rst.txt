@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.setup
+===============================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.setup

@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.Lid
+﻿:orphan:
+
+
+pylabrobot.resources.Lid
 ========================
 
 .. currentmodule:: pylabrobot.resources
@@ -12,6 +15,7 @@
    .. autosummary::
       :toctree: .
    
+      ~Lid.location
       ~Lid.name
    
    
@@ -37,6 +41,8 @@
       ~Lid.deregister_will_assign_resource_callback
       ~Lid.deregister_will_unassign_resource_callback
       ~Lid.deserialize
+      ~Lid.find_resource
+      ~Lid.find_resources
       ~Lid.get_absolute_location
       ~Lid.get_absolute_rotation
       ~Lid.get_absolute_size_x
@@ -51,6 +57,7 @@
       ~Lid.get_size_x
       ~Lid.get_size_y
       ~Lid.get_size_z
+      ~Lid.has_resource
       ~Lid.is_in_subtree_of
       ~Lid.load_all_state
       ~Lid.load_from_json_file
@@ -63,6 +70,7 @@
       ~Lid.register_will_assign_resource_callback
       ~Lid.register_will_unassign_resource_callback
       ~Lid.rotate
+      ~Lid.rotate_to
       ~Lid.rotated
       ~Lid.save
       ~Lid.save_state_to_file

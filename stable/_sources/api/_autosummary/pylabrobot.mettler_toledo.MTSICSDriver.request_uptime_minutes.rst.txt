@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.request\_uptime\_minutes
+================================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.request_uptime_minutes

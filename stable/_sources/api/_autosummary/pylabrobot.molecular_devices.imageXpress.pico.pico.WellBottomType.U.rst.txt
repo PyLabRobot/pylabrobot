@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.pico.WellBottomType.U
+====================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. autoattribute:: WellBottomType.U

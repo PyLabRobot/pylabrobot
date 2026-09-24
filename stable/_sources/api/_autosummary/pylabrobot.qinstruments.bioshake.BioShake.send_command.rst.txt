@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.send\_command
+=======================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.send_command

@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.\_\_init\_\_
+===================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.__init__

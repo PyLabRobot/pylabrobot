@@ -1,0 +1,6 @@
+pylabrobot.big\_bear.orbital\_shaker.BigBearOrbitalShaker.find\_home
+====================================================================
+
+.. currentmodule:: pylabrobot.big_bear.orbital_shaker
+
+.. automethod:: BigBearOrbitalShaker.find_home

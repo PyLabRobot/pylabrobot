@@ -1,0 +1,6 @@
+﻿pylabrobot.thermo\_fisher.alps.sealer.ThermoScientificALPSError
+===============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.sealer
+
+.. autoexception:: ThermoScientificALPSError

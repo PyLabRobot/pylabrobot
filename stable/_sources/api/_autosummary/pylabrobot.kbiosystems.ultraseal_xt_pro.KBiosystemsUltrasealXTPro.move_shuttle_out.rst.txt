@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_xt\_pro.KBiosystemsUltrasealXTPro.move\_shuttle\_out
+======================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
+
+.. automethod:: KBiosystemsUltrasealXTPro.move_shuttle_out

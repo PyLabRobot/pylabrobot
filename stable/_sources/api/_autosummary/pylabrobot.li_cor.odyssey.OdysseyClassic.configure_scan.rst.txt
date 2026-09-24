@@ -1,0 +1,6 @@
+pylabrobot.li\_cor.odyssey.OdysseyClassic.configure\_scan
+=========================================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. automethod:: OdysseyClassic.configure_scan

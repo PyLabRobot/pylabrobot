@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.HardwareDefaultConfig.default\_x\_galvo\_mm\_per\_volt
+================================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: HardwareDefaultConfig.default_x_galvo_mm_per_volt

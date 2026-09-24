@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.StepperMotor.request\_encoder\_ticks
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: StepperMotor.request_encoder_ticks

@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.curiox.ht2000.CurioxHT2000
+=====================================
+
+.. currentmodule:: pylabrobot.curiox.ht2000
+
+.. autoclass:: CurioxHT2000
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CurioxHT2000.__init__
+      ~CurioxHT2000.drain_aspirator
+      ~CurioxHT2000.drain_spill_tray
+      ~CurioxHT2000.enquire_report
+      ~CurioxHT2000.home
+      ~CurioxHT2000.move_tray_in
+      ~CurioxHT2000.move_tray_out
+      ~CurioxHT2000.ping
+      ~CurioxHT2000.prime
+      ~CurioxHT2000.setup
+      ~CurioxHT2000.stop
+      ~CurioxHT2000.wash
+   
+   

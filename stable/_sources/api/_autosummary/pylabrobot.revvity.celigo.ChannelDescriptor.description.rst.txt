@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ChannelDescriptor.description
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ChannelDescriptor.description

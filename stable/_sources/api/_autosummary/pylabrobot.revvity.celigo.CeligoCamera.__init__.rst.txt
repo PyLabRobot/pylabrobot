@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoCamera.\_\_init\_\_
+===================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CeligoCamera.__init__

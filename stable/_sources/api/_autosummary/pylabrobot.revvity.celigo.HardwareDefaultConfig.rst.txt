@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.HardwareDefaultConfig
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: HardwareDefaultConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HardwareDefaultConfig.source_path
+      ~HardwareDefaultConfig.default_calibrated_z
+      ~HardwareDefaultConfig.default_plate_x_corner_stage_coordinate
+      ~HardwareDefaultConfig.default_plate_y_corner_stage_coordinate
+      ~HardwareDefaultConfig.default_x_field_of_view_mm
+      ~HardwareDefaultConfig.default_y_field_of_view_mm
+      ~HardwareDefaultConfig.default_x_galvo_mm_per_volt
+      ~HardwareDefaultConfig.default_y_galvo_mm_per_volt
+      ~HardwareDefaultConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HardwareDefaultConfig.__init__
+      ~HardwareDefaultConfig.from_xml
+   
+   

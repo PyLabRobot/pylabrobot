@@ -1,0 +1,6 @@
+pylabrobot.byonoy.luminescence\_96.ByonoyLuminescenceBaseUnit.save\_state\_to\_file
+===================================================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. automethod:: ByonoyLuminescenceBaseUnit.save_state_to_file

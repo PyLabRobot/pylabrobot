@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_carriers.hamilton\_prep\_ftr\_pedestal
+=========================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_carriers
+
+.. autofunction:: hamilton_prep_ftr_pedestal

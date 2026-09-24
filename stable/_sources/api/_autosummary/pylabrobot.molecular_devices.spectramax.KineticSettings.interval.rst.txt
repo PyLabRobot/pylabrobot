@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.KineticSettings.interval
+=================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoattribute:: KineticSettings.interval

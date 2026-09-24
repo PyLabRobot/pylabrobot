@@ -1,0 +1,6 @@
+pylabrobot.micronic.code\_reader.driver.RackScanResult.entries
+==============================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.driver
+
+.. autoattribute:: RackScanResult.entries

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoOpticalCalibration.y
+===================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoOpticalCalibration.y

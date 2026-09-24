@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterMapEntry.physical\_number
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterMapEntry.physical_number

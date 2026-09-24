@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.VSpin.at\_bucket
+=========================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoproperty:: VSpin.at_bucket

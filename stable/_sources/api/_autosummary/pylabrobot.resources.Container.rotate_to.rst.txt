@@ -1,0 +1,6 @@
+pylabrobot.resources.Container.rotate\_to
+=========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Container.rotate_to

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.\_\_init\_\_
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FilterWheelConfig.__init__

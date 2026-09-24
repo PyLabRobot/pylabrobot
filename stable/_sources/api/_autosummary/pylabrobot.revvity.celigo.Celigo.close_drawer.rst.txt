@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.close\_drawer
+==============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.close_drawer

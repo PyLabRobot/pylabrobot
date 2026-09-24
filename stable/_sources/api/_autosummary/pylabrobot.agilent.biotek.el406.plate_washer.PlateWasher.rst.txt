@@ -1,0 +1,29 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.el406.plate\_washer.PlateWasher
+=========================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.el406.plate_washer
+
+.. autoclass:: PlateWasher
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateWasher.__init__
+      ~PlateWasher.aspirate
+      ~PlateWasher.auto_clean
+      ~PlateWasher.dispense
+      ~PlateWasher.prime
+      ~PlateWasher.wash
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.Axis.\_\_init\_\_
+=================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: Axis.__init__

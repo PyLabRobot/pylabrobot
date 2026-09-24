@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2.get\_all\_children
+===================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2.get_all_children

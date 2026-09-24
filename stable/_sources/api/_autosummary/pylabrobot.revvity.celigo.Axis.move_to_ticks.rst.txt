@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Axis.move\_to\_ticks
+==============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Axis.move_to_ticks

@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.save
+=================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. automethod:: Tip.save

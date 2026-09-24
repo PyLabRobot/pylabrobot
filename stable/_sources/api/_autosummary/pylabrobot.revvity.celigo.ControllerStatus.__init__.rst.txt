@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ControllerStatus.\_\_init\_\_
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: ControllerStatus.__init__

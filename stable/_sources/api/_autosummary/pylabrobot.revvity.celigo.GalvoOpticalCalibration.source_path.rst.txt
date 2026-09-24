@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoOpticalCalibration.source\_path
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoOpticalCalibration.source_path

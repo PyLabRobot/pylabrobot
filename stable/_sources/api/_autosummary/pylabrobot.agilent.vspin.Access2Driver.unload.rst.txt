@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2Driver.unload
+=============================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2Driver.unload

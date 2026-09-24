@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.VSpin.reserve\_transfer
+================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: VSpin.reserve_transfer

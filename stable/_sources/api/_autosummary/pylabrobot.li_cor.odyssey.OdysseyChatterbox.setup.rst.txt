@@ -1,0 +1,6 @@
+pylabrobot.li\_cor.odyssey.OdysseyChatterbox.setup
+==================================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. automethod:: OdysseyChatterbox.setup

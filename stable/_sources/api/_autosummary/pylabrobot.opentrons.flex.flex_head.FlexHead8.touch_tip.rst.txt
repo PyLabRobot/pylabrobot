@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead8.touch\_tip
+=========================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead8.touch_tip

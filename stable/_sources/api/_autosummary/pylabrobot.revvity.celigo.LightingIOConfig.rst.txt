@@ -1,0 +1,41 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.LightingIOConfig
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: LightingIOConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LightingIOConfig.config_version
+      ~LightingIOConfig.controller_index
+      ~LightingIOConfig.channel
+      ~LightingIOConfig.enabled
+      ~LightingIOConfig.invert
+      ~LightingIOConfig.io_name
+      ~LightingIOConfig.min_voltage
+      ~LightingIOConfig.max_voltage
+      ~LightingIOConfig.delay
+      ~LightingIOConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LightingIOConfig.__init__
+      ~LightingIOConfig.from_element
+   
+   

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Hamilton STAR “ML_STAR” &#8212; PyLabRobot 0.2.1 documentation</title>
+    <title>Hamilton STAR “ML_STAR” &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -27,34 +27,39 @@
   </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
-<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+  <link href="../../_static/styles/theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="../../_static/plr_cards.css?v=bbd25712" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plr_devices.css?v=c92e449a" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plr_cards.css?v=ed9dfa64" />
   
   <!-- So that users can add custom icons -->
-  <script src="../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="../../_static/scripts/fontawesome.js?digest=cb8930eaaf36d9849b67"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
-<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67" />
 
-    <script src="../../_static/documentation_options.js?v=37f418d5"></script>
+    <script src="../../_static/documentation_options.js?v=3ce10a4d"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/plr_devices.js?v=ba1a2da2"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'resources/library/hamilton';</script>
     <script>
-        DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
+        DOCUMENTATION_OPTIONS.theme_version = '0.21.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
-    <script src="../../_static/plr_cards.js?v=0d03ad13"></script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../_static/graphviz.js?v=0710df9f"></script>
+    <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/resources/library/hamilton.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
@@ -63,21 +68,27 @@
     <link rel="prev" title="Greiner" href="greiner.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="0.2.1" />
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../../_static/searchtools.js"></script>
+    <script src="../../_static/language_data.js"></script>
+    <script src="../../searchindex.js"></script>
+  
   </head>
-  
-  
-  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
-
+  <body data-default-mode="">
   
   
   <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
   
   <div id="pst-scroll-pixel-helper"></div>
   
   <button type="button" class="btn rounded-pill" id="pst-back-to-top">
     <i class="fa-solid fa-arrow-up"></i>Back to top</button>
-
+  
+  
+  
   
   <dialog id="pst-search-dialog">
     
@@ -103,7 +114,7 @@
 </div>
 
   
-    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
 <div class="bd-header__inner bd-page-width">
   <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
     <span class="fa-solid fa-bars"></span>
@@ -174,13 +185,6 @@
   </a>
 </li>
 
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../api/pylabrobot.html">
-    API
-  </a>
-</li>
-
             <li class="nav-item dropdown">
                 <button class="btn dropdown-toggle nav-item" type="button"
                 data-bs-toggle="dropdown" aria-expanded="false"
@@ -189,6 +193,20 @@
                 </button>
                 <ul id="pst-nav-more-links" class="dropdown-menu">
                     
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
 <li class=" ">
   <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
     Community
@@ -237,11 +255,18 @@
       
         <div class="navbar-item">
 
-<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
-  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
-  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
-  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
-</button></div>
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
       
         <div class="navbar-item"><ul class="navbar-icon-links"
     aria-label="Icon Links">
@@ -254,8 +279,7 @@
           
           
           
-          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">X</span></a>
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
         </li>
         <li class="nav-item">
           
@@ -266,8 +290,7 @@
           
           
           
-          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">GitHub</span></a>
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
         </li>
         <li class="nav-item">
           
@@ -278,8 +301,7 @@
           
           
           
-          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">YouTube</span></a>
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
         </li>
         <li class="nav-item">
           
@@ -290,8 +312,7 @@
           
           
           
-          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">Bluesky</span></a>
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
         </li>
 </ul></div>
       
@@ -375,6 +396,13 @@
 
 
 <li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
   <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
     Community
   </a>
@@ -412,11 +440,18 @@
         
           <div class="navbar-item">
 
-<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
-  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
-  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
-  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
-</button></div>
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
         
           <div class="navbar-item"><ul class="navbar-icon-links"
     aria-label="Icon Links">
@@ -429,8 +464,7 @@
           
           
           
-          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">X</span></a>
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
         </li>
         <li class="nav-item">
           
@@ -441,8 +475,7 @@
           
           
           
-          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">GitHub</span></a>
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
         </li>
         <li class="nav-item">
           
@@ -453,8 +486,7 @@
           
           
           
-          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">YouTube</span></a>
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
         </li>
         <li class="nav-item">
           
@@ -465,8 +497,7 @@
           
           
           
-          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">Bluesky</span></a>
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
         </li>
 </ul></div>
         
@@ -475,7 +506,15 @@
   </div>
   
     <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
         <div class="sidebar-primary-item">
+
 <nav class="bd-docs-nav bd-links"
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
@@ -508,7 +547,11 @@
 </ul>
 </details></li>
 
-<li class="toctree-l2"><a class="reference internal" href="../itemized-resource/tiprack/tiprack.html">TipRack</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../itemized-resource/tiprack/tiprack.html">TipRack</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../itemized-resource/tiprack/tip-spot.html">TipSpot</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../itemized-resource/container-rack/container-rack.html">ContainerRack</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../resource-holder/resource-holder.html">ResourceHolder</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -539,6 +582,7 @@
 <li class="toctree-l1"><a class="reference internal" href="nest.html">Wuxi Nest</a></li>
 <li class="toctree-l1"><a class="reference internal" href="opentrons.html">Opentrons</a></li>
 <li class="toctree-l1"><a class="reference internal" href="perkin_elmer.html">Perkin Elmer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pioreactor.html">Pioreactor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="porvair.html">Porvair</a></li>
 <li class="toctree-l1"><a class="reference internal" href="revvity.html">Revvity</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sergi.html">Sergi Lab Supplies</a></li>
@@ -635,6 +679,10 @@
 <td><p><img alt="" src="../../_images/TIP_CAR_288_C00.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">TIP_CAR_288_C00</span></code></p></td>
 </tr>
+<tr class="row-even"><td><p>‘TIP_CAR_NTR_A00’<br>Part no.: 182074<br>Carrier for 5 stacks of up to 4x 96 nested tip racks (NTR) (6T)</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_tip_carrier_L5_ntr_a00</span></code></p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -703,19 +751,23 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>‘MFX_TIP_module’<br>Part no.: 188160 or 188040<br><a class="reference external" href="https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188040">manufacturer website</a> <br>Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack)</p></td>
+<tr class="row-even"><td><p>‘MFX_TIP_module’<br>Part no.: 188160<br>Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack)</p></td>
 <td><p><img alt="" src="../../_images/MFX_TIP_module_188040.jpg" /></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">MFX_TIP_module</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_mfx_tiprackholder_standard</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>‘hamilton_mfx_plateholder_DWP_flat’<br>Part no.: 188229<br><a class="reference external" href="https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188229">manufacturer website</a> (&lt;-non-functional link?) <br>MFX DWP module rack-based</p></td>
+<tr class="row-odd"><td><p>‘NTR4 module’<br>Part no.: 191425<br>Module to position a stack of up to 4x 96 nested tip racks (NTR). Occupies one MFX site.</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_mfx_resourceholder_ntr</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>‘hamilton_mfx_plateholder_DWP_flat’<br>Part no.: 188229<br><a class="reference external" href="https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188229">manufacturer website</a> (&lt;-non-functional link?) <br>MFX DWP module rack-based</p></td>
 <td><p><img alt="" src="../../_images/MFX_DWP_RB_module_188229_.jpg" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_mfx_plateholder_DWP_flat</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>‘MFX_DWP_module_flat’<br>Part no.: 6601988-01<br>manufacturer website unknown</p></td>
+<tr class="row-odd"><td><p>‘MFX_DWP_module_flat’<br>Part no.: 6601988-01<br>manufacturer website unknown</p></td>
 <td><p><img alt="" src="../../_images/MFX_DWP_module_flat.jpg" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">MFX_DWP_module_flat</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>‘Hamilton_mfx_plateholder_DWP_metal_tapped’<br>Part no.: 188042 <br><a class="reference external" href="https://www.hamiltoncompany.com/other-robotics/188042">manufacturer website</a><br>Carries a single ANSI/SLAS footprint DWP, a Matrix or Micronics tube rack, or a Nunc reagent reservoir. Occupies one MFX site.</p></td>
+<tr class="row-even"><td><p>‘Hamilton_mfx_plateholder_DWP_metal_tapped’<br>Part no.: 188042 <br><a class="reference external" href="https://www.hamiltoncompany.com/other-robotics/188042">manufacturer website</a><br>Carries a single ANSI/SLAS footprint DWP, a Matrix or Micronics tube rack, or a Nunc reagent reservoir. Occupies one MFX site.</p></td>
 <td><p><img alt="" src="../../_images/hamilton_MFX_plateholder_DWP_metal_tapped.png" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">Hamilton_mfx_plateholder_DWP_metal_tapped</span></code></p></td>
 </tr>
@@ -812,25 +864,33 @@
 <td><p><img alt="" src="../../_images/hamilton_96_tiprack_10uL_filter.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_10uL_filter</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>Hamilton 96 tip rack 50uL.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">TIP_50ul</span></code><br>Part number: 235966 (non-sterile), 235978 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/50-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
+<tr class="row-even"><td><p>Hamilton 96 nested tip rack (NTR) 10uL.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">LT_L_NE_stack</span></code><br>Part number: 235949 (non-sterile), 235971 (clear, non-sterile), 235983 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/10-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_10uL_NTR</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Hamilton 96 tip rack 50uL.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">TIP_50ul</span></code><br>Part number: 235966 (non-sterile), 235978 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/50-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
 <td><p><img alt="" src="../../_images/hamilton_96_tiprack_50uL.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_50uL</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Hamilton 96 tip rack 50uL filter.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">TIP_50ul_w_filter</span></code><br>Part number: 235948 (non-sterile), 235979 (sterile), 235829 (clear, non-sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/50-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
+<tr class="row-even"><td><p>Hamilton 96 tip rack 50uL filter.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">TIP_50ul_w_filter</span></code><br>Part number: 235948 (non-sterile), 235979 (sterile), 235829 (clear, non-sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/50-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
 <td><p><img alt="" src="../../_images/hamilton_96_tiprack_50uL_filter.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_50uL_filter</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>Hamilton 96 nested tip rack (NTR) 50uL.<br>Hamilton name: ?<br>Part number: 235947 (non-sterile), 235964 (clear, non-sterile), 235987 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/50-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
+<tr class="row-odd"><td><p>Hamilton 96 nested tip rack (NTR) 50uL.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">TIP_50ul_L_NE_stack</span></code><br>Part number: 235947 (non-sterile), 235964 (clear, non-sterile), 235987 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/50-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
 <td><p><img alt="" src="../../_images/hamilton_96_tiprack_50uL_NTR.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_50uL_NTR</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Hamilton 96 tip rack 300uL.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">ST</span></code><br>Part number: 235834 (clear, non-sterile), 235902 (non-sterile), 235937 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/300-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
+<tr class="row-even"><td><p>Hamilton 96 tip rack 300uL.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">ST</span></code><br>Part number: 235834 (clear, non-sterile), 235902 (non-sterile), 235937 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/300-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
 <td><p><img alt="" src="../../_images/hamilton_96_tiprack_300uL.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_300uL</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>Hamilton 96 tip rack 300uL filter.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">STF</span></code><br>Part number: 235830 (clear), 235903 (non-sterile), 235938 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/300-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
+<tr class="row-odd"><td><p>Hamilton 96 tip rack 300uL filter.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">STF</span></code><br>Part number: 235830 (clear), 235903 (non-sterile), 235938 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/300-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
 <td><p><img alt="" src="../../_images/hamilton_96_tiprack_300uL.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_300uL_filter</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Hamilton 96 nested tip rack (NTR) 300uL.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">ST_L_NE_stack</span></code><br>Part number: 235950 (non-sterile), 235965 (clear, non-sterile), 235985 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/300-%CE%BCl-co-re-ii-tips">Hamilton website</a></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_300uL_NTR</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Hamilton 96 tip rack 300uL filter slim.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">STF_Slim</span></code><br>Part number: 235646<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables/300-%C2%B5l-slim-conductive-tips?part-number=235646">Hamilton website</a></p></td>
 <td><p><img alt="" src="../../_images/hamilton_96_tiprack_300uL_filter_slim.jpg.avif" /></p></td>
@@ -856,6 +916,14 @@
 <td><p><img alt="" src="../../_images/hamilton_96_tiprack_1000uL_filter_ultrawide.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_1000uL_filter_ultrawide</span></code></p></td>
 </tr>
+<tr class="row-odd"><td><p>Hamilton 96 raised CO-RE II tip rack.<br>Part number: 6608647<br>Thick, unbending body with no frame; holds its tips 16 mm above the holder it sinks into.<br>Takes the tips it holds as <code class="docutils literal notranslate"><span class="pre">make_tip</span></code>.</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_raised_core_ii</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Hamilton 96 raised CO-RE I tip rack.<br>The CO-RE II rack’s generation before, holding its tips 3.5 mm lower.<br>Takes the tips it holds as <code class="docutils literal notranslate"><span class="pre">make_tip</span></code>.</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_96_tiprack_raised_core_i</span></code></p></td>
+</tr>
 <tr class="row-odd"><td><p>Hamilton 24 tip rack 4000uL filter.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">FourmlTF</span></code><br>Part number: 184021 (non-sterile), 184023 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/4000-%CE%BCl-5000-%CE%BCl-co-re-tips">Hamilton website</a></p></td>
 <td><p><img alt="" src="../../_images/hamilton_24_tiprack_4000uL_filter.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_24_tiprack_4000uL_filter</span></code></p></td>
@@ -863,6 +931,29 @@
 <tr class="row-even"><td><p>Hamilton 24 tip rack 5000uL.<br>Hamilton name: <code class="docutils literal notranslate"><span class="pre">FivemlT</span></code><br>Part number: 184020 (non-sterile), 184022 (sterile)<br><a class="reference external" href="https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/4000-%CE%BCl-5000-%CE%BCl-co-re-tips">Hamilton website</a></p></td>
 <td><p><img alt="" src="../../_images/hamilton_24_tiprack_5000uL.jpg.avif" /></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">hamilton_24_tiprack_5000uL</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="teaching-needles">
+<h3>Teaching needles<a class="headerlink" href="#teaching-needles" title="Link to this heading">#</a></h3>
+<p>Closed-tip steel probes for labware teaching, not liquid handling. They are modelled as zero-capacity tools (<code class="docutils literal notranslate"><span class="pre">nominal_volume=0</span></code>, <code class="docutils literal notranslate"><span class="pre">maximal_volume=0</span></code>) so any attempted aspirate raises. The integrated <code class="docutils literal notranslate"><span class="pre">teaching_tip_rack</span></code> on every STAR and STARlet deck is built from <code class="docutils literal notranslate"><span class="pre">hamilton_teaching_needle_300uL</span></code>.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Description</p></th>
+<th class="head"><p>Image</p></th>
+<th class="head"><p>PLR definition</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Hamilton teaching needle, standard-volume (300 uL) class.<br>Part no.: 182176 (set of 8: 182136)<br>Steel teach-in needle; geometry matches the 300 uL tip.</p></td>
+<td><p><img alt="" src="../../_images/hamilton_teaching_needle_300uL.png" /></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_teaching_needle_300uL</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Hamilton teaching needle, XL (5000 uL) class.<br>Part no.: 184184<br>Steel teach-in needle; geometry matches the 5000 uL tip.</p></td>
+<td><p><img alt="" src="../../_images/hamilton_teaching_needle_5000uL.png" /></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_teaching_needle_5000uL</span></code></p></td>
 </tr>
 </tbody>
 </table>
@@ -942,8 +1033,8 @@
     class="page-toc tocsection onthispage">
     <i class="fa-solid fa-list"></i> On this page
   </div>
-  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="visible nav section-nav flex-column">
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#carriers">Carriers</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tip-carriers">Tip carriers</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-carriers">Plate carriers</a></li>
@@ -956,6 +1047,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-adapters">Plate Adapters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#consumables">Consumables</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tipracks">TipRacks</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#teaching-needles">Teaching needles</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#troughs">Troughs</a></li>
 </ul>
 </li>
@@ -979,13 +1071,13 @@
 </div>
 
   <div class="sidebar-secondary-item">
-  <div role="note" aria-label="source link">
-    <h3>This Page</h3>
-    <ul class="this-page-menu">
-      <li><a href="../../_sources/resources/library/hamilton.md.txt"
-            rel="nofollow">Show Source</a></li>
-    </ul>
-   </div></div>
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/resources/library/hamilton.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
 
 </div></div>
               
@@ -1000,8 +1092,8 @@
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script defer src="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
-<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="../../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67"></script>
 
   <footer class="bd-footer">
 <div class="bd-footer__inner bd-page-width">
@@ -1035,7 +1127,7 @@
         <div class="footer-item">
 <p class="theme-version">
   <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
-  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.21.0.
 </p></div>
       
     </div>

@@ -1,4 +1,7 @@
-﻿pylabrobot.config.io.file.FileWriter
+﻿:orphan:
+
+
+pylabrobot.config.io.file.FileWriter
 ====================================
 
 .. currentmodule:: pylabrobot.config.io.file

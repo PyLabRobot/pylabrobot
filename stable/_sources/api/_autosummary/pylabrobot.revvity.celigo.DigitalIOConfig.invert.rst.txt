@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.DigitalIOConfig.invert
+================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: DigitalIOConfig.invert

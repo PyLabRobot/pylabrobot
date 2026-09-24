@@ -1,0 +1,46 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.vspin.Access2Status
+======================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoclass:: Access2Status
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Access2Status.estop_active
+      ~Access2Status.estop_set
+      ~Access2Status.gripper_position
+      ~Access2Status.gripper_status
+      ~Access2Status.homed
+      ~Access2Status.initialized
+      ~Access2Status.motor_power_fault
+      ~Access2Status.optical_plate_sensor
+      ~Access2Status.y_position
+      ~Access2Status.y_status
+      ~Access2Status.z_position
+      ~Access2Status.z_status
+      ~Access2Status.access2_status
+      ~Access2Status.vspin_status
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Access2Status.__init__
+      ~Access2Status.axis_position
+      ~Access2Status.axis_status
+   
+   

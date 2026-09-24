@@ -1,0 +1,44 @@
+﻿:orphan:
+
+pylabrobot.lib.liquid\_handling.pipette\_batch\_scheduling
+==========================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling
+
+.. automodule:: pylabrobot.lib.liquid_handling.pipette_batch_scheduling
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      enumerate_valid_batches
+      is_valid_batch
+      log_batches
+      minimum_exact_cover
+      plan_batches
+      validate_channel_selections
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: class.rst
+   
+      ChannelBatch
+   
+   
+
+   
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.curiox.ht2000.CurioxHT2000.drain\_spill\_tray
+========================================================
+
+.. currentmodule:: pylabrobot.curiox.ht2000
+
+.. automethod:: CurioxHT2000.drain_spill_tray

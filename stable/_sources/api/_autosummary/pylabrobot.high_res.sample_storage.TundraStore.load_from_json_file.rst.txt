@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.load\_from\_json\_file
+=======================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.load_from_json_file

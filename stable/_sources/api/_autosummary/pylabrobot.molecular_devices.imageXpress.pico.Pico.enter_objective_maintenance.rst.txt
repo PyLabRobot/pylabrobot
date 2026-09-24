@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.Pico.enter\_objective\_maintenance
+=================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico
+
+.. automethod:: Pico.enter_objective_maintenance

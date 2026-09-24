@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxis.request\_encoder\_ratio
+============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: LinearAxis.request_encoder_ratio

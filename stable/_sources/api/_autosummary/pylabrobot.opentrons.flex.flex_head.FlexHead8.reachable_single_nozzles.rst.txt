@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead8.reachable\_single\_nozzles
+=========================================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead8.reachable_single_nozzles

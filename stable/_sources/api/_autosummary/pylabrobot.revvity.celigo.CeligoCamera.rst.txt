@@ -1,0 +1,41 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.CeligoCamera
+======================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: CeligoCamera
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CeligoCamera.is_open
+      ~CeligoCamera.exposure_ms
+      ~CeligoCamera.gain
+      ~CeligoCamera.width
+      ~CeligoCamera.height
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CeligoCamera.__init__
+      ~CeligoCamera.capture
+      ~CeligoCamera.set_exposure
+      ~CeligoCamera.set_frame_format
+      ~CeligoCamera.set_gain
+      ~CeligoCamera.setup
+      ~CeligoCamera.stop
+   
+   

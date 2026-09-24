@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.\_\_init\_\_
+==========================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.__init__

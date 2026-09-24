@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead1.has\_tip\_on\_hardware
+=====================================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead1.has_tip_on_hardware

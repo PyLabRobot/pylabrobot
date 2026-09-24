@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.request\_settings
+================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.request_settings

@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCelLabwareSettings.can\_be\_lidded
+===================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoattribute:: BenchCelLabwareSettings.can_be_lidded

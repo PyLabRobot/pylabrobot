@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ExternalCameraControlConfig.config\_version
+=====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ExternalCameraControlConfig.config_version

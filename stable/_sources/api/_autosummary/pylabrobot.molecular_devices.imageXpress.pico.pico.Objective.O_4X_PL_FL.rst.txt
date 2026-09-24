@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.pico.Objective.O\_4X\_PL\_FL
+===========================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. autoattribute:: Objective.O_4X_PL_FL

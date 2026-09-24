@@ -1,0 +1,6 @@
+pylabrobot.resources.Trough.has\_lid
+====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trough.has_lid

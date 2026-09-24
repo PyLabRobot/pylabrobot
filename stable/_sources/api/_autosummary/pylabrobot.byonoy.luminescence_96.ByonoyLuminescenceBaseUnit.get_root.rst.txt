@@ -1,0 +1,6 @@
+pylabrobot.byonoy.luminescence\_96.ByonoyLuminescenceBaseUnit.get\_root
+=======================================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. automethod:: ByonoyLuminescenceBaseUnit.get_root

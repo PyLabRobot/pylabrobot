@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LightingIOConfig.channel
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LightingIOConfig.channel

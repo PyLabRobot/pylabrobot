@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.get\_runs
+===========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.get_runs

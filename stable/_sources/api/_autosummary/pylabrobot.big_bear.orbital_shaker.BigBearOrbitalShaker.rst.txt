@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.big\_bear.orbital\_shaker.BigBearOrbitalShaker
+=========================================================
+
+.. currentmodule:: pylabrobot.big_bear.orbital_shaker
+
+.. autoclass:: BigBearOrbitalShaker
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BigBearOrbitalShaker.__init__
+      ~BigBearOrbitalShaker.find_home
+      ~BigBearOrbitalShaker.get_serial_number
+      ~BigBearOrbitalShaker.home_all
+      ~BigBearOrbitalShaker.setup
+      ~BigBearOrbitalShaker.start_shaking
+      ~BigBearOrbitalShaker.stop
+      ~BigBearOrbitalShaker.stop_all
+      ~BigBearOrbitalShaker.stop_shaking
+   
+   

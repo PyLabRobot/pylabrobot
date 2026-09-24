@@ -1,0 +1,6 @@
+pylabrobot.hamilton.transport.tcp.CommandResponse
+=================================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.tcp
+
+.. autoclass:: CommandResponse

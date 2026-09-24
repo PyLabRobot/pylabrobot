@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.peel
+==================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.peel

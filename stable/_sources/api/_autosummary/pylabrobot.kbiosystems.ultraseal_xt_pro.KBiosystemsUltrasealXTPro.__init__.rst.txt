@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_xt\_pro.KBiosystemsUltrasealXTPro.\_\_init\_\_
+================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
+
+.. automethod:: KBiosystemsUltrasealXTPro.__init__

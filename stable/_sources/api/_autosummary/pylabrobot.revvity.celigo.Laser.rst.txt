@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.Laser
+===============================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: Laser
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Laser.attenuator
+      ~Laser.enabled
+      ~Laser.nd_filter
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Laser.__init__
+      ~Laser.fire
+      ~Laser.fire_grid
+      ~Laser.fire_targets
+      ~Laser.request_uart_response
+      ~Laser.send_command
+   
+   

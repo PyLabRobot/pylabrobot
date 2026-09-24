@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.unlock\_plate
+=======================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.unlock_plate

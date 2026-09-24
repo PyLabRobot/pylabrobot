@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCelLabwareSettings.plate\_presence\_threshold
+==============================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoattribute:: BenchCelLabwareSettings.plate_presence_threshold

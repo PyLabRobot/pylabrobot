@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.request\_device\_info
+=======================================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.request_device_info

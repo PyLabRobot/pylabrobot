@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4S.system\_reset
+=======================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. automethod:: A4S.system_reset

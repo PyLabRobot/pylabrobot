@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.KBiosystemsUltrasealEPRO.set\_sealing\_force
+===================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. automethod:: KBiosystemsUltrasealEPRO.set_sealing_force

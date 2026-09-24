@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.GalvoMagnificationCalibration
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: GalvoMagnificationCalibration
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoMagnificationCalibration.center_voltage
+      ~GalvoMagnificationCalibration.frame_size_volts
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoMagnificationCalibration.__init__
+   
+   

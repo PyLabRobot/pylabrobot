@@ -1,0 +1,6 @@
+pylabrobot.high\_res.lid\_valet.HighResLidValet.set\_vacuum
+===========================================================
+
+.. currentmodule:: pylabrobot.high_res.lid_valet
+
+.. automethod:: HighResLidValet.set_vacuum

@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.spectramax.FluorescenceResult
+===========================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoclass:: FluorescenceResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FluorescenceResult.data
+      ~FluorescenceResult.excitation_wavelength
+      ~FluorescenceResult.emission_wavelength
+      ~FluorescenceResult.temperature
+      ~FluorescenceResult.timestamp
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FluorescenceResult.__init__
+   
+   

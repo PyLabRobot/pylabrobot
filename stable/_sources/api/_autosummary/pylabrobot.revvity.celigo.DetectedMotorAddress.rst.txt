@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.DetectedMotorAddress
+==============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: DetectedMotorAddress
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DetectedMotorAddress.uart_index
+      ~DetectedMotorAddress.motor_index
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DetectedMotorAddress.__init__
+   
+   

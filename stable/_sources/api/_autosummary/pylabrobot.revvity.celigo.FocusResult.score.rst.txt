@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FocusResult.score
+===========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FocusResult.score

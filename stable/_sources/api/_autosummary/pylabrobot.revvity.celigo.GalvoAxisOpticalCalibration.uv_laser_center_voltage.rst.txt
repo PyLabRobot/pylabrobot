@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoAxisOpticalCalibration.uv\_laser\_center\_voltage
+================================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoAxisOpticalCalibration.uv_laser_center_voltage

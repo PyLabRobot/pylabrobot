@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoControllerStatus.y\_hardware\_voltage
+====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoControllerStatus.y_hardware_voltage

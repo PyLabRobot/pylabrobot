@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.Pico.stop
+========================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico
+
+.. automethod:: Pico.stop

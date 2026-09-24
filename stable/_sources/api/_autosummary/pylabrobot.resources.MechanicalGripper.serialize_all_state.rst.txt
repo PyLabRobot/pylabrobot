@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.serialize\_all\_state
+============================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.serialize_all_state

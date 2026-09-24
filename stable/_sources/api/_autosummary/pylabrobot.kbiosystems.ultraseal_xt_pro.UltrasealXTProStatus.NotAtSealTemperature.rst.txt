@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_xt\_pro.UltrasealXTProStatus.NotAtSealTemperature
+===================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
+
+.. autoattribute:: UltrasealXTProStatus.NotAtSealTemperature

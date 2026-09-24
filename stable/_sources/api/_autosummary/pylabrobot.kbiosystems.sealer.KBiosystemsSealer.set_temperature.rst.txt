@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.sealer.KBiosystemsSealer.set\_temperature
+================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. automethod:: KBiosystemsSealer.set_temperature

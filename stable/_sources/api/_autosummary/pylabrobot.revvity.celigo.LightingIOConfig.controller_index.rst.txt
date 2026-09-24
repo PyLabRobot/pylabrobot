@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LightingIOConfig.controller\_index
+============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LightingIOConfig.controller_index

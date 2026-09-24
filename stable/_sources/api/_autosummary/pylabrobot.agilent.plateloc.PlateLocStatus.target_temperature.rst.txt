@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLocStatus.target\_temperature
+==============================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoattribute:: PlateLocStatus.target_temperature

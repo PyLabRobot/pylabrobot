@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_xt\_pro.KBiosystemsUltrasealXTPro.wait\_for\_idle
+===================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
+
+.. automethod:: KBiosystemsUltrasealXTPro.wait_for_idle

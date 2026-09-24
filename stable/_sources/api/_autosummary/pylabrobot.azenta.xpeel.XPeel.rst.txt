@@ -1,0 +1,53 @@
+﻿:orphan:
+
+
+pylabrobot.azenta.xpeel.XPeel
+=============================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. autoclass:: XPeel
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~XPeel.BAUDRATE
+      ~XPeel.RESPONSE_TIMEOUT
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~XPeel.__init__
+      ~XPeel.advance_tape
+      ~XPeel.describe_error
+      ~XPeel.enable_plate_check
+      ~XPeel.move_conveyor_in
+      ~XPeel.move_conveyor_out
+      ~XPeel.move_elevator_down
+      ~XPeel.move_elevator_up
+      ~XPeel.parse_ready_line
+      ~XPeel.peel
+      ~XPeel.request_seal_sensor_status
+      ~XPeel.request_status
+      ~XPeel.request_tape_remaining
+      ~XPeel.request_version
+      ~XPeel.reset
+      ~XPeel.restart
+      ~XPeel.seal_check
+      ~XPeel.send_command
+      ~XPeel.set_seal_threshold_lower
+      ~XPeel.set_seal_threshold_upper
+      ~XPeel.setup
+      ~XPeel.stop
+   
+   

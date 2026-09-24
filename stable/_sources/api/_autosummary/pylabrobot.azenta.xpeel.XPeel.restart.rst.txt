@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.restart
+=====================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.restart

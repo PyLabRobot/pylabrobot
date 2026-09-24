@@ -1,0 +1,1238 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Hamilton Prep: getting started &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_devices.css?v=c92e449a" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=cb8930eaaf36d9849b67"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67" />
+
+    <script src="../../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/plr_devices.js?v=ba1a2da2"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/00_liquid-handling/hamilton-prep/prep_basic_demo';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.21.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/graphviz.js?v=0710df9f"></script>
+    <script src="../../../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/00_liquid-handling/hamilton-prep/prep_basic_demo.html" />
+    <link rel="icon" href="../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="HighRes" href="../../high_res/index.html" />
+    <link rel="prev" title="Prep" href="../../hamilton/prep/index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started/units.html">Default Units</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../needs-testing.html">Devices that need testing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../definitions.html">Definitions</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../generic/index.html">Generic devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../generic/line-barcode-scanner/hello-world.html">Line-oriented serial barcode scanners</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mixing.html">Mixing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../container_no_go_zones.html">Container No-Go Zones</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/plateloc/hello-world.html">Agilent PlateLoc</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/state-machine.html">VSpin and Access2 state machine</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../azenta/index.html">Azenta</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../azenta/fluidx/intellixcap96/hello-world.html">FluidX IntelliXcap 96</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../big_bear/index.html">BigBear</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../big_bear/orbital-shaker/hello-world.html">BigBear Orbital Shaker</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../brooks/index.html">Brooks</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../brooks/precise_flex/hello-world.html">Brooks PreciseFlex PF400 / PF3400</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../brooks/precise_flex/events.html">PreciseFlex events</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../byonoy/index.html">Byonoy</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../byonoy/absorbance_96/hello-world.html">Byonoy Absorbance 96</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../byonoy/luminescence_96/hello-world.html">Byonoy Luminescence 96 — lab guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../byonoy/luminescence_96/led_bar.html">Byonoy L96 — LED bar</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../cole_parmer/index.html">Cole-Parmer</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../cole_parmer/genogrinder/hello-world.html">Cole-Parmer GenoGrinder (fka SPEX GenoGrinder)</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../curiox/index.html">Curiox</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../curiox/curiox-ht2000/hello-world.html">Curiox Laminar Wash HT2000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../hamilton/index.html">Hamilton</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../hamilton/star/index.html">Hamilton STAR and STARlet</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../hamilton/star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../hamilton/star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../../hamilton/prep/index.html">Prep</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">Hamilton Prep: getting started</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../high_res/sample-storage/index.html">Sample storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/ambistore/hello-world.html">HighRes AmbiStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/steristore/hello-world.html">HighRes SteriStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/tundrastore/hello-world.html">HighRes TundraStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/events.html">Sample-storage events</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/cpac/hello-world.html">Inheco CPAC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/incubator_shaker/hello-world.html">Inheco Incubator Shaker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/odtc/hello-world.html">Inheco ODTC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/scila/hello-world.html">Inheco SCILA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/thermoshake/hello-world.html">Inheco ThermoShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../kbioscience/index.html">KBioscience</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../kbioscience/kube/hello-world.html">KBioscience KUBE</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../kbiosystems/index.html">KBiosystems</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../kbiosystems/ultraseal-epro/hello-world.html">KBiosystems Ultraseal ePRO</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../kbiosystems/ultraseal-pro/hello-world.html">KBiosystems Ultraseal PRO (formerly WASP)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../kbiosystems/ultraseal-xt-pro/hello-world.html">KBiosystems Ultraseal XT Pro</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../li_cor/index.html">LI-COR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../li_cor/odyssey/hello-world.html">LI-COR Odyssey Classic</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../mettler_toledo/index.html">Mettler Toledo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../mettler_toledo/scales/hello-world.html">Mettler Toledo MT-SICS scales</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../micronic/index.html">Micronic</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../micronic/code_reader/hello-world.html">Micronic RD235 Code Reader</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../molecular_devices/index.html">Molecular Devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../molecular_devices/spectramax/hello-world.html">Molecular Devices SpectraMax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../molecular_devices/imageXpress/pico.html">ImageXpress Pico</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../opentrons/index.html">Opentrons</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../opentrons/ot2/hello-world.html">Opentrons OT-2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../opentrons/flex/hello-world.html">Opentrons Flex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../qinstruments/index.html">QInstruments</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../qinstruments/bioshake/hello-world.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../revvity/index.html">Revvity</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../revvity/celigo/index.html">Celigo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../revvity/celigo/hello-world.html">Celigo hello world</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../revvity/celigo/advanced-imaging.html">Advanced imaging and coordinates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../revvity/celigo/scan-planning.html">Scan specifications and planning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../revvity/celigo/components-and-diagnostics.html">Hardware components and diagnostics</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../sartorius/index.html">Sartorius</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../sartorius/entris2/hello-world.html">Sartorius Entris II</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../thermo_fisher/index.html">Thermo Fisher</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../thermo_fisher/alps/index.html">ALPS Heat Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/alps/alps300/hello-world.html">Thermo Scientific ALPS 300</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/alps/alps3000/hello-world.html">Thermo Scientific ALPS 3000</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/alps/alps5000/hello-world.html">Thermo Scientific ALPS 5000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../thermo_fisher/btx/index.html">BTX</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/btx/gemini/X2/installation.html">BTX Gemini X2 installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/btx/gemini/X2/hello-world.html">BTX Gemini X2</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../thermo_fisher/nanodrop_1000/index.html">Thermo Fisher NanoDrop 1000</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/nanodrop_1000/setup.html">NanoDrop 1000 setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/nanodrop_1000/hello-world.html">Thermo Fisher NanoDrop 1000</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../ufactory/index.html">UFACTORY</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../ufactory/xarm6/hello-world.html">UFACTORY xArm 6</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../machine-agnostic-features/event-bus.html">EventBus</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/machine-lifecycle.html">Machine lifecycle events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/incubator.html">Incubator events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/liquid-handler.html">LiquidHandler events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/thermal-and-shaking.html">Shaker and environmental-controller events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/diagnostic-transports.html">Diagnostic transport events</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/logging.html">Setting Up Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/manual-operator.html">Operator actions</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../../hamilton/index.html" class="nav-link">Hamilton</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../../hamilton/prep/index.html" class="nav-link">Prep</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Hamilton Prep: getting started</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="hamilton-prep-getting-started">
+<h1>Hamilton Prep: getting started<a class="headerlink" href="#hamilton-prep-getting-started" title="Link to this heading">#</a></h1>
+<p>The Prep driver in the STAR v1 architecture, from setup to plate movement:</p>
+<ol class="arabic simple">
+<li><p><strong>Setup</strong> - a simulated or real Prep, and what it reports about itself</p></li>
+<li><p><strong>Moving</strong> - the X arm, and the channels along Y and Z, each axis on its own</p></li>
+<li><p><strong>Teaching needle</strong> - pick it up, move over a plate, put it back</p></li>
+<li><p><strong>Dual-channel liquid handling</strong> - tips, aspirate, dispense, with tip and volume tracking</p></li>
+<li><p><strong>The 8-channel head</strong> - when the device has one</p></li>
+<li><p><strong>Probing</strong> - capacitive LLD along Z and along Y</p></li>
+<li><p><strong>Plate movement</strong> - CoRe grippers</p></li>
+<li><p><strong>Deck light, a declared configuration, and putting it down</strong></p></li>
+</ol>
+<p><code class="docutils literal notranslate"><span class="pre">SIMULATION</span> <span class="pre">=</span> <span class="pre">True</span></code> runs everything against <code class="docutils literal notranslate"><span class="pre">PrepSimulationDriver</span></code>, which answers from a recorded Prep (PRPAA1087, MLPrep Runtime V1.2.2), so the notebook runs without a device. Set it to <code class="docutils literal notranslate"><span class="pre">False</span></code> and <code class="docutils literal notranslate"><span class="pre">HOST</span></code> to your Prep’s address to run the same cells on a device.</p>
+<p><code class="docutils literal notranslate"><span class="pre">prep</span></code> is a <a class="reference internal" href="../../../api/_autosummary/pylabrobot.hamilton.prep.PrepDevice.html#pylabrobot.hamilton.prep.PrepDevice" title="pylabrobot.hamilton.prep.device.PrepDevice"><code class="xref py py-class docutils literal notranslate"><span class="pre">PrepDevice</span></code></a>: the device is a resource and its deck is its child. <code class="docutils literal notranslate"><span class="pre">prep.driver</span></code> speaks to the device; <code class="docutils literal notranslate"><span class="pre">prep.pipettes</span></code>, <code class="docutils literal notranslate"><span class="pre">prep.x_arm</span></code>, <code class="docutils literal notranslate"><span class="pre">prep.head8</span></code> and <code class="docutils literal notranslate"><span class="pre">prep.core_grippers</span></code> are its features, built at setup.</p>
+<section id="imports-and-config">
+<h2>1. Imports and config<a class="headerlink" href="#imports-and-config" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.hamilton.prep</span><span class="w"> </span><span class="kn">import</span> <span class="n">Prep</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coordinate</span><span class="p">,</span> <span class="n">set_tip_tracking</span><span class="p">,</span> <span class="n">set_volume_tracking</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.corning.axygen.plates</span><span class="w"> </span><span class="kn">import</span> <span class="n">cor_axy_96_wellplate_500uL_Ub</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton</span><span class="w"> </span><span class="kn">import</span> <span class="n">PrepDeck</span><span class="p">,</span> <span class="n">hamilton_96_tiprack_50uL_NTR</span>
+
+<span class="n">SIMULATION</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># False to drive a Prep on the network</span>
+<span class="n">HOST</span> <span class="o">=</span> <span class="s2">"192.168.100.102"</span>  <span class="c1"># ignored in simulation</span>
+<span class="n">PORT</span> <span class="o">=</span> <span class="mi">2000</span>
+
+<span class="c1"># Commands and answers are logged at DEBUG (decoded) and at pylabrobot.io.LOG_LEVEL_IO (raw frames).</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pylabrobot"</span><span class="p">)</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">WARNING</span><span class="p">)</span>
+
+<span class="c1"># Opt-in labware tracking: tip spots and well volumes follow what the channels do.</span>
+<span class="n">set_tip_tracking</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">set_volume_tracking</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="deck-and-device">
+<h2>2. Deck and device<a class="headerlink" href="#deck-and-device" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">PrepDeck</span></code> has eight labware spots (column-major, <code class="docutils literal notranslate"><span class="pre">deck[0]</span></code>..<code class="docutils literal notranslate"><span class="pre">deck[7]</span></code>), the waste block, the liquid waste container, the teaching needle and the waste positions; <code class="docutils literal notranslate"><span class="pre">with_core_grippers=True</span></code> adds the CoRe gripper mount.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">deck</span> <span class="o">=</span> <span class="n">PrepDeck</span><span class="p">(</span><span class="n">with_core_grippers</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">tip_rack</span> <span class="o">=</span> <span class="n">deck</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_50uL_NTR</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"ntr_50"</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">plate</span> <span class="o">=</span> <span class="n">deck</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="n">cor_axy_96_wellplate_500uL_Ub</span><span class="p">(</span><span class="s2">"plate"</span><span class="p">)</span>
+
+<span class="n">prep</span> <span class="o">=</span> <span class="n">Prep</span><span class="p">(</span><span class="n">deck</span><span class="o">=</span><span class="n">deck</span><span class="p">,</span> <span class="n">simulation</span><span class="o">=</span><span class="n">SIMULATION</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="n">HOST</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">PORT</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">format_setup_summary</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[Hamilton Prep] Connected on simulation (no link)
+  Serial: PRPAA1087
+  Firmware: MLPrep Runtime V1.2.2.444 99020-02 Rev G
+  Configuration: enclosure none, safe speeds off, traverse height 167.5 mm
+  Deck: x 0.00 to 299.00 mm, y -9.00 to 385.00 mm, z 18.03 to 167.50 mm; 3 sites, 3 waste sites
+  Pipettes: 2, v2 aspirate/dispense
+    channel 0 (rear): firmware Channel1ml Runtime V1.4.9.249 98228-02 Rev K, x 0.19 to 299.19 mm, y 0.00 to 385.00 mm, z 18.03 to 167.50 mm
+    channel 1 (front): firmware Channel1ml Runtime V1.4.9.249 98228-02 Rev K, x 0.19 to 299.19 mm, y -9.00 to 376.00 mm, z 18.03 to 167.50 mm
+  8-channel head: none
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="what-the-device-reports">
+<h2>3. What the device reports<a class="headerlink" href="#what-the-device-reports" title="Link to this heading">#</a></h2>
+<p>Setup reads the device: serial and firmware, what is fitted, the deck and channel bounds, and where the teaching needle and waste positions are - which it places on the deck. The configuration can be saved, and declared later: a real device is then checked against it at setup, and a simulated one answers as it says.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">configuration</span> <span class="o">=</span> <span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">configuration</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">configuration</span><span class="o">.</span><span class="n">serial_number</span><span class="p">,</span> <span class="s2">"|"</span><span class="p">,</span> <span class="n">configuration</span><span class="o">.</span><span class="n">firmware_version</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"channels:"</span><span class="p">,</span> <span class="n">configuration</span><span class="o">.</span><span class="n">num_channels</span><span class="p">,</span> <span class="s2">"| 8-channel head:"</span><span class="p">,</span> <span class="n">configuration</span><span class="o">.</span><span class="n">head8_installed</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"channel order (firmware ChannelIndex, back to front):"</span><span class="p">,</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">channel_order</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Y windows:"</span><span class="p">,</span> <span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">y_range</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">channels</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"minimum Y spacing:"</span><span class="p">,</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">_min_spacing_between</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="s2">"mm"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"teaching needle at"</span><span class="p">,</span> <span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s2">"teaching_tip"</span><span class="p">)</span><span class="o">.</span><span class="n">location</span><span class="p">)</span>
+
+<span class="n">configuration_path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">())</span> <span class="o">/</span> <span class="s2">"prep_configuration.json"</span><span class="p">)</span>
+<span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">save_configuration</span><span class="p">(</span><span class="n">configuration_path</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"saved"</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">configuration_path</span><span class="p">)</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">"in the temporary directory"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>PRPAA1087 | MLPrep Runtime V1.2.2.444 99020-02 Rev G
+channels: 2 | 8-channel head: False
+channel order (firmware ChannelIndex, back to front): [2, 1]
+Y windows: [(0.0, 385.0), (-9.0, 376.0)]
+minimum Y spacing: 9.0 mm
+teaching needle at Coordinate(284.760, 214.290, 023.850)
+saved prep_configuration.json in the temporary directory
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="moving">
+<h2>4. Moving<a class="headerlink" href="#moving" title="Link to this heading">#</a></h2>
+<p>The X arm moves the gantry both channels ride. <code class="docutils literal notranslate"><span class="pre">move_to_y_positions</span></code> and <code class="docutils literal notranslate"><span class="pre">move_tool_bottom_to_z_positions</span></code> move one axis for all channels in one command (<code class="docutils literal notranslate"><span class="pre">ChannelXYZCoordinator.MoveYAbsolute</span></code> / <code class="docutils literal notranslate"><span class="pre">MoveZAbsolute</span></code>), each at a <code class="docutils literal notranslate"><span class="pre">speed</span></code> in mm/s; the Z moves also take an <code class="docutils literal notranslate"><span class="pre">acceleration</span></code> in mm/s2. Channels are numbered from the back and stay at least their minimum spacing apart: <code class="docutils literal notranslate"><span class="pre">make_space=True</span></code> lets a channel that is in the way move aside.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">x_arm</span><span class="o">.</span><span class="n">move_to_x_position</span><span class="p">(</span><span class="mi">150</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">move_to_y_positions</span><span class="p">({</span><span class="mi">0</span><span class="p">:</span> <span class="mi">250</span><span class="p">},</span> <span class="n">make_space</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">move_to_y_positions</span><span class="p">({</span><span class="mi">0</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="mi">150</span><span class="p">},</span> <span class="n">speed</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">move_tool_bottom_to_z_positions</span><span class="p">({</span><span class="mi">0</span><span class="p">:</span> <span class="mi">150</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="mi">140</span><span class="p">},</span> <span class="n">speed</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">acceleration</span><span class="o">=</span><span class="mi">400</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">move_to_safe_z</span><span class="p">()</span>
+
+<span class="k">for</span> <span class="n">channel</span><span class="p">,</span> <span class="n">location</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">request_locations</span><span class="p">()):</span>
+  <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"channel </span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">: x </span><span class="si">{</span><span class="n">location</span><span class="o">.</span><span class="n">x</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, y </span><span class="si">{</span><span class="n">location</span><span class="o">.</span><span class="n">y</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, z </span><span class="si">{</span><span class="n">location</span><span class="o">.</span><span class="n">z</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>channel 0: x 150.00, y 200.00, z 167.50
+channel 1: x 150.00, y 150.00, z 167.50
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># A move that would put the channels too close is refused before anything is sent, saying what would fit.</span>
+<span class="k">try</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">move_to_y_positions</span><span class="p">({</span><span class="mi">0</span><span class="p">:</span> <span class="mi">150</span><span class="p">})</span>
+<span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Channels 0 and 1 would be 0.00 mm apart (y=150.00 and y=150.00 mm); they must be at least 9.0 mm apart. Send channel 0 to y &gt;= 159.00 or channel 1 to y &lt;= 141.00. Channel 1 was not named, so it stays at y=150.00 mm; make_space=True moves it out of the way.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="teaching-needle">
+<h2>5. Teaching needle<a class="headerlink" href="#teaching-needle" title="Link to this heading">#</a></h2>
+<p>Pick up the teaching needle, move it over well A1 at a safe height, and put it back. On a device, check the needle’s pickup height first: on PRPAA1087 its top was measured 1.6 mm below the deck model’s.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">SAFE_HEIGHT_ABOVE_WELL</span> <span class="o">=</span> <span class="mi">20</span>
+
+<span class="n">teaching_tip</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s2">"teaching_tip"</span><span class="p">)</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">teaching_tip</span><span class="o">.</span><span class="n">has_tip</span><span class="p">():</span>  <span class="c1"># with tip tracking on, the spot starts out without its needle</span>
+  <span class="n">teaching_tip</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">add_tip</span><span class="p">(</span><span class="n">teaching_tip</span><span class="o">.</span><span class="n">make_tip</span><span class="p">(),</span> <span class="n">origin</span><span class="o">=</span><span class="n">teaching_tip</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">([</span><span class="n">teaching_tip</span><span class="p">],</span> <span class="n">use_channels</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+<span class="n">a1</span> <span class="o">=</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">get_location_wrt</span><span class="p">(</span><span class="n">deck</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">move_to_y_positions</span><span class="p">({</span><span class="mi">0</span><span class="p">:</span> <span class="n">a1</span><span class="o">.</span><span class="n">y</span><span class="p">},</span> <span class="n">make_space</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">move_to_location</span><span class="p">(</span><span class="n">Coordinate</span><span class="p">(</span><span class="n">a1</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">a1</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">a1</span><span class="o">.</span><span class="n">z</span> <span class="o">+</span> <span class="n">SAFE_HEIGHT_ABOVE_WELL</span><span class="p">),</span> <span class="n">use_channels</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">([</span><span class="n">teaching_tip</span><span class="p">],</span> <span class="n">use_channels</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="tip-pickup-aspirate-dispense-dual-channel">
+<h2>6. Tip pickup, aspirate, dispense (dual channel)<a class="headerlink" href="#tip-pickup-aspirate-dispense-dual-channel" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_spots</span> <span class="o">=</span> <span class="n">tip_rack</span><span class="p">[</span><span class="s2">"A1:B1"</span><span class="p">]</span>
+<span class="n">channels</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="n">source</span> <span class="o">=</span> <span class="n">plate</span><span class="p">[</span><span class="s2">"A1:B1"</span><span class="p">]</span>
+<span class="n">destination</span> <span class="o">=</span> <span class="n">plate</span><span class="p">[</span><span class="s2">"A7:B7"</span><span class="p">]</span>
+<span class="n">volumes</span> <span class="o">=</span> <span class="p">[</span><span class="mf">35.0</span><span class="p">,</span> <span class="mf">25.0</span><span class="p">]</span>
+<span class="k">for</span> <span class="n">well</span> <span class="ow">in</span> <span class="n">source</span><span class="p">:</span>
+  <span class="n">well</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">set_volume</span><span class="p">(</span><span class="mf">100.0</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">status</span><span class="p">(</span><span class="n">label</span><span class="p">):</span>
+  <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">: mounted </span><span class="si">{</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">name</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="kc">None</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">get_mounted_tips</span><span class="p">()]</span><span class="si">}</span><span class="s2">, "</span>
+        <span class="sa">f</span><span class="s2">"source </span><span class="si">{</span><span class="p">[</span><span class="n">w</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">()</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">w</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">source</span><span class="p">]</span><span class="si">}</span><span class="s2">, "</span>
+        <span class="sa">f</span><span class="s2">"destination </span><span class="si">{</span><span class="p">[</span><span class="n">w</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">()</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">w</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">destination</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_spots</span><span class="p">,</span> <span class="n">use_channels</span><span class="o">=</span><span class="n">channels</span><span class="p">)</span>
+<span class="n">status</span><span class="p">(</span><span class="s2">"after pickup"</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">vols</span><span class="o">=</span><span class="n">volumes</span><span class="p">,</span> <span class="n">use_channels</span><span class="o">=</span><span class="n">channels</span><span class="p">,</span> <span class="n">liquid_height</span><span class="o">=</span><span class="p">[</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
+<span class="n">status</span><span class="p">(</span><span class="s2">"after aspirate"</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">vols</span><span class="o">=</span><span class="n">volumes</span><span class="p">,</span> <span class="n">use_channels</span><span class="o">=</span><span class="n">channels</span><span class="p">,</span> <span class="n">liquid_height</span><span class="o">=</span><span class="p">[</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
+<span class="n">status</span><span class="p">(</span><span class="s2">"after dispense"</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">tip_spots</span><span class="p">,</span> <span class="n">use_channels</span><span class="o">=</span><span class="n">channels</span><span class="p">)</span>
+<span class="n">status</span><span class="p">(</span><span class="s2">"after drop"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>after pickup: mounted ['ntr_50_tipspot_A1#0', 'ntr_50_tipspot_B1#0'], source [100.0, 100.0], destination [0, 0]
+after aspirate: mounted ['ntr_50_tipspot_A1#0', 'ntr_50_tipspot_B1#0'], source [65.0, 75.0], destination [0, 0]
+after dispense: mounted ['ntr_50_tipspot_A1#0', 'ntr_50_tipspot_B1#0'], source [65.0, 75.0], destination [35.0, 25.0]
+after drop: mounted [None, None], source [65.0, 75.0], destination [35.0, 25.0]
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="the-8-channel-head">
+<h2>7. The 8-channel head<a class="headerlink" href="#the-8-channel-head" title="Link to this heading">#</a></h2>
+<p>Skipped on a device without one. To simulate a Prep with the head, build it with <code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code> pointing at <code class="docutils literal notranslate"><span class="pre">pylabrobot/hamilton/prep/driver/recordings/prep_PRPAA1087_v1_2_2_head8.json</span></code>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">prep</span><span class="o">.</span><span class="n">head8</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"no 8-channel head on this device; skipping"</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+  <span class="n">tip_spots8</span> <span class="o">=</span> <span class="n">tip_rack</span><span class="p">[</span><span class="s2">"A2:H2"</span><span class="p">]</span>
+  <span class="n">source8</span><span class="p">,</span> <span class="n">destination8</span> <span class="o">=</span> <span class="n">plate</span><span class="p">[</span><span class="s2">"A2:H2"</span><span class="p">],</span> <span class="n">plate</span><span class="p">[</span><span class="s2">"A4:H4"</span><span class="p">]</span>
+  <span class="k">for</span> <span class="n">well</span> <span class="ow">in</span> <span class="n">source8</span><span class="p">:</span>
+    <span class="n">well</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">set_volume</span><span class="p">(</span><span class="mf">100.0</span><span class="p">)</span>
+  <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">head8</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_spots8</span><span class="p">)</span>
+  <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">head8</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">wells</span><span class="o">=</span><span class="n">source8</span><span class="p">,</span> <span class="n">volume</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">liquid_height</span><span class="o">=</span><span class="mf">3.0</span><span class="p">)</span>
+  <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">head8</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">wells</span><span class="o">=</span><span class="n">destination8</span><span class="p">,</span> <span class="n">volume</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">liquid_height</span><span class="o">=</span><span class="mf">3.0</span><span class="p">)</span>
+  <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">head8</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">tip_spots8</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>no 8-channel head on this device; skipping
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="probing-with-capacitive-lld">
+<h2>8. Probing with capacitive LLD<a class="headerlink" href="#probing-with-capacitive-lld" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">probe_z_using_clld</span></code> lowers a channel where it stands until its cLLD triggers, and returns the height (None when nothing triggers); on PRPAA1087 it found a finger and the teaching needle’s top. <code class="docutils literal notranslate"><span class="pre">clld_probe_y_position_using_channel</span></code> searches along Y from where the channel stands, kept clear of its neighbours; its detection is not yet reliable on a device. The simulator has nothing to detect.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">height</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">probe_z_using_clld</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">lowest_immers_pos</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mf">20.0</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Z probe:"</span><span class="p">,</span> <span class="n">height</span><span class="p">)</span>
+
+<span class="k">try</span><span class="p">:</span>
+  <span class="n">surface</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">clld_probe_y_position_using_channel</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">"forward"</span><span class="p">,</span> <span class="n">end_pos_search</span><span class="o">=</span><span class="mf">60.0</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"Y probe: surface at"</span><span class="p">,</span> <span class="n">surface</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"Y probe:"</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Z probe: None
+Y probe: channel 1 detected nothing between y=352.50 and y=60.00 mm
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="plate-movement-with-core-grippers-deck-4-to-deck-2">
+<h2>9. Plate movement with CoRe grippers (deck[4] to deck[2])<a class="headerlink" href="#plate-movement-with-core-grippers-deck-4-to-deck-2" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">drop_resource</span></code> reassigns the plate in the resource tree. On a device, check the gripper mount position first: the deck’s default is not yet measured.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">arm</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">pick_up_core_grippers</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">arm</span><span class="o">.</span><span class="n">pick_up_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">arm</span><span class="o">.</span><span class="n">drop_resource</span><span class="p">(</span><span class="n">deck</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">return_core_grippers</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"plate is now on"</span><span class="p">,</span> <span class="n">plate</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>plate is now on spot_0_2
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="deck-light-a-declared-configuration-and-putting-it-down">
+<h2>10. Deck light, a declared configuration, and putting it down<a class="headerlink" href="#deck-light-a-declared-configuration-and-putting-it-down" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">before</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_deck_light</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">set_deck_light</span><span class="p">(</span><span class="n">white</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">red</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">green</span><span class="o">=</span><span class="mi">255</span><span class="p">,</span> <span class="n">blue</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">set_deck_light</span><span class="p">(</span><span class="o">*</span><span class="n">before</span><span class="p">)</span>
+
+<span class="c1"># A simulated Prep answering as the saved configuration says.</span>
+<span class="n">declared</span> <span class="o">=</span> <span class="n">Prep</span><span class="p">(</span><span class="n">simulation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">declared_configuration_json</span><span class="o">=</span><span class="n">configuration_path</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">declared</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"declared:"</span><span class="p">,</span> <span class="n">declared</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">serial_number</span><span class="p">,</span> <span class="n">declared</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">num_channels</span><span class="p">,</span> <span class="s2">"channels"</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">declared</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>declared: PRPAA1087 2 channels
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">park</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>  <span class="c1"># raises the channels to Z safety, then closes the link</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../../hamilton/prep/index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Prep</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../../high_res/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">HighRes</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#imports-and-config">1. Imports and config</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deck-and-device">2. Deck and device</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-device-reports">3. What the device reports</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#moving">4. Moving</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#teaching-needle">5. Teaching needle</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tip-pickup-aspirate-dispense-dual-channel">6. Tip pickup, aspirate, dispense (dual channel)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-8-channel-head">7. The 8-channel head</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#probing-with-capacitive-lld">8. Probing with capacitive LLD</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-movement-with-core-grippers-deck-4-to-deck-2">9. Plate movement with CoRe grippers (deck[4] to deck[2])</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deck-light-a-declared-configuration-and-putting-it-down">10. Deck light, a declared configuration, and putting it down</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/00_liquid-handling/hamilton-prep/prep_basic_demo.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../../_sources/user_guide/00_liquid-handling/hamilton-prep/prep_basic_demo.ipynb.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.21.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationProtocol.duration\_us
+=====================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoattribute:: ElectroporationProtocol.duration_us

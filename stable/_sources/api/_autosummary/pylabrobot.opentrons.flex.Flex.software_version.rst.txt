@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.software\_version
+================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. autoproperty:: Flex.software_version

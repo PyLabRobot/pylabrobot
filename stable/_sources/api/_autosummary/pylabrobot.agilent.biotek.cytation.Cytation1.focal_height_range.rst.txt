@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.cytation.Cytation1.focal\_height\_range
+=================================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.cytation
+
+.. autoproperty:: Cytation1.focal_height_range

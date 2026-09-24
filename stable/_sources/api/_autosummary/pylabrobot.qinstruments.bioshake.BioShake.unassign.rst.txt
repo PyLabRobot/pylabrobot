@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.unassign
+==================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.unassign

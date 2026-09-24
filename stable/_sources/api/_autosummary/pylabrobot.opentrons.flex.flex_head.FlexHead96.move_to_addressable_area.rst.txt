@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead96.move\_to\_addressable\_area
+===========================================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead96.move_to_addressable_area

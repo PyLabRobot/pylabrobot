@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.labware\_moved\_off\_deck
+========================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. automethod:: Flex.labware_moved_off_deck

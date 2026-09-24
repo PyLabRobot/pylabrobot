@@ -1,0 +1,6 @@
+pylabrobot.resources.TubeRack.row\_containers
+=============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: TubeRack.row_containers

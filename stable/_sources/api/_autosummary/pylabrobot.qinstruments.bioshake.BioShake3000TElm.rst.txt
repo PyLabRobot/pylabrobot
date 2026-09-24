@@ -1,0 +1,6 @@
+﻿pylabrobot.qinstruments.bioshake.BioShake3000TElm
+=================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. autofunction:: BioShake3000TElm

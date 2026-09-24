@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCelLabwareSettings.lidded\_plate\_gripper\_position
+====================================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoattribute:: BenchCelLabwareSettings.lidded_plate_gripper_position

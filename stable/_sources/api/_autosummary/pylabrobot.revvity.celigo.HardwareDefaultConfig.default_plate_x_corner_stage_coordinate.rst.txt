@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.HardwareDefaultConfig.default\_plate\_x\_corner\_stage\_coordinate
+============================================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: HardwareDefaultConfig.default_plate_x_corner_stage_coordinate

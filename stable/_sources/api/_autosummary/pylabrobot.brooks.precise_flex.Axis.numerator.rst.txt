@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.Axis.numerator
+==============================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: Axis.numerator

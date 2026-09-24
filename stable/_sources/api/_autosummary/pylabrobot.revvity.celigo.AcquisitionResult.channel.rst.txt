@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AcquisitionResult.channel
+===================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AcquisitionResult.channel

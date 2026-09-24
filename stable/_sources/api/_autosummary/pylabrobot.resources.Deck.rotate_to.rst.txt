@@ -1,0 +1,6 @@
+pylabrobot.resources.Deck.rotate\_to
+====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Deck.rotate_to

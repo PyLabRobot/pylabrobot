@@ -1,0 +1,6 @@
+pylabrobot.cole\_parmer.genogrinder.GenoGrinder.\_\_init\_\_
+============================================================
+
+.. currentmodule:: pylabrobot.cole_parmer.genogrinder
+
+.. automethod:: GenoGrinder.__init__

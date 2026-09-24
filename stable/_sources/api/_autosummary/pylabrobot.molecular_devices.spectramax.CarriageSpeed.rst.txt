@@ -1,0 +1,6 @@
+﻿pylabrobot.molecular\_devices.spectramax.CarriageSpeed
+======================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autodata:: CarriageSpeed

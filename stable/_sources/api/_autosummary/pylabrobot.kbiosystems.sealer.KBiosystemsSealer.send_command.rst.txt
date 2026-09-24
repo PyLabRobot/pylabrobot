@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.sealer.KBiosystemsSealer.send\_command
+=============================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. automethod:: KBiosystemsSealer.send_command

@@ -1,0 +1,6 @@
+pylabrobot.hamilton.transport.tcp.Address
+=========================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.tcp
+
+.. autoclass:: Address

@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.unassign\_child\_resource
+=======================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: LinkBody.unassign_child_resource

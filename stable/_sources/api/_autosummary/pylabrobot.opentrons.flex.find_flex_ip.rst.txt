@@ -1,0 +1,6 @@
+﻿pylabrobot.opentrons.flex.find\_flex\_ip
+========================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. autofunction:: find_flex_ip

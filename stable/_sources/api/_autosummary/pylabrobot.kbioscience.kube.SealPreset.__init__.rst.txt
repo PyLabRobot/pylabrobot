@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.SealPreset.\_\_init\_\_
+===================================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. automethod:: SealPreset.__init__

@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectrumSettings.start\_wavelength
+===========================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoattribute:: SpectrumSettings.start_wavelength

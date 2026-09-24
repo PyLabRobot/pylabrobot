@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2\_8ChannelPipette.tips
+==============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2_8ChannelPipette.tips

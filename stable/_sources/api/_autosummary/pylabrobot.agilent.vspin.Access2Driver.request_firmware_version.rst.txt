@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2Driver.request\_firmware\_version
+=================================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2Driver.request_firmware_version

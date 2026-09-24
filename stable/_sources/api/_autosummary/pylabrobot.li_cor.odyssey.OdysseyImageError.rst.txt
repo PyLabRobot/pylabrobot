@@ -1,0 +1,6 @@
+﻿pylabrobot.li\_cor.odyssey.OdysseyImageError
+============================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. autoexception:: OdysseyImageError

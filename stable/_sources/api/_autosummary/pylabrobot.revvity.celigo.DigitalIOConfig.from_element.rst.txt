@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.DigitalIOConfig.from\_element
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: DigitalIOConfig.from_element

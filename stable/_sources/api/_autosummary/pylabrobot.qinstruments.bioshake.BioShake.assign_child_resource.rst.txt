@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.assign\_child\_resource
+=================================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.assign_child_resource

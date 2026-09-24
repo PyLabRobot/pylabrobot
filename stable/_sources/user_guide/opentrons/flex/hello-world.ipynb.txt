@@ -1,0 +1,676 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "6ca62154",
+   "metadata": {},
+   "source": [
+    "# Opentrons Flex\n",
+    "\n",
+    "```{device-card} opentrons-flex\n",
+    "```\n",
+    "\n",
+    "This guide covers discovery, connection, deck setup, full-column and single-nozzle\n",
+    "pipetting, partial-column tip pickup, tip and volume tracking, liquid-handling\n",
+    "parameters, optional gripper moves, and shutdown. The runnable examples use an\n",
+    "**8-channel Flex pipette** and a 50 µL tip rack. See the final section for other\n",
+    "heads and lower-level operations.\n",
+    "\n",
+    "| Property | Value |\n",
+    "|---|---|\n",
+    "| Connection | Robot-server HTTP API on port `31950` |\n",
+    "| Discovery | Local-network mDNS with `find_flex_ip()` |\n",
+    "| Device | `Flex`; pipettes at `flex.left_pipette`, `flex.right_pipette`, or `flex.head96` |\n",
+    "| Units | µL for volume, µL/s for flow, mm for positions and offsets |\n",
+    "| Deck in this guide | Tips D1, plate B1, trash A3; B2 reserved for optional gripper moves |\n",
+    "\n",
+    "```{warning}\n",
+    "These cells control real hardware. Setup homes the robot; pipetting, gripper,\n",
+    "and shutdown cells move it. Run deliberately, keep the deck clear of hands,\n",
+    "close the enclosure, and keep the emergency stop accessible.\n",
+    "\n",
+    "Hardware verification is operation-specific. The driver records prior checks for\n",
+    "some 8-channel and gripper operations, while other operations and the 1-channel\n",
+    "and 96-channel heads remain unverified. This guide does not establish hardware\n",
+    "validation for your pipette, labware, calibration, or software version. Partial\n",
+    "pickup below is an optional bench-validation example.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9993263d",
+   "metadata": {},
+   "source": [
+    "## Install and import\n",
+    "\n",
+    "Install `pip install 'pylabrobot[opentrons]'` in the notebook's Python environment.\n",
+    "Connect the computer and robot to the same local network. Discovery reads live\n",
+    "advertisements; it does not depend on the Opentrons app's cached robot list.\n",
+    "\n",
+    "The driver sends commands to the robot's HTTP API. The deck describes physical\n",
+    "labware locations; pipetting methods belong to a mounted head. The resource\n",
+    "plate geometry below comes from PLR. Aspiration and dispensing move to PLR\n",
+    "coordinates, then operate in place; the robot does not resolve the plate geometry.\n",
+    "Use the resource definition matching your physical plate, including its cavity floor."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "cf94f210",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.opentrons import Flex, FlexHead8, find_flex_ip\n",
+    "from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking, set_volume_tracking\n",
+    "from pylabrobot.resources.opentrons import (\n",
+    "  FlexDeck,\n",
+    "  flex_96_filtertiprack_50ul,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c261a0f3",
+   "metadata": {},
+   "source": [
+    "## Prepare the physical deck\n",
+    "\n",
+    "Start with no tips mounted. Load a fresh **Flex 50 µL tip rack in D1** and a\n",
+    "**Corning 96-well 360 µL flat-bottom plate in B1**. Add **100 µL of water to each\n",
+    "well A1–H1**. Confirm the pipette supports these tips and the example volumes.\n",
+    "Leave **A1 and C1 empty** so inactive nozzles have clearance; keep other labware\n",
+    "out of rows A and C except the configured trash in A3. Leave **B2 empty** for the\n",
+    "optional plate move.\n",
+    "\n",
+    "For a single or partial pickup, all eight nozzles descend even though only some\n",
+    "receive tips. With the front H1 nozzle selected, unused nozzles extend behind\n",
+    "the target. This is why these examples use deck rows B and D.\n",
+    "\n",
+    "| Nozzle selection | Channels | Adjacent clearance |\n",
+    "|---|---|---|\n",
+    "| Full column | 0–7 (A1–H1 nozzles) | All eight tips and wells must align |\n",
+    "| Front single nozzle H1 | `[7]` | Rear of target clear; use rows B/D |\n",
+    "| Rear single nozzle A1 | `[0]` | Front of target clear; use rows A/C instead |\n",
+    "| Front four nozzles E1–H1 | `[4, 5, 6, 7]` | Rear of target clear; use rows B/D |\n",
+    "\n",
+    "Channel numbers identify **pipette nozzles**, not tip-rack rows or plate wells.\n",
+    "The notebook uses rack column 1 for eight tips, A2 for one tip, and A4–D4 for\n",
+    "four tips. Run each pickup once per fresh rack. Do not rerun setup to make used\n",
+    "tips appear available in software."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "671298a2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "deck = FlexDeck()\n",
+    "tip_rack = flex_96_filtertiprack_50ul(name=\"tips_01\")\n",
+    "plate = cor_96_wellplate_360uL_Fb(name=\"plate_01\")\n",
+    "deck.assign_child_at_slot(tip_rack, \"D1\")\n",
+    "deck.assign_child_at_slot(plate, \"B1\")\n",
+    "trash = deck.get_trash_area()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f61b0a81",
+   "metadata": {},
+   "source": [
+    "## Track tips and liquid\n",
+    "\n",
+    "Enable tracking so missing tips and insufficient liquid can be rejected before\n",
+    "a command is sent. Initialize volumes to the **actual** water you added.\n",
+    "These trackers describe expected state; they do not measure the deck or liquid.\n",
+    "The examples return each aspirated volume to its source well.\n",
+    "\n",
+    "Pickup, tip drop, and well/container aspirate/dispense operations finish by lifting\n",
+    "vertically to at least `flex.traversal_height`. Model every deck obstacle so taller\n",
+    "labware raises this clearance. In-place operations and explicit positioning keep\n",
+    "their requested position; position above the intended well before an in-place blowout."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "99412a49",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "set_tip_tracking(True)\n",
+    "set_volume_tracking(True)\n",
+    "for well in plate.column(0):\n",
+    "  well.tracker.set_volume(100)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7da8f5d9",
+   "metadata": {},
+   "source": [
+    "## Discover and connect without motion\n",
+    "\n",
+    "`find_flex_ip()` returns the sole Flex address advertised on the local network.\n",
+    "If more than one is present, use `find_flex_ip(name=\"My Flex\")` with the exact\n",
+    "advertised robot name. It raises an error for missing or ambiguous results.\n",
+    "You can also pass a known IP address directly as `host`.\n",
+    "\n",
+    "`connect()` reads robot health without creating a run or homing. Check the\n",
+    "reported robot before continuing. `setup()` in the next section takes control\n",
+    "of the robot and homes it."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d8c917fa",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "flex = Flex(host=find_flex_ip(), deck=deck)\n",
+    "await flex.connect()\n",
+    "print(\"host:\", flex.host)\n",
+    "print(\"software version:\", flex.software_version)\n",
+    "print(\"robot model:\", flex.robot_model)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "33ae7862",
+   "metadata": {},
+   "source": [
+    "## Set up and select the head\n",
+    "\n",
+    "After checking the physical deck, run `setup()`. It checks the connection,\n",
+    "creates a control run, **homes all axes**, and loads the mounted instruments.\n",
+    "The robot's touchscreen is occupied while the run is active.\n",
+    "\n",
+    "Set `MOUNT` to the mount carrying your 8-channel pipette. `flex.head96` is used\n",
+    "instead for a 96-channel head; those examples are not interchangeable with this\n",
+    "8-channel protocol. A standalone `await flex.home()` can home again when needed;\n",
+    "there is no need to repeat it immediately after setup."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e436da0d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await flex.setup()\n",
+    "MOUNT = \"left\"  # Change to \"right\" if that is where your 8-channel pipette is mounted.\n",
+    "head = {\"left\": flex.left_pipette, \"right\": flex.right_pipette}[MOUNT]\n",
+    "assert isinstance(head, FlexHead8), f\"Expected an 8-channel head on {MOUNT}, got {head}\"\n",
+    "print(\"mounted tips:\", head.get_mounted_tips())\n",
+    "print(\"gripper:\", flex.gripper)\n",
+    "print(\"traversal height:\", flex.traversal_height)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "eea83f98",
+   "metadata": {},
+   "source": [
+    "## Full column: pick up eight tips\n",
+    "\n",
+    "`column(0)` means the first column, A1–H1. Pass the tip spots directly to\n",
+    "`pick_up_tips()`. With no `use_channels` argument, a full column uses all eight\n",
+    "nozzles. Labware is loaded into the robot's run as needed."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8bb154f8",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.pick_up_tips(tip_rack.column(0))\n",
+    "print(\"mounted tips:\", head.get_mounted_tips())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e94fa870",
+   "metadata": {},
+   "source": [
+    "### Check tip presence\n",
+    "\n",
+    "Pickup checks the pipette's hardware tip sensor before committing PLR's tip\n",
+    "state. `has_tip_on_hardware()` returns a pipette-level reading (`True`, `False`,\n",
+    "or `None` when unavailable), **not eight independent nozzle readings**.\n",
+    "`get_mounted_tips()` is the per-channel software state; a positive sensor reading\n",
+    "cannot prove that every nozzle seated a tip."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2a69132a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(\"hardware tip presence:\", await head.has_tip_on_hardware())\n",
+    "print(\n",
+    "  \"channels with tips:\", [i for i, tip in enumerate(head.get_mounted_tips()) if tip is not None]\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c7a09910",
+   "metadata": {},
+   "source": [
+    "### Aspirate a full column\n",
+    "\n",
+    "Volumes are **per active nozzle**: 20 µL here means 160 µL across eight wells.\n",
+    "`plate.column(0)` supplies the well list. The explicit `flow_rate=10` is in µL/s.\n",
+    "`liquid_height=1` places the nominal pipetting point 1 mm above the well bottom;\n",
+    "choose a height that is submerged and clear of the bottom for your real labware.\n",
+    "An optional `offset=Coordinate(x=0, y=0, z=...)` adjusts that point in mm\n",
+    "(import `Coordinate` from `pylabrobot.resources`).\n",
+    "\n",
+    "When `flow_rate` is omitted, the driver looks up defaults for the discovered\n",
+    "pipette model and mounted tip capacity. `head.default_flow_rates()` reports\n",
+    "them after pickup; an unsupported model raises instead of guessing."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "bed66a75",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(\"default flow rates:\", head.default_flow_rates())\n",
+    "await head.aspirate(plate.column(0), volume=20, flow_rate=10, liquid_height=1)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "852f3b5f",
+   "metadata": {},
+   "source": [
+    "### Dispense back into the source column\n",
+    "\n",
+    "Return 20 µL per nozzle to A1–H1. `use_channels` on a liquid operation must match\n",
+    "all mounted channels; it cannot turn off some nozzles after a full-column pickup.\n",
+    "Omitting it uses the mounted channels."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "3530e9e2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.dispense(plate.column(0), volume=20, flow_rate=10, liquid_height=1)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2d991499",
+   "metadata": {},
+   "source": [
+    "### Optional: touch the well walls\n",
+    "\n",
+    "With the full column still mounted, `touch_tip()` touches the well walls using\n",
+    "the labware geometry. The 8-channel method takes the plate and a column index;\n",
+    "`radius` is a fraction of the well radius, not a distance in mm. Skip this cell\n",
+    "unless the well geometry and clearance are appropriate for your tips."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "3268cd0c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.touch_tip(plate, column=0, radius=0.8)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b87955b5",
+   "metadata": {},
+   "source": [
+    "### Optional: probe for liquid\n",
+    "\n",
+    "With the full column mounted, `try_liquid_probe()` reports the detected liquid\n",
+    "Z position in mm, or `None` when none is detected. `liquid_probe()` instead raises\n",
+    "when no liquid is found. This is an active probe motion, not a cached volume\n",
+    "reading. The reported Z position is not automatically a well-relative\n",
+    "`liquid_height`; do not substitute it directly into aspiration parameters."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "4902d59b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "liquid_z = await head.try_liquid_probe(plate, column=0)\n",
+    "print(\"detected liquid Z:\", liquid_z)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d857a538",
+   "metadata": {},
+   "source": [
+    "### Discard the full column\n",
+    "\n",
+    "Discard into the trash configured by `FlexDeck` at A3. The hardware sensor is\n",
+    "checked after dropping; investigate a warning about a retained tip before\n",
+    "continuing. For a full column that should be returned to its original empty\n",
+    "rack column, `await head.drop_tips(tip_rack, column=0)` is an alternative to\n",
+    "this discard cell. Do not run both alternatives for the same mounted tips."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9801db4d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.discard_tips(trash)\n",
+    "print(\"after drop:\", await head.has_tip_on_hardware())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "04b93e31",
+   "metadata": {},
+   "source": [
+    "## Single nozzle: pick up one tip on H1\n",
+    "\n",
+    "Channel **7** is the front **H1 nozzle**. Picking tip-rack **A2** places that tip\n",
+    "on H1; the tip's well name does not select the nozzle. The other seven nozzles\n",
+    "overhang behind row A of the rack, into the clear space behind D1.\n",
+    "\n",
+    "Only channels 0 (A1 nozzle) and 7 (H1 nozzle) can anchor a single-tip layout.\n",
+    "The nozzle layout is chosen at pickup and stays fixed until tips are discarded."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2ff7c0fb",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.pick_up_tips(tip_rack.get_item(\"A2\"), use_channels=[7])\n",
+    "print(\"mounted tips:\", head.get_mounted_tips())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "1a81e740",
+   "metadata": {},
+   "source": [
+    "### Aspirate from one well\n",
+    "\n",
+    "Use a single `Well` target with the single tip. The plate is in B1 and A1 is\n",
+    "empty, providing clearance behind the target for the inactive nozzles."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "4edab9ab",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.aspirate(\n",
+    "  plate.get_item(\"A1\"), volume=20, use_channels=[7], flow_rate=10, liquid_height=1\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "5e86ef09",
+   "metadata": {},
+   "source": [
+    "### Dispense into one well\n",
+    "\n",
+    "Return the liquid to A1. The explicit channel list is optional when it matches\n",
+    "the mounted tip; the driver also infers it from the pickup."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c9d0d0c6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.dispense(\n",
+    "  plate.get_item(\"A1\"), volume=20, use_channels=[7], flow_rate=10, liquid_height=1\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b0d4eb28",
+   "metadata": {},
+   "source": [
+    "### Discard the single tip\n",
+    "\n",
+    "`discard_tips(trash)` works for the single-nozzle layout too. It drops the tip\n",
+    "before restoring the full layout. The driver does not support returning this\n",
+    "single tip with the full-column rack-drop method."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2d5379bc",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.discard_tips(trash)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7380b3da",
+   "metadata": {},
+   "source": [
+    "## Optional: pick up a partial column\n",
+    "\n",
+    "This example picks **A4–D4** onto the front four nozzles **E1–H1**, channels\n",
+    "`[4, 5, 6, 7]`. A partial selection must be contiguous and include one end of\n",
+    "the head. Here H1 is positioned over D4; the unused rear nozzles remain behind\n",
+    "row A of the rack. Keep C1 clear.\n",
+    "\n",
+    "Do **not** substitute `column(3)[4:8]` on a full rack: that would leave unused\n",
+    "nozzles above tips in A4–D4. Treat this as a bench-validation step; confirm the\n",
+    "physical alignment and watch the pickup.\n",
+    "\n",
+    "This section demonstrates **pickup and discard only**. The current well-list\n",
+    "aspirate/dispense path requests the full nozzle layout, so partial-column\n",
+    "pipetting is not demonstrated or promised by this guide."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "08f9f8f4",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.pick_up_tips(tip_rack.column(3)[:4], use_channels=[4, 5, 6, 7])\n",
+    "print(\n",
+    "  \"channels with tips:\", [i for i, tip in enumerate(head.get_mounted_tips()) if tip is not None]\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0283331d",
+   "metadata": {},
+   "source": [
+    "### Discard the partial column\n",
+    "\n",
+    "Discard all four mounted tips before continuing or switching layouts."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e99272e9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await head.discard_tips(trash)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2c608748",
+   "metadata": {},
+   "source": [
+    "## Optional: move a plate with the gripper\n",
+    "\n",
+    "Skip these cells if no gripper is installed. Finish pipetting and discard all\n",
+    "tips first. Confirm the plate is suitable for gripping, its definition and\n",
+    "calibration match the physical plate, and B2 and the travel path are clear.\n",
+    "`move_labware()` performs pickup, travel, and placement, and updates PLR's deck\n",
+    "location after success. The gripper cannot rotate labware.\n",
+    "\n",
+    "Keep the plate in the same orientation. Do not change its PLR slot manually\n",
+    "before asking the gripper to move it."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e3fc9b4c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "if flex.gripper is not None:\n",
+    "  await flex.gripper.move_labware(plate, to_slot=\"B2\")\n",
+    "  print(\"plate slot:\", deck.get_slot(plate))\n",
+    "else:\n",
+    "  print(\"No gripper installed; skipping plate move.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0cc259c8",
+   "metadata": {},
+   "source": [
+    "### Return the plate to B1\n",
+    "\n",
+    "Confirm B1 is still clear, then restore the example's deck layout."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "db6fa673",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "if flex.gripper is not None:\n",
+    "  await flex.gripper.move_labware(plate, to_slot=\"B1\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "19d7a8d1",
+   "metadata": {},
+   "source": [
+    "## Shutdown and release control\n",
+    "\n",
+    "After a successful run, `stop()` discards any tracked mounted tips, homes the\n",
+    "robot, cancels its run, and closes the connection. **It moves hardware.**\n",
+    "\n",
+    "If a failure leaves the physical state uncertain, inspect it before requesting\n",
+    "further motion. `await flex.disconnect()` cancels this object's run and closes\n",
+    "its connection without homing or dropping tips; it does not remove physical tips\n",
+    "or make a failed motion safe. A connection created only with `connect()` can\n",
+    "also be released this way. Keep the `flex` object until its run is released."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "20068ed9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await flex.stop()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "017ed8b7",
+   "metadata": {},
+   "source": [
+    "## Additional operations and troubleshooting\n",
+    "\n",
+    "The [Flex API reference](../../../api/pylabrobot.opentrons.rst) describes the full\n",
+    "method signatures. These operations require a protocol tailored to your deck:\n",
+    "\n",
+    "| Task | API and constraints |\n",
+    "|---|---|\n",
+    "| Reservoir pipetting | `head.aspirate(container, volume=...)` / `dispense(...)`; the single cavity must accommodate all active tips, and its volume tracker changes by volume × active channels. |\n",
+    "| In-place pipetting | `aspirate_in_place`, `dispense_in_place`, `air_gap_in_place`, and `blow_out` act at the current position. Position the head deliberately; they do not target a well for you. |\n",
+    "| Position and motion | `position`, `move_to`, `move_to_well`, `move_relative`, and `move_to_addressable_area`; follow the method's frame and clearance rules. |\n",
+    "| Pipette configuration | `configure_for_volume` and `prepare_to_aspirate`; support and hardware validation depend on the operation and robot software. |\n",
+    "| Robot controls | `set_rail_lights`, `set_status_bar`, `add_comment`, and `wait_for_duration`. Direct axis methods and `send_command` require explicit protocol knowledge. |\n",
+    "| Labware changes | `sync_tips_to_robot`, `labware_moved_off_deck`, and `reload_labware` keep the active run consistent after intentional resource changes. |\n",
+    "| Other heads | A `FlexHead1` uses individual tip spots and wells; `FlexHead96` uses rack/plate-wide operations. Check their signatures and verification status rather than reusing this 8-channel protocol. |\n",
+    "\n",
+    "- **No robot found:** check that the robot and computer share a network with\n",
+    "  mDNS multicast allowed. Try its known IP if discovery is blocked.\n",
+    "- **More than one robot found:** use `find_flex_ip(name=\"My Flex\")`.\n",
+    "- **Wrong or missing head:** check the selected mount and installed pipette.\n",
+    "- **Missing tips or insufficient liquid:** reconcile the real deck and PLR\n",
+    "  trackers. Do not disable tracking merely to retry a failed command.\n",
+    "- **Layout or clearance error:** discard mounted tips before changing nozzle\n",
+    "  layouts and check the empty adjacent slots and tip selection.\n",
+    "- **Unknown default flow rates:** choose explicit rates validated for the\n",
+    "  pipette, tip, and liquid instead of substituting a different model's defaults.\n",
+    "- **Robot remains in use:** release the run through the existing `flex` object;\n",
+    "  creating another Python object does not release the previous run.\n",
+    "\n",
+    "To repeat the full guide, restore the physical rack and water volumes, release\n",
+    "the previous run, and then rebuild the resources. Tracking state must match the\n",
+    "physical deck at the start of each pass."
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.\_\_init\_\_
+====================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.__init__

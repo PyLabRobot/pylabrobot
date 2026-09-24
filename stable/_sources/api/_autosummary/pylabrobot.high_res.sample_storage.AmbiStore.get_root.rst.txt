@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.get\_root
+========================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.get_root

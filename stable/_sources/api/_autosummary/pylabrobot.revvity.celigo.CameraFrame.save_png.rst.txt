@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CameraFrame.save\_png
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CameraFrame.save_png

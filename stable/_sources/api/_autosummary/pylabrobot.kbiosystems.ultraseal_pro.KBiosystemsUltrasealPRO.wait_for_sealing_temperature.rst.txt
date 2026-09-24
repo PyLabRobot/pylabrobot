@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_pro.KBiosystemsUltrasealPRO.wait\_for\_sealing\_temperature
+=============================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_pro
+
+.. automethod:: KBiosystemsUltrasealPRO.wait_for_sealing_temperature

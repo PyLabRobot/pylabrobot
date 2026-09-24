@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.GalvoAxisOpticalCalibration
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: GalvoAxisOpticalCalibration
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoAxisOpticalCalibration.magnifications
+      ~GalvoAxisOpticalCalibration.logical_filter_offsets
+      ~GalvoAxisOpticalCalibration.laser_center_voltage
+      ~GalvoAxisOpticalCalibration.uv_laser_center_voltage
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoAxisOpticalCalibration.__init__
+   
+   

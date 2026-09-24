@@ -1,0 +1,47 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.alps.alps300.ALPS300Status
+====================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps300
+
+.. autoclass:: ALPS300Status
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ALPS300Status.real
+      ~ALPS300Status.imag
+      ~ALPS300Status.numerator
+      ~ALPS300Status.denominator
+      ~ALPS300Status.Ready
+      ~ALPS300Status.Busy
+      ~ALPS300Status.Error
+      ~ALPS300Status.Sealing
+      ~ALPS300Status.NotAtSealTemperature
+      ~ALPS300Status.NotAssigned
+      ~ALPS300Status.FoilLow
+      ~ALPS300Status.DoorOpen
+      ~ALPS300Status.ProceedOverridden
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ALPS300Status.conjugate
+      ~ALPS300Status.bit_length
+      ~ALPS300Status.bit_count
+      ~ALPS300Status.as_integer_ratio
+      ~ALPS300Status.__init__
+   
+   

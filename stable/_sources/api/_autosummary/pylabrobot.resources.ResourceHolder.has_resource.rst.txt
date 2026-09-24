@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceHolder.has\_resource
+=================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceHolder.has_resource

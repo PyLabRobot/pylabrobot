@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.request\_analog\_input\_count
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.request_analog_input_count

@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.rotate\_to
+===================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.rotate_to

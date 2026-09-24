@@ -1,0 +1,50 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesSettings
+=================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoclass:: MolecularDevicesSettings
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MolecularDevicesSettings.cuvette
+      ~MolecularDevicesSettings.flashes_per_well
+      ~MolecularDevicesSettings.path_check
+      ~MolecularDevicesSettings.pmt_gain
+      ~MolecularDevicesSettings.read_from_bottom
+      ~MolecularDevicesSettings.settling_time
+      ~MolecularDevicesSettings.plate
+      ~MolecularDevicesSettings.read_mode
+      ~MolecularDevicesSettings.read_type
+      ~MolecularDevicesSettings.read_order
+      ~MolecularDevicesSettings.calibrate
+      ~MolecularDevicesSettings.shake_settings
+      ~MolecularDevicesSettings.carriage_speed
+      ~MolecularDevicesSettings.speed_read
+      ~MolecularDevicesSettings.kinetic_settings
+      ~MolecularDevicesSettings.spectrum_settings
+      ~MolecularDevicesSettings.wavelengths
+      ~MolecularDevicesSettings.excitation_wavelengths
+      ~MolecularDevicesSettings.emission_wavelengths
+      ~MolecularDevicesSettings.cutoff_filters
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MolecularDevicesSettings.__init__
+   
+   

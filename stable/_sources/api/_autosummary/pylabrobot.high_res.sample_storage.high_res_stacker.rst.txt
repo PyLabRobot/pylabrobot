@@ -1,0 +1,6 @@
+﻿pylabrobot.high\_res.sample\_storage.high\_res\_stacker
+=======================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autofunction:: high_res_stacker

@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.UltrasealEPROStatus.bit\_count
+=====================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. automethod:: UltrasealEPROStatus.bit_count

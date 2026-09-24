@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead96.configure\_for\_volume
+======================================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead96.configure_for_volume

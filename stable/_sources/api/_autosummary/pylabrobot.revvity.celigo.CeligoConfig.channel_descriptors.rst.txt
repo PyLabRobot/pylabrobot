@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoConfig.channel\_descriptors
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoConfig.channel_descriptors

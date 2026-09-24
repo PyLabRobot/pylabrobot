@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CoordinateSystems.stage\_mm\_to\_sample\_mm
+=====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CoordinateSystems.stage_mm_to_sample_mm

@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MettlerToledoResponse.command
+========================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. autoattribute:: MettlerToledoResponse.command

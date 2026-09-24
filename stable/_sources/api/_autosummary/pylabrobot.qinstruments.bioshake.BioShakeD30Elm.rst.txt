@@ -1,0 +1,6 @@
+﻿pylabrobot.qinstruments.bioshake.BioShakeD30Elm
+===============================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. autofunction:: BioShakeD30Elm

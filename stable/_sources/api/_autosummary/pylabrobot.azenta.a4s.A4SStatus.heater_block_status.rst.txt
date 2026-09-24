@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4SStatus.heater\_block\_status
+=====================================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. autoattribute:: A4SStatus.heater_block_status

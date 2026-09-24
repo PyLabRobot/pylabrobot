@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.IOConfig.\_\_init\_\_
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: IOConfig.__init__

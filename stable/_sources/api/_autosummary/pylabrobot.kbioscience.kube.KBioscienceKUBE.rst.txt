@@ -1,0 +1,42 @@
+﻿:orphan:
+
+
+pylabrobot.kbioscience.kube.KBioscienceKUBE
+===========================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. autoclass:: KBioscienceKUBE
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KBioscienceKUBE.__init__
+      ~KBioscienceKUBE.clear_error_window
+      ~KBioscienceKUBE.request_error_code
+      ~KBioscienceKUBE.request_firmware_version
+      ~KBioscienceKUBE.request_product_name
+      ~KBioscienceKUBE.request_sealing_temperature
+      ~KBioscienceKUBE.request_sealing_time
+      ~KBioscienceKUBE.request_status
+      ~KBioscienceKUBE.request_temperature
+      ~KBioscienceKUBE.seal
+      ~KBioscienceKUBE.send_command
+      ~KBioscienceKUBE.set_plate_orientation
+      ~KBioscienceKUBE.set_seal_preset
+      ~KBioscienceKUBE.set_sealing_time
+      ~KBioscienceKUBE.set_temperature
+      ~KBioscienceKUBE.setup
+      ~KBioscienceKUBE.stop
+      ~KBioscienceKUBE.wait_for_idle
+      ~KBioscienceKUBE.wait_for_sealing_temperature
+   
+   

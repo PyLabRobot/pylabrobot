@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.stop\_run
+===========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.stop_run

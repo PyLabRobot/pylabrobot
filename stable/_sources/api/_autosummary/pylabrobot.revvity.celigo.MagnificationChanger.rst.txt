@@ -1,0 +1,42 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.MagnificationChanger
+==============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: MagnificationChanger
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MagnificationChanger.axis_index
+      ~MagnificationChanger.has_position_reference
+      ~MagnificationChanger.is_initialized
+      ~MagnificationChanger.config
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MagnificationChanger.__init__
+      ~MagnificationChanger.home
+      ~MagnificationChanger.move_to
+      ~MagnificationChanger.move_to_ticks
+      ~MagnificationChanger.request_encoder_ratio
+      ~MagnificationChanger.request_encoder_ticks
+      ~MagnificationChanger.request_is_negative_limit_active
+      ~MagnificationChanger.request_is_positive_limit_active
+      ~MagnificationChanger.request_limit_flags
+   
+   

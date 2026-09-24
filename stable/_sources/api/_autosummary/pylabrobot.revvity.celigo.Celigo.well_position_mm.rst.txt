@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.well\_position\_mm
+===================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.well_position_mm

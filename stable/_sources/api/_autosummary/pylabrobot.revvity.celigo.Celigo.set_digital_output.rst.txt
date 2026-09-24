@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.set\_digital\_output
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.set_digital_output

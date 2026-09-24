@@ -1,0 +1,6 @@
+﻿pylabrobot.azenta.fluidx.intellixcap96.is\_recoverable\_error
+=============================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autofunction:: is_recoverable_error

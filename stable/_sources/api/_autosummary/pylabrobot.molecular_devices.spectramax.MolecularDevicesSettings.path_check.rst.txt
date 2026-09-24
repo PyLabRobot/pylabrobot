@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesSettings.path\_check
+=============================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoattribute:: MolecularDevicesSettings.path_check

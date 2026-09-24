@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.z\_plane\_y\_coeff
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.z_plane_y_coeff

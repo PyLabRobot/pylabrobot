@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead96.pick\_up\_tips
+==============================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead96.pick_up_tips

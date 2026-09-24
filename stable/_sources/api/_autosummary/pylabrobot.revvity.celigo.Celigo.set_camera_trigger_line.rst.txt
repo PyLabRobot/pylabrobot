@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.set\_camera\_trigger\_line
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.set_camera_trigger_line

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.microns\_per\_pixel\_y
+==================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.microns_per_pixel_y

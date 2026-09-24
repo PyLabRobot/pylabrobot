@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.WorkEnvelope.zmin
+=================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: WorkEnvelope.zmin

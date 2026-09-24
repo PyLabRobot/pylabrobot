@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoHardwareConfig.dichroic\_filter\_wheel
+======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoHardwareConfig.dichroic_filter_wheel

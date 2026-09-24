@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.UltrasealEPROStatus.conjugate
+====================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. automethod:: UltrasealEPROStatus.conjugate

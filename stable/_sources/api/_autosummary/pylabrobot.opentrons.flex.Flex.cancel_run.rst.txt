@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.cancel\_run
+==========================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. automethod:: Flex.cancel_run

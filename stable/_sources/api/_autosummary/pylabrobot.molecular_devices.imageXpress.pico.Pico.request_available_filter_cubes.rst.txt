@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.Pico.request\_available\_filter\_cubes
+=====================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico
+
+.. automethod:: Pico.request_available_filter_cubes

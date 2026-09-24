@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.FluidXIntelliXcap96.initialize\_keeping\_caps\_on\_pins
+==============================================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. automethod:: FluidXIntelliXcap96.initialize_keeping_caps_on_pins

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AxisConfig.homing\_short\_move
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AxisConfig.homing_short_move

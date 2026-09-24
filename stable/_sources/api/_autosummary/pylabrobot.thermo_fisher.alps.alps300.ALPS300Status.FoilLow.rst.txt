@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps300.ALPS300Status.FoilLow
+============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps300
+
+.. autoattribute:: ALPS300Status.FoilLow

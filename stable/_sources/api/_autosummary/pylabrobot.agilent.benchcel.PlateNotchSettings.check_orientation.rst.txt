@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.PlateNotchSettings.check\_orientation
+=================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoattribute:: PlateNotchSettings.check_orientation

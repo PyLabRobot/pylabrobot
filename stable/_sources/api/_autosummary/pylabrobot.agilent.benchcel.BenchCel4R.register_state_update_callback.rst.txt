@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.register\_state\_update\_callback
+========================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.register_state_update_callback

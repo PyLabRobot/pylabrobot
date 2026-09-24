@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.Galvo
+===============================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: Galvo
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Galvo.__init__
+      ~Galvo.calibrate
+      ~Galvo.home
+      ~Galvo.move_both
+      ~Galvo.move_single
+      ~Galvo.request_calibration_errors
+      ~Galvo.request_controller_status
+      ~Galvo.request_position_trace_dac_counts
+      ~Galvo.voltages_for_offset
+   
+   

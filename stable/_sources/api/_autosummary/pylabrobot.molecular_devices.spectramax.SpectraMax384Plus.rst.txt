@@ -1,0 +1,48 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.spectramax.SpectraMax384Plus
+==========================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoclass:: SpectraMax384Plus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SpectraMax384Plus.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SpectraMax384Plus.__init__
+      ~SpectraMax384Plus.clear_error_log
+      ~SpectraMax384Plus.close
+      ~SpectraMax384Plus.deactivate
+      ~SpectraMax384Plus.open
+      ~SpectraMax384Plus.read_absorbance
+      ~SpectraMax384Plus.read_error_log
+      ~SpectraMax384Plus.request_current_temperature
+      ~SpectraMax384Plus.request_firmware_version
+      ~SpectraMax384Plus.request_status
+      ~SpectraMax384Plus.request_temperature
+      ~SpectraMax384Plus.send_command
+      ~SpectraMax384Plus.set_temperature
+      ~SpectraMax384Plus.setup
+      ~SpectraMax384Plus.start_shake
+      ~SpectraMax384Plus.stop
+      ~SpectraMax384Plus.stop_shake
+      ~SpectraMax384Plus.wait_for_idle
+   
+   

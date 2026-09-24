@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ControllerInfo.\_\_init\_\_
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: ControllerInfo.__init__

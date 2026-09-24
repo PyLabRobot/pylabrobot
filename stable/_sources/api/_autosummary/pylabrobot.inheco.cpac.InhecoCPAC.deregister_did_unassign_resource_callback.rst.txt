@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.deregister\_did\_unassign\_resource\_callback
+===============================================================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.deregister_did_unassign_resource_callback

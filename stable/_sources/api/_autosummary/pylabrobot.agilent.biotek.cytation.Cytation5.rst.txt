@@ -1,0 +1,59 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.cytation.Cytation5
+============================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.cytation
+
+.. autoclass:: Cytation5
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Cytation5.abs_wavelength_range
+      ~Cytation5.emission_range
+      ~Cytation5.excitation_range
+      ~Cytation5.focal_height_range
+      ~Cytation5.supports_active_cooling
+      ~Cytation5.supports_cooling
+      ~Cytation5.supports_heating
+      ~Cytation5.temperature_range
+      ~Cytation5.version
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Cytation5.__init__
+      ~Cytation5.clear_plate
+      ~Cytation5.close
+      ~Cytation5.deactivate
+      ~Cytation5.home
+      ~Cytation5.open
+      ~Cytation5.read_absorbance
+      ~Cytation5.read_fluorescence
+      ~Cytation5.read_luminescence
+      ~Cytation5.request_current_temperature
+      ~Cytation5.request_firmware_version
+      ~Cytation5.request_serial_number
+      ~Cytation5.send_command
+      ~Cytation5.set_plate
+      ~Cytation5.set_slow_mode
+      ~Cytation5.set_temperature
+      ~Cytation5.setup
+      ~Cytation5.shake
+      ~Cytation5.stop
+      ~Cytation5.stop_heating_or_cooling
+      ~Cytation5.stop_shaking
+   
+   

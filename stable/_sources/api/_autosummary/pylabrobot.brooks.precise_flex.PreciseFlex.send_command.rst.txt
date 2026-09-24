@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.send\_command
+=========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.send_command

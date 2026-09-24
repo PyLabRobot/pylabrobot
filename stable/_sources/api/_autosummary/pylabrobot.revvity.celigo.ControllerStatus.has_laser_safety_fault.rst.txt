@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ControllerStatus.has\_laser\_safety\_fault
+====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: ControllerStatus.has_laser_safety_fault

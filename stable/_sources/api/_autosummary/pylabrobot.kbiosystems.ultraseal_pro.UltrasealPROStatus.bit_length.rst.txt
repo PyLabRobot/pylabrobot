@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_pro.UltrasealPROStatus.bit\_length
+====================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_pro
+
+.. automethod:: UltrasealPROStatus.bit_length

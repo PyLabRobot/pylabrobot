@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.move\_to\_well
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.move_to_well

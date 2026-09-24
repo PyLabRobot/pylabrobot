@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead1.drop\_tips
+=========================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead1.drop_tips

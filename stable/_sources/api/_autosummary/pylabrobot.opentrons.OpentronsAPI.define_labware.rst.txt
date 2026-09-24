@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.define\_labware
+=================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.define_labware

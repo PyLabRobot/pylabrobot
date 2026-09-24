@@ -1,0 +1,6 @@
+pylabrobot.byonoy.absorbance\_96.AbsorbanceResult.temperature
+=============================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autoattribute:: AbsorbanceResult.temperature

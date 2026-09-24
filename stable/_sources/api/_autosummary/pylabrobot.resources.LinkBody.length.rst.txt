@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.length
+====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: LinkBody.length

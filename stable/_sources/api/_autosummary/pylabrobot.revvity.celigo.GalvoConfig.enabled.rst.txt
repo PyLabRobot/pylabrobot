@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoConfig.enabled
+=============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoConfig.enabled

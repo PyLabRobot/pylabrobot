@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateCarrier.find\_resource
+================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateCarrier.find_resource

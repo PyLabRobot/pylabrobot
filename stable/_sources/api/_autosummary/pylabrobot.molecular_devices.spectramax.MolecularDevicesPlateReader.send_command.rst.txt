@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesPlateReader.send\_command
+==================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: MolecularDevicesPlateReader.send_command

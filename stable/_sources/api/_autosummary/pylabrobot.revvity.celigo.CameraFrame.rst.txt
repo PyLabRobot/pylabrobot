@@ -1,0 +1,45 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.CameraFrame
+=====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: CameraFrame
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CameraFrame.pixel_count
+      ~CameraFrame.data
+      ~CameraFrame.width
+      ~CameraFrame.height
+      ~CameraFrame.bit_depth
+      ~CameraFrame.exposure_ms
+      ~CameraFrame.gain
+      ~CameraFrame.captured_at
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CameraFrame.__init__
+      ~CameraFrame.pixels
+      ~CameraFrame.save_pgm
+      ~CameraFrame.save_png
+      ~CameraFrame.sharpness
+      ~CameraFrame.statistics
+      ~CameraFrame.to_numpy
+      ~CameraFrame.to_png_bytes
+   
+   

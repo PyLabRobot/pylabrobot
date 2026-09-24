@@ -1,0 +1,84 @@
+﻿:orphan:
+
+
+pylabrobot.resources.LinkBody
+=============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: LinkBody
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LinkBody.length
+      ~LinkBody.location
+      ~LinkBody.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LinkBody.__init__
+      ~LinkBody.assign_child_by_anchor
+      ~LinkBody.assign_child_resource
+      ~LinkBody.at
+      ~LinkBody.center
+      ~LinkBody.centers
+      ~LinkBody.check_can_drop_resource_here
+      ~LinkBody.copy
+      ~LinkBody.deregister_did_assign_resource_callback
+      ~LinkBody.deregister_did_unassign_resource_callback
+      ~LinkBody.deregister_state_update_callback
+      ~LinkBody.deregister_will_assign_resource_callback
+      ~LinkBody.deregister_will_unassign_resource_callback
+      ~LinkBody.deserialize
+      ~LinkBody.find_resource
+      ~LinkBody.find_resources
+      ~LinkBody.get_absolute_location
+      ~LinkBody.get_absolute_rotation
+      ~LinkBody.get_absolute_size_x
+      ~LinkBody.get_absolute_size_y
+      ~LinkBody.get_absolute_size_z
+      ~LinkBody.get_all_children
+      ~LinkBody.get_anchor
+      ~LinkBody.get_highest_known_point
+      ~LinkBody.get_location_wrt
+      ~LinkBody.get_resource
+      ~LinkBody.get_root
+      ~LinkBody.get_size_x
+      ~LinkBody.get_size_y
+      ~LinkBody.get_size_z
+      ~LinkBody.has_resource
+      ~LinkBody.is_in_subtree_of
+      ~LinkBody.load_all_state
+      ~LinkBody.load_from_json_file
+      ~LinkBody.load_state
+      ~LinkBody.load_state_from_file
+      ~LinkBody.named
+      ~LinkBody.register_did_assign_resource_callback
+      ~LinkBody.register_did_unassign_resource_callback
+      ~LinkBody.register_state_update_callback
+      ~LinkBody.register_will_assign_resource_callback
+      ~LinkBody.register_will_unassign_resource_callback
+      ~LinkBody.rotate
+      ~LinkBody.rotate_to
+      ~LinkBody.rotated
+      ~LinkBody.save
+      ~LinkBody.save_state_to_file
+      ~LinkBody.serialize
+      ~LinkBody.serialize_all_state
+      ~LinkBody.serialize_state
+      ~LinkBody.unassign
+      ~LinkBody.unassign_child_resource
+   
+   

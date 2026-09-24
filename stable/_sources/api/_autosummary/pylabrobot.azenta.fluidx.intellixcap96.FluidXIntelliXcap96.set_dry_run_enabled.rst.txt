@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.FluidXIntelliXcap96.set\_dry\_run\_enabled
+=================================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. automethod:: FluidXIntelliXcap96.set_dry_run_enabled

@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.parse\_ready\_line
+================================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.parse_ready_line

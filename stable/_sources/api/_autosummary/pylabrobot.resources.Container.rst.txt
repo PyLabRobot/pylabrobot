@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.Container
+﻿:orphan:
+
+
+pylabrobot.resources.Container
 ==============================
 
 .. currentmodule:: pylabrobot.resources
@@ -12,6 +15,8 @@
    .. autosummary::
       :toctree: .
    
+      ~Container.lid
+      ~Container.location
       ~Container.material_z_thickness
       ~Container.name
    
@@ -40,6 +45,8 @@
       ~Container.deregister_will_assign_resource_callback
       ~Container.deregister_will_unassign_resource_callback
       ~Container.deserialize
+      ~Container.find_resource
+      ~Container.find_resources
       ~Container.get_absolute_location
       ~Container.get_absolute_rotation
       ~Container.get_absolute_size_x
@@ -48,12 +55,15 @@
       ~Container.get_all_children
       ~Container.get_anchor
       ~Container.get_highest_known_point
+      ~Container.get_lid_location
       ~Container.get_location_wrt
       ~Container.get_resource
       ~Container.get_root
       ~Container.get_size_x
       ~Container.get_size_y
       ~Container.get_size_z
+      ~Container.has_lid
+      ~Container.has_resource
       ~Container.is_in_subtree_of
       ~Container.load_all_state
       ~Container.load_from_json_file
@@ -66,6 +76,7 @@
       ~Container.register_will_assign_resource_callback
       ~Container.register_will_unassign_resource_callback
       ~Container.rotate
+      ~Container.rotate_to
       ~Container.rotated
       ~Container.save
       ~Container.save_state_to_file

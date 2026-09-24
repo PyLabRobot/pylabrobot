@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesSettings.kinetic\_settings
+===================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoattribute:: MolecularDevicesSettings.kinetic_settings

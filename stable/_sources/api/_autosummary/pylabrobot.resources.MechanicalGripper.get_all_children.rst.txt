@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.get\_all\_children
+=========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.get_all_children

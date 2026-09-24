@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.IOConfig.analog\_ins
+==============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: IOConfig.analog_ins

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.deregister\_did\_unassign\_resource\_callback
+=============================================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.deregister_did_unassign_resource_callback

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.find\_random\_site
+==================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.find_random_site

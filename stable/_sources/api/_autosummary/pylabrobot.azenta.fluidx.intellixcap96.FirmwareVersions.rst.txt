@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.azenta.fluidx.intellixcap96.FirmwareVersions
+=======================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoclass:: FirmwareVersions
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FirmwareVersions.light_curtain
+      ~FirmwareVersions.touchscreen
+      ~FirmwareVersions.unit
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FirmwareVersions.__init__
+      ~FirmwareVersions.count
+      ~FirmwareVersions.index
+   
+   

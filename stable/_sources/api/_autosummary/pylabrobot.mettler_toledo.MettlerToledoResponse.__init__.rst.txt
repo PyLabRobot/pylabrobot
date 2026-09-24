@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MettlerToledoResponse.\_\_init\_\_
+=============================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MettlerToledoResponse.__init__

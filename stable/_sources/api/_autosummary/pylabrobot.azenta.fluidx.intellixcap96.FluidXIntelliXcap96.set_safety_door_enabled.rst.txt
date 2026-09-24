@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.FluidXIntelliXcap96.set\_safety\_door\_enabled
+=====================================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. automethod:: FluidXIntelliXcap96.set_safety_door_enabled

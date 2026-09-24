@@ -1,0 +1,6 @@
+pylabrobot.micronic.code\_reader.driver.MicronicRD235.stop
+==========================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.driver
+
+.. automethod:: MicronicRD235.stop

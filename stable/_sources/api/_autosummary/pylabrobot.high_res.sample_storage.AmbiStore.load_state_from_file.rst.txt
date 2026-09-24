@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.load\_state\_from\_file
+======================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.load_state_from_file

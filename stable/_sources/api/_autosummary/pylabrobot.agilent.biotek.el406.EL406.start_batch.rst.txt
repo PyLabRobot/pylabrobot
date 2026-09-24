@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.el406.EL406.start\_batch
+==================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.el406
+
+.. automethod:: EL406.start_batch

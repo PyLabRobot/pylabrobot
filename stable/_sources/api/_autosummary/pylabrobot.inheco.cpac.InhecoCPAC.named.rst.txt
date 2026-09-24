@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.named
+=======================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.named

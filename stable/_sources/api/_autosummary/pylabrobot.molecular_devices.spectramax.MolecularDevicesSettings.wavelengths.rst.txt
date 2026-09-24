@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesSettings.wavelengths
+=============================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoattribute:: MolecularDevicesSettings.wavelengths

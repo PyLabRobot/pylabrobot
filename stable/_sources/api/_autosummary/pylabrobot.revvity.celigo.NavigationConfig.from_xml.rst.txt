@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.NavigationConfig.from\_xml
+====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: NavigationConfig.from_xml

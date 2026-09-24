@@ -1,0 +1,6 @@
+pylabrobot.opentrons.InstrumentInfo.minimum\_volume
+===================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: InstrumentInfo.minimum_volume

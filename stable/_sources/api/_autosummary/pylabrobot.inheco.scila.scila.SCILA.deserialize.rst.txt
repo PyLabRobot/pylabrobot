@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILA.deserialize
+===============================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILA.deserialize

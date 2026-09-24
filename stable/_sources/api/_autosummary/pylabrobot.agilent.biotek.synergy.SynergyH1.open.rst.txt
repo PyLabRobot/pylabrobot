@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.synergy.SynergyH1.open
+================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy
+
+.. automethod:: SynergyH1.open

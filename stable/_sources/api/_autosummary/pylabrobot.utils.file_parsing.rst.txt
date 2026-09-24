@@ -1,4 +1,6 @@
-﻿pylabrobot.utils.file\_parsing
+﻿:orphan:
+
+pylabrobot.utils.file\_parsing
 ==============================
 
 .. currentmodule:: pylabrobot.utils.file_parsing

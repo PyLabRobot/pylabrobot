@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.stage\_shear
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.stage_shear

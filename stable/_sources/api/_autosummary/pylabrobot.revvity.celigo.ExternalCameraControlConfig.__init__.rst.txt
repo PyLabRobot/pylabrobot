@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ExternalCameraControlConfig.\_\_init\_\_
+==================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: ExternalCameraControlConfig.__init__

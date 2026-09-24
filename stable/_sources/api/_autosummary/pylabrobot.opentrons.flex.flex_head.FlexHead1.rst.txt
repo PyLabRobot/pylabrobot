@@ -1,0 +1,50 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.flex.flex\_head.FlexHead1
+==============================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. autoclass:: FlexHead1
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexHead1.__init__
+      ~FlexHead1.air_gap_in_place
+      ~FlexHead1.aspirate
+      ~FlexHead1.aspirate_in_place
+      ~FlexHead1.blow_out
+      ~FlexHead1.configure_for_volume
+      ~FlexHead1.default_flow_rates
+      ~FlexHead1.discard_tips
+      ~FlexHead1.dispense
+      ~FlexHead1.dispense_in_place
+      ~FlexHead1.drop_tips
+      ~FlexHead1.get_mounted_tips
+      ~FlexHead1.get_tip_presence
+      ~FlexHead1.has_tip_on_hardware
+      ~FlexHead1.liquid_probe
+      ~FlexHead1.move_relative
+      ~FlexHead1.move_to
+      ~FlexHead1.move_to_addressable_area
+      ~FlexHead1.move_to_well
+      ~FlexHead1.pick_up_tips
+      ~FlexHead1.position
+      ~FlexHead1.prepare_to_aspirate
+      ~FlexHead1.touch_tip
+      ~FlexHead1.try_liquid_probe
+      ~FlexHead1.unsafe_blow_out_in_place
+      ~FlexHead1.unsafe_drop_tip_in_place
+      ~FlexHead1.verify_tip_presence
+   
+   

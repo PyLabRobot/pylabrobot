@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.loading\_current\_percentage
+=======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.loading_current_percentage

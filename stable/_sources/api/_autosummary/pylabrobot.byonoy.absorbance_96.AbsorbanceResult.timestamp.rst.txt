@@ -1,0 +1,6 @@
+pylabrobot.byonoy.absorbance\_96.AbsorbanceResult.timestamp
+===========================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autoattribute:: AbsorbanceResult.timestamp

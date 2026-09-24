@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.ChannelDescriptor
+===========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: ChannelDescriptor
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ChannelDescriptor.name
+      ~ChannelDescriptor.fixed_type
+      ~ChannelDescriptor.description
+      ~ChannelDescriptor.guid
+      ~ChannelDescriptor.calibration_index
+      ~ChannelDescriptor.channel_key
+      ~ChannelDescriptor.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ChannelDescriptor.__init__
+      ~ChannelDescriptor.from_element
+   
+   

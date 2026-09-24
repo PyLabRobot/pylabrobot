@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.copy
+===========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.copy

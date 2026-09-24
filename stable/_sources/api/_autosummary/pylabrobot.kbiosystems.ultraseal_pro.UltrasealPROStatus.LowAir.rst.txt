@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_pro.UltrasealPROStatus.LowAir
+===============================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_pro
+
+.. autoattribute:: UltrasealPROStatus.LowAir

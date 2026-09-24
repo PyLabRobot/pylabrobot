@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.load\_all\_state
+=======================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.load_all_state

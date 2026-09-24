@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.has\_resource
+==============================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.has_resource

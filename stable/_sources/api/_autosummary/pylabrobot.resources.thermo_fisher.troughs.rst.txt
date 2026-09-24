@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.thermo\_fisher.troughs
+﻿:orphan:
+
+pylabrobot.resources.thermo\_fisher.troughs
 ===========================================
 
 .. currentmodule:: pylabrobot.resources.thermo_fisher

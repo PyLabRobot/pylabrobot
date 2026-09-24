@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.sealer.ThermoScientificALPSSealer.MAX\_SEALING\_DURATION
+=======================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.sealer
+
+.. autoattribute:: ThermoScientificALPSSealer.MAX_SEALING_DURATION

@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.Well
+﻿:orphan:
+
+
+pylabrobot.resources.Well
 =========================
 
 .. currentmodule:: pylabrobot.resources
@@ -12,6 +15,8 @@
    .. autosummary::
       :toctree: .
    
+      ~Well.lid
+      ~Well.location
       ~Well.material_z_thickness
       ~Well.name
    
@@ -40,6 +45,8 @@
       ~Well.deregister_will_assign_resource_callback
       ~Well.deregister_will_unassign_resource_callback
       ~Well.deserialize
+      ~Well.find_resource
+      ~Well.find_resources
       ~Well.get_absolute_location
       ~Well.get_absolute_rotation
       ~Well.get_absolute_size_x
@@ -50,6 +57,7 @@
       ~Well.get_column
       ~Well.get_highest_known_point
       ~Well.get_identifier
+      ~Well.get_lid_location
       ~Well.get_location_wrt
       ~Well.get_resource
       ~Well.get_root
@@ -57,6 +65,8 @@
       ~Well.get_size_x
       ~Well.get_size_y
       ~Well.get_size_z
+      ~Well.has_lid
+      ~Well.has_resource
       ~Well.is_in_subtree_of
       ~Well.load_all_state
       ~Well.load_from_json_file
@@ -69,6 +79,7 @@
       ~Well.register_will_assign_resource_callback
       ~Well.register_will_unassign_resource_callback
       ~Well.rotate
+      ~Well.rotate_to
       ~Well.rotated
       ~Well.save
       ~Well.save_state_to_file

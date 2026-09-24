@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Galvo.move\_single
+============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Galvo.move_single

@@ -1,0 +1,41 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.GalvoConfig
+=====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: GalvoConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoConfig.config_version
+      ~GalvoConfig.controller_index
+      ~GalvoConfig.position_error_window
+      ~GalvoConfig.velocity_error_window
+      ~GalvoConfig.big_move_delay
+      ~GalvoConfig.min_voltage
+      ~GalvoConfig.max_voltage
+      ~GalvoConfig.invert_voltage
+      ~GalvoConfig.enabled
+      ~GalvoConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoConfig.__init__
+      ~GalvoConfig.from_element
+   
+   

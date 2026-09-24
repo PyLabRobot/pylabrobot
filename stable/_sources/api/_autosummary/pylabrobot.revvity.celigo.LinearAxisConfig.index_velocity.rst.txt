@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.index\_velocity
+==========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.index_velocity

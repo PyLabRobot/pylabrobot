@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4S.read\_message
+=======================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. automethod:: A4S.read_message

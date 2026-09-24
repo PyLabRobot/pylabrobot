@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.has\_resource
+=======================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.has_resource

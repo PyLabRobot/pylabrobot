@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.cytation.Cytation5.request\_firmware\_version
+=======================================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.cytation
+
+.. automethod:: Cytation5.request_firmware_version

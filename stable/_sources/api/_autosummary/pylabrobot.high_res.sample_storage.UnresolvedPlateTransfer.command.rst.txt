@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.UnresolvedPlateTransfer.command
+====================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoattribute:: UnresolvedPlateTransfer.command

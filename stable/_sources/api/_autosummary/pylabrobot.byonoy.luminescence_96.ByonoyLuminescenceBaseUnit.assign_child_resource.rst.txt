@@ -1,0 +1,6 @@
+pylabrobot.byonoy.luminescence\_96.ByonoyLuminescenceBaseUnit.assign\_child\_resource
+=====================================================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. automethod:: ByonoyLuminescenceBaseUnit.assign_child_resource

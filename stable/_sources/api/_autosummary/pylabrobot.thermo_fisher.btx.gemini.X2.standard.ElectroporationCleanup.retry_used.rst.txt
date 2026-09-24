@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationCleanup.retry\_used
+===================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoattribute:: ElectroporationCleanup.retry_used

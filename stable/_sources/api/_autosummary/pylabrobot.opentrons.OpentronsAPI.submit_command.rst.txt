@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.submit\_command
+=================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.submit_command

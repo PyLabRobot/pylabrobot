@@ -1,0 +1,311 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "intro",
+   "metadata": {},
+   "source": [
+    "# Byonoy L96 — LED bar\n",
+    "\n",
+    "The L96 has a 20-pixel addressable RGB front bar on the chassis. PyLabRobot exposes two methods to drive it:\n",
+    "\n",
+    "| Method | Use for |\n",
+    "|---|---|\n",
+    "| `set_led_color(color, effect)` | Single color across all 20 pixels, optionally animated by the firmware (`BREATHING`, `CYLON`, `RAINBOW`, ...) |\n",
+    "| `set_led_colors(colors)` | Per-pixel control — supply a list of up to 20 RGB triplets. Fast enough for real-time animation. |"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "connect-md",
+   "metadata": {},
+   "source": [
+    "## Connect\n",
+    "\n",
+    "We'll talk to the device's driver directly, so the bar can be driven without setting up a plate read."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "connect-code",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2026-05-17T02:44:03.229447Z",
+     "iopub.status.busy": "2026-05-17T02:44:03.229245Z",
+     "iopub.status.idle": "2026-05-17T02:44:03.307144Z",
+     "shell.execute_reply": "2026-05-17T02:44:03.306740Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "from pylabrobot.byonoy import byonoy_l96\n",
+    "\n",
+    "base, reader = byonoy_l96(name=\"l96\")\n",
+    "await reader.setup()\n",
+    "drv = reader.driver"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "solid-md",
+   "metadata": {},
+   "source": [
+    "## Solid colors\n",
+    "\n",
+    "The simplest call: one color, `SOLID` effect (the default). The firmware snaps the bar to that color."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "solid-code",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2026-05-17T02:44:03.308426Z",
+     "iopub.status.busy": "2026-05-17T02:44:03.308329Z",
+     "iopub.status.idle": "2026-05-17T02:44:06.321067Z",
+     "shell.execute_reply": "2026-05-17T02:44:06.319852Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "import asyncio\n",
+    "\n",
+    "await drv.set_led_color((255, 0, 0))     # red\n",
+    "await asyncio.sleep(1)\n",
+    "await drv.set_led_color((0, 255, 0))     # green\n",
+    "await asyncio.sleep(1)\n",
+    "await drv.set_led_color((0, 0, 255))     # blue\n",
+    "await asyncio.sleep(1)\n",
+    "await drv.set_led_color((0, 0, 0))       # off"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "effects-md",
+   "metadata": {},
+   "source": [
+    "## Built-in effects\n",
+    "\n",
+    "The firmware can animate the base color for you. Pass `duration_ms` to set how long the effect runs before reverting to firmware control. Use `force=True` to override an unexpired previous duration.\n",
+    "\n",
+    "| Effect | Behavior |\n",
+    "|---|---|\n",
+    "| `SOLID` | Snap to color (default) |\n",
+    "| `BREATHING` | Pulse brightness |\n",
+    "| `BLINKING` | Flash on/off |\n",
+    "| `CYLON` | Bouncing dot across the bar |\n",
+    "| `RAINBOW` | Cycle through hues (ignores supplied color) |\n",
+    "| `PROGRESS` | Fill progressively, driven by `effect_state` (0–255) |"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "effects-code",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2026-05-17T02:44:06.324515Z",
+     "iopub.status.busy": "2026-05-17T02:44:06.324197Z",
+     "iopub.status.idle": "2026-05-17T02:44:16.339410Z",
+     "shell.execute_reply": "2026-05-17T02:44:16.337534Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "await drv.set_led_color((0, 255, 0), \"breathing\", duration_ms=6000)\n",
+    "await asyncio.sleep(6)\n",
+    "\n",
+    "await drv.set_led_color((255, 0, 255), \"cylon\", duration_ms=4000, force=True)\n",
+    "await asyncio.sleep(4)\n",
+    "\n",
+    "await drv.set_led_color((0, 0, 0))   # back to off"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "pixels-md",
+   "metadata": {},
+   "source": [
+    "## Per-pixel control\n",
+    "\n",
+    "`set_led_colors(colors)` takes a list of up to 20 `(r, g, b)` triplets, one per pixel (left to right). Shorter lists are zero-padded; longer ones are truncated."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "pixels-code",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2026-05-17T02:44:16.344037Z",
+     "iopub.status.busy": "2026-05-17T02:44:16.343628Z",
+     "iopub.status.idle": "2026-05-17T02:44:23.366202Z",
+     "shell.execute_reply": "2026-05-17T02:44:23.364702Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "# Left half red, right half blue\n",
+    "await drv.set_led_colors([(255, 0, 0)] * 10 + [(0, 0, 255)] * 10)\n",
+    "await asyncio.sleep(2)\n",
+    "\n",
+    "# Rainbow gradient across the bar\n",
+    "import colorsys\n",
+    "def hue(i, n=20):\n",
+    "  r, g, b = colorsys.hsv_to_rgb(i / n, 1, 1)\n",
+    "  return (int(r * 255), int(g * 255), int(b * 255))\n",
+    "\n",
+    "await drv.set_led_colors([hue(i) for i in range(20)])\n",
+    "await asyncio.sleep(3)\n",
+    "\n",
+    "# Every other pixel\n",
+    "await drv.set_led_colors([(0, 255, 0) if i % 2 == 0 else (0, 0, 0) for i in range(20)])\n",
+    "await asyncio.sleep(2)\n",
+    "\n",
+    "await drv.set_led_colors([(0, 0, 0)] * 20)   # off"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "scanner-md",
+   "metadata": {},
+   "source": [
+    "## Animation recipe: KITT scanner\n",
+    "\n",
+    "A back-and-forth scanner with a fading trail — the kind of thing you'd want as a \"robot is busy\" indicator. Frame rate is set by how fast you call `set_led_colors`; ~30 fps is comfortable."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "scanner-code",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2026-05-17T02:44:23.369015Z",
+     "iopub.status.busy": "2026-05-17T02:44:23.368873Z",
+     "iopub.status.idle": "2026-05-17T02:44:30.548475Z",
+     "shell.execute_reply": "2026-05-17T02:44:30.547235Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "import asyncio\n",
+    "\n",
+    "N = 20\n",
+    "trail = 4         # length of the fading trail\n",
+    "decay = 0.45      # brightness ratio per trail step\n",
+    "step_s = 0.06     # ~16 fps; lower for faster\n",
+    "\n",
+    "def frame(head):\n",
+    "  px = [(0, 0, 0)] * N\n",
+    "  for k in range(trail + 1):\n",
+    "    v = int(255 * (decay ** k))\n",
+    "    if 0 <= head - k < N:\n",
+    "      px[head - k] = (v, 0, 0)   # red trail\n",
+    "  return px\n",
+    "\n",
+    "positions = list(range(N)) + list(range(N - 2, 0, -1))   # 0..19..1\n",
+    "for _ in range(3):                                       # 3 ping-pong cycles\n",
+    "  for head in positions:\n",
+    "    await drv.set_led_colors(frame(head))\n",
+    "    await asyncio.sleep(step_s)\n",
+    "\n",
+    "await drv.set_led_colors([(0, 0, 0)] * 20)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "walking-md",
+   "metadata": {},
+   "source": [
+    "## Animation recipe: walking dot\n",
+    "\n",
+    "Simplest possible animation — one bright pixel marches across the bar. Useful as a progress indicator with a known step count."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "walking-code",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2026-05-17T02:44:30.551351Z",
+     "iopub.status.busy": "2026-05-17T02:44:30.551132Z",
+     "iopub.status.idle": "2026-05-17T02:44:33.613534Z",
+     "shell.execute_reply": "2026-05-17T02:44:33.612076Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "for pos in range(20):\n",
+    "  px = [(0, 0, 0)] * 20\n",
+    "  px[pos] = (0, 255, 0)\n",
+    "  await drv.set_led_colors(px)\n",
+    "  await asyncio.sleep(0.15)\n",
+    "\n",
+    "await drv.set_led_colors([(0, 0, 0)] * 20)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "teardown-md",
+   "metadata": {},
+   "source": [
+    "## Teardown"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "teardown-code",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2026-05-17T02:44:33.616454Z",
+     "iopub.status.busy": "2026-05-17T02:44:33.616208Z",
+     "iopub.status.idle": "2026-05-17T02:44:33.621351Z",
+     "shell.execute_reply": "2026-05-17T02:44:33.620597Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "await drv.set_led_color((0, 0, 0))   # ensure bar is off\n",
+    "await reader.stop()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "reference",
+   "metadata": {},
+   "source": [
+    "## Reference\n",
+    "\n",
+    "- `set_led_color(color, effect, *, duration_ms=0, force=False, low_power=False)` — single uniform color, optional firmware-driven effect.\n",
+    "- `set_led_colors(colors)` — list of up to 20 `(r, g, b)` triplets, one per pixel. Pads with black; truncates if longer.\n",
+    "- Both methods live on `reader.driver`. Source: `pylabrobot/byonoy/driver.py`."
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.12.12"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

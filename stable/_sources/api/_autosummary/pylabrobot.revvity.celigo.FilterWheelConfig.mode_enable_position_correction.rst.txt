@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.mode\_enable\_position\_correction
+==============================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.mode_enable_position_correction

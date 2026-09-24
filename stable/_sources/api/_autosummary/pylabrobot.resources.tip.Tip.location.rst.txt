@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.location
+=====================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. autoproperty:: Tip.location

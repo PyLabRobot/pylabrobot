@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.from\_element
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FilterWheelConfig.from_element

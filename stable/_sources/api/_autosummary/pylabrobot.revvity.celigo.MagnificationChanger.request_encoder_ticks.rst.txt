@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.MagnificationChanger.request\_encoder\_ticks
+======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: MagnificationChanger.request_encoder_ticks

@@ -1,0 +1,6 @@
+pylabrobot.byonoy.luminescence\_96.ByonoyLuminescenceBaseUnit.center
+====================================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. automethod:: ByonoyLuminescenceBaseUnit.center

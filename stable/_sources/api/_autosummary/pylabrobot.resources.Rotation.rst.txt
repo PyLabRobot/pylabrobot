@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.Rotation
+﻿:orphan:
+
+
+pylabrobot.resources.Rotation
 =============================
 
 .. currentmodule:: pylabrobot.resources
@@ -14,7 +17,10 @@
    
       ~Rotation.pitch
       ~Rotation.roll
+      ~Rotation.x
+      ~Rotation.y
       ~Rotation.yaw
+      ~Rotation.z
    
    
 
@@ -26,7 +32,6 @@
       :toctree: .
    
       ~Rotation.__init__
-      ~Rotation.deserialize
       ~Rotation.get_rotation_matrix
       ~Rotation.serialize
    

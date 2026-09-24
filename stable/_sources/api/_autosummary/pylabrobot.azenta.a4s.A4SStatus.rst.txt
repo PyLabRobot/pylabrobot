@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.azenta.a4s.A4SStatus
+===============================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. autoclass:: A4SStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~A4SStatus.current_temperature
+      ~A4SStatus.system_status
+      ~A4SStatus.heater_block_status
+      ~A4SStatus.error_code
+      ~A4SStatus.warning_code
+      ~A4SStatus.sensor_status
+      ~A4SStatus.remaining_time
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~A4SStatus.__init__
+   
+   

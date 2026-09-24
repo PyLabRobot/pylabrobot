@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.TipCarrier
+﻿:orphan:
+
+
+pylabrobot.resources.TipCarrier
 ===============================
 
 .. currentmodule:: pylabrobot.resources
@@ -13,6 +16,7 @@
       :toctree: .
    
       ~TipCarrier.capacity
+      ~TipCarrier.location
       ~TipCarrier.name
    
    
@@ -39,6 +43,8 @@
       ~TipCarrier.deregister_will_assign_resource_callback
       ~TipCarrier.deregister_will_unassign_resource_callback
       ~TipCarrier.deserialize
+      ~TipCarrier.find_resource
+      ~TipCarrier.find_resources
       ~TipCarrier.get_absolute_location
       ~TipCarrier.get_absolute_rotation
       ~TipCarrier.get_absolute_size_x
@@ -55,6 +61,7 @@
       ~TipCarrier.get_size_x
       ~TipCarrier.get_size_y
       ~TipCarrier.get_size_z
+      ~TipCarrier.has_resource
       ~TipCarrier.is_in_subtree_of
       ~TipCarrier.load_all_state
       ~TipCarrier.load_from_json_file
@@ -67,6 +74,7 @@
       ~TipCarrier.register_will_assign_resource_callback
       ~TipCarrier.register_will_unassign_resource_callback
       ~TipCarrier.rotate
+      ~TipCarrier.rotate_to
       ~TipCarrier.rotated
       ~TipCarrier.save
       ~TipCarrier.save_state_to_file

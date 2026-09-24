@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoConfig.galvo\_optical\_calibration
+==================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoConfig.galvo_optical_calibration

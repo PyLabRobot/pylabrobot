@@ -1,0 +1,55 @@
+﻿:orphan:
+
+
+pylabrobot.kbiosystems.ultraseal\_epro.KBiosystemsUltrasealEPRO
+===============================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. autoclass:: KBiosystemsUltrasealEPRO
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KBiosystemsUltrasealEPRO.ERRORS
+      ~KBiosystemsUltrasealEPRO.MAX_SEALING_DURATION
+      ~KBiosystemsUltrasealEPRO.MAX_SEALING_TEMPERATURE
+      ~KBiosystemsUltrasealEPRO.MIN_SEALING_DURATION
+      ~KBiosystemsUltrasealEPRO.MIN_SEALING_TEMPERATURE
+      ~KBiosystemsUltrasealEPRO.STATUS_MESSAGES
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KBiosystemsUltrasealEPRO.__init__
+      ~KBiosystemsUltrasealEPRO.request_error_code
+      ~KBiosystemsUltrasealEPRO.request_firmware_version
+      ~KBiosystemsUltrasealEPRO.request_sealing_temperature
+      ~KBiosystemsUltrasealEPRO.request_sealing_time
+      ~KBiosystemsUltrasealEPRO.request_status
+      ~KBiosystemsUltrasealEPRO.request_temperature
+      ~KBiosystemsUltrasealEPRO.seal
+      ~KBiosystemsUltrasealEPRO.send_command
+      ~KBiosystemsUltrasealEPRO.set_eco_mode
+      ~KBiosystemsUltrasealEPRO.set_foil_length
+      ~KBiosystemsUltrasealEPRO.set_force_mode
+      ~KBiosystemsUltrasealEPRO.set_sealing_distance
+      ~KBiosystemsUltrasealEPRO.set_sealing_force
+      ~KBiosystemsUltrasealEPRO.set_sealing_time
+      ~KBiosystemsUltrasealEPRO.set_temperature
+      ~KBiosystemsUltrasealEPRO.setup
+      ~KBiosystemsUltrasealEPRO.stop
+      ~KBiosystemsUltrasealEPRO.wait_for_idle
+      ~KBiosystemsUltrasealEPRO.wait_for_sealing_temperature
+   
+   

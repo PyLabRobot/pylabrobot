@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.move\_axes\_to
+=============================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. automethod:: Flex.move_axes_to

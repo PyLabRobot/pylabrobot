@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.z\_axis
+========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: Celigo.z_axis

@@ -1,0 +1,6 @@
+pylabrobot.generic.SerialBarcodeScanner.setup
+=============================================
+
+.. currentmodule:: pylabrobot.generic
+
+.. automethod:: SerialBarcodeScanner.setup

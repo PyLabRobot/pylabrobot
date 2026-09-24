@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.kinematics\_source
+===========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexConfiguration.kinematics_source

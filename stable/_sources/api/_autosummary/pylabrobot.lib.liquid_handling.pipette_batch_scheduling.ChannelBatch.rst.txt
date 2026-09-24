@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.pipette\_batch\_scheduling.ChannelBatch
+=======================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.pipette_batch_scheduling
+
+.. autoclass:: ChannelBatch

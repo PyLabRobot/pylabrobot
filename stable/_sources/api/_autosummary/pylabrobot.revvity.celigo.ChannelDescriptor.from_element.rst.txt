@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ChannelDescriptor.from\_element
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: ChannelDescriptor.from_element

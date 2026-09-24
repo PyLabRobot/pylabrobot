@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.sealer.KBiosystemsSealer.setup
+=====================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. automethod:: KBiosystemsSealer.setup

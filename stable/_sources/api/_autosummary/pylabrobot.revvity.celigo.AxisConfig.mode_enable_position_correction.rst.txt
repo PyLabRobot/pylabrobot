@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AxisConfig.mode\_enable\_position\_correction
+=======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AxisConfig.mode_enable_position_correction

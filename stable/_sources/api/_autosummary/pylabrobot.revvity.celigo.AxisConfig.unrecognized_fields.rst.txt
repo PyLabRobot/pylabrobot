@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AxisConfig.unrecognized\_fields
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AxisConfig.unrecognized_fields

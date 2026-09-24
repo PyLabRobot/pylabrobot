@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AxisConfig.home\_type
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AxisConfig.home_type

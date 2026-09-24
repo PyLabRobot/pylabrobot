@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.calibrated\_plate\_to\_stage\_theta\_radians
+========================================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.calibrated_plate_to_stage_theta_radians

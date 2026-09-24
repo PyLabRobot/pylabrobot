@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.\_\_init\_\_
+===========================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.__init__

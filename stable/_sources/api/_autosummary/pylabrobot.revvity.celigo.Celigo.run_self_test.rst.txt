@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.run\_self\_test
+================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.run_self_test

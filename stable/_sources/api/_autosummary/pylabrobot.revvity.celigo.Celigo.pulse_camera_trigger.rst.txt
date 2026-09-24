@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.pulse\_camera\_trigger
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.pulse_camera_trigger

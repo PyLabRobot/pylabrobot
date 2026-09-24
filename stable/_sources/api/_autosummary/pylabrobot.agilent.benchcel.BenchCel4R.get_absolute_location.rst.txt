@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.get\_absolute\_location
+==============================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.get_absolute_location

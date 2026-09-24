@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesSettings.flashes\_per\_well
+====================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoattribute:: MolecularDevicesSettings.flashes_per_well

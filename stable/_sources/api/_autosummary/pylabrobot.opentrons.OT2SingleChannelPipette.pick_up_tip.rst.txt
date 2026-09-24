@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2SingleChannelPipette.pick\_up\_tip
+==========================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2SingleChannelPipette.pick_up_tip

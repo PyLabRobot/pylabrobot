@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4SStatus.system\_status
+==============================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. autoattribute:: A4SStatus.system_status

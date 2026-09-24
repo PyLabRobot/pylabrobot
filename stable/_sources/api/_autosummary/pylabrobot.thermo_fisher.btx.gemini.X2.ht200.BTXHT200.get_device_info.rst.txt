@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.ht200.BTXHT200.get\_device\_info
+========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.ht200
+
+.. automethod:: BTXHT200.get_device_info

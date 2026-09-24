@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.channel\_positioning.required\_spacing\_between
+===============================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.channel_positioning
+
+.. autofunction:: required_spacing_between

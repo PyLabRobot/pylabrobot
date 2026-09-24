@@ -1,0 +1,47 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.alps.alps3000.ALPS3000Status
+======================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps3000
+
+.. autoclass:: ALPS3000Status
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ALPS3000Status.real
+      ~ALPS3000Status.imag
+      ~ALPS3000Status.numerator
+      ~ALPS3000Status.denominator
+      ~ALPS3000Status.Ready
+      ~ALPS3000Status.NoFoil
+      ~ALPS3000Status.Error
+      ~ALPS3000Status.Busy
+      ~ALPS3000Status.WaitingForSealTemperature
+      ~ALPS3000Status.PlateNotPresent
+      ~ALPS3000Status.LowAir
+      ~ALPS3000Status.FoilLoadModeAfterPark
+      ~ALPS3000Status.ParkMode
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ALPS3000Status.conjugate
+      ~ALPS3000Status.bit_length
+      ~ALPS3000Status.bit_count
+      ~ALPS3000Status.as_integer_ratio
+      ~ALPS3000Status.__init__
+   
+   

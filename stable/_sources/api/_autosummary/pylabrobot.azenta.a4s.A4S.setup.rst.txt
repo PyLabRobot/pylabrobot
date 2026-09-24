@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4S.setup
+===============================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. automethod:: A4S.setup

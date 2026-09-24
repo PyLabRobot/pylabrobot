@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.source\_path
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.source_path

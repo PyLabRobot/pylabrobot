@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.pipette\_batch\_scheduling.minimum\_exact\_cover
+================================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.pipette_batch_scheduling
+
+.. autofunction:: minimum_exact_cover

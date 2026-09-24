@@ -1,0 +1,6 @@
+pylabrobot.resources.Trough.has\_resource
+=========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trough.has_resource

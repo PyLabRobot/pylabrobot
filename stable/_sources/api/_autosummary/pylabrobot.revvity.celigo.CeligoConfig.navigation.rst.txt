@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoConfig.navigation
+=================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoConfig.navigation

@@ -1,0 +1,6 @@
+pylabrobot.big\_bear.orbital\_shaker.BigBearOrbitalShaker.\_\_init\_\_
+======================================================================
+
+.. currentmodule:: pylabrobot.big_bear.orbital_shaker
+
+.. automethod:: BigBearOrbitalShaker.__init__

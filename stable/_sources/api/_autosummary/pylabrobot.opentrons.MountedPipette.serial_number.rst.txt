@@ -1,0 +1,6 @@
+pylabrobot.opentrons.MountedPipette.serial\_number
+==================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: MountedPipette.serial_number

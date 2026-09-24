@@ -1,4 +1,7 @@
-﻿pylabrobot.config.io.file.FileReader
+﻿:orphan:
+
+
+pylabrobot.config.io.file.FileReader
 ====================================
 
 .. currentmodule:: pylabrobot.config.io.file

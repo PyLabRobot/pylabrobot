@@ -1,0 +1,6 @@
+pylabrobot.resources.TubeCarrier.has\_resource
+==============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: TubeCarrier.has_resource

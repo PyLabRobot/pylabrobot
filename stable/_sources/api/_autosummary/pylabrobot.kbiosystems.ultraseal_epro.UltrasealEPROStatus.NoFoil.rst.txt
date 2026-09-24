@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.UltrasealEPROStatus.NoFoil
+=================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. autoattribute:: UltrasealEPROStatus.NoFoil

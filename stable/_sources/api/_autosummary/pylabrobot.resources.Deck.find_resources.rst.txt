@@ -1,0 +1,6 @@
+pylabrobot.resources.Deck.find\_resources
+=========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Deck.find_resources

@@ -1,0 +1,6 @@
+pylabrobot.resources.Tube.lid
+=============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: Tube.lid

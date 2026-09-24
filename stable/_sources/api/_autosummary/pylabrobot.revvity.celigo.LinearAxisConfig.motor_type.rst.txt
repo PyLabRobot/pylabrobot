@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.motor\_type
+======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.motor_type

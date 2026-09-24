@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.request\_status\_snapshot
+================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.request_status_snapshot

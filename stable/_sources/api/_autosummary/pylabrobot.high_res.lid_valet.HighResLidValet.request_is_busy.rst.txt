@@ -1,0 +1,6 @@
+pylabrobot.high\_res.lid\_valet.HighResLidValet.request\_is\_busy
+=================================================================
+
+.. currentmodule:: pylabrobot.high_res.lid_valet
+
+.. automethod:: HighResLidValet.request_is_busy

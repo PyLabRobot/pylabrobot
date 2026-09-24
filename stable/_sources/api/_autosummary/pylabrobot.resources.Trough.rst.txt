@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.Trough
+﻿:orphan:
+
+
+pylabrobot.resources.Trough
 ===========================
 
 .. currentmodule:: pylabrobot.resources
@@ -12,6 +15,8 @@
    .. autosummary::
       :toctree: .
    
+      ~Trough.lid
+      ~Trough.location
       ~Trough.material_z_thickness
       ~Trough.name
    
@@ -40,6 +45,8 @@
       ~Trough.deregister_will_assign_resource_callback
       ~Trough.deregister_will_unassign_resource_callback
       ~Trough.deserialize
+      ~Trough.find_resource
+      ~Trough.find_resources
       ~Trough.get_absolute_location
       ~Trough.get_absolute_rotation
       ~Trough.get_absolute_size_x
@@ -48,12 +55,15 @@
       ~Trough.get_all_children
       ~Trough.get_anchor
       ~Trough.get_highest_known_point
+      ~Trough.get_lid_location
       ~Trough.get_location_wrt
       ~Trough.get_resource
       ~Trough.get_root
       ~Trough.get_size_x
       ~Trough.get_size_y
       ~Trough.get_size_z
+      ~Trough.has_lid
+      ~Trough.has_resource
       ~Trough.is_in_subtree_of
       ~Trough.load_all_state
       ~Trough.load_from_json_file
@@ -66,6 +76,7 @@
       ~Trough.register_will_assign_resource_callback
       ~Trough.register_will_unassign_resource_callback
       ~Trough.rotate
+      ~Trough.rotate_to
       ~Trough.rotated
       ~Trough.save
       ~Trough.save_state_to_file

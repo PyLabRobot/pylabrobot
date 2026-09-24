@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.Pico.request\_configuration
+==========================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico
+
+.. automethod:: Pico.request_configuration

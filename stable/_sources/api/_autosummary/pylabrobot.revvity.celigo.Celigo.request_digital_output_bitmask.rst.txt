@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.request\_digital\_output\_bitmask
+==================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.request_digital_output_bitmask

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.EnvironmentControl.supports\_o2\_control
+=============================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoproperty:: EnvironmentControl.supports_o2_control

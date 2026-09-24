@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.VSpin.g\_to\_rpm
+=========================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: VSpin.g_to_rpm

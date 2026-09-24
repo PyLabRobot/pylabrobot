@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.check\_can\_drop\_resource\_here
+================================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.check_can_drop_resource_here

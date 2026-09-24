@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.sealer.ThermoScientificALPSSealer.\_\_init\_\_
+=============================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.sealer
+
+.. automethod:: ThermoScientificALPSSealer.__init__

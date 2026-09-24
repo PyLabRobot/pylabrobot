@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2Status.axis\_position
+=====================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2Status.axis_position

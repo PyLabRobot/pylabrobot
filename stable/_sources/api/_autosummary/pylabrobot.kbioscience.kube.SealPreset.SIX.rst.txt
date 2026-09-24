@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.SealPreset.SIX
+==========================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. autoattribute:: SealPreset.SIX

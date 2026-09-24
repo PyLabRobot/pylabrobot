@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoConfig.channels
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: CeligoConfig.channels

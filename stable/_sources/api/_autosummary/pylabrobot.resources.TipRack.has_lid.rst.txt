@@ -1,0 +1,6 @@
+pylabrobot.resources.TipRack.has\_lid
+=====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: TipRack.has_lid

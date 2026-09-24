@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.named
+============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.named

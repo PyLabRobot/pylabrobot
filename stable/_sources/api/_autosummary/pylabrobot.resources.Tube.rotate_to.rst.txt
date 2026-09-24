@@ -1,0 +1,6 @@
+pylabrobot.resources.Tube.rotate\_to
+====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Tube.rotate_to

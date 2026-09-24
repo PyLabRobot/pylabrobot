@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.Carrier
+﻿:orphan:
+
+
+pylabrobot.resources.Carrier
 ============================
 
 .. currentmodule:: pylabrobot.resources
@@ -13,6 +16,7 @@
       :toctree: .
    
       ~Carrier.capacity
+      ~Carrier.location
       ~Carrier.name
    
    
@@ -39,6 +43,8 @@
       ~Carrier.deregister_will_assign_resource_callback
       ~Carrier.deregister_will_unassign_resource_callback
       ~Carrier.deserialize
+      ~Carrier.find_resource
+      ~Carrier.find_resources
       ~Carrier.get_absolute_location
       ~Carrier.get_absolute_rotation
       ~Carrier.get_absolute_size_x
@@ -55,6 +61,7 @@
       ~Carrier.get_size_x
       ~Carrier.get_size_y
       ~Carrier.get_size_z
+      ~Carrier.has_resource
       ~Carrier.is_in_subtree_of
       ~Carrier.load_all_state
       ~Carrier.load_from_json_file
@@ -67,6 +74,7 @@
       ~Carrier.register_will_assign_resource_callback
       ~Carrier.register_will_unassign_resource_callback
       ~Carrier.rotate
+      ~Carrier.rotate_to
       ~Carrier.rotated
       ~Carrier.save
       ~Carrier.save_state_to_file

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.lid\_valet.HighResLidValet.request\_raw\_settings
+======================================================================
+
+.. currentmodule:: pylabrobot.high_res.lid_valet
+
+.. automethod:: HighResLidValet.request_raw_settings

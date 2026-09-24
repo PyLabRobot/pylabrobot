@@ -1,0 +1,6 @@
+pylabrobot.resources.TipRack.get\_lid\_location
+===============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: TipRack.get_lid_location

@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4SStatus.warning\_code
+=============================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. autoattribute:: A4SStatus.warning_code

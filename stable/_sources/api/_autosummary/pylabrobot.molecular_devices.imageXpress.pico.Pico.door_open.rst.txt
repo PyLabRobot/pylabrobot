@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.Pico.door\_open
+==============================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico
+
+.. autoproperty:: Pico.door_open

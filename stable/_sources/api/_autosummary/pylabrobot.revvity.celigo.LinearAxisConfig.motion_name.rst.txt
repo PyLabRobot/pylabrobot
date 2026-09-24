@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.motion\_name
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.motion_name

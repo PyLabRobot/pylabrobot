@@ -1,0 +1,6 @@
+pylabrobot.resources.barcode.Barcode.serialize
+==============================================
+
+.. currentmodule:: pylabrobot.resources.barcode
+
+.. automethod:: Barcode.serialize

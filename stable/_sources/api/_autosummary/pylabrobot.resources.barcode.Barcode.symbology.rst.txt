@@ -1,0 +1,6 @@
+pylabrobot.resources.barcode.Barcode.symbology
+==============================================
+
+.. currentmodule:: pylabrobot.resources.barcode
+
+.. autoattribute:: Barcode.symbology

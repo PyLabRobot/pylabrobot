@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILADrawerLoadingTray.copy
+=========================================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILADrawerLoadingTray.copy

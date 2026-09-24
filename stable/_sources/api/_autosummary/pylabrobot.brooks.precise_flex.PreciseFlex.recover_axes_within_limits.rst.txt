@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.recover\_axes\_within\_limits
+=========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.recover_axes_within_limits

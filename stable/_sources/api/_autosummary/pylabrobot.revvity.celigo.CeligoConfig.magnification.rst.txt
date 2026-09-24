@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoConfig.magnification
+====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoConfig.magnification

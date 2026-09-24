@@ -1,0 +1,6 @@
+﻿pylabrobot.revvity.celigo.load\_illumination\_channels
+======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autofunction:: load_illumination_channels

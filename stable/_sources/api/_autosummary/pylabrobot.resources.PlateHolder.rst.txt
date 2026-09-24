@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.PlateHolder
+﻿:orphan:
+
+
+pylabrobot.resources.PlateHolder
 ================================
 
 .. currentmodule:: pylabrobot.resources
@@ -12,6 +15,7 @@
    .. autosummary::
       :toctree: .
    
+      ~PlateHolder.location
       ~PlateHolder.name
       ~PlateHolder.resource
    
@@ -38,6 +42,8 @@
       ~PlateHolder.deregister_will_assign_resource_callback
       ~PlateHolder.deregister_will_unassign_resource_callback
       ~PlateHolder.deserialize
+      ~PlateHolder.find_resource
+      ~PlateHolder.find_resources
       ~PlateHolder.get_absolute_location
       ~PlateHolder.get_absolute_rotation
       ~PlateHolder.get_absolute_size_x
@@ -53,6 +59,7 @@
       ~PlateHolder.get_size_x
       ~PlateHolder.get_size_y
       ~PlateHolder.get_size_z
+      ~PlateHolder.has_resource
       ~PlateHolder.is_in_subtree_of
       ~PlateHolder.load_all_state
       ~PlateHolder.load_from_json_file
@@ -65,6 +72,7 @@
       ~PlateHolder.register_will_assign_resource_callback
       ~PlateHolder.register_will_unassign_resource_callback
       ~PlateHolder.rotate
+      ~PlateHolder.rotate_to
       ~PlateHolder.rotated
       ~PlateHolder.save
       ~PlateHolder.save_state_to_file

@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.sealer.KBiosystemsSealer.request\_status
+===============================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. automethod:: KBiosystemsSealer.request_status

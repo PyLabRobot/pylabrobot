@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.request\_status
+=============================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.request_status

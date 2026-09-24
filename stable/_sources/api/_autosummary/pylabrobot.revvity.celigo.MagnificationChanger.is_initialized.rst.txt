@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.MagnificationChanger.is\_initialized
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: MagnificationChanger.is_initialized

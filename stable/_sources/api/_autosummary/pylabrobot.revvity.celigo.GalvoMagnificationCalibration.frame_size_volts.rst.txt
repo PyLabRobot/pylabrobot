@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoMagnificationCalibration.frame\_size\_volts
+==========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoMagnificationCalibration.frame_size_volts

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoConfig.position\_error\_window
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoConfig.position_error_window

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.find\_resources
+==============================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.find_resources

@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.load\_state\_from\_file
+=================================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.load_state_from_file

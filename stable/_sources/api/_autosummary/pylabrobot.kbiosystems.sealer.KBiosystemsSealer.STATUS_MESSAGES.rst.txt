@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.sealer.KBiosystemsSealer.STATUS\_MESSAGES
+================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. autoattribute:: KBiosystemsSealer.STATUS_MESSAGES

@@ -1,0 +1,6 @@
+﻿pylabrobot.molecular\_devices.imageXpress.pico.pico.Gain
+========================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. autodata:: Gain

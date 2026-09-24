@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.CartridgeProfile.communication\_protocol
+===============================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoattribute:: CartridgeProfile.communication_protocol

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheel.request\_encoder\_ticks
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FilterWheel.request_encoder_ticks

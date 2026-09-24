@@ -1,0 +1,51 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.CalibrationConfig
+===========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: CalibrationConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CalibrationConfig.source_path
+      ~CalibrationConfig.microns_per_pixel_x
+      ~CalibrationConfig.microns_per_pixel_y
+      ~CalibrationConfig.image_width_pixels
+      ~CalibrationConfig.image_height_pixels
+      ~CalibrationConfig.image_to_stage_theta_radians
+      ~CalibrationConfig.galvo_to_stage_theta_radians
+      ~CalibrationConfig.calibrated_plate_corner_x
+      ~CalibrationConfig.calibrated_plate_corner_y
+      ~CalibrationConfig.calibrated_plate_to_stage_theta_radians
+      ~CalibrationConfig.stage_x_scale
+      ~CalibrationConfig.stage_y_scale
+      ~CalibrationConfig.stage_shear
+      ~CalibrationConfig.stage_x_shear_offset
+      ~CalibrationConfig.stage_y_shear_offset
+      ~CalibrationConfig.calibrated_z_position
+      ~CalibrationConfig.calibrated_z_glass_plate_delta
+      ~CalibrationConfig.z_plane_x_coeff
+      ~CalibrationConfig.z_plane_y_coeff
+      ~CalibrationConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CalibrationConfig.__init__
+      ~CalibrationConfig.from_xml
+   
+   

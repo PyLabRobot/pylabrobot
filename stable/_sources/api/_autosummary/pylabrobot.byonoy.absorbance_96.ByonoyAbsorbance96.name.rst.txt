@@ -1,0 +1,6 @@
+pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbance96.name
+========================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autoproperty:: ByonoyAbsorbance96.name

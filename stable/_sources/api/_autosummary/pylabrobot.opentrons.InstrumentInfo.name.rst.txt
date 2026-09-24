@@ -1,0 +1,6 @@
+pylabrobot.opentrons.InstrumentInfo.name
+========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: InstrumentInfo.name

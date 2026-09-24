@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.FluidXIntelliXcap96.step\_tray\_in
+=========================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. automethod:: FluidXIntelliXcap96.step_tray_in

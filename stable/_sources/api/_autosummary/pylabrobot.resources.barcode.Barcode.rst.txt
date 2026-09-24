@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.resources.barcode.Barcode
+====================================
+
+.. currentmodule:: pylabrobot.resources.barcode
+
+.. autoclass:: Barcode
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Barcode.data
+      ~Barcode.symbology
+      ~Barcode.position_on_resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Barcode.__init__
+      ~Barcode.serialize
+   
+   

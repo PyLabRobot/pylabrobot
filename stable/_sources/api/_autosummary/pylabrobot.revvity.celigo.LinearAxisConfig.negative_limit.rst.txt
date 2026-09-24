@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.negative\_limit
+==========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.negative_limit

@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.imageXpress.pico.pico.ImagingMode
+===============================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. autoclass:: ImagingMode
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ImagingMode.light_channel
+      ~ImagingMode.filter_cube
+      ~ImagingMode.excitation_source
+      ~ImagingMode.BRIGHTFIELD
+      ~ImagingMode.CY5
+      ~ImagingMode.DAPI
+      ~ImagingMode.GFP
+      ~ImagingMode.RFP
+      ~ImagingMode.TEXAS_RED
+   
+   
+
+   
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.generic.SerialBarcodeScanner.read\_line
+==================================================
+
+.. currentmodule:: pylabrobot.generic
+
+.. automethod:: SerialBarcodeScanner.read_line

@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.length
+=============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: MechanicalGripper.length

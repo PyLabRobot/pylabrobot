@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Galvo.request\_calibration\_errors
+============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Galvo.request_calibration_errors

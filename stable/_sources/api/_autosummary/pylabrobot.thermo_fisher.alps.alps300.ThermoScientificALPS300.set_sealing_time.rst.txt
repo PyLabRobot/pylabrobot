@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps300.ThermoScientificALPS300.set\_sealing\_time
+=================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps300
+
+.. automethod:: ThermoScientificALPS300.set_sealing_time

@@ -1,0 +1,6 @@
+pylabrobot.resources.PetriDish.rotate\_to
+=========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PetriDish.rotate_to

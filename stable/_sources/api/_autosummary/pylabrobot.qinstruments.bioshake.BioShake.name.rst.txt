@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.name
+==============================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. autoproperty:: BioShake.name

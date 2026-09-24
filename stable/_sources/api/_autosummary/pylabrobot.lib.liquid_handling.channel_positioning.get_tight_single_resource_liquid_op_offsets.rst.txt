@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.channel\_positioning.get\_tight\_single\_resource\_liquid\_op\_offsets
+======================================================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.channel_positioning
+
+.. autofunction:: get_tight_single_resource_liquid_op_offsets

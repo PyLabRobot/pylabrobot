@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoConfig.min\_voltage
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoConfig.min_voltage

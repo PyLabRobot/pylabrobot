@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.DigitalIOConfig.io\_type
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: DigitalIOConfig.io_type

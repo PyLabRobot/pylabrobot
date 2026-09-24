@@ -1,0 +1,6 @@
+pylabrobot.generic.SerialBarcodeScanner.reset\_input\_buffer
+============================================================
+
+.. currentmodule:: pylabrobot.generic
+
+.. automethod:: SerialBarcodeScanner.reset_input_buffer

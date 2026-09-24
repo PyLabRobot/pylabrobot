@@ -1,0 +1,6 @@
+﻿pylabrobot.molecular\_devices.spectramax.ReadType
+=================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autodata:: ReadType

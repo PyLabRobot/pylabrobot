@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheel.axis\_index
+=================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: FilterWheel.axis_index

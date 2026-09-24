@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLocSerialProfile.ack\_timeout
+==============================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoattribute:: PlateLocSerialProfile.ack_timeout

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.MountedPipette.name
+========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: MountedPipette.name

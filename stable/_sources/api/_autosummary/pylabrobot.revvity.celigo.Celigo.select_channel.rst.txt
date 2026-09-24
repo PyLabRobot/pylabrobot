@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.select\_channel
+================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.select_channel

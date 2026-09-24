@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.EnvironmentControl.request\_current\_o2
+============================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: EnvironmentControl.request_current_o2

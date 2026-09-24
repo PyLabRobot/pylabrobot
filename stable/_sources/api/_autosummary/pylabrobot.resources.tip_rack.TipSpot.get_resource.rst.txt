@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.get\_resource
+====================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.get_resource

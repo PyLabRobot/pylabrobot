@@ -1,4 +1,7 @@
-﻿pylabrobot.config.io.ConfigReader
+﻿:orphan:
+
+
+pylabrobot.config.io.ConfigReader
 =================================
 
 .. currentmodule:: pylabrobot.config.io

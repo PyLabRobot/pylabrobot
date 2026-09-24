@@ -1,0 +1,6 @@
+﻿pylabrobot.azenta.fluidx.intellixcap96.get\_error\_message
+==========================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autofunction:: get_error_message

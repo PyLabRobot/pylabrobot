@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.request\_nest\_is\_holding
+==========================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.request_nest_is_holding

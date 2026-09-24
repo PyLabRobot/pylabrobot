@@ -1,0 +1,6 @@
+﻿pylabrobot.qinstruments.bioshake.Heatplate
+==========================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. autofunction:: Heatplate

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.find\_smallest\_site\_for\_plate
+================================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.find_smallest_site_for_plate

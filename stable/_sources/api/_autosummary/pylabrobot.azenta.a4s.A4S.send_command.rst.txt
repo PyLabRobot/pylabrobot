@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4S.send\_command
+=======================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. automethod:: A4S.send_command

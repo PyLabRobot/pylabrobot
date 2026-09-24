@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4SStatus.current\_temperature
+====================================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. autoattribute:: A4SStatus.current_temperature

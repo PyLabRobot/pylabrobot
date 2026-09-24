@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.HardwareDefaultConfig.default\_y\_field\_of\_view\_mm
+===============================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: HardwareDefaultConfig.default_y_field_of_view_mm

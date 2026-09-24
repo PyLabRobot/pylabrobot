@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.Tube
+﻿:orphan:
+
+
+pylabrobot.resources.Tube
 =========================
 
 .. currentmodule:: pylabrobot.resources
@@ -12,6 +15,8 @@
    .. autosummary::
       :toctree: .
    
+      ~Tube.lid
+      ~Tube.location
       ~Tube.material_z_thickness
       ~Tube.name
    
@@ -40,6 +45,8 @@
       ~Tube.deregister_will_assign_resource_callback
       ~Tube.deregister_will_unassign_resource_callback
       ~Tube.deserialize
+      ~Tube.find_resource
+      ~Tube.find_resources
       ~Tube.get_absolute_location
       ~Tube.get_absolute_rotation
       ~Tube.get_absolute_size_x
@@ -48,12 +55,15 @@
       ~Tube.get_all_children
       ~Tube.get_anchor
       ~Tube.get_highest_known_point
+      ~Tube.get_lid_location
       ~Tube.get_location_wrt
       ~Tube.get_resource
       ~Tube.get_root
       ~Tube.get_size_x
       ~Tube.get_size_y
       ~Tube.get_size_z
+      ~Tube.has_lid
+      ~Tube.has_resource
       ~Tube.is_in_subtree_of
       ~Tube.load_all_state
       ~Tube.load_from_json_file
@@ -66,6 +76,7 @@
       ~Tube.register_will_assign_resource_callback
       ~Tube.register_will_unassign_resource_callback
       ~Tube.rotate
+      ~Tube.rotate_to
       ~Tube.rotated
       ~Tube.save
       ~Tube.save_state_to_file

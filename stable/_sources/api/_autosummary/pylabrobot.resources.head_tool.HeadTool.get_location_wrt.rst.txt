@@ -1,0 +1,6 @@
+pylabrobot.resources.head\_tool.HeadTool.get\_location\_wrt
+===========================================================
+
+.. currentmodule:: pylabrobot.resources.head_tool
+
+.. automethod:: HeadTool.get_location_wrt

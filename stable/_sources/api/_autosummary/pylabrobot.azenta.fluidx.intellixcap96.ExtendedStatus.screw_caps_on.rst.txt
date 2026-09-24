@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.ExtendedStatus.screw\_caps\_on
+=====================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoattribute:: ExtendedStatus.screw_caps_on

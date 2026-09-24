@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.SelfTestReport
+========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: SelfTestReport
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SelfTestReport.passed
+      ~SelfTestReport.checks
+      ~SelfTestReport.failures
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SelfTestReport.__init__
+   
+   

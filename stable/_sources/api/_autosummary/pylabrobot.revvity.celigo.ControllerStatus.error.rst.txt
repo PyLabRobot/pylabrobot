@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ControllerStatus.error
+================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: ControllerStatus.error

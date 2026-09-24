@@ -1,0 +1,6 @@
+pylabrobot.resources.TubeRack.empty
+===================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: TubeRack.empty

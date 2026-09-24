@@ -1,0 +1,47 @@
+﻿:orphan:
+
+
+pylabrobot.kbioscience.kube.KUBEStatus
+======================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. autoclass:: KUBEStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KUBEStatus.real
+      ~KUBEStatus.imag
+      ~KUBEStatus.numerator
+      ~KUBEStatus.denominator
+      ~KUBEStatus.Ready
+      ~KUBEStatus.Busy
+      ~KUBEStatus.Error
+      ~KUBEStatus.Sealing
+      ~KUBEStatus.NotAtSealTemperature
+      ~KUBEStatus.SystemShutdown
+      ~KUBEStatus.FoilLow
+      ~KUBEStatus.DoorOpen
+      ~KUBEStatus.LowAirPressure
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KUBEStatus.conjugate
+      ~KUBEStatus.bit_length
+      ~KUBEStatus.bit_count
+      ~KUBEStatus.as_integer_ratio
+      ~KUBEStatus.__init__
+   
+   

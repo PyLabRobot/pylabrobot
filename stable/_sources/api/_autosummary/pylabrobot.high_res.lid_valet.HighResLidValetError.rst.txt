@@ -1,0 +1,6 @@
+﻿pylabrobot.high\_res.lid\_valet.HighResLidValetError
+====================================================
+
+.. currentmodule:: pylabrobot.high_res.lid_valet
+
+.. autoexception:: HighResLidValetError

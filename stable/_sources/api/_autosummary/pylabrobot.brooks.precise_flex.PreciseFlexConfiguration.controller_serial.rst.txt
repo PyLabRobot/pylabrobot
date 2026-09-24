@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.controller\_serial
+===========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexConfiguration.controller_serial

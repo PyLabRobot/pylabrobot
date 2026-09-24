@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterMapEntry.logical\_number
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterMapEntry.logical_number

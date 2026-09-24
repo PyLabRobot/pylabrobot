@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.fetch\_plate\_to\_loading\_tray
+==============================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.fetch_plate_to_loading_tray

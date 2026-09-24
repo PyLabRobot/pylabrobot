@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.sealer.KBiosystemsSealer.\_\_init\_\_
+============================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. automethod:: KBiosystemsSealer.__init__

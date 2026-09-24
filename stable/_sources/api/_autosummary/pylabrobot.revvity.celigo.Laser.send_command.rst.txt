@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Laser.send\_command
+=============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Laser.send_command

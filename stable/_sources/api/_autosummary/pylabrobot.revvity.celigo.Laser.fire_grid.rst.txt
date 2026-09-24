@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Laser.fire\_grid
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Laser.fire_grid

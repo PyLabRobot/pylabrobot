@@ -1,4 +1,6 @@
-﻿pylabrobot.resources.hamilton.tip\_carriers
+﻿:orphan:
+
+pylabrobot.resources.hamilton.tip\_carriers
 ===========================================
 
 .. currentmodule:: pylabrobot.resources.hamilton
@@ -31,6 +33,8 @@
       TIP_CAR_96BC_4mlTF_A00
       TIP_CAR_96BC_5mlT_A00
       TIP_CAR_NTR_A00
+      hamilton_prep_ftr_pedestal
+      hamilton_tip_carrier_L5_ntr_a00
    
    
 

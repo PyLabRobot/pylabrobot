@@ -1,0 +1,6 @@
+pylabrobot.cole\_parmer.genogrinder.GenoGrinder.shake
+=====================================================
+
+.. currentmodule:: pylabrobot.cole_parmer.genogrinder
+
+.. automethod:: GenoGrinder.shake

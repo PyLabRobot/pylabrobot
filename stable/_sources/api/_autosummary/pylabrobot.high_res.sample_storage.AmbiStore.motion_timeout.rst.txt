@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.motion\_timeout
+==============================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoproperty:: AmbiStore.motion_timeout

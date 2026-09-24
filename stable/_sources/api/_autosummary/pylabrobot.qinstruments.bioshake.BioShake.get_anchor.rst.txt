@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.get\_anchor
+=====================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.get_anchor

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.MagnificationChanger.request\_encoder\_ratio
+======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: MagnificationChanger.request_encoder_ratio

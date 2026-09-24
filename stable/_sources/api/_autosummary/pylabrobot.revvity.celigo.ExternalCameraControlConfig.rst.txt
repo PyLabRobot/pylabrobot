@@ -1,0 +1,36 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.ExternalCameraControlConfig
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: ExternalCameraControlConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ExternalCameraControlConfig.config_version
+      ~ExternalCameraControlConfig.enabled
+      ~ExternalCameraControlConfig.invert_busy
+      ~ExternalCameraControlConfig.invert_integration
+      ~ExternalCameraControlConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ExternalCameraControlConfig.__init__
+      ~ExternalCameraControlConfig.from_element
+   
+   

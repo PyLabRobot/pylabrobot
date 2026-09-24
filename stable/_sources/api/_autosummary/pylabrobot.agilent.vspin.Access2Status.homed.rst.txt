@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2Status.homed
+============================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoproperty:: Access2Status.homed

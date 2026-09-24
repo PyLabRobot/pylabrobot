@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ControllerInfo.uart\_buffer\_length
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ControllerInfo.uart_buffer_length

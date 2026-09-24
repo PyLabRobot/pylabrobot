@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.AcquisitionResult
+===========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: AcquisitionResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AcquisitionResult.label
+      ~AcquisitionResult.channel
+      ~AcquisitionResult.x_mm
+      ~AcquisitionResult.y_mm
+      ~AcquisitionResult.z_mm
+      ~AcquisitionResult.frame
+      ~AcquisitionResult.focus
+      ~AcquisitionResult.galvo_hardware_voltages
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AcquisitionResult.__init__
+   
+   

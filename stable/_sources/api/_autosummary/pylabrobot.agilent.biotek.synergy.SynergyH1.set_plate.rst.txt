@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.synergy.SynergyH1.set\_plate
+======================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy
+
+.. automethod:: SynergyH1.set_plate

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.attach\_deck
+===========================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. automethod:: Flex.attach_deck

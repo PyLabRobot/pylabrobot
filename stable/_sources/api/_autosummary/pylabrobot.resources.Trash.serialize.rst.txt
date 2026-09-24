@@ -1,0 +1,6 @@
+pylabrobot.resources.Trash.serialize
+====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trash.serialize

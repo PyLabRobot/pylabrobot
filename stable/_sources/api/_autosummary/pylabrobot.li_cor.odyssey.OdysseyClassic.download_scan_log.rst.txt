@@ -1,0 +1,6 @@
+pylabrobot.li\_cor.odyssey.OdysseyClassic.download\_scan\_log
+=============================================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. automethod:: OdysseyClassic.download_scan_log

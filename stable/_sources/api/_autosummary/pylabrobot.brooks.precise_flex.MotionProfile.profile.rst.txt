@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.MotionProfile.profile
+=====================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: MotionProfile.profile

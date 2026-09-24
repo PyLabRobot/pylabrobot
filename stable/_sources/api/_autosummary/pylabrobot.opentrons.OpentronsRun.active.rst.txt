@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsRun.active
+========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OpentronsRun.active

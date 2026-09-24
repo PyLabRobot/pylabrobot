@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.KUBEStatus.as\_integer\_ratio
+=========================================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. automethod:: KUBEStatus.as_integer_ratio

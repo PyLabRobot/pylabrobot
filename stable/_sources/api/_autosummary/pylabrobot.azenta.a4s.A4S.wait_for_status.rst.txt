@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4S.wait\_for\_status
+===========================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. automethod:: A4S.wait_for_status

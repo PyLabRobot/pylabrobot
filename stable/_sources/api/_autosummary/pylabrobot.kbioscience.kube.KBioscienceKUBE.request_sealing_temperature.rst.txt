@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.KBioscienceKUBE.request\_sealing\_temperature
+=========================================================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. automethod:: KBioscienceKUBE.request_sealing_temperature

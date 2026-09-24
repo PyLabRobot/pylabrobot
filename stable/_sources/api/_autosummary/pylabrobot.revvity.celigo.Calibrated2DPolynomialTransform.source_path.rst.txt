@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Calibrated2DPolynomialTransform.source\_path
+======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: Calibrated2DPolynomialTransform.source_path

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoControllerStatus.fire\_table\_size
+=================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoControllerStatus.fire_table_size

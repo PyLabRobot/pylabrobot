@@ -1,0 +1,6 @@
+pylabrobot.cole\_parmer.masterflex.Masterflex.send\_command
+===========================================================
+
+.. currentmodule:: pylabrobot.cole_parmer.masterflex
+
+.. automethod:: Masterflex.send_command

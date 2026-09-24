@@ -1,0 +1,36 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationExecutionDetails
+================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoclass:: ElectroporationExecutionDetails
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationExecutionDetails.verification_state
+      ~ElectroporationExecutionDetails.completed_state
+      ~ElectroporationExecutionDetails.final_state
+      ~ElectroporationExecutionDetails.device_run
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationExecutionDetails.__init__
+      ~ElectroporationExecutionDetails.as_dict
+      ~ElectroporationExecutionDetails.from_dict
+   
+   

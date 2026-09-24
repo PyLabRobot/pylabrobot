@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.gemini\_x2.BTXGeminiX2.UI\_PROTOCOL\_NAME\_BYTES
+========================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.gemini_x2
+
+.. autoattribute:: BTXGeminiX2.UI_PROTOCOL_NAME_BYTES

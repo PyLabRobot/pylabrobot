@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps5000.ThermoScientificALPS5000.STATUS\_MESSAGES
+=================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps5000
+
+.. autoattribute:: ThermoScientificALPS5000.STATUS_MESSAGES

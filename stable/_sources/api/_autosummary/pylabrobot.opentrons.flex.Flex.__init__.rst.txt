@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.Flex.\_\_init\_\_
+===========================================
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. automethod:: Flex.__init__

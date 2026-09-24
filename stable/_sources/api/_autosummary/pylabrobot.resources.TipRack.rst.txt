@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.TipRack
+﻿:orphan:
+
+
+pylabrobot.resources.TipRack
 ============================
 
 .. currentmodule:: pylabrobot.resources
@@ -12,9 +15,12 @@
    .. autosummary::
       :toctree: .
    
+      ~TipRack.frame_height
       ~TipRack.item_dx
       ~TipRack.item_dy
       ~TipRack.items
+      ~TipRack.lid
+      ~TipRack.location
       ~TipRack.name
       ~TipRack.num_items
       ~TipRack.num_items_x
@@ -48,6 +54,8 @@
       ~TipRack.empty
       ~TipRack.enable_tip_trackers
       ~TipRack.fill
+      ~TipRack.find_resource
+      ~TipRack.find_resources
       ~TipRack.get_absolute_location
       ~TipRack.get_absolute_rotation
       ~TipRack.get_absolute_size_x
@@ -63,6 +71,7 @@
       ~TipRack.get_highest_known_point
       ~TipRack.get_item
       ~TipRack.get_items
+      ~TipRack.get_lid_location
       ~TipRack.get_location_wrt
       ~TipRack.get_resource
       ~TipRack.get_root
@@ -71,6 +80,8 @@
       ~TipRack.get_size_z
       ~TipRack.get_tip
       ~TipRack.get_tips
+      ~TipRack.has_lid
+      ~TipRack.has_resource
       ~TipRack.index_of_item
       ~TipRack.is_in_subtree_of
       ~TipRack.load_all_state
@@ -84,6 +95,7 @@
       ~TipRack.register_will_assign_resource_callback
       ~TipRack.register_will_unassign_resource_callback
       ~TipRack.rotate
+      ~TipRack.rotate_to
       ~TipRack.rotated
       ~TipRack.row
       ~TipRack.save

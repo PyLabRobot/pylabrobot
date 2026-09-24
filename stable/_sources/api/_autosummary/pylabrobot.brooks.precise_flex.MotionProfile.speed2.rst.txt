@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.MotionProfile.speed2
+====================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: MotionProfile.speed2

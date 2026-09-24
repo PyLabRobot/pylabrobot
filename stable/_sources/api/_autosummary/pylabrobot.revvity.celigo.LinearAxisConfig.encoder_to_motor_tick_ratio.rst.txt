@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.encoder\_to\_motor\_tick\_ratio
+==========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.encoder_to_motor_tick_ratio

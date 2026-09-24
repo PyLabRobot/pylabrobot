@@ -242,6 +242,37 @@
   },
   {
    "cell_type": "markdown",
+   "id": "a1b2c3d4",
+   "metadata": {},
+   "source": [
+    "### Nesting plates by `stacking_z_height`\n",
+    "\n",
+    "Bare plates that define a `stacking_z_height` nest into one another when stacked in the\n",
+    "z direction: a plate placed on another bare plate sinks in by `size_z - stacking_z_height`,\n",
+    "so a stack of `N` identical plates is `size_z + (N - 1) * stacking_z_height` tall instead of\n",
+    "`N * size_z`. Plates without a `stacking_z_height`, and plates wearing a lid, do not nest.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "a1b2c3d5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "nesting_stack = ResourceStack(\"nesting_stack\", \"z\")\n",
+    "nesting_stack.location = Coordinate.zero()\n",
+    "for i in range(3):\n",
+    "    nesting_stack.assign_child_resource(\n",
+    "        Plate(f\"plate_{i}\", size_x=127, size_y=86, size_z=14, ordered_items={}, stacking_z_height=4)\n",
+    "    )\n",
+    "\n",
+    "# 14 + (3 - 1) * 4 = 22, not 3 * 14 = 42\n",
+    "nesting_stack.get_size_z()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
    "id": "dc9633b5",
    "metadata": {
     "lines_to_next_cell": 2

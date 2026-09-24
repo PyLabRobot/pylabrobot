@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.set\_camera\_exposure\_and\_gain
+=================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.set_camera_exposure_and_gain

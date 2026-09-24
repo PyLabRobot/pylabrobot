@@ -1,4 +1,7 @@
-﻿pylabrobot.resources.Deck
+﻿:orphan:
+
+
+pylabrobot.resources.Deck
 =========================
 
 .. currentmodule:: pylabrobot.resources
@@ -12,6 +15,7 @@
    .. autosummary::
       :toctree: .
    
+      ~Deck.location
       ~Deck.name
    
    
@@ -38,6 +42,8 @@
       ~Deck.deregister_will_assign_resource_callback
       ~Deck.deregister_will_unassign_resource_callback
       ~Deck.deserialize
+      ~Deck.find_resource
+      ~Deck.find_resources
       ~Deck.get_absolute_location
       ~Deck.get_absolute_rotation
       ~Deck.get_absolute_size_x
@@ -68,6 +74,7 @@
       ~Deck.register_will_assign_resource_callback
       ~Deck.register_will_unassign_resource_callback
       ~Deck.rotate
+      ~Deck.rotate_to
       ~Deck.rotated
       ~Deck.save
       ~Deck.save_state_to_file

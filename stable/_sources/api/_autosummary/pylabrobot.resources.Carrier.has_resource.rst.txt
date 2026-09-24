@@ -1,0 +1,6 @@
+pylabrobot.resources.Carrier.has\_resource
+==========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Carrier.has_resource

@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.spectramax.ShakeSettings
+======================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoclass:: ShakeSettings
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ShakeSettings.before_read
+      ~ShakeSettings.before_read_duration
+      ~ShakeSettings.between_reads
+      ~ShakeSettings.between_reads_duration
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ShakeSettings.__init__
+   
+   

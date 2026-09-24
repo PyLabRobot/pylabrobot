@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.ExtendedStatus.standby\_active
+=====================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoattribute:: ExtendedStatus.standby_active

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Galvo.voltages\_for\_offset
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Galvo.voltages_for_offset

@@ -1,0 +1,56 @@
+﻿:orphan:
+
+
+pylabrobot.li\_cor.odyssey.OdysseyClassic
+=========================================
+
+.. currentmodule:: pylabrobot.li_cor.odyssey
+
+.. autoclass:: OdysseyClassic
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OdysseyClassic.connected
+      ~OdysseyClassic.last_status_html
+      ~OdysseyClassic.last_status_http
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OdysseyClassic.__init__
+      ~OdysseyClassic.cancel_scan
+      ~OdysseyClassic.configure_scan
+      ~OdysseyClassic.download
+      ~OdysseyClassic.download_channel
+      ~OdysseyClassic.download_scan_log
+      ~OdysseyClassic.estimate_time
+      ~OdysseyClassic.force_stop
+      ~OdysseyClassic.get_instrument_info
+      ~OdysseyClassic.get_preview
+      ~OdysseyClassic.list_groups
+      ~OdysseyClassic.list_scans
+      ~OdysseyClassic.pause_scan
+      ~OdysseyClassic.request_progress
+      ~OdysseyClassic.request_status
+      ~OdysseyClassic.scan
+      ~OdysseyClassic.serialize
+      ~OdysseyClassic.setup
+      ~OdysseyClassic.shutdown_instrument
+      ~OdysseyClassic.start_scan
+      ~OdysseyClassic.stop
+      ~OdysseyClassic.stop_and_save
+      ~OdysseyClassic.stop_scan
+      ~OdysseyClassic.wait_until_done
+   
+   

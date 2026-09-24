@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLoc.stop\_cycle
+================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. automethod:: PlateLoc.stop_cycle

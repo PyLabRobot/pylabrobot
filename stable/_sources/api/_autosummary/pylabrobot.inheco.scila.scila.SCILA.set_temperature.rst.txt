@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILA.set\_temperature
+====================================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILA.set_temperature

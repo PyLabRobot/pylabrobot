@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.ExtendedStatus.safety\_door\_rs232\_disabled
+===================================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoattribute:: ExtendedStatus.safety_door_rs232_disabled

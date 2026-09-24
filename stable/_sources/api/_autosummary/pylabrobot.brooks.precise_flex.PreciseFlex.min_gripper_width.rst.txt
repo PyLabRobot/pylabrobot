@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.min\_gripper\_width
+===============================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlex.min_gripper_width

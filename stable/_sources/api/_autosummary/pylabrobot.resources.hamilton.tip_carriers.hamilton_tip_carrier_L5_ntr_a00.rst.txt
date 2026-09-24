@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_carriers.hamilton\_tip\_carrier\_L5\_ntr\_a00
+================================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_carriers
+
+.. autofunction:: hamilton_tip_carrier_L5_ntr_a00

@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.plateloc.PlateLocStatus
+==========================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoclass:: PlateLocStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateLocStatus.port
+      ~PlateLocStatus.connected
+      ~PlateLocStatus.target_temperature
+      ~PlateLocStatus.stage_position
+      ~PlateLocStatus.cycle_complete
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateLocStatus.__init__
+   
+   

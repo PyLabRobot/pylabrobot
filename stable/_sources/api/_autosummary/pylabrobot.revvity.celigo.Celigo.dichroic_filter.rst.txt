@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.dichroic\_filter
+=================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: Celigo.dichroic_filter

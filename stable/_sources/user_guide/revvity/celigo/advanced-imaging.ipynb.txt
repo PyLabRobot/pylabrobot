@@ -1,0 +1,437 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "title",
+   "metadata": {},
+   "source": [
+    "# Advanced imaging and coordinates\n",
+    "\n",
+    "This notebook goes beyond the [Celigo hello world](hello-world.ipynb): it inspects the installed imaging configuration, plans calibrated coordinates and galvo fields of view, works directly with `CameraFrame`, tunes exposure and autofocus, and inspects structured acquisition results.\n",
+    "\n",
+    "The executable cells move the stage, Z axis, filter wheel, and galvos and switch illumination. Clear the motion envelope, seat the plate correctly, and keep the final cleanup cell available before continuing."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "imports-note",
+   "metadata": {},
+   "source": [
+    "## Configure the instrument\n",
+    "\n",
+    "`CeligoConfig.from_install(install_dir)` loads the complete, per-instrument configuration from an explicit installation root, `ConfigFiles` directory, or hardware-config path. Assign the plate after constructing `Celigo`; the plate is not a constructor setting."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "imports",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pathlib import Path\n",
+    "\n",
+    "from pylabrobot.revvity import Capture, Celigo, CeligoConfig, ScanSpec\n",
+    "from pylabrobot.revvity.celigo import CoordinateSystems\n",
+    "from pylabrobot.revvity.celigo.navigation import galvo_field_of_view_offsets_mm\n",
+    "from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "configuration",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "config_root = Path(\"/path/to/Celigo/ConfigFiles\")\n",
+    "lucam_sdk = Path(\"/path/to/liblucamapi.so\")\n",
+    "usb_address = \"3-2\"\n",
+    "\n",
+    "config = CeligoConfig.from_install(str(config_root))\n",
+    "plate = cor_96_wellplate_360uL_Fb(name=\"imaging_plate\")\n",
+    "celigo = Celigo(\n",
+    "  config=config,\n",
+    "  usb_address=usb_address,\n",
+    "  lucam_sdk=str(lucam_sdk),\n",
+    ")\n",
+    "celigo.set_plate(plate)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "connect-note",
+   "metadata": {},
+   "source": [
+    "## Connect and establish position references\n",
+    "\n",
+    "`setup()` initializes the controller and camera, configures the motors and galvos, then homes Z, X, Y, and the dichroic filter in that clearance-safe order."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "connect",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await celigo.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "channels-note",
+   "metadata": {},
+   "source": [
+    "## Inspect the installed channel recipes\n",
+    "\n",
+    "Channel configuration is magnification-specific. Each recipe supplies the logical filter, lighting output, default intensity, Z correction, and pixel-scale correction used by `acquire()` and scan planning."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "channels",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "channel_summary = {\n",
+    "  name: {\n",
+    "    \"logical_filter\": channel.logical_filter,\n",
+    "    \"lighting_output\": channel.lighting_io_name,\n",
+    "    \"intensity_percent\": channel.intensity_percent,\n",
+    "    \"z_offset_mm\": channel.z_offset_to_brightfield_mm,\n",
+    "    \"pixel_scale\": (\n",
+    "      channel.mm_per_pixel_x_correction_to_brightfield,\n",
+    "      channel.mm_per_pixel_y_correction_to_brightfield,\n",
+    "    ),\n",
+    "  }\n",
+    "  for name, channel in celigo.config.channels.items()\n",
+    "}\n",
+    "celigo.config.magnification, channel_summary"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "coordinates-note",
+   "metadata": {},
+   "source": [
+    "## Plan calibrated coordinates without moving\n",
+    "\n",
+    "`well_position_mm()` converts a standard PyLabRobot well into calibrated stage millimeters. `CoordinateSystems` also converts between plate-relative sample millimeters, stage millimeters, and pixels. For image conversions, `reference_point_mm` is the field center in sample coordinates; the calibrated center pixel maps to that sample point and its corresponding stage position."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "coordinates",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "plate_coordinates = CoordinateSystems.from_config(\n",
+    "  celigo.config.calibration,\n",
+    "  celigo.config.hardware_defaults,\n",
+    ")\n",
+    "a1_stage_mm = celigo.well_position_mm(\"A1\")\n",
+    "a1_sample_mm = plate_coordinates.stage_mm_to_sample_mm(*a1_stage_mm)\n",
+    "field_coordinates = CoordinateSystems.from_config(\n",
+    "  celigo.config.calibration,\n",
+    "  celigo.config.hardware_defaults,\n",
+    "  reference_point_mm=a1_sample_mm,\n",
+    ")\n",
+    "center_pixel = (\n",
+    "  celigo.config.calibration.image_width_pixels / 2,\n",
+    "  celigo.config.calibration.image_height_pixels / 2,\n",
+    ")\n",
+    "center_sample_mm = field_coordinates.image_pixel_to_sample_mm(*center_pixel)\n",
+    "center_stage_mm = field_coordinates.image_pixel_to_stage_mm(*center_pixel)\n",
+    "{\n",
+    "  \"A1 stage mm\": a1_stage_mm,\n",
+    "  \"A1 sample mm\": a1_sample_mm,\n",
+    "  \"center pixel\": center_pixel,\n",
+    "  \"center pixel sample mm\": center_sample_mm,\n",
+    "  \"center pixel stage mm\": center_stage_mm,\n",
+    "}"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "fov-plan-note",
+   "metadata": {},
+   "source": [
+    "## Preview the galvo FOV plan\n",
+    "\n",
+    "The navigation calibration defines a centered serpentine grid of sample-space offsets. `Galvo.voltages_for_offset()` combines one offset with the active magnification center, the logical-filter correction, and the calibrated inverse polynomial. These calculations do not move hardware."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "fov-plan",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "brightfield_filter = celigo.config.channels[\"brightfield\"].logical_filter\n",
+    "fov_offsets_mm = galvo_field_of_view_offsets_mm(\n",
+    "  celigo.config.calibration,\n",
+    "  celigo.config.navigation,\n",
+    ")\n",
+    "fov_plan = [\n",
+    "  {\n",
+    "    \"offset_mm\": offset_mm,\n",
+    "    \"logical_voltages\": celigo.galvo.voltages_for_offset(\n",
+    "      brightfield_filter,\n",
+    "      offset_mm,\n",
+    "    ),\n",
+    "  }\n",
+    "  for offset_mm in fov_offsets_mm\n",
+    "]\n",
+    "fov_plan"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "frame-note",
+   "metadata": {},
+   "source": [
+    "## Capture and analyze a `CameraFrame`\n",
+    "\n",
+    "`capture_frame()` captures at the current stage, Z, filter, galvo, and illumination state. The following cells establish that state explicitly. `CameraFrame` stores dependency-free monochrome bytes and exposes statistics, sharpness, PGM export, and optional NumPy conversion."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "establish-field",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await celigo.move_to_well(\"A1\", retract_z=True)\n",
+    "await celigo.select_channel(\"brightfield\")\n",
+    "await celigo.z_axis.move_to(celigo.config.calibration.calibrated_z_position)\n",
+    "await celigo.galvo.home(logical_filter=brightfield_filter)\n",
+    "await celigo.set_camera_exposure_and_gain(\n",
+    "  exposure_ms=1.0,\n",
+    "  gain=1.0,\n",
+    "  restart_camera_stream=True,\n",
+    ")\n",
+    "await celigo.set_illumination_enabled(True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "frame-analysis",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "try:\n",
+    "  frame = await celigo.capture_frame(flush_frames=2)\n",
+    "finally:\n",
+    "  await celigo.turn_off_illumination()\n",
+    "frame.save_pgm(\"A1-brightfield-direct.pgm\")\n",
+    "{\n",
+    "  \"shape\": (frame.height, frame.width),\n",
+    "  \"bit_depth\": frame.bit_depth,\n",
+    "  \"exposure_ms\": frame.exposure_ms,\n",
+    "  \"gain\": frame.gain,\n",
+    "  \"statistics\": frame.statistics(),\n",
+    "  \"sharpness\": frame.sharpness(sample_step=8),\n",
+    "}"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "numpy-note",
+   "metadata": {},
+   "source": [
+    "NumPy is optional. When installed, `to_numpy()` returns a two-dimensional `uint8` or `uint16` view suitable for scientific image tooling."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "numpy",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "try:\n",
+    "  image = frame.to_numpy()\n",
+    "except ImportError as error:\n",
+    "  print(error)\n",
+    "else:\n",
+    "  print(image.shape, image.dtype)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "exposure-note",
+   "metadata": {},
+   "source": [
+    "## Tune exposure directly\n",
+    "\n",
+    "`auto_exposure()` tests only the supplied positive candidates, from left to right. It chooses the first frame that is bright enough while keeping the saturated-pixel fraction below the requested limit. It does not move or select a channel, so establish the field first as above."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "exposure",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "selected_exposure_ms, exposure_frame = await celigo.auto_exposure(\n",
+    "  candidates_ms=(10.0, 5.0, 2.0, 1.0, 0.5),\n",
+    "  saturation_fraction=0.01,\n",
+    "  minimum_mean_fraction=0.03,\n",
+    ")\n",
+    "selected_exposure_ms, exposure_frame.statistics()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "autofocus-note",
+   "metadata": {},
+   "source": [
+    "## Inspect a direct autofocus result\n",
+    "\n",
+    "The high-level acquisition API accepts `autofocus=\"image\"`. Calling `autofocus()` directly additionally exposes the sampled Z ticks and scores. Its span and step arguments are controller-native encoder ticks; use the Z-axis conversion helpers when starting from millimeters. The scan restores the initial Z position on failure and rejects flat focus curves and boundary optima."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "autofocus",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "center_z_ticks = await celigo.z_axis.request_encoder_ticks()\n",
+    "focus = await celigo.autofocus(\n",
+    "  center_z_ticks=center_z_ticks,\n",
+    "  span_ticks=1500,\n",
+    "  coarse_step_ticks=250,\n",
+    "  fine_step_ticks=75,\n",
+    ")\n",
+    "focus.frame.save_pgm(\"A1-brightfield-focused-direct.pgm\")\n",
+    "{\n",
+    "  \"z_ticks\": focus.z_ticks,\n",
+    "  \"z_mm\": focus.z_mm,\n",
+    "  \"verified_score\": focus.score,\n",
+    "  \"samples\": focus.scored_z_samples,\n",
+    "}"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "acquisition-result-note",
+   "metadata": {},
+   "source": [
+    "## Inspect structured acquisition metadata\n",
+    "\n",
+    "`AcquisitionResult` records the requested well and channel, settled X/Y/Z millimeters, the final frame, optional `FocusResult`, and the hardware galvo voltages. Acquisition extinguishes illumination if any step fails or is cancelled."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "acquisition-result",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "result = await celigo.acquire(\n",
+    "  \"A1\",\n",
+    "  \"brightfield\",\n",
+    "  exposure_ms=selected_exposure_ms,\n",
+    "  gain=1.0,\n",
+    "  autofocus=\"image\",\n",
+    "  galvo_offset_mm=fov_offsets_mm[0],\n",
+    ")\n",
+    "{\n",
+    "  \"label\": result.label,\n",
+    "  \"channel\": result.channel,\n",
+    "  \"stage_mm\": (result.x_mm, result.y_mm),\n",
+    "  \"z_mm\": result.z_mm,\n",
+    "  \"galvo_hardware_voltages\": result.galvo_hardware_voltages,\n",
+    "  \"focus_score\": None if result.focus is None else result.focus.score,\n",
+    "  \"frame_statistics\": result.frame.statistics(),\n",
+    "}"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "scan-note",
+   "metadata": {},
+   "source": [
+    "## Build and execute a multichannel scan\n",
+    "\n",
+    "`ScanSpec.wells()` converts well names to physical centers and stores every capture setting. `plan()` is offline; `execute()` accepts no scientific overrides and runs the inspected operations exactly. The coarse stage moves once per block."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "scan",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "scan_spec = ScanSpec.wells(\n",
+    "  plate,\n",
+    "  [\"A1\", \"A2\"],\n",
+    "  block_shape=(2, 3),\n",
+    "  captures=[\n",
+    "    Capture(channel=\"brightfield\", exposure_ms=selected_exposure_ms, gain=1.0),\n",
+    "    Capture(channel=\"green\", exposure_ms=10.0, gain=1.0),\n",
+    "  ],\n",
+    "  autofocus=\"image\",\n",
+    ")\n",
+    "scan_plan = celigo.plan(scan_spec)\n",
+    "print(scan_plan)\n",
+    "\n",
+    "scan_result = await celigo.execute(scan_plan)\n",
+    "[\n",
+    "  (\n",
+    "    item.planned.block.label,\n",
+    "    item.planned.capture.channel,\n",
+    "    item.actual_stage_mm,\n",
+    "    item.actual_z_mm,\n",
+    "  )\n",
+    "  for item in scan_result.frames\n",
+    "]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "cleanup-note",
+   "metadata": {},
+   "source": [
+    "## Stop safely\n",
+    "\n",
+    "Run cleanup even after an exception. `turn_off_illumination()` attempts every configured lighting output even if one output fails; `stop()` also aborts controller work, clears safe outputs, closes the camera, and releases FTDI."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "cleanup",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await celigo.turn_off_illumination()\n",
+    "await celigo.stop()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

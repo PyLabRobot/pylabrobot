@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AxisConfig.s\_curve\_support
+======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AxisConfig.s_curve_support

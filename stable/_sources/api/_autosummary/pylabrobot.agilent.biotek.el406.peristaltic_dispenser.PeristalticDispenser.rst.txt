@@ -1,0 +1,27 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.el406.peristaltic\_dispenser.PeristalticDispenser
+===========================================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.el406.peristaltic_dispenser
+
+.. autoclass:: PeristalticDispenser
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PeristalticDispenser.__init__
+      ~PeristalticDispenser.dispense
+      ~PeristalticDispenser.prime
+      ~PeristalticDispenser.purge
+   
+   

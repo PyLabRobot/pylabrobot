@@ -1,0 +1,6 @@
+pylabrobot.resources.Well.rotate\_to
+====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Well.rotate_to

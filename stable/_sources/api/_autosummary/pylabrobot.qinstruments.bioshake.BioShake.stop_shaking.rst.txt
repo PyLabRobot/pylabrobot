@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.stop\_shaking
+=======================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.stop_shaking

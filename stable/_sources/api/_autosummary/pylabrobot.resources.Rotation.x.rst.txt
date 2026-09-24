@@ -1,0 +1,6 @@
+pylabrobot.resources.Rotation.x
+===============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: Rotation.x

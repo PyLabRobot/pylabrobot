@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesPlateReader.start\_shake
+=================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: MolecularDevicesPlateReader.start_shake

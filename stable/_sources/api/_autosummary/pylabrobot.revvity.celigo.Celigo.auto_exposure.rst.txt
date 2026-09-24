@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.auto\_exposure
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.auto_exposure
