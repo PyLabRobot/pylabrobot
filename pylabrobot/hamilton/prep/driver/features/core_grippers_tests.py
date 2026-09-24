@@ -17,6 +17,7 @@ from pylabrobot.hamilton.prep.driver.features.core_grippers import (
   JAW_OPEN_EXTRA,
   CoreGrippers,
 )
+from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.azenta import azenta_96_wellplate_200uL_Vb_4titudeframestar
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
@@ -1203,6 +1204,42 @@ def test_a_held_plate_rides_on_the_front_tool_and_lands_where_it_is_put():
     held_at = plate.get_location_wrt(deck)
     await grippers.release_plate()
     assert plate.parent is deck and plate.location == pytest.approx(held_at)
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_while_a_plate_is_held_the_simulator_refuses_the_tools_home_and_initializing_as_the_device():
+  """The plate-held latch: 0x0F04 for PrepDropTool, 0x0F0A (and 0x0F04) for PrepInitialize."""
+
+  async def _run():
+    deck = PrepDeck(with_core_grippers=True)
+    plate = deck[0] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    grippers = p.core_grippers
+    assert grippers is not None
+    await grippers.pick_up_tools()
+    await grippers.pick_up_resource(plate)
+    front_tool = grippers._front_tool()
+
+    with pytest.raises(RuntimeError, match="the grippers hold plate"):
+      await grippers.return_tools()  # refused before anything is sent
+    with pytest.raises(HoiError, match="0x0F04"):
+      await p.send_command(PrepCmd.PrepDropTool())
+    assert grippers.tools_mounted and plate.parent is front_tool  # nothing let go of in the model
+    initialize = PrepCmd.PrepInitialize(
+      smart=True,
+      tip_drop_params=PrepCmd.InitTipDropParameters(
+        default_values=True, x_position=287.0, rolloff_distance=3, channel_parameters=[]
+      ),
+    )
+    with pytest.raises(HoiError, match="0x0F0A"):
+      await p.send_command(initialize)
+
+    await grippers.return_resource()
+    await grippers.return_tools()  # accepted once the plate is down
+    await p.send_command(initialize)
     await p.stop()
 
   asyncio.run(_run())
