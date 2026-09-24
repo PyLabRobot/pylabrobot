@@ -3,7 +3,7 @@ import math
 import re
 import unittest
 import unittest.mock
-from typing import Any, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
@@ -2772,3 +2772,159 @@ class TestLiquidClassLookup(unittest.TestCase):
           blow_out=blow_out,
         )
         self.assertIsNotNone(found)
+
+
+class TestAspirateInOneMove(unittest.IsolatedAsyncioTestCase):
+  """One `C0 AS` from mm and uL: the fields it fills, the defaults it takes, what it refuses."""
+
+  async def asyncSetUp(self):
+    from pylabrobot.resources.hamilton.tip_creators import hamilton_tip_300uL_filter
+
+    self.pipettes = await simulated_channels()
+    self.tip = hamilton_tip_300uL_filter("tip")
+    self.pipettes.get_mounted_tip = unittest.mock.Mock(return_value=self.tip)  # type: ignore[method-assign]
+    self.fw = unittest.mock.AsyncMock()
+    self.pipettes._unchecked_fw_aspirate = self.fw  # type: ignore[method-assign]
+    self.pipettes._record_after_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    self.locations = [Coordinate(300.0, 300.0, 150.0), Coordinate(300.0, 291.0, 150.0)]
+    self.floors = [120.0, 120.0]
+    self.searches = [180.0, 180.0]
+
+  def sent(self) -> Mapping[str, Any]:
+    """The fields of the one command sent."""
+    assert self.fw.await_args is not None
+    return self.fw.await_args.kwargs
+
+  async def test_defaults_are_legacys_and_the_fields_are_tenths(self):
+    await self.pipettes._aspirate_in_one_move(
+      [0, 1], self.locations, self.searches, self.floors, [100.0, 50.0]
+    )
+    self.fw.assert_awaited_once()
+    sent = self.sent()
+    traverse = round(self.pipettes.default_minimum_traverse_height * 10)
+    # Laid out as legacy lays them out: one trailing unused entry when not every channel is listed.
+    self.assertEqual(sent["tip_pattern"], [True, True, False])
+    self.assertEqual((sent["x_positions"], sent["y_positions"]), ([3000, 3000, 0], [3000, 2910, 0]))
+    self.assertEqual(sent["aspiration_volumes"], [1000, 500])
+    self.assertEqual(sent["aspiration_speed"], [1000, 1000])
+    self.assertEqual(sent["liquid_surface_no_lld"], [1500, 1500])
+    self.assertEqual(sent["minimum_height"], [1200, 1200])
+    self.assertEqual(sent["lld_search_height"], [1800, 1800])
+    self.assertEqual(sent["lld_mode"], [0, 0])
+    self.assertEqual(
+      (sent["minimum_traverse_height_start"], sent["minimum_z_end_position"]), (traverse, traverse)
+    )
+    self.assertEqual(sent["pull_out_distance_transport_air"], [100, 100])
+    self.assertEqual(
+      (sent["second_section_height"], sent["second_section_ratio"]), ([32, 32], [6180, 6180])
+    )
+    self.assertEqual((sent["swap_speed"], sent["settling_time"]), ([1000, 1000], [0, 0]))
+    self.assertEqual((sent["immersion_depth"], sent["immersion_depth_direction"]), ([0, 0], [0, 0]))
+    self.assertEqual(sent["use_2nd_section_aspiration"], [False, False])
+    self.assertEqual(
+      (
+        sent["dispensation_speed_during_emptying_tip"],
+        sent["z_drive_speed_during_2nd_section_search"],
+      ),
+      ([500, 500], [300, 300]),
+    )
+    self.pipettes._record_after_command.assert_awaited_once()  # type: ignore[attr-defined]
+
+  async def test_wells_a_pitch_apart_in_floating_point_are_accepted(self):
+    # 145.7 - 136.7 is 8.999999999999986 in floating point; the firmware gets 9.0 mm.
+    locations = [Coordinate(300.0, 145.7, 150.0), Coordinate(300.0, 136.7, 150.0)]
+    await self.pipettes._aspirate_in_one_move(
+      [0, 1], locations, self.searches, self.floors, [10.0, 10.0]
+    )
+    self.assertEqual(self.sent()["y_positions"], [1457, 1367, 0])
+
+  async def test_both_traverse_heights_are_any_the_tips_reach(self):
+    await self.pipettes._aspirate_in_one_move(
+      [0, 1],
+      self.locations,
+      self.searches,
+      self.floors,
+      [10.0, 10.0],
+      minimum_traverse_height_start=150.0,
+      minimum_traverse_height_end=180.0,
+    )
+    sent = self.sent()
+    self.assertEqual(
+      (sent["minimum_traverse_height_start"], sent["minimum_z_end_position"]), (1500, 1800)
+    )
+    with self.assertRaises(ValueError):
+      await self.pipettes._aspirate_in_one_move(
+        [0, 1],
+        self.locations,
+        self.searches,
+        self.floors,
+        [10.0, 10.0],
+        minimum_traverse_height_end=400.0,
+      )
+
+  async def test_a_negative_immersion_depth_is_sent_as_a_direction(self):
+    await self.pipettes._aspirate_in_one_move(
+      [0, 1],
+      self.locations,
+      self.searches,
+      self.floors,
+      [10.0, 10.0],
+      immersion_depths=[-1.5, 2.0],
+    )
+    sent = self.sent()
+    self.assertEqual(
+      (sent["immersion_depth"], sent["immersion_depth_direction"]), ([15, 20], [1, 0])
+    )
+
+  async def test_z_touch_is_sent_with_a_warning(self):
+    with self.assertLogs(
+      "pylabrobot.hamilton.star.driver.features.pipettes", level="WARNING"
+    ) as logs:
+      await self.pipettes._aspirate_in_one_move(
+        [0, 1],
+        self.locations,
+        self.searches,
+        self.floors,
+        [10.0, 10.0],
+        lld_modes=[Pipettes.LLDMode.ZTOUCH, Pipettes.LLDMode.OFF],
+      )
+    self.assertIn("channels [0]", logs.output[0])
+    self.assertEqual(self.sent()["lld_mode"], [4, 0])
+
+  async def test_what_the_tip_holds_counts_towards_its_capacity(self):
+    self.tip.tracker.set_volume(310.0)
+    with self.assertRaises(ValueError) as refused:
+      await self.pipettes._aspirate_in_one_move(
+        [0, 1],
+        self.locations,
+        self.searches,
+        self.floors,
+        [40.0, 10.0],
+        transport_air_volumes=[20.0, 0.0],
+      )
+    self.assertIn(
+      "370.0 uL with its transport air, 310.0 uL in the tip already", str(refused.exception)
+    )
+    self.fw.assert_not_awaited()
+
+  async def test_refusals_come_before_anything_is_sent(self):
+    over = self.tip.maximal_volume
+    ten = [10.0, 10.0]
+    refusals: List[Tuple[List[float], Dict[str, Any], str]] = [
+      ([over, 10.0], {"transport_air_volumes": [5.0, 0.0]}, "over its tip's"),
+      ([10.0], {}, "one entry per channel"),
+      (ten, {"flow_rates": [0.0, 10.0]}, "flow_rates"),
+      (ten, {"clld_sensitivities": [5, 1]}, "clld_sensitivities"),
+    ]
+    for volumes, kwargs, message in refusals:
+      with self.assertRaises(ValueError, msg=message) as refused:
+        await self.pipettes._aspirate_in_one_move(
+          [0, 1], self.locations, self.searches, self.floors, volumes, **kwargs
+        )
+      self.assertIn(message, str(refused.exception))
+    self.pipettes.get_mounted_tip = unittest.mock.Mock(return_value=None)  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError):
+      await self.pipettes._aspirate_in_one_move(
+        [0, 1], self.locations, self.searches, self.floors, [10.0, 10.0]
+      )
+    self.fw.assert_not_awaited()
