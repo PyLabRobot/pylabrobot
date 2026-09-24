@@ -21,18 +21,34 @@ from pylabrobot.hamilton.prep.driver.simulator import (
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
+from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton import (
   PrepDeck,
   STARLetDeck,
   hamilton_96_tiprack_50uL_NTR,
+  hamilton_96_tiprack_300uL_NTR,
   hamilton_tip_300uL,
 )
-from pylabrobot.resources.tip_tracker import set_tip_tracking
+from pylabrobot.resources.tip_tracking import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
 
 
 def _run(coro):
   asyncio.run(coro)
+
+
+def _record(p: PrepSimulationDriver, only: Any = object, names: bool = False) -> List[Any]:
+  """Every command `p` sends from here on (of type `only`, when given), or its name with `names`."""
+  sent: List[Any] = []
+  send = p.send_command
+
+  async def record(command, *args, **kwargs):
+    if isinstance(command, only):
+      sent.append(type(command).__name__ if names else command)
+    return await send(command, *args, **kwargs)
+
+  p.send_command = record  # type: ignore[method-assign]
+  return sent
 
 
 def _index(sent: List[Any], command_type: Any) -> int:
@@ -73,42 +89,8 @@ def test_channels_attach_the_bounds_the_device_answers():
   _run(_t())
 
 
-def test_channels_tip_trackers_pick_and_drop():
-  """pick_up_tips / drop_tips update spot + channel TipTrackers when tip tracking is on."""
-
-  async def _t():
-    set_tip_tracking(True)
-    try:
-      deck = PrepDeck()
-      tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
-      p = PrepSimulationDriver(deck=deck)
-      await p.setup()
-      assert p.pipettes is not None
-      spots = [tip_rack.get_item("A1"), tip_rack.get_item("B1")]
-      n = min(2, p.pipettes.num_channels)
-      spots = spots[:n]
-      use = list(range(n))
-      assert all(s.has_tip() for s in spots)
-      assert all(t is None for t in p.pipettes.get_mounted_tips()[:n])
-
-      await p.pipettes.pick_up_tips(spots, use_channels=use)
-      assert all(not s.has_tip() for s in spots)
-      mounted = p.pipettes.get_mounted_tips()
-      assert all(mounted[i] is not None for i in use)
-      assert all(p.pipettes.head[i].has_tip for i in use)
-
-      await p.pipettes.drop_tips(spots, use_channels=use)
-      assert all(s.has_tip() for s in spots)
-      assert all(not p.pipettes.head[i].has_tip for i in use)
-      await p.stop()
-    finally:
-      set_tip_tracking(False)
-
-  _run(_t())
-
-
-def test_channels_volume_trackers_aspirate_dispense():
-  """aspirate/dispense update well and tip VolumeTrackers when volume tracking is on."""
+def test_channels_tip_and_volume_trackers_follow_pick_up_aspirate_dispense_and_drop():
+  """Tips move between their spots and the channels' shafts; wells and tips track the volume moved."""
 
   async def _t():
     set_tip_tracking(True)
@@ -120,41 +102,48 @@ def test_channels_volume_trackers_aspirate_dispense():
       p = PrepSimulationDriver(deck=deck)
       await p.setup()
       assert p.pipettes is not None
-      n = min(2, p.pipettes.num_channels)
-      spots = [tip_rack.get_item("A1"), tip_rack.get_item("B1")][:n]
-      use = list(range(n))
-      src = plate["A1:B1"][:n]
-      dst = plate["A7:B7"][:n]
-      vols = [20.0] * n
+      spots = [tip_rack.get_item("A1"), tip_rack.get_item("B1")]
+      use = [0, 1]
+      src = plate["A1:B1"]
+      dst = plate["A7:B7"]
+      vols = [20.0] * 2
       for well in src:
         well.tracker.set_volume(100.0)
 
       await p.pipettes.pick_up_tips(spots, use_channels=use)
+      assert all(s.tip is None for s in spots)
+      for i in use:
+        tip = p.pipettes.get_mounted_tip(i)
+        assert tip is not None and tip.parent is p.pipettes.shaft(i)
       await p.pipettes.aspirate(
         src,
         vols=vols,
         use_channels=use,
-        disable_volume_correction=[True] * n,
+        disable_volume_correction=[True] * 2,
       )
       for well in src:
         assert well.tracker.get_used_volume() == pytest.approx(80.0)
       for ch in use:
-        tip = p.pipettes.head[ch].get_tip()
+        tip = p.pipettes.get_mounted_tip(ch)
+        assert tip is not None
         assert tip.tracker.get_used_volume() == pytest.approx(20.0)
 
       await p.pipettes.dispense(
         dst,
         vols=vols,
         use_channels=use,
-        disable_volume_correction=[True] * n,
+        disable_volume_correction=[True] * 2,
       )
       for well in dst:
         assert well.tracker.get_used_volume() == pytest.approx(20.0)
       for ch in use:
-        tip = p.pipettes.head[ch].get_tip()
+        tip = p.pipettes.get_mounted_tip(ch)
+        assert tip is not None
         assert tip.tracker.get_used_volume() == pytest.approx(0.0)
 
       await p.pipettes.drop_tips(spots, use_channels=use)
+      assert all(s.tip is not None for s in spots)
+      assert all(p.pipettes.get_mounted_tip(i) is None for i in use)
       await p.stop()
     finally:
       set_tip_tracking(False)
@@ -163,93 +152,16 @@ def test_channels_volume_trackers_aspirate_dispense():
   _run(_t())
 
 
-def test_setup_keeps_the_default_traverse_height_it_is_given():
+def test_default_minimum_traverse_height_is_plrs_then_the_devices_then_the_one_setup_is_given():
   async def _t():
-    p = PrepSimulationDriver(deck=STARLetDeck())
-    await p.setup(default_traverse_height=150.0)
+    p = PrepSimulationDriver(deck=STARLetDeck(), default_minimum_traverse_height=160.0)
     assert p.pipettes is not None
+    assert p.pipettes.default_minimum_traverse_height == 167.5
+    await p.setup()
+    assert p.pipettes.default_minimum_traverse_height == 160.0
+    await p.stop()
+    await p.setup(default_minimum_traverse_height=150.0)
     assert p.pipettes.default_minimum_traverse_height == 150.0
-    await p.stop()
-
-  _run(_t())
-
-
-def test_move_to_location_refuses_what_the_channel_bounds_exclude():
-  """The reach recorded on a channel's configuration guards the move before anything is sent."""
-
-  async def _t():
-    p = PrepSimulationDriver(deck=STARLetDeck())
-    await p.setup()
-    assert p.pipettes is not None
-    c = p.pipettes.configuration.channels[0]
-    c.x_range, c.y_range, c.z_range = (0.0, 400.0), (0.0, 400.0), (0.0, 170.0)
-    with pytest.raises(ValueError, match="outside channel 0"):
-      await p.pipettes.move_to_location(Coordinate(500.0, 100.0, 100.0), use_channels=0)
-    with pytest.raises(ValueError, match="above channel 0 maximum"):
-      await p.pipettes.move_to_location(Coordinate(100.0, 100.0, 200.0), use_channels=0)
-    with pytest.raises(ValueError, match="same x"):
-      await p.pipettes.move_to_location(
-        [Coordinate(100.0, 200.0, 100.0), Coordinate(101.0, 100.0, 100.0)], use_channels=[0, 1]
-      )
-    await p.stop()
-
-  _run(_t())
-
-
-def test_move_to_y_positions_moves_each_named_channel_in_one_command():
-  """Each channel goes to its own Y in a single move, keeping its X and Z."""
-
-  async def _t():
-    p = PrepSimulationDriver(deck=PrepDeck())
-    await p.setup()
-    assert p.pipettes is not None
-    before = await p.pipettes.request_locations()
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(type(command).__name__)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.move_to_y_positions({1: 75.0, 0: 100.0})
-    assert sent.count("PrepMoveYAbsolute") == 1
-    assert "PrepMoveToPosition" not in sent
-    after = await p.pipettes.request_locations()
-    assert (after[0].y, after[0].z) == (100.0, before[0].z)
-    assert (after[1].y, after[1].z) == (75.0, before[1].z)
-    assert after[0].x == after[1].x == before[0].x
-    with pytest.raises(ValueError, match="out of range"):
-      await p.pipettes.move_to_y_positions({2: 50.0})
-    await p.stop()
-
-  _run(_t())
-
-
-def test_move_tool_bottom_to_z_positions_moves_each_named_channel_in_one_command():
-  """Each channel goes to its own Z in a single move, keeping its X and Y."""
-
-  async def _t():
-    p = PrepSimulationDriver(deck=PrepDeck())
-    await p.setup()
-    assert p.pipettes is not None
-    before = await p.pipettes.request_locations()
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(type(command).__name__)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.move_tool_bottom_to_z_positions({1: 75.0, 0: 50.0})
-    assert sent.count("PrepMoveZAbsolute") == 1
-    assert "PrepMoveToPosition" not in sent
-    after = await p.pipettes.request_locations()
-    assert (after[0].y, after[0].z) == (before[0].y, 50.0)
-    assert (after[1].y, after[1].z) == (before[1].y, 75.0)
-    with pytest.raises(ValueError, match="out of range"):
-      await p.pipettes.move_tool_bottom_to_z_positions({2: 50.0})
     await p.stop()
 
   _run(_t())
@@ -274,86 +186,54 @@ def test_move_to_location_keeps_each_location_with_its_channel():
   _run(_t())
 
 
-def test_move_to_location_sets_speed_scales_for_the_move_and_puts_them_back():
-  """The move runs at the given speed scales, and the earlier scales are restored after it."""
+@pytest.mark.parametrize(
+  "default_x_speed, kwargs, scales",
+  [
+    (None, {"x_speed_scale": 25, "z_speed": 40.0}, [25, 100]),
+    (None, {"x_speed": 150.0}, [25, 100]),
+    (None, {}, [53, 100]),
+    (60.0, {}, [10, 100]),
+  ],
+)
+def test_move_to_location_sets_an_x_speed_scale_for_the_move_and_puts_it_back(
+  default_x_speed, kwargs, scales
+):
+  """x_speed_scale is sent as given, x_speed in mm/s as the nearest scale, and with neither the
+  default_x_speed; the descent takes z_speed in mm/s."""
 
   async def _t():
     p = PrepSimulationDriver(deck=PrepDeck())
     await p.setup()
     assert p.pipettes is not None
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.move_to_location(
-      Coordinate(150.0, 360.0, 160.0), use_channels=0, x_speed_scale=25, z_speed_scale=50
-    )
+    if default_x_speed is not None:
+      p.pipettes.default_x_speed = default_x_speed
+    sent = _record(p)
+    await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), use_channels=0, **kwargs)
     move = _index(sent, PrepCmd.PrepMoveToPosition)
-    assert _last_before(sent, PrepCmd.PrepSetXSpeedScale, move).value == 25
-    assert _last_before(sent, PrepCmd.PrepSetZSpeedScale, move).value == 50
-    assert _last_after(sent, PrepCmd.PrepSetXSpeedScale, move).value == 100
-    assert _last_after(sent, PrepCmd.PrepSetZSpeedScale, move).value == 100
-
-    with pytest.raises(ValueError, match="between 1 and 100"):
-      await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), x_speed_scale=0)
+    assert [c.value for c in sent if isinstance(c, PrepCmd.PrepSetXSpeedScale)] == scales
+    assert _last_before(sent, PrepCmd.PrepSetXSpeedScale, move).value == scales[0]
+    descent = _last_after(sent, PrepCmd.PrepMoveZAbsolute, move)
+    assert descent.velocity == kwargs.get("z_speed", p.pipettes.default_z_speed)
     await p.stop()
 
   _run(_t())
 
 
-def test_move_to_location_x_speed_is_set_as_the_nearest_scale():
-  """x_speed in mm/s becomes the X speed scale; it and x_speed_scale cannot both be given."""
-
+@pytest.mark.parametrize(
+  "kwargs, refusal",
+  [
+    ({"x_speed_scale": 0}, "between 1 and 100"),
+    ({"x_speed": 150.0, "x_speed_scale": 25}, "not both"),
+    ({"x_speed": 500.0}, "between 6.0 and 400.0 mm/s"),
+  ],
+)
+def test_move_to_location_refuses_an_x_speed_it_cannot_send(kwargs, refusal):
   async def _t():
     p = PrepSimulationDriver(deck=PrepDeck())
     await p.setup()
     assert p.pipettes is not None
-    sent: list = []
-    execute = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await execute(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), x_speed=150.0)
-    scales = [c.value for c in sent if type(c).__name__ == "PrepSetXSpeedScale"]
-    assert scales == [25, 100]
-    with pytest.raises(ValueError, match="not both"):
-      await p.pipettes.move_to_location(
-        Coordinate(150.0, 360.0, 160.0), x_speed=150.0, x_speed_scale=25
-      )
-    with pytest.raises(ValueError, match="between 6.0 and 400.0 mm/s"):
-      await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), x_speed=500.0)
-    await p.stop()
-
-  _run(_t())
-
-
-def test_move_to_location_uses_default_x_speed_when_none_is_given():
-  """With no speed named, the move is sent at `default_x_speed`, and a changed default is honoured."""
-
-  async def _t():
-    p = PrepSimulationDriver(deck=PrepDeck())
-    await p.setup()
-    assert p.pipettes is not None
-    sent: list = []
-    execute = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await execute(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0))
-    p.pipettes.default_x_speed = 60.0
-    await p.pipettes.move_to_location(Coordinate(200.0, 360.0, 160.0))
-    scales = [c.value for c in sent if type(c).__name__ == "PrepSetXSpeedScale"]
-    assert scales == [53, 100, 10, 100]
+    with pytest.raises(ValueError, match=refusal):
+      await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), **kwargs)
     await p.stop()
 
   _run(_t())
@@ -368,14 +248,7 @@ def test_y_and_z_moves_send_every_channel_at_the_default_speed():
     await p.setup()
     assert p.pipettes is not None
     before = await p.pipettes.request_locations()
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
+    sent = _record(p)
     await p.pipettes.move_to_y_position(0, 370.0)
     await p.pipettes.move_tool_bottom_to_z_position(1, 150.0)
     y_move = next(c for c in sent if isinstance(c, PrepCmd.PrepMoveYAbsolute))
@@ -393,6 +266,16 @@ def test_y_and_z_moves_send_every_channel_at_the_default_speed():
     assert z_move.velocity == p.pipettes.default_z_speed
     after = await p.pipettes.request_locations()
     assert (after[0].x, after[0].y, after[1].z) == (before[0].x, 370.0, 150.0)
+
+    # Positions named out of channel order still go to the channels they were named for.
+    await p.pipettes.move_to_y_positions({1: 75.0, 0: 100.0})
+    await p.pipettes.move_tool_bottom_to_z_positions({1: 75.0, 0: 50.0})
+    after = await p.pipettes.request_locations()
+    assert [(at.y, at.z) for at in after] == [(100.0, 50.0), (75.0, 75.0)]
+    with pytest.raises(ValueError, match="no channel 2 on this Prep"):
+      await p.pipettes.move_to_y_positions({2: 50.0})
+    with pytest.raises(ValueError, match="out of range"):
+      await p.pipettes.move_tool_bottom_to_z_positions({2: 50.0})
     await p.stop()
 
   _run(_t())
@@ -405,14 +288,7 @@ def test_y_and_z_moves_send_the_speed_they_are_given():
     p = PrepSimulationDriver(deck=PrepDeck())
     await p.setup()
     assert p.pipettes is not None
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
+    sent = _record(p)
     await p.pipettes.move_to_y_positions({0: 370.0, 1: 350.0}, speed=50.0)
     await p.pipettes.move_to_y_position(1, 340.0, speed=60.0)
     await p.pipettes.move_tool_bottom_to_z_positions({0: 150.0, 1: 140.0}, speed=30.0)
@@ -430,10 +306,16 @@ def test_y_and_z_moves_send_the_speed_they_are_given():
     for refused in (
       lambda: p.pipettes.move_to_y_positions({0: 370.0}, speed=0),
       lambda: p.pipettes.move_to_y_position(0, 370.0, speed=-5.0),
-      lambda: p.pipettes.move_tool_bottom_to_z_positions({0: 150.0}, speed=0),
-      lambda: p.pipettes.move_tool_bottom_to_z_position(0, 150.0, speed=-1.0),
     ):
       with pytest.raises(ValueError, match="speed must be above 0 mm/s"):
+        await refused()
+    # Z: within the speeds the drive has been sent at and runs.
+    for refused in (
+      lambda: p.pipettes.move_tool_bottom_to_z_positions({0: 150.0}, speed=0),
+      lambda: p.pipettes.move_tool_bottom_to_z_position(0, 150.0, speed=9.9),
+      lambda: p.pipettes.move_tool_bottom_to_z_position(0, 150.0, speed=142.1),
+    ):
+      with pytest.raises(ValueError, match="speed must be between 10.0 and 142.0 mm/s"):
         await refused()
     assert sent == []
     await p.stop()
@@ -493,30 +375,6 @@ def test_z_moves_hold_the_acceleration_for_the_move_and_put_it_back():
     assert not any(
       isinstance(c, (PrepCmd.PrepZDriveSetAcceleration, PrepCmd.PrepMoveZAbsolute)) for c in sent
     )
-    await p.stop()
-
-  _run(_t())
-
-
-def test_moves_that_keep_x_leave_the_x_speed_scale_alone():
-  """A Y or Z move keeps the gantry where it stands, so no X speed scale is read, set or put back."""
-
-  async def _t():
-    p = PrepSimulationDriver(deck=PrepDeck())
-    await p.setup()
-    assert p.pipettes is not None
-    sent: list = []
-    execute = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(type(command).__name__)
-      return await execute(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.move_to_y_positions({0: 300.0, 1: 280.0})
-    await p.pipettes.move_tool_bottom_to_z_positions({0: 150.0, 1: 140.0})
-    assert {"PrepMoveYAbsolute", "PrepMoveZAbsolute"} <= set(sent)
-    assert not [name for name in sent if "XSpeedScale" in name]
     await p.stop()
 
   _run(_t())
@@ -751,14 +609,7 @@ def test_simulated_x_probe_stops_the_arm_at_the_first_resource_in_the_way():
     assert p.pipettes is not None and p.x_arm is not None
     await p.pipettes.move_to_y_positions({0: 340.0, 1: 300.0})
     await p.pipettes.move_tool_bottom_to_z_positions({1: 50.0})
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
+    sent = _record(p)
     surface = await p.pipettes.probe_x_using_clld(
       1, "left", search_end_position=275.0, allow_without_tip=True
     )
@@ -843,7 +694,9 @@ def test_probe_z_using_ztouch_seeks_the_tip_bottom_and_can_end_at_z_safety():
     assert p.pipettes is not None and p.x_arm is not None
     await p.x_arm.move_to_x_position(100.0)
     await p.pipettes.move_to_y_positions({0: 300.0, 1: 100.0})
-    p.pipettes.head[1].add_tip(hamilton_tip_300uL(name="tip"))
+    shaft = p.pipettes.shaft(1)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="tip"))
     assert await p.pipettes.request_held_tip_length() == pytest.approx(51.9)
     here = (await p.pipettes.request_locations())[1].z
     drive = await p.pipettes.channels[1].request_z_drive_position()
@@ -1099,14 +952,7 @@ def test_x_arm_move_sets_speed_and_acceleration_for_the_axis_move_and_puts_them_
     await p.setup()
     assert p.x_arm is not None and p.pipettes is not None
     await p.pipettes.move_to_safe_z()
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
+    sent = _record(p)
     await p.x_arm.move_to_x_position(200.0)
     move = _index(sent, PrepCmd.PrepXAxisMoveAbsolute)
     assert sent[move].position == pytest.approx(200.0 - SIMULATED_X_AXIS_OFFSET, abs=1e-3)
@@ -1126,20 +972,46 @@ def test_x_arm_move_sets_speed_and_acceleration_for_the_axis_move_and_puts_them_
   _run(_t())
 
 
-def test_x_arm_move_leaves_lowered_channels_where_they_are():
-  """An X axis move neither raises the channels nor refuses while one is lowered."""
+def test_x_arm_move_raises_lowered_channels_up_to_the_height_it_is_given():
+  """The arm travels at the traverse height; a height of 0 raises nothing."""
 
   async def _t():
     p = PrepSimulationDriver(deck=PrepDeck())
     await p.setup()
     assert p.x_arm is not None and p.pipettes is not None
+    traverse = p.pipettes.default_minimum_traverse_height
+
     await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 100.0), use_channels=1)
-    z_before = [position.z for position in await p.pipettes.request_locations()]
     await p.x_arm.move_to_x_position(200.0)
     assert await p.x_arm.request_position() == 200.0
-    assert [position.z for position in await p.pipettes.request_locations()] == z_before
+    assert [at.z for at in await p.pipettes.request_locations()] == [traverse, traverse]
+
+    await p.pipettes.move_to_location(Coordinate(200.0, 200.0, 100.0), use_channels=1)
+    z_before = [at.z for at in await p.pipettes.request_locations()]
+    await p.x_arm.move_to_x_position(180.0, minimum_traverse_height_start=0)
+    assert [at.z for at in await p.pipettes.request_locations()] == z_before
+
     with pytest.raises(ValueError, match="speed must be above 0"):
       await p.x_arm.move_to_x_position(200.0, speed=500.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_x_arm_move_raises_a_channel_only_as_high_as_what_it_carries_allows():
+  """A channel carrying something travels at its own ceiling, not at the traverse height."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.x_arm is not None and p.pipettes is not None
+    traverse = p.pipettes.default_minimum_traverse_height
+    # What the device answers for a channel holding the 51.9 mm teaching needle.
+    p.pipettes.configuration.channels[1].z_range = (-33.9, 115.6)
+
+    await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 100.0), use_channels=1)
+    await p.x_arm.move_to_x_position(200.0)
+    assert [at.z for at in await p.pipettes.request_locations()] == [traverse, 115.6]
     await p.stop()
 
   _run(_t())
@@ -1155,14 +1027,7 @@ def test_x_arm_probe_home_flag_seeks_at_the_given_speed_and_returns_the_deck_fra
     await p.pipettes.move_to_safe_z()
     start = await p.x_arm.request_position()
     assert start is not None
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
+    sent = _record(p)
     tripped = await p.x_arm.probe_home_flag(-30.0)
     assert tripped == pytest.approx(start, abs=1e-3)  # no flag is modelled in simulation
     seek = _index(sent, PrepCmd.PrepXAxisSeekToHomeFlag)
@@ -1190,14 +1055,7 @@ def test_probe_z_using_clld_defaults_lowest_z_to_the_bottom_of_the_channel_z_ran
     await p.setup()
     assert p.pipettes is not None
     p.pipettes.configuration.channels[1].z_range = (18.03, 167.5)
-    sent: list = []
-    execute = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await execute(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
+    sent = _record(p)
     await p.pipettes.probe_z_using_clld(1, search_start_position=160.0, allow_without_tip=True)
     seek = next(c for c in sent if type(c).__name__ == "PrepZSeekLldPosition").seek_parameters[0]
     assert seek.min_seek_height == pytest.approx(18.03)
@@ -1255,38 +1113,6 @@ def test_minimum_y_spacing_comes_from_the_channel_windows():
   _run(_t())
 
 
-def test_moves_refuse_channels_too_close_or_out_of_order():
-  """Neither move sends anything that puts neighbouring channels closer than their spacing, or swaps them."""
-
-  async def _t():
-    p = PrepSimulationDriver(deck=PrepDeck())
-    await p.setup()
-    assert p.pipettes is not None
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(type(command).__name__)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
-    with pytest.raises(ValueError, match="at least 9.0 mm apart"):
-      await p.pipettes.move_to_y_positions({0: 100.0, 1: 95.0})
-    with pytest.raises(ValueError, match="at least 9.0 mm apart"):
-      await p.pipettes.move_to_y_positions({0: 100.0, 1: 120.0})
-    here = await p.pipettes.request_locations()
-    with pytest.raises(ValueError, match="at least 9.0 mm apart"):
-      # The front channel sent to 5 mm in front of the rear one, which stays where it is.
-      await p.pipettes.move_to_location(
-        Coordinate(here[1].x, here[0].y - 5.0, here[1].z), use_channels=1
-      )
-    assert "PrepMoveToPosition" not in sent
-    assert "PrepMoveYAbsolute" not in sent
-    await p.stop()
-
-  _run(_t())
-
-
 def test_spacing_refusals_say_what_is_wrong_and_what_would_fit():
   """Out of order and too close read differently, give both positions and where either channel could go, and
   name a channel that was not asked to move - pointing to make_space where the move offers it."""
@@ -1296,6 +1122,7 @@ def test_spacing_refusals_say_what_is_wrong_and_what_would_fit():
     await p.setup()
     assert p.pipettes is not None
     await p.pipettes.move_to_y_positions({0: 200.0, 1: 91.0})
+    here = await p.pipettes.request_locations()
     with pytest.raises(ValueError) as refused:
       await p.pipettes.move_to_y_positions({0: 80.0})
     assert str(refused.value) == (
@@ -1310,11 +1137,21 @@ def test_spacing_refusals_say_what_is_wrong_and_what_would_fit():
       "Channels 0 and 1 would be 5.00 mm apart (y=100.00 and y=95.00 mm); they must be at least 9.0 mm apart. "
       "Send channel 0 to y >= 104.00 or channel 1 to y <= 91.00."
     )
-    here = await p.pipettes.request_locations()
     with pytest.raises(
-      ValueError, match=r"Channel 0 was not named, so it stays at y=200\.00 mm\.$"
+      ValueError,
+      match=r"Channel 0 was not named, so it stays at y=200\.00 mm; make_space=True moves it out of "
+      r"the way\.$",
     ):
       await p.pipettes.move_to_location(Coordinate(here[1].x, 195.0, here[1].z), use_channels=1)
+    assert await p.pipettes.request_locations() == here  # every refusal came before a move
+
+    # And with it, channel 0 gives way rather than the move being refused.
+    await p.pipettes.move_to_location(
+      Coordinate(here[1].x, 195.0, here[1].z), use_channels=1, make_space=True
+    )
+    after = await p.pipettes.request_locations()
+    assert round(after[1].y, 2) == 195.0
+    assert round(after[0].y, 2) == 204.0  # pushed back to the minimum spacing, and no further
     await p.stop()
 
   _run(_t())
@@ -1331,14 +1168,7 @@ def test_move_to_y_positions_make_space_moves_the_channel_not_named():
     target = before[0].y - 5.0
     with pytest.raises(ValueError, match="at least 9.0 mm apart"):
       await p.pipettes.move_to_y_positions({1: target})
-    sent: list = []
-    send = p.send_command
-
-    async def record(command, *args, **kwargs):
-      sent.append(type(command).__name__)
-      return await send(command, *args, **kwargs)
-
-    p.send_command = record  # type: ignore[method-assign]
+    sent = _record(p, names=True)
     await p.pipettes.move_to_y_positions({1: target}, make_space=True)
     assert sent.count("PrepMoveYAbsolute") == 1
     after = await p.pipettes.request_locations()
@@ -1393,6 +1223,216 @@ def test_default_y_windows_are_not_applied_on_a_device_with_an_8_channel_head():
   _run(_t())
 
 
+def test_move_to_xy_positions_raises_every_low_channel_then_travels_at_that_height():
+  """A channel left out of the move still rides the gantry, so it is raised with the others."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_location(
+      [Coordinate(150.0, 250.0, 90.0), Coordinate(150.0, 200.0, 80.0)], use_channels=[0, 1]
+    )
+    sent = _record(p, names=True)
+    await p.pipettes.move_to_xy_positions(200.0, {0: 300.0}, minimum_traverse_height_start=160.0)
+
+    # up first, then across: the gantry never has a descent to blend into the lateral move
+    assert sent.index("PrepMoveZAbsolute") < sent.index("PrepMoveToPosition")
+    assert sent.count("PrepMoveToPosition") == 1
+    at = await p.pipettes.request_locations()
+    assert (at[0].x, at[0].y, at[0].z) == (200.0, 300.0, 160.0)
+    assert (at[1].y, at[1].z) == (200.0, 160.0)  # not named, kept its y, raised all the same
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_xy_positions_travels_without_raising_when_the_channels_are_high_enough():
+  """Channels already at the height are not sent a Z move they do not need."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_location(
+      [Coordinate(150.0, 250.0, 167.5), Coordinate(150.0, 200.0, 167.5)], use_channels=[0, 1]
+    )
+    sent = _record(p, names=True)
+    await p.pipettes.move_to_xy_positions(200.0, {0: 300.0, 1: 250.0})
+    assert "PrepMoveZAbsolute" not in sent
+    assert sent.count("PrepMoveToPosition") == 1
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_xy_positions_refuses_what_a_channel_cannot_reach():
+  """The reach is checked before anything moves, the traverse height included."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    c = p.pipettes.configuration.channels[0]
+    c.x_range, c.y_range, c.z_range = (0.0, 400.0), (0.0, 400.0), (0.0, 170.0)
+    with pytest.raises(ValueError, match=r"x=500.0 outside channel 0"):
+      await p.pipettes.move_to_xy_positions(500.0, {0: 100.0})
+    with pytest.raises(ValueError, match=r"y=500.0 outside channel 0"):
+      await p.pipettes.move_to_xy_positions(100.0, {0: 500.0})
+    with pytest.raises(ValueError, match="no channel 5 on this Prep"):
+      await p.pipettes.move_to_xy_positions(100.0, {5: 100.0})
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_location_rises_travels_then_descends():
+  """Three commands, in that order: the descent cannot be blended into the lateral move."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_location(
+      [Coordinate(150.0, 250.0, 90.0), Coordinate(150.0, 200.0, 90.0)], use_channels=[0, 1]
+    )
+    sent = _record(p, names=True)
+    await p.pipettes.move_to_location(
+      [Coordinate(200.0, 300.0, 100.0), Coordinate(200.0, 250.0, 120.0)],
+      use_channels=[0, 1],
+      minimum_traverse_height_start=160.0,
+    )
+    moves = [c for c in sent if c in ("PrepMoveZAbsolute", "PrepMoveToPosition")]
+    assert moves == ["PrepMoveZAbsolute", "PrepMoveToPosition", "PrepMoveZAbsolute"]
+    at = await p.pipettes.request_locations()
+    assert (at[0].x, at[0].y, at[0].z) == (200.0, 300.0, 100.0)
+    assert (at[1].x, at[1].y, at[1].z) == (200.0, 250.0, 120.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_location_refuses_a_z_the_channel_cannot_reach_before_moving():
+  """The target Z is checked with the rest, so nothing is raised for a move that cannot finish."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    p.pipettes.configuration.channels[0].z_range = (0.0, 170.0)
+    sent = _record(p, names=True)
+    with pytest.raises(ValueError, match=r"z=200.0 outside channel 0"):
+      await p.pipettes.move_to_location(Coordinate(150.0, 250.0, 200.0), use_channels=0)
+    with pytest.raises(ValueError, match="same x"):
+      await p.pipettes.move_to_location(
+        [Coordinate(100.0, 200.0, 100.0), Coordinate(101.0, 100.0, 100.0)], use_channels=[0, 1]
+      )
+    assert "PrepMoveZAbsolute" not in sent and "PrepMoveToPosition" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_one_channel_picks_up_a_spot_in_front_of_where_the_other_stands():
+  """The channels share a gantry, so the one not picking up gives way rather than the call failing."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+
+    # Channel 1 stands where channel 0 has to go: in front of the spot it is sent to.
+    spot = rack.get_item("A1")
+    y = spot.get_location_wrt(deck, "c", "c", "t").y
+    await p.pipettes.move_to_y_positions({0: y + 30.0, 1: y + 20.0})
+
+    await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    standing = await p.pipettes.request_locations()
+    assert round(standing[0].y, 2) == round(y, 2)  # channel 0 arrived at the spot
+    assert round(standing[1].y, 2) == round(y - 9.0, 2)  # channel 1 moved just out of its way
+
+    # The move underneath still refuses on its own, where nothing has been asked to give way.
+    await p.pipettes.drop_tips(rack["A1"], use_channels=[0])
+    await p.pipettes.move_to_y_positions({0: y + 30.0, 1: y + 20.0})
+    with pytest.raises(ValueError):
+      await p.pipettes.move_to_xy_positions(100.0, {0: y})
+    await p.stop()
+
+  _run(_t())
+
+
+@pytest.mark.parametrize("known_from", ["model", "sensors"])
+def test_a_channel_that_carries_a_tip_is_refused_before_anything_moves(known_from):
+  """A refusal moves nothing, whether the tip is in the model or only in the sleeve sensors - one
+  left on from another session."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    if known_from == "model":
+      await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    else:
+
+      async def senses_one(*args, **kwargs):
+        return [True, False]
+
+      p.pipettes.sense_tip_presence = senses_one  # type: ignore[method-assign]
+    sent = _record(p, names=True)
+    with pytest.raises(HasTipError, match="senses a tip" if known_from == "sensors" else None):
+      await p.pipettes.pick_up_tips(rack["A2"], use_channels=[0])
+    assert "PrepMoveToPosition" not in sent  # refused where it stood
+    assert "PrepPickUpTips" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_channel_the_sensors_say_lost_its_tip_is_not_asked_to_drop_one():
+  """A tip knocked off on the way is in the sleeve sensors, not in the model."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    assert p.pipettes.get_mounted_tip(0) is not None  # the model holds one
+
+    async def senses_none(*args, **kwargs):
+      return [False, False]
+
+    p.pipettes.sense_tip_presence = senses_none  # type: ignore[method-assign]
+    sent = _record(p, names=True)
+    with pytest.raises(NoTipError, match="senses no tip"):
+      await p.pipettes.drop_tips(rack["A1"], use_channels=[0])
+    assert "PrepDropTips" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_z_positions_are_read_for_every_channel_in_one_command():
+  """The same GetPositions that answers X and Y, in the deck's frame, recorded on each channel."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    sent = _record(p, names=True)
+    zs = await p.pipettes.request_z_positions()
+    assert sent == ["PrepGetPositions"]
+    assert zs == [at.z for at in await p.pipettes.request_locations()]
+    await p.stop()
+
+  _run(_t())
+
+
 def test_initializing_waits_longer_than_the_drivers_default():
   """A command that takes longer than any this device performs is one it will not answer."""
 
@@ -1410,6 +1450,262 @@ def test_initializing_waits_longer_than_the_drivers_default():
     assert [t for name, t in waited if "Initialize" in name] == [300.0]
     # Everything else names none, so it waits `default_read_timeout`.
     assert {t for name, t in waited if "Initialize" not in name} == {None}
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_first_group_is_reached_at_the_starting_height_and_the_rest_at_the_one_between():
+  """Two groups mean a raise between them, which is its own height, not the starting one."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+
+    given: list = []
+    one_move = p.pipettes._pick_up_tips_in_one_move
+
+    async def record(*args, **kwargs):
+      given.append(args[3] if len(args) > 3 else kwargs.get("minimum_traverse_height_start"))
+      return await one_move(*args, **kwargs)
+
+    p.pipettes._pick_up_tips_in_one_move = record  # type: ignore[method-assign]
+    await p.pipettes.pick_up_tips(
+      rack["A1", "A2"],
+      use_channels=[0, 1],
+      minimum_traverse_height_start=150.0,
+      minimum_traverse_height_during=120.0,
+    )
+    assert given == [150.0, 120.0]  # to the first group, then between the groups
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_starting_height_is_a_floor_and_leaves_a_higher_channel_where_it_is():
+  """Below it is brought up; above it travels where it stands. Sending it would drive a high one down."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_tool_bottom_to_z_positions({1: 40.0})
+    standing = await p.pipettes.request_locations()
+    assert (round(standing[0].z, 2), round(standing[1].z, 2)) == (167.5, 40.0)
+
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      if isinstance(command, PrepCmd.PrepMoveToPosition):
+        sent.append(
+          {a.channel: round(a.z_position, 2) for a in command.move_parameters.axis_parameters}
+        )
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_xy_positions(
+      120.0, {0: 200.0, 1: 150.0}, minimum_traverse_height_start=62.0
+    )
+    # Channel 0 is at 167.5, well above the floor, and stays there; channel 1 comes up to it.
+    assert sent == [{2: 167.5, 1: 62.0}]
+    after = await p.pipettes.request_locations()
+    assert (round(after[0].z, 2), round(after[1].z, 2)) == (167.5, 62.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_channel_carrying_a_tip_travels_as_high_as_it_goes_not_to_the_traverse_height():
+  """The tool bottom cannot reach the traverse height with a tip on: what it holds hangs below it.
+
+  The device answers 0x0011 GenericInvalidParameter for a tool bottom of 167.5 while a 51.9 mm
+  needle is on, because the drive would have to reach 219.4.
+  """
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+    sent: list = []
+    travelled: list = []
+    send = p.send_command
+
+    async def record(command, **kwargs):
+      if isinstance(command, PrepCmd.PrepMoveZAbsolute):
+        # to 0.01 mm: the device's tip lengths come back as float32, so 51.9 is 51.900001525878906
+        sent.append({int(c.channel): round(c.z_position, 2) for c in command.channels})
+      if isinstance(command, PrepCmd.PrepMoveToPosition):
+        travelled.append(
+          {int(a.channel): round(a.z_position, 2) for a in command.move_parameters.axis_parameters}
+        )
+      return await send(command, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+
+    await pipettes.move_to_y_positions({0: 250.0, 1: 200.0})
+    await pipettes.move_tool_bottom_to_z_positions({0: 90.0, 1: 90.0})
+    sent.clear()
+    await pipettes.move_to_xy_positions(150.0, {0: 250.0})
+    assert sent == [{2: 167.5, 1: 167.5}]  # nothing held, so both go to the traverse height
+
+    shaft = pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="tip"))  # 51.9 mm below the stop disc
+    # A pick-up reads the windows again, and this test mounts behind the driver's back.
+    await pipettes._record_channel_bounds()
+    await pipettes.move_tool_bottom_to_z_positions({0: 90.0})
+    sent.clear()
+    travelled.clear()
+    await pipettes.move_to_xy_positions(100.0, {0: 250.0})
+    assert sent == [{2: 115.6, 1: 167.5}]  # 167.5 - 51.9 for the carrying channel, alone
+    # The raise and the travel carry their heights separately, so both are held here. The raise
+    # covers every channel below its ceiling; the travel carries only the ones moving.
+    assert travelled == [{2: 115.6}]
+
+    sent.clear()
+    await pipettes.move_to_xy_positions(150.0, {0: 250.0})
+    assert sent == []  # already at its ceiling, so it is not asked to move at all
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_stop_disc_move_takes_off_what_the_channel_carries():
+  """The firmware positions the tool bottom, so a stop-disc target is sent an overhang lower."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, **kwargs):
+      if isinstance(command, PrepCmd.PrepMoveZAbsolute):
+        sent.append({int(c.channel): round(c.z_position, 2) for c in command.channels})
+      return await send(command, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+
+    # Carrying nothing, the stop disc and the tool bottom are the same point.
+    await pipettes.move_stop_disc_to_z_positions({0: 150.0})
+    assert sent == [{2: 150.0, 1: 167.5}]
+
+    shaft = pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="tip"))  # 51.9 mm below the stop disc
+    sent.clear()
+    await pipettes.move_stop_disc_to_z_positions({0: 150.0})
+    assert sent == [{2: 98.1, 1: 167.5}]  # 150 - 51.9
+
+    sent.clear()
+    await pipettes.move_stop_disc_to_z_position(0, 140.0)
+    assert sent == [{2: 88.1, 1: 167.5}]  # the singular is the plural with one channel
+
+    # Every channel that does not exist is named, not just the first.
+    with pytest.raises(ValueError, match=r"channels must be between 0 and 1, are \[5, 7\]"):
+      await pipettes.move_stop_disc_to_z_positions({5: 100.0, 7: 100.0})
+    await p.stop()
+
+  _run(_t())
+
+
+def _shaft_end_z(p: PrepSimulationDriver, channel: int) -> float:
+  """Where the model has the end of a channel's shaft, in mm on the deck."""
+  assert p.pipettes is not None and p.pipettes.deck is not None
+  resource = p.pipettes.resources[channel]
+  return resource.get_location_wrt(p.pipettes.deck).z + p.pipettes._reference_anchor(resource).z
+
+
+def test_z_is_where_the_device_reports_it_at_the_bottom_of_what_a_channel_carries():
+  """A reported Z is the tip's bottom when there is one: the shaft ends that much higher."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_300uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+
+    pipettes.update_location_by_reference_point(0, z=100.0)
+    assert _shaft_end_z(p, 0) == pytest.approx(100.0)
+
+    await pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    tip = pipettes.get_mounted_tip(0)
+    assert tip is not None
+    below = tip.get_size_z() - tip.fitting_depth
+    pipettes.update_location_by_reference_point(0, z=100.0)
+    assert _shaft_end_z(p, 0) == pytest.approx(100.0 + below)
+    point = pipettes.get_reference_point_location(0)
+    assert point is not None and point.z == pytest.approx(100.0)
+    assert (await pipettes.request_locations())[0].z == pytest.approx(100.0)
+
+    await pipettes.drop_tips(rack["A1"], use_channels=[0])
+    pipettes.update_location_by_reference_point(0, z=100.0)
+    assert _shaft_end_z(p, 0) == pytest.approx(100.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_every_y_and_z_move_is_recorded_from_where_the_device_says_the_channels_are():
+  """Done, failed or cancelled: the model is read back from the device, never set from the target."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None and p.x_arm is not None
+    pipettes = p.pipettes
+    reads: List[str] = []
+    record = pipettes._record_where_they_stopped
+
+    async def recording() -> None:
+      reads.append("read")
+      await record()
+
+    pipettes._record_where_they_stopped = recording  # type: ignore[method-assign]
+    await pipettes.move_tool_bottom_to_z_positions({0: 150.0})
+    await pipettes.move_to_y_positions({0: 370.0})
+    assert reads == ["read", "read"]
+
+    for name, move in (
+      (
+        "_unchecked_fw_move_z_absolute",
+        lambda: pipettes.move_tool_bottom_to_z_positions({0: 140.0}),
+      ),
+      ("_unchecked_fw_move_y_absolute", lambda: pipettes.move_to_y_positions({0: 365.0})),
+    ):
+      reads.clear()
+
+      async def cancelled(*args: Any, **kwargs: Any) -> None:
+        raise asyncio.CancelledError()
+
+      setattr(pipettes, name, cancelled)
+      with pytest.raises(asyncio.CancelledError):
+        await move()
+      delattr(pipettes, name)
+      assert reads == ["read"], name
+
+    # The arm's move reads the channels as well as the arm: once before, to see what to raise (nothing,
+    # here), and once after, where it stopped.
+    await pipettes.move_to_safe_z()
+    located = pipettes.request_locations
+    asked: List[str] = []
+
+    async def locations() -> List[Coordinate]:
+      asked.append("pipettes")
+      return await located()
+
+    pipettes.request_locations = locations  # type: ignore[method-assign]
+    await p.x_arm.move_to_x_position(150.0, minimum_traverse_height_start=0)
+    assert asked == ["pipettes", "pipettes"]
     await p.stop()
 
   _run(_t())

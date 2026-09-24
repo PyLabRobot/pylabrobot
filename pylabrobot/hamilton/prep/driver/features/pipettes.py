@@ -18,14 +18,12 @@ import enum
 import logging
 import math
 import struct as _struct
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from typing import (
   TYPE_CHECKING,
   Any,
   AsyncIterator,
-  Awaitable,
-  Callable,
   Collection,
   Dict,
   Generic,
@@ -45,30 +43,27 @@ from pylabrobot.hamilton.liquid_class_resolver import (
   corrected_volumes_for_ops,
   resolve_hamilton_liquid_classes,
 )
+from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.messages import HoiParamsParser, parse_into_struct
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources import Container, Coordinate, Tip
+from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_state import (
-  TipDropIntent,
-  TipPickupIntent,
   VolumeTransferIntent,
   all_channels_succeeded,
-  finalize_tip_ops,
   finalize_volume_ops,
-  queue_tip_drops,
-  queue_tip_pickups,
   queue_volume_transfers,
   successes_from_failed_channels,
 )
-from pylabrobot.resources.tip_rack import TipSpot
-from pylabrobot.resources.tip_tracker import TipTracker
+from pylabrobot.resources.tip_rack import TipSpot, tip_origin
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well
 
@@ -212,6 +207,14 @@ def patch_common_with_cone(
     settling_time=common.settling_time,
     additional_probes=common.additional_probes,
   )
+
+
+def channels_named(channels: Sequence[int]) -> str:
+  """The channels, as an error names them: "channel 0", or "channels 0 and 1"."""
+  named = [str(channel) for channel in channels]
+  if len(named) == 1:
+    return f"channel {named[0]}"
+  return f"channels {', '.join(named[:-1])} and {named[-1]}"
 
 
 def resolve_command_version(
@@ -408,6 +411,10 @@ class PipettesConfiguration:
   channels at."""
   channel_model: str = "hamilton_star_pipette_channel"
   """Which 3D model draws a channel."""
+  z_speed_range: Tuple[float, float] = (10.0, 142.0)
+  """The Z speeds a `MoveZAbsolute` is sent at, in mm/s, lowest first. The top is the drive's own
+  speed, fitted from timed moves; the bottom the slowest sent to date. The firmware reports neither,
+  and where it refuses is not yet read."""
   default_y_ranges: Tuple[Tuple[float, float], ...] = ((0.0, 385.0), (-9.0, 376.0))
   """The Y window each channel reaches when its device reports none, in mm, lowest first, by channel back to
   front. A legacy Prep's without an 8-channel head: what GetChannelBounds reports on PRPAA1087 (V1.2.2) and
@@ -779,22 +786,20 @@ class Pipettes:
     self,
     driver: "PrepDriver",
     *,
-    default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
     configuration: Optional[PipettesConfiguration] = None,
   ) -> None:
     """
     Args:
       driver: the driver to send commands through, whose configuration holds what the device reported.
-      default_traverse_height: sets `default_minimum_traverse_height`, when given.
       use_v1_aspirate_dispense: sets `configuration.use_v1_aspirate_dispense`, when set.
       configuration: the channels' configuration. Defaults to `PipettesConfiguration()`.
     """
     self._driver = driver
     self.configuration = configuration or PipettesConfiguration()
-    # The height to travel at when a command names none, in mm. None leaves it to the height the
-    # device reports.
-    self.default_minimum_traverse_height: Optional[float] = default_traverse_height
+    # The height to travel at when a command names none, in mm. Setup replaces it with what the device
+    # reports.
+    self.default_minimum_traverse_height: float = 167.5
     # Default speed and acceleration along each axis, in mm/s and mm/s2: PyLabRobot's defaults are 80
     # percent of what the axis does on PRPAA1087 (V1.2.2).
     # X: 80 % of the X axis profile (`XAxis.GetVelocity` 400 mm/s, `GetAcceleration` 2250 mm/s2) at
@@ -806,16 +811,20 @@ class Pipettes:
     # (rms 1.7 ms). `move_to_y_positions` sends the speed with `MoveYAbsolute`, in mm/s; `MoveToPosition`
     # carries none.
     self.default_y_speed: float = 276.0
+    # The firmware's own. YAxis.MoveRelative takes a per-move level (1-7, about 233 mm/s2 each); the
+    # driver does not use it yet.
     self.default_y_acceleration: float = 760.0
-    # Z: 80 % of 142 mm/s, fitted from timed `MoveToPosition` moves of 2 to 30 mm (rms 4.5 ms), and of
-    # 800 mm/s2, read with `ZDrive.GetAcceleration` and matched by that fit. `move_tool_bottom_to_z_positions`
-    # sends the speed with `MoveZAbsolute`, in mm/s; `MoveToPosition` carries none.
-    self.default_z_speed: float = 113.6
-    self.default_z_acceleration: float = 640.0
     # cLLD Z probe: the seek speed (mm/s), sensitivity and detect mode `probe_z_using_clld` was run with on
     # PRPAA1087 (V1.2.2), where it triggered.
     self.default_clld_probe_speed: float = 20.0
     self.default_clld_sensitivity: int = 1
+    # Z: about 90 % of 142 mm/s, fitted from timed `MoveToPosition` moves of 2 to 30 mm (rms 4.5 ms).
+    # `move_tool_bottom_to_z_positions` sends the speed with `MoveZAbsolute`, in mm/s;
+    # `MoveToPosition` carries none.
+    self.default_z_speed: float = 125.0
+    # The Z drives' own, read with `ZDrive.GetAcceleration` and matched by that fit. Setup
+    # overwrites it with what the firmware holds.
+    self.default_z_acceleration: float = 800.0
     self.default_clld_detect_mode: int = 0
     if use_v1_aspirate_dispense:
       self.configuration.use_v1_aspirate_dispense = True
@@ -823,7 +832,9 @@ class Pipettes:
     self.channels: List[PipetteChannel] = []
     # The firmware's ChannelIndex for each channel, back to front. Discovery sets it from the device.
     self.channel_order: Tuple[int, ...] = tuple(PrepCmd.channel_order_legacy_prep)
-    self.head: dict[int, TipTracker] = {}
+    # A channel carries its tip on its shaft. Only a deck that models no channels - one that is not
+    # a PrepDeck - leaves nowhere to put it, and then it is held here instead.
+    self._unmodelled_tips: Dict[int, Tip] = {}
     # One per channel, hung from the X-arm's resource when the driver was given a deck. Setup puts
     # them there; reads and moves keep them in step.
     self.resources: List[Resource] = []
@@ -837,11 +848,10 @@ class Pipettes:
     """
     cfg = self._configuration
     logger.debug(
-      "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
+      "Hardware config: has_enclosure=%s, safe_speeds=%s, "
       "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, head8_installed=%s",
       cfg.has_enclosure,
       cfg.safe_speeds_enabled,
-      cfg.default_traverse_height,
       cfg.deck_bounds,
       len(cfg.deck_sites),
       len(cfg.waste_sites),
@@ -849,9 +859,24 @@ class Pipettes:
       cfg.head8_installed,
     )
 
+    reported = await self._driver.request_default_traverse_height()
+    if reported is not None:
+      self.default_minimum_traverse_height = reported
+    logger.debug("default minimum traverse height: %s", self.default_minimum_traverse_height)
+
     await self.discover()
     if not any(c.x_range is not None for c in self.configuration.channels):
       logger.warning("Channel bounds not available — move_to_location will skip validation")
+
+    z_accelerations = []
+    for drive in [c.zdrive for c in self.channels if c.zdrive is not None]:
+      answer = await self._driver.send_command(PrepCmd.PrepZDriveGetAcceleration(dest=drive))
+      z_accelerations.append(float(answer.value))
+    if z_accelerations:
+      if len(set(z_accelerations)) > 1:
+        logger.warning("the Z drives differ in acceleration: %s mm/s2", z_accelerations)
+      self.default_z_acceleration = z_accelerations[0]
+    logger.debug("default Z acceleration: %s mm/s2", self.default_z_acceleration)
 
     # Probe pipettor for v2 aspirate/dispense support (cmd 38-43).
     if self.configuration.use_v1_aspirate_dispense:
@@ -871,12 +896,10 @@ class Pipettes:
       self.configuration.supports_v2_pipetting = True
       logger.debug("V2 aspirate/dispense support: True")
 
-    self._ensure_head()
     self.setup_finished = True
 
   async def _on_stop(self):
-    for tracker in self.head.values():
-      tracker.clear()
+    """Nothing to undo: the tips a channel carries are resources on its shaft, and stopping moves none."""
 
   async def stop(self) -> None:
     self.setup_finished = False
@@ -1026,12 +1049,6 @@ class Pipettes:
       )
     self.configuration.check_channels_agree()
 
-  def _ensure_head(self) -> None:
-    """Ensure pipette-side TipTrackers exist for each dual-channel index."""
-    for i in range(self.num_channels):
-      if i not in self.head:
-        self.head[i] = TipTracker(thing=f"Channel {i}")
-
   async def _probe_v2_support(self) -> bool:
     """Probe the pipettor for v2 aspirate/dispense command support.
 
@@ -1132,6 +1149,38 @@ class Pipettes:
             message += "; make_space=True moves it out of the way." if make_space_available else "."
         raise ValueError(message)
 
+  def _make_space(self, targets: Dict[int, float], named: Collection[int]) -> Dict[int, float]:
+    """Move the channels not named just far enough for the named ones to stand where they are asked.
+
+    The channels ride one gantry in a fixed order, so a channel sent past its neighbour can only get
+    there if the neighbour moves. Each one not named is pushed to its minimum spacing, nearest
+    first, and no further.
+
+    Args:
+      targets: where every channel would end up, in mm, keyed by channel, 0-indexed from the back.
+      named: the channels the caller asked to move.
+
+    Returns:
+      The targets, with the channels not named moved out of the way.
+    """
+    spaced = dict(targets)
+    back, front = min(named), max(named)
+    # Behind the rearmost named channel, push each channel back far enough, nearest first.
+    for i in range(back, 0, -1):
+      spacing = self._min_spacing_between(i - 1, i)
+      if spaced[i - 1] - spaced[i] < spacing:
+        spaced[i - 1] = spaced[i] + spacing
+    # Between named channels, place the ones not named at their minimum spacing.
+    for i in range(back + 1, front):
+      if i not in named:
+        spaced[i] = spaced[i - 1] - self._min_spacing_between(i - 1, i)
+    # In front of the frontmost named channel, push each channel forward far enough, nearest first.
+    for i in range(front, len(spaced) - 1):
+      spacing = self._min_spacing_between(i, i + 1)
+      if spaced[i] - spaced[i + 1] < spacing:
+        spaced[i + 1] = spaced[i] - spacing
+    return spaced
+
   def _resolve_command_version(self, override: Optional[Literal["v1", "v2"]] = None) -> bool:
     return resolve_command_version(
       self.configuration.supports_v2_pipetting,
@@ -1172,10 +1221,25 @@ class Pipettes:
       return anchor
     return Coordinate(anchor.x, anchor.y, shaft.location.z)
 
+  def _mounted_length(self, channel: int) -> float:
+    """How far below the end of a channel's shaft what the model has on it reaches, in mm.
+
+    The device reports and takes Z there: at a tip's bottom, at the gripper tools' jaws (the length
+    they were picked up with), and at the shaft's end when nothing is on it.
+    """
+    shaft = self.shaft(channel)
+    mounted = shaft.tip if shaft is not None and shaft.has_tip() else None
+    if isinstance(mounted, Tip):
+      return float(mounted.get_size_z() - mounted.fitting_depth)
+    if mounted is not None:
+      return float(PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS.length)
+    return 0.0
+
   def get_reference_point_location(self, channel: int) -> Optional[Coordinate]:
     """Where the model has a channel's reference point, in mm on the deck.
 
-    The inverse of `update_location_by_reference_point`.
+    The inverse of `update_location_by_reference_point`: Z is where the device reports it, the bottom
+    of what the channel carries.
 
     Args:
       channel: which channel, 0-indexed from the back.
@@ -1192,6 +1256,7 @@ class Pipettes:
       resource.location
       + resource.parent.get_location_wrt(self.deck)
       + self._reference_anchor(resource)
+      - Coordinate(0, 0, self._mounted_length(channel))
     )
 
   def update_location_by_reference_point(
@@ -1206,7 +1271,8 @@ class Pipettes:
     Args:
       channel: which channel, 0-indexed from the back.
       y: where it is now, in mm on the deck. Left as it was when None.
-      z: where the end of its shaft is now, in mm on the deck. Left as it was when None.
+      z: where the device reports it now, in mm on the deck: the bottom of what the channel carries,
+        the end of its shaft when it carries nothing. Left as it was when None.
     """
     if channel >= len(self.resources) or self.deck is None:
       return
@@ -1215,10 +1281,11 @@ class Pipettes:
       return
     here, on_the_arm = resource.location, resource.parent.get_location_wrt(self.deck)
     anchor = self._reference_anchor(resource)
+    shaft_z = None if z is None else z + self._mounted_length(channel)
     resource.location = Coordinate(
       here.x,
       here.y if y is None else y - on_the_arm.y - anchor.y,
-      here.z if z is None else z - on_the_arm.z - anchor.z,
+      here.z if shaft_z is None else shaft_z - on_the_arm.z - anchor.z,
     )
 
   @staticmethod
@@ -1328,30 +1395,37 @@ class Pipettes:
       )
     return round(at_front, 2)
 
+  @property
+  def minimum_y_spacings(self) -> List[float]:
+    """The smallest Y gap each channel keeps from the one in front of it, in mm, one per channel.
+
+    What `plan_batches` asks for; the last channel has nothing in front of it.
+    """
+    count = self.num_channels
+    return [self._min_spacing_between(i, i + 1) if i + 1 < count else 0.0 for i in range(count)]
+
   # ----------------------------------------
   # Movement
   # ----------------------------------------
 
-  def _resolve_traverse_height(self, final_z: Optional[float] = None) -> float:
-    """Resolve final_z: explicit arg > user-set default > probed value. Raises if none available."""
-    if final_z is not None:
-      return final_z
-    if self.default_minimum_traverse_height is not None:
+  def _resolve_traverse_height(self, minimum_traverse_height_end: Optional[float] = None) -> float:
+    """The height to leave the channels at: what is given, else `default_minimum_traverse_height`."""
+    if minimum_traverse_height_end is None:
       return self.default_minimum_traverse_height
-    try:
-      cfg = self._configuration
-    except RuntimeError:
-      height: Optional[float] = None
-    else:
-      height = cfg.default_traverse_height
-    if height is not None:
-      return height
-    raise RuntimeError(
-      "Default traverse height is required for this operation but could not be determined. "
-      "Either pass final_z explicitly to this call, or set it via "
-      "Pipettes(..., default_traverse_height=<mm>) or pipettes.default_minimum_traverse_height. "
-      "If the instrument supports it, the value is also probed during setup(); ensure setup() completed successfully."
-    ) from None
+    return minimum_traverse_height_end
+
+  async def _record_channel_bounds(self) -> None:
+    """Read each channel's window from the device and record it on the configuration.
+
+    The device reports the window for whatever is attached, so it is read again whenever that
+    changes.
+    """
+    for index, bounds in enumerate(await self.request_channel_bounds()):
+      if index < len(self.configuration.channels):
+        channel = self.configuration.channels[index]
+        channel.x_range = (bounds["x_min"], bounds["x_max"])
+        channel.y_range = (bounds["y_min"], bounds["y_max"])
+        channel.z_range = (bounds["z_min"], bounds["z_max"])
 
   async def request_channel_bounds(self) -> List[ChannelBounds]:
     """Request per-channel movement bounds from the firmware (cmd=10).
@@ -1399,12 +1473,13 @@ class Pipettes:
       index = channel_indices.get(int(bounds.channel))
       if index is not None:
         by_channel[index] = {
-          "x_min": bounds.x_min,
-          "x_max": bounds.x_max,
-          "y_min": bounds.y_min,
-          "y_max": bounds.y_max,
-          "z_min": bounds.z_min,
-          "z_max": bounds.z_max,
+          # To 0.01 mm: the device answers in float32, whose step here is a ten-thousandth of that.
+          "x_min": round(bounds.x_min, 2),
+          "x_max": round(bounds.x_max, 2),
+          "y_min": round(bounds.y_min, 2),
+          "y_max": round(bounds.y_max, 2),
+          "z_min": round(bounds.z_min, 2),
+          "z_max": round(bounds.z_max, 2),
         }
     return by_channel
 
@@ -1451,10 +1526,163 @@ class Pipettes:
     for p in resp.positions:
       ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
       if ch_idx is not None:
-        indexed.append((ch_idx, Coordinate(x=p.position_x, y=p.position_y, z=p.position_z)))
+        # To 0.01 mm, as the bounds are: what the device answers is float32.
+        indexed.append(
+          (
+            ch_idx,
+            Coordinate(
+              x=round(p.position_x, 2), y=round(p.position_y, 2), z=round(p.position_z, 2)
+            ),
+          )
+        )
 
     indexed.sort(key=lambda pair: pair[0])
     return [coord for _, coord in indexed]
+
+  def _check_reachable(self, channel: int, axis: Literal["x", "y", "z"], value: float) -> None:
+    """Raise unless a channel reaches a position along one axis.
+
+    The windows are the firmware's own, read at setup; a channel whose window was not read is left
+    unchecked.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      axis: which axis - `x` along the gantry, `y` across it, `z` up and down.
+      value: where it would be sent, in mm.
+
+    Raises:
+      ValueError: If the channel cannot reach it.
+    """
+    if channel >= len(self.configuration.channels):
+      return
+    window = getattr(self.configuration.channels[channel], f"{axis}_range")
+    if window is None:
+      return
+    low, high = window
+    # Below its Z minimum a channel is only sent by a probe, which judges its own depth.
+    if value > high or (axis != "z" and value < low):
+      raise ValueError(f"{axis}={value} outside channel {channel} range [{low:.1f}, {high:.1f}]")
+
+  async def _unchecked_fw_move_to_position(
+    self,
+    x: float,
+    channels: List[int],
+    y: Union[float, List[float]],
+    z: Union[float, List[float]],
+    via_lane: bool = False,
+  ) -> None:
+    """Send the gantry move (cmd=26, or 27 via the lane). Nothing is guarded and nothing is recorded.
+
+    Args:
+      x: where to send the gantry, in mm.
+      channels: which channels, sorted, 0-indexed from the back.
+      y: where to send each channel along Y, in mm; one value for all, or one per channel.
+      z: where to send each channel along Z, in mm; one value for all, or one per channel.
+      via_lane: travel by the firmware's lane rather than directly.
+    """
+    move_parameters = _build_pipettor_gantry_move_parameters(
+      x, channels, y, z, channel_order=self.channel_order
+    )
+    if via_lane:
+      await self._driver.send_command(
+        PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters)
+      )
+    else:
+      await self._driver.send_command(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+
+  async def request_attached_tip_information(self, channel: int) -> Optional[PrepCmd.TipDefinition]:
+    """Read the tip definition the device holds for a pipette, as sent when it was picked up.
+
+    The pipettor holds one definition for the machine, so every carrying pipette answers with it.
+
+    Args:
+      channel: which pipette, 0-indexed from the back.
+
+    Returns:
+      The definition of what it carries - id, volume, length below the stop disc, tip type, filter,
+      needle, tool, label - or None when it carries nothing.
+
+    Raises:
+      ValueError: If the channel does not exist.
+    """
+    if not 0 <= channel < self.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
+    if not (await self.sense_tip_presence())[channel]:
+      return None
+    return (await self._driver.send_command(PrepCmd.PrepGetTipDefinitionHeld())).value
+
+  async def request_tip_overhangs(self) -> Dict[int, Optional[float]]:
+    """Read how far the tip on each channel stands below its stop disc, in mm.
+
+    Returns:
+      Each channel's overhang in mm, None where it holds nothing, keyed by channel, 0-indexed from
+      the back.
+    """
+    # One definition for the pipettor: it answers a zero length, labelled "No Tip", when the machine
+    # holds nothing at all, and the sensors say which channels are carrying when it holds something.
+    attached_tip_info = (await self._driver.send_command(PrepCmd.PrepGetTipDefinitionHeld())).value
+    if not attached_tip_info.length:
+      return {channel: None for channel in range(self.num_channels)}
+    presence = await self.sense_tip_presence()
+    return {
+      channel: attached_tip_info.length if presence[channel] else None
+      for channel in range(self.num_channels)
+    }
+
+  async def request_tip_overhang(self, channel: int) -> float:
+    """Read how far the tip on one channel stands below its stop disc, in mm.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      Its overhang in mm.
+
+    Raises:
+      ValueError: If the channel does not exist.
+      RuntimeError: If the channel carries nothing, so there is no overhang.
+    """
+    if not 0 <= channel < self.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
+    overhang = (await self.request_tip_overhangs())[channel]
+    if overhang is None:
+      raise RuntimeError(f"channel {channel} reports no tip, so there is no overhang to measure")
+    return overhang
+
+  # -- dispensing drives ---------------------------------------------------------------------------
+
+  async def dispensing_drives_request_uL_positions(self) -> Dict[int, float]:
+    """Read where every channel's dispensing drive stands, in uL.
+
+    Returns:
+      Each channel's dispensing drive position in uL, keyed by channel, 0-indexed from the back.
+    """
+    response = await self._driver.send_command(PrepCmd.PrepGetCurrentDispenserVolume())
+    return {
+      channel: entry.volume
+      for entry in response.volumes
+      if (channel := self.channel_of(entry.channel)) is not None
+    }
+
+  async def dispensing_drive_request_uL_position(self, channel: int) -> float:
+    """Read where one channel's dispensing drive stands, in uL.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      Its dispensing drive position in uL.
+
+    Raises:
+      ValueError: If the channel does not exist.
+      RuntimeError: If the device answered nothing for it.
+    """
+    if not 0 <= channel < self.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
+    volumes = await self.dispensing_drives_request_uL_positions()
+    if channel not in volumes:
+      raise RuntimeError(f"the device reported no dispensing drive volume for channel {channel}")
+    return volumes[channel]
 
   # -- x position ----------------------------------------------------------------------------------
 
@@ -1474,23 +1702,43 @@ class Pipettes:
       raise RuntimeError("the channels reported no positions")
     return float(positions[0].x)
 
-  async def move_to_x_position(self, x: float) -> None:
-    """Move the gantry X axis to a position (in mm).
+  async def move_to_x_position(
+    self,
+    x: float,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
+  ) -> None:
+    """Move the gantry along X. The channels share it, so they all move.
 
-    On the Prep, X is shared across all channels (single gantry): all channels move together in X.
-
-    Analogous to STARBackend.move_to_x_position().
+    The arm's own axis move, which leaves Y and Z where they are.
 
     Args:
-      x: Target X position in mm.
+      x: target x in mm.
+      speed: speed in mm/s. Defaults to the arm's `default_speed`.
+      acceleration: acceleration in mm/s2. Defaults to the arm's `default_acceleration`.
+      minimum_traverse_height_start: raise every channel standing below this height, in mm, before
+        the arm travels. `default_minimum_traverse_height` when None; 0 raises nothing.
+      z_speed: how fast to raise them, in mm/s. `default_z_speed` when None.
+      z_acceleration: the Z drive acceleration for the raise, in mm/s2, then restored.
 
     Raises:
-      RuntimeError: If the channels report no positions.
+      ValueError: If a channel cannot reach `x`, or a speed or acceleration is out of range.
+      RuntimeError: If there is no arm to move.
     """
-    positions = await self.request_locations()
-    if not positions:
-      raise RuntimeError("the channels reported no positions")
-    await self.move_to_location(Coordinate(x, positions[0].y, positions[0].z), use_channels=0)
+    arm = None if self._driver is None else self._driver.x_arm
+    if arm is None:
+      raise RuntimeError("no arm to move; have you called `prep.setup()`?")
+    await arm.move_to_x_position(
+      x,
+      speed=speed,
+      acceleration=acceleration,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      z_speed=z_speed,
+      z_acceleration=z_acceleration,
+    )
 
   # -- y position ----------------------------------------------------------------------------------
 
@@ -1543,10 +1791,27 @@ class Pipettes:
       )
     )
 
+  def _check_ys_by_channel(self, ys: Dict[int, float]) -> None:
+    """Raise unless `ys` maps channels that exist to a y each."""
+    if not isinstance(ys, dict):
+      raise TypeError(
+        f"ys maps each channel to its y in mm, e.g. {{0: 50, 1: 20}} for channel 0 at 50 and "
+        f"channel 1 at 20; got {ys!r}"
+      )
+    missing = sorted(c for c in ys if not 0 <= c < self.num_channels)
+    if missing:
+      names = " or ".join(str(c) for c in missing)
+      have = " and ".join(str(c) for c in range(self.num_channels))
+      raise ValueError(f"no channel {names} on this Prep: its channels are {have}, 0 at the back")
+
   async def move_to_y_positions(
     self, ys: Dict[int, float], make_space: bool = False, speed: Optional[float] = None
   ) -> None:
     """Move channels along Y together.
+
+    A channel the caller names goes where it is sent, at the height it stands at. A channel shoved
+    aside to make that possible is not one the caller is watching, so it goes up to Z safety first
+    rather than travelling through whatever it was standing in.
 
     Args:
       ys: target y in mm, keyed by channel, 0-indexed from the back.
@@ -1560,52 +1825,32 @@ class Pipettes:
     speed = self.default_y_speed if speed is None else speed
     if speed <= 0:
       raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    self._check_ys_by_channel(ys)
     if not ys:
       return
     positions = await self.request_locations()
-    for channel in ys:
-      if not 0 <= channel < len(positions):
-        raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
     targets = {i: position.y for i, position in enumerate(positions)}
     targets.update(ys)
 
     if make_space:
-      back, front = min(ys), max(ys)
-      # Behind the rearmost named channel, push each channel back far enough, nearest first.
-      for i in range(back, 0, -1):
-        spacing = self._min_spacing_between(i - 1, i)
-        if targets[i - 1] - targets[i] < spacing:
-          targets[i - 1] = targets[i] + spacing
-      # Between named channels, place the ones not named at their minimum spacing.
-      for i in range(back + 1, front):
-        if i not in ys:
-          targets[i] = targets[i - 1] - self._min_spacing_between(i - 1, i)
-      # In front of the frontmost named channel, push each channel forward far enough, nearest first.
-      for i in range(front, len(positions) - 1):
-        spacing = self._min_spacing_between(i, i + 1)
-        if targets[i] - targets[i + 1] < spacing:
-          targets[i + 1] = targets[i] - spacing
+      targets = self._make_space(targets, named=ys)
 
     for channel, y in targets.items():
-      window = (
-        self.configuration.channels[channel].y_range
-        if channel < len(self.configuration.channels)
-        else None
-      )
-      if window is not None and not window[0] <= y <= window[1]:
-        raise ValueError(
-          f"y={y} outside channel {channel} range [{window[0]:.1f}, {window[1]:.1f}]"
-        )
+      # Destinations only: a channel cannot be out of reach of where it already stands.
+      if y != positions[channel].y:
+        self._check_reachable(channel, "y", y)
     self._check_y_spacing(targets, named=ys, make_space_available=not make_space)
+
+    shoved = [
+      channel for channel, y in targets.items() if channel not in ys and y != positions[channel].y
+    ]
+    if shoved:
+      await self.move_to_safe_z(shoved)
 
     try:
       await self._unchecked_fw_move_y_absolute(targets, speed)
-    except Exception:
-      # Only on the way out: a move that arrives is recorded from its targets below.
+    finally:
       await self._record_where_they_stopped()
-      raise
-    for channel, y in targets.items():
-      self.update_location_by_reference_point(channel, y=y)
 
   async def move_to_y_position(self, channel: int, y: float, speed: Optional[float] = None) -> None:
     """Move one channel along Y.
@@ -1621,6 +1866,20 @@ class Pipettes:
     await self.move_to_y_positions({channel: y}, speed=speed)
 
   # -- z position ----------------------------------------------------------------------------------
+
+  async def request_z_positions(self) -> List[float]:
+    """Request where every channel is along Z, in one command.
+
+    `GetPositions` answers for all of them at once, in the deck's frame, as it does for X and Y: the
+    Z drives answer in their own. Each answer is recorded on the resource modelling that channel.
+
+    Returns:
+      The position of each channel in mm, back to front.
+    """
+    positions = [coord.z for coord in await self._unchecked_fw_request_positions()]
+    for channel, z in enumerate(positions):
+      self.update_location_by_reference_point(channel, z=z)
+    return positions
 
   async def request_z_position(self, channel: int) -> float:
     """Request Z position of pipettor channel n (in mm).
@@ -1743,12 +2002,13 @@ class Pipettes:
       acceleration: Z drive acceleration in mm/s2 for this move, then restored. None leaves it.
 
     Raises:
-      ValueError: If a channel does not exist or cannot reach its z, or `speed` or `acceleration` is
-        not above 0.
+      ValueError: If a channel does not exist or cannot reach its z, `speed` is outside
+        `configuration.z_speed_range`, or `acceleration` is not above 0.
     """
     speed = self.default_z_speed if speed is None else speed
-    if speed <= 0:
-      raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    low, high = self.configuration.z_speed_range
+    if not low <= speed <= high:
+      raise ValueError(f"speed must be between {low} and {high} mm/s, is {speed}")
     if acceleration is not None and acceleration <= 0:
       raise ValueError(f"acceleration must be above 0 mm/s2, is {acceleration}")
     if not zs:
@@ -1758,26 +2018,21 @@ class Pipettes:
       if not 0 <= channel < len(positions):
         raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
     for channel, z in zs.items():
-      if channel < len(self.configuration.channels):
-        z_range = self.configuration.channels[channel].z_range
-        if z_range is not None and z > z_range[1]:
-          raise ValueError(f"z={z} above channel {channel} maximum {z_range[1]:.1f}")
+      self._check_reachable(channel, "z", z)
     targets = {i: position.z for i, position in enumerate(positions)}
     targets.update(zs)
 
     try:
-      async with self._z_drive_acceleration(acceleration):
+      async with self._temporary_z_drive_acceleration(acceleration):
         await self._unchecked_fw_move_z_absolute(targets, speed)
-    except Exception:
-      # Only on the way out: a move that arrives is recorded from its targets below.
+    finally:
       await self._record_where_they_stopped()
-      raise
-    for channel, z in targets.items():
-      self.update_location_by_reference_point(channel, z=z)
 
   @asynccontextmanager
-  async def _z_drive_acceleration(self, acceleration: Optional[float]) -> AsyncIterator[None]:
-    """Set every channel's Z drive acceleration for the enclosed block, then restore it.
+  async def _temporary_z_drive_acceleration(
+    self, acceleration: Optional[float]
+  ) -> AsyncIterator[None]:
+    """Set every channel's Z drive acceleration for the enclosed block, then `default_z_acceleration`.
 
     Args:
       acceleration: acceleration in mm/s2, or None to leave the drives unchanged.
@@ -1785,26 +2040,26 @@ class Pipettes:
     if acceleration is None:
       yield
       return
-    held: Dict[Address, float] = {}
+    drives = [c.zdrive for c in self.channels if c.zdrive is not None]
+    set_: List[Address] = []
     try:
-      for drive in [c.zdrive for c in self.channels if c.zdrive is not None]:
-        response = await self._driver.send_command(PrepCmd.PrepZDriveGetAcceleration(dest=drive))
-        held[drive] = float(response.value)
+      for drive in drives:
         await self._driver.send_command(
           PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=acceleration)
         )
+        set_.append(drive)
       yield
     finally:
-      for drive, value in held.items():
+      for drive in set_:
         try:
           await self._driver.send_command(
-            PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=value)
+            PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=self.default_z_acceleration)
           )
         except Exception:
           logger.warning(
             "could not put the Z drive acceleration at %s back to %s mm/s2",
             drive,
-            value,
+            self.default_z_acceleration,
             exc_info=True,
           )
 
@@ -1847,6 +2102,56 @@ class Pipettes:
     """
     await self.move_tool_bottom_to_z_positions({channel: z}, speed=speed, acceleration=acceleration)
 
+  async def move_stop_disc_to_z_positions(
+    self,
+    zs: Dict[int, float],
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+  ) -> None:
+    """Move the stop disc of channels along Z together.
+
+    Args:
+      zs: target stop-disc z in mm, keyed by channel, 0-indexed from the back.
+      speed: speed in mm/s. Defaults to `default_z_speed`.
+      acceleration: Z drive acceleration in mm/s2 for this move, then restored. None leaves it.
+
+    Raises:
+      ValueError: If a channel does not exist or cannot reach its z, or `speed` or `acceleration` is
+        not above 0.
+    """
+    # The firmware positions the tool bottom, so what a channel carries comes off each height.
+    overhangs = await self.request_tip_overhangs()
+    out_of_range = sorted(channel for channel in zs if channel not in overhangs)
+    if out_of_range:
+      raise ValueError(
+        f"channels must be between 0 and {self.num_channels - 1}, are {out_of_range}"
+      )
+    targets = {}
+    for channel, z in zs.items():
+      overhang = overhangs[channel]
+      targets[channel] = z if overhang is None else z - overhang
+    await self.move_tool_bottom_to_z_positions(targets, speed=speed, acceleration=acceleration)
+
+  async def move_stop_disc_to_z_position(
+    self,
+    channel: int,
+    z: float,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+  ) -> None:
+    """Move the stop disc of one channel along Z.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      z: target stop-disc z in mm.
+      speed: speed in mm/s. Defaults to `default_z_speed`.
+      acceleration: Z drive acceleration in mm/s2 for this move, then restored. None leaves it.
+
+    Raises:
+      ValueError: As `move_stop_disc_to_z_positions`.
+    """
+    await self.move_stop_disc_to_z_positions({channel: z}, speed=speed, acceleration=acceleration)
+
   async def move_to_safe_z(self, channels: Optional[List[int]] = None) -> None:
     """Move the given channels' Z axes up to safe (traverse) height (cmd=28).
 
@@ -1883,164 +2188,207 @@ class Pipettes:
 
   # -- xyz position --------------------------------------------------------------------------------
 
+  async def move_to_xy_positions(
+    self,
+    x: float,
+    ys: Dict[int, float],
+    *,
+    make_space: bool = False,
+    minimum_traverse_height_start: Optional[float] = None,
+    via_lane: bool = False,
+    x_speed: Optional[float] = None,
+    x_speed_scale: Optional[int] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
+  ) -> None:
+    """Move the channels across the deck, travelling at one height.
+
+    Every channel below `minimum_traverse_height_start` is raised to it first, and the lateral move is
+    sent with Z already there. Left to itself the gantry drives X, Y and Z at once from some
+    positions.
+
+    Args:
+      x: where to send the gantry, in mm. The channels share it.
+      ys: where to send each channel, in mm, keyed by channel, 0-indexed from the back. A channel
+        left out keeps its Y, and is raised with the others.
+      make_space: whether channels not named may move in Y to keep the minimum spacing. Without it,
+        a named channel sent past a channel that stays put is refused.
+      minimum_traverse_height_start: the height to raise every low channel to before travelling,
+        in mm. `default_minimum_traverse_height`
+        when None; 0 raises nothing, so the channels travel at the height they stand at.
+      via_lane: travel by the firmware's lane - Y, then X - rather than both together.
+      x_speed: how fast to drive X, in mm/s, set as the nearest X speed scale and put back after.
+        `default_x_speed` when the move takes the gantry to another x.
+      x_speed_scale: the X speed scale itself, in percent, 1 to 100, instead of `x_speed`.
+      z_speed: how fast to raise the channels, in mm/s. `default_z_speed` when None.
+      z_acceleration: the Z drive acceleration for the raise, in mm/s2, then restored. None leaves
+        it.
+
+    Raises:
+      ValueError: If a channel does not exist, a position is out of its reach, the channels would
+        stand closer than they may in Y, or a speed or scale is out of range.
+      RuntimeError: If a speed scale is given but there is no driver to set it through.
+    """
+    # Arguments
+    self._check_ys_by_channel(ys)
+    if not ys:
+      return
+    if x_speed is not None and x_speed_scale is not None:
+      raise ValueError("give x_speed or x_speed_scale, not both")
+    channels = sorted(ys)
+    traverse = (
+      self.default_minimum_traverse_height
+      if minimum_traverse_height_start is None
+      else minimum_traverse_height_start
+    )
+
+    # Where every channel ends up, the ones not named included: they ride the same gantry, so they
+    # are what the spacing is judged on, and what may have to move for the named ones to arrive.
+    standing = await self.request_locations()
+    final_y = {channel: at.y for channel, at in enumerate(standing)}
+    final_y.update(ys)
+    if make_space:
+      final_y = self._make_space(final_y, named=channels)
+
+    ceilings = {}
+    for channel in range(len(standing)):
+      window = (
+        self.configuration.channels[channel].z_range
+        if channel < len(self.configuration.channels)
+        else None
+      )
+      # The device reports each channel's Z window for whatever is attached to it, so a channel
+      # carrying something travels as high as it goes rather than to the traverse height.
+      ceilings[channel] = traverse if window is None else min(traverse, window[1])
+
+    moving = sorted(final_y) if make_space else channels
+    for channel in moving:
+      self._check_reachable(channel, "x", x)
+      # Destinations only: a channel cannot be out of reach of where it already stands.
+      if final_y[channel] != standing[channel].y:
+        self._check_reachable(channel, "y", final_y[channel])
+    self._check_y_spacing(final_y, named=channels, make_space_available=not make_space)
+
+    arm = None if self._driver is None else self._driver.x_arm
+    x_arm_configuration = arm.configuration if arm is not None else XArmConfiguration()
+    if x_speed is not None:
+      x_speed_scale = x_arm_configuration.speed_to_scale_percent(x_speed)
+    if x_speed_scale is not None and not 1 <= x_speed_scale <= 100:
+      raise ValueError(f"x speed scale must be between 1 and 100 percent, is {x_speed_scale}")
+    if x_speed_scale is not None and self._driver is None:
+      raise RuntimeError("speed scales are set through the driver, and this has none")
+    named_speed = x_speed is not None or x_speed_scale is not None
+
+    restore_x: Optional[int] = None
+    try:
+      # Every channel rides the gantry, so a channel that is low travels low: all are raised, each
+      # as high as it goes.
+      below = {
+        channel: ceilings[channel]
+        for channel, at in enumerate(standing)
+        if at.z < ceilings[channel]
+      }
+      if below:
+        await self.move_tool_bottom_to_z_positions(
+          below, speed=z_speed, acceleration=z_acceleration
+        )
+
+      # With no speed named, the default is set only for a move that takes the gantry somewhere.
+      if not named_speed and not (standing and standing[0].x == x):
+        x_speed_scale = x_arm_configuration.speed_to_scale_percent(self.default_x_speed)
+      if self._driver is not None and x_speed_scale is not None:
+        restore_x = await self._driver.request_x_speed_scale()
+        await self._driver.set_x_speed_scale(x_speed_scale)
+
+      # A floor, not a height: a channel standing above it travels where it stands, and only what
+      # is below it is brought up. Sending the floor to every channel would drive the high ones down.
+      heights = {channel: max(ceilings[channel], standing[channel].z) for channel in moving}
+      # Where the move is going, recorded as it is sent: on the answer the model would already be a
+      # whole move behind the device. The read below still has the last word.
+      if arm is not None:
+        arm.update_location_by_reference_point(x)
+      for channel in moving:
+        self.update_location_by_reference_point(channel, y=final_y[channel], z=heights[channel])
+      await self._unchecked_fw_move_to_position(
+        x,
+        moving,
+        [final_y[channel] for channel in moving],
+        [heights[channel] for channel in moving],
+        via_lane=via_lane,
+      )
+    finally:
+      try:
+        if self._driver is not None and restore_x is not None:
+          await self._driver.set_x_speed_scale(restore_x)
+      finally:
+        await self._record_where_they_stopped()
+
   async def move_to_location(
     self,
     location: Union[Coordinate, List[Coordinate]],
     use_channels: Optional[Union[int, List[int]]] = 0,
     *,
+    make_space: bool = False,
+    minimum_traverse_height_start: Optional[float] = None,
     via_lane: bool = False,
     x_speed: Optional[float] = None,
     x_speed_scale: Optional[int] = None,
-    z_speed_scale: Optional[int] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
   ) -> None:
-    """Move channels to locations on the deck (cmd=26, or 27 via the lane).
+    """Move channels to locations on the deck: raise, travel, descend.
 
-    The channels ride one gantry, so they share X: every location must name the same x.
-
-    The move command carries no speed. What the firmware offers is MLPrep's X and Z speed scales,
-    which hold for every move until changed, so a scale given here is set for this move and the one
-    that was set before is put back afterwards, whether or not the move succeeded. Y has no scale.
+    Three moves the gantry cannot blend into one another. Each records where it left the channels,
+    so this has no `finally` of its own; what it raises, it raises before anything has moved.
 
     Args:
-      location: where to send each channel's reference point, in mm on the deck. One location for
-        every channel named, or one per channel, in the order of `use_channels`.
+      location: where to send each channel's reference point, in mm on the deck. One location, or
+        one per channel in the order of `use_channels`.
       use_channels: which channels, 0-indexed from the back. One index, or a list. Defaults to 0.
-      via_lane: travel by the firmware's lane rather than directly.
-      x_speed: how fast to drive X for this move, in mm/s. Set as the nearest X speed scale, so it
-        is rounded to whole multiples of `XArmConfiguration.speed_per_scale_percent`. Defaults to
-        `default_x_speed` when the move takes the gantry to another x; a move that keeps it where it
-        stands leaves the scale as it is.
-      x_speed_scale: overrides `x_speed` with the X speed scale itself, in percent, 1 to 100. Give
-        one or the other, not both.
-      z_speed_scale: how fast to drive Z for this move, in percent of full speed, 1 to 100. None
-        keeps the scale MLPrep has.
+      minimum_traverse_height_start: the height to raise every low channel to before travelling,
+        in mm. `default_minimum_traverse_height`
+        when None; 0 raises nothing, so the channels travel at the height they stand at.
+      via_lane: travel by the firmware's lane - Y, then X - rather than both together.
+      x_speed: how fast to drive X for the lateral move, in mm/s.
+      x_speed_scale: the X speed scale itself, in percent, instead of `x_speed`.
+      z_speed: how fast to raise and to descend, in mm/s. `default_z_speed` when None.
+      z_acceleration: the Z drive acceleration for both, in mm/s2, then restored. None leaves it.
 
     Raises:
-      ValueError: If a channel does not exist, the locations do not match the channels, they do not
-        share one x, a location is outside a channel's reach, a speed or speed scale is out of
-        range, or both `x_speed` and `x_speed_scale` are given.
-      RuntimeError: If a speed scale is given but there is no driver to set it through.
+      ValueError: As `move_to_xy_positions`, and if the locations do not match the channels named
+        or do not share one x.
     """
-    if x_speed is not None and x_speed_scale is not None:
-      raise ValueError("give x_speed or x_speed_scale, not both")
-    x_speed_named = x_speed is not None or x_speed_scale is not None
-    arm = None if self._driver is None else self._driver.x_arm
-    x_arm_configuration = arm.configuration if arm is not None else XArmConfiguration()
-    if x_speed is not None:
-      x_speed_scale = x_arm_configuration.speed_to_scale_percent(x_speed)
-    for axis, scale in (("x", x_speed_scale), ("z", z_speed_scale)):
-      if scale is not None and not 1 <= scale <= 100:
-        raise ValueError(f"{axis} speed scale must be between 1 and 100 percent, is {scale}")
-    if (x_speed_scale is not None or z_speed_scale is not None) and self._driver is None:
-      raise RuntimeError("speed scales are set through the driver, and this has none")
-    if use_channels is None:
-      named = [0]
-    elif isinstance(use_channels, list):
-      named = list(use_channels)
+    if isinstance(use_channels, list):
+      channels = list(use_channels)
     else:
-      # int or int-like (e.g. numpy.int64); single channel
-      named = [int(use_channels)]
-    if named and (max(named) >= self.num_channels or min(named) < 0):
-      raise ValueError(f"use_channels must be between 0 and {self.num_channels - 1}, are {named}")
-    locations = location if isinstance(location, list) else [location] * len(named)
-    if len(locations) != len(named):
-      raise ValueError(f"{len(locations)} locations given for {len(named)} channels")
-    if len({loc.x for loc in locations}) > 1:
+      channels = [0 if use_channels is None else int(use_channels)]
+    locations = location if isinstance(location, list) else [location] * len(channels)
+    if len(locations) != len(channels):
+      raise ValueError(f"{len(locations)} locations given for {len(channels)} channels")
+    if len({point.x for point in locations}) > 1:
       raise ValueError(
         f"the channels share one gantry, so every location needs the same x; got "
-        f"{sorted({loc.x for loc in locations})}"
+        f"{sorted({point.x for point in locations})}"
       )
-    # Each location stays with the channel it was named for, in channel order.
-    paired = sorted(zip(named, locations), key=lambda pair: pair[0])
-    channels = [channel for channel, _ in paired]
-    x = locations[0].x if locations else 0.0
-    y_vals = [loc.y for _, loc in paired]
-    z_vals = [loc.z for _, loc in paired]
+    for channel, point in zip(channels, locations):
+      self._check_reachable(channel, "z", point.z)
 
-    # Validate against per-channel movement bounds (cached from firmware at setup).
-    for i, (y_i, z_i) in enumerate(zip(y_vals, z_vals)):
-      ch = channels[i]
-      if ch < len(self.configuration.channels):
-        c = self.configuration.channels[ch]
-        if c.x_range is not None and not c.x_range[0] <= x <= c.x_range[1]:
-          raise ValueError(
-            f"x={x} outside channel {ch} range [{c.x_range[0]:.1f}, {c.x_range[1]:.1f}]"
-          )
-        if c.y_range is not None and not c.y_range[0] <= y_i <= c.y_range[1]:
-          raise ValueError(
-            f"y={y_i} outside channel {ch} range [{c.y_range[0]:.1f}, {c.y_range[1]:.1f}]"
-          )
-        if c.z_range is not None and z_i > c.z_range[1]:
-          raise ValueError(f"z={z_i} above channel {ch} maximum {c.z_range[1]:.1f}")
-
-    # Where the channels stand: for the Y a channel not named keeps, and for whether the gantry moves.
-    standing: List[Coordinate] = []
-    if len(channels) < len(self.channel_order) or not x_speed_named:
-      standing = await self._unchecked_fw_request_positions()
-    # With no speed named, the default X speed is set only for a move that takes the gantry somewhere.
-    if not x_speed_named and not (standing and standing[0].x == x):
-      x_speed_scale = x_arm_configuration.speed_to_scale_percent(self.default_x_speed)
-
-    # Every channel's Y after the move: where it is sent, or, for a channel not named, where it stands.
-    final_y: Dict[int, float] = {}
-    if len(channels) < len(self.channel_order):
-      final_y = {i: position.y for i, position in enumerate(standing)}
-    final_y.update(zip(channels, y_vals))
-    self._check_y_spacing(final_y, named=channels)
-
-    # The scales in force before this move, to put back once it is done.
-    restore_x: Optional[int] = None
-    restore_z: Optional[int] = None
-    try:
-      if self._driver is not None and x_speed_scale is not None:
-        restore_x = await self._driver.request_x_speed_scale()
-        await self._driver.set_x_speed_scale(x_speed_scale)
-      if self._driver is not None and z_speed_scale is not None:
-        restore_z = await self._driver.request_z_speed_scale()
-        await self._driver.set_z_speed_scale(z_speed_scale)
-      await self._unchecked_fw_move_to_position(x, channels, y_vals, z_vals, via_lane=via_lane)
-      # What was asked, recorded as soon as the command answers; the read below replaces it with
-      # where the channels actually stopped.
-      arm = None if self._driver is None else self._driver.x_arm
-      if arm is not None:
-        arm.update_location_by_reference_point(x)
-      for channel, y_i, z_i in zip(channels, y_vals, z_vals):
-        self.update_location_by_reference_point(channel, y=y_i, z=z_i)
-    finally:
-      try:
-        if self._driver is not None and restore_x is not None:
-          await self._driver.set_x_speed_scale(restore_x)
-        if self._driver is not None and restore_z is not None:
-          await self._driver.set_z_speed_scale(restore_z)
-      finally:
-        await self._record_where_they_stopped()
-
-  async def _unchecked_fw_move_to_position(
-    self,
-    x: float,
-    channels: List[int],
-    y: Union[float, List[float]],
-    z: Union[float, List[float]],
-    via_lane: bool = False,
-  ) -> None:
-    """Send the gantry move (cmd=26, or 27 via the lane). Nothing is guarded and nothing is recorded.
-
-    Args:
-      x: where to send the gantry, in mm.
-      channels: which channels, sorted, 0-indexed from the back.
-      y: where to send each channel along Y, in mm; one value for all, or one per channel.
-      z: where to send each channel along Z, in mm; one value for all, or one per channel.
-      via_lane: travel by the firmware's lane rather than directly.
-    """
-    move_parameters = _build_pipettor_gantry_move_parameters(
-      x, channels, y, z, channel_order=self.channel_order
+    await self.move_to_xy_positions(
+      locations[0].x,
+      {channel: point.y for channel, point in zip(channels, locations)},
+      make_space=make_space,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      via_lane=via_lane,
+      x_speed=x_speed,
+      x_speed_scale=x_speed_scale,
+      z_speed=z_speed,
+      z_acceleration=z_acceleration,
     )
-    if via_lane:
-      await self._driver.send_command(
-        PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters)
-      )
-    else:
-      await self._driver.send_command(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+    await self.move_tool_bottom_to_z_positions(
+      {channel: point.z for channel, point in zip(channels, locations)},
+      speed=z_speed,
+      acceleration=z_acceleration,
+    )
 
   # ----------------------------------------
   # Probing
@@ -2169,7 +2517,7 @@ class Pipettes:
     step = 0.1  # mm between status reads
     try:
       async with (
-        arm._temporary_x_axis_profile(velocity=speed),
+        arm._temporary_x_axis_profile(speed=speed),
         channel.clld_detection(detect_mode, sensitivity),
       ):
         x = here
@@ -2645,75 +2993,106 @@ class Pipettes:
     }
 
   # ----------------------------------------
-  # Tips and liquid handling
+  # Tip handling
   # ----------------------------------------
 
-  # -- tip pickup / drop ---------------------------------------------------------------------------
+  def shaft(self, channel: int) -> Optional[TipMountingShaft]:
+    """The mounting shaft modelling a channel, or None while nothing models it."""
+    if channel >= len(self.resources):
+      return None
+    return next(
+      (child for child in self.resources[channel].children if isinstance(child, TipMountingShaft)),
+      None,
+    )
+
+  def get_mounted_tip(self, channel: int) -> Optional[Tip]:
+    """The tip the model has on a channel's shaft, or None if it carries none."""
+    shaft = self.shaft(channel)
+    if shaft is None:
+      return self._unmodelled_tips.get(channel)
+    tip = shaft.tip
+    return tip if isinstance(tip, Tip) else None
+
+  def _mount_tip(self, channel: int, tip: Tip) -> None:
+    """Put a collected tip on a channel in the model."""
+    shaft = self.shaft(channel)
+    if shaft is not None:
+      shaft.mount_tip(tip)
+      return
+    if tip.parent is not None:
+      tip.parent.unassign_child_resource(tip)
+    self._unmodelled_tips[channel] = tip
+
+  def _release_tip(self, channel: int) -> Optional[Tip]:
+    """Take a channel's tip off it in the model, leaving it assigned to nothing."""
+    shaft = self.shaft(channel)
+    if shaft is None:
+      return self._unmodelled_tips.pop(channel, None)
+    return cast(Tip, shaft.release_tip()) if shaft.has_tip() else None
 
   def get_mounted_tips(self) -> List[Optional[Tip]]:
-    """Tips currently mounted on the dual-channel head (``None`` if empty)."""
-    self._ensure_head()
-    return [
-      self.head[i].get_tip() if self.head[i].has_tip else None for i in range(self.num_channels)
-    ]
+    """The tip on each channel's shaft, back to front, ``None`` where there is none."""
+    return [self.get_mounted_tip(i) for i in range(self.num_channels)]
 
   def _require_mounted_tips(self, use_channels: List[int]) -> List[Tip]:
-    self._ensure_head()
-    tips: List[Tip] = []
-    for ch in use_channels:
-      tracker = self.head[ch]
-      if not tracker.has_tip:
-        raise RuntimeError(f"No tip mounted on channel {ch}; call pick_up_tips first.")
-      tips.append(tracker.get_tip())
-    return tips
+    """The tip on each channel named.
 
-  async def _finalize_channel_command(
-    self,
-    use_channels: Sequence[int],
-    *,
-    tip_intents: Optional[Sequence[Union[TipPickupIntent, TipDropIntent]]] = None,
-    volume_intents: Optional[Sequence[VolumeTransferIntent]] = None,
-    send: Callable[[], Awaitable[None]],
-  ) -> None:
-    """Send a Prep command and commit/rollback queued tip or volume intents."""
-    error: Optional[BaseException] = None
-    try:
-      await send()
-      successes = all_channels_succeeded(use_channels)
-    except ChannelizedError as e:
-      error = e
-      successes = successes_from_failed_channels(use_channels, e.errors)
-    except BaseException as e:
-      error = e
-      successes = {ch: False for ch in use_channels}
-    if tip_intents is not None:
-      finalize_tip_ops(tip_intents, successes)
-    if volume_intents is not None:
-      finalize_volume_ops(volume_intents, successes)
-    if error is not None:
-      raise error
+    Raises:
+      NoTipError: If any of them carries none, naming all of those.
+    """
+    mounted = {ch: self.get_mounted_tip(ch) for ch in use_channels}
+    empty = [ch for ch, tip in mounted.items() if tip is None]
+    if empty:
+      raise NoTipError(f"no tip is mounted on {channels_named(empty)}; call pick_up_tips first.")
+    return [tip for tip in mounted.values() if tip is not None]
 
-  async def pick_up_tips(
+  async def _pick_up_tips_in_one_move(
     self,
     tip_spots: Sequence[TipSpot],
     use_channels: Optional[List[int]] = None,
-    *,
     offsets: Optional[Sequence[Coordinate]] = None,
-    final_z: Optional[float] = None,
-    seek_speed: float = 15.0,
+    minimum_traverse_height_start: Optional[float] = None,
     z_seek_offset: Optional[float] = None,
-    enable_tadm: bool = False,
+    seek_speed: float = 15.0,
     dispenser_volume: float = 0.0,
     dispenser_speed: float = 250.0,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    pre_position: bool = True,
+    enable_tadm: bool = False,
+    minimum_traverse_height_end: Optional[float] = None,
   ):
-    """Pick up tips from tip spots.
+    """Pick up tips from spots the channels can all reach at once.
 
-    The arm moves to z_seek during lateral XY approach, then descends to z_position
-    to engage the tip. Default z_seek = z_position + fitting_depth + 5mm (tip-type-
-    aware; avoids descending into the rack during approach).
+    One firmware command, so the spots must share one x and stand far enough apart in y, in channel
+    order. `pick_up_tips` plans any set of spots into groups like this and calls it for each.
+
+    In order: channels standing below the starting height are raised to it, the channels travel over
+    the spots at that height, descend to the seek height, press down onto the tips until they are
+    seated, and rise to the ending height. Channels not picking up move aside as far as the spacing
+    needs, since a channel can only reach a spot past its neighbour if the neighbour gives way.
+
+    Args:
+      tip_spots: the spot each channel takes a tip from.
+      use_channels: which channels take them, 0-indexed from the back. Defaults to the first ones.
+      offsets: how far each spot's centre is missed by, in mm.
+      minimum_traverse_height_start: the height to travel over the spots at, in mm. The ending
+        height when None.
+      z_seek_offset: how far above the tip to stop descending before pressing on, in mm. A height
+        the tip type decides when None.
+      seek_speed: how fast to press onto the tip, in mm/s.
+      dispenser_volume: air to hold in the dispenser while picking up, in ul.
+      dispenser_speed: how fast to move that air, in ul/s.
+      enable_tadm: whether to record the pressure through the pick-up.
+      minimum_traverse_height_start: the height to travel over the destinations at, in mm.
+        `minimum_traverse_height_end` when None.
+      minimum_traverse_height_end: the height to leave the channels at, in mm.
+        `default_minimum_traverse_height` when None.
+
+    Raises:
+      ValueError: If the counts do not match, a channel does not exist, or the spots hold more than
+        one type of tip.
+      HasTipError: If a channel already carries a tip, in the model or on the sensors.
+      NoTipError: If a spot holds none.
     """
+    # Arguments
     tip_spots = list(tip_spots)
     use_channels = use_channels if use_channels is not None else list(range(len(tip_spots)))
     if len(tip_spots) != len(use_channels):
@@ -2726,9 +3105,30 @@ class Pipettes:
     if len(offsets_list) != len(tip_spots):
       raise ValueError("len(offsets) must equal len(tip_spots)")
 
-    tips = [spot.get_tip() for spot in tip_spots]
-    resolved_final_z = self._resolve_traverse_height(final_z)
+    # What the model holds: every channel that carries one is named, not just the first
+    carrying = {ch: tip for ch in use_channels if (tip := self.get_mounted_tip(ch)) is not None}
+    if carrying:
+      raise HasTipError(
+        "already carrying a tip: "
+        + ", ".join(f"channel {ch} carries {tip.name}" for ch, tip in carrying.items())
+      )
+    # And asked of the device itself: the model says what was recorded, the sleeve sensors say what
+    # is on the channel, and a tip left on from another session is only in the second.
+    held = await self.sense_tip_presence()
+    sensed = [ch for ch in use_channels if ch < len(held) and held[ch]]
+    if sensed:
+      raise HasTipError(
+        f"{channels_named(sensed)} senses a tip on it, though the model holds none"
+        if len(sensed) == 1
+        else f"{channels_named(sensed)} sense a tip on them, though the model holds none"
+      )
 
+    if not tip_spots:
+      return
+    tips = [spot.tip_for_pickup() for spot in tip_spots]
+    resolved_end = self._resolve_traverse_height(minimum_traverse_height_end)
+
+    # Where each channel descends: the spot's top as the deck holds it, plus the offset
     indexed = {
       ch: (spot, tip, off)
       for ch, spot, tip, off in zip(use_channels, tip_spots, tips, offsets_list)
@@ -2745,6 +3145,7 @@ class Pipettes:
         )
       )
 
+    # One tip type for the command: the firmware takes a single definition, not one each
     tip0 = tips[0]
     if any(
       t.maximal_volume != tip0.maximal_volume
@@ -2759,38 +3160,31 @@ class Pipettes:
       length=tip0.get_size_z() - tip0.fitting_depth,
       tip_type=PrepCmd.TipTypes.StandardVolume,
       has_filter=tip0.has_filter,
-      is_needle=False,
+      is_needle=tip0.maximal_volume == 0,  # a needle is closed: it holds no liquid
       is_tool=False,
     )
 
-    if pre_position:
-      traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
-      locs = [
-        indexed[ch][0].get_location_wrt(self._require_deck(), "c", "c", "t") + indexed[ch][2]
-        for ch in use_channels
-      ]
-      await self.move_to_location(
-        [Coordinate(locs[0].x, loc.y, traverse_h) for loc in locs],
-        use_channels=use_channels,
-      )
-
-    self._ensure_head()
-    tip_intents = [
-      TipPickupIntent(
-        channel=ch,
-        tip_spot=spot,
-        tip=tip,
-        channel_tracker=self.head[ch],
-      )
-      for ch, spot, tip in zip(use_channels, tip_spots, tips)
+    # Over the spots first, so the pick-up itself is straight down
+    traverse_h = (
+      resolved_end if minimum_traverse_height_start is None else minimum_traverse_height_start
+    )
+    locs = [
+      indexed[ch][0].get_location_wrt(self._require_deck(), "c", "c", "t") + indexed[ch][2]
+      for ch in use_channels
     ]
-    queue_tip_pickups(tip_intents)
+    await self.move_to_xy_positions(
+      locs[0].x,
+      {ch: loc.y for ch, loc in zip(use_channels, locs)},
+      make_space=True,
+      minimum_traverse_height_start=traverse_h,
+    )
 
-    async def _send() -> None:
+    picked_up = {ch: False for ch in use_channels}
+    try:
       await self._driver.send_command(
         PrepCmd.PrepPickUpTips(
           tip_positions=tip_positions,
-          final_z=resolved_final_z,
+          final_z=resolved_end,
           seek_speed=seek_speed,
           tip_definition=tip_definition,
           enable_tadm=enable_tadm,
@@ -2798,29 +3192,159 @@ class Pipettes:
           dispenser_speed=dispenser_speed,
         )
       )
+      picked_up = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      # It can fail on some channels and not others; the device says which
+      picked_up = successes_from_failed_channels(use_channels, e.errors)
+      raise
+    finally:
+      # A tip is a resource: once the device has it, it leaves its spot for the channel's shaft
+      for ch, tip in zip(use_channels, tips):
+        if picked_up[ch]:
+          self._mount_tip(ch, tip)
+      # What a channel carries moves its Z window, and the device answers the new one.
+      with suppress(Exception):  # in a finally: never mask what went wrong above
+        await self._record_channel_bounds()
+      # Read once the tips are on the model: Z is reported at their bottom.
+      await self._record_where_they_stopped()
 
-    await self._finalize_channel_command(use_channels, tip_intents=tip_intents, send=_send)
+  async def pick_up_tips(
+    self,
+    tip_spots: Sequence[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    offsets: Optional[Sequence[Coordinate]] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+    z_seek_offset: Optional[float] = None,
+    seek_speed: float = 15.0,
+    dispenser_volume: float = 0.0,
+    dispenser_speed: float = 250.0,
+    enable_tadm: bool = False,
+    minimum_traverse_height_during: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+    x_tolerance: float = 0.1,
+  ):
+    """Pick up tips from tip spots, wherever on the deck they are.
 
-  async def drop_tips(
+    The channels ride one gantry, so only spots at one x, far enough apart in y and in channel
+    order, can be taken in one move. Any other set is planned into the fewest such groups, and each
+    group is taken by `_pick_up_tips_in_one_move`, in ascending x.
+
+    Args:
+      tip_spots: the spot each channel takes a tip from.
+      use_channels: which channels take them, 0-indexed from the back. Defaults to the first ones.
+      offsets: how far each spot's centre is missed by, in mm.
+      minimum_traverse_height_start: the height to travel over the spots at, in mm. The ending
+        height when None.
+      z_seek_offset: how far above the tip to stop descending before pressing on, in mm. A height
+        the tip type decides when None.
+      seek_speed: how fast to press onto the tip, in mm/s.
+      dispenser_volume: air to hold in the dispenser while picking up, in ul.
+      dispenser_speed: how fast to move that air, in ul/s.
+      enable_tadm: whether to record the pressure through the pick-up.
+      minimum_traverse_height_during: the height to travel at between one group of spots and the
+        next, in mm. The starting height when None. Only a set that takes more than one group
+        reaches it.
+      minimum_traverse_height_end: the height to leave the channels at, in mm.
+        `default_minimum_traverse_height` when None.
+      x_tolerance: how far apart in x two spots may be and still be taken together, in mm.
+
+    Raises:
+      ValueError: If the counts do not match, or a channel does not exist.
+      HasTipError: If a channel already carries a tip, in the model or on the sensors.
+      NoTipError: If a spot holds none.
+    """
+    # Arguments
+    tip_spots = list(tip_spots)
+    if not tip_spots:
+      return
+    use_channels = use_channels if use_channels is not None else list(range(len(tip_spots)))
+    if len(tip_spots) != len(use_channels):
+      raise ValueError(
+        f"len(tip_spots) must equal len(use_channels): {len(tip_spots)} != {len(use_channels)}"
+      )
+    if max(use_channels) >= self.num_channels or min(use_channels) < 0:
+      raise ValueError(f"use_channels index out of range (valid: 0..{self.num_channels - 1})")
+    offsets_list = list(offsets) if offsets is not None else [Coordinate.zero()] * len(tip_spots)
+    if len(offsets_list) != len(tip_spots):
+      raise ValueError("len(offsets) must equal len(tip_spots)")
+
+    # The fewest groups of spots the channels can reach without moving the gantry between them
+    batches = plan_batches(
+      use_channels=list(use_channels),
+      # Spots, not containers: the planner asks them where they are and whether anything is in the
+      # way, which a spot answers as a well does.
+      containers=cast(List[Container], list(tip_spots)),
+      channel_spacings=self.minimum_y_spacings,
+      wrt_resource=self._require_deck(),
+      x_tolerance=x_tolerance,
+      resource_offsets=offsets_list,
+    )
+    # The first group is approached from wherever the channels stand, at the starting height; every
+    # group after it is reached from the group before, at the height in between.
+    between = (
+      minimum_traverse_height_start
+      if minimum_traverse_height_during is None
+      else (minimum_traverse_height_during)
+    )
+    for reached, batch in enumerate(batches):
+      await self._pick_up_tips_in_one_move(
+        [tip_spots[i] for i in batch.indices],
+        list(batch.channels),
+        [offsets_list[i] for i in batch.indices],
+        minimum_traverse_height_start if reached == 0 else between,
+        z_seek_offset,
+        seek_speed,
+        dispenser_volume,
+        dispenser_speed,
+        enable_tadm,
+        minimum_traverse_height_end,
+      )
+
+  async def _drop_tips_in_one_move(
     self,
     destinations: Sequence[Union[TipSpot, Trash]],
     use_channels: Optional[List[int]] = None,
-    *,
     offsets: Optional[Sequence[Coordinate]] = None,
-    final_z: Optional[float] = None,
-    seek_speed: float = 15.0,
     z_seek_offset: Optional[float] = None,
+    seek_speed: float = 15.0,
     drop_type: PrepCmd.TipDropType = PrepCmd.TipDropType.FixedHeight,
     tip_roll_off_distance: float = 0.0,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
   ):
-    """Drop tips to tip spots or trash.
+    """Drop tips into spots the channels can all reach at once, or into the waste.
 
-    The arm moves to z_seek during lateral XY approach (tip is on pipette, so tip
-    bottom is at z_seek - (size_z - fitting_depth)). z_position uses
-    fitting depth so the tip bottom lands at the spot surface; default z_seek =
-    z_position + 10mm so the tip bottom stays above adjacent tips in the rack.
+    One firmware command, so the spots must share one x and stand far enough apart in y, in channel
+    order. `drop_tips` plans any set of spots into groups like this and calls it for each. The waste
+    needs no planning: each channel has its own, at one x.
+
+    In order: the channels descend to the seek height with the tips on them, let go, and rise to the
+    ending height. A tip goes back onto a spot, or is rolled off over the waste, and one command
+    does one or the other rather than both.
+
+    Args:
+      destinations: the spot each channel drops its tip into, or the waste.
+      use_channels: which channels drop them, 0-indexed from the back. Defaults to the first ones.
+      offsets: how far each destination's centre is missed by, in mm.
+      z_seek_offset: how far above the destination the tip bottom stops, in mm. A height the drop
+        decides when None.
+      seek_speed: how fast to descend onto the destination, in mm/s.
+      drop_type: how the tip is let go. Stalled off over the waste, whatever this says elsewhere.
+      tip_roll_off_distance: how far the tip is rolled off as it is released, in mm. 3 mm over the
+        waste when it is 0.
+      minimum_traverse_height_end: the height to leave the channels at, in mm.
+        `default_minimum_traverse_height` when None.
+
+    Raises:
+      ValueError: If the counts do not match, a channel does not exist, waste and spots are mixed,
+        two tips go into one spot, or a tip still holds liquid.
+      NoTipError: If a channel carries no tip, in the model or on the sensors.
+      HasTipError: If a destination spot already holds one.
     """
+    # Arguments
     destinations = list(destinations)
+    if not destinations:
+      return
     use_channels = use_channels if use_channels is not None else list(range(len(destinations)))
     if len(destinations) != len(use_channels):
       raise ValueError(
@@ -2830,24 +3354,36 @@ class Pipettes:
     if use_channels and max(use_channels) >= self.num_channels:
       raise ValueError(f"use_channels index out of range (valid: 0..{self.num_channels - 1})")
     tips = self._require_mounted_tips(use_channels)
+    # And asked of the device itself: the model says what was recorded, the sleeve sensors say what
+    # is on the channel, and a tip lost on the way is only in the second.
+    held = await self.sense_tip_presence()
+    empty = [ch for ch in use_channels if ch < len(held) and not held[ch]]
+    if empty:
+      raise NoTipError(
+        f"{channels_named(empty)} senses no tip on it, though the model holds one"
+        if len(empty) == 1
+        else f"{channels_named(empty)} sense no tip on them, though the model holds one"
+      )
     offsets_list = list(offsets) if offsets is not None else [Coordinate.zero()] * len(destinations)
     if len(offsets_list) != len(destinations):
       raise ValueError("len(offsets) must equal len(destinations)")
 
+    # Waste and spots are dropped differently, so one command does one or the other
     all_trash = all(isinstance(d, Trash) for d in destinations)
     all_tip_spots = all(isinstance(d, TipSpot) for d in destinations)
     if not (all_trash or all_tip_spots):
       raise ValueError("Cannot mix waste (Trash) and tip spots in a single drop_tips call.")
 
-    resolved_final_z = self._resolve_traverse_height(final_z)
+    resolved_end = self._resolve_traverse_height(minimum_traverse_height_end)
     roll_off = 3.0 if (all_trash and tip_roll_off_distance == 0.0) else tip_roll_off_distance
     resolved_drop_type = PrepCmd.TipDropType.Stall if all_trash else drop_type
 
+    # Where each channel lets go: its own waste position, or the spot as the deck holds it
     indexed = {
       ch: (dest, tip, off)
       for ch, dest, tip, off in zip(use_channels, destinations, tips, offsets_list)
     }
-    tip_positions: List[PrepCmd.TipDropParameters] = []
+    locations: Dict[int, Coordinate] = {}
     for ch in range(self.num_channels):
       if ch not in indexed:
         continue
@@ -2855,45 +3391,409 @@ class Pipettes:
       if all_trash:
         if self.deck is None:
           raise ValueError(
-            "Cannot drop tips to waste: backend has no deck (assign a deck before drop_tips)."
+            "Cannot drop tips to waste: the driver has no deck (assign one before drop_tips)."
           )
-        waste_name = self._driver.get_component_name(_CHANNEL_TO_WASTE_NAME.get(ch, "waste_mph"))
-        if not self.deck.has_resource(waste_name):
+        waste_name = _CHANNEL_TO_WASTE_NAME.get(ch, "waste_mph")
+        waste = getattr(self.deck, "waste_positions", {}).get(waste_name)
+        if waste is None:
           raise ValueError(
             f"Cannot drop tips to waste: deck has no waste position '{waste_name}'. "
             "Use a deck with waste_rear, waste_front (and waste_mph if using MPH)."
           )
-        loc = self.deck.get_resource(waste_name).get_location_wrt(self.deck, "c", "c", "t")
+        loc = waste.get_location_wrt(self.deck, "c", "c", "t")
+        # The device's waste position is where the tip's end goes, down its chute, while a drop is
+        # sent the height the collar rests at - the tip's length above that end.
+        loc = Coordinate(loc.x, loc.y, loc.z + tip.get_size_z() - tip.collar_height)
       else:
         loc = dest.get_location_wrt(self._require_deck(), "c", "c", "t") + off
-      tip_positions.append(
-        PrepCmd.TipDropParameters.for_op(
-          self.channel_enum(ch), loc, tip, z_seek_offset=z_seek_offset, drop_type=resolved_drop_type
-        )
-      )
+      locations[ch] = loc
 
-    tip_intents = [
-      TipDropIntent(
-        channel=ch,
-        destination=dest,
-        tip=tip,
-        channel_tracker=self.head[ch],
+    # Over the destinations first, so the drop itself is straight down. Left to itself the gantry
+    # drives X, Y and Z at once, which arcs whatever is on the channels through the deck.
+    traverse_h = (
+      resolved_end if minimum_traverse_height_start is None else minimum_traverse_height_start
+    )
+    await self.move_to_xy_positions(
+      locations[use_channels[0]].x,
+      {ch: locations[ch].y for ch in use_channels},
+      make_space=True,
+      minimum_traverse_height_start=traverse_h,
+    )
+
+    tip_positions = [
+      PrepCmd.TipDropParameters.for_op(
+        self.channel_enum(ch),
+        locations[ch],
+        indexed[ch][1],
+        z_seek_offset=z_seek_offset,
+        drop_type=resolved_drop_type,
       )
-      for ch, dest, tip in zip(use_channels, destinations, tips)
+      for ch in range(self.num_channels)
+      if ch in indexed
     ]
-    queue_tip_drops(tip_intents)
 
-    async def _send() -> None:
+    # Nothing is dropped with liquid in it, two into one spot, or into a spot that is taken
+    for ch, tip in zip(use_channels, tips):
+      if not tip.tracker.is_disabled and tip.tracker.get_used_volume() > 1e-6:
+        raise RuntimeError(
+          f"Cannot drop tip on channel {ch} with volume {tip.tracker.get_used_volume()} uL"
+        )
+    spots = [dest for dest in destinations if isinstance(dest, TipSpot)]
+    if len({id(spot) for spot in spots}) != len(spots):
+      raise ValueError("each tip must go into a spot of its own")
+    for spot in spots:
+      if spot.tracks_tips and spot.tip is not None:
+        raise HasTipError(f"{spot.name} already holds a tip")
+
+    dropped = {ch: False for ch in use_channels}
+    try:
       await self._driver.send_command(
         PrepCmd.PrepDropTips(
           tip_positions=tip_positions,
-          final_z=resolved_final_z,
+          final_z=resolved_end,
           seek_speed=seek_speed,
           tip_roll_off_distance=roll_off,
         )
       )
+      dropped = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      # It can fail on some channels and not others, and the device says which.
+      dropped = successes_from_failed_channels(use_channels, e.errors)
+      raise
+    finally:
+      # Once the device has let go, a tip goes into its spot, or to nothing in the waste
+      for ch, dest in zip(use_channels, destinations):
+        if not dropped[ch]:
+          continue
+        released = self._release_tip(ch)
+        if released is not None and isinstance(dest, TipSpot) and dest.tracks_tips:
+          dest.assign_tip(released)
+      # What a channel carries moves its Z window, and the device answers the new one.
+      with suppress(Exception):  # in a finally: never mask what went wrong above
+        await self._record_channel_bounds()
+      # Read once the tips are off the model: Z is reported at the shafts' ends again.
+      await self._record_where_they_stopped()
 
-    await self._finalize_channel_command(use_channels, tip_intents=tip_intents, send=_send)
+  async def drop_tips(
+    self,
+    destinations: Sequence[Union[TipSpot, Trash]],
+    use_channels: Optional[List[int]] = None,
+    offsets: Optional[Sequence[Coordinate]] = None,
+    z_seek_offset: Optional[float] = None,
+    seek_speed: float = 15.0,
+    drop_type: PrepCmd.TipDropType = PrepCmd.TipDropType.FixedHeight,
+    tip_roll_off_distance: float = 0.0,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_during: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+    x_tolerance: float = 0.1,
+  ):
+    """Drop tips into tip spots, wherever on the deck they are, or into the waste.
+
+    The channels ride one gantry, so only spots at one x, far enough apart in y and in channel
+    order, can be dropped into in one move. Any other set is planned into the fewest such groups,
+    and each group is dropped by `_drop_tips_in_one_move`, in ascending x. Waste goes in one move:
+    each channel has a waste position of its own.
+
+    Args:
+      destinations: the spot each channel drops its tip into, or the waste.
+      use_channels: which channels drop them, 0-indexed from the back. Defaults to the first ones.
+      offsets: how far each destination's centre is missed by, in mm.
+      z_seek_offset: how far above the destination the tip bottom stops, in mm. A height the drop
+        decides when None.
+      seek_speed: how fast to descend onto the destination, in mm/s.
+      drop_type: how the tip is let go. Stalled off over the waste, whatever this says elsewhere.
+      tip_roll_off_distance: how far the tip is rolled off as it is released, in mm. 3 mm over the
+        waste when it is 0.
+      minimum_traverse_height_start: the height to travel to the first group at, in mm.
+        `minimum_traverse_height_end` when None.
+      minimum_traverse_height_during: the height to travel between groups at, in mm.
+        `minimum_traverse_height_start` when None.
+      minimum_traverse_height_end: the height to leave the channels at, in mm.
+        `default_minimum_traverse_height` when None.
+      x_tolerance: how far apart in x two spots may be and still be dropped into together, in mm.
+
+    Raises:
+      ValueError: If the counts do not match, a channel does not exist, waste and spots are mixed,
+        two tips go into one spot, or a tip still holds liquid.
+      NoTipError: If a channel carries no tip, in the model or on the sensors.
+      HasTipError: If a destination spot already holds one.
+    """
+    # Arguments
+    destinations = list(destinations)
+    if not destinations:
+      return
+    use_channels = use_channels if use_channels is not None else list(range(len(destinations)))
+    if len(destinations) != len(use_channels):
+      raise ValueError(
+        f"len(destinations) must equal len(use_channels): "
+        f"{len(destinations)} != {len(use_channels)}"
+      )
+    if max(use_channels) >= self.num_channels or min(use_channels) < 0:
+      raise ValueError(f"use_channels index out of range (valid: 0..{self.num_channels - 1})")
+    offsets_list = list(offsets) if offsets is not None else [Coordinate.zero()] * len(destinations)
+    if len(offsets_list) != len(destinations):
+      raise ValueError("len(offsets) must equal len(destinations)")
+
+    if all(isinstance(destination, Trash) for destination in destinations):
+      await self._drop_tips_in_one_move(
+        destinations,
+        use_channels,
+        offsets_list,
+        z_seek_offset,
+        seek_speed,
+        drop_type,
+        tip_roll_off_distance,
+        minimum_traverse_height_start,
+        minimum_traverse_height_end,
+      )
+      return
+
+    # The fewest groups of spots the channels can reach without moving the gantry between them
+    batches = plan_batches(
+      use_channels=list(use_channels),
+      containers=cast(List[Container], list(destinations)),
+      channel_spacings=self.minimum_y_spacings,
+      wrt_resource=self._require_deck(),
+      x_tolerance=x_tolerance,
+      resource_offsets=offsets_list,
+    )
+    between = (
+      minimum_traverse_height_start
+      if minimum_traverse_height_during is None
+      else minimum_traverse_height_during
+    )
+    for reached, batch in enumerate(batches):
+      await self._drop_tips_in_one_move(
+        [destinations[i] for i in batch.indices],
+        list(batch.channels),
+        [offsets_list[i] for i in batch.indices],
+        z_seek_offset,
+        seek_speed,
+        drop_type,
+        tip_roll_off_distance,
+        minimum_traverse_height_start if reached == 0 else between,
+        minimum_traverse_height_end,
+      )
+
+  async def return_tips(self, use_channels: Optional[List[int]] = None, **kwargs) -> None:
+    """Put each channel's tip back in the tip spot it was picked up from, as legacy does.
+
+    The spot is found from the tip itself: a spot names the tips it makes after itself.
+
+    Args:
+      use_channels: which channels. Of these, only those carrying a tip return one. Every channel,
+        when None.
+      kwargs: passed on to `drop_tips`.
+
+    Raises:
+      RuntimeError: If no channel carries a tip, or a tip's spot is not on the deck.
+    """
+    deck = self._require_deck()
+    channels = range(self.num_channels) if use_channels is None else use_channels
+    spots: List[TipSpot] = []
+    carrying: List[int] = []
+    for ch in sorted(channels):
+      tip = self.get_mounted_tip(ch)
+      if tip is None:
+        continue
+      spot = tip_origin(tip, deck)
+      if spot is None:
+        raise RuntimeError(f"the spot channel {ch}'s tip {tip.name} came from is not on the deck")
+      spots.append(spot)
+      carrying.append(ch)
+    if not spots:
+      raise RuntimeError("No tips have been picked up.")
+    await self.drop_tips(spots, use_channels=carrying, **kwargs)
+
+  async def discard_tips(self, use_channels: Optional[List[int]] = None, **kwargs) -> None:
+    """Discard each channel's tip into the deck's waste, each at its own waste position.
+
+    Args:
+      use_channels: which channels. Every channel the model has a tip on, when None.
+      kwargs: passed on to `drop_tips`.
+
+    Raises:
+      RuntimeError: If this deck was built without a waste block.
+    """
+    deck = self._require_deck()
+    if use_channels is None:
+      use_channels = [ch for ch in range(self.num_channels) if self.get_mounted_tip(ch) is not None]
+    if not use_channels:
+      return
+    waste = getattr(deck, "waste_block", None)
+    if waste is None:
+      raise RuntimeError("tips are discarded into the deck's waste block; this deck has none")
+    await self.drop_tips([waste] * len(use_channels), use_channels=use_channels, **kwargs)
+
+  async def _move_relative_and_check(
+    self, command: PrepCmd.PrepCommand, expected: Dict[int, Coordinate], tolerance: float = 1.0
+  ) -> List[Coordinate]:
+    """Send one relative axis move, then read where the channels are and stop unless they arrived.
+
+    The relative moves bypass the coordinator, so nothing but this check tells a wrong sign, a
+    refused distance or a stalled drive from a move that happened.
+
+    Args:
+      command: the relative move to send.
+      expected: where each channel named should report itself after it.
+      tolerance: how far off still counts as arrived, in mm.
+
+    Raises:
+      RuntimeError: If a channel is not where the move should have left it.
+    """
+    await self._driver.send_command(command)
+    at = await self.request_locations()
+    for ch, want in expected.items():
+      got = at[ch]
+      off = max(abs(got.x - want.x), abs(got.y - want.y), abs(got.z - want.z))
+      if off > tolerance:
+        raise RuntimeError(
+          f"after {type(command).__name__} channel {ch} reports {got}, expected {want} "
+          f"({off:.1f} mm off): stopping before anything else moves"
+        )
+    return at
+
+  async def release_tips(self, channels: Optional[List[int]] = None) -> None:
+    """Let go of whatever each channel holds, where it stands, with the squeeze drive alone.
+
+    `PipettorService.ReleaseTips` opens the squeeze and nothing else: no Z move, no drop position,
+    and no definition consulted. It is what clears a channel the Pipettor has lost track of, since
+    after a power cycle it forgets what it holds and refuses to drop it. Runs before initializing.
+    The tip falls where the channel is, so bring it over the waste first.
+
+    Args:
+      channels: which channels, 0-indexed from the back. Every channel sensing something, when None.
+    """
+    if channels is None:
+      channels = [ch for ch, on in enumerate(await self.sense_tip_presence()) if on]
+    if not channels:
+      return
+    service = await self._driver.resolve_path(f"{PIPETTOR_OBJECT_PATH}.PipettorService")
+    method = await self._driver.request_method_by_name(service, "ReleaseTips")
+    try:
+      for ch in sorted(set(channels)):
+        await self._driver.send_command(
+          PrepCmd.PrepReleaseTips(
+            dest=service,
+            command_id=method.method_id,
+            interface_id=method.interface_id,
+            channel=self.channel_enum(ch),
+          )
+        )
+        self._release_tip(ch)
+    finally:
+      # What a channel carries moves its Z window, and the device answers the new one.
+      with suppress(Exception):  # in a finally: never mask what went wrong above
+        await self._record_channel_bounds()
+      await self._record_where_they_stopped()
+
+  async def _emergency_release_of_tips_over_waste(self) -> None:
+    """Get the tips off over the waste with the axes and the squeeze drives alone.
+
+    For a device whose Pipettor will not drop what the channels carry: after a power cycle it
+    forgets what it holds and refuses `DropTips` and its own initialization. Nothing here goes
+    through the coordinator: every move is relative, on the axis itself, and checked against
+    where the channels then report themselves. In order:
+
+    1. where the channels are, and which sense something;
+    2. every stop disc to Z safety, relatively;
+    3. X, then each channel's Y, relatively, to the centre of its waste site;
+    4. the length of what is on, from the firmware: its definition, or the shift of the Z window
+       it reports where the two disagree;
+    5. each carrying channel down, relatively, to 10 mm above the waste's tip-end height;
+    6. the squeeze drives let go;
+    7. back up to Z safety, relatively.
+
+    Raises:
+      RuntimeError: If the deck has no waste sites, or a move did not leave a channel where it should.
+    """
+    deck = self._require_deck()
+    sites = getattr(deck, "waste_positions", None)
+    if not sites:
+      raise RuntimeError("the waste sites are placed on a PrepDeck; this driver has another deck")
+    at = await self.request_locations()
+    present = await self.sense_tip_presence()
+    carrying = [ch for ch, on in enumerate(present) if on]
+    if not carrying:
+      logger.info("nothing is sensed on the channels; nothing to release")
+      return
+    traverse = self.default_minimum_traverse_height
+
+    def axis(address: Optional[Address], which: str, ch: int) -> Address:
+      if address is None:
+        raise RuntimeError(f"channel {ch}'s {which} was not found at setup")
+      return address
+
+    zaxes = {ch: axis(self.channels[ch].zaxis, "Z axis", ch) for ch in range(self.num_channels)}
+    yaxes = {ch: axis(self.channels[ch].yaxis, "Y axis", ch) for ch in range(self.num_channels)}
+
+    # 4 first, since the stop discs' heights follow from it: reported Z is the bottom of what is on.
+    attached = await self.request_attached_tip_information(carrying[0])
+    with suppress(Exception):
+      await self._record_channel_bounds()
+    lengths: Dict[int, float] = {}
+    for ch in carrying:
+      length = attached.length if attached is not None else 0.0
+      window = (
+        self.configuration.channels[ch].z_range if ch < len(self.configuration.channels) else None
+      )
+      if window is not None:
+        physical = traverse - window[1]
+        if physical > 0.5 and abs(physical - length) > 0.5:
+          logger.warning(
+            "channel %d's window says %.1f mm below the stop disc, its definition %.1f: the window",
+            ch,
+            physical,
+            length,
+          )
+          length = physical
+      lengths[ch] = length
+
+    # 2. Every stop disc up to Z safety, one channel at a time.
+    for ch in range(self.num_channels):
+      disc = at[ch].z + lengths.get(ch, 0.0)
+      if traverse - disc > 0.5:
+        want = Coordinate(at[ch].x, at[ch].y, at[ch].z + (traverse - disc))
+        at = await self._move_relative_and_check(
+          PrepCmd.PrepZAxisMoveRelative(dest=zaxes[ch], distance=traverse - disc),
+          {ch: want},
+        )
+
+    # 3. X once, then Y per channel, the smaller target first so nobody passes the one ahead.
+    targets = {
+      ch: sites[_CHANNEL_TO_WASTE_NAME[ch]].get_location_wrt(deck, "c", "c", "t") for ch in carrying
+    }
+    x = next(iter(targets.values())).x
+    at = await self._move_relative_and_check(
+      PrepCmd.PrepXAxisMoveRelative(distance=x - at[0].x),
+      {ch: Coordinate(x, at[ch].y, at[ch].z) for ch in range(self.num_channels)},
+    )
+    for ch in sorted(carrying, key=lambda c: targets[c].y):
+      want = Coordinate(at[ch].x, targets[ch].y, at[ch].z)
+      at = await self._move_relative_and_check(
+        PrepCmd.PrepYAxisMoveRelative(dest=yaxes[ch], distance=targets[ch].y - at[ch].y),
+        {ch: want},
+      )
+
+    # 5. Down to 10 mm over the waste's tip-end height, 6. let go, 7. back up.
+    for ch in carrying:
+      down = at[ch].z - (targets[ch].z + 10.0)
+      if down > 0:
+        want = Coordinate(at[ch].x, at[ch].y, at[ch].z - down)
+        at = await self._move_relative_and_check(
+          PrepCmd.PrepZAxisMoveRelative(dest=zaxes[ch], distance=-down), {ch: want}
+        )
+    await self.release_tips(carrying)
+    at = await self.request_locations()
+    for ch in carrying:
+      # Nothing on it now: reported Z is the stop disc, and Z safety is where it goes.
+      up = traverse - at[ch].z
+      if up > 0.5:
+        at = await self._move_relative_and_check(
+          PrepCmd.PrepZAxisMoveRelative(dest=zaxes[ch], distance=up),
+          {ch: Coordinate(at[ch].x, at[ch].y, traverse)},
+        )
 
   def can_pick_up_tip(self, channel: int, tip: Tip) -> bool:
     """Check if the tip can be picked up by the specified channel.
@@ -2912,6 +3812,10 @@ class Pipettes:
     if n is not None and channel >= n:
       return False
     return True
+
+  # ----------------------------------------
+  # Liquid handling
+  # ----------------------------------------
 
   # -- v1/v2 aspirate/dispense dispatch helpers ----------------------------------------------------
 
@@ -3299,22 +4203,19 @@ class Pipettes:
     (False, False, False): PrepCmd.PrepAspirateNoLldMonitoring,
   }
 
-  async def _send_aspirate(
+  def _aspirate_command(
     self,
     kits: list[_AspirateChannelKit],
     effective_lld: bool,
     is_tadm: bool,
     use_v2: bool,
-    read_timeout: Optional[float] = None,
-  ) -> None:
-    """Assemble the correct param types and send the aspirate command."""
+  ) -> TCPCommand[None]:
+    """The aspirate command for these channels, with the param types this firmware takes."""
     cmd_cls = self._ASPIRATE_CMD[(effective_lld, is_tadm, use_v2)]
     assembler = self._assemble_aspirate_v2 if use_v2 else self._assemble_aspirate_v1
     params = [assembler(k, effective_lld, is_tadm) for k in kits]
-    await self._driver.send_command(
-      cmd_cls(aspirate_parameters=params),  # type: ignore[arg-type]
-      read_timeout=read_timeout if effective_lld else None,
-    )
+    command: TCPCommand[None] = cmd_cls(aspirate_parameters=params)  # type: ignore[arg-type]
+    return command
 
   # -- dispense: resolve, assemble, send -----------------------------------------------------------
 
@@ -3487,21 +4388,18 @@ class Pipettes:
     (False, False): PrepCmd.PrepDispenseNoLld,
   }
 
-  async def _send_dispense(
+  def _dispense_command(
     self,
     kits: list[_DispenseChannelKit],
     effective_lld: bool,
     use_v2: bool,
-    read_timeout: Optional[float] = None,
-  ) -> None:
-    """Assemble the correct param types and send the dispense command."""
+  ) -> TCPCommand[None]:
+    """The dispense command for these channels, with the param types this firmware takes."""
     cmd_cls = self._DISPENSE_CMD[(effective_lld, use_v2)]
     assembler = self._assemble_dispense_v2 if use_v2 else self._assemble_dispense_v1
     params = [assembler(k, effective_lld) for k in kits]
-    await self._driver.send_command(
-      cmd_cls(dispense_parameters=params),  # type: ignore[arg-type]
-      read_timeout=read_timeout if effective_lld else None,
-    )
+    command: TCPCommand[None] = cmd_cls(dispense_parameters=params)  # type: ignore[arg-type]
+    return command
 
   # -- aspirate / dispense orchestrators -----------------------------------------------------------
 
@@ -3638,10 +4536,20 @@ class Pipettes:
     ]
     queue_volume_transfers(volume_intents)
 
-    async def _send() -> None:
-      await self._send_aspirate(kits, effective_lld, is_tadm, use_v2, lld_read_timeout)
-
-    await self._finalize_channel_command(use_channels, volume_intents=volume_intents, send=_send)
+    aspirated = {ch: False for ch in use_channels}
+    try:
+      await self._driver.send_command(
+        self._aspirate_command(kits, effective_lld, is_tadm, use_v2),
+        read_timeout=lld_read_timeout if effective_lld else None,
+      )
+      aspirated = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      # It can fail on some channels and not others, and the device says which.
+      aspirated = successes_from_failed_channels(use_channels, e.errors)
+      raise
+    finally:
+      # What each channel took is what its tip now holds, and the well no longer does
+      finalize_volume_ops(volume_intents, aspirated)
 
   async def dispense(
     self,
@@ -3734,7 +4642,21 @@ class Pipettes:
     ]
     queue_volume_transfers(volume_intents)
 
-    async def _send() -> None:
-      await self._send_dispense(kits, effective_lld, use_v2, lld_read_timeout)
+    dispensed = {ch: False for ch in use_channels}
+    try:
+      await self._driver.send_command(
+        self._dispense_command(kits, effective_lld, use_v2),
+        read_timeout=lld_read_timeout if effective_lld else None,
+      )
+      dispensed = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      # It can fail on some channels and not others, and the device says which.
+      dispensed = successes_from_failed_channels(use_channels, e.errors)
+      raise
+    finally:
+      # What each channel put down is what the well now holds, and its tip no longer does
+      finalize_volume_ops(volume_intents, dispensed)
 
-    await self._finalize_channel_command(use_channels, volume_intents=volume_intents, send=_send)
+  # ----------------------------------------
+  # Auto-calibration (only for experienced users)
+  # ----------------------------------------
