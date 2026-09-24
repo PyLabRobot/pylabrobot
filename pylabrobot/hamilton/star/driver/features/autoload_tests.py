@@ -210,10 +210,10 @@ class TestTheWheelsSafeZTolerance(unittest.IsolatedAsyncioTestCase):
       )
 
 
-class TestTheRecordingsSled(unittest.TestCase):
+class TestTheRecordingsSled(unittest.IsolatedAsyncioTestCase):
   """Every shipped recording with an autoload places its sled where the configuration does."""
 
-  def test_the_reference_point_is_the_configurations(self):
+  async def test_the_reference_point_is_the_configurations(self):
     default = AutoloadConfiguration().reference_point_from_sled_left_edge
     for recording in (
       RECORDING_STAR,
