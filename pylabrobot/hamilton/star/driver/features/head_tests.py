@@ -1,16 +1,21 @@
 import dataclasses
 import json
 import pathlib
+import random
 import tempfile
 import unittest
-from typing import cast
+from typing import Any, List, Optional, cast
+from unittest.mock import patch
 
-from pylabrobot.hamilton.star.device import RECORDING_STAR
+from pylabrobot.hamilton.star.device import RECORDING_STAR, RECORDING_STARLET
 from pylabrobot.hamilton.star.driver.configuration import read_configuration
+from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.head96 import Head96, Head96Configuration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
-from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton import STARDeck, STARLetDeck
+from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 from pylabrobot.serializer import serialize
 
 # The 96-head on the device this package ships a recording of.
@@ -141,3 +146,116 @@ class TestDriveDefaults(unittest.IsolatedAsyncioTestCase):
       ),
       (390.62, 546.88, 85.0, 400.0),
     )
+
+
+class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
+  """As legacy's 96-head tip tests, on the layout they use: a 300 uL filter rack on a STARlet."""
+
+  async def asyncSetUp(self):
+    from pylabrobot.resources import set_tip_tracking
+    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL_filter
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+    self.deck = STARLetDeck()
+    self.driver = STARSimulationDriver(
+      deck=self.deck, declared_configuration_json=RECORDING_STARLET
+    )
+    await self.driver.setup()
+    self.head = cast(Head96, self.driver.head96)
+    self.head_resource = cast(NChannelPipette, self.head.resource)
+    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    self.deck.assign_child_resource(tip_car, track=1)
+    self.sent: List[str] = []
+    log = self.driver._log_exchange
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      if written[:4] in ("C0TT", "H0DQ", "C0EP", "C0ER"):
+        self.sent.append(written)
+      log(written, read)
+
+    self.driver._log_exchange = recorded  # type: ignore[method-assign]
+
+  async def test_pick_up_and_drop_send_what_legacy_sends(self):
+    await self.head.pick_up_tips(self.tip_rack)
+    await self.head.drop_tips(self.tip_rack)
+    await self.head.pick_up_tips(self.tip_rack)
+    await self.head.drop_tips(self.deck.get_trash_area96())
+    self.assertEqual(
+      self.sent,
+      [
+        "C0TTtt01tf1tl0519tv03600tg2tu0",
+        "H0DQdq11281dv13500du00000dr900000dw15",
+        "C0EPxs01179xd0yh2418tt01wu0za2164zh2450ze2450",
+        "C0ERxs01179xd0yh2418za2164zh2450ze2450",
+        "H0DQdq11281dv13500du00000dr900000dw15",
+        "C0EPxs01179xd0yh2418tt01wu0za2164zh2450ze2450",
+        "C0ERxs00420xd1yh1203za2164zh2450ze2450",
+      ],
+    )
+
+  async def test_tips_missing_from_a_rack_are_missing_from_the_head(self):
+    rng = random.Random(0)
+    shafts = self.head_resource.get_all_items()
+    for missing in (0, 1, 48, 95):
+      with self.subTest(missing=missing):
+        spots = self.tip_rack.get_all_items()
+        empty = set(rng.sample(range(96), missing))
+        for i in empty:
+          spots[i].unassign_tip()
+        tips = [spot.tip for spot in spots]
+
+        await self.head.pick_up_tips(self.tip_rack)
+        self.assertEqual([shaft.tip for shaft in shafts], tips)
+        self.assertFalse(any(spot.has_tip() for spot in spots))
+
+        await self.head.drop_tips(self.tip_rack)
+        self.assertEqual([spot.tip for spot in spots], tips)
+        self.assertFalse(any(shaft.has_tip() for shaft in shafts))
+        self.tip_rack.fill()
+
+  async def test_tips_dropped_in_the_trash_belong_to_nothing(self):
+    await self.head.pick_up_tips(self.tip_rack)
+    tips = [shaft.tip for shaft in self.head_resource.get_all_items()]
+    await self.head.drop_tips(self.deck.get_trash_area96())
+    self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+    self.assertFalse(any(spot.has_tip() for spot in self.tip_rack.get_all_items()))
+    self.assertTrue(all(tip is not None and tip.parent is None for tip in tips))
+
+  async def test_a_refused_pickup_moves_nothing(self):
+    """An empty rack is refused before anything is sent; an unreachable one after the tip type."""
+    with self.assertRaises(ValueError):
+      await self.head.pick_up_tips(self.tip_rack, offset=Coordinate(0, 1000, 0))
+    self.assertEqual(self.sent, ["C0TTtt01tf1tl0519tv03600tg2tu0"])
+    self.tip_rack.empty()
+    self.sent.clear()
+    with self.assertRaises(ValueError):
+      await self.head.pick_up_tips(self.tip_rack)
+    self.assertEqual(self.sent, [])
+
+  async def test_a_failed_command_leaves_the_tips_where_they_were(self):
+    answer = self.driver._answer
+    spots = self.tip_rack.get_all_items()
+    shafts = self.head_resource.get_all_items()
+
+    def failing(failed: str):
+      async def answering(module: str, command: str, **kwargs: Any):
+        if command == failed:
+          check_fw_string_error(f"C0{failed}id0001er99/00")
+        return await answer(module, command, **kwargs)
+
+      return answering
+
+    with patch.object(self.driver, "_answer", failing("EP")):
+      with self.assertRaises(STARFirmwareError):
+        await self.head.pick_up_tips(self.tip_rack)
+    self.assertTrue(all(spot.has_tip() for spot in spots))
+    self.assertFalse(any(shaft.has_tip() for shaft in shafts))
+
+    await self.head.pick_up_tips(self.tip_rack)
+    with patch.object(self.driver, "_answer", failing("ER")):
+      with self.assertRaises(STARFirmwareError):
+        await self.head.drop_tips(self.tip_rack)
+    self.assertTrue(all(shaft.has_tip() for shaft in shafts))
+    self.assertFalse(any(spot.has_tip() for spot in spots))
