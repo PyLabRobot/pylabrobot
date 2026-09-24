@@ -64,7 +64,7 @@
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.resources.tip_rack.TipSpot.unassign" href="pylabrobot.resources.tip_rack.TipSpot.unassign.html" />
+    <link rel="next" title="pylabrobot.resources.tip_rack.TipSpot.tip_for_pickup" href="pylabrobot.resources.tip_rack.TipSpot.tip_for_pickup.html" />
     <link rel="prev" title="pylabrobot.resources.tip_rack.TipSpot.serialize_all_state" href="pylabrobot.resources.tip_rack.TipSpot.serialize_all_state.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -590,13 +590,9 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.resources.tip_rack.TipSpot.serialize_state">
 <span class="sig-prename descclassname"><span class="pre">TipSpot.</span></span><span class="sig-name descname"><span class="pre">serialize_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pylabrobot.resources.tip_rack.TipSpot.serialize_state" title="Link to this definition">#</a></dt>
-<dd><p>Serialize the state of this resource only.</p>
-<p>Use <code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.serialize_all_state()</span></code> to serialize the state of
-this resource and all children.</p>
-<p>The base implementation includes <code class="docutils literal notranslate"><span class="pre">&quot;rotation&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;location&quot;</span></code> so that subscribers
-(e.g. the Visualizer) are notified of orientation and position changes through the
-standard state channel. Subclasses overriding this method should merge
-in <code class="docutils literal notranslate"><span class="pre">super().serialize_state()</span></code>.</p>
+<dd><p>This spot’s state, with the tip it holds in the tree: <code class="code docutils literal notranslate"><span class="pre">tip</span></code>, <code class="code docutils literal notranslate"><span class="pre">tip_state</span></code> and <code class="code docutils literal notranslate"><span class="pre">pending_tip</span></code>.</p>
+<p><code class="code docutils literal notranslate"><span class="pre">pending_tip</span></code> is the tip held now. <code class="code docutils literal notranslate"><span class="pre">tip</span></code> is the same one, unless the legacy liquid handler has an
+operation on this spot it has not yet committed.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><em>Dict</em></a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>]</p>
@@ -626,11 +622,11 @@ in <code class="docutils literal notranslate"><span class="pre">super().serializ
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.resources.tip_rack.TipSpot.unassign.html"
+       href="pylabrobot.resources.tip_rack.TipSpot.tip_for_pickup.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.resources.tip_rack.TipSpot.unassign</p>
+        <p class="prev-next-title">pylabrobot.resources.tip_rack.TipSpot.tip_for_pickup</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

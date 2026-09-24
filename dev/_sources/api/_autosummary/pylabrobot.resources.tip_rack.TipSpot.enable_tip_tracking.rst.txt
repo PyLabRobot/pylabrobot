@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.enable\_tip\_tracking
+============================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.enable_tip_tracking

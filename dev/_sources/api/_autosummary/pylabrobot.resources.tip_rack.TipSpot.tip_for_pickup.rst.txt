@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.tip\_for\_pickup
+=======================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.tip_for_pickup

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.resources.hamilton.tip_creators.HamiltonTip &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -49,7 +49,7 @@
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../_static/plr_devices.js?v=ba1a2da2"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.hamilton.tip_creators.HamiltonTip';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.21.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -60,12 +60,12 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/graphviz.js?v=0710df9f"></script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.resources.hamilton.tip_creators.HamiltonTip.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.resources.hamilton.tip_creators.TipDropMethod" href="pylabrobot.resources.hamilton.tip_creators.TipDropMethod.html" />
-    <link rel="prev" title="pylabrobot.resources.hamilton.tip_creators.wide_high_volume_tip_with_filter" href="pylabrobot.resources.hamilton.tip_creators.wide_high_volume_tip_with_filter.html" />
+    <link rel="next" title="pylabrobot.resources.tip_rack.TipSpot.empty" href="pylabrobot.resources.tip_rack.TipSpot.empty.html" />
+    <link rel="prev" title="pylabrobot.resources.tip_rack.TipSpot.deserialize" href="pylabrobot.resources.tip_rack.TipSpot.deserialize.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.2" />
@@ -566,9 +566,9 @@
     <li class="breadcrumb-item"><a href="../pylabrobot.resources.html" class="nav-link">pylabrobot.resources package</a></li>
     
     
-    <li class="breadcrumb-item"><a href="pylabrobot.resources.hamilton.tip_creators.html" class="nav-link">pylabrobot.resources.hamilton.tip_creators</a></li>
+    <li class="breadcrumb-item"><a href="pylabrobot.resources.tip_rack.TipSpot.html" class="nav-link">pylabrobot.resources.tip_rack.TipSpot</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources.hamilton.tip_creators.HamiltonTip</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking</span></li>
   </ul>
 </nav>
 </div>
@@ -585,29 +585,15 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-resources-hamilton-tip-creators-hamiltontip">
-<h1>pylabrobot.resources.hamilton.tip_creators.HamiltonTip<a class="headerlink" href="#pylabrobot-resources-hamilton-tip-creators-hamiltontip" title="Link to this heading">#</a></h1>
-<dl class="py class">
-<dt class="sig sig-object py" id="pylabrobot.resources.hamilton.tip_creators.HamiltonTip">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.resources.hamilton.tip_creators.</span></span><span class="sig-name descname"><span class="pre">HamiltonTip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">has_filter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">size_z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximal_volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">tip_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.resources.hamilton.tip_creators.TipSize.html#pylabrobot.resources.hamilton.tip_creators.TipSize" title="pylabrobot.resources.hamilton.tip_creators.TipSize"><span class="pre">TipSize</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">pickup_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.resources.hamilton.tip_creators.TipPickupMethod.html#pylabrobot.resources.hamilton.tip_creators.TipPickupMethod" title="pylabrobot.resources.hamilton.tip_creators.TipPickupMethod"><span class="pre">TipPickupMethod</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">nominal_volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collar_height</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diameter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">category</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'tip'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pick_up_location</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><span class="pre">Coordinate</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.resources.hamilton.tip_creators.HamiltonTip" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="pylabrobot.resources.tip.Tip.html#pylabrobot.resources.tip.Tip" title="pylabrobot.resources.tip.Tip"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tip</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">HamiltonTool</span></code></p>
-<p>Represents a single tip for Hamilton instruments.</p>
+  <section id="pylabrobot-resources-tip-rack-tipspot-disable-tip-tracking">
+<h1>pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking<a class="headerlink" href="#pylabrobot-resources-tip-rack-tipspot-disable-tip-tracking" title="Link to this heading">#</a></h1>
+<dl class="py method">
+<dt class="sig sig-object py" id="pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking">
+<span class="sig-prename descclassname"><span class="pre">TipSpot.</span></span><span class="sig-name descname"><span class="pre">disable_tip_tracking</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking" title="Link to this definition">#</a></dt>
+<dd><p>Leave this spot as it is whatever is picked up from it or dropped into it.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>has_filter</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
-<li><p><strong>size_z</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
-<li><p><strong>maximal_volume</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
-<li><p><strong>tip_size</strong> (<a class="reference internal" href="pylabrobot.resources.hamilton.tip_creators.TipSize.html#pylabrobot.resources.hamilton.tip_creators.TipSize" title="pylabrobot.resources.hamilton.tip_creators.TipSize"><em>TipSize</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>pickup_method</strong> (<a class="reference internal" href="pylabrobot.resources.hamilton.tip_creators.TipPickupMethod.html#pylabrobot.resources.hamilton.tip_creators.TipPickupMethod" title="pylabrobot.resources.hamilton.tip_creators.TipPickupMethod"><em>TipPickupMethod</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>nominal_volume</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>collar_height</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>diameter</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>category</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>model</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>pick_up_location</strong> (<a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><em>Coordinate</em></a><em> | </em><em>None</em>)</p></li>
-</ul>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
 </dd>
 </dl>
 </dd></dl>
@@ -625,20 +611,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.resources.hamilton.tip_creators.wide_high_volume_tip_with_filter.html"
+       href="pylabrobot.resources.tip_rack.TipSpot.deserialize.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.resources.hamilton.tip_creators.wide_high_volume_tip_with_filter</p>
+        <p class="prev-next-title">pylabrobot.resources.tip_rack.TipSpot.deserialize</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.resources.hamilton.tip_creators.TipDropMethod.html"
+       href="pylabrobot.resources.tip_rack.TipSpot.empty.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.resources.hamilton.tip_creators.TipDropMethod</p>
+        <p class="prev-next-title">pylabrobot.resources.tip_rack.TipSpot.empty</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -661,7 +647,7 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.resources.hamilton.tip_creators.HamiltonTip"><code class="docutils literal notranslate"><span class="pre">HamiltonTip</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking"><code class="docutils literal notranslate"><span class="pre">TipSpot.disable_tip_tracking()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -669,7 +655,7 @@
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.resources.hamilton.tip_creators.HamiltonTip.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -684,7 +670,7 @@
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.resources.hamilton.tip_creators.HamiltonTip.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.resources.tip_rack.TipSpot.disable_tip_tracking.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
