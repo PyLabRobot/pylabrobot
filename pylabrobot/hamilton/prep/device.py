@@ -169,7 +169,8 @@ def Prep(
   """A Prep, on a Prep deck.
 
   Args:
-    deck: the deck. Defaults to `PrepDeck()`.
+    deck: the deck. If omitted, builds a deck and components prefixed with `name`.
+      A supplied deck keeps its existing resource names.
     simulation: whether to build a simulated device, which answers without one being connected.
     host: the address the Prep answers on. Required unless simulating or given a driver.
     port: the port it answers on.
@@ -188,7 +189,7 @@ def Prep(
     The device, on a Prep deck.
   """
   if deck is None:
-    deck = PrepDeck()
+    deck = PrepDeck(name=f"{name}_deck", name_prefix=name)
   if driver is None:
     if simulation:
       driver = PrepSimulationDriver(

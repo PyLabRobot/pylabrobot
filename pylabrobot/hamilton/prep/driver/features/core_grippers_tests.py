@@ -149,14 +149,16 @@ def test_pick_up_at_location_enables_drop_at_location():
   asyncio.run(_run())
 
 
-def test_pick_up_tool_default_pre_position_moves_then_picks():
+@pytest.mark.parametrize("name_prefix", [None, "prep_a"])
+def test_pick_up_tool_default_pre_position_moves_then_picks(name_prefix):
   """Default pre_position=True moves to the tools before the one PrepPickUpTool."""
 
   async def _run() -> None:
-    deck = PrepDeck(with_core_grippers=True)
+    deck = PrepDeck(with_core_grippers=True, name_prefix=name_prefix)
     p = PrepSimulationDriver(deck=deck)
     await p.setup()
     assert p.core_grippers is not None
+    assert p.pipettes is not None and p.pipettes.num_arms == 1
     captured = _record_send(p)
 
     await p.pick_up_core_grippers()

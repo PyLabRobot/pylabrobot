@@ -285,6 +285,12 @@ class PrepDriver:
     self.x_arm: Optional[XArm] = None
     self._setup_finished: bool = False
 
+  def get_component_name(self, name: str) -> str:
+    """Resolve a built-in resource name using the Prep deck's naming prefix."""
+    if isinstance(self.deck, PrepDeck):
+      return self.deck.get_component_name(name)
+    return name
+
   # ----------------------------------------
   # Connection and lifecycle
   # ----------------------------------------
@@ -1114,8 +1120,9 @@ class PrepDriver:
     if not isinstance(self.deck, PrepDeck) or self.configuration is None:
       return
     c = self.configuration
-    if self.deck.has_resource("teaching_tip"):
-      spot = self.deck.get_resource("teaching_tip")
+    teaching_tip_name = self.get_component_name("teaching_tip")
+    if self.deck.has_resource(teaching_tip_name):
+      spot = self.deck.get_resource(teaching_tip_name)
       footprint = (spot.get_absolute_size_x(), spot.get_absolute_size_y())
       site = next((s for s in c.deck_sites if (s.length, s.width) == footprint), None)
       if site is not None and spot.location is not None and spot.parent is not None:
@@ -1126,7 +1133,10 @@ class PrepDriver:
         logger.debug("teaching needle at deck site %d", site.id)
     for waste_site in c.waste_sites:
       name = _WASTE_SITE_NAMES.get(waste_site.index)
-      if name is None or not self.deck.has_resource(name):
+      if name is None:
+        continue
+      name = self.get_component_name(name)
+      if not self.deck.has_resource(name):
         continue
       self.deck.get_resource(name).location = Coordinate(
         waste_site.x_position, waste_site.y_position, waste_site.z_position
@@ -1160,7 +1170,7 @@ class PrepDriver:
     y_ranges = [c.y_range for c in pipettes.channels if c.y_range is not None]
     reach = (min(r[0] for r in y_ranges), max(r[1] for r in y_ranges)) if y_ranges else None
     arm.resource = self.deck.get_or_create_x_arm(
-      name="x_arm",
+      name=self.get_component_name("x_arm"),
       x=positions[0].x,
       z=z,
       size_x=c.size_x,
@@ -1176,7 +1186,7 @@ class PrepDriver:
     # and each has its own Y and Z.
     self.pipettes.resources = []
     for channel in range(len(positions)):
-      name = f"pipette_channel_{channel}"
+      name = self.get_component_name(f"pipette_channel_{channel}")
       resource = next((child for child in arm.resource.children if child.name == name), None)
       if resource is None:
         resource = Resource(
@@ -1221,10 +1231,11 @@ class PrepDriver:
     if self.pipettes is None or self.core_grippers is None:
       raise RuntimeError("PrepDriver.setup() has not run.")
 
-    mount = self.deck.get_resource("core_grippers")
+    mount_name = self.get_component_name("core_grippers")
+    mount = self.deck.get_resource(mount_name)
     if not isinstance(mount, HamiltonCoreGrippers):
       raise TypeError(
-        "deck must have a resource named 'core_grippers' of type HamiltonCoreGrippers"
+        f"deck must have a resource named {mount_name!r} of type HamiltonCoreGrippers"
       )
 
     loc = mount.get_location_wrt(self.deck)

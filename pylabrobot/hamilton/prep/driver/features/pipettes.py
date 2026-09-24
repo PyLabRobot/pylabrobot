@@ -911,7 +911,7 @@ class Pipettes:
     if cfg.num_channels != 2:
       return 0
     try:
-      mount = self.deck.get_resource("core_grippers")
+      mount = self.deck.get_resource(self._driver.get_component_name("core_grippers"))
       return 1 if isinstance(mount, HamiltonCoreGrippers) else 0
     except Exception:
       return 0
@@ -2857,7 +2857,7 @@ class Pipettes:
           raise ValueError(
             "Cannot drop tips to waste: backend has no deck (assign a deck before drop_tips)."
           )
-        waste_name = _CHANNEL_TO_WASTE_NAME.get(ch, "waste_mph")
+        waste_name = self._driver.get_component_name(_CHANNEL_TO_WASTE_NAME.get(ch, "waste_mph"))
         if not self.deck.has_resource(waste_name):
           raise ValueError(
             f"Cannot drop tips to waste: deck has no waste position '{waste_name}'. "
