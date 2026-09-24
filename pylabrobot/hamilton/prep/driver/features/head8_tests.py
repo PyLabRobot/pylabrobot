@@ -406,7 +406,11 @@ def test_head8_aspirate_tadm_sends_mphaspirate_tadm2():
 
 
 def test_head8_aspirate_clld_sends_mphaspirate_with_lld2():
-  """lld_mode=CAPACITIVE → MphAspirateWithLld2 (v2, LLD, no TADM)."""
+  """lld_mode=CAPACITIVE → MphAspirateWithLld2 (v2, LLD, no TADM).
+
+  Capacitive seeks leave pLLD on firmware defaults so the dispenser is not
+  started at speed 0; cLLD stays explicit so detection still runs.
+  """
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
@@ -426,6 +430,10 @@ def test_head8_aspirate_clld_sends_mphaspirate_with_lld2():
 
     lld_cmds = [c for c in captured if isinstance(c, PrepCmd.MphAspirateWithLld2)]
     assert len(lld_cmds) == 1, f"Expected 1 MphAspirateWithLld2, got {len(lld_cmds)}"
+    params = lld_cmds[0].aspirate_parameters[0]
+    assert params.p_lld.default_values is True
+    assert params.c_lld.default_values is False
+    assert params.c_lld.sensitivity == 3
 
     await p.stop()
 

@@ -116,14 +116,32 @@ def default_lld_params(
   effective_lld: bool,
   p_lld: Optional[PrepCmd.PLldParameters] = None,
   c_lld: Optional[PrepCmd.CLldParameters] = None,
+  *,
+  lld_mode: Optional[Pipettes.LLDMode] = None,
 ) -> Pipettes._LldDefaults:
   """Build resolved pLLD / cLLD defaults.
 
   When LLD is active and no caller override is given, returns non-default
   parameters (``default_values=False``) so the firmware actually triggers
-  detection.  Otherwise returns firmware defaults.
+  detection. Capacitive-only seeks leave the pressure block at firmware
+  defaults so the dispenser is not started at speed 0. Otherwise returns
+  firmware defaults.
+
+  Args:
+    effective_lld: Whether this call uses any LLD seek.
+    p_lld: Caller override for pressure LLD parameters.
+    c_lld: Caller override for capacitive LLD parameters.
+    lld_mode: Which LLD mode the call resolved to. ``CAPACITIVE`` keeps pLLD
+      on firmware defaults unless ``p_lld`` is set.
   """
-  if effective_lld:
+  if not effective_lld:
+    resolved_p = p_lld or PrepCmd.PLldParameters.default()
+    resolved_c = c_lld or PrepCmd.CLldParameters.default()
+    return Pipettes._LldDefaults(p_lld=resolved_p, c_lld=resolved_c)
+
+  if lld_mode == Pipettes.LLDMode.CAPACITIVE:
+    resolved_p = p_lld or PrepCmd.PLldParameters.default()
+  else:
     resolved_p = p_lld or PrepCmd.PLldParameters(
       default_values=False,
       sensitivity=1,
@@ -131,16 +149,13 @@ def default_lld_params(
       lld_height_difference=0.0,
       detect_mode=0,
     )
-    resolved_c = c_lld or PrepCmd.CLldParameters(
-      default_values=False,
-      sensitivity=4,
-      clot_check_enable=False,
-      z_clot_check=0.0,
-      detect_mode=0,
-    )
-  else:
-    resolved_p = p_lld or PrepCmd.PLldParameters.default()
-    resolved_c = c_lld or PrepCmd.CLldParameters.default()
+  resolved_c = c_lld or PrepCmd.CLldParameters(
+    default_values=False,
+    sensitivity=3,
+    clot_check_enable=False,
+    z_clot_check=0.0,
+    detect_mode=0,
+  )
   return Pipettes._LldDefaults(p_lld=resolved_p, c_lld=resolved_c)
 
 
@@ -239,17 +254,44 @@ def resolve_command_version(
   return supports_v2 is True
 
 
+# LLD command read-timeout budget (shared by head8 and pipettes).
+# Floor matches PrepDriver.default_read_timeout so LLD never undercuts a
+# non-LLD command. Pad covers XY approach, settle, and dual-channel work
+# that is not in the vertical seek alone.
+LLD_READ_TIMEOUT_PAD_S: float = 30.0
+LLD_READ_TIMEOUT_FLOOR_S: float = 60.0
+
+
 def lld_seek_timeout(
   lld_params: PrepCmd.LldParameters,
   z_minimum: float,
+  *,
+  approach_from_z: Optional[float] = None,
 ) -> Optional[float]:
-  """Compute a read timeout (s) for an LLD seek move, or None if not applicable."""
-  if lld_params.channel_speed > 0:
-    speed: float = float(lld_params.channel_speed)
-    seek_distance: float = float(lld_params.search_start_position) - z_minimum
-    if seek_distance > 0:
-      return seek_distance / speed + 5.0
-  return None
+  """Read timeout (s) for an LLD aspirate/dispense, or None if not applicable.
+
+  Both head8 and pipettes use this same budget:
+
+  1. **Travel** — vertical distance from ``approach_from_z`` (or the seek
+     start when omitted) down to ``z_minimum``, timed at ``channel_speed``.
+     Using seek speed for the whole descent is a deliberate overestimate;
+     the real approach is faster.
+  2. **Pad** — ``LLD_READ_TIMEOUT_PAD_S`` for XY, settle, and dual-channel
+     work outside that Z travel.
+  3. **Floor** — at least ``LLD_READ_TIMEOUT_FLOOR_S`` so a shallow well
+     cannot produce a shorter wait than a non-LLD command.
+  """
+  if lld_params.channel_speed <= 0:
+    return None
+  speed: float = float(lld_params.channel_speed)
+  search_start: float = float(lld_params.search_start_position)
+  top: float = (
+    search_start if approach_from_z is None else max(search_start, float(approach_from_z))
+  )
+  distance: float = top - float(z_minimum)
+  if distance <= 0:
+    return None
+  return max(distance / speed + LLD_READ_TIMEOUT_PAD_S, LLD_READ_TIMEOUT_FLOOR_S)
 
 
 def _effective_radius(resource) -> float:
@@ -763,7 +805,7 @@ class Pipettes:
   class LLDMode(enum.Enum):
     """Liquid level detection mode.
 
-    Same numbering as STARBackend.LLDMode for cross-backend compatibility.
+    Same numbering as the STAR's LLDMode, so the two read the same.
     CAPACITIVE (value=1) is named GAMMA on the STAR — CAPACITIVE is the correct term.
     The Prep firmware uses separate command variants for LLD vs no-LLD, so all
     channels in a single aspirate/dispense call must use the same mode category
@@ -814,10 +856,6 @@ class Pipettes:
     # The firmware's own. YAxis.MoveRelative takes a per-move level (1-7, about 233 mm/s2 each); the
     # driver does not use it yet.
     self.default_y_acceleration: float = 760.0
-    # cLLD Z probe: the seek speed (mm/s), sensitivity and detect mode `probe_z_using_clld` was run with on
-    # PRPAA1087 (V1.2.2), where it triggered.
-    self.default_clld_probe_speed: float = 20.0
-    self.default_clld_sensitivity: int = 1
     # Z: about 90 % of 142 mm/s, fitted from timed `MoveToPosition` moves of 2 to 30 mm (rms 4.5 ms).
     # `move_tool_bottom_to_z_positions` sends the speed with `MoveZAbsolute`, in mm/s;
     # `MoveToPosition` carries none.
@@ -825,6 +863,16 @@ class Pipettes:
     # The Z drives' own, read with `ZDrive.GetAcceleration` and matched by that fit. Setup
     # overwrites it with what the firmware holds.
     self.default_z_acceleration: float = 800.0
+    # cLLD probes: the seek speed (mm/s), sensitivity and detect mode that detect. Swept on
+    # PRPAA1087 (V1.2.2) over sensitivities 0 to 4 against modes 0 to 3, 286 seeks onto the same
+    # surface: sensitivity 3 detected in 64 of 76, every other sensitivity in under a third of
+    # theirs, and mode mattered far less than sensitivity. Every probe run since has used these.
+    # A seek that does not detect does not stop at the surface, so an unreliable setting is not a
+    # missing measurement - it is the channel driving into whatever is under it.
+    self.default_clld_probe_speed: float = 10.0
+    self.default_clld_sensitivity: int = 3
+    # Read only by `probe_z_using_clld`: onto the calibration block with a needle, modes 0 and 1
+    # detected at 21.86 mm and mode 2 went through to the end of the search.
     self.default_clld_detect_mode: int = 0
     if use_v1_aspirate_dispense:
       self.configuration.use_v1_aspirate_dispense = True
@@ -2401,15 +2449,53 @@ class Pipettes:
 
   # -- x probing (capacitive only) -----------------------------------------------------------------
 
+  # How close to a search start counts as being at it. A device answers where it stopped, which is
+  # never exactly where it was sent, so an exact comparison sends every probe travelling again.
+  AT_SEARCH_START = 0.1
+
+  async def _diameter_that_probes(
+    self,
+    channel_idx: int,
+    allow_without_tip: bool,
+    tip_bottom_diameter: float,
+    stop_disc_diameter: float,
+  ) -> float:
+    """What the channel would meet a surface with, in mm, refusing a bare channel unless allowed.
+
+    A probe answers where the surface is, not where the channel stopped, so it has to know what did
+    the touching: the tip on the channel, or the stop disc it would touch with bare.
+
+    Args:
+      channel_idx: the probing channel.
+      allow_without_tip: whether a channel with no tip on it may probe.
+      tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
+      stop_disc_diameter: diameter of the stop disc (tip mounting shaft) in mm, when none is.
+
+    Returns:
+      The diameter of whichever of the two is on the channel, in mm.
+
+    Raises:
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
+    """
+    tips = await self.sense_tip_presence()
+    has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
+    if not has_tip and not allow_without_tip:
+      raise RuntimeError(
+        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+      )
+    return tip_bottom_diameter if has_tip else stop_disc_diameter
+
   async def probe_x_using_clld(
     self,
     channel_idx: int,
     direction: Literal["left", "right"],
+    *,
+    search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
-    speed: float = 5.0,
+    minimum_traverse_height_start: Optional[float] = None,
     sensitivity: Optional[int] = None,
     detect_mode: int = 2,
-    post_detection_dist: float = 2.0,
+    post_detection_distance: float = 2.0,
     tip_bottom_diameter: float = 1.2,
     stop_disc_diameter: float = 7.0,
     allow_without_tip: bool = False,
@@ -2419,17 +2505,22 @@ class Pipettes:
     Args:
       channel_idx: detecting channel, 0-indexed from the back.
       direction: "left" (decreasing x) or "right" (increasing x).
+      search_start_position: where to search from in mm. The arm travels there first unless it is
+        already there, raising every channel below `minimum_traverse_height_start` on the way and
+        putting this one back down to where it stood. Searches from where the arm is when None.
       search_end_position: search end in mm. Defaults to the end of the channels' X range.
-      speed: arm speed in mm/s.
+      minimum_traverse_height_start: height to raise every low channel to before travelling to
+        `search_start_position`, in mm. `default_minimum_traverse_height` when None. A lower value
+        asserts the lateral path is clear, which the driver cannot check.
       sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
-      detect_mode: cLLD detect mode.
+      detect_mode: cLLD detect mode. What the modes mean is not known; only 2 has worked along X.
       post_detection_dist: back-off after a detection in mm.
       tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
       stop_disc_diameter: diameter of the stop disc (tip mounting shaft) in mm, when none is.
       allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
-      Surface x position in mm, rounded to 0.1 mm, or None when nothing was detected.
+      Surface x position in mm, rounded to 0.01 mm, or None when nothing was detected.
 
     Raises:
       ValueError: If an argument is out of range or `search_end_position` is not ahead of the arm.
@@ -2437,15 +2528,11 @@ class Pipettes:
         the X range is unknown, or the channel has no cLLD objects.
     """
     # Tip: required unless allow_without_tip; what touches is the tip, or the stop disc
-    tips = await self.sense_tip_presence()
-    has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
-    if not has_tip and not allow_without_tip:
-      raise RuntimeError(
-        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
-      )
-    diameter = tip_bottom_diameter if has_tip else stop_disc_diameter
+    diameter = await self._diameter_that_probes(
+      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+    )
 
-    # Argument verification
+    # Arguments
     if not 0 <= channel_idx < self.num_channels:
       raise ValueError(
         f"channel_idx must be between 0 and {self.num_channels - 1}, is {channel_idx}"
@@ -2455,10 +2542,6 @@ class Pipettes:
     arm = self._driver.x_arm
     if arm is None:
       raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
-    low_speed, high_speed = arm.configuration.speed_range
-    if not low_speed < speed <= high_speed:
-      raise ValueError(f"speed must be above {low_speed} and at most {high_speed} mm/s, is {speed}")
-
     # Search range: the channels' X range
     left = direction == "left"
     ranges = [c.x_range for c in self.configuration.channels if c.x_range is not None]
@@ -2470,34 +2553,46 @@ class Pipettes:
       raise ValueError(
         f"search_end_position={end} is outside the channels' X range [{low:.2f}, {high:.2f}]"
       )
-    here = (await self.request_locations())[channel_idx].x
+    standing = (await self.request_locations())[channel_idx]
+    if search_start_position is not None:
+      self._check_reachable(channel_idx, "x", search_start_position)
+      if abs(search_start_position - standing.x) > self.AT_SEARCH_START:
+        # There first, the way any travel goes: up, across, and back down to the height the caller
+        # had the channel at, so the search itself is X alone. An arm already at the start is left
+        # alone. The outbound path is unknown, so it raises unless the caller says otherwise; the
+        # back-off below needs no such height because it retraces the line just searched.
+        await arm.move_to_x_position(
+          search_start_position, minimum_traverse_height_start=minimum_traverse_height_start
+        )
+        await self.move_tool_bottom_to_z_positions({channel_idx: standing.z})
+        standing = (await self.request_locations())[channel_idx]
+    here = standing.x
     if (end >= here) if left else (end <= here):
       raise ValueError(f"a {direction} search from x={here:.2f} cannot end at x={end:.2f} mm")
 
     # Search until the channel detects or the search ends
     sensitivity = self.default_clld_sensitivity if sensitivity is None else sensitivity
-    detected_x = await self._search_x_using_clld(
-      channel_idx, here, end, speed, detect_mode, sensitivity
-    )
+    detected_x = await self._search_x_using_clld(channel_idx, here, end, detect_mode, sensitivity)
     if detected_x is None:
       return None
 
-    # Back off inside the X range, and return the surface
     post_detection_x_position = (
-      min(detected_x + post_detection_dist, high)
+      min(detected_x + post_detection_distance, high)
       if left
-      else max(detected_x - post_detection_dist, low)
+      else max(detected_x - post_detection_distance, low)
     )
-    await arm.move_to_x_position(post_detection_x_position, speed=speed)
+    await arm.move_to_x_position(
+      post_detection_x_position, minimum_traverse_height_start=standing.z
+    )
     surface = detected_x - diameter / 2 if left else detected_x + diameter / 2
-    return round(surface, 1)
+
+    return round(surface, 2)
 
   async def _search_x_using_clld(
     self,
     channel_idx: int,
     here: float,
     end: float,
-    speed: float,
     detect_mode: int,
     sensitivity: int,
   ) -> Optional[float]:
@@ -2507,7 +2602,6 @@ class Pipettes:
       channel_idx: detecting channel, 0-indexed from the back.
       here: the arm's x where the search starts, in mm.
       end: search end in mm.
-      speed: arm speed in mm/s.
       detect_mode: cLLD detect mode.
       sensitivity: cLLD sensitivity.
 
@@ -2520,6 +2614,9 @@ class Pipettes:
     channel = self.channels[channel_idx]
     offset = await arm.request_axis_offset()
     step = 0.1  # mm between status reads
+    # The steps are what the search is: a speed above them only overshoots between reads, and one
+    # below them makes the search take longer than the surface is worth.
+    speed = 5.0
     try:
       async with (
         arm._temporary_x_axis_profile(speed=speed),
@@ -2541,7 +2638,7 @@ class Pipettes:
     self,
     yaxis: Address,
     position: float,
-    velocity: float,
+    speed: float,
     detect_mode: int,
     sensitivity: int,
     read_timeout: Optional[float] = None,
@@ -2551,7 +2648,7 @@ class Pipettes:
     Args:
       yaxis: the channel's Y axis.
       position: search end in the channel's Y drive frame, in mm.
-      velocity: search speed in mm/s.
+      speed: search speed in mm/s.
       detect_mode: cLLD detect mode.
       sensitivity: cLLD sensitivity.
       read_timeout: answer timeout in seconds. Defaults to the link's.
@@ -2563,7 +2660,7 @@ class Pipettes:
       PrepCmd.PrepYAxisSeekCapacitiveLld(
         dest=yaxis,
         position=position,
-        velocity=velocity,
+        velocity=speed,
         detect_mode=detect_mode,
         sensitivity=sensitivity,
       ),
@@ -2574,11 +2671,14 @@ class Pipettes:
     self,
     channel_idx: int,
     direction: Literal["forward", "backward"],
+    *,
+    search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
-    speed: float = 10.0,
+    minimum_traverse_height_start: Optional[float] = None,
+    search_speed: float = 10.0,
     sensitivity: Optional[int] = None,
     detect_mode: int = 2,
-    post_detection_dist: float = 2.0,
+    post_detection_distance: float = 2.0,
     tip_bottom_diameter: float = 1.2,
     stop_disc_diameter: float = 7.0,
     allow_without_tip: bool = False,
@@ -2588,8 +2688,15 @@ class Pipettes:
     Args:
       channel_idx: which channel, 0-indexed from the back.
       direction: "forward" (decreasing y) or "backward" (increasing y).
+      search_start_position: where to search from in mm. The channel travels there first unless it
+        is already there, raising every channel below `minimum_traverse_height_start` on the way,
+        making room for it, and coming back down to where it stood. Searches from where the channel
+        stands when None.
       search_end_position: search end in mm. Defaults to as far as the channel may go.
-      speed: search speed in mm/s.
+      minimum_traverse_height_start: height to raise every low channel to before travelling to
+        `search_start_position`, in mm. `default_minimum_traverse_height` when None. A lower value
+        asserts the lateral path is clear, which the driver cannot check.
+      search_speed: search speed in mm/s.
       sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
       detect_mode: cLLD detect mode.
       post_detection_dist: back-off after a detection in mm.
@@ -2598,7 +2705,7 @@ class Pipettes:
       allow_without_tip: whether to probe without a mounted tip. False requires one.
 
     Returns:
-      Surface y position in mm, rounded to 0.1 mm, or None when nothing was detected.
+      Surface y position in mm, rounded to 0.01 mm, or None when nothing was detected.
 
     Raises:
       ValueError: If an argument is out of range, or `search_end_position` is not ahead of the
@@ -2607,13 +2714,9 @@ class Pipettes:
         window is unknown, or it has no Y axis.
     """
     # Tip: required unless allow_without_tip; what touches is the tip, or the stop disc
-    tips = await self.sense_tip_presence()
-    has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
-    if not has_tip and not allow_without_tip:
-      raise RuntimeError(
-        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
-      )
-    diameter = tip_bottom_diameter if has_tip else stop_disc_diameter
+    diameter = await self._diameter_that_probes(
+      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+    )
 
     # Arguments
     if not 0 <= channel_idx < self.num_channels:
@@ -2622,10 +2725,31 @@ class Pipettes:
       )
     if direction not in ("forward", "backward"):
       raise ValueError(f"direction must be 'forward' or 'backward', is {direction!r}")
-    if speed <= 0:
-      raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    if search_speed <= 0:
+      raise ValueError(f"search_speed must be above 0 mm/s, is {search_speed}")
     forward = direction == "forward"
     positions = await self.request_locations()
+    if (
+      search_start_position is not None
+      and abs(search_start_position - positions[channel_idx].y) > self.AT_SEARCH_START
+    ):
+      # There first, the way the X probe travels to its start: up, across - with the neighbours
+      # moved aside as far as the spacing needs - and back down to the height the caller had the
+      # channel at. A channel already at the start is left alone. The outbound path is unknown, so
+      # it raises unless the caller says otherwise.
+      standing = positions[channel_idx]
+      if minimum_traverse_height_start is not None and minimum_traverse_height_start <= standing.z:
+        await self.move_to_y_positions({channel_idx: search_start_position}, make_space=True)
+      else:
+        await self.move_to_xy_positions(
+          standing.x,
+          {channel_idx: search_start_position},
+          minimum_traverse_height_start=minimum_traverse_height_start,
+          make_space=True,
+        )
+        await self.move_tool_bottom_to_z_positions({channel_idx: standing.z})
+      positions = await self.request_locations()
+
     here = positions[channel_idx]
 
     # Search range: the Y window, and the neighbours at their minimum spacing
@@ -2637,6 +2761,36 @@ class Pipettes:
     if window is None:
       raise RuntimeError(f"channel {channel_idx}'s Y window has not been read")
     low, high = window
+
+    # An end the caller named is one they mean: the neighbour standing in the way of it steps aside,
+    # rather than the search being refused for room the caller cannot see. Checked against the
+    # channel's own window first, so nothing moves for a search it could never make.
+    if search_end_position is not None:
+      if not low <= search_end_position <= high:
+        raise ValueError(
+          f"search_end_position={search_end_position} is outside the range channel {channel_idx} "
+          f"may reach, [{low:.2f}, {high:.2f}]"
+        )
+      if (search_end_position >= here.y) if forward else (search_end_position <= here.y):
+        raise ValueError(
+          f"a {direction} search from y={here.y:.2f} cannot end at y={search_end_position:.2f} mm"
+        )
+      # A tenth of a millimetre past the spacing: a device never stops exactly where it is sent,
+      # and a neighbour a thousandth short of clear floors the search just above its end.
+      targets = {other: at.y for other, at in enumerate(positions)}
+      targets[channel_idx] = search_end_position
+      aside = {
+        other: y - self.AT_SEARCH_START if other > channel_idx else y + self.AT_SEARCH_START
+        for other, y in self._make_space(targets, named=[channel_idx]).items()
+        if other != channel_idx and y != positions[other].y
+      }
+      if aside:
+        for other, y in aside.items():
+          self._check_reachable(other, "y", y)  # refused before anything is raised or moved
+        await self.move_to_safe_z(list(aside))
+        await self.move_to_y_positions(aside)
+        positions = await self.request_locations()
+
     if channel_idx > 0:
       high = min(
         high, positions[channel_idx - 1].y - self._min_spacing_between(channel_idx - 1, channel_idx)
@@ -2665,10 +2819,10 @@ class Pipettes:
       result = await self._unchecked_fw_y_axis_seek_capacitive_lld(
         channel.yaxis,
         position=end + offset,
-        velocity=speed,
+        speed=search_speed,
         detect_mode=detect_mode,
         sensitivity=self.default_clld_sensitivity if sensitivity is None else sensitivity,
-        read_timeout=abs(end - here.y) / speed + 30,
+        read_timeout=abs(end - here.y) / search_speed + 30,
       )
     finally:
       await self._record_where_they_stopped()
@@ -2678,13 +2832,13 @@ class Pipettes:
     # Back off inside the search range, and return the surface
     detected_y = float(result.detect_position) - offset
     back_off = (
-      min(detected_y + post_detection_dist, high)
+      min(detected_y + post_detection_distance, high)
       if forward
-      else max(detected_y - post_detection_dist, low)
+      else max(detected_y - post_detection_distance, low)
     )
-    await self.move_to_y_positions({channel_idx: back_off}, speed=speed)
+    await self.move_to_y_positions({channel_idx: back_off}, speed=search_speed)
     surface = detected_y - diameter / 2 if forward else detected_y + diameter / 2
-    return round(surface, 1)
+    return round(surface, 2)
 
   # -- z probing (capacitive, force) ---------------------------------------------------------------
 
@@ -2709,27 +2863,32 @@ class Pipettes:
     channel_idx: int,
     *,
     search_start_position: Optional[float] = None,
-    speed: Optional[float] = None,
-    lowest_immers_pos: Optional[float] = None,
+    search_end_position: Optional[float] = None,
+    search_speed: Optional[float] = None,
     sensitivity: Optional[int] = None,
     detect_mode: Optional[int] = None,
-    z_position_at_end_of_a_command: Optional[float] = None,
     allow_without_tip: bool = False,
+    post_detection_distance: float = 2.0,
+    move_channels_to_safe_pos_after: bool = False,
   ) -> Optional[float]:
     """Lower a channel where it stands until its cLLD triggers.
 
     Args:
       channel_idx: which channel, 0-indexed from the back.
-      search_start_position: start height in mm. Defaults to the traverse height.
-      speed: seek speed in mm/s. Defaults to `default_clld_probe_speed`.
-      lowest_immers_pos: lowest height in mm. Defaults to the bottom of the channel's Z range.
+      search_start_position: start height in mm. Defaults to where the channel stands.
+      search_end_position: where the search ends, in mm. The bottom of the channel's Z range when
+        None: a seek that detects nothing goes that far down.
+      search_speed: seek speed in mm/s. Defaults to `default_clld_probe_speed`.
       sensitivity: cLLD sensitivity. Defaults to `default_clld_sensitivity`.
       detect_mode: cLLD detect mode. Defaults to `default_clld_detect_mode`.
-      z_position_at_end_of_a_command: height to finish at in mm. Defaults to `search_start_position`.
       allow_without_tip: whether to probe without a mounted tip. False requires one.
+      post_detection_distance: how far above the liquid the tip rests afterwards, in mm. The seek
+        leaves the tip where it stopped, about 0.1 mm past the surface, when this is 0. A seek
+        that detects nothing raises the tip back to the start.
+      move_channels_to_safe_pos_after: whether to raise every channel to Z safety instead.
 
     Returns:
-      Detected height in mm, or None.
+      Detected height in mm, rounded to 0.01 mm, or None.
 
     Raises:
       ValueError: If an argument is out of range.
@@ -2751,46 +2910,45 @@ class Pipettes:
     positions = await self.request_locations()
     if channel_idx >= len(positions):
       raise RuntimeError(f"channel {channel_idx} reported no position")
-    # Sent as the channel stands: given another X or Y, the firmware moves there before seeking.
+    # Sent as the channel stands: given another X or Y, the firmware moves there before seeking,
+    # and given another Z it goes up or down to it first. Seeking from where the channel is leaves
+    # an approach the caller made in place.
     x, y = positions[channel_idx].x, positions[channel_idx].y
     search_start_position = (
-      self._resolve_traverse_height() if search_start_position is None else search_start_position
+      round(positions[channel_idx].z, 2) if search_start_position is None else search_start_position
     )
-    speed = self.default_clld_probe_speed if speed is None else speed
+    search_speed = self.default_clld_probe_speed if search_speed is None else search_speed
     sensitivity = self.default_clld_sensitivity if sensitivity is None else sensitivity
     detect_mode = self.default_clld_detect_mode if detect_mode is None else detect_mode
-    z_position_at_end_of_a_command = (
-      search_start_position
-      if z_position_at_end_of_a_command is None
-      else z_position_at_end_of_a_command
+    # The Z window is the stop disc's and these heights are the tip bottom's, so what the channel
+    # carries moves the range down with it.
+    window = (
+      self.configuration.channels[channel_idx].z_range
+      if channel_idx < len(self.configuration.channels)
+      else None
     )
-    if lowest_immers_pos is None:
-      reach_z = (
-        self.configuration.channels[channel_idx].z_range
-        if channel_idx < len(self.configuration.channels)
-        else None
-      )
+    reach_z = window
+    if search_end_position is None:
       if reach_z is None:
         raise RuntimeError(
-          f"channel {channel_idx}'s Z range has not been read; pass lowest_immers_pos"
+          f"channel {channel_idx}'s Z range has not been read; pass search_end_position"
         )
-      lowest_immers_pos = reach_z[0]
-    if speed <= 0:
-      raise ValueError(f"speed must be positive, is {speed}")
-    if lowest_immers_pos > search_start_position:
+      search_end_position = reach_z[0]
+    if search_speed <= 0:
+      raise ValueError(f"search_speed must be positive, is {search_speed}")
+    if search_end_position > search_start_position:
       raise ValueError(
-        f"lowest_immers_pos={lowest_immers_pos} is above search_start_position={search_start_position}"
+        f"search_end_position={search_end_position} is above search_start_position={search_start_position}"
       )
     if channel_idx < len(self.configuration.channels):
-      reach = self.configuration.channels[channel_idx]
-      for name, value, window in (
-        ("search_start_position", search_start_position, reach.z_range),
-        ("lowest_immers_pos", lowest_immers_pos, reach.z_range),
-        ("z_position_at_end_of_a_command", z_position_at_end_of_a_command, reach.z_range),
+      for name, value in (
+        ("search_start_position", search_start_position),
+        ("search_end_position", search_end_position),
       ):
-        if window is not None and not window[0] <= value <= window[1]:
+        if reach_z is not None and not reach_z[0] <= value <= reach_z[1]:
           raise ValueError(
-            f"{name}={value} outside channel {channel_idx} range [{window[0]:.1f}, {window[1]:.1f}]"
+            f"{name}={value} outside channel {channel_idx} range "
+            f"[{reach_z[0]:.1f}, {reach_z[1]:.1f}]"
           )
 
     seek = PrepCmd.LLDChannelSeekParameters(
@@ -2798,26 +2956,33 @@ class Pipettes:
       channel=self.channel_enum(channel_idx),
       seek_position_x=x,
       seek_position_y=y,
-      seek_velocity_z=speed,
+      seek_velocity_z=search_speed,
       seek_height=search_start_position,
-      min_seek_height=lowest_immers_pos,
-      final_position_z=z_position_at_end_of_a_command,
+      min_seek_height=search_end_position,
+      # The seek ends at the higher of this and where it stopped: the search end leaves the tip
+      # where it stopped, and saves a return to the start and back down.
+      final_position_z=search_end_position,
       lld_sensitivity=sensitivity,
       detect_mode=detect_mode,
     )
     try:
+      # The lowest the seek can leave the channel, recorded as it is sent: on the answer the model
+      # would already be a whole move behind the device. The read below still has the last word.
+      self.update_location_by_reference_point(channel_idx, z=search_end_position)
       results = await self._unchecked_fw_z_seek_lld_position([seek])
-      # What was asked, recorded as soon as the command answers; the read below replaces it with
-      # where the channels actually stopped.
-      self.update_location_by_reference_point(channel_idx, z=z_position_at_end_of_a_command)
     finally:
       await self._record_where_they_stopped()
     result = next(
       (r for r in results if int(r.channel) == int(self.channel_enum(channel_idx))), None
     )
-    if result is None or not result.detected:
-      return None
-    return float(result.position)
+    surface = None if result is None or not result.detected else round(float(result.position), 2)
+    if move_channels_to_safe_pos_after:
+      await self.move_to_safe_z()
+    elif surface is None:
+      await self.move_tool_bottom_to_z_position(channel_idx, search_start_position)
+    elif post_detection_distance:
+      await self.move_tool_bottom_to_z_position(channel_idx, surface + post_detection_distance)
+    return surface
 
   async def _unchecked_fw_z_axis_seek_obstacle(
     self,
@@ -2825,7 +2990,7 @@ class Pipettes:
     start_position: float,
     end_position: float,
     final_position: float,
-    velocity: float,
+    speed: float,
     read_timeout: Optional[float] = None,
   ) -> PrepCmd.PrepZAxisSeekObstacle.Response:
     """Send `ZAxis.SeekObstacle` without checks.
@@ -2835,7 +3000,7 @@ class Pipettes:
       start_position: search start in the channel's Z drive frame, in mm.
       end_position: search end in the channel's Z drive frame, in mm.
       final_position: height to finish at in the channel's Z drive frame, in mm.
-      velocity: search speed in mm/s.
+      speed: search speed in mm/s.
       read_timeout: answer timeout in seconds. Defaults to the link's.
 
     Returns:
@@ -2847,7 +3012,7 @@ class Pipettes:
         start_position=start_position,
         end_position=end_position,
         final_position=final_position,
-        velocity=velocity,
+        velocity=speed,
       ),
       read_timeout=read_timeout,
     )
@@ -2856,20 +3021,20 @@ class Pipettes:
     self,
     channel_idx: int,
     *,
-    tip_len: Optional[float] = None,
     search_start_position: Optional[float] = None,
-    speed: float = 10.0,
-    lowest_immers_pos: Optional[float] = None,
-    z_position_at_end_of_a_command: Optional[float] = None,
-    allow_without_tip: bool = False,
-    move_channels_to_safe_pos_after: bool = False,
-    end_tolerance: float = 1.2,
+    search_end_position: Optional[float] = None,
+    search_speed: float = 10.0,
     push_force_pwm: Optional[int] = None,
+    end_tolerance: float = 1.2,
+    tip_len: Optional[float] = None,
+    allow_without_tip: bool = False,
+    post_detection_distance: float = 2.0,
+    move_channels_to_safe_pos_after: bool = False,
   ) -> Optional[float]:
     """Lower a channel where it stands until it meets resistance, with its Z axis's obstacle seek.
 
     Sent as `ZAxis.SeekObstacle`. What it does, measured on PRPAA1087 on 2026-09-16: it goes to the start at
-    full speed, searches down at `speed`, and on contact keeps pressing until the Z drive's following error
+    full speed, searches down at `search_speed`, and on contact keeps pressing until the Z drive's following error
     reaches its limit of 150 increments (1.6 mm), then stops and answers. Its answer sits about 0.15 mm above
     where the drive actually stopped. Only a firm surface is detected: a finger is pushed through, because it
     yields and no following error builds. Reaching the end of the search untouched is also answered as a
@@ -2878,21 +3043,23 @@ class Pipettes:
 
     Args:
       channel_idx: which channel, 0-indexed from the back.
+      search_start_position: start height in mm. Defaults to where the channel stands.
+      search_end_position: where the search ends, in mm. The bottom of the channel's Z range when
+        None: a seek that detects nothing goes that far down.
+      search_speed: seek speed in mm/s.
+      push_force_pwm: the Z drive's PWM to hold for the seek, 40 to 125, put back afterwards. None
+        leaves the drive as it is. Below 40 the drive cannot lift the channel again: 30 stalled it.
+      end_tolerance: how close to `search_end_position` an answer counts as the end of an
+        untouched search rather than a surface, in mm.
       tip_len: total length of the mounted tip in mm. Defaults to the length the firmware holds
         for it plus the fitting depth.
-      search_start_position: start height in mm. Defaults to the traverse height.
-      speed: seek speed in mm/s.
-      lowest_immers_pos: lowest height in mm. Defaults to the bottom of the channel's Z range.
-      z_position_at_end_of_a_command: height to finish at in mm. Defaults to `search_start_position`.
       allow_without_tip: whether to probe without a mounted tip. False requires one.
-      move_channels_to_safe_pos_after: whether to move all channels to Z safety afterwards.
-      end_tolerance: how close to `lowest_immers_pos` an answer counts as the end of an untouched search
-        rather than a surface, in mm.
-      push_force_pwm: the Z drive's PWM to hold for the seek, 40 to 125, put back afterwards. None leaves the
-        drive as it is (125 on PRPAA1087). Below 40 the drive cannot lift the channel again: 30 stalled it.
+      post_detection_distance: how far above what it met the channel rests afterwards, in mm. The
+        seek itself lands back at the start first, as the firmware returns it there.
+      move_channels_to_safe_pos_after: whether to raise every channel to Z safety instead.
 
     Returns:
-      Height where the channel met the obstacle in mm, or None.
+      Height where the channel met the obstacle in mm, rounded to 0.01 mm, or None.
 
     Raises:
       ValueError: If an argument is out of range.
@@ -2921,8 +3088,8 @@ class Pipettes:
       raise ValueError(
         f"channel_idx must be between 0 and {self.num_channels - 1}, is {channel_idx}"
       )
-    if speed <= 0:
-      raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    if search_speed <= 0:
+      raise ValueError(f"search_speed must be above 0 mm/s, is {search_speed}")
     if push_force_pwm is not None and not 40 <= push_force_pwm <= 125:
       raise ValueError(f"push_force_pwm must be between 40 and 125, is {push_force_pwm}")
     positions = await self.request_locations()
@@ -2936,22 +3103,22 @@ class Pipettes:
     )
     if window is None:
       raise RuntimeError(f"channel {channel_idx}'s Z range has not been read")
-    start = (
-      self._resolve_traverse_height() if search_start_position is None else search_start_position
-    )
-    floor = window[0] if lowest_immers_pos is None else lowest_immers_pos
-    final = start if z_position_at_end_of_a_command is None else z_position_at_end_of_a_command
+    # From where the channel stands, not from the traverse height: a caller that brought it down to
+    # a surface meant it to seek from there, and lifting it first undoes that approach.
+    # The device reports this window for whatever is attached, so it is already the tip bottom's.
+    reach = window
+    start = round(here.z, 2) if search_start_position is None else search_start_position
+    floor = reach[0] if search_end_position is None else search_end_position
     for name, value in (
       ("search_start_position", start),
-      ("lowest_immers_pos", floor),
-      ("z_position_at_end_of_a_command", final),
+      ("search_end_position", floor),
     ):
-      if not window[0] <= value <= window[1]:
+      if not reach[0] <= value <= reach[1]:
         raise ValueError(
-          f"{name}={value} outside channel {channel_idx} range [{window[0]:.1f}, {window[1]:.1f}]"
+          f"{name}={value} outside channel {channel_idx} range [{reach[0]:.1f}, {reach[1]:.1f}]"
         )
     if floor >= start:
-      raise ValueError(f"lowest_immers_pos={floor} must be below search_start_position={start}")
+      raise ValueError(f"search_end_position={floor} must be below search_start_position={start}")
     channel = self.channels[channel_idx] if channel_idx < len(self.channels) else None
     if channel is None or channel.zaxis is None or channel.zdrive is None:
       raise RuntimeError(f"channel {channel_idx} has no Z axis in the firmware tree")
@@ -2966,26 +3133,29 @@ class Pipettes:
           channel.zaxis,
           start_position=start + extension + offset,
           end_position=floor + extension + offset,
-          final_position=final + extension + offset,
-          velocity=speed,
-          read_timeout=(abs(here.z - start) + start - floor) / speed + 30,
+          final_position=start + extension + offset,
+          speed=search_speed,
+          read_timeout=(abs(here.z - start) + start - floor) / search_speed + 30,
         )
     finally:
       await self._record_where_they_stopped()
+    surface: Optional[float] = None
+    if result.obstacle_detected:
+      met = float(result.position) - offset - extension
+      if abs(met - floor) <= end_tolerance:
+        logger.info(
+          "channel %d reached the end of its search at %.3f mm without meeting anything; the "
+          "firmware answers that as a detection at %.3f mm",
+          channel_idx,
+          floor,
+          met,
+        )
+      else:
+        surface = round(met, 2)
     if move_channels_to_safe_pos_after:
       await self.move_to_safe_z()
-    if not result.obstacle_detected:
-      return None
-    surface = float(result.position) - offset - extension
-    if abs(surface - floor) <= end_tolerance:
-      logger.info(
-        "channel %d reached the end of its search at %.3f mm without meeting anything; the firmware answers "
-        "that as a detection at %.3f mm",
-        channel_idx,
-        floor,
-        surface,
-      )
-      return None
+    elif surface is not None and post_detection_distance:
+      await self.move_tool_bottom_to_z_position(channel_idx, surface + post_detection_distance)
     return surface
 
   # -- shutdown / serialization --------------------------------------------------------------------
@@ -3881,8 +4051,22 @@ class Pipettes:
     effective_lld: bool,
     p_lld: Optional[PrepCmd.PLldParameters] = None,
     c_lld: Optional[PrepCmd.CLldParameters] = None,
+    *,
+    lld_mode: Optional[Pipettes.LLDMode] = None,
   ) -> Pipettes._LldDefaults:
-    return default_lld_params(effective_lld, p_lld, c_lld)
+    return default_lld_params(effective_lld, p_lld, c_lld, lld_mode=lld_mode)
+
+  @staticmethod
+  def _single_lld_mode(
+    lld_mode: Optional[Sequence[Pipettes.LLDMode]],
+  ) -> Optional[Pipettes.LLDMode]:
+    """The non-OFF mode from a per-channel list, or OFF / None when none apply."""
+    if lld_mode is None:
+      return None
+    for mode in lld_mode:
+      if mode != Pipettes.LLDMode.OFF:
+        return mode
+    return Pipettes.LLDMode.OFF
 
   @staticmethod
   def _lld_for_well(
@@ -4000,6 +4184,7 @@ class Pipettes:
     auto_container_geometry: bool = False,
     hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
     disable_volume_correction: Optional[List[bool]] = None,
+    lld_mode: Optional[Pipettes.LLDMode] = None,
   ) -> list[_AspirateChannelKit]:
     """Resolve all per-channel values for aspirate (pure computation, no I/O)."""
     ctx = self._resolve_channel_context(
@@ -4041,7 +4226,7 @@ class Pipettes:
       for op, hlc in zip(ops, hlcs)
     ]
 
-    lld_defaults = self._default_lld_params(effective_lld, p_lld, c_lld)
+    lld_defaults = self._default_lld_params(effective_lld, p_lld, c_lld, lld_mode=lld_mode)
     _tadm = tadm or PrepCmd.TadmParameters.default()
 
     kits: list[_AspirateChannelKit] = []
@@ -4256,6 +4441,7 @@ class Pipettes:
     auto_container_geometry: bool = False,
     hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]] = None,
     disable_volume_correction: Optional[List[bool]] = None,
+    lld_mode: Optional[Pipettes.LLDMode] = None,
   ) -> list[_DispenseChannelKit]:
     """Resolve all per-channel values for dispense (pure computation, no I/O)."""
     ctx = self._resolve_channel_context(
@@ -4295,7 +4481,7 @@ class Pipettes:
       for op, hlc in zip(ops, hlcs)
     ]
 
-    lld_defaults = self._default_lld_params(effective_lld, c_lld=c_lld)
+    lld_defaults = self._default_lld_params(effective_lld, c_lld=c_lld, lld_mode=lld_mode)
 
     kits: list[_DispenseChannelKit] = []
     for ch in range(self.num_channels):
@@ -4532,12 +4718,17 @@ class Pipettes:
       auto_container_geometry=auto_container_geometry,
       hamilton_liquid_classes=hamilton_liquid_classes,
       disable_volume_correction=disable_volume_correction,
+      lld_mode=self._single_lld_mode(lld_mode),
     )
 
     lld_read_timeout = read_timeout
     if lld_read_timeout is None and effective_lld and kits:
       min_z_min = min(k.common.z_minimum for k in kits)
-      lld_read_timeout = lld_seek_timeout(kits[0].lld, min_z_min)
+      lld_read_timeout = lld_seek_timeout(
+        kits[0].lld,
+        min_z_min,
+        approach_from_z=self.default_minimum_traverse_height,
+      )
 
     volume_intents = [
       VolumeTransferIntent(
@@ -4638,12 +4829,17 @@ class Pipettes:
       auto_container_geometry=auto_container_geometry,
       hamilton_liquid_classes=hamilton_liquid_classes,
       disable_volume_correction=disable_volume_correction,
+      lld_mode=self._single_lld_mode(lld_mode),
     )
 
     lld_read_timeout = read_timeout
     if lld_read_timeout is None and effective_lld and kits:
       min_z_min = min(k.common.z_minimum for k in kits)
-      lld_read_timeout = lld_seek_timeout(kits[0].lld, min_z_min)
+      lld_read_timeout = lld_seek_timeout(
+        kits[0].lld,
+        min_z_min,
+        approach_from_z=self.default_minimum_traverse_height,
+      )
 
     volume_intents = [
       VolumeTransferIntent(
