@@ -182,6 +182,15 @@ class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
     )
     self.tip = hamilton_tip_300uL(name="tip")
 
+  async def test_the_model_answers_for_each_channel_s_shaft_and_tip(self):
+    """What the model holds, read without asking the device."""
+    self.assertIs(self.pipettes.shaft(0), self.shaft)
+    self.assertIsNone(self.pipettes.shaft(len(self.pipettes.resources)))
+    self.assertIsNone(self.pipettes.get_mounted_tip(0))
+    self.shaft.mount_tip(self.tip)
+    self.assertIs(self.pipettes.get_mounted_tip(0), self.tip)
+    self.assertIsNone(self.pipettes.get_mounted_tip(1))
+
   async def test_a_tip_on_a_shaft_is_sensed_on_that_channel_only(self):
     self.assertEqual(await self.pipettes.sense_tip_presence(), [0] * self.pipettes.num_channels)
     self.shaft.mount_tip(self.tip)

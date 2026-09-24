@@ -57,6 +57,9 @@ from pylabrobot.serializer import serialize
 
 logger = logging.getLogger(__name__)
 
+# What the firmware's tip type table calls the CO-RE grip tool (cat. 186100).
+CORE_GRIPPER_TIP_TYPE_INDEX = 14
+
 # What a declaration and a device have to agree on for the one to stand for the other: what is
 # fitted and how much of it. Everything else is either identity, which is the device's own, or
 # geometry, which follows from what is fitted.
@@ -1065,9 +1068,14 @@ class STARDriver:
     if model is None:
       raise ValueError("Tip model must be defined to assign a tip type index.")
     if model not in self._tip_type_indices:
-      index = len(self._tip_type_indices) + 1
-      if index > 99:
-        raise ValueError("the tip type table is full: 99 tip types have already been defined.")
+      # The first free entry, skipping the grip tool's: a tip written there would overwrite it.
+      taken = set(self._tip_type_indices.values()) | {CORE_GRIPPER_TIP_TYPE_INDEX}
+      index = next((i for i in range(1, 100) if i not in taken), None)
+      if index is None:
+        raise ValueError(
+          f"the tip type table is full: {len(self._tip_type_indices)} tip types have already "
+          "been defined."
+        )
       await self.define_tip_needle(
         tip_type_table_index=index,
         has_filter=tip.has_filter,
@@ -1588,6 +1596,9 @@ class STARDriver:
 
     Each carries a `TipMountingShaft` at its lower end. A collected tip becomes a child of the
     shaft, not of the channel.
+
+    Raises:
+      RuntimeError: If a channel to be modelled has no width read.
     """
     if self.deck is None:
       return
@@ -1611,8 +1622,9 @@ class STARDriver:
       if resource is None:
         width = c.channels[channel].width
         if width is None:
-          logger.warning("channel %d reported no width, so it is not modelled", channel)
-          continue
+          # Skipping it would leave the list one short and every later channel's resource one out
+          # of step with its channel.
+          raise RuntimeError(f"channel {channel} has no width read yet; run discovery first")
         resource = Resource(
           name=name,
           size_x=width,
