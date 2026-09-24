@@ -17,10 +17,12 @@ from pylabrobot.hamilton.prep.driver.simulator import (
   SIMULATED_X_SPEED,
   SIMULATED_Y_DRIVE_OFFSETS,
   SIMULATED_Z_DRIVE_OFFSETS,
+  _SimulatedIO,
 )
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import ChannelBatch
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.errors import HasTipError, NoTipError
@@ -2279,6 +2281,87 @@ def test_every_y_and_z_move_is_recorded_from_where_the_device_says_the_channels_
     pipettes.request_locations = locations  # type: ignore[method-assign]
     await p.x_arm.move_to_x_position(150.0, minimum_traverse_height_start=0)
     assert asked == ["pipettes", "pipettes"]
+    await p.stop()
+
+  _run(_t())
+
+
+def _batch_probe_setup(second_session: bool):
+  """A simulated Prep with tips on both channels over a 30 mm block; each seek's link recorded."""
+  deck = PrepDeck()
+  tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
+  block = Resource(name="block", size_x=40, size_y=40, size_z=30)
+  deck[6].assign_child_resource(block, location=Coordinate(10, 10, 0))
+  p = PrepSimulationDriver(deck=deck)
+  if second_session:
+    p.second_io = _SimulatedIO(p)
+  links: List[str] = []
+  main_send, second_send = p.send_command, p.send_command_on_second_session
+
+  async def on_main(command, *args, **kwargs):
+    if isinstance(command, PrepCmd.PrepZAxisSeekCapacitiveLld):
+      links.append("main")
+    return await main_send(command, *args, **kwargs)
+
+  async def on_second(command, *args, **kwargs):
+    links.append("second")
+    return await second_send(command, *args, **kwargs)
+
+  p.send_command = on_main  # type: ignore[method-assign]
+  p.send_command_on_second_session = on_second  # type: ignore[method-assign]
+  return p, tip_rack, block, links
+
+
+@pytest.mark.parametrize("second_session", [False, True])
+def test_probe_batch_liquid_heights_seeks_each_channel_and_stays_where_it_detects(second_session):
+  """Both channels to their starts, then each one's own seek.
+
+  Together on two sessions, in turn on one.
+  """
+
+  async def _t():
+    p, tip_rack, block, links = _batch_probe_setup(second_session)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(tip_rack["A1:B1"], use_channels=[0, 1])
+    top = block.get_location_wrt(p.deck, "c", "c", "t")
+    await p.pipettes.move_to_safe_z()
+    await p.pipettes.move_to_xy_positions(x=top.x, ys={0: top.y + 6, 1: top.y - 6}, make_space=True)
+    found = await p.pipettes._probe_batch_liquid_heights(
+      ChannelBatch(x_position=top.x, indices=[0, 1], channels=[0, 1]),
+      [block, block],
+      z_cavity_bottom=[top.z - 10] * 2,
+      z_start=[top.z + 20] * 2,
+      lld_modes=[Pipettes.LLDMode.CAPACITIVE] * 2,
+      search_speed=5.0,
+      n_replicates=2,
+    )
+    assert found == {0: [pytest.approx(top.z)] * 2, 1: [pytest.approx(top.z)] * 2}
+    assert [loc.z for loc in await p.pipettes.request_locations()] == pytest.approx([top.z] * 2)
+    assert links == (["main", "second"] * 2 if second_session else ["main"] * 4)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probe_batch_liquid_heights_refuses_pressure_lld():
+  """Pressure LLD has no seek of its own: refused before anything moves."""
+
+  async def _t():
+    p, _, block, links = _batch_probe_setup(second_session=False)
+    await p.setup()
+    assert p.pipettes is not None
+    with pytest.raises(ValueError, match="only capacitive LLD has a seek"):
+      await p.pipettes._probe_batch_liquid_heights(
+        ChannelBatch(x_position=100.0, indices=[0], channels=[0]),
+        [block],
+        z_cavity_bottom=[10.0],
+        z_start=[50.0],
+        lld_modes=[Pipettes.LLDMode.PRESSURE],
+        search_speed=5.0,
+        n_replicates=1,
+      )
+    assert links == []
     await p.stop()
 
   _run(_t())
