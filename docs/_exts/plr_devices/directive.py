@@ -142,15 +142,17 @@ def _code_uri_factory(app, fromdocname):
 
   def code_uri(code_slug):
     target = source_root / code_slug
-    if not (target.is_dir() or target.with_suffix(".py").is_file()):
-      logger.warning(
-        "device registry: code_slug %r is not a module or package under %s",
-        code_slug,
-        source_root,
-        location=fromdocname,
-      )
-      return None
-    return f"{base}/{app.config.plr_devices_code_root}/{code_slug}"
+    if target.is_dir():
+      return f"{base}/{app.config.plr_devices_code_root}/{code_slug}"
+    if target.with_suffix(".py").is_file():
+      return f"{base}/{app.config.plr_devices_code_root}/{code_slug}.py"
+    logger.warning(
+      "device registry: code_slug %r is not a module or package under %s",
+      code_slug,
+      source_root,
+      location=fromdocname,
+    )
+    return None
 
   return code_uri
 
