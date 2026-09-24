@@ -1391,3 +1391,25 @@ def test_default_y_windows_are_not_applied_on_a_device_with_an_8_channel_head():
     await p.stop()
 
   _run(_t())
+
+
+def test_initializing_waits_longer_than_the_drivers_default():
+  """A command that takes longer than any this device performs is one it will not answer."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    waited: list = []
+    send = p.send_command
+
+    async def record(command, *args, read_timeout=None, **kwargs):
+      waited.append((type(command).__name__, read_timeout))
+      return await send(command, *args, read_timeout=read_timeout, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.setup(force_initialize=True)
+    assert [t for name, t in waited if "Initialize" in name] == [300.0]
+    # Everything else names none, so it waits `default_read_timeout`.
+    assert {t for name, t in waited if "Initialize" not in name} == {None}
+    await p.stop()
+
+  _run(_t())

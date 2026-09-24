@@ -279,6 +279,10 @@ class PrepDriver:
     self.pipettes: Optional[Pipettes] = None
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
+    # How long to wait for a command's answer, in seconds. A command that takes longer than any
+    # this device performs is one it is not going to answer, and a caller waiting on it cannot halt
+    # the device or say so. Initializing names its own.
+    self.default_read_timeout: float = 60.0
     self.method: Optional[MethodLifecycle] = None
     self.calibration: Optional[Calibration] = None
     # The gantry the channels ride. Built at setup, and kept across setups like the configuration.
@@ -555,7 +559,7 @@ class PrepDriver:
     Args:
       command: the command. One declaring a `firmware_path` is sent to that object's address on this
         connection; one given an explicit `dest` is sent there.
-      read_timeout: how long to wait for the answer, in seconds. Defaults to the link's.
+      read_timeout: how long to wait for the answer, in seconds. `default_read_timeout` when None.
 
     Returns:
       The command's decoded response.
@@ -563,6 +567,7 @@ class PrepDriver:
     Raises:
       RuntimeError: If the command's firmware path does not resolve on this device.
     """
+    read_timeout = self.default_read_timeout if read_timeout is None else read_timeout
     session = self.io._session
     resolved = await self._resolve_command(command)
     if isinstance(resolved, _ResolvedPrepCommand):
@@ -573,7 +578,13 @@ class PrepDriver:
   async def exchange(
     self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
   ) -> CommandResponse:
-    """Send a command and return the device's full terminal frame, firmware errors included."""
+    """Send a command and return the device's full terminal frame, firmware errors included.
+
+    Args:
+      command: the command to send.
+      read_timeout: how long to wait for the answer, in seconds. `default_read_timeout` when None.
+    """
+    read_timeout = self.default_read_timeout if read_timeout is None else read_timeout
     session = self.io._session
     return await session.exchange(await self._resolve_command(command), read_timeout=read_timeout)
 
@@ -989,8 +1000,17 @@ class PrepDriver:
     self.configuration = configuration
     return configuration
 
-  async def _initialize_instrument(self, *, smart: bool, force_initialize: bool) -> None:
-    """Send ``MLPrep.Initialize`` when needed."""
+  async def _initialize_instrument(
+    self, *, smart: bool, force_initialize: bool, read_timeout: float = 300.0
+  ) -> None:
+    """Send ``MLPrep.Initialize`` when needed.
+
+    Args:
+      smart: whether the device initializes only what it judges it has to.
+      force_initialize: run the procedure without asking whether it has already run.
+      read_timeout: how long to wait for the procedure, in seconds. A wide margin over the 17 s it
+        has been measured to take at its longest, rather than `default_read_timeout`.
+    """
     if not force_initialize:
       try:
         already = await self.request_initialization_status()
@@ -1011,7 +1031,8 @@ class PrepDriver:
           rolloff_distance=3,
           channel_parameters=[],
         ),
-      )
+      ),
+      read_timeout=read_timeout,
     )
     logger.debug("the device initialization procedure has run")
 
