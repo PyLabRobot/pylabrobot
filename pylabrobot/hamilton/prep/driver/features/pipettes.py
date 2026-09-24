@@ -14,6 +14,7 @@ IDs directly.
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import functools
 import logging
@@ -52,7 +53,7 @@ from pylabrobot.hamilton.transport.tcp.messages import HoiParamsParser, parse_in
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
-from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import ChannelBatch, plan_batches
 from pylabrobot.resources import Container, Coordinate, Tip
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
@@ -3015,6 +3016,124 @@ class Pipettes:
       ),
       read_timeout=read_timeout,
     )
+
+  async def _unchecked_fw_z_axis_seek_capacitive_lld(
+    self,
+    zaxis: Address,
+    position: float,
+    speed: float,
+    detect_mode: int,
+    sensitivity: int,
+    read_timeout: Optional[float] = None,
+    on_second_session: bool = False,
+  ) -> PrepCmd.PrepZAxisSeekCapacitiveLld.Response:
+    """Send `ZAxis.SeekCapacitiveLld` without checks: down from where the channel stands.
+
+    Args:
+      zaxis: the channel's Z axis.
+      position: search end in the channel's Z drive frame, in mm.
+      speed: search speed in mm/s.
+      detect_mode: cLLD detect mode.
+      sensitivity: cLLD sensitivity.
+      read_timeout: answer timeout in seconds. Defaults to the link's.
+      on_second_session: whether to send it on the driver's second session.
+
+    Returns:
+      The firmware's answer, with the position in the Z drive frame.
+    """
+    command = PrepCmd.PrepZAxisSeekCapacitiveLld(
+      dest=zaxis,
+      position=position,
+      velocity=speed,
+      detect_mode=detect_mode,
+      sensitivity=sensitivity,
+    )
+    if on_second_session:
+      return await self._driver.send_command_on_second_session(command, read_timeout=read_timeout)
+    return await self._driver.send_command(command, read_timeout=read_timeout)
+
+  async def _probe_batch_liquid_heights(
+    self,
+    batch: ChannelBatch,
+    containers: Sequence[Container],
+    *,
+    z_cavity_bottom: Sequence[float],
+    z_start: Sequence[float],
+    lld_modes: Sequence[Pipettes.LLDMode],
+    search_speed: float,
+    n_replicates: int,
+    approach_speed: Optional[float] = None,
+  ) -> Dict[int, List[Optional[float]]]:
+    """Search for the liquid in every container of one batch, n times, by each channel's own seek.
+
+    The channels stand at the batch's X/Y. Each round they go to their starts together, then seek
+    down to the cavity bottom and stay where they detect: together with a second session, one after
+    the other without it.
+
+    Args:
+      batch: the channels and which container each has, by job index.
+      containers: per job, what each channel searches in. Nothing here reads them.
+      z_cavity_bottom: per job, tip bottom height the search ends at, on the deck in mm.
+      z_start: per job, tip bottom height the search starts from, on the deck in mm.
+      lld_modes: per job; capacitive only.
+      search_speed: in mm/s.
+      n_replicates: how many rounds.
+      approach_speed: the speed the channels go to their starts at, in mm/s. `default_z_speed` when
+        None.
+
+    Returns:
+      The heights found, in mm on the deck, one list per job index; None where nothing was found.
+
+    Raises:
+      ValueError: If a job asks for pressure LLD: it has no seek of its own, only the LLD aspirate.
+      RuntimeError: If a channel has no Z axis in the firmware tree.
+    """
+    jobs = list(zip(batch.channels, batch.indices))
+    for channel, job in jobs:
+      if lld_modes[job] != self.LLDMode.CAPACITIVE:
+        raise ValueError(
+          f"job {job}: only capacitive LLD has a seek; {lld_modes[job].name} has none"
+        )
+      if channel >= len(self.channels) or self.channels[channel].zaxis is None:
+        raise RuntimeError(f"channel {channel} has no Z axis in the firmware tree")
+    parallel = self._driver.second_io is not None
+    found: Dict[int, List[Optional[float]]] = {job: [] for _, job in jobs}
+    for _ in range(n_replicates):
+      await self.move_tool_bottom_to_z_positions(
+        {channel: z_start[job] for channel, job in jobs}, speed=approach_speed
+      )
+      here = await self.request_locations()
+      searches = []
+      for i, (channel, job) in enumerate(jobs):
+        # The drive frame is the tip bottom plus an offset, read where the channel now stands
+        offset = await self.channels[channel].request_z_drive_position() - here[channel].z
+        timeout = (z_start[job] - z_cavity_bottom[job]) / search_speed + 30
+        searches.append((channel, z_cavity_bottom[job], offset, timeout, parallel and i > 0))
+
+      async def seek(
+        channel: int, end: float, offset: float, timeout: float, second: bool
+      ) -> Optional[float]:
+        answer = await self._unchecked_fw_z_axis_seek_capacitive_lld(
+          cast(Address, self.channels[channel].zaxis),
+          position=end + offset,
+          speed=search_speed,
+          detect_mode=self.default_clld_detect_mode,
+          sensitivity=self.default_clld_sensitivity,
+          read_timeout=timeout,
+          on_second_session=second,
+        )
+        return round(float(answer.detect_position) - offset, 2) if answer.lld_detected else None
+
+      try:
+        if parallel:
+          heights = await asyncio.gather(*(seek(*search) for search in searches))
+        else:
+          heights = [await seek(*search) for search in searches]
+      finally:
+        await self._record_where_they_stopped()
+      for (_, job), height in zip(jobs, heights):
+        found[job].append(height)
+    return found
 
   async def probe_z_using_ztouch(
     self,
