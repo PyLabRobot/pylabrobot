@@ -89,7 +89,7 @@ from .well import CrossSectionType, Well, WellBottomType
 
 
 def __getattr__(name: str):
-  # TODO: Remove >2026-12
+  # TODO: Remove in v1
   if name == "TipTracker":
     from .tip_tracker import __getattr__ as deprecated
 

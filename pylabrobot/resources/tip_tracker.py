@@ -4,7 +4,7 @@ A tip spot holds its tip as a child, and a tip mounting shaft does too. The tip 
 in `pylabrobot.resources.tip_tracking`, and `TipTracker` in `pylabrobot.legacy.tip_tracker`.
 """
 
-# TODO: Remove >2026-12
+# TODO: Remove in v1
 
 import warnings
 from typing import Any

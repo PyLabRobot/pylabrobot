@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 def _legacy_tracker(spot: "TipSpot") -> "TipTracker":
   """The legacy liquid handler's tracker for a spot: a view on its tip in the tree.
 
-  TODO: Remove >2026-12, with the methods on `TipSpot` and `TipRack` that use it.
+  TODO: Remove in v1, with the methods on `TipSpot` and `TipRack` that use it.
   """
   from pylabrobot.legacy.tip_tracker import tip_spot_tracker
 
@@ -198,7 +198,7 @@ class TipSpot(Resource):
     return self._make_tip_func(self._get_next_tip_name())
 
   # -- legacy ------------------------------------------------------------------------------------
-  # TODO: Remove >2026-12. The legacy liquid handler's view of this spot, with its pending
+  # TODO: Remove in v1. The legacy liquid handler's view of this spot, with its pending
   # operations: `tip`, `tip_for_pickup`, `assign_tip` and `unassign_tip` read and move the tree.
 
   @property
@@ -421,7 +421,7 @@ class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
       item.enable_tip_tracking()
 
   def disable_tip_trackers(self) -> None:
-    """Deprecated: use `disable_tip_tracking`. TODO: Remove >2026-12"""
+    """Deprecated: use `disable_tip_tracking`. TODO: Remove in v1"""
     warnings.warn(
       "TipRack.disable_tip_trackers is deprecated. Use 'disable_tip_tracking' instead.",
       DeprecationWarning,
@@ -430,7 +430,7 @@ class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
     self.disable_tip_tracking()
 
   def enable_tip_trackers(self) -> None:
-    """Deprecated: use `enable_tip_tracking`. TODO: Remove >2026-12"""
+    """Deprecated: use `enable_tip_tracking`. TODO: Remove in v1"""
     warnings.warn(
       "TipRack.enable_tip_trackers is deprecated. Use 'enable_tip_tracking' instead.",
       DeprecationWarning,
