@@ -42,7 +42,7 @@ from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration, read_configuration, to_jsonable
 from .errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from .features.calibration import Calibration
-from .features.core_grippers import CoreGripperArm, CoreGrippers
+from .features.core_grippers import CoreGrippers
 from .features.head8 import Head8
 from .features.lights import Lights
 from .features.method import MethodLifecycle
@@ -283,7 +283,8 @@ class PrepDriver:
     self.deck = deck
     # What the device reports about itself, read by `discover`. None until setup has run.
     self.configuration: Optional[DeviceConfiguration] = None
-    self._core_gripper_arm: Optional[CoreGripperArm] = None
+    # Where each tool the channels are carrying came from, so it goes back there when it is
+    # dropped. A tool is a resource: while the channels hold it, it is theirs.
     self.pipettes: Optional[Pipettes] = None
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
@@ -507,13 +508,6 @@ class PrepDriver:
     if not self._setup_finished:
       return
     try:
-      if self._core_gripper_arm is not None:
-        logger.warning(
-          "PrepDriver.stop() called with CoRe grippers still mounted. stop() raises the channels to Z "
-          "safety but does not return the tools. Call `await prep.return_core_grippers()` first if you "
-          "want them returned."
-        )
-        self._core_gripper_arm = None
       if skip_raise_to_z_safety:
         low = await self.features_below_safe_z()
         logger.warning(
@@ -1198,9 +1192,8 @@ class PrepDriver:
     if not isinstance(self.deck, PrepDeck) or self.configuration is None:
       return
     c = self.configuration
-    teaching_tip_name = self.get_component_name("teaching_tip")
-    if self.deck.has_resource(teaching_tip_name):
-      spot = self.deck.get_resource(teaching_tip_name)
+    spot = self.deck.teaching_needle_spot
+    if spot is not None:
       footprint = (spot.get_absolute_size_x(), spot.get_absolute_size_y())
       site = next((s for s in c.deck_sites if (s.length, s.width) == footprint), None)
       if site is not None and spot.location is not None and spot.parent is not None:
@@ -1211,12 +1204,10 @@ class PrepDriver:
         logger.debug("teaching needle at deck site %d", site.id)
     for waste_site in c.waste_sites:
       name = _WASTE_SITE_NAMES.get(waste_site.index)
-      if name is None:
+      waste = self.deck.waste_positions.get(name) if name is not None else None
+      if waste is None:
         continue
-      name = self.get_component_name(name)
-      if not self.deck.has_resource(name):
-        continue
-      self.deck.get_resource(name).location = Coordinate(
+      waste.location = Coordinate(
         waste_site.x_position, waste_site.y_position, waste_site.z_position
       )
       logger.debug("%s at waste site %d", name, waste_site.index)
@@ -1235,15 +1226,9 @@ class PrepDriver:
       return
     arm, c = self.x_arm, self.x_arm.configuration
     pipettes = self.pipettes.configuration
-    # The arm rides at the top of the channels' travel: what their bounds say, or the traverse height
-    # when no bounds were read.
-    tops = [c.z_range[1] for c in self.pipettes.configuration.channels if c.z_range is not None]
-    if tops:
-      z = max(tops)
-    elif self.configuration is not None and self.configuration.default_traverse_height is not None:
-      z = self.configuration.default_traverse_height
-    else:
-      z = self.deck.get_absolute_size_z()
+    # The arm rides at the height it was measured at, not at the top of the channels' travel: what
+    # the channels report is how far they travel, not where the arm sits.
+    z = c.ride_height
     # The Y the channels reach between them, which the arm's reference line spans.
     y_ranges = [c.y_range for c in pipettes.channels if c.y_range is not None]
     reach = (min(r[0] for r in y_ranges), max(r[1] for r in y_ranges)) if y_ranges else None
@@ -1289,68 +1274,24 @@ class PrepDriver:
   # ----------------------------------------
 
   @property
-  def core_gripper_arm(self) -> CoreGripperArm:
-    """The mounted CoRe gripper arm. Raises if grippers are not currently picked up."""
-    if self._core_gripper_arm is None:
-      raise RuntimeError(
-        "CoRe grippers not mounted. Call `await prep.pick_up_core_grippers()` first, "
-        "or use `async with prep.mounted_core_grippers() as arm:`."
-      )
-    return self._core_gripper_arm
+  def core_gripper_holder(self) -> Optional[HamiltonCoreGrippers]:
+    """The holder this Prep's deck parks its CO-RE grip tools in, by type, or None."""
+    if self.deck is None:
+      return None
+    return next(
+      (r for r in self.deck.get_all_children() if isinstance(r, HamiltonCoreGrippers)), None
+    )
 
   @property
   def core_grippers_mounted(self) -> bool:
-    return self._core_gripper_arm is not None
-
-  async def pick_up_core_grippers(self) -> CoreGripperArm:
-    """Pick up the CoRe gripper tools and return the mounted arm."""
-    if self._core_gripper_arm is not None:
-      raise RuntimeError("CoRe grippers already mounted")
-    if self.pipettes is None or self.core_grippers is None:
-      raise RuntimeError("PrepDriver.setup() has not run.")
-
-    mount_name = self.get_component_name("core_grippers")
-    mount = self.deck.get_resource(mount_name)
-    if not isinstance(mount, HamiltonCoreGrippers):
-      raise TypeError(
-        f"deck must have a resource named {mount_name!r} of type HamiltonCoreGrippers"
-      )
-
-    loc = mount.get_location_wrt(self.deck)
-    await self.core_grippers.pick_up_tool(
-      tool_position_x=loc.x,
-      tool_position_z=loc.z,
-      front_channel_position_y=loc.y + mount.front_channel_y_center,
-      rear_channel_position_y=loc.y + mount.back_channel_y_center,
-      tool_seek=loc.z + 10.0,
-    )
-
-    self._core_gripper_arm = CoreGripperArm(
-      backend=self.core_grippers, reference_resource=self.deck, grip_axis="y"
-    )
-    return self._core_gripper_arm
-
-  async def return_core_grippers(self) -> None:
-    if self._core_gripper_arm is None:
-      return
-    try:
-      await self._core_gripper_arm.backend.drop_tool()
-    finally:
-      self._core_gripper_arm = None
-
-  @asynccontextmanager
-  async def mounted_core_grippers(self) -> AsyncIterator[CoreGripperArm]:
-    arm = await self.pick_up_core_grippers()
-    try:
-      yield arm
-    finally:
-      await self.return_core_grippers()
+    """Whether the CoRe gripper tools are on the channels."""
+    return self.core_grippers is not None and self.core_grippers.tools_mounted
 
   # ----------------------------------------
   # Park and spread
   # ----------------------------------------
 
-  async def park(self) -> None:
+  async def park_device(self) -> None:
     await self.send_command(PrepCmd.PrepPark())
 
   async def spread(self) -> None:

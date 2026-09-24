@@ -984,11 +984,12 @@ class Pipettes:
       return 0
     if cfg.num_channels != 2:
       return 0
-    try:
-      mount = self.deck.get_resource(self._driver.get_component_name("core_grippers"))
-      return 1 if isinstance(mount, HamiltonCoreGrippers) else 0
-    except Exception:
+    if self.deck is None:
       return 0
+    holder = next(
+      (r for r in self.deck.get_all_children() if isinstance(r, HamiltonCoreGrippers)), None
+    )
+    return 1 if holder is not None else 0
 
   # -- session / discovery -------------------------------------------------------------------------
 
