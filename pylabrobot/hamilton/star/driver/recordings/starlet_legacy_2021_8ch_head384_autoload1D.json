@@ -436,7 +436,7 @@
     "adjustment_date": "2025-06-11",
     "adjusted": true,
     "drive_zero_on_the_deck": 100.0,
-    "reference_point_from_sled_left_edge": 109.0,
+    "reference_point_from_sled_left_edge": 73.7,
     "x_drive_range_increments": [
       0,
       12500

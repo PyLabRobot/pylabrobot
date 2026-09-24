@@ -2,8 +2,13 @@ import unittest
 from typing import Any, List, Optional, Set, Tuple
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.hamilton.star.device import RECORDING_STAR
-from pylabrobot.hamilton.star.driver.features.autoload import Autoload
+from pylabrobot.hamilton.star.device import (
+  RECORDING_STAR,
+  RECORDING_STAR_HEAD384,
+  RECORDING_STARLET,
+  RECORDING_STARLET_HEAD384,
+)
+from pylabrobot.hamilton.star.driver.features.autoload import Autoload, AutoloadConfiguration
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.hamilton import PLT_CAR_L5AC_A00, STARDeck
 
@@ -184,6 +189,41 @@ class TestLoadCarrier(unittest.IsolatedAsyncioTestCase):
       with self.subTest(carrier_barcode_reading=wanted):
         pulled_in.assert_awaited_once()
         self.assertEqual(loaded["carrier_barcode"], "read" if wanted else None)
+
+
+class TestTheWheelsSafeZTolerance(unittest.IsolatedAsyncioTestCase):
+  """The drive answers its hardware counter, which rests a step or two past where it was sent."""
+
+  async def test_a_wheel_a_couple_of_steps_low_is_at_its_safe_z(self):
+    feature, _ = await autoload(failing=set())
+    with patch(LOWERED, feature.configuration.z_drive_increments_to_mm(2)):
+      self.assertTrue(await feature.wheel_is_at_safe_z())
+      low = await feature._driver.features_below_safe_z()
+      self.assertFalse([entry for entry in low if "autoload" in entry])
+
+  async def test_a_wheel_further_down_than_the_tolerance_is_not(self):
+    feature, _ = await autoload(failing=set())
+    with patch(LOWERED, 2.0):
+      self.assertFalse(await feature.wheel_is_at_safe_z())
+      self.assertIn(
+        "autoload wheel below its safe Z", await feature._driver.features_below_safe_z()
+      )
+
+
+class TestTheRecordingsSled(unittest.TestCase):
+  """Every shipped recording with an autoload places its sled where the configuration does."""
+
+  def test_the_reference_point_is_the_configurations(self):
+    default = AutoloadConfiguration().reference_point_from_sled_left_edge
+    for recording in (
+      RECORDING_STAR,
+      RECORDING_STAR_HEAD384,
+      RECORDING_STARLET,
+      RECORDING_STARLET_HEAD384,
+    ):
+      driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=recording)
+      with self.subTest(recording=recording):
+        self.assertEqual(driver.simulated_autoload.reference_point_from_sled_left_edge, default)
 
 
 if __name__ == "__main__":
