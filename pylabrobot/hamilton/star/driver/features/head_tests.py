@@ -1,4 +1,5 @@
 import dataclasses
+import datetime
 import json
 import pathlib
 import random
@@ -7,6 +8,7 @@ import unittest
 from typing import Any, List, Optional, cast
 from unittest.mock import patch
 
+from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR, RECORDING_STARLET
 from pylabrobot.hamilton.star.driver.configuration import read_configuration
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
@@ -259,3 +261,49 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
         await self.head.drop_tips(self.tip_rack)
     self.assertTrue(all(shaft.has_tip() for shaft in shafts))
     self.assertFalse(any(spot.has_tip() for spot in spots))
+
+
+class TestProbeZUsingCLLD(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    from pylabrobot.resources import set_tip_tracking
+    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL_filter
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+    self.deck = STARLetDeck()
+    self.driver = STARSimulationDriver(
+      deck=self.deck, declared_configuration_json=RECORDING_STARLET
+    )
+    await self.driver.setup()
+    self.head = cast(Head96, self.driver.head96)
+    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car[1] = tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    self.deck.assign_child_resource(tip_car, track=1)
+    await self.head.pick_up_tips(tip_rack)
+
+    self.sent: List[str] = []
+    answer = self.driver.send_command
+
+    async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      if module + command == "H0ZL":
+        self.sent.append(assemble_command(module, command, **kwargs))
+        return ""
+      if module + command == "H0RH":
+        return {"rh": 40000}
+      return await answer(module=module, command=command, fmt=fmt, **kwargs)
+
+    self.driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_the_search_is_sent_in_stop_disc_increments(self):
+    detected = await self.head.probe_z_using_clld(tip_overhang=50.0)
+    self.assertEqual(
+      self.sent,
+      ["H0ZLzh36100zc67200zi0400zj1lm2gt0010gl0002zv17000zl02000zr060000zw15"],
+    )
+    self.assertEqual(detected, 150.0)
+
+  async def test_a_2008_head_refuses_a_sensor(self):
+    self.head.configuration.firmware_date = datetime.date(2008, 11, 11)
+    with self.assertRaises(ValueError):
+      await self.head.probe_z_using_clld(tip_overhang=50.0, lld_sensor="A1 or B2")
+    self.assertEqual(self.sent, [])
