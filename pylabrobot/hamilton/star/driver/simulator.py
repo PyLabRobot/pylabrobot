@@ -58,6 +58,7 @@ from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGripperTool
 from pylabrobot.resources.hamilton.hamilton_decks import (
   HamiltonDeck,
 )
+from pylabrobot.resources.hamilton.tip_creators import TipDropMethod, TipPickupMethod
 from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 
 logger = logging.getLogger(__name__)
@@ -350,6 +351,127 @@ class SimulatedPipettes(_Simulated, Pipettes):
     resp = await super()._unchecked_fw_move_lowest_point_to_z_positions(zs)
     for channel, z in zs.items():
       self.update_location_by_reference_point(channel, z=z + self._below_stop_disc(channel))
+    return resp
+
+  async def _record_tip_command(
+    self,
+    x_positions: List[int],
+    y_positions: List[int],
+    tip_pattern: List[bool],
+    z: int,
+    overhang: float = 0.0,
+    descend_to: Optional[int] = None,
+  ) -> None:
+    """Put the arm and the channels where a tip command leaves them, as the reads will find them.
+
+    The arm ends over the last column the command visited, and each channel taking part at its Y.
+    The Z drives are each their own, so an unnamed channel keeps its height: `rz +2450 +3343
+    +3343 ...`. In Y they share a rail, so the device brings the others along: the same pick-up
+    answers `ry +2418 +2328 +2238 ...`.
+
+    The height a tip command ends at is its lowest point, and the model holds the stop disc, so a
+    channel that came away with a tip ends that much higher. As the device answers a pick-up of a
+    300 uL tip at `th2450`: the master reads the lowest points as `rz +2450 +3343 ...`, and the
+    channel itself reads `rz +27674` increments - 296.9 mm, the traverse height plus the 51.9 mm
+    the tip hangs below the disc.
+
+    Args:
+      x_positions, y_positions, tip_pattern: the command, in tenths of a millimetre.
+      z: the height the command ends at, in tenths of a millimetre.
+      overhang: how far what the channels now carry hangs below the stop disc, in mm. Nothing for
+        a command that leaves them empty.
+      descend_to: the lowest point of the stroke, in tenths of a millimetre. Recorded as a stop of
+        its own so the descent is seen; only the end is recorded when it is None.
+    """
+    involved = [i for i, used in enumerate(tip_pattern) if used and i < self.num_channels]
+    if not involved:
+      return
+    self.arm.update_location_by_reference_point(x_positions[involved[-1]] / 10)
+
+    # One rail, so the channels not named are moved as far as the spacing asks - the rule a Y
+    # move already goes by.
+    sent = {channel: y_positions[channel] / 10 for channel in involved}
+    try:
+      planned = await self._plan_y_positions(sent, make_space=True)
+    except ValueError:
+      # No room for the others, as a packed discard leaves none: the firmware arranges them.
+      planned = sent
+    # The stroke as the device makes it: across at the height it starts from, down onto the spots,
+    # and back up. Recorded as one stop, the whole command is a single jump to wherever it ended.
+    for channel, y in planned.items():
+      self.update_location_by_reference_point(channel, y=y)
+    if descend_to is not None:
+      await self.device.pay_motion_time()
+      for channel in involved:
+        self.update_location_by_reference_point(
+          channel, z=descend_to / 10 + self._below_stop_disc(channel)
+        )
+      await self.device.pay_motion_time()
+    for channel in involved:
+      self.update_location_by_reference_point(channel, z=z / 10 + overhang)
+
+  async def _unchecked_fw_pick_up_tips(
+    self,
+    x_positions: List[int],
+    y_positions: List[int],
+    tip_pattern: List[bool],
+    tip_type_index: int,
+    begin_tip_pick_up_process: int,
+    end_tip_pick_up_process: int,
+    minimum_traverse_height_start: int,
+    pickup_method: TipPickupMethod,
+    read_timeout: int = 120,
+  ):
+    resp = await super()._unchecked_fw_pick_up_tips(
+      x_positions=x_positions,
+      y_positions=y_positions,
+      tip_pattern=tip_pattern,
+      tip_type_index=tip_type_index,
+      begin_tip_pick_up_process=begin_tip_pick_up_process,
+      end_tip_pick_up_process=end_tip_pick_up_process,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      pickup_method=pickup_method,
+    )
+    # The channels come away carrying a tip of this type, which hangs below the stop disc by the
+    # length the type was defined with.
+    await self._record_tip_command(
+      x_positions,
+      y_positions,
+      tip_pattern,
+      minimum_traverse_height_start,
+      overhang=self.device.defined_tip_lengths.get(tip_type_index, 0.0),
+      descend_to=end_tip_pick_up_process,
+    )
+    return resp
+
+  async def _unchecked_fw_drop_tips(
+    self,
+    x_positions: List[int],
+    y_positions: List[int],
+    tip_pattern: List[bool],
+    begin_tip_deposit_process: int,
+    end_tip_deposit_process: int,
+    minimum_traverse_height_start: int,
+    minimum_traverse_height_end: int,
+    discarding_method: TipDropMethod,
+  ):
+    resp = await super()._unchecked_fw_drop_tips(
+      x_positions=x_positions,
+      y_positions=y_positions,
+      tip_pattern=tip_pattern,
+      begin_tip_deposit_process=begin_tip_deposit_process,
+      end_tip_deposit_process=end_tip_deposit_process,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      minimum_traverse_height_end=minimum_traverse_height_end,
+      discarding_method=discarding_method,
+    )
+    await self._record_tip_command(
+      x_positions,
+      y_positions,
+      tip_pattern,
+      minimum_traverse_height_end,
+      descend_to=end_tip_deposit_process,
+    )
     return resp
 
   async def move_stop_disc_to_z_position(self, channel: int, z: float, *args: Any, **kwargs: Any):
@@ -1133,6 +1255,10 @@ class STARSimulationDriver(STARDriver):
     # What the drives would still be doing, in seconds: the longest move recorded since the last
     # command, waited out before the next one goes.
     self._motion_owed = 0.0
+    # How far a tip of each defined type stands below the stop disc, by tip type index, as
+    # `define_tip_needle` was told. A tip command names one of these, and what it collects hangs
+    # that far down: the traverse height it ends at is the tip's, so the stop disc ends higher.
+    self.defined_tip_lengths: Dict[int, float] = {}
     # What each channel's drive holds, by channel; filled from the power-on values when first asked.
     self.channel_drive_parameters: Dict[int, Dict[str, int]] = {}
 
@@ -1172,6 +1298,19 @@ class STARSimulationDriver(STARDriver):
 
   async def _close(self):
     pass
+
+  async def define_tip_needle(self, *args: Any, **kwargs: Any):
+    """Remember how far a tip of this type hangs below the stop disc, then define it as usual.
+
+    A tip command names a type rather than a tip, so this is where the model learns what a channel
+    collecting that type will carry: `_record_tip_command` puts the stop disc that much above the
+    traverse height the command ends at.
+    """
+    resp = await super().define_tip_needle(*args, **kwargs)
+    index, length = kwargs.get("tip_type_table_index"), kwargs.get("tip_length")
+    if index is not None and length is not None:
+      self.defined_tip_lengths[int(index)] = float(length)
+    return resp
 
   async def request_device_configuration(self) -> DeviceConfiguration:
     """What the device reports it carries, answered from what it was declared to be.
