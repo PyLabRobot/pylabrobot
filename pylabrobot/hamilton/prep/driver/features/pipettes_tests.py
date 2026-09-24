@@ -23,8 +23,9 @@ from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import ChannelBatch
-from pylabrobot.resources import Coordinate, Resource
+from pylabrobot.resources import Coordinate, PetriDish, Resource
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton import (
   PrepDeck,
@@ -2362,6 +2363,79 @@ def test_probe_batch_liquid_heights_refuses_pressure_lld():
         n_replicates=1,
       )
     assert links == []
+    await p.stop()
+
+  _run(_t())
+
+
+def _probe_liquid_setup():
+  """A simulated Prep with a plate and a dish without height-volume functions.
+
+  Both channels carry a tip.
+  """
+  deck = PrepDeck()
+  tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
+  plate = deck[4] = cor_96_wellplate_360uL_Fb(name="plate")
+  dish = PetriDish(name="dish", diameter=77.0, height=20.0, material_z_thickness=2.0)
+  deck[6].assign_child_resource(dish, location=Coordinate(20, 5, 0))
+  return PrepSimulationDriver(deck=deck), tip_rack, plate, dish
+
+
+def test_probe_liquid_heights_deals_the_containers_in_cycles_and_rises_to_safe_z():
+  """Four wells on two channels: two cycles, each channel's seek in each; left at Z safety."""
+
+  async def _t():
+    p, tip_rack, plate, _ = _probe_liquid_setup()
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(tip_rack["A1:B1"], use_channels=[0, 1])
+    sent: List[Any] = []
+    send = p.send_command
+
+    async def recording(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = recording  # type: ignore[method-assign]
+    wells = plate["A1:D1"]
+    heights = await p.pipettes.probe_liquid_heights(wells)
+    # The simulator meets the plate as a solid, at its top.
+    top = plate.get_location_wrt(p.deck, "c", "c", "t").z
+    tops = [top - w.get_location_wrt(p.deck, "c", "c", "cavity_bottom").z for w in wells]
+    assert heights == pytest.approx(tops, abs=0.01)
+    seeks = [c.dest.node for c in sent if isinstance(c, PrepCmd.PrepZAxisSeekCapacitiveLld)]
+    assert len(seeks) == 4 and len(set(seeks)) == 2
+    assert isinstance(sent[-2], PrepCmd.PrepMoveZUpToSafe)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probe_liquid_volumes_refuses_a_container_without_height_volume_functions():
+  """Refused before anything moves."""
+
+  async def _t():
+    p, tip_rack, _, dish = _probe_liquid_setup()
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(tip_rack["A1:B1"], use_channels=[0, 1])
+    with pytest.raises(ValueError, match="no height-to-volume function"):
+      await p.pipettes.probe_liquid_volumes([dish])
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probe_liquid_heights_refuses_pressure_lld():
+  """Pressure LLD has no seek on the Prep: refused before anything moves."""
+
+  async def _t():
+    p, tip_rack, plate, _ = _probe_liquid_setup()
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(tip_rack["A1:B1"], use_channels=[0, 1])
+    with pytest.raises(ValueError, match="capacitive"):
+      await p.pipettes.probe_liquid_heights([plate["A1"][0]], lld_mode=Pipettes.LLDMode.PRESSURE)
     await p.stop()
 
   _run(_t())
