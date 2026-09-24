@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import enum
 import logging
 import math
 from contextlib import asynccontextmanager
@@ -135,6 +136,14 @@ class PipettesConfiguration:
   clld_detection_edge_range: Tuple[int, int] = (0, 1_023)
   clld_detection_drop_range: Tuple[int, int] = (0, 1_023)
   lld_post_detection_distance_range_increments: Tuple[int, int] = (0, 9_999)
+  lld_max_delta_range_increments: Tuple[int, int] = (0, 9_999)
+  """How far a pressure detection may sit from the capacitive one verifying it, in Z increments."""
+  plld_detection_edge_range: Tuple[int, int] = (0, 1_023)
+  plld_detection_drop_range: Tuple[int, int] = (0, 1_023)
+  plld_foam_detection_drop_range: Tuple[int, int] = (0, 1_023)
+  plld_foam_detection_edge_tolerance_range: Tuple[int, int] = (0, 1_023)
+  plld_foam_ad_values_range: Tuple[int, int] = (0, 4_999)
+  plld_foam_search_speed_range_increments: Tuple[int, int] = (20, 13_500)
 
   # -- what a channel's own Z drive accepts, for the moves addressed to the channel itself --
   z_drive_speed_range_increments: Tuple[int, int] = (20, 15_000)
@@ -158,6 +167,11 @@ class PipettesConfiguration:
   device's channels. The floor is the deck surface either way."""
   dispensing_drive_mm_per_increment: float = 0.002734375
   dispensing_drive_uL_per_increment: float = 0.046876
+  dispensing_drive_speed_range_increments: Tuple[int, int] = (20, 13_500)
+  dispensing_drive_acceleration_range_increments: Tuple[int, int] = (1, 100)
+  """Counted in increments per second squared, unlike the Z drive's."""
+  dispensing_drive_current_limit_range: Tuple[int, int] = (0, 7)
+  dispensing_drive_volume_range_increments: Tuple[int, int] = (0, 26_666)
 
   channel_size_z: float = 140.0
   """How tall to model a channel, in mm. Not read from anywhere: how far a channel extends is not
@@ -282,6 +296,12 @@ class Pipettes:
   `configuration` holds what every channel shares, and one entry per channel in
   `configuration.channels`.
   """
+
+  class PressureLLDMode(enum.Enum):
+    """What a pressure search stops at: the liquid, or the foam and then the liquid under it."""
+
+    LIQUID = 0
+    FOAM = 1
 
   # Y speed when the caller names none, in mm/s.
   default_y_speed: float = 250.0
@@ -2326,6 +2346,361 @@ class Pipettes:
     if move_channels_to_safe_pos_after:
       await self.move_to_safe_z()
     return (await self.request_last_lld_z_positions())[channel_idx]
+
+  async def _unchecked_fw_probe_z_using_plld(
+    self,
+    channel: int,
+    end_position: int,
+    start_position: int,
+    post_detection_distance: int,
+    post_detection_trajectory: int,
+    tip_has_filter: bool,
+    clld_detection_edge: int,
+    clld_detection_drop: int,
+    plld_detection_edge: int,
+    plld_detection_drop: int,
+    clld_verification: bool,
+    max_delta_plld_clld: int,
+    mode: int,
+    foam_detection_drop: int,
+    foam_detection_edge_tolerance: int,
+    foam_ad_values: int,
+    foam_search_speed: int,
+    dispense_back_mode: int,
+    dispense_back_volume: int,
+    approach_speed: int,
+    search_speed: int,
+    acceleration: int,
+    z_current_limit: int,
+    dispensing_speed: int,
+    dispensing_acceleration: int,
+    dispensing_max_speed: int,
+    dispensing_current_limit: int,
+    read_timeout: int = 120,
+  ) -> List[int]:
+    """Lower one channel until its pressure sensor meets a surface, as given. `Px ZE`.
+
+    Args:
+      channel: 0-indexed from the back.
+      end_position: stop disc height it goes no lower than (`zh`).
+      start_position: stop disc height the search starts from (`zc`).
+      post_detection_distance: how far it moves after detection (`zi`).
+      post_detection_trajectory: 0 moves down after detection, 1 up (`zj`).
+      tip_has_filter: whether the tip has a filter (`gf`).
+      clld_detection_edge: cLLD edge steepness, 0 to 1023 (`gt`).
+      clld_detection_drop: offset after the cLLD edge, 0 to 1023 (`gl`).
+      plld_detection_edge: pLLD edge steepness, 0 to 1023 (`gu`).
+      plld_detection_drop: offset after the pLLD edge, 0 to 1023 (`gn`).
+      clld_verification: whether the cLLD searches alongside to verify (`gm`).
+      max_delta_plld_clld: how far the two detections may differ, in increments (`gz`).
+      mode: 0 stops at the liquid, 1 at the foam and then the liquid (`cj`).
+      foam_detection_drop: foam detection drop, 0 to 1023 (`co`).
+      foam_detection_edge_tolerance: foam edge tolerance, 0 to 1023 (`cp`).
+      foam_ad_values: foam AD values, 0 to 4999 (`cq`).
+      foam_search_speed: search speed through the foam, increments/s (`cl`).
+      dispense_back_mode: 1 dispenses `dispense_back_volume` back after detection, 0 not (`cc`).
+      dispense_back_volume: in dispensing drive increments (`cd`).
+      approach_speed: speed above the start position, increments/s (`zv`).
+      search_speed: increments/s (`zl`).
+      acceleration: thousands of increments/s2 (`zr`).
+      z_current_limit: Z drive current limit, 0 to 7 (`zw`).
+      dispensing_speed: dispensing drive speed, increments/s (`dl`).
+      dispensing_acceleration: dispensing drive acceleration, increments/s2 (`dr`).
+      dispensing_max_speed: dispensing drive top speed, increments/s (`dv`).
+      dispensing_current_limit: dispensing drive current limit, 0 to 7 (`dw`).
+      read_timeout: how long to wait for the answer, in s. A search can take over 30 s.
+
+    Returns:
+      The stop disc heights it detected at, in Z increments (`if`).
+    """
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel),
+      command="ZE",
+      zh=f"{end_position:05}",
+      zc=f"{start_position:05}",
+      zi=f"{post_detection_distance:04}",
+      zj=f"{post_detection_trajectory:01}",
+      gf=str(int(tip_has_filter)),
+      gt=f"{clld_detection_edge:04}",
+      gl=f"{clld_detection_drop:04}",
+      gu=f"{plld_detection_edge:04}",
+      gn=f"{plld_detection_drop:04}",
+      gm=str(int(clld_verification)),
+      gz=f"{max_delta_plld_clld:04}",
+      cj=str(mode),
+      co=f"{foam_detection_drop:04}",
+      cp=f"{foam_detection_edge_tolerance:04}",
+      cq=f"{foam_ad_values:04}",
+      cl=f"{foam_search_speed:05}",
+      cc=str(dispense_back_mode),
+      cd=f"{dispense_back_volume:05}",
+      zv=f"{approach_speed:05}",
+      zl=f"{search_speed:05}",
+      zr=f"{acceleration:03}",
+      zw=f"{z_current_limit}",
+      dl=f"{dispensing_speed:05}",
+      dr=f"{dispensing_acceleration:03}",
+      dv=f"{dispensing_max_speed:05}",
+      dw=f"{dispensing_current_limit}",
+      fmt="if##### (n)",
+      read_timeout=read_timeout,
+    )
+    return cast(List[int], resp["if"])
+
+  async def _plld_search(
+    self,
+    channel: int,
+    end_position: float,
+    start_position: float,
+    *,
+    approach_speed: float = 120.0,
+    search_speed: float = 10.0,
+    acceleration: float = 800.0,
+    z_current_limit: Optional[int] = None,
+    tip_has_filter: Optional[bool] = None,
+    dispensing_speed: float = 5.0,
+    dispensing_acceleration: float = 0.2,
+    dispensing_max_speed: float = 14.5,
+    dispensing_current_limit: int = 3,
+    detection_edge: int = 30,
+    detection_drop: int = 10,
+    clld_verification: bool = False,
+    clld_detection_edge: int = 10,
+    clld_detection_drop: int = 2,
+    max_delta_plld_clld: float = 5.0,
+    mode: Optional["Pipettes.PressureLLDMode"] = None,
+    foam_detection_drop: int = 30,
+    foam_detection_edge_tolerance: int = 30,
+    foam_ad_values: int = 30,
+    foam_search_speed: float = 10.0,
+    dispense_back_volume: Optional[float] = None,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_distance: float = 0.0,
+    read_timeout: int = 120,
+  ) -> List[float]:
+    """Run one channel's pressure search between two stop disc heights, every field checked.
+
+    The channel comes down at `approach_speed` to the start, then searches at `search_speed` with
+    its dispensing drive drawing on the tip until the pressure says the tip met a surface. With
+    `clld_verification` the capacitive sensor searches alongside and the two detections must agree
+    within `max_delta_plld_clld`. In foam mode the search goes on through the foam to the liquid
+    under it. As `_clld_search`: in stop disc terms, and nothing sensed here.
+
+    Args:
+      channel: 0-indexed from the back.
+      end_position: stop disc height it goes no lower than, in mm.
+      start_position: stop disc height the search starts from, in mm.
+      approach_speed: above the start position, in mm/s.
+      search_speed: in mm/s.
+      acceleration: in mm/s2.
+      z_current_limit: Z drive current limit, 0 to 7.
+        `configuration.z_drive_current_limit_default` when None.
+      tip_has_filter: whether the tip has a filter. What the model says of the mounted tip when
+        None, and no filter if the model has none.
+      dispensing_speed: of the dispensing drive during the search, in mm/s.
+      dispensing_acceleration: in mm/s2.
+      dispensing_max_speed: in mm/s.
+      dispensing_current_limit: 0 to 7.
+      detection_edge: pLLD edge steepness, 0 to 1023.
+      detection_drop: offset after the pLLD edge, 0 to 1023.
+      clld_verification: whether the cLLD searches alongside to verify.
+      clld_detection_edge: cLLD edge steepness, 0 to 1023.
+      clld_detection_drop: offset after the cLLD edge, 0 to 1023.
+      max_delta_plld_clld: how far the two detections may differ, in mm.
+      mode: what the search stops at. The liquid when None.
+      foam_detection_drop: 0 to 1023.
+      foam_detection_edge_tolerance: 0 to 1023.
+      foam_ad_values: 0 to 4999.
+      foam_search_speed: through the foam, in mm/s.
+      dispense_back_volume: dispensed back after detection, in uL. Nothing when None.
+      post_detection_trajectory: 0 moves down after detection, 1 up.
+      post_detection_distance: how far it moves after detection, in mm; 0 stays there.
+      read_timeout: how long to wait for the search, in s.
+
+    Returns:
+      The stop disc heights it detected at, in mm: one, or in foam mode the foam's and then the
+      liquid's.
+
+    Raises:
+      ValueError: If a field is out of the drive's range.
+      STARFirmwareError: As the channel answers, a search that found nothing included.
+    """
+    c = self.configuration
+    if mode is None:
+      mode = self.PressureLLDMode.LIQUID
+    if post_detection_trajectory not in (0, 1):
+      raise ValueError(f"post_detection_trajectory must be 0 or 1, is {post_detection_trajectory}")
+    if z_current_limit is None:
+      z_current_limit = c.z_drive_current_limit_default
+    if tip_has_filter is None:
+      tip = self.get_mounted_tip(channel)
+      tip_has_filter = tip is not None and tip.has_filter
+    end = c.z_drive_mm_to_increments(end_position)
+    start = c.z_drive_mm_to_increments(start_position)
+    approach = c.z_drive_mm_to_increments(approach_speed)
+    speed = c.z_drive_mm_to_increments(search_speed)
+    ramp = c.z_drive_acceleration_mm_to_increments(acceleration)
+    distance = c.z_drive_mm_to_increments(post_detection_distance)
+    delta = c.z_drive_mm_to_increments(max_delta_plld_clld)
+    foam_speed = c.z_drive_mm_to_increments(foam_search_speed)
+    d_speed = c.dispensing_drive_mm_to_increments(dispensing_speed)
+    d_ramp = c.dispensing_drive_mm_to_increments(dispensing_acceleration)
+    d_max = c.dispensing_drive_mm_to_increments(dispensing_max_speed)
+    back = (
+      0
+      if dispense_back_volume is None
+      else c.dispensing_drive_uL_to_increments(dispense_back_volume)
+    )
+    for checked, (low, high), name in (
+      (end, c.z_range_increments, "search end, in increments,"),
+      (start, c.z_range_increments, "search start, in increments,"),
+      (approach, c.z_drive_speed_range_increments, "approach_speed, in increments/s,"),
+      (speed, c.z_drive_speed_range_increments, "search_speed, in increments/s,"),
+      (ramp, c.z_drive_acceleration_range_increments, "acceleration, in 1000 increments/s2,"),
+      (z_current_limit, c.z_drive_current_limit_range, "z_current_limit"),
+      (d_speed, c.dispensing_drive_speed_range_increments, "dispensing_speed, in increments/s,"),
+      (
+        d_ramp,
+        c.dispensing_drive_acceleration_range_increments,
+        "dispensing_acceleration, in increments/s2,",
+      ),
+      (d_max, c.dispensing_drive_speed_range_increments, "dispensing_max_speed, in increments/s,"),
+      (
+        dispensing_current_limit,
+        c.dispensing_drive_current_limit_range,
+        "dispensing_current_limit",
+      ),
+      (detection_edge, c.plld_detection_edge_range, "detection_edge"),
+      (detection_drop, c.plld_detection_drop_range, "detection_drop"),
+      (clld_detection_edge, c.clld_detection_edge_range, "clld_detection_edge"),
+      (clld_detection_drop, c.clld_detection_drop_range, "clld_detection_drop"),
+      (delta, c.lld_max_delta_range_increments, "max_delta_plld_clld, in increments,"),
+      (foam_detection_drop, c.plld_foam_detection_drop_range, "foam_detection_drop"),
+      (
+        foam_detection_edge_tolerance,
+        c.plld_foam_detection_edge_tolerance_range,
+        "foam_detection_edge_tolerance",
+      ),
+      (foam_ad_values, c.plld_foam_ad_values_range, "foam_ad_values"),
+      (
+        foam_speed,
+        c.plld_foam_search_speed_range_increments,
+        "foam_search_speed, in increments/s,",
+      ),
+      (back, c.dispensing_drive_volume_range_increments, "dispense_back_volume, in increments,"),
+      (
+        distance,
+        c.lld_post_detection_distance_range_increments,
+        "post_detection_distance, in increments,",
+      ),
+    ):
+      if not low <= checked <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {checked}")
+    found = await self._unchecked_fw_probe_z_using_plld(
+      channel,
+      end_position=end,
+      start_position=start,
+      post_detection_distance=distance,
+      post_detection_trajectory=post_detection_trajectory,
+      tip_has_filter=tip_has_filter,
+      clld_detection_edge=clld_detection_edge,
+      clld_detection_drop=clld_detection_drop,
+      plld_detection_edge=detection_edge,
+      plld_detection_drop=detection_drop,
+      clld_verification=clld_verification,
+      max_delta_plld_clld=delta,
+      mode=mode.value,
+      foam_detection_drop=foam_detection_drop,
+      foam_detection_edge_tolerance=foam_detection_edge_tolerance,
+      foam_ad_values=foam_ad_values,
+      foam_search_speed=foam_speed,
+      dispense_back_mode=0 if dispense_back_volume is None else 1,
+      dispense_back_volume=back,
+      approach_speed=approach,
+      search_speed=speed,
+      acceleration=ramp,
+      z_current_limit=z_current_limit,
+      dispensing_speed=d_speed,
+      dispensing_acceleration=d_ramp,
+      dispensing_max_speed=d_max,
+      dispensing_current_limit=dispensing_current_limit,
+      read_timeout=read_timeout,
+    )
+    wanted = 2 if mode == self.PressureLLDMode.FOAM else 1
+    return [c.z_drive_increments_to_mm(increments) for increments in found[:wanted]]
+
+  async def probe_z_using_plld(
+    self,
+    channel_idx: int,
+    *,
+    search_start_position: Optional[float] = None,
+    search_end_position: Optional[float] = None,
+    pressure_mode: Optional["Pipettes.PressureLLDMode"] = None,
+    allow_without_tip: bool = False,
+    post_detection_distance: float = 2.0,
+    move_channels_to_safe_pos_after: bool = False,
+    **search: Any,
+  ) -> Optional[List[float]]:
+    """Lower a channel's tip until the pressure says it met the liquid, and say how high that is.
+
+    The pressure counterpart of `probe_z_using_clld`: a tip sensed on, the overhang measured, the
+    window in tip bottom terms, then the search. Every other setting of the search, speeds,
+    thresholds, the capacitive verification, foam and dispense-back, is passed on to
+    `_plld_search` by name and takes its default there.
+
+    Args:
+      channel_idx: which channel, 0-indexed from the back.
+      search_start_position: tip bottom height to search from, in mm. As high as the tip goes
+        when None.
+      search_end_position: lowest tip bottom height, in mm. The drive's floor when None.
+      pressure_mode: what the search stops at. The liquid when None.
+      allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
+      post_detection_distance: how far it moves after detection, in mm.
+      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
+        instead of resting where the search left it.
+      search: the rest of `_plld_search`'s settings, by name.
+
+    Returns:
+      The tip bottom heights detected, in mm: the liquid's, or in foam mode the foam's and then
+      the liquid's. None if the search found nothing.
+
+    Raises:
+      RuntimeError: If the channel carries no tip and `allow_without_tip` is False.
+      ValueError: If an argument is out of range.
+    """
+    self._require_channel(channel_idx)
+    overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
+    c = self.configuration
+    lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
+    top, floor = highest - overhang, round(lowest - overhang, 2)
+    if search_start_position is None:
+      search_start_position = top
+    if search_end_position is None:
+      search_end_position = floor
+    if search_end_position < floor:
+      raise ValueError(f"search_end_position must be at least {floor} mm, is {search_end_position}")
+    if not search_end_position <= search_start_position <= top:
+      raise ValueError(
+        f"search_start_position must be between {search_end_position} and {top} mm, "
+        f"is {search_start_position}"
+      )
+    try:
+      detected = await self._plld_search(
+        channel_idx,
+        search_end_position + overhang,
+        round(search_start_position + overhang, 2),
+        mode=pressure_mode,
+        post_detection_distance=post_detection_distance,
+        **search,
+      )
+    except STARFirmwareError as error:
+      await self.move_to_safe_z()
+      if not self._found_nothing(error, self.channel_id(channel_idx)):
+        raise
+      return None
+    if move_channels_to_safe_pos_after:
+      await self.move_to_safe_z()
+    return [round(stop_disc - overhang, 2) for stop_disc in detected]
 
   # TODO: _unchecked_fw_ vs tip-presence-guarded versions
 
