@@ -311,6 +311,8 @@ class PrepDriver:
     port: int = 2000,
     declared_configuration_json: Optional[str] = None,
     io: Optional[HamiltonTCPClient] = None,
+    use_two_sessions: bool = True,
+    second_io: Optional[HamiltonTCPClient] = None,
   ):
     """
     Args:
@@ -322,6 +324,10 @@ class PrepDriver:
         physical device, discovery cross-checks it against what the device answers; against a
         simulated one, the device answers as it says.
       io: the link to drive the device through, instead of a TCP connection to `host`.
+      use_two_sessions: whether to open a second connection to `host`, so each channel node can be
+        sent a command beside the other's. Only with `host`: a given `io` has no second link but
+        `second_io`.
+      second_io: the second link, instead of a second TCP connection to `host`.
 
     Raises:
       ValueError: If neither `host` nor `io` is given.
@@ -335,7 +341,10 @@ class PrepDriver:
       if not host:
         raise ValueError("host must be provided to reach a Prep over TCP")
       io = _PrepTCPClient(host=host, port=port)
+      if use_two_sessions and second_io is None:
+        second_io = _PrepTCPClient(host=host, port=port)
     self.io: HamiltonTCPClient = io
+    self.second_io: Optional[HamiltonTCPClient] = second_io
     self._mlprep_address: Optional[Address] = None
     self.deck = deck
     # What the device reports about itself, read by `discover`. None until setup has run.
@@ -542,16 +551,22 @@ class PrepDriver:
           f"Expected root '{PREP_ROOT_NAME}' (Prep), but discovered '{root}'. Wrong instrument?"
         )
       self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
+      if self.second_io is not None:
+        await self.second_io.setup()
     except BaseException:
       await self._close()
       raise
 
   async def _close(self) -> None:
-    """Close the link and discard what was resolved on it."""
+    """Close the links and discard what was resolved on them."""
     try:
-      await self.io.stop()
+      if self.second_io is not None:
+        await self.second_io.stop()
     finally:
-      self._mlprep_address = None
+      try:
+        await self.io.stop()
+      finally:
+        self._mlprep_address = None
 
   async def features_below_safe_z(self, tolerance: float = 0.5) -> List[str]:
     """Which channels report below where they are safe.
@@ -725,6 +740,29 @@ class PrepDriver:
       data = await session.execute(resolved, read_timeout=read_timeout)
       return command.parse_response_parameters(data)
     return await session.execute(command, read_timeout=read_timeout)
+
+  async def send_command_on_second_session(
+    self, command: TCPCommand[ResultT], *, read_timeout: Optional[float] = None
+  ) -> ResultT:
+    """Send a command on the second session, beside whatever the first has in flight.
+
+    Args:
+      command: the command, with its `dest` given, as each channel node's commands have it.
+      read_timeout: how long to wait for the answer, in seconds. `default_read_timeout` when None.
+
+    Returns:
+      The command's decoded response.
+
+    Raises:
+      RuntimeError: If there is no second session, or the command names a firmware path, not a
+        `dest`.
+    """
+    if self.second_io is None:
+      raise RuntimeError("no second session: built with use_two_sessions=False, or without a host")
+    if isinstance(command, PrepCommand) and command.dest == _UNRESOLVED:
+      raise RuntimeError(f"{type(command).__name__} needs a dest= on the second session")
+    read_timeout = self.default_read_timeout if read_timeout is None else read_timeout
+    return await self.second_io._session.execute(command, read_timeout=read_timeout)
 
   async def exchange(
     self, command: TCPCommand[object], *, read_timeout: Optional[float] = None

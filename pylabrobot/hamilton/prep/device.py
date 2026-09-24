@@ -200,6 +200,7 @@ def Prep(
   size_z: float = PREP_SIZE_Z,
   simulate_motion_time: bool = False,
   motion_time_scale: float = 0.25,
+  use_two_sessions: bool = True,
 ) -> PrepDevice:
   """A Prep, on a Prep deck.
 
@@ -223,6 +224,9 @@ def Prep(
       shows every step. Ignored for a real device.
     motion_time_scale: the share of the real device's time a simulated move then takes, a quarter
       by default. 1.0 keeps the real time. Ignored for a real device.
+    use_two_sessions: for a real device, whether its driver opens a second connection, so each
+      channel node can be sent a command beside the other's. Ignored when simulating or given a
+      driver.
 
   Returns:
     The device, on a Prep deck.
@@ -244,6 +248,7 @@ def Prep(
         host=host,
         port=port,
         declared_configuration_json=declared_configuration_json,
+        use_two_sessions=use_two_sessions,
       )
   return PrepDevice(
     deck=deck,
