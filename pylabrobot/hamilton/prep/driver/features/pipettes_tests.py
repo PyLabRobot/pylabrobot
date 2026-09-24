@@ -18,7 +18,9 @@ from pylabrobot.hamilton.prep.driver.simulator import (
   SIMULATED_Y_DRIVE_OFFSETS,
   SIMULATED_Z_DRIVE_OFFSETS,
 )
+from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.packets import Address
+from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.errors import HasTipError, NoTipError
@@ -28,8 +30,10 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL_NTR,
+  hamilton_tip_50uL,
   hamilton_tip_300uL,
 )
+from pylabrobot.resources.hamilton.core_gripper_tools import hamilton_core_gripper_tool
 from pylabrobot.resources.tip_tracking import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
 
@@ -1955,6 +1959,166 @@ def test_the_stop_disc_move_takes_off_what_the_channel_carries():
     # Every channel that does not exist is named, not just the first.
     with pytest.raises(ValueError, match=r"channels must be between 0 and 1, are \[5, 7\]"):
       await pipettes.move_stop_disc_to_z_positions({5: 100.0, 7: 100.0})
+    await p.stop()
+
+  _run(_t())
+
+
+def test_setup_discards_a_tip_it_finds_already_attached():
+  """A session that connects to a machine still holding a tip clears it before anything else."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    shaft = p.pipettes.shaft(0)
+    assert shaft is not None
+    await p.stop()
+    # A crash leaves a tip on without stop() running, which would have cleared it.
+    shaft.mount_tip(hamilton_tip_300uL(name="left on"))
+
+    sent = _record(p)
+    await p.setup(smart=True)  # and the next one connects, to a machine still holding it
+    assert p.pipettes is not None
+
+    assert [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]  # into the waste
+    assert not (await p.pipettes.sense_tip_presence())[0]
+    assert p.pipettes.get_mounted_tip(0) is None
+    await p.stop()
+
+  _run(_t())
+
+
+def test_setup_discards_tips_it_finds_on_both_channels():
+  """Each channel found carrying gets a tip of its own in the model, so both are dropped."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    shafts = [p.pipettes.shaft(ch) for ch in range(2)]
+    await p.stop()
+    for ch, shaft in enumerate(shafts):
+      assert shaft is not None
+      shaft.mount_tip(hamilton_tip_50uL(name=f"left on {ch}"))
+
+    sent = _record(p)
+    await p.setup(smart=True)
+    assert p.pipettes is not None
+
+    drops = [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]
+    assert len(drops) == 1 and len(drops[0].tip_positions) == 2  # both, in one move
+    assert await p.pipettes.sense_tip_presence() == [False, False]
+    assert all(p.pipettes.get_mounted_tip(ch) is None for ch in range(2))
+    await p.stop()
+
+  _run(_t())
+
+
+def _refusal(code: int, action: int) -> HoiError:
+  """A device refusal carrying `code`, as the session raises it."""
+  entry = HcResultEntry(
+    module_id=0xE000, node_id=1, object_id=0x1000, interface_id=1, action_id=action, result=code
+  )
+  return HoiError(exceptions={0: RuntimeError(hex(code))}, entries=[entry], raw_response=b"")
+
+
+def test_setup_treats_a_stale_tool_definition_as_the_tips_that_are_on():
+  """A refused tool pickup leaves its definition behind: the device says no tool is held, and the
+  Z window says what is really on, so those are dropped as tips."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None and p.core_grippers is not None
+    shafts = [p.pipettes.shaft(ch) for ch in range(2)]
+    await p.stop()
+    for ch, shaft in enumerate(shafts):
+      assert shaft is not None
+      shaft.mount_tip(hamilton_tip_50uL(name=f"left on {ch}"))
+
+    stale = PrepCmd.TipDefinition(
+      default_values=False,
+      id=255,
+      volume=1.0,
+      length=22.9,
+      tip_type=0,
+      has_filter=False,
+      is_needle=False,
+      is_tool=True,
+      label="Pipettor Custom",
+    )
+
+    async def stale_definition(channel: int):
+      return stale
+
+    async def no_tool_held(**kwargs):
+      raise _refusal(0x0F07, 16)
+
+    p.pipettes.request_attached_tip_information = stale_definition  # type: ignore[method-assign]
+    p.core_grippers.drop_tools = no_tool_held  # type: ignore[method-assign]
+    sent = _record(p)
+    await p.setup(smart=True)
+    assert p.pipettes is not None
+
+    drops = [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]
+    assert len(drops) == 1 and len(drops[0].tip_positions) == 2
+    assert not [c for c in sent if isinstance(c, PrepCmd.PrepReleaseTips)]  # the drop sufficed
+    assert await p.pipettes.sense_tip_presence() == [False, False]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_setup_releases_over_the_waste_when_the_device_refuses_to_drop():
+  """Last resort: a drop the Pipettor refuses (it has forgotten the tips) ends with the squeeze
+  release over the waste, after the channels were taken there."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    shafts = [p.pipettes.shaft(ch) for ch in range(2)]
+    await p.stop()
+    for ch, shaft in enumerate(shafts):
+      assert shaft is not None
+      shaft.mount_tip(hamilton_tip_50uL(name=f"left on {ch}"))
+
+    async def no_tips_held(*args, **kwargs):
+      raise _refusal(0x0F03, 14)
+
+    p.pipettes.drop_tips = no_tips_held  # type: ignore[method-assign]
+    sent = _record(p)
+    await p.setup(smart=True)
+    assert p.pipettes is not None
+
+    names = [type(c).__name__ for c in sent]
+    assert "PrepXAxisMoveAbsolute" in names and names.count("PrepYAxisMoveRelative") == 2
+    assert names.count("PrepReleaseTips") == 2
+    assert names.index("PrepXAxisMoveAbsolute") < names.index("PrepReleaseTips")
+    assert await p.pipettes.sense_tip_presence() == [False, False]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_setup_puts_a_tool_it_finds_attached_back_rather_than_discarding_it():
+  """A grip tool is not a tip: it goes back in its holder, and no drop into the waste is sent."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck(with_core_grippers=True))
+    await p.setup()
+    assert p.pipettes is not None
+    shaft = p.pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_core_gripper_tool(name="left on"))
+    await p.stop()  # the session ends without putting it back
+
+    sent = _record(p)
+    await p.setup(smart=True)  # and the next one connects, to a machine still holding it
+
+    assert [c for c in sent if isinstance(c, PrepCmd.PrepDropTool)]
+    assert not [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]
     await p.stop()
 
   _run(_t())

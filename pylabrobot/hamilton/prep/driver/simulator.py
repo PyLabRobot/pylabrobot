@@ -1258,6 +1258,8 @@ class PrepSimulationDriver(PrepDriver):
     declared = "the declared configuration"
 
     if isinstance(request, PrepCmd.PrepInitialize):
+      if isinstance(self.pipettes, SimulatedPipettes) and self.pipettes._plate_held:
+        raise _DeviceRefuses(_INITIALIZE_WITH_A_PLATE)
       self.initialized = True
       return None
     if isinstance(request, PrepCmd.PrepGetIsInitialized):

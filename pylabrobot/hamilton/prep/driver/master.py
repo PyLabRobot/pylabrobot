@@ -19,7 +19,7 @@ from typing import (
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
-from pylabrobot.hamilton.transport.tcp.hoi_error import parse_hamilton_error_entries
+from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError, parse_hamilton_error_entries
 from pylabrobot.hamilton.transport.tcp.introspection import FirmwareTreeNode, MethodInfo
 from pylabrobot.hamilton.transport.tcp.messages import (
   CommandMessage,
@@ -36,6 +36,19 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.hamilton.prep_decks import PrepDeck
+from pylabrobot.resources.hamilton.tip_creators import (
+  HamiltonTip,
+  TipPickupMethod,
+  TipSize,
+  hamilton_tip_10uL,
+  hamilton_tip_10uL_filter,
+  hamilton_tip_50uL,
+  hamilton_tip_50uL_filter,
+  hamilton_tip_300uL,
+  hamilton_tip_300uL_filter,
+  hamilton_tip_1000uL,
+  hamilton_tip_1000uL_filter,
+)
 from pylabrobot.resources.resource import Resource
 
 from . import prep_commands as PrepCmd
@@ -46,7 +59,7 @@ from .features.core_grippers import CoreGrippers
 from .features.head8 import Head8
 from .features.lights import Lights
 from .features.method import MethodLifecycle
-from .features.pipettes import Pipettes
+from .features.pipettes import TIP_FITTING_DEPTH, Pipettes, channels_named
 from .features.x_arm import XArm
 from .prep_commands import (
   _UNRESOLVED,
@@ -93,6 +106,18 @@ def _fragment_values(data: bytes) -> List[Any]:
   return values
 
 
+# How far each channel moves out to open the grippers before initializing, in mm.
+_OPEN_GRIPPERS_BY = 5.0
+
+
+def _confirm(question: str) -> bool:
+  """Ask the person at the device; only y or yes is a yes. No one to ask is a no."""
+  try:
+    return input(question).strip().lower() in ("y", "yes")
+  except EOFError:
+    return False
+
+
 class _PrepTCPClient(HamiltonTCPClient):
   """The TCP link to a Prep, describing firmware errors from the Prep's own error table."""
 
@@ -110,6 +135,38 @@ class _PrepTCPClient(HamiltonTCPClient):
       read_timeout=self._read_timeout,
       error_codes=self._ERROR_CODES,
     )
+
+
+def _hamilton_tip_for_reach(reach: float, has_filter: bool, name: str) -> Optional[HamiltonTip]:
+  """The Hamilton tip whose reach below the stop disc is `reach`, or None when none is within 0.3 mm.
+
+  A drop needs the tip's collar height, which only a known tip has. The filter flag breaks a tie
+  between the plain and filtered tip of one length, which share every other dimension.
+  """
+  candidates = (
+    hamilton_tip_10uL,
+    hamilton_tip_10uL_filter,
+    hamilton_tip_50uL,
+    hamilton_tip_50uL_filter,
+    hamilton_tip_300uL,
+    hamilton_tip_300uL_filter,
+    hamilton_tip_1000uL,
+    hamilton_tip_1000uL_filter,
+  )
+  matching = [
+    tip
+    for tip in (make(name) for make in candidates)
+    if abs(tip.get_size_z() - tip.fitting_depth - reach) <= 0.3
+  ]
+  if not matching:
+    return None
+  return next((tip for tip in matching if tip.has_filter == has_filter), matching[0])
+
+
+def _refused_with(error: BaseException, code: int) -> bool:
+  """Whether a device refusal carries `code` in any of its entries."""
+  entries = getattr(error, "entries", None) or getattr(error, "hoi_entries", None) or []
+  return any(getattr(entry, "result", None) == code for entry in entries)
 
 
 @dataclass(frozen=True)
@@ -352,10 +409,19 @@ class PrepDriver:
 
       # 2. Bring the device to a known state.
       logger.debug("[PHASE 2] Device initialization")
+      # Kept across a power cycle: while it is set, the device refuses to initialize (0x0F0A) and to
+      # take the tools home (0x0F04).
+      plate_held = await self._request_plate_held()
       if skip_device_initialization:
         logger.warning("skipping the device initialization procedure, as asked")
       else:
-        await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
+        if plate_held and (force_initialize or not await self.request_initialization_status()):
+          await self._release_held_plate_by_hand()
+          plate_held = False
+          # Known to need it, just asked: not asked again.
+          await self._initialize_instrument(smart=smart, force_initialize=True)
+        else:
+          await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
 
       # 3. Each feature brings itself up.
       logger.debug("[PHASE 3] Feature initialization")
@@ -420,6 +486,32 @@ class PrepDriver:
         self._place_reported_sites()
         await self._create_capability_resources()
 
+      if any(tips) and plate_held:
+        attached = await self.pipettes.request_attached_tip_information(tips.index(True))
+        if attached is not None and attached.is_tool and self.core_grippers is not None:
+          await self.core_grippers._adopt_mounted_tools()
+        logger.warning(
+          "the device records a plate gripped, so the tools stay on: lower it onto a free spot with "
+          "`pipettes.move_tool_bottom_to_z_positions` (both channels together), let go with "
+          "`core_grippers.release_plate()`, then return the tools"
+        )
+      elif any(tips):
+        try:
+          await self._return_or_discard_attached(tips)
+        except Exception:
+          # Setup still has to finish: the caller needs a driver to look at the device with.
+          logger.warning("could not clear what was attached at setup", exc_info=True)
+        # The device reports each channel's window for whatever is attached to it, so the windows
+        # recorded at discovery are that thing's. Read them again now the channels are clear.
+        still = await self.pipettes.sense_tip_presence()
+        carrying = [channel for channel, held in enumerate(still) if held]
+        if carrying:
+          logger.warning(
+            "%s still carries something, so the windows recorded are its, not an empty channel's",
+            channels_named(carrying),
+          )
+        else:
+          await self.pipettes._record_channel_bounds()
       self._setup_finished = True
     except Exception:
       # The deck said the device was working; it is not, and the link is about to go.
@@ -508,6 +600,17 @@ class PrepDriver:
     if not self._setup_finished:
       return
     try:
+      # A plate in the jaws goes back first: parking spreads the channels and would tear it out.
+      holding = await self._return_held_resource()
+      # As at setup: a tool goes back in its holder, anything else into the waste.
+      if self.pipettes is not None:
+        try:
+          tips = await self.pipettes.sense_tip_presence()
+          if any(tips) and not holding:
+            await self._return_or_discard_attached(tips)
+        except Exception:
+          # The link closes either way.
+          logger.warning("could not clear what was attached before stopping", exc_info=True)
       if skip_raise_to_z_safety:
         low = await self.features_below_safe_z()
         logger.warning(
@@ -523,6 +626,13 @@ class PrepDriver:
         low = await self.features_below_safe_z()
         if low:
           logger.warning("not everything is at Z safety: %s", "; ".join(low))
+      if holding:
+        logger.error(
+          "not parking: the device records a plate gripped, and parking spreads the channels. "
+          "They are left where they stand; put the plate down before moving them apart."
+        )
+      else:
+        await self.park_device()
     except Exception:
       logger.warning(
         "could not bring the device to a safe state; closing the link anyway", exc_info=True
@@ -884,10 +994,8 @@ class PrepDriver:
     mlprep = self.mlprep_address
     enc_resp = await self.send_command(PrepCmd.PrepGetIsEnclosurePresent(dest=mlprep))
     safe_resp = await self.send_command(PrepCmd.PrepGetSafeSpeedsEnabled(dest=mlprep))
-    height_resp = await self.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=mlprep))
     has_enclosure = bool(enc_resp.value) if enc_resp else False
     safe_speeds_enabled = bool(safe_resp.value) if safe_resp else False
-    default_traverse_height = float(height_resp.value) if height_resp else None
 
     deck_bounds: Optional[PrepCmd.DeckBounds] = None
     deck_sites: Tuple[PrepCmd.DeckSiteInfo, ...] = ()
@@ -956,11 +1064,84 @@ class PrepDriver:
       head8_installed=head8_installed,
       has_enclosure=has_enclosure,
       safe_speeds_enabled=safe_speeds_enabled,
-      default_traverse_height=default_traverse_height,
       deck_bounds=deck_bounds,
       deck_sites=deck_sites,
       waste_sites=waste_sites,
     )
+
+  async def _release_held_plate_by_hand(self) -> None:
+    """Open the grippers with a person there to take the plate, so the device can initialize.
+
+    Before initializing only each channel's own relative Y move runs: the two move apart by
+    `_OPEN_GRIPPERS_BY`, then PrepReleasePlate clears the record.
+
+    Raises:
+      RuntimeError: If the person does not confirm, or the record is still set after.
+    """
+    print(
+      "\nThe Prep has a plate gripped written into its memory, which a power cycle does not clear. "
+      "It refuses to initialize (0x0F0A) until the grippers open, and until it initializes nothing "
+      "else can move."
+    )
+    if not _confirm(
+      "Take the plate out of the grippers, or have your hand under it to catch it as they open. "
+      "Ready for the grippers to open? [y/n] "
+    ):
+      raise RuntimeError(
+        "setup stopped: the device records a plate gripped and refuses to initialize until the "
+        "grippers open. Run setup again when someone can take the plate."
+      )
+    for channel, distance in ((1, -_OPEN_GRIPPERS_BY), (0, _OPEN_GRIPPERS_BY)):
+      try:
+        await self._move_relative_in_y(channel, distance)
+      except Exception:
+        logger.warning("channel %d did not move %+.1f mm", channel, distance, exc_info=True)
+    await self.send_command(PrepCmd.PrepReleasePlate())
+    if not _confirm("Have you moved your hands out of the device? [y/n] "):
+      raise RuntimeError(
+        "setup stopped before initializing: hands may be in the device. The grippers are open; run "
+        "setup again to initialize."
+      )
+    if await self._request_plate_held():
+      raise RuntimeError("the device still records a plate gripped after the grippers opened")
+
+  async def _return_held_resource(self) -> bool:
+    """Put back what the grippers hold, if this session knows where from. Whether one is still held.
+
+    A record that cannot be read counts as held.
+    """
+    try:
+      if not await self._request_plate_held():
+        return False
+      grippers = self.core_grippers
+      if grippers is not None and grippers._taken_from is not None:
+        held = grippers._held_resource
+        logger.warning(
+          "the grippers hold %s: putting it back before stopping",
+          "a resource" if held is None else held.name,
+        )
+        try:
+          await grippers.return_resource()
+        except Exception:
+          logger.error("could not put back what the grippers hold", exc_info=True)
+      return await self._request_plate_held()
+    except Exception:
+      logger.error("could not read whether a plate is held; treating it as held", exc_info=True)
+      return True
+
+  async def _move_relative_in_y(self, channel: int, distance: float) -> None:
+    """Move a channel along Y by `distance` mm with its own Y axis; runs before initializing.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      distance: how far, in mm; positive is towards the back.
+    """
+    yaxes = (await self.request_channel_drives()).yaxis_addrs
+    await self.send_command(PrepCmd.PrepYAxisMoveRelative(dest=yaxes[channel], distance=distance))
+
+  async def _request_plate_held(self) -> bool:
+    """Whether the device records a plate gripped (PrepGetPlateHeld): its record, not a sensor."""
+    return bool((await self.send_command(PrepCmd.PrepGetPlateHeld())).value)
 
   async def request_initialization_status(self) -> bool:
     """Whether MLPrep reports as initialized (GetIsInitialized, cmd=2)."""
@@ -1050,6 +1231,32 @@ class PrepDriver:
     self.configuration = configuration
     return configuration
 
+  async def _release_attached_over_waste(self, carrying: List[int]) -> None:
+    """Take the channels over their waste sites and let go with the squeeze drive alone.
+
+    A last resort, for what the Pipettor will not drop: after a power cycle it forgets what it
+    holds and refuses `DropTips` and its own initialization; a refused `PickUpTool` leaves a stale
+    definition behind. The X axis, each channel's Y axis and `ReleaseTips` all run regardless.
+
+    Args:
+      carrying: the channels sensing something, 0-indexed from the back.
+    """
+    if self.pipettes is None or self.x_arm is None:
+      raise RuntimeError("the pipettes and the arm are needed to release over the waste")
+    if not isinstance(self.deck, PrepDeck):
+      raise RuntimeError("the waste sites are placed on a PrepDeck; this driver has another deck")
+    names = ["waste_rear", "waste_front", "waste_mph"]
+    targets = {
+      ch: self.deck.waste_positions[names[ch]].get_location_wrt(self.deck, "c", "c", "t")
+      for ch in carrying
+    }
+    await self.x_arm.move_to_x_position(next(iter(targets.values())).x)
+    at = await self.pipettes.request_locations()
+    # The smaller target first, so a channel never has to pass the one ahead of it.
+    for ch in sorted(carrying, key=lambda c: targets[c].y):
+      await self._move_relative_in_y(ch, targets[ch].y - at[ch].y)
+    await self.pipettes.release_tips(carrying)
+
   async def _initialize_instrument(
     self, *, smart: bool, force_initialize: bool, read_timeout: float = 300.0
   ) -> None:
@@ -1072,18 +1279,37 @@ class PrepDriver:
         return
 
       logger.debug("device reports not initialized - running the initialization procedure")
-    await self.send_command(
-      PrepCmd.PrepInitialize(
-        smart=smart,
-        tip_drop_params=PrepCmd.InitTipDropParameters(
-          default_values=True,
-          x_position=287.0,
-          rolloff_distance=3,
-          channel_parameters=[],
-        ),
+    initialize = PrepCmd.PrepInitialize(
+      smart=smart,
+      tip_drop_params=PrepCmd.InitTipDropParameters(
+        default_values=True,
+        x_position=287.0,
+        rolloff_distance=3,
+        channel_parameters=[],
       ),
-      read_timeout=read_timeout,
     )
+    try:
+      await self.send_command(initialize, read_timeout=read_timeout)
+    except HoiError as e:
+      # Tips on after a power cycle: the device has no definition for them, so its own drop inside
+      # the procedure computes a Z beyond travel (0x0F06), whatever drop parameters it is given.
+      if not _refused_with(e, 0x0F06):
+        raise
+      if self.pipettes is None:
+        self.pipettes = Pipettes(self)
+        await self.pipettes._on_setup()
+      if self.x_arm is None:
+        self.x_arm = XArm(self)
+      carrying = [ch for ch, on in enumerate(await self.pipettes.sense_tip_presence()) if on]
+      if not carrying:
+        raise
+      logger.warning(
+        "the device refused to initialize with something on %s it has no definition for: "
+        "releasing it over the waste, then initializing again",
+        channels_named(carrying),
+      )
+      await self._release_attached_over_waste(carrying)
+      await self.send_command(initialize, read_timeout=read_timeout)
     logger.debug("the device initialization procedure has run")
 
   def format_setup_summary(self) -> str:
@@ -1180,6 +1406,97 @@ class PrepDriver:
   # ----------------------------------------
   # Resource model
   # ----------------------------------------
+
+  async def _return_or_discard_attached(self, tips: List[bool]) -> None:
+    """Put back or discard whatever the device was already holding when this session connected.
+
+    A tool goes back in its holder; anything else goes into the waste. What it was is read from the
+    firmware, which keeps it across a restart while the model knows nothing.
+
+    Args:
+      tips: whether each pipette senses something on it.
+    """
+    if self.pipettes is None:
+      return
+    carrying = [channel for channel, held in enumerate(tips) if held]
+    attached = await self.pipettes.request_attached_tip_information(carrying[0])
+    if attached is None:
+      return
+    logger.warning(
+      "something is still attached to %s: the firmware holds it as "
+      "%r, id %d, %.1f mm below the stop disc, %.1f uL, needle=%s, tool=%s",
+      channels_named(carrying),
+      attached.label,
+      attached.id,
+      attached.length,
+      attached.volume,
+      attached.is_needle,
+      attached.is_tool,
+    )
+    if attached.is_tool and self.core_grippers is not None:
+      logger.warning("it is a tool, so it goes back in its holder rather than into the waste")
+      try:
+        # Nothing parked to put back: only a tool on a channel to let go of.
+        await self.core_grippers.drop_tools()
+        return
+      except HoiError as e:
+        # A refused `PickUpTool` leaves its definition behind while the tips stay on: the device
+        # then says no tool is held, and what is on is treated as tips.
+        if not _refused_with(e, 0x0F07):
+          raise
+        logger.warning(
+          "the device holds no tool: the definition is stale, so it is treated as tips"
+        )
+    elif attached.is_tool:
+      logger.warning("it is a tool, but there is nothing here to put it back with")
+      return
+    waste = self.deck.waste_block if isinstance(self.deck, PrepDeck) else None
+    if waste is None:
+      logger.warning("this deck has no waste, so it stays on: take it off before running anything")
+      return
+    logger.warning("discarding it into the waste")
+    # The model holds nothing at setup and a drop needs it to, so it adopts what the firmware
+    # describes. The definition gives how far the tip reaches below the stop disc, not its fitting
+    # depth, which is 8 mm for every Hamilton tip but the 5 mL family's 10.
+    traverse = self.pipettes.default_minimum_traverse_height
+    for channel in carrying:
+      # A model that already knows keeps what it has; a fresh one adopts what the firmware describes.
+      # One tip per channel: a resource has one parent, so a shared one would leave all but the last.
+      if self.pipettes.get_mounted_tip(channel) is None:
+        # The Z window the device reports is shifted by what is physically on; the definition can
+        # be another thing's. The window wins where the two disagree.
+        length = attached.length
+        windows = self.pipettes.configuration.channels
+        window = windows[channel].z_range if channel < len(windows) else None
+        if window is not None:
+          physical = traverse - window[1]
+          if physical > 0.5 and abs(physical - length) > 0.5:
+            logger.warning(
+              "channel %d's window says %.1f mm below the stop disc, its definition %.1f: the window",
+              channel,
+              physical,
+              length,
+            )
+            length = physical
+        name = f"attached at setup ({attached.label}) on channel {channel}"
+        found = _hamilton_tip_for_reach(length, attached.has_filter, name) or HamiltonTip(
+          name=name,
+          has_filter=attached.has_filter,
+          size_z=length + TIP_FITTING_DEPTH,
+          maximal_volume=attached.volume,
+          nominal_volume=attached.volume,
+          tip_size=TipSize.STANDARD_VOLUME,
+          pickup_method=TipPickupMethod.OUT_OF_RACK,
+        )
+        self.pipettes._mount_tip(channel, found)
+    try:
+      await self.pipettes.drop_tips([waste] * len(carrying), use_channels=carrying)
+    except (HoiError, ValueError) as e:
+      # Last resort: the Pipettor forgets what it holds across a power cycle and refuses to drop it
+      # (0x0F03), computes its Z from a stale definition (0x0F06), or what is on matches no tip
+      # whose collar height a drop can be planned from. The squeeze drive lets go regardless.
+      logger.warning("the device refused to drop it (%s): releasing it over the waste instead", e)
+      await self._release_attached_over_waste(carrying)
 
   def _place_reported_sites(self) -> None:
     """Move the teaching needle and the waste positions to where the device reports them.
