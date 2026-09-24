@@ -23,28 +23,34 @@ logger = logging.getLogger(__name__)
 class XArmConfiguration:
   """How the arm is modelled.
 
-  Measured on the arm rather than read off the device: the Prep reports no size for it.
+  Measured on the arm rather than read off the device: the Prep reports no size for it. X and Z are
+  the model's own, which is the measured part; the back shuttle reaches left of that width and below
+  that height, as it does on the arm.
   """
 
-  size_x: float = 66.0
-  """How wide the arm is, in mm."""
+  size_x: float = 66.5
+  """How wide the arm is, in mm: from the body's left face to the right face of its cable duct."""
   size_y: float = 532.0
   """How deep the arm is, in mm. Its back is flush with the back of the device."""
-  size_z: float = 69.0
-  """How tall the arm is, in mm."""
+  size_z: float = 70.0
+  """How tall the arm is, in mm, from the underside of its body to its top."""
+  ride_height: float = 248.5
+  """How high the arm rides, in mm on the deck, measured to the underside of its body. Measured on
+  the arm: what the channels report is how far they travel, not where the arm sits."""
   reference_point_from_left: float = -80.0
   """Where the gantry's x refers to, in mm from the arm's left edge. The channels hang to the arm's left,
   so their axis - which is what the Prep reports - sits about 80 mm left of that edge."""
   model: str = "hamilton_prep_x_arm"
-  """Which 3D model draws it. None ships yet, so the viewer draws a box of this size."""
+  """Which 3D model draws it. The model is measured off the arm, and stands where the arm does: its
+  right edge on this box's right edge, its front edge and the body's underside on its own origin.
+  The back shuttle reaches left of the box and below it, as the part does."""
   appearance: Dict[str, Any] = field(
     default_factory=lambda: {"color": 0xC0C4C8, "metalness": 0.6, "roughness": 0.35}
   )
   """How the viewer draws the arm: silver, and metallic."""
   speed_per_scale_percent: float = 6.0
-  """How fast the gantry may drive X per percent of MLPrep's X speed scale, in mm/s. Measured on
-  PRPAA1087 (V1.2.2): the X axis profile velocity is this times the scale, up to the top of
-  `speed_range`."""
+  """How fast the gantry may drive X per percent of MLPrep's X speed scale, in mm/s. Measured: the
+  X axis speed is this times the scale, up to the top of `speed_range`."""
   speed_range: Tuple[float, float] = (0.0, 400.0)
   """X speed window in mm/s: above the first, up to the second, the fastest the axis drives."""
 

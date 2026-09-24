@@ -25,6 +25,7 @@ from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton import (
   PrepDeck,
   STARLetDeck,
+  hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL_NTR,
   hamilton_tip_300uL,
@@ -528,8 +529,9 @@ def test_simulated_y_probe_stops_at_the_first_resource_in_the_way():
     )
     assert surface == pytest.approx(300.0)
     assert (await p.pipettes.request_locations())[1].y == pytest.approx(305.5)
-    # Raised above the block, the channel passes over it.
-    await p.pipettes.move_tool_bottom_to_z_positions({1: 70.0})
+    # Raised above the block, the channel passes over it. The deck's own waste block is 75 mm
+    # tall, so clearing it takes more than the test block's 60.
+    await p.pipettes.move_tool_bottom_to_z_positions({1: 80.0})
     await p.pipettes.move_to_y_positions({1: 320.0})
     found = await p.pipettes.probe_y_using_clld(
       1, "forward", search_end_position=290.0, allow_without_tip=True
@@ -1351,6 +1353,39 @@ def test_a_channel_the_sensors_say_lost_its_tip_is_not_asked_to_drop_one():
   _run(_t())
 
 
+@pytest.mark.parametrize(
+  "spots, picked_xs",
+  [(("A1", "A2"), [[13.05], [22.05]]), (("A1", "B1"), [[13.05, 13.05]])],
+)
+def test_spots_are_picked_up_in_as_many_moves_as_their_x_positions_take(spots, picked_xs):
+  """The channels ride one gantry: spots at two x are two moves, not a refusal, and spots in one
+  column stay one move."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      if isinstance(command, PrepCmd.PrepPickUpTips):
+        sent.append([round(t.x_position, 2) for t in command.tip_positions])
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.pick_up_tips(rack[spots], use_channels=[0, 1])
+    assert sent == picked_xs
+    assert [tip is not None for tip in p.pipettes.get_mounted_tips()] == [True, True]
+    await p.pipettes.drop_tips(rack[spots], use_channels=[0, 1])
+    assert p.pipettes.get_mounted_tips() == [None, None]
+    await p.stop()
+
+  _run(_t())
+
+
 def test_z_positions_are_read_for_every_channel_in_one_command():
   """The same GetPositions that answers X and Y, in the deck's frame, recorded on each channel."""
 
@@ -1663,6 +1698,101 @@ def test_probing_four_edges_refuses_a_bare_channel_before_it_moves():
   _run(_t())
 
 
+def test_tips_are_taken_where_their_collars_rest_not_where_their_bottoms_are():
+  """A tip spot is the hole a tip hangs in, so the height sent is the spot itself: the moat floor,
+  3.5, plus the rack's 55.0 to its top face, where the collars rest - probed at 58.22 to 58.42."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    sent = _record(p)
+
+    await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    (pick,) = [c for c in sent if isinstance(c, PrepCmd.PrepPickUpTips)]
+    (at,) = pick.tip_positions
+    spot = rack.get_item("A1")
+    assert at.z_position == spot.get_location_wrt(deck).z == 58.5
+    assert at.z_seek == 71.5  # a collar and 5 mm above, clear of the tips' tops
+
+    await p.pipettes.drop_tips(rack["A1"], use_channels=[0])
+    (drop,) = [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]
+    (back,) = drop.tip_positions
+    assert (back.z_position, back.z_seek) == (58.5, 68.5)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_height_tips_are_taken_at_does_not_depend_on_how_long_they_are():
+  """Three racks of one body, three tip lengths: the collars rest in the same hole, so one height.
+
+  The STAR's recorded pick-ups say the same - one rack, four tip types, tz2164 every time - and it
+  is the property the old Prep formula broke, by adding the tip's length to the spot.
+  """
+
+  async def _t():
+    lengths, heights = set(), set()
+    for rack_fn in (
+      hamilton_96_tiprack_10uL_NTR,
+      hamilton_96_tiprack_50uL_NTR,
+      hamilton_96_tiprack_300uL_NTR,
+    ):
+      deck = PrepDeck()
+      rack = deck[1] = rack_fn(name="tips", with_tips=True)
+      p = PrepSimulationDriver(deck=deck)
+      await p.setup()
+      assert p.pipettes is not None
+      sent: list = []
+      send = p.send_command
+
+      async def record(command, _send=send, _sent=sent, **kwargs):
+        _sent.append(command)
+        return await _send(command, **kwargs)
+
+      p.send_command = record  # type: ignore[method-assign]
+      await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+      (pick,) = [c for c in sent if isinstance(c, PrepCmd.PrepPickUpTips)]
+      lengths.add(rack.get_item("A1").make_tip().get_size_z())
+      heights.add(pick.tip_positions[0].z_position)
+      await p.stop()
+
+    assert len(lengths) == 3
+    assert heights == {58.5}
+
+  _run(_t())
+
+
+def test_the_teaching_needle_is_taken_where_the_device_takes_it():
+  """Ground truth: 75.75 to pick up and to drop, the heights every run of the needle has used."""
+
+  async def _t():
+    deck = PrepDeck()
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    needle = deck.teaching_needle_spot
+    assert needle is not None
+    sent = _record(p)
+
+    await p.pipettes.pick_up_tips([needle], use_channels=[0])
+    (pick,) = [c for c in sent if isinstance(c, PrepCmd.PrepPickUpTips)]
+    assert (pick.tip_positions[0].z_position, pick.tip_positions[0].z_seek) == (75.75, 88.75)
+
+    await p.pipettes.drop_tips([needle], use_channels=[0])
+    (drop,) = [c for c in sent if isinstance(c, PrepCmd.PrepDropTips)]
+    assert (drop.tip_positions[0].z_position, drop.tip_positions[0].z_seek) == (75.75, 85.75)
+
+    # And the needle stands where it stood: its body from the block's hole to 8 mm proud of its top.
+    body = needle.make_tip()
+    assert needle.get_location_wrt(deck).z - (body.get_size_z() - body.collar_height) == 23.85
+    await p.stop()
+
+  _run(_t())
+
+
 def test_a_neighbour_in_the_way_of_a_named_search_end_stands_aside():
   """It alone goes to Z safety and moves just clear; the probing channel stays where it was put."""
 
@@ -1825,6 +1955,71 @@ def test_the_stop_disc_move_takes_off_what_the_channel_carries():
     # Every channel that does not exist is named, not just the first.
     with pytest.raises(ValueError, match=r"channels must be between 0 and 1, are \[5, 7\]"):
       await pipettes.move_stop_disc_to_z_positions({5: 100.0, 7: 100.0})
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_drop_travels_over_its_destination_before_letting_go():
+  """Left to itself the gantry drives X, Y and Z at once, arcing the tips through the deck."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+    await pipettes.pick_up_tips(rack["A1", "B1"], use_channels=[0, 1])
+
+    sent = _record(p, only=(PrepCmd.PrepMoveToPosition, PrepCmd.PrepDropTips), names=True)
+
+    await pipettes.drop_tips(rack["A1", "B1"], use_channels=[0, 1])
+    assert sent == ["PrepMoveToPosition", "PrepDropTips"]  # over them first, then straight down
+
+    # Into the waste, which has its own position per channel and no planning.
+    await pipettes.pick_up_tips(rack["A2", "B2"], use_channels=[0, 1])
+    sent.clear()
+    waste = deck.waste_block
+    assert waste is not None
+    await pipettes.drop_tips([waste, waste], use_channels=[0, 1])
+    assert sent == ["PrepMoveToPosition", "PrepDropTips"]
+
+    # Two groups, too far apart in x to share a move: each is travelled to.
+    await pipettes.pick_up_tips(rack["A3", "B3"], use_channels=[0, 1])
+    sent.clear()
+    await pipettes.drop_tips(rack["A3", "B4"], use_channels=[0, 1])
+    assert sent == [
+      "PrepMoveToPosition",
+      "PrepDropTips",
+      "PrepMoveToPosition",
+      "PrepDropTips",
+    ]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_discard_tips_drops_what_the_channels_carry_into_the_waste():
+  """Only the channels carrying a tip go, in one move; nothing carried, nothing sent."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    pipettes = p.pipettes
+    sent = _record(p, only=(PrepCmd.PrepMoveToPosition, PrepCmd.PrepDropTips), names=True)
+
+    await pipettes.discard_tips()
+    assert sent == []
+
+    await pipettes.pick_up_tips(rack["A1"], use_channels=[1])
+    sent.clear()
+    await pipettes.discard_tips()
+    assert sent == ["PrepMoveToPosition", "PrepDropTips"]
+    assert pipettes.get_mounted_tip(1) is None
     await p.stop()
 
   _run(_t())

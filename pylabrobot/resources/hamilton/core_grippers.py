@@ -1,90 +1,17 @@
-"""The CO-RE gripper tools and mounts for a Hamilton STAR."""
+"""The CO-RE grippers a Hamilton STAR parks on its waste block."""
 
-from __future__ import annotations
-
-from typing import Optional
-
-from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.hamilton.hamilton_tool import HamiltonTool
-from pylabrobot.resources.hamilton.tip_creators import TipPickupMethod, TipSize
-from pylabrobot.resources.resource import Resource
+import warnings
 
 # TODO: add new quad-core gripper definitions when they are released by Hamilton.
+from typing import List
 
-
-class HamiltonCoreGripperTool(HamiltonTool):
-  """A CO-RE grip tool, picked up by a pair of channels to grip a plate."""
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    grip_line_height: float,
-    fitting_depth: float,
-    collar_height: Optional[float] = None,
-    category: str = "core_gripper_tool",
-    model: Optional[str] = None,
-    pick_up_location: Optional[Coordinate] = None,
-  ):
-    """Initialize a CO-RE gripper tool.
-
-    Args:
-      grip_line_height: height of the axis through the gripping pins above the tool's bottom, in mm.
-    """
-
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      fitting_depth=fitting_depth,
-      category=category,
-      model=model,
-      pick_up_location=pick_up_location,
-    )
-    self.grip_line_height = grip_line_height
-    self.collar_height = collar_height
-    self.tip_size = TipSize.UNDEFINED
-    self.pickup_method = TipPickupMethod.OUT_OF_RACK
-
-  def __eq__(self, other: object) -> bool:
-    """Compare resource geometry, grip line height, and collar height."""
-    return (
-      isinstance(other, HamiltonCoreGripperTool)
-      and super().__eq__(other)
-      and self.grip_line_height == other.grip_line_height
-      and self.collar_height == other.collar_height
-    )
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "grip_line_height": self.grip_line_height,
-      "collar_height": self.collar_height,
-    }
-
-
-def hamilton_core_gripper_tool(name: str) -> HamiltonCoreGripperTool:
-  """Hamilton CO-RE grip tool, for 1000 uL channels.
-
-  Hamilton cat. no.: 186100 (firmware tip type 14)
-
-  36 x 8.346 x 32 mm, lying along x with its pins pointing +y. The grip line is 2 mm above
-  the tool's bottom. The collar is 10 mm tall; its opening is off centre in y, at 4.25.
-  """
-  return HamiltonCoreGripperTool(
-    name=name,
-    size_x=36.0,
-    size_y=8.346,
-    size_z=32.0,
-    grip_line_height=2.0,
-    fitting_depth=8.0,
-    collar_height=10.0,
-    model=hamilton_core_gripper_tool.__name__,
-    pick_up_location=Coordinate(x=18.0, y=4.25, z=32.0),
-  )
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton.core_gripper_tools import (
+  HamiltonCoreGripperTool,
+  hamilton_core_gripper_tool,
+)
+from pylabrobot.resources.head_tool import HeadTool
+from pylabrobot.resources.resource import Resource
 
 
 class HamiltonCoreGrippers(Resource):
@@ -114,47 +41,97 @@ class HamiltonCoreGrippers(Resource):
     self.back_channel_y_center = back_channel_y_center
     self.front_channel_y_center = front_channel_y_center
 
+  def _comparable_children(self) -> List[Resource]:
+    """Everything but the tools parked here, which are state."""
+    return [child for child in self.children if not isinstance(child, HeadTool)]
+
   @property
   def front_tool(self) -> HamiltonCoreGripperTool:
-    """The front tool stored on this mount."""
+    """The front tool parked in this holder."""
     tool = self.get_resource(f"{self.name}_front")
     assert isinstance(tool, HamiltonCoreGripperTool)
     return tool
 
   @property
   def back_tool(self) -> HamiltonCoreGripperTool:
-    """The back tool stored on this mount."""
+    """The back tool parked in this holder."""
     tool = self.get_resource(f"{self.name}_back")
     assert isinstance(tool, HamiltonCoreGripperTool)
     return tool
 
   def serialize(self):
-    return {
+    """Serialize the grippers. The tools parked here are state, not serialized children."""
+    data = {
       **super().serialize(),
       "back_channel_y_center": self.back_channel_y_center,
       "front_channel_y_center": self.front_channel_y_center,
     }
+    children = [child.serialize() for child in self._comparable_children()]
+    if children:
+      data["children"] = children
+    else:
+      data.pop("children", None)
+    return data
 
 
-def prep_core_gripper_mount(name: str = "core_grippers") -> HamiltonCoreGrippers:
-  """CORE gripper mount for PREP decks. Assign at Coordinate(290, 266.5, 62).
+def prep_core_gripper_holder(name: str = "core_grippers") -> HamiltonCoreGrippers:
+  """The holder a PREP parks its CO-RE grip tools in, measured off the block it stands on.
 
-  Physical rear paddle at (290, 257.5, 62), front at (290, 275.5, 62).
   front_channel_y_center / back_channel_y_center are named for the PREP command
   (front_channel_position_y, rear_channel_position_y) so the correct paddle is used.
   """
-  return HamiltonCoreGrippers(
+  size_x, size_y, size_z = 23.5, 42.5, 18.0
+  holder = HamiltonCoreGrippers(
     name=name,
-    back_channel_y_center=9.0,
-    front_channel_y_center=-9.0,
-    size_x=20.0,
-    size_y=20.0,
-    size_z=24.0,
-    model="prep_core_gripper_mount",
+    # the two tools stand 18 mm apart, centred on the holder
+    back_channel_y_center=size_y / 2 + 9.0,
+    front_channel_y_center=size_y / 2 - 9.0,
+    size_x=size_x,
+    size_y=size_y,
+    size_z=size_z,
+    model="prep_core_gripper_holder",
   )
 
+  # A tool standing here has its top 30 mm above the holder's flat, measured. The flat is 3 mm up
+  # from the holder's base; the rail between the two tools stands higher.
+  flat_z = 3.0
+  tool_top = flat_z + 30.0
+  front = hamilton_core_gripper_tool(name=f"{name}_front")
+  pick_up = front.pick_up_location or front.get_anchor("c", "c", "t")
+  holder.assign_child_resource(
+    front,
+    location=Coordinate(
+      x=size_x / 2 - pick_up.x,
+      y=holder.front_channel_y_center - pick_up.y,
+      z=tool_top - pick_up.z,
+    ),
+  )
+  back = hamilton_core_gripper_tool(name=f"{name}_back")
+  back.rotate(z=180)
+  holder.assign_child_resource(
+    back,
+    location=Coordinate(
+      x=size_x / 2 + pick_up.x,
+      y=holder.back_channel_y_center + pick_up.y,
+      z=tool_top - pick_up.z,
+    ),
+  )
+  return holder
 
-def hamilton_core_gripper_1000ul_at_waste(name: str = "core_grippers") -> HamiltonCoreGrippers:
+
+def prep_core_gripper_mount(name: str = "core_grippers") -> HamiltonCoreGrippers:
+  """Deprecated alias for `prep_core_gripper_holder`."""
+  warnings.warn(
+    "prep_core_gripper_mount is deprecated. Use 'prep_core_gripper_holder' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return prep_core_gripper_holder(name=name)
+
+
+def hamilton_core_gripper_1000ul_at_waste(
+  name: str = "core_grippers",
+) -> HamiltonCoreGrippers:
   # inner hole diameter is 8.6mm
   # distance from base of rack to outer base of containers: -7mm
   # left outer edge of rack is 22.5mm
@@ -170,23 +147,25 @@ def hamilton_core_gripper_1000ul_at_waste(name: str = "core_grippers") -> Hamilt
     model=hamilton_core_gripper_1000ul_at_waste.__name__,
   )
   mount.assign_child_resource(
-    hamilton_core_gripper_tool(name=f"{mount.name}_front"),
+    hamilton_core_gripper_tool(name=f"{name}_front"),
     location=Coordinate(x=-18.0, y=5.25, z=-2.0),
   )
   mount.assign_child_resource(
-    hamilton_core_gripper_tool(name=f"{mount.name}_back"),
+    hamilton_core_gripper_tool(name=f"{name}_back"),
     location=Coordinate(x=-18.0, y=31.25, z=-2.0),
   )
   return mount
 
 
-def hamilton_core_gripper_1000ul_5ml_on_waste(name: str = "core_grippers") -> HamiltonCoreGrippers:
+def hamilton_core_gripper_1000ul_5ml_on_waste(
+  name: str = "core_grippers",
+) -> HamiltonCoreGrippers:
   # distance from base of rack to outer base of containers: 0mm
   # inner hole diameter is 8.6mm
   # left outer edge of rack is 19.5mm
   # front outer edge of rack is 39.5mm
 
-  mount = HamiltonCoreGrippers(
+  grippers = HamiltonCoreGrippers(
     name=name,
     size_x=39,  # from venus
     size_y=61,  # from venus
@@ -195,12 +174,30 @@ def hamilton_core_gripper_1000ul_5ml_on_waste(name: str = "core_grippers") -> Ha
     front_channel_y_center=0 + 21.5,
     model=hamilton_core_gripper_1000ul_5ml_on_waste.__name__,
   )
-  mount.assign_child_resource(
-    hamilton_core_gripper_tool(name=f"{mount.name}_front"),
-    location=Coordinate(x=-18.0, y=17.25, z=2.5),
+
+  # The two tools stand parked in the holder, collars on the holder's centre x and on the channel
+  # y centres, pins facing each other. Their tops are 34.5 mm above the holder's base: probed at
+  # 235.0 with the base at 200.5.
+  tool_top = 34.5
+  front = hamilton_core_gripper_tool(name=f"{name}_front")
+  pick_up = front.pick_up_location or front.get_anchor("c", "c", "t")
+  grippers.assign_child_resource(
+    front,
+    location=Coordinate(
+      x=grippers.get_size_x() / 2 - pick_up.x,
+      y=grippers.front_channel_y_center - pick_up.y,
+      z=tool_top - pick_up.z,
+    ),
   )
-  mount.assign_child_resource(
-    hamilton_core_gripper_tool(name=f"{mount.name}_back"),
-    location=Coordinate(x=-18.0, y=35.25, z=2.5),
+  # Turned about its own origin, so its origin lands on the far corner.
+  back = hamilton_core_gripper_tool(name=f"{name}_back")
+  back.rotate(z=180)
+  grippers.assign_child_resource(
+    back,
+    location=Coordinate(
+      x=grippers.get_size_x() / 2 + pick_up.x,
+      y=grippers.back_channel_y_center + pick_up.y,
+      z=tool_top - pick_up.z,
+    ),
   )
-  return mount
+  return grippers

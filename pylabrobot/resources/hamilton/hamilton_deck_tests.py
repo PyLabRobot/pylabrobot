@@ -130,31 +130,29 @@ class HamiltonDeckTests(unittest.TestCase):
       deck.summary(),
       textwrap.dedent(
         """
-    Rail  Resource                           Type                    Coordinates (mm)
-    ===============================================================================================
-    (-6)  ├── trash_core96                   Trash                   (-58.200, 106.000, 216.400)
+    Rail  Resource                      Type                  Coordinates (mm)
+    ========================================================================================
+    (-6)  ├── trash_core96              Trash                 (-58.200, 106.000, 216.400)
           │
-    (1)   ├── tip_carrier                    TipCarrier              (100.000, 063.000, 100.000)
-          │   ├── tip_rack_01                EmbeddedTipRack         (106.200, 073.000, 208.950)
-          │   ├── tip_rack_02                EmbeddedTipRack         (106.200, 169.000, 208.950)
+    (1)   ├── tip_carrier               TipCarrier            (100.000, 063.000, 100.000)
+          │   ├── tip_rack_01           EmbeddedTipRack       (106.200, 073.000, 208.950)
+          │   ├── tip_rack_02           EmbeddedTipRack       (106.200, 169.000, 208.950)
           │   ├── <empty>
-          │   ├── tip_rack_04                EmbeddedTipRack         (106.200, 361.000, 208.950)
-          │   ├── <empty>
-          │
-    (21)  ├── plate carrier                  PlateCarrier            (550.000, 063.000, 100.000)
-          │   ├── aspiration plate           Plate                   (554.000, 071.500, 183.120)
-          │   ├── <empty>
-          │   ├── dispense plate             Plate                   (554.000, 263.500, 183.120)
-          │   ├── <empty>
+          │   ├── tip_rack_04           EmbeddedTipRack       (106.200, 361.000, 208.950)
           │   ├── <empty>
           │
-    (31)  ├── waste_block                    Resource                (775.000, 115.000, 100.000)
-          │   ├── teaching_tip_rack          TipRack                 (780.900, 461.100, 100.000)
-          │   ├── core_grippers              HamiltonCoreGrippers    (797.500, 085.500, 200.500)
-          │   │   ├── core_grippers_front    HamiltonCoreGripperTool (779.500, 102.750, 203.000)
-          │   │   ├── core_grippers_back     HamiltonCoreGripperTool (779.500, 120.750, 203.000)
+    (21)  ├── plate carrier             PlateCarrier          (550.000, 063.000, 100.000)
+          │   ├── aspiration plate      Plate                 (554.000, 071.500, 183.120)
+          │   ├── <empty>
+          │   ├── dispense plate        Plate                 (554.000, 263.500, 183.120)
+          │   ├── <empty>
+          │   ├── <empty>
           │
-    (32)  ├── trash                          Trash                   (800.000, 190.600, 137.100)
+    (31)  ├── waste_block               Resource              (775.000, 115.000, 100.000)
+          │   ├── teaching_tip_rack     TipRack               (780.900, 461.100, 100.000)
+          │   ├── core_grippers         HamiltonCoreGrippers  (797.500, 085.500, 200.500)
+          │
+    (32)  ├── trash                     Trash                 (800.000, 190.600, 137.100)
     """[1:]
       ),
     )
@@ -230,8 +228,9 @@ class HamiltonDeckTests(unittest.TestCase):
         self.assertAlmostEqual(holder.get_location_wrt(deck).z, 200.5)
         self.assertAlmostEqual(holder.get_location_wrt(deck, z="t").z, 220.0)
 
-  def test_core_gripper_tools_belong_to_the_mount_and_round_trip(self):
-    """The deck owns the two parked tools and preserves them through serialization."""
+  def test_core_gripper_tools_belong_to_the_mount_and_are_not_structure(self):
+    """The deck owns the two parked tools; a serialized deck leaves them out, as it leaves out the
+    tips in its racks, since what a holder holds is state a driver reads off the device."""
     for deck_factory in (STARDeck, STARLetDeck):
       with self.subTest(deck=deck_factory.__name__):
         deck = deck_factory(with_teaching_rack=False)
@@ -249,9 +248,8 @@ class HamiltonDeckTests(unittest.TestCase):
         self.assertEqual(restored.serialize(), deck.serialize())
         restored_mount = restored.get_resource("core_grippers")
         assert isinstance(restored_mount, HamiltonCoreGrippers)
-        self.assertEqual(len(restored_mount.children), 2)
-        self.assertEqual(restored_mount.front_tool, mount.front_tool)
-        self.assertEqual(restored_mount.back_tool, mount.back_tool)
+        self.assertEqual(restored_mount._comparable_children(), [])
+        self.assertEqual(len(restored_mount.children), 0)
 
   def test_named_decks_preserve_accessories_when_saved_and_cleared(self):
     """Named deck accessories remain discoverable after serialization and deck clearing."""
