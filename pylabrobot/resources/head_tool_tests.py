@@ -1,11 +1,14 @@
 import unittest
 from typing import Any, Dict
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import (
   HamiltonCoreGripperTool,
   hamilton_core_gripper_tool,
   hamilton_tip_1000uL,
+  hamilton_tip_1000uL_filter,
 )
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.serializer import serialize
 
@@ -56,6 +59,41 @@ class HeadToolTests(unittest.TestCase):
     with self.assertRaises(NotImplementedError):
       hamilton_tip_5000uL(name="tip").collar_height
 
+  def test_tips_filter_tips_and_grip_tools_are_different_kinds(self):
+    tip = hamilton_tip_1000uL(name="tip")
+    filter_tip = hamilton_tip_1000uL_filter(name="filter_tip")
+    tool = hamilton_core_gripper_tool(name="tool")
+    self.assertEqual(len({tip.kind(), filter_tip.kind(), tool.kind()}), 3)
+
+  def test_names_and_locations_do_not_change_the_kind(self):
+    holder = Resource(name="holder", size_x=100, size_y=100, size_z=100)
+    a = hamilton_tip_1000uL(name="rack_A1#0")
+    b = hamilton_tip_1000uL(name="rack_B1#0")
+    holder.assign_child_resource(b, location=Coordinate(10, 20, 30))
+    self.assertEqual(a.kind(), b.kind())
+
+  def test_tips_that_differ_in_geometry_or_filter_are_different_kinds(self):
+    def make_tip(size_z: float, has_filter: bool) -> Tip:
+      return Tip(
+        name="tip",
+        diameter=8.2,
+        size_z=size_z,
+        has_filter=has_filter,
+        maximal_volume=400,
+        fitting_depth=8,
+      )
+
+    self.assertNotEqual(make_tip(59.9, False).kind(), make_tip(50.0, False).kind())
+    self.assertNotEqual(make_tip(59.9, False).kind(), make_tip(59.9, True).kind())
+
+  def test_kind_leaves_serialization_unchanged(self):
+    holder = Resource(name="holder", size_x=100, size_y=100, size_z=100)
+    tip = hamilton_tip_1000uL(name="tip")
+    holder.assign_child_resource(tip, location=Coordinate(1, 2, 3))
+    before = tip.serialize()
+    tip.kind()
+    self.assertEqual(tip.serialize(), before)
+
   def test_deserialize_tip_definition(self):
     """A tip definition loads its name and dimensions through the resource loader."""
     legacy: Dict[str, Any] = {
@@ -103,3 +141,4 @@ class HeadToolTests(unittest.TestCase):
     restored = HamiltonCoreGripperTool.deserialize(tool.serialize())
     self.assertIsInstance(restored, HamiltonCoreGripperTool)
     self.assertEqual(restored, tool)
+    self.assertEqual(restored.kind(), tool.kind())
