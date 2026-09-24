@@ -56,26 +56,6 @@ class HeadToolTests(unittest.TestCase):
     with self.assertRaises(NotImplementedError):
       hamilton_tip_5000uL(name="tip").collar_height
 
-  def test_a_grip_tool_has_a_different_kind_from_a_tip(self):
-    """A gripper and a liquid-holding tip cannot share a firmware definition."""
-    tip = hamilton_tip_1000uL(name="tip")
-    tool = hamilton_core_gripper_tool(name="tool")
-    self.assertNotEqual(tip.kind(), tool.kind())
-
-  def test_two_tips_of_one_kind_are_one_kind(self):
-    a = hamilton_tip_1000uL(name="rack_A1#0")
-    b = hamilton_tip_1000uL(name="rack_B1#0")
-    self.assertEqual(a.kind(), b.kind())
-
-  def test_tips_that_differ_are_different_kinds(self):
-    a = Tip(
-      name="a", diameter=8.2, size_z=59.9, has_filter=False, maximal_volume=400, fitting_depth=8
-    )
-    b = Tip(
-      name="b", diameter=8.2, size_z=59.9, has_filter=True, maximal_volume=360, fitting_depth=8
-    )
-    self.assertNotEqual(a.kind(), b.kind())
-
   def test_deserialize_tip_definition(self):
     """A tip definition loads its name and dimensions through the resource loader."""
     legacy: Dict[str, Any] = {
@@ -123,4 +103,3 @@ class HeadToolTests(unittest.TestCase):
     restored = HamiltonCoreGripperTool.deserialize(tool.serialize())
     self.assertIsInstance(restored, HamiltonCoreGripperTool)
     self.assertEqual(restored, tool)
-    self.assertEqual(restored.kind(), tool.kind())

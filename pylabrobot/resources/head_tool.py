@@ -1,18 +1,9 @@
-from typing import Any, Callable, Optional, Tuple, cast
+from typing import Callable, Optional
 
 from pylabrobot.serializer import serialize
 
 from .coordinate import Coordinate
 from .resource import Resource
-
-
-def _without_names(value: object) -> Any:
-  """`value` with every name dropped, and hashable: dicts become sorted tuples, lists tuples."""
-  if isinstance(value, dict):
-    return tuple(sorted((k, _without_names(v)) for k, v in value.items() if k != "name"))
-  if isinstance(value, list):
-    return tuple(_without_names(v) for v in value)
-  return value
 
 
 def move_tool(tool: Resource, assign: Callable[[], None]) -> None:
@@ -103,10 +94,3 @@ class HeadTool(Resource):
       "fitting_depth": self.fitting_depth,
       "pick_up_location": serialize(self.pick_up_location),
     }
-
-  def kind(self) -> Tuple[object, ...]:
-    """The tool definition without its name or holder-dependent location."""
-    data = self.serialize()
-    data.pop("location", None)
-    data.pop("parent_name", None)
-    return cast(Tuple[object, ...], _without_names(data))
