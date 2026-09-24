@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Tuple, cast
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
+from pylabrobot.hamilton.star.driver.errors import NoTeachInSignalError, STARFirmwareError
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMountingShaft
@@ -96,6 +97,14 @@ class PipettesConfiguration:
   z_range_increments: Tuple[int, int] = (9_320, 31_200)
   """The Z travel the drive counts in, in increments, lowest first. The floor is the deck
   surface, which is as low as a stop disc goes."""
+
+  # -- what a channel's own Y drive accepts --
+  y_range_increments: Tuple[int, int] = (0, 13_714)
+  y_drive_speed_range_increments: Tuple[int, int] = (20, 8_000)
+  y_drive_acceleration_level_range: Tuple[int, int] = (1, 4)
+  """Each level is `level * 5000` increments/s2: 231.5, 463.0, 694.5, 926.0 mm/s2."""
+  y_drive_current_limit_range: Tuple[int, int] = (0, 7)
+  clld_detection_edge_range: Tuple[int, int] = (0, 1_023)
 
   # -- what a channel's own Z drive accepts, for the moves addressed to the channel itself --
   z_drive_speed_range_increments: Tuple[int, int] = (20, 15_000)
@@ -1330,13 +1339,300 @@ class Pipettes:
   # Probing
   # ----------------------------------------
 
+  def _found_nothing(self, error: STARFirmwareError, module: str) -> bool:
+    """Whether a firmware error says only that a search reached its end without detecting.
+
+    The master answers that with error 12, a channel with trace 70, or 73 when both its sensors
+    searched.
+    """
+    return bool(error.errors) and all(
+      isinstance(e, NoTeachInSignalError)
+      if module == "C0"
+      else e.raw_module == module and e.trace_information in (70, 73)
+      for e in error.errors.values()
+    )
+
   # -- x probing (capacitive only) --------------------------------------------------------------
 
-  # TODO: _unchecked_fw_ vs tip-presence-guarded versions
+  async def _unchecked_fw_probe_x_using_clld(self, end_position: float, read_timeout: int = 240):
+    """Move the arm along X until the channel's cLLD triggers, or to the end, as given. `C0 XL`.
+
+    Args:
+      end_position: where the search ends, in mm, sent in 0.1 mm (`xs`).
+      read_timeout: how long to wait for the answer, in s.
+    """
+    await self._driver.send_command(
+      module="C0",
+      command="XL",
+      xs=f"{int(round(end_position * 10)):05}",
+      read_timeout=read_timeout,
+    )
+
+  async def _diameter_that_probes(
+    self,
+    channel_idx: int,
+    allow_without_tip: bool,
+    tip_bottom_diameter: float,
+    stop_disc_diameter: float,
+  ) -> float:
+    """What the channel would meet a surface with, in mm, refusing a bare channel unless allowed.
+
+    A probe answers where the surface is, not where the channel stopped, so it has to know what did
+    the touching: the tip on the channel, or the stop disc it would touch with bare.
+
+    Args:
+      channel_idx: the probing channel.
+      allow_without_tip: whether a channel with no tip on it may probe.
+      tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
+      stop_disc_diameter: diameter of the stop disc in mm, when none is.
+
+    Returns:
+      The diameter of whichever of the two is on the channel, in mm.
+
+    Raises:
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
+    """
+    has_tip = bool((await self.sense_tip_presence())[channel_idx])
+    if not has_tip and not allow_without_tip:
+      raise RuntimeError(
+        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+      )
+    return tip_bottom_diameter if has_tip else stop_disc_diameter
+
+  async def probe_x_using_clld(
+    self,
+    channel_idx: int,
+    direction: Literal["left", "right"],
+    *,
+    search_end_position: Optional[float] = None,
+    post_detection_distance: float = 2.0,
+    tip_bottom_diameter: float = 1.2,
+    stop_disc_diameter: float = 7.0,
+    allow_without_tip: bool = False,
+    read_timeout: int = 240,
+  ) -> Optional[float]:
+    """Probe a conductive surface along X with a channel's cLLD, from where the arm stands.
+
+    Args:
+      channel_idx: which channel, 0-indexed from the back.
+      direction: "left" (decreasing x) or "right" (increasing x).
+      search_end_position: where the search ends, in mm. The end of the reach in `direction` when
+        None.
+      post_detection_distance: how far to back away from the surface afterwards, in mm.
+      tip_bottom_diameter: the tip's bottom diameter, in mm; half of it is added to the reading.
+      stop_disc_diameter: the stop disc's, in mm, for a channel probing without a tip.
+      allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
+      read_timeout: how long to wait for the search, in s.
+
+    Returns:
+      The surface's X in mm, rounded to 0.1 mm, or None if the search found nothing.
+
+    Raises:
+      ValueError: If an argument is out of range, or the search end lies behind the arm.
+      RuntimeError: If no configuration has been read, or the channel carries no tip and
+        `allow_without_tip` is False.
+    """
+    self._require_channel(channel_idx)
+    diameter = await self._diameter_that_probes(
+      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+    )
+    device = self._driver.configuration
+    if device is None:
+      raise RuntimeError("no configuration read; have you called `star.setup()`?")
+    if direction not in ("left", "right"):
+      raise ValueError(f"direction must be 'left' or 'right', is {direction!r}")
+    if post_detection_distance < 0:
+      raise ValueError(f"post_detection_distance must be 0 or more, is {post_detection_distance}")
+
+    here = round(await self.request_x_position(), 1)
+    # 95 mm up to 125 mm past the last track: the reach the search is allowed.
+    low, high = 95.0, device.instrument_size_slots * 22.5 + 125.0
+    if search_end_position is None:
+      search_end_position = high if direction == "right" else low
+    elif not low <= search_end_position <= high:
+      raise ValueError(
+        f"search_end_position must be between {low} and {high} mm, is {search_end_position}"
+      )
+    if direction == "right" and not here < search_end_position:
+      raise ValueError(f"search_end_position={search_end_position} is not right of x={here}")
+    if direction == "left" and not here > search_end_position:
+      raise ValueError(f"search_end_position={search_end_position} is not left of x={here}")
+
+    found = True
+    try:
+      await self._unchecked_fw_probe_x_using_clld(search_end_position, read_timeout=read_timeout)
+    except STARFirmwareError as error:
+      if not self._found_nothing(error, "C0"):
+        raise
+      found = False
+    detected = round(await self.request_x_position(), 1)
+
+    # Back away, so a carrier moved later does not drag against the tip.
+    if direction == "left":
+      await self.move_to_x_position(detected + post_detection_distance)
+      surface = detected - diameter / 2
+    else:
+      await self.move_to_x_position(detected - post_detection_distance)
+      surface = detected + diameter / 2
+    return round(surface, 1) if found else None
 
   # -- y probing (capacitive only) --------------------------------------------------------------
 
-  # TODO: _unchecked_fw_ vs tip-presence-guarded versions
+  async def _unchecked_fw_probe_y_using_clld(
+    self,
+    channel: int,
+    end_position: int,
+    detection_edge: int,
+    search_speed: int,
+    acceleration_level: int,
+    current_limit: int,
+  ):
+    """Move one channel along Y until its cLLD triggers, or to the end, as given. `Px YL`.
+
+    Args:
+      channel: 0-indexed from the back.
+      end_position: where the search ends, in Y increments (`ya`).
+      detection_edge: edge steepness on detection, 0 to 1023 (`gt`).
+      search_speed: increments/s (`yv`).
+      acceleration_level: 1 to 4, each `level * 5000` increments/s2 (`yr`).
+      current_limit: 0 to 7 (`yw`).
+    """
+    await self._driver.send_command(
+      module=self.channel_id(channel),
+      command="YL",
+      ya=f"{end_position:05}",
+      gt=f"{detection_edge:04}",
+      gl=f"{0:04}",  # no offset after the edge, so it stops where it detected
+      yv=f"{search_speed:04}",
+      yr=f"{acceleration_level}",
+      yw=f"{current_limit}",
+      read_timeout=120,
+    )
+
+  async def probe_y_using_clld(
+    self,
+    channel_idx: int,
+    direction: Literal["forward", "backward"],
+    *,
+    search_start_position: Optional[float] = None,
+    search_end_position: Optional[float] = None,
+    search_speed: float = 10.0,
+    acceleration_level: int = 4,
+    detection_edge: int = 10,
+    current_limit: int = 7,
+    post_detection_distance: float = 2.0,
+    tip_bottom_diameter: float = 1.2,
+    stop_disc_diameter: float = 7.0,
+    allow_without_tip: bool = False,
+  ) -> Optional[float]:
+    """Probe a conductive surface along Y with a channel's cLLD, never past its neighbours.
+
+    Args:
+      channel_idx: which channel, 0-indexed from the back.
+      direction: "forward" (decreasing y) or "backward" (increasing y).
+      search_start_position: where to search from, in mm. Where the channel stands when None.
+      search_end_position: where the search ends, in mm. As far as the neighbour allows when None.
+      search_speed: in mm/s.
+      acceleration_level: 1 to 4, each `level * 5000` increments/s2.
+      detection_edge: cLLD edge steepness, 0 to 1023.
+      current_limit: the Y drive's current limit, 0 to 7.
+      post_detection_distance: how far to back away from the surface afterwards, in mm; less if
+        the neighbour is closer.
+      tip_bottom_diameter: the tip's bottom diameter, in mm; half of it is added to the reading.
+        1.2 is the teaching needle's.
+      stop_disc_diameter: the stop disc's, in mm, for a channel probing without a tip.
+      allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
+
+    Returns:
+      The surface's Y in mm, rounded to 0.1 mm, or None if the search found nothing.
+
+    Raises:
+      ValueError: If an argument is out of range, or the search end lies behind the channel.
+      RuntimeError: If no configuration has been read, or the channel carries no tip and
+        `allow_without_tip` is False.
+    """
+    self._require_channel(channel_idx)
+    diameter = await self._diameter_that_probes(
+      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+    )
+    c = self.configuration
+    device = self._driver.configuration
+    if device is None:
+      raise RuntimeError("no configuration read; have you called `star.setup()`?")
+    if direction not in ("forward", "backward"):
+      raise ValueError(f"direction must be 'forward' or 'backward', is {direction!r}")
+
+    # What the channel may reach without meeting a neighbour
+    ys = await self.request_y_positions()
+    if channel_idx > 0:
+      high = ys[channel_idx - 1] - self._min_spacing_between(channel_idx, channel_idx - 1)
+    else:
+      high = device.pip_maximal_y_position
+    if channel_idx < self.num_channels - 1:
+      low = ys[channel_idx + 1] + self._min_spacing_between(channel_idx, channel_idx + 1)
+    elif self.arm.side == "left":
+      low = device.left_arm_min_y_position
+    else:
+      low = device.right_arm_min_y_position
+    for name, value in (
+      ("search_start_position", search_start_position),
+      ("search_end_position", search_end_position),
+    ):
+      if value is not None and not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high} mm, is {value}")
+
+    if search_start_position is not None:
+      await self.move_to_y_position(channel_idx, search_start_position)
+    here = await self.request_y_position(channel_idx)
+    if direction == "backward":
+      end = high if search_end_position is None else search_end_position
+      if end < here:
+        raise ValueError(f"channel {channel_idx} cannot search backward from {here} to {end} mm")
+    else:
+      end = low if search_end_position is None else search_end_position
+      if end > here:
+        raise ValueError(f"channel {channel_idx} cannot search forward from {here} to {end} mm")
+
+    end_increments = c.y_drive_mm_to_increments(end)
+    speed_increments = c.y_drive_mm_to_increments(search_speed)
+    for checked, (lowest, highest), name in (
+      (end_increments, c.y_range_increments, "search end, in increments,"),
+      (speed_increments, c.y_drive_speed_range_increments, "search_speed, in increments/s,"),
+      (acceleration_level, c.y_drive_acceleration_level_range, "acceleration_level"),
+      (detection_edge, c.clld_detection_edge_range, "detection_edge"),
+      (current_limit, c.y_drive_current_limit_range, "current_limit"),
+    ):
+      if not lowest <= checked <= highest:
+        raise ValueError(f"{name} must be between {lowest} and {highest}, is {checked}")
+
+    found = True
+    try:
+      await self._unchecked_fw_probe_y_using_clld(
+        channel_idx,
+        end_position=end_increments,
+        detection_edge=detection_edge,
+        search_speed=speed_increments,
+        acceleration_level=acceleration_level,
+        current_limit=current_limit,
+      )
+    except STARFirmwareError as error:
+      if not self._found_nothing(error, self.channel_id(channel_idx)):
+        raise
+      found = False
+    detected = await self.request_y_position(channel_idx)
+
+    # Back away from the surface, no further than the neighbour behind the move allows.
+    if direction == "backward":
+      await self.move_to_y_position(
+        channel_idx, detected - min(post_detection_distance, detected - low)
+      )
+      surface = detected + diameter / 2
+    else:
+      await self.move_to_y_position(
+        channel_idx, detected + min(post_detection_distance, high - detected)
+      )
+      surface = detected - diameter / 2
+    return round(surface, 1) if found else None
 
   # -- z probing (capacitive, pressure, force) --------------------------------------------------
 
