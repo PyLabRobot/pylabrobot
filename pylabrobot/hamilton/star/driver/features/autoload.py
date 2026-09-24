@@ -650,7 +650,7 @@ class Autoload:
       await self._raise_wheel_after_failed_move()
       raise
 
-  async def move_x(
+  async def move_to_x_position(
     self,
     x: float,
     speed: Optional[float] = None,
@@ -749,7 +749,7 @@ class Autoload:
       ValueError: If the sled would end up outside the drive's travel, or an argument is outside
         what the drive accepts.
     """
-    return await self.move_x(
+    return await self.move_to_x_position(
       await self.request_x_position() + distance,
       speed=speed,
       acceleration_ramp=acceleration_ramp,

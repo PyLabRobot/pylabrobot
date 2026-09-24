@@ -1,10 +1,15 @@
+import math
 import unittest
+import unittest.mock
 from typing import Any, List, Optional, Tuple
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes, PipettesConfiguration
-from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.hamilton.star.driver.simulator import (
+  SIMULATED_CHANNEL_Y_SPEED,
+  STARSimulationDriver,
+)
 from pylabrobot.resources.hamilton import STARDeck
 
 
@@ -221,3 +226,75 @@ class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
     await self.pipettes.move_tool_bottom_to_z_positions({0: z})
     stop_disc = await self.pipettes.request_stop_disc_z_position(0)
     self.assertAlmostEqual(stop_disc - z, self.tip.get_size_z() - self.tip.fitting_depth, places=1)
+
+
+def travel_time(distance: float, speed: float, acceleration: float) -> float:
+  """How long a trapezoidal move takes, in seconds: the simulator's timing, worked independently."""
+  if distance * acceleration < speed * speed:
+    return 2 * math.sqrt(distance / acceleration)
+  return distance / speed + speed / acceleration
+
+
+class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
+  """A simulated move owes the time its drives would take, and the next command waits it out.
+
+  The clock is a mock, so what is checked is what would have been waited, not how long it took.
+  """
+
+  async def asyncSetUp(self):
+    patcher = unittest.mock.patch("asyncio.sleep", new_callable=unittest.mock.AsyncMock)
+    self.sleep = patcher.start()
+    self.addCleanup(patcher.stop)
+
+  async def timed_channels(self, simulate_motion_time: bool) -> Pipettes:
+    """The channels of a simulated device keeping time at its full rate, with nothing owed."""
+    driver = STARSimulationDriver(
+      deck=STARDeck(),
+      declared_configuration_json=RECORDING_STAR,
+      simulate_motion_time=simulate_motion_time,
+      motion_time_scale=1.0,
+    )
+    await driver.setup()
+    assert driver.pipettes is not None
+    await driver.pay_motion_time()
+    self.sleep.reset_mock()
+    return driver.pipettes
+
+  async def test_a_z_move_is_waited_out_before_the_next_command(self):
+    pipettes = await self.timed_channels(simulate_motion_time=True)
+    c = pipettes.configuration
+    z = await pipettes.request_stop_disc_z_position(0)
+    await pipettes.move_stop_disc_to_z_position(0, z - 50.0)
+    self.sleep.assert_not_awaited()
+
+    await pipettes.request_stop_disc_z_position(0)
+    self.sleep.assert_awaited_once()
+    waited = self.sleep.await_args_list[0].args[0]
+    expected = travel_time(50.0, c.z_drive_speed_default, c.z_drive_acceleration_default)
+    self.assertAlmostEqual(waited, expected, places=3)
+
+  async def test_channels_moving_together_take_as_long_as_the_farthest(self):
+    pipettes = await self.timed_channels(simulate_motion_time=True)
+    last = pipettes.num_channels - 1
+    ys = await pipettes.request_y_positions()
+    await pipettes.move_to_y_positions({0: ys[0] + 30.0, last: ys[last] - 10.0})
+    await pipettes.request_y_positions()
+    self.sleep.assert_awaited_once()
+    self.assertAlmostEqual(
+      self.sleep.await_args_list[0].args[0], 30.0 / SIMULATED_CHANNEL_Y_SPEED, places=3
+    )
+
+  async def test_nothing_is_waited_when_the_device_keeps_no_time(self):
+    pipettes = await self.timed_channels(simulate_motion_time=False)
+    z = await pipettes.request_stop_disc_z_position(0)
+    await pipettes.move_stop_disc_to_z_position(0, z - 50.0)
+    await pipettes.request_stop_disc_z_position(0)
+    self.sleep.assert_not_awaited()
+
+  async def test_the_default_is_a_quarter_of_the_device_time(self):
+    driver = STARSimulationDriver(
+      deck=STARDeck(), declared_configuration_json=RECORDING_STAR, simulate_motion_time=True
+    )
+    driver.owe_motion_time(2.0)
+    await driver.pay_motion_time()
+    self.sleep.assert_awaited_once_with(0.5)

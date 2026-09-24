@@ -478,7 +478,7 @@ class XArm:
     except Exception:
       logger.warning("could not read where the %s X-arm stopped; its model is stale", self.side)
 
-  async def move_x(
+  async def move_to_x_position(
     self,
     x: float,
     acceleration_level: int = 3,
@@ -553,8 +553,8 @@ class XArm:
     """Move this arm to an X position with all attached components in Z-safety position. Nothing is
     guarded and nothing is recorded.
 
-    The master raises what the arm carries before it travels, where `move_x` travels with the arm
-    as it stands and leaves getting to Z safety to the caller.
+    The master raises what the arm carries before it travels, where `move_to_x_position` travels
+    with the arm as it stands and leaves getting to Z safety to the caller.
 
     Args:
       x: where to send the arm, in mm at its reference point.
@@ -590,7 +590,7 @@ class XArm:
         the drive accepts.
       RuntimeError: If the arm's geometry was not resolved.
     """
-    return await self.move_x(
+    return await self.move_to_x_position(
       await self.request_position() + distance,
       acceleration_level=acceleration_level,
       current_limit=current_limit,

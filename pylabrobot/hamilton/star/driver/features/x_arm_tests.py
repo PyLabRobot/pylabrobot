@@ -95,7 +95,7 @@ class TestPerDriveCommands(unittest.IsolatedAsyncioTestCase):
     arm = cast(XArm, driver.left_x_arm)
     sent = record(arm)
     await XArm.initialize(arm)
-    await XArm.move_x(arm, 500.0)
+    await XArm.move_to_x_position(arm, 500.0)
     await XArm.move_x_relative(arm, -12.5)
     await XArm._switch_drive_power_off(arm)
     self.assertEqual(
@@ -108,7 +108,7 @@ class TestPerDriveCommands(unittest.IsolatedAsyncioTestCase):
     arm = cast(XArm, driver.right_x_arm)
     sent = record(arm)
     await XArm.initialize(arm)
-    await XArm.move_x(arm, 500.0)
+    await XArm.move_to_x_position(arm, 500.0)
     await XArm.move_x_relative(arm, -12.5)
     await XArm._switch_drive_power_off(arm)
     self.assertEqual(
@@ -134,16 +134,16 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
   async def test_a_move_moves_the_model(self):
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     self.assertEqual(await arm.request_position(), 500.0)
 
   async def test_a_refused_target_sends_nothing_and_moves_nothing(self):
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     sent = record(arm)
     with self.assertRaises(ValueError):
-      await arm.move_x(5_000.0)
+      await arm.move_to_x_position(5_000.0)
     self.assertEqual(sent, [])
     self.assertEqual(await arm.request_position(), 500.0)
 
@@ -175,7 +175,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
     )
     arm.resource = resource
     with self.assertRaises(RuntimeError):
-      await arm.move_x(900.0)
+      await arm.move_to_x_position(900.0)
     seated = cast(Coordinate, resource.location)
     self.assertEqual(seated.x + arm.configuration.reference_point_from_left, 640.0)
 
@@ -194,7 +194,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
       side="left",
     )
     with self.assertRaises(RuntimeError) as raised:
-      await arm.move_x(900.0)
+      await arm.move_to_x_position(900.0)
     self.assertIn("drive blocked", str(raised.exception))
 
   async def test_a_relative_move_is_bounded_like_an_absolute_one(self):
@@ -202,7 +202,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
     before anything reaches the wire."""
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     sent = record(arm)
     with self.assertRaises(ValueError):
       await arm.move_x_relative(5_000.0)
@@ -237,7 +237,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
       side="left",
     )
     arm.resource = resource
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     self.assertEqual(sent.count("X0RX"), 4)
     seated = cast(Coordinate, resource.location)
     self.assertEqual(seated.x + arm.configuration.reference_point_from_left, 500.0)
@@ -271,7 +271,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
       side="left",
     )
     arm.resource = cast(HamiltonDeck, driver.deck).get_resource("left_x_arm")
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     self.assertEqual(reads, 5)
     seated = cast(Coordinate, arm.resource.location)
     self.assertEqual(seated.x + arm.configuration.reference_point_from_left, 500.0)
@@ -295,7 +295,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
     )
     arm.resource = cast(HamiltonDeck, driver.deck).get_resource("left_x_arm")
     with self.assertLogs("pylabrobot.hamilton.star.driver.features.x_arm", level="WARNING"):
-      await arm.move_x(500.0, settle_reads=3)
+      await arm.move_to_x_position(500.0, settle_reads=3)
     self.assertEqual(reads, 3)
     seated = cast(Coordinate, arm.resource.location)
     self.assertEqual(seated.x + arm.configuration.reference_point_from_left, 498.0)
