@@ -15,6 +15,7 @@ IDs directly.
 from __future__ import annotations
 
 import enum
+import functools
 import logging
 import math
 import struct as _struct
@@ -24,6 +25,8 @@ from typing import (
   TYPE_CHECKING,
   Any,
   AsyncIterator,
+  Awaitable,
+  Callable,
   Collection,
   Dict,
   Generic,
@@ -4871,3 +4874,381 @@ class Pipettes:
   # ----------------------------------------
   # Auto-calibration (only for experienced users)
   # ----------------------------------------
+
+  async def _probe_one_edge(
+    self,
+    channel_idx: int,
+    x_start: float,
+    ys: Dict[int, float],
+    traverse_height: float,
+    probing_height: float,
+    n_replicates: int,
+    search: Callable[[], Awaitable[Optional[float]]],
+  ) -> List[Optional[float]]:
+    """Approach one edge and search it `n_replicates` times, returning what each search found.
+
+    Args:
+      channel_idx: the probing channel.
+      x_start: where the gantry stands for this edge, in mm.
+      ys: where every channel stands for it: the probing one at the start of its search, the others
+        clear of where that search ends.
+      traverse_height: the height to travel at, in mm.
+      probing_height: the height to search at, in mm.
+      n_replicates: how many searches.
+      search: the search itself.
+
+    A search that detects nothing leaves the channel at the end of it, so the approach is made
+    again before the next try.
+    """
+
+    async def approach() -> None:
+      await self.move_to_xy_positions(x_start, ys, minimum_traverse_height_start=traverse_height)
+      await self.move_tool_bottom_to_z_positions({channel_idx: probing_height})
+
+    await approach()
+    found: List[Optional[float]] = []
+    for _ in range(n_replicates):
+      surface = await search()
+      found.append(surface)
+      if surface is None:
+        await approach()
+    return found
+
+  async def probe_edges_using_clld(
+    self,
+    channel_idx: int,
+    target: Coordinate,
+    n_replicates: int = 2,
+    back_approach: float = 15.0,
+    front_approach: float = 9.0,
+    side_approach: float = 12.0,
+    below_the_top: float = 1.0,
+    between_edges: float = 20.0,
+    search_speed: float = 5.0,
+    tip_bottom_diameter: float = 1.2,
+    stop_disc_diameter: float = 7.0,
+    allow_without_tip: bool = False,
+  ) -> Dict[str, List[Optional[float]]]:
+    """Find the four edges of something on the deck, with the channel's cLLD.
+
+    One edge at a time: the channel goes to the height of what it is probing, comes at the edge from
+    outside, and is lifted clear before the next one. What each search answers is the surface the
+    channel met, so the four together bracket the object. The channels end at Z safety.
+
+    Args:
+      channel_idx: the probing channel, 0-indexed from the back. Only a channel whose cLLD detects
+        answers anything; another sweeps and finds nothing.
+      target: the centre of what is being probed, and its top, in deck mm.
+      n_replicates: how many times to search each edge.
+      back_approach: how far behind the centre the backward-facing search starts, in mm.
+      front_approach: how far in front of it the forward-facing search starts, in mm.
+      side_approach: how far to either side the X searches start, in mm.
+      below_the_top: how far below the target's top to probe, in mm.
+      between_edges: how far above the top to lift between edges, in mm.
+      search_speed: search speed for the Y searches, in mm/s.
+      tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
+      stop_disc_diameter: diameter of the stop disc (tip mounting shaft) in mm, when none is.
+      allow_without_tip: whether to probe without a mounted tip. False requires one.
+
+    Returns:
+      What each search found, keyed "back", "front", "right" and "left", each list as long as
+      `n_replicates`, with None where nothing was detected.
+
+    Raises:
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
+    """
+    # Asked here rather than at the first search, which would refuse it once the channel had moved.
+    await self._diameter_that_probes(
+      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+    )
+
+    reach = self.configuration.channels[channel_idx].x_range
+    rightmost = (
+      target.x + side_approach if reach is None else min(target.x + side_approach, reach[1])
+    )
+
+    def y_search(
+      direction: Literal["forward", "backward"],
+    ) -> Callable[[], Awaitable[Optional[float]]]:
+      return functools.partial(
+        self.probe_y_using_clld,
+        channel_idx,
+        direction,
+        search_end_position=target.y,
+        search_speed=search_speed,
+        tip_bottom_diameter=tip_bottom_diameter,
+        stop_disc_diameter=stop_disc_diameter,
+        allow_without_tip=allow_without_tip,
+      )
+
+    def x_search(direction: Literal["left", "right"]) -> Callable[[], Awaitable[Optional[float]]]:
+      return functools.partial(
+        self.probe_x_using_clld,
+        channel_idx,
+        direction,
+        search_end_position=target.x + (1.0 if direction == "left" else -1.0),
+        tip_bottom_diameter=tip_bottom_diameter,
+        stop_disc_diameter=stop_disc_diameter,
+        allow_without_tip=allow_without_tip,
+      )
+
+    def with_room_for_the_search(y_start: float) -> Dict[int, float]:
+      """Where every channel stands: this one at `y_start`, the others clear of its whole search.
+
+      A neighbour has to be clear of where the search *ends* as well as where it begins, or the
+      channel runs out of room partway and the search is refused.
+      """
+      nearest, furthest = min(y_start, target.y), max(y_start, target.y)
+      standing = {channel_idx: y_start}
+      for other in range(self.num_channels):
+        if other == channel_idx:
+          continue
+        spacing = self._min_spacing_between(channel_idx, other)
+        standing[other] = nearest - spacing if other > channel_idx else furthest + spacing
+      return standing
+
+    # Each edge, as the machine meets it: where the channels stand, and the search that finds it.
+    edges: Dict[str, Tuple[float, Dict[int, float], Callable[[], Awaitable[Optional[float]]]]] = {
+      "back": (target.x, with_room_for_the_search(target.y + back_approach), y_search("forward")),
+      "front": (
+        target.x,
+        with_room_for_the_search(target.y - front_approach),
+        y_search("backward"),
+      ),
+      "right": (rightmost, with_room_for_the_search(target.y), x_search("left")),
+      "left": (target.x - side_approach, with_room_for_the_search(target.y), x_search("right")),
+    }
+
+    await self.move_to_safe_z()
+    measurements: Dict[str, List[Optional[float]]] = {}
+    for edge, (x_start, ys, search) in edges.items():
+      measurements[edge] = await self._probe_one_edge(
+        channel_idx,
+        x_start,
+        ys,
+        traverse_height=target.z,
+        probing_height=target.z - below_the_top,
+        n_replicates=n_replicates,
+        search=search,
+      )
+      await self.move_tool_bottom_to_z_positions({channel_idx: target.z + between_edges})
+    await self.move_to_safe_z()
+    return measurements
+
+  async def probe_calibration_block_cct(
+    self,
+    channel_idx: int = 0,
+    n_replicates: int = 3,
+    search_start_position: float = 30.0,
+    below_the_top: float = 1.0,
+    tip_bottom_diameter: float = 1.2,
+  ) -> Coordinate:
+    """Find the calibration block's top centre with the channel's ztouch and cLLD.
+
+    The top is probed first, then the four sides at that height, so the sides are searched at a
+    measured height rather than a modelled one.
+
+    Args:
+      channel_idx: the probing channel, 0-indexed from the back.
+      n_replicates: how many searches per height and per edge.
+      search_start_position: where the Z probe starts, in mm.
+      below_the_top: how far below the measured top to search the sides, in mm.
+      tip_bottom_diameter: diameter of the tip bottom in mm.
+
+    Returns:
+      Where the block's top centre was found, in deck mm.
+
+    Raises:
+      RuntimeError: If there is no deck, the deck carries no calibration block, or an edge was not
+        found.
+    """
+    if self.deck is None:
+      raise RuntimeError("no deck to measure from; have you called `prep.setup()`?")
+    block = getattr(self.deck, "calibration_block", None)
+    if block is None:
+      raise RuntimeError("this deck carries no calibration block")
+    modelled = block.get_location_wrt(self.deck, "c", "c", "t")
+
+    await self.move_to_safe_z()
+    await self.move_to_xy_positions(x=modelled.x, ys={channel_idx: modelled.y}, make_space=True)
+
+    heights: List[float] = []
+    start = search_start_position
+    for _ in range(n_replicates):
+      height = await self.probe_z_using_ztouch(channel_idx, search_start_position=start)
+      if height is None:
+        raise RuntimeError("the calibration block's top was not found")
+      heights.append(height)
+      start = height + 5
+    await self.move_to_safe_z()
+    top = round(sum(heights) / len(heights), 2)
+
+    edges = await self.probe_edges_using_clld(
+      channel_idx=channel_idx,
+      target=Coordinate(modelled.x, modelled.y, top),
+      n_replicates=n_replicates,
+      below_the_top=below_the_top,
+      tip_bottom_diameter=tip_bottom_diameter,
+    )
+
+    found = {}
+    for edge, measurements in edges.items():
+      surfaces = [s for s in measurements if s is not None]
+      if not surfaces:
+        raise RuntimeError(f"the {edge} edge of the calibration block was not found")
+      found[edge] = sum(surfaces) / len(surfaces)
+    return Coordinate(
+      round((found["left"] + found["right"]) / 2, 2),
+      round((found["front"] + found["back"]) / 2, 2),
+      top,
+    )
+
+  async def probe_deck_corner_z_offsets(
+    self,
+    channel_idx: int = 1,
+    n_replicates: int = 3,
+    search_start_position: float = 30.0,
+    xs: Tuple[float, float] = (30.0, 235.0),
+    ys: Tuple[float, float] = (-2.5, 375.0),
+  ) -> Dict[str, float]:
+    """Probe the deck's height at its four corners with the channel's ztouch.
+
+    Args:
+      channel_idx: the probing channel, 0-indexed from the back.
+      n_replicates: how many searches per corner.
+      search_start_position: where each search starts, in mm.
+      xs: the two gantry positions to probe at, in mm.
+      ys: the two channel positions to probe at, in mm.
+
+    Returns:
+      What each corner answered, keyed "x,y", in deck mm.
+
+    Raises:
+      RuntimeError: If a corner was not found.
+    """
+    await self.move_to_safe_z()
+    corners: Dict[str, float] = {}
+    for x in xs:
+      for y in ys:
+        await self.move_to_xy_positions(x=x, ys={channel_idx: y}, make_space=True)
+
+        heights: List[float] = []
+        start = search_start_position
+        for _ in range(n_replicates):
+          height = await self.probe_z_using_ztouch(
+            channel_idx=channel_idx, search_start_position=start
+          )
+          if height is not None:
+            heights.append(height)
+            start = height + 5
+        if not heights:
+          raise RuntimeError(f"the deck was not found at ({x}, {y})")
+        corners[f"{x},{y}"] = round(sum(heights) / len(heights), 2)
+    await self.move_to_safe_z()
+    return corners
+
+  async def probe_all_resourceholder_edges(
+    self,
+    channel_idx: int = 0,
+    n_replicates: int = 3,
+    hole_x: float = 112.0,
+    hole_y: float = 77.0,
+    probe_z: float = -2.0,
+    margin: float = 4.5,
+  ) -> Dict[str, Dict[str, List[Optional[float]]]]:
+    """Probe the four walls of every resource holder's aperture with the channel's cLLD.
+
+    WARNING: the X/Y cLLD probing of the Prep is not as reliable as the STAR's. Only run this while
+    you are at the device and can trigger the sensor by touching the channel with a finger, in case
+    the conductive material is not recognised and the channel does not stop.
+
+    The channel drops into each aperture and searches outward to each wall, starting a third of the
+    way out and stepping back 5 mm from the wall just found for the repeats.
+
+    Args:
+      channel_idx: the probing channel, 0-indexed from the back.
+      n_replicates: how many searches per edge.
+      hole_x: how wide the aperture is drawn, in mm.
+      hole_y: how deep it is drawn, in mm.
+      probe_z: the height to search at, below the deck plane, in mm.
+      margin: how far past an expected wall a search may travel, in mm.
+
+    Returns:
+      What each search found, by holder name, then keyed "front", "back", "left" and "right", each
+      list as long as `n_replicates`, with None where nothing was detected.
+
+    Raises:
+      RuntimeError: If there is no deck, or it carries no resource holders.
+    """
+    if self.deck is None:
+      raise RuntimeError("no deck to measure from; have you called `prep.setup()`?")
+    holders = getattr(self.deck, "spots", None)
+    if not holders:
+      raise RuntimeError("this deck carries no resource holders")
+
+    x_offset, y_offset = hole_x / 2.4, hole_y / 3
+    found: Dict[str, Dict[str, List[Optional[float]]]] = {}
+    for holder in holders:
+      centre = holder.get_location_wrt(self.deck, "c", "c", "t")
+      await self.move_to_safe_z()
+
+      edges: Dict[str, List[Optional[float]]] = {}
+      for edge, direction, axis, start_x, start_y, end_position in (
+        ("front", "forward", "y", centre.x, centre.y - y_offset, centre.y - hole_y / 2 - margin),
+        ("back", "backward", "y", centre.x, centre.y + y_offset, centre.y + hole_y / 2 + margin),
+        ("left", "left", "x", centre.x - x_offset, centre.y, centre.x - hole_x / 2 - margin),
+        ("right", "right", "x", centre.x + x_offset, centre.y, centre.x + hole_x / 2 + margin),
+      ):
+        await self.move_to_xy_positions(x=start_x, ys={channel_idx: start_y}, make_space=True)
+        await self.move_tool_bottom_to_z_positions({channel_idx: probe_z})
+
+        search_from = start_y if axis == "y" else start_x
+        step = 5 if direction in ("forward", "left") else -5  # back into the hole
+
+        measurements: List[Optional[float]] = []
+        search_start = search_from
+        for _ in range(n_replicates):
+          if axis == "y":
+            surface = await self.probe_y_using_clld(
+              channel_idx=channel_idx,
+              direction=cast(Literal["forward", "backward"], direction),
+              search_start_position=search_start,
+              search_end_position=end_position,
+              minimum_traverse_height_start=probe_z,
+              search_speed=5,
+            )
+          else:
+            surface = await self.probe_x_using_clld(
+              channel_idx=channel_idx,
+              direction=cast(Literal["left", "right"], direction),
+              search_start_position=search_start,
+              search_end_position=end_position,
+              minimum_traverse_height_start=probe_z,
+            )
+          measurements.append(surface)
+          search_start = search_from if surface is None else surface + step
+        edges[edge] = measurements
+
+      await self.move_to_safe_z()
+      found[holder.name] = edges
+
+      if any(None in edge for edge in edges.values()):
+        logger.warning("%s: missed an edge - %s", holder.name, edges)
+        continue
+      means = {
+        edge: sum(cast(List[float], surfaces)) / len(surfaces) for edge, surfaces in edges.items()
+      }
+      cx, cy = (means["left"] + means["right"]) / 2, (means["front"] + means["back"]) / 2
+      logger.info(
+        "%s: centre (%.2f, %.2f)  model (%.2f, %.2f)  dx %+.2f  dy %+.2f  span %.2f x %.2f",
+        holder.name,
+        cx,
+        cy,
+        centre.x,
+        centre.y,
+        cx - centre.x,
+        cy - centre.y,
+        means["right"] - means["left"],
+        means["back"] - means["front"],
+      )
+    return found
