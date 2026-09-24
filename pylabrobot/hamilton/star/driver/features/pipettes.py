@@ -6,6 +6,7 @@ import datetime
 import enum
 import logging
 import math
+import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import (
@@ -297,6 +298,23 @@ class PipettesConfiguration:
       self.channels.extend(PipetteConfiguration() for _ in range(num_channels))
     elif len(self.channels) != num_channels:
       raise ValueError(f"configuration has {len(self.channels)} channels, expected {num_channels}")
+
+
+@dataclass(frozen=True)
+class TADMCurve:
+  """One recorded TADM pressure curve, read back from a channel's FIFO.
+
+  Attributes:
+    measurement_id: the 4-character label stamped on the recording (`nr`).
+    operation: which stroke recorded it, from the liquid-handling-type field.
+    had_error: whether the firmware flagged a TADM error on it.
+    pressures: signed pressures in Pa, in time order.
+  """
+
+  measurement_id: str
+  operation: Literal["aspirate", "dispense", "other"]
+  had_error: bool
+  pressures: List[int]
 
 
 class Pipettes:
@@ -4348,3 +4366,152 @@ class Pipettes:
     """
     self._require_channel(channel)
     await self._driver.send_command(module=self.channel_id(channel), command="AC")
+
+  # -- total aspiration and dispense monitoring (TADM) ---------------------------------------------
+
+  # Index is the `gk` wire value.
+  _TADM_STORAGE_LEVELS = ("none", "errors_only", "all")
+
+  async def set_tadm_mode(self, channel: int, enabled: bool = True) -> None:
+    """Switch a channel between TADM mode and pressure/capacitive LLD mode. `Px AF`.
+
+    A curve is recorded only in TADM mode, and the FIFO is readable only while the mode stays on.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      enabled: True for TADM mode, False for LLD mode.
+    """
+    self._require_channel(channel)
+    await self._driver.send_command(
+      module=self.channel_id(channel), command="AF", af="1" if enabled else "0"
+    )
+
+  async def request_tadm_mode(self, channel: int) -> bool:
+    """Whether a channel is in TADM mode. `Px QF`.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+    """
+    self._require_channel(channel)
+    resp = await self._driver.send_command(module=self.channel_id(channel), command="QF")
+    return "qf1" in resp
+
+  async def clear_tadm_fifo(self, channel: int) -> None:
+    """Empty a channel's TADM curve FIFO. `Px AN`.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+    """
+    self._require_channel(channel)
+    await self._driver.send_command(module=self.channel_id(channel), command="AN")
+
+  async def reset_tadm_limit_curves(self, channel: int) -> None:
+    """Erase a channel's limit-curve bank and load the default curve at index 0. `Px AQ`.
+
+    Enforcing a limit curve fails with an invalid-index error until the default is loaded.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+    """
+    self._require_channel(channel)
+    await self._driver.send_command(module=self.channel_id(channel), command="AQ")
+
+  async def start_tadm_monitoring(
+    self,
+    channel: int,
+    *,
+    enforce_limit_curve_control: bool = True,
+    storage_level: Literal["none", "errors_only", "all"] = "all",
+    limit_curve_index: int = 0,
+    measurement_id: Optional[str] = None,
+  ) -> None:
+    """Record every aspirate and dispense on a channel until `stop_tadm_monitoring`. `Px BG`.
+
+    Needs TADM mode on and a limit curve loaded. With enforcement off, nothing is recorded.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      enforce_limit_curve_control: abort the plunger when pressure leaves the limit curve (`gj`).
+      storage_level: which curves the FIFO keeps (`gk`).
+      limit_curve_index: the limit curve enforced against, 0 to 999 (`gi`).
+      measurement_id: 4-character label stamped on each curve (`nr`). Omitted when None.
+    """
+    self._require_channel(channel)
+    if storage_level not in self._TADM_STORAGE_LEVELS:
+      raise ValueError(f"storage_level must be one of {self._TADM_STORAGE_LEVELS}")
+    if not 0 <= limit_curve_index <= 999:
+      raise ValueError(f"limit_curve_index must be in [0, 999], is {limit_curve_index}")
+    if measurement_id is not None and len(measurement_id) != 4:
+      raise ValueError(f"measurement_id must be 4 characters, is {measurement_id!r}")
+    if storage_level == "errors_only" and not enforce_limit_curve_control:
+      raise ValueError('storage_level="errors_only" keeps nothing without enforcement')
+    fields: Dict[str, Any] = {
+      "gi": f"{limit_curve_index:03}",
+      "gj": "1" if enforce_limit_curve_control else "0",
+      "gk": str(self._TADM_STORAGE_LEVELS.index(storage_level)),
+    }
+    if measurement_id is not None:
+      fields["nr"] = measurement_id
+    await self._driver.send_command(module=self.channel_id(channel), command="BG", **fields)
+
+  async def stop_tadm_monitoring(self, channel: int) -> None:
+    """End the monitoring `start_tadm_monitoring` began. `Px BH`.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+    """
+    self._require_channel(channel)
+    await self._driver.send_command(module=self.channel_id(channel), command="BH")
+
+  async def _advance_tadm_fifo(self, channel: int) -> bool:
+    """Move the FIFO pointer to the next stored curve; whether there is one. `Px QM`."""
+    resp = await self._driver.send_command(module=self.channel_id(channel), command="QM")
+    return "qm1" in resp
+
+  async def _request_tadm_curve_parameters(
+    self, channel: int
+  ) -> Tuple[int, Literal["aspirate", "dispense", "other"], bool, str]:
+    """Point count, operation, error flag and label of the curve at the pointer. `Px QL`."""
+    resp = await self._driver.send_command(module=self.channel_id(channel), command="QL")
+    match = re.search(r"ql([\d ]+?)nr(.*?)gd", resp)
+    if match is None:
+      raise ValueError(f"could not parse QL reply: {resp!r}")
+    fields = match.group(1).split()
+    operation: Literal["aspirate", "dispense", "other"] = (
+      "aspirate" if int(fields[1]) == 0 else "dispense" if int(fields[1]) == 1 else "other"
+    )
+    return int(fields[0]), operation, int(fields[2]) != 0, match.group(2).strip()
+
+  async def _request_tadm_curve_data(self, channel: int, start: int, count: int) -> List[int]:
+    """`count` signed pressures in Pa from index `start` of the curve at the pointer. `Px QN`."""
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel), command="QN", li=f"{start:04}", ln=f"{count:02}"
+    )
+    return [int(value) for value in resp.split("qn")[-1].split()]
+
+  async def read_tadm_curve(self, channel: int, points_per_read: int = 50) -> Optional[TADMCurve]:
+    """Read the next recorded curve from a channel's TADM FIFO.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      points_per_read: pressures per `QN` request, 1 to 50.
+
+    Returns:
+      The curve, or None when the FIFO is empty.
+    """
+    self._require_channel(channel)
+    if not 1 <= points_per_read <= 50:
+      raise ValueError(f"points_per_read must be in [1, 50], is {points_per_read}")
+    if not await self._advance_tadm_fifo(channel):
+      return None
+    n_points, operation, had_error, measurement_id = await self._request_tadm_curve_parameters(
+      channel
+    )
+    pressures: List[int] = []
+    while len(pressures) < n_points:
+      count = min(points_per_read, n_points - len(pressures))
+      values = await self._request_tadm_curve_data(channel, len(pressures), count)
+      if not values:  # an empty reply would otherwise loop forever
+        break
+      pressures.extend(values)
+    return TADMCurve(measurement_id, operation, had_error, pressures)
