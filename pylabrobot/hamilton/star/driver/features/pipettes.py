@@ -2272,7 +2272,7 @@ class Pipettes:
 
     Args:
       locations: where each channel collects, on the deck in mm, keyed by channel, ascending.
-      tips: what each channel collects, keyed by channel. All of one kind.
+      tips: what each channel collects, keyed by channel. All of the same model.
       begin_tip_pick_up_process: where the pick-up begins, in mm. The lowest location plus the
         collar height when None.
       end_tip_pick_up_process: where it ends, in mm. The lowest location when None.
@@ -2284,12 +2284,12 @@ class Pipettes:
       Which channels came away with a tip, keyed by channel.
 
     Raises:
-      ValueError: If the tips are not all of one kind, or a position cannot be reached.
+      ValueError: If the tips do not all have the same model, or a position cannot be reached.
     """
     use_channels = list(locations)
     hamilton_tips = [tips[channel] for channel in use_channels]
-    if len({tip.kind() for tip in hamilton_tips}) > 1:
-      raise ValueError("the tips picked up together must all be of one kind")
+    if len({tip.model for tip in hamilton_tips}) > 1:
+      raise ValueError("the tips picked up together must all have the same model")
 
     traverse = round(self._tip_traverse_height(hamilton_tips, minimum_traverse_height_start) * 10)
 
@@ -2381,8 +2381,8 @@ class Pipettes:
   ) -> None:
     """Pick up a tip from each spot, one channel per spot, and move each onto its channel.
 
-    The spots may hold tips of different kinds: a command carries one tip type, so the spots are
-    grouped by the kind of tip they hold and each group is planned into its own commands. The
+    The spots may hold tips of different models: a command carries one tip type, so the spots are
+    grouped by the model of tip they hold and each group is planned into its own commands. The
     commands go out in ascending X, whichever group they came from, so the arm sweeps once.
 
     Heights as legacy's `STARBackend.pick_up_tips`: the process begins a collar's height above the
@@ -2432,16 +2432,16 @@ class Pipettes:
         # again with that deck.
         raise RuntimeError(f"channel {channel} is not modelled; set the driver up with its deck")
 
-    # One command per set of spots the channels can take at once, planned per kind of tip: a
+    # One command per set of spots the channels can take at once, planned per tip model: a
     # command names one tip type, so spots holding different tips cannot share one.
-    of_each_kind: Dict[Tuple[object, ...], List[int]] = {}
+    of_each_model: Dict[Optional[str], List[int]] = {}
     for index, tip in enumerate(hamilton_tips):
-      of_each_kind.setdefault(tip.kind(), []).append(index)
+      of_each_model.setdefault(tip.model, []).append(index)
 
-    # Only Y decides within a kind by default: spots in one column closer than their channels may
+    # Only Y decides within a model by default: spots in one column closer than their channels may
     # stand go in separate commands. The batches are run in ascending X, wherever they came from.
     planned: List[Tuple[ChannelBatch, List[int]]] = []
-    for group in of_each_kind.values():
+    for group in of_each_model.values():
       planned += [
         (batch, group)
         for batch in plan_batches(
