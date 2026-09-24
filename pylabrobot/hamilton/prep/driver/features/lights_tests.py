@@ -145,6 +145,60 @@ def test_a_pulse_given_seconds_darkens_the_light_when_they_are_up():
   asyncio.run(run())
 
 
+def test_an_error_inside_the_signalling_block_pulses_the_deck_and_still_raises():
+  """The pulse is on when the error leaves the block, and the error is untouched."""
+
+  async def run():
+    p = await _prep()
+    captured = _record_send(p)
+    with pytest.raises(ZeroDivisionError):
+      async with p.error_lighting(duration=0.3):
+        raise ZeroDivisionError("something went wrong mid-protocol")
+    await asyncio.sleep(0.1)
+    pulsed = _colors(captured)
+    assert pulsed and all(white == blue == 0 and red > 0 for white, red, green, blue in pulsed)
+    await asyncio.sleep(0.4)
+    assert _colors(captured)[-1] == (0, 0, 0, 0)  # the pulse ends itself, the deck goes dark
+    await p.stop()
+
+  asyncio.run(run())
+
+
+def test_a_device_with_no_light_signals_nothing():
+  """Nothing is sent, and the error still raises."""
+
+  async def run():
+    p = await _prep()
+    p.lights = None
+    captured = _record_send(p)
+    with pytest.raises(ZeroDivisionError):
+      async with p.error_lighting(duration=0.3):
+        raise ZeroDivisionError("something went wrong mid-protocol")
+    assert _colors(captured) == []
+    await p.stop()
+
+  asyncio.run(run())
+
+
+def test_a_light_that_fails_does_not_bury_the_error_it_signals():
+  """Signalling is not part of what went wrong: its own failure is logged, not raised."""
+
+  async def run():
+    p = await _prep()
+    assert p.lights is not None
+
+    async def fails(duration=None):
+      raise ConnectionError("the link went down")
+
+    p.lights.animate_error_pulse = fails  # type: ignore[method-assign, assignment]
+    with pytest.raises(ZeroDivisionError):
+      async with p.error_lighting(duration=0.3):
+        raise ZeroDivisionError("something went wrong mid-protocol")
+    await p.stop()
+
+  asyncio.run(run())
+
+
 def test_waiting_holds_until_the_pulse_is_over_and_the_deck_is_dark():
   """A script that exits the moment it raises needs the pulse finished, not merely started."""
 
@@ -162,6 +216,30 @@ def test_waiting_holds_until_the_pulse_is_over_and_the_deck_is_dark():
   asyncio.run(run())
 
 
+def test_a_signal_with_no_duration_leaves_the_deck_pulsing_after_the_error():
+  """None is for an error nobody should be able to walk past: it pulses until it is turned off."""
+
+  async def run():
+    p = await _prep()
+    captured = _record_send(p)
+    with pytest.raises(ZeroDivisionError):
+      async with p.error_lighting(duration=None):
+        raise ZeroDivisionError("something went wrong mid-protocol")
+    await asyncio.sleep(0.3)
+    assert _colors(captured)[-1] != (0, 0, 0, 0)  # still lit, well past a timed pulse
+
+    assert p.lights is not None
+    await p.lights.turn_off()
+    await asyncio.sleep(0.2)
+    assert _colors(captured)[-1] == (0, 0, 0, 0)
+
+    with pytest.raises(ValueError):  # it would never return
+      await p.signal_error(duration=None, wait=True)
+    await p.stop()
+
+  asyncio.run(run())
+
+
 def test_a_held_colour_stands_for_its_time_and_then_the_deck_goes_dark():
   """It holds: whoever asked for it is still there when the deck darkens."""
 
@@ -173,6 +251,28 @@ def test_a_held_colour_stands_for_its_time_and_then_the_deck_goes_dark():
     await p.lights.hold("green", duration=0.3)
     assert asyncio.get_running_loop().time() - started >= 0.3
     assert _colors(captured) == [(0, 0, 255, 0), (0, 0, 0, 0)]
+    await p.stop()
+
+  asyncio.run(run())
+
+
+def test_setup_says_the_device_is_working_and_then_that_it_is_ready():
+  """Turquoise for as long as setup takes, then green, then the deck as setup found it: dark."""
+
+  async def run():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    assert p.lights is not None
+    assert p.lights.default_ready_seconds == 0.0  # nobody is looking at a simulated deck
+    p.lights.default_ready_seconds = 0.2
+    captured = _record_send(p)
+    started = asyncio.get_running_loop().time()
+    await p.setup()
+    assert asyncio.get_running_loop().time() - started >= 0.2  # setup stands at the green
+    assert _colors(captured) == [
+      (0, 0, 255, 180),  # turquoise: working
+      (0, 0, 255, 0),  # green: ready
+      (0, 0, 0, 0),
+    ]
     await p.stop()
 
   asyncio.run(run())
