@@ -1,7 +1,7 @@
 """Resolve Hamilton liquid classes and corrected volumes for Prep PIP ops.
 
 Automatic lookup defaults to
-:func:`~pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.star.get_star_liquid_class`
+:func:`~pylabrobot.hamilton.star.liquid_classes.get_star_liquid_class`
 (STAR calibration tables); pass ``lookup=`` for instrument-specific tables.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, List, Optional, Sequence, Union
 
-from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
+from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
 from pylabrobot.resources.hamilton import HamiltonTip
 from pylabrobot.resources.liquid import Liquid
 
@@ -54,7 +54,7 @@ def resolve_hamilton_liquid_classes(
   if lookup is None:
     # Lazy import avoids circular import: star package __init__ may pull in pip_backend,
     # which imports this module.
-    from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.star import get_star_liquid_class
+    from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
 
     fn = get_star_liquid_class
   else:
