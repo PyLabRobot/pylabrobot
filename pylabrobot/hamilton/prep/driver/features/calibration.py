@@ -155,12 +155,12 @@ class Calibration:
     return tuple(
       PrepCmd.CalibrationSiteInfo(
         id=int(s.id),
-        left_bottom_front_x=float(s.left_bottom_front_x),
-        left_bottom_front_y=float(s.left_bottom_front_y),
-        left_bottom_front_z=float(s.left_bottom_front_z),
-        length=float(s.length),
-        width=float(s.width),
-        height=float(s.height),
+        left_bottom_front_x=round(s.left_bottom_front_x, 2),
+        left_bottom_front_y=round(s.left_bottom_front_y, 2),
+        left_bottom_front_z=round(s.left_bottom_front_z, 2),
+        length=round(s.length, 2),
+        width=round(s.width, 2),
+        height=round(s.height, 2),
         post=bool(s.post),
       )
       for s in result.sites

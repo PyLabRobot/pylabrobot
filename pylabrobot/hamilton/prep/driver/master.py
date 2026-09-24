@@ -305,7 +305,7 @@ class PrepDriver:
     smart: bool = True,
     force_initialize: bool = False,
     skip_device_initialization: bool = False,
-    default_traverse_height: Optional[float] = None,
+    default_minimum_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ):
     """Connect, discover the device, initialize MLPrep, construct peers.
@@ -317,6 +317,12 @@ class PrepDriver:
       skip_device_initialization: do not run the device's own initialization procedure on a device that reports
         itself down. Its moves are then whatever the caller sends, and a device that has not initialized may
         refuse them.
+      default_minimum_traverse_height: the height the pipettes and the 8-channel head travel at when a command
+        names none, in mm. Replaces what the device reports.
+
+    Raises:
+      RuntimeError: If the device records a plate gripped and has to initialize, and the person at it
+        does not confirm the grippers may open.
     """
     logger.debug("Setting up Prep on %s ...", self.describe_link())
     try:
@@ -344,20 +350,21 @@ class PrepDriver:
         self.calibration = Calibration(self)
       if self.pipettes is None:
         self.pipettes = Pipettes(self)
-      if default_traverse_height is not None:
-        self.pipettes.default_minimum_traverse_height = default_traverse_height
       if use_v1_aspirate_dispense:
         self.pipettes.configuration.use_v1_aspirate_dispense = True
       await self.pipettes._on_setup()
+      if default_minimum_traverse_height is not None:
+        self.pipettes.default_minimum_traverse_height = default_minimum_traverse_height
 
       if self.pipettes.head8_installed:
         if self.head8 is None:
-          self.head8 = Head8(
-            self,
-            default_traverse_height=default_traverse_height,
-            use_v1_aspirate_dispense=use_v1_aspirate_dispense,
-          )
+          self.head8 = Head8(self, use_v1_aspirate_dispense=use_v1_aspirate_dispense)
         await self.head8._on_setup()
+        # One height governs the arm: the head rides the channels' gantry, so it travels at what
+        # they travel at rather than at a second number that happens to match.
+        self.head8.default_minimum_traverse_height = self.pipettes.default_minimum_traverse_height
+        if default_minimum_traverse_height is not None:
+          self.head8.default_minimum_traverse_height = default_minimum_traverse_height
 
       # What the device was left holding, and where it was left standing: read before anything moves laterally,
       # then raise what can be raised. The 8-channel head is not raised: no move of its Z alone is known.
@@ -377,6 +384,12 @@ class PrepDriver:
       if low:
         logger.warning("not everything is at Z safety after setup: %s", "; ".join(low))
       if self.head8 is not None:
+        # TODO: the head is left where it stands, and every lateral move travels it there. No move
+        # of its Z alone is known, and the device reports neither its position nor its bounds, so
+        # nothing here can tell that it is low or lift it. `MoveZUpToSafe` takes ChannelIndex values
+        # and the MPH has one (3): try it on a device with a head fitted, and if it answers, raise
+        # the head in `Pipettes.move_to_xy_positions` and `XArm.move_to_x_position` as the channels
+        # are raised.
         logger.warning("the 8-channel head is not raised at setup: no move of its Z alone is known")
 
       if self.core_grippers is None:
@@ -426,7 +439,7 @@ class PrepDriver:
 
     Read back rather than taken on trust: a retract that answered without arriving leaves the device looking
     safe while a lateral move would drive whatever is still low into whatever is in the way. Each channel's stop
-    disc is held to the traverse height the device reports, so a mounted tip does not count as low. The 8-channel
+    disc is held to the pipettes' `default_minimum_traverse_height`, so a mounted tip does not count as low. The 8-channel
     head is not judged: no read of its height is known.
 
     Args:
@@ -434,13 +447,13 @@ class PrepDriver:
 
     Returns:
       One entry per channel that is low, naming it and where it says it is. Empty when everything is up, or when
-      the device reported no traverse height to hold the channels to.
+      there are no pipettes.
     """
     low: List[str] = []
     pipettes = self.pipettes
-    safe = None if self.configuration is None else self.configuration.default_traverse_height
-    if pipettes is None or safe is None:
+    if pipettes is None:
       return low
+    safe = pipettes.default_minimum_traverse_height
     for channel in range(pipettes.num_channels):
       try:
         z = await pipettes.request_stop_disc_z_position(channel)
@@ -928,6 +941,15 @@ class PrepDriver:
       return False
     return bool(result.value)
 
+  async def request_default_traverse_height(self) -> Optional[float]:
+    """The height MLPrep travels at when a command names none (GetDefaultTraverseHeight), in mm.
+
+    Returns:
+      The height, or None if the device does not answer it.
+    """
+    result = await self.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=self.mlprep_address))
+    return None if result is None else float(result.value)
+
   async def request_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
     """Firmware object tree. ``print(await prep.request_firmware_tree())`` for a diagnostic dump."""
     return await self.io.introspection.get_firmware_tree(refresh=refresh)
@@ -1048,13 +1070,14 @@ class PrepDriver:
     if c is None:
       return "[Hamilton Prep] not discovered yet"
 
-    traverse = "unknown" if c.default_traverse_height is None else f"{c.default_traverse_height} mm"
+    height = None if self.pipettes is None else self.pipettes.default_minimum_traverse_height
+    traverse = "unknown" if height is None else f"{height} mm"
     lines = [
-      f"[Hamilton Prep] Connected on {self.describe_link()}",
-      f"  Serial: {c.serial_number or 'unknown'}",
-      f"  Firmware: {c.firmware_version or 'unknown'}",
-      f"  Configuration: enclosure {'installed' if c.has_enclosure else 'none'}, "
-      f"safe speeds {'on' if c.safe_speeds_enabled else 'off'}, traverse height {traverse}",
+      f"[Hamilton Prep] Connected on {self.describe_link()}\n",
+      f"  Serial: {c.serial_number or 'unknown'}\n",
+      f"  Firmware: {c.firmware_version or 'unknown'}\n",
+      f"  Configuration: \n - enclosure {'installed' if c.has_enclosure else 'none'}, "
+      f" - safe speeds {'on' if c.safe_speeds_enabled else 'off'},\n - traverse height {traverse}",
     ]
     deck = f"{len(c.deck_sites)} sites, {len(c.waste_sites)} waste sites"
     if c.deck_bounds is not None:

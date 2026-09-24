@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional, Tuple, Union
 from .features.pipettes import PipettesConfiguration
 from .prep_commands import DeckBounds, DeckSiteInfo, WasteSiteInfo
 
+__all__ = ["DeviceConfiguration", "read_configuration", "to_jsonable"]
+
 # The JSON walk is the STAR's: it is written against dataclass field types, and nothing in it is
 # particular to that device.
 
@@ -81,9 +83,6 @@ def _restore(hint: Any, value: Any) -> Any:
     named = {field.name for field in dataclasses.fields(hint)}
     return hint(**{n: _restore(field_types[n], v) for n, v in value.items() if n in named})
   return value
-
-
-__all__ = ["DeviceConfiguration", "read_configuration", "to_jsonable"]
 
 
 @dataclass
