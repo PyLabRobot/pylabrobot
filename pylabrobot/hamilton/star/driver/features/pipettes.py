@@ -133,6 +133,8 @@ class PipettesConfiguration:
   """Each level is `level * 5000` increments/s2: 231.5, 463.0, 694.5, 926.0 mm/s2."""
   y_drive_current_limit_range: Tuple[int, int] = (0, 7)
   clld_detection_edge_range: Tuple[int, int] = (0, 1_023)
+  clld_detection_drop_range: Tuple[int, int] = (0, 1_023)
+  lld_post_detection_distance_range_increments: Tuple[int, int] = (0, 9_999)
 
   # -- what a channel's own Z drive accepts, for the moves addressed to the channel itself --
   z_drive_speed_range_increments: Tuple[int, int] = (20, 15_000)
@@ -1869,6 +1871,30 @@ class Pipettes:
       )
     return tip_bottom_diameter if has_tip else stop_disc_diameter
 
+  async def _overhang_that_probes(self, channel_idx: int, allow_without_tip: bool) -> float:
+    """How far below the stop disc a channel probes, in mm, refusing a bare channel unless allowed.
+
+    The Z searches run on the stop disc and answer for it, so a probe that speaks of the tip bottom
+    offsets by the tip's overhang; a bare channel probes with the stop disc itself, overhang 0.
+
+    Args:
+      channel_idx: the probing channel.
+      allow_without_tip: whether a channel with no tip on it may probe.
+
+    Returns:
+      The mounted tip's overhang in mm, to 0.1 mm, or 0.0 for a bare channel.
+
+    Raises:
+      RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
+    """
+    if not (await self.sense_tip_presence())[channel_idx]:
+      if not allow_without_tip:
+        raise RuntimeError(
+          f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+        )
+      return 0.0
+    return round(await self.request_tip_overhang(channel_idx), 1)
+
   async def probe_x_using_clld(
     self,
     channel_idx: int,
@@ -2105,6 +2131,201 @@ class Pipettes:
     return round(surface, 1) if found else None
 
   # -- z probing (capacitive, pressure, force) --------------------------------------------------
+
+  async def _unchecked_fw_probe_z_using_clld(
+    self,
+    channel: int,
+    end_position: int,
+    start_position: int,
+    search_speed: int,
+    acceleration: int,
+    detection_edge: int,
+    detection_drop: int,
+    post_detection_trajectory: int,
+    post_detection_distance: int,
+  ):
+    """Lower one channel until its cLLD triggers, as given, in Z increments. `Px ZL`.
+
+    Args:
+      channel: 0-indexed from the back.
+      end_position: stop disc height it goes no lower than (`zh`).
+      start_position: stop disc height the search starts from (`zc`).
+      search_speed: increments/s (`zl`).
+      acceleration: thousands of increments/s2 (`zr`).
+      detection_edge: edge steepness on detection, 0 to 1023 (`gt`).
+      detection_drop: offset after the edge, 0 to 1023 (`gl`).
+      post_detection_trajectory: 0 moves down after detection, 1 up (`zj`).
+      post_detection_distance: how far it moves after detection (`zi`).
+    """
+    await self._driver.send_command(
+      module=self.channel_id(channel),
+      command="ZL",
+      zh=f"{end_position:05}",
+      zc=f"{start_position:05}",
+      zl=f"{search_speed:05}",
+      zr=f"{acceleration:03}",
+      gt=f"{detection_edge:04}",
+      gl=f"{detection_drop:04}",
+      zj=post_detection_trajectory,
+      zi=f"{post_detection_distance:04}",
+    )
+
+  async def request_last_lld_z_positions(self) -> List[float]:
+    """Request where each channel last detected liquid, by cLLD or pLLD. `C0 RL`.
+
+    Returns:
+      The tip bottom's Z position at detection, in mm on the deck, by channel.
+    """
+    resp = await self._driver.send_command(module="C0", command="RL", fmt="lh#### (n)")
+    return [round(increments / 10, 1) for increments in cast(List[int], resp["lh"])]
+
+  async def _clld_search(
+    self,
+    channel: int,
+    end_position: float,
+    start_position: float,
+    search_speed: float = 10.0,
+    acceleration: float = 800.0,
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_distance: float = 0.0,
+  ) -> None:
+    """Run one channel's cLLD search between two stop disc heights, every field checked.
+
+    In stop disc terms: a caller that thinks in tip bottoms adds the overhang first. Nothing is
+    sensed here, so the caller makes sure a tip is on. A search that finds nothing raises as the
+    channel answers it.
+
+    Args:
+      channel: 0-indexed from the back.
+      end_position: stop disc height it goes no lower than, in mm.
+      start_position: stop disc height the search starts from, in mm.
+      search_speed: in mm/s.
+      acceleration: in mm/s2.
+      detection_edge: cLLD edge steepness, 0 to 1023.
+      detection_drop: offset after the edge, 0 to 1023.
+      post_detection_trajectory: 0 moves down after detection, 1 up.
+      post_detection_distance: how far it moves after detection, in mm; 0 stays there.
+
+    Raises:
+      ValueError: If a field is out of the drive's range.
+      STARFirmwareError: As the channel answers, a search that found nothing included.
+    """
+    c = self.configuration
+    if post_detection_trajectory not in (0, 1):
+      raise ValueError(f"post_detection_trajectory must be 0 or 1, is {post_detection_trajectory}")
+    end = c.z_drive_mm_to_increments(end_position)
+    start = c.z_drive_mm_to_increments(start_position)
+    speed = c.z_drive_mm_to_increments(search_speed)
+    ramp = c.z_drive_acceleration_mm_to_increments(acceleration)
+    distance = c.z_drive_mm_to_increments(post_detection_distance)
+    for checked, (low, high), name in (
+      (end, c.z_range_increments, "search end, in increments,"),
+      (start, c.z_range_increments, "search start, in increments,"),
+      (speed, c.z_drive_speed_range_increments, "search_speed, in increments/s,"),
+      (ramp, c.z_drive_acceleration_range_increments, "acceleration, in 1000 increments/s2,"),
+      (detection_edge, c.clld_detection_edge_range, "detection_edge"),
+      (detection_drop, c.clld_detection_drop_range, "detection_drop"),
+      (
+        distance,
+        c.lld_post_detection_distance_range_increments,
+        "post_detection_distance, in increments,",
+      ),
+    ):
+      if not low <= checked <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {checked}")
+    await self._unchecked_fw_probe_z_using_clld(
+      channel,
+      end_position=end,
+      start_position=start,
+      search_speed=speed,
+      acceleration=ramp,
+      detection_edge=detection_edge,
+      detection_drop=detection_drop,
+      post_detection_trajectory=post_detection_trajectory,
+      post_detection_distance=distance,
+    )
+
+  async def probe_z_using_clld(
+    self,
+    channel_idx: int,
+    *,
+    search_start_position: Optional[float] = None,
+    search_end_position: Optional[float] = None,
+    search_speed: float = 10.0,
+    acceleration: float = 800.0,
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    allow_without_tip: bool = False,
+    post_detection_distance: float = 2.0,
+    move_channels_to_safe_pos_after: bool = False,
+  ) -> Optional[float]:
+    """Lower a channel's tip until its cLLD triggers, and read the height it detected at.
+
+    On a firmware error the channels go to Z safety first, then it is raised or, for a search
+    that found nothing, None returned.
+
+    Args:
+      channel_idx: which channel, 0-indexed from the back.
+      search_start_position: tip bottom height to search from, in mm. As high as the tip goes
+        when None.
+      search_end_position: lowest tip bottom height, in mm. The drive's floor when None.
+      search_speed: in mm/s.
+      acceleration: in mm/s2.
+      detection_edge: cLLD edge steepness, 0 to 1023.
+      detection_drop: offset after the edge, 0 to 1023.
+      post_detection_trajectory: 0 moves down after detection, 1 up.
+      allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
+      post_detection_distance: how far it moves after detection, in mm.
+      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
+        instead of resting where the search left it.
+
+    Returns:
+      The height the channel detected at, in mm, or None if the search found nothing.
+
+    Raises:
+      RuntimeError: If the channel carries no tip and `allow_without_tip` is False.
+      ValueError: If an argument is out of range.
+    """
+    self._require_channel(channel_idx)
+    # The search runs on the stop disc, which sits the overhang above the tip bottom.
+    overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
+    c = self.configuration
+    lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
+    top, floor = highest - overhang, round(lowest - overhang, 2)
+    if search_start_position is None:
+      search_start_position = top
+    if search_end_position is None:
+      search_end_position = floor
+    if search_end_position < floor:
+      raise ValueError(f"search_end_position must be at least {floor} mm, is {search_end_position}")
+    if not search_end_position <= search_start_position <= top:
+      raise ValueError(
+        f"search_start_position must be between {search_end_position} and {top} mm, "
+        f"is {search_start_position}"
+      )
+    try:
+      await self._clld_search(
+        channel_idx,
+        search_end_position + overhang,
+        round(search_start_position + overhang, 2),
+        search_speed=search_speed,
+        acceleration=acceleration,
+        detection_edge=detection_edge,
+        detection_drop=detection_drop,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_distance=post_detection_distance,
+      )
+    except STARFirmwareError as error:
+      await self.move_to_safe_z()
+      if not self._found_nothing(error, self.channel_id(channel_idx)):
+        raise
+      return None
+    if move_channels_to_safe_pos_after:
+      await self.move_to_safe_z()
+    return (await self.request_last_lld_z_positions())[channel_idx]
 
   # TODO: _unchecked_fw_ vs tip-presence-guarded versions
 
