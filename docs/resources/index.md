@@ -55,7 +55,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td><a href="introduction.html">Resource</a></td></tr>
   <!-- Arm subtree -->
   <tr><td>├── <a href="deck/deck.html">Arm</a></td></tr>
-  <tr><td>│   ├── ArticulatedArm</td></tr>
+  <tr><td>│   ├── ArticulatedGripperArm</td></tr>
   <tr><td>│   ├── CartesianArm</td></tr>
   <tr><td>│   └── SCARA</td></tr>
 
@@ -88,19 +88,21 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <!-- ItemizedResource subtree -->
   <tr><td>├── <a href="itemized-resource/itemized-resource.html">ItemizedResource</a></td></tr>
   <tr><td>│   ├── <a href="itemized-resource/plate/plate.html">Plate</a></td></tr>
-  <tr><td>│   ├── TipRack</td></tr>
-  <tr><td>│   └── TubeRack</td></tr>
+  <tr><td>│   ├── <a href="itemized-resource/tiprack/tiprack.html">TipRack</a></td></tr>
+  <tr><td>│   └── <a href="itemized-resource/container-rack/container-rack.html">ContainerRack</a></td></tr>
+  <tr><td>│       └── TubeRack</td></tr>
 
   <!-- ResourceHolder subtree -->
   <tr><td>├── <a href="resource-holder/resource-holder.html">ResourceHolder</a></td></tr>
-  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">PlateHolder</a></td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder.html">PlateHolder</a></td></tr>
 
   <!-- Others -->
+  <tr><td>├── <a href="itemized-resource/tiprack/tip-spot.html">TipSpot</a></td></tr>
   <tr><td>├── Lid</td></tr>
   <tr><td>├── <a href="plate-adapter/plate-adapter.html">PlateAdapter</a></td></tr>
 
   <tr><td>├── ResourceStack</td></tr>
-  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">NestedTipRackStack (to be made)</a></td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder.html">NestedTipRackStack (to be made)</a></td></tr>
 
   <tr><td>└── Workcell (to be made)</td></tr>
 </table>
@@ -184,6 +186,7 @@ library/imcs
 library/nest
 library/opentrons
 library/perkin_elmer
+library/pioreactor
 library/porvair
 library/revvity
 library/sergi

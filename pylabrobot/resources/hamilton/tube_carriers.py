@@ -75,7 +75,7 @@ def hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL(name: str) -> TubeCarrie
 def hamilton_tube_carrier_12_b00(name: str) -> TubeCarrier:
   """Hamilton cat. no.: 182045
   Hamilton name: 'SMP_CAR_12_B00'.
-  'Sample' carrier for 12 50mL falcon tubes (Cor_Falcon_tube_50mL_Vb).
+  'Sample' carrier for 12 50mL falcon tubes (cor_falcon_tube_50mL_Vb).
   2 track(T) wide.
   """
   hole_diameter = 29.0

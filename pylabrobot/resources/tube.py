@@ -70,7 +70,6 @@ class Tube(Container):
       height_volume_data=height_volume_data,
       no_go_zones=no_go_zones,
     )
-    self.tracker.register_callback(self._state_updated)
 
   def serialize(self) -> dict:
     return {**super().serialize(), "max_volume": self.max_volume}

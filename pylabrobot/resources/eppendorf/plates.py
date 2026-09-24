@@ -96,6 +96,7 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       compute_volume_from_height=(_compute_volume_from_height_Eppendorf_96_wellplate_250ul_Vb),
       compute_height_from_volume=(_compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb),
+      name_prefix=name,
     ),
   )
 
@@ -134,6 +135,7 @@ def eppendorf_96_wellplate_500ul_Vb(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       compute_volume_from_height=None,
       compute_height_from_volume=None,
+      name_prefix=name,
     ),
   )
 
@@ -172,6 +174,7 @@ def eppendorf_96_wellplate_1000ul_Vb(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       compute_volume_from_height=None,
       compute_height_from_volume=None,
+      name_prefix=name,
     ),
   )
 
@@ -210,5 +213,6 @@ def eppendorf_96_wellplate_2000ul_vb(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       compute_volume_from_height=None,
       compute_height_from_volume=None,
+      name_prefix=name,
     ),
   )

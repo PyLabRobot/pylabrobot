@@ -1,20 +1,26 @@
+import asyncio
+import errno
 import json
 import time
 import unittest
 import unittest.mock
 import urllib.request
+from typing import Optional
 
-import pytest
 import websockets
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.resources import (
   Coordinate,
-  Cor_96_wellplate_360ul_Fb,
   Resource,
+  cor_96_wellplate_360uL_Fb,
 )
 from pylabrobot.visualizer import Visualizer
-from pylabrobot.visualizer.visualizer import _sanitize_floats, _serialize_with_methods
+from pylabrobot.visualizer.visualizer import (
+  _build_method_registry,
+  _sanitize_floats,
+  _serialize_resource_tree,
+)
 
 
 class SanitizeFloatsTests(unittest.TestCase):
@@ -87,12 +93,11 @@ class VisualizerLiquidColorValidationTests(unittest.TestCase):
 class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
   """Tests for the setup and stop methods of the visualizer backend."""
 
-  @pytest.mark.timeout(20)
   async def test_setup_stop(self):
     """Test that the thread is started and stopped correctly."""
 
     r = Resource(size_x=100, size_y=100, size_z=100, name="root")
-    vis = Visualizer(r, open_browser=False)
+    vis = Visualizer(r, ws_port=0, fs_port=0, open_browser=False)
 
     async def setup_stop_single():
       await vis.setup()
@@ -106,6 +111,88 @@ class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
     await setup_stop_single()
     await setup_stop_single()
 
+  async def test_stop_waits_for_websocket_thread_with_connection(self):
+    """Test that stop waits for the WebSocket thread when a browser is connected."""
+
+    resource = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    vis = Visualizer(resource, ws_port=0, fs_port=0, open_browser=False)
+    await vis.setup()
+    client = await websockets.connect(f"ws://localhost:{vis.ws_port}")
+    await client.send('{"event": "ready"}')
+    await client.recv()
+    server_thread = vis.t
+
+    try:
+      await vis.stop()
+      self.assertFalse(server_thread.is_alive())
+    finally:
+      await client.close()
+      await asyncio.to_thread(server_thread.join, 1)
+
+
+class VisualizerServerStartupFailureTests(unittest.IsolatedAsyncioTestCase):
+  """Tests for failures while starting the visualizer servers."""
+
+  def setUp(self):
+    resource = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    self.vis = Visualizer(resource, open_browser=False)
+
+  async def test_websocket_permission_error_is_propagated(self):
+    error = PermissionError(errno.EACCES, "permission denied")
+    with unittest.mock.patch(
+      "pylabrobot.visualizer.visualizer.websockets.asyncio.server.serve",
+      side_effect=error,
+    ):
+      with self.assertRaises(PermissionError):
+        await asyncio.wait_for(self.vis._run_ws_server(), timeout=1)
+
+  async def test_websocket_address_retries_are_bounded(self):
+    error = OSError(errno.EADDRINUSE, "address already in use")
+    with (
+      unittest.mock.patch(
+        "pylabrobot.visualizer.visualizer.websockets.asyncio.server.serve",
+        side_effect=error,
+      ) as serve,
+      unittest.mock.patch("pylabrobot.visualizer.visualizer._SERVER_PORT_ATTEMPTS", 3),
+    ):
+      with self.assertRaises(OSError):
+        await asyncio.wait_for(self.vis._run_ws_server(), timeout=1)
+    self.assertEqual(serve.call_count, 3)
+
+  async def test_file_server_permission_error_is_propagated(self):
+    error = PermissionError(errno.EACCES, "permission denied")
+    with unittest.mock.patch(
+      "pylabrobot.visualizer.visualizer.http.server.HTTPServer",
+      side_effect=error,
+    ):
+      with self.assertRaises(PermissionError):
+        await asyncio.wait_for(self.vis._run_file_server(), timeout=1)
+
+  async def test_file_server_error_stops_websocket_server(self):
+    error = PermissionError(errno.EACCES, "permission denied")
+    websocket_threads = []
+
+    def fail_file_server(*args, **kwargs):
+      websocket_threads.append(self.vis.t)
+      raise error
+
+    self.vis.ws_port = 0
+    self.vis.fs_port = 0
+    with unittest.mock.patch(
+      "pylabrobot.visualizer.visualizer.http.server.HTTPServer",
+      side_effect=fail_file_server,
+    ):
+      with self.assertRaises(PermissionError):
+        await self.vis.setup()
+
+    websocket_thread = websocket_threads[0]
+    try:
+      self.assertFalse(websocket_thread.is_alive())
+    finally:
+      if websocket_thread.is_alive():
+        self.vis.loop.call_soon_threadsafe(self.vis.stop_.set_result, "test cleanup")
+        await asyncio.to_thread(websocket_thread.join, 1)
+
 
 class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
   """Tests for servers (ws/fs)."""
@@ -113,7 +200,7 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     await super().asyncSetUp()
     self.r = Resource(size_x=100, size_y=100, size_z=100, name="root")
-    self.vis = Visualizer(self.r, open_browser=False)
+    self.vis = Visualizer(self.r, ws_port=0, fs_port=0, open_browser=False)
     await self.vis.setup()
 
     ws_port = self.vis.ws_port  # port may change if port is already in use
@@ -122,8 +209,8 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
 
   async def asyncTearDown(self):
     await super().asyncTearDown()
-    await self.vis.stop()
     await self.client.close()
+    await self.vis.stop()
 
   def test_get_index_html(self):
     """Test that the index.html file is returned."""
@@ -150,7 +237,8 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
       {
         "event": "set_root_resource",
         "data": {
-          "resource": _serialize_with_methods(self.r),
+          "resource": _serialize_resource_tree(self.r),
+          "method_registry": _build_method_registry(self.r),
         },
         "id": "0001",
         "version": STANDARD_FORM_JSON_VERSION,
@@ -175,7 +263,7 @@ class VisualizerShowMachineToolsTests(unittest.IsolatedAsyncioTestCase):
   async def test_show_machine_tools_at_start_false(self):
     """When show_machine_tools_at_start=False, the show_machine_tools event should not be sent."""
     r = Resource(size_x=100, size_y=100, size_z=100, name="root")
-    vis = Visualizer(r, open_browser=False, show_machine_tools_at_start=False)
+    vis = Visualizer(r, ws_port=0, fs_port=0, open_browser=False, show_machine_tools_at_start=False)
     vis.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
     await vis.setup()
 
@@ -200,22 +288,45 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     await super().asyncSetUp()
     self.maxDiff = None
     self.r = Resource(size_x=100, size_y=100, size_z=100, name="root")
-    self.vis = Visualizer(self.r, open_browser=False)
+    self.vis = Visualizer(self.r, ws_port=0, fs_port=0, open_browser=False)
 
     # mock the send_command method to catch the events
-    self.vis.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    self.send_command_mock = unittest.mock.AsyncMock()
+    self.vis.send_command = self.send_command_mock  # type: ignore[method-assign]
 
     await self.vis.setup()
+
+  async def asyncTearDown(self):
+    await self.vis.stop()
+    await super().asyncTearDown()
+
+  async def _wait_for_event(self, event: str, data_key: Optional[str] = None, timeout: float = 5.0):
+    """Wait until the most recent send_command call is ``event`` (optionally carrying
+    ``data_key`` in its data), yielding to the loop.
+
+    Replaces fixed ``time.sleep()`` waits: those block the event loop and race under CI
+    load. Checking the last call - not just any call - matters when one action fans out
+    into many events (e.g. set_well_volumes emits a set_state per well); the assert reads
+    the last call, so we wait until that call carries the expected payload.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+      last = self.send_command_mock.call_args
+      if last is not None and last.kwargs.get("event") == event:
+        if data_key is None or data_key in last.kwargs.get("data", {}):
+          return
+      await asyncio.sleep(0.01)
 
   async def test_assign_child_resource(self):
     """Test that the assign_child_resource method sends the correct event."""
     child = Resource(size_x=100, size_y=100, size_z=100, name="child")
     self.r.assign_child_resource(child, location=Coordinate(0, 0, 0))
-    time.sleep(0.1)  # wait for the event to be sent
-    self.vis.send_command.assert_called_once_with(  # type: ignore[attr-defined]
+    await self._wait_for_event("resource_assigned")
+    self.send_command_mock.assert_called_once_with(
       event="resource_assigned",
       data={
-        "resource": _serialize_with_methods(child),
+        "resource": _serialize_resource_tree(child),
+        "method_registry": _build_method_registry(child),
         "state": child.serialize_all_state(),
         "parent_name": "root",
       },
@@ -227,9 +338,9 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     child = Resource(size_x=100, size_y=100, size_z=100, name="child")
     self.r.assign_child_resource(child, location=Coordinate(0, 0, 0))
     self.r.unassign_child_resource(child)
-    time.sleep(0.1)
+    await self._wait_for_event("resource_unassigned")
 
-    self.vis.send_command.assert_called_with(  # type: ignore[attr-defined]
+    self.send_command_mock.assert_called_with(
       event="resource_unassigned",
       data={"resource_name": "child"},
       wait_for_response=False,
@@ -237,14 +348,56 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_state_updated(self):
     """Test that the state_updated method sends the correct event."""
-    plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
+    plate = cor_96_wellplate_360uL_Fb(name="plate_01")
     self.r.assign_child_resource(plate, location=Coordinate(0, 0, 0))
     plate.set_well_volumes([500] * 96)
-    time.sleep(0.1)
-    self.vis.send_command.assert_called()  # type: ignore[attr-defined]
-    call_args = self.vis.send_command.call_args[1]  # type: ignore[attr-defined]
+    await self._wait_for_event("set_state", data_key="plate_01_well_H12")
+    self.send_command_mock.assert_called()
+    call_args = self.send_command_mock.call_args[1]
     self.assertEqual(call_args["event"], "set_state")
     self.assertEqual(
       call_args["data"]["plate_01_well_H12"]["volume"],
       500,
     )
+
+
+class TestVisualizerMetadataHandling(unittest.TestCase):
+  """Tests for visualizer metadata handling."""
+
+  def test_serialize_resource_tree_preserves_and_stringifies_metadata(self):
+    deck = Resource(
+      size_x=100,
+      size_y=100,
+      size_z=100,
+      name="deck",
+      metadata={"level": 0, "fn": lambda x: x},
+    )
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.metadata = {"level": 1, "unserializable": object()}
+    plate.get_well("A1").metadata = {"level": 2, "sample_id": 123}
+    deck.assign_child_resource(plate, location=Coordinate(0, 0, 0))
+
+    serialized = _serialize_resource_tree(deck)
+    self.assertIn("metadata", serialized)
+    self.assertEqual(serialized["metadata"]["level"], 0)
+
+    plate_serialized = serialized["children"][0]
+    self.assertIn("metadata", plate_serialized)
+    self.assertEqual(plate_serialized["metadata"]["level"], 1)
+
+    well_serialized = plate_serialized["children"][0]
+    self.assertIn("metadata", well_serialized)
+    self.assertEqual(well_serialized["metadata"]["level"], 2)
+    self.assertEqual(well_serialized["metadata"]["sample_id"], 123)
+
+    # Ensure _assemble_command succeeds and round-trips via json.loads
+    vis = Visualizer(deck, open_browser=False)
+    payload, _ = vis._assemble_command(
+      "set_root_resource", {"resource": _serialize_resource_tree(deck)}
+    )
+    decoded = json.loads(payload)["data"]["resource"]
+    self.assertEqual(decoded["name"], "deck")
+    self.assertEqual(decoded["metadata"]["level"], 0)
+    self.assertIsInstance(decoded["metadata"]["fn"], str)
+    self.assertEqual(decoded["children"][0]["metadata"]["level"], 1)
+    self.assertEqual(decoded["children"][0]["children"][0]["metadata"]["sample_id"], 123)
