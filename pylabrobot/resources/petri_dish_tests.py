@@ -19,6 +19,10 @@ class TestPetriDish(unittest.TestCase):
       {
         "name": "petri_dish",
         "type": "PetriDish",
+        "size_x": 90.0,
+        "size_y": 90.0,
+        "size_z": 15.0,
+        "cross_section_type": "circle",
         "category": "petri_dish",
         "max_volume": 121500.0,
         "material_z_thickness": None,
