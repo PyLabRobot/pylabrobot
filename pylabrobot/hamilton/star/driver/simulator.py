@@ -463,6 +463,14 @@ class SimulatedPipettes(_Simulated, Pipettes):
         {"rz": c.z_drive_mm_to_increments(self._modelled_z(channel))},
         f"where the model has channel {channel}'s stop disc",
       )
+    if command == "DC":
+      # The piston draws the air and stands there.
+      self.device.dispensing_drive_uL[channel] = round(
+        self.device.dispensing_drive_uL.get(channel, 0.0)
+        + c.dispensing_drive_increments_to_uL(int(kwargs["dh"])),
+        1,
+      )
+      return None
     if command == "RD":
       uL = self.device.dispensing_drive_uL.get(channel, 0.0)
       return (
