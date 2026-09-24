@@ -35,6 +35,13 @@ Each driver stands alone: one device's package never imports another's. What mor
   per-channel minimum spacing and executes the plan with its own moves; `hamilton/prep/driver/features/pipettes_tests.py` and
   `hamilton/star/driver/features/pipettes_tests.py` show the pattern.
 
+### Liquid classes live with their device
+
+A liquid class is a calibration of one instrument's channel, so each instrument keeps its own tables in its own
+package: `pylabrobot/hamilton/star/liquid_classes/`, `pylabrobot/hamilton/vantage/liquid_classes/`. What the
+tables share is only the shape of a class, `pylabrobot/hamilton/liquid_classes/`. A device without tables of
+its own borrows another's by name, and says so.
+
 ### Idempotent public API
 
 The public surface must expose **no non-idempotent commands.** If the hardware only offers a raw toggle/flip, keep it private (`_toggle_x`) and expose move-to-state methods (`move_x_out` / `move_x_in`) that read current state, act only if needed, then confirm. This keeps the API safe to call repeatedly — the caller states intent ("be open"), not a blind toggle.
