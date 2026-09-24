@@ -253,7 +253,7 @@ class Resource(SerializableMixin):
       "when it is created. Create the resource with the name you want instead."
     )
 
-  def comparable_children(self) -> List["Resource"]:
+  def _comparable_children(self) -> List["Resource"]:
     """The children compared in equality: all of them, unless a subclass holds some as state."""
     return self.children
 
@@ -266,7 +266,7 @@ class Resource(SerializableMixin):
       and self.get_absolute_size_z() == other.get_absolute_size_z()
       and self.location == other.location
       and self.category == other.category
-      and self.comparable_children() == other.comparable_children()
+      and self._comparable_children() == other._comparable_children()
       and self.metadata == other.metadata
     )
 

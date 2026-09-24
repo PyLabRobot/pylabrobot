@@ -658,7 +658,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       new_depth = depth + 1 if resource.category not in exclude_categories else depth
       return max(
         [(longest + longest_depth * depth_weight)]
-        + [find_longest_child_name(c, new_depth) for c in resource.comparable_children()]
+        + [find_longest_child_name(c, new_depth) for c in resource._comparable_children()]
       )
 
     def find_longest_type_name(resource: Resource):
@@ -667,7 +667,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         len(resource.__class__.__name__) if resource.category not in exclude_categories else 0
       )
       return max(
-        [longest] + [find_longest_type_name(child) for child in resource.comparable_children()]
+        [longest] + [find_longest_type_name(child) for child in resource._comparable_children()]
       )
 
     # Calculate the maximum lengths of the resource name and type for proper alignment
@@ -737,7 +737,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     def print_tree(resource: Resource, depth=0):
       r_summary = print_resource_line(resource, depth=depth)
 
-      for child in resource.comparable_children():
+      for child in resource._comparable_children():
         if isinstance(child, ResourceHolder):
           r_summary += "\n"
           if child.resource is not None:

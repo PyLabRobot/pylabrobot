@@ -92,7 +92,7 @@ class TipMountingShaft(Resource):
     """Whether this shaft is carrying a tip."""
     return len(self.children) > 0
 
-  def comparable_children(self) -> List[Resource]:
+  def _comparable_children(self) -> List[Resource]:
     """Everything but the tool it is carrying, which is state."""
     return [child for child in self.children if not isinstance(child, HeadTool)]
 

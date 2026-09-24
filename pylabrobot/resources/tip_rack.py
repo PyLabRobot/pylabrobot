@@ -97,7 +97,7 @@ class TipSpot(Resource):
     # of the tree: this spot's child.
     self.tip_tracking_enabled = True
 
-  def comparable_children(self) -> List[Resource]:
+  def _comparable_children(self) -> List[Resource]:
     """Everything but the tip it is holding, which is state."""
     return [child for child in self.children if not isinstance(child, HeadTool)]
 
