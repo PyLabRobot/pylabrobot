@@ -354,6 +354,14 @@ class Pipettes:
   default_x_grouping_tolerance: float = 0.1
   # How far above a container's top a liquid search starts, in mm.
   search_start_clearance: float = 5.0
+  # A floor search stops looking this far below the modelled cavity bottom, in mm: the seating
+  # error of a plate, no more.
+  search_limit_below_cavity_bottom: float = 1.0
+  # The channels of a batch set off on their Z-touch one after another, this long apart, in s.
+  ztouch_cascade_interval: float = 0.25
+  # A drive that ran to the search limit lands a few hundredths off it: a stop this close to the
+  # limit, in mm, reached it and met nothing.
+  _ztouch_end_allowance: float = 0.1
 
   def __init__(self, driver: "STARDriver", configuration: Optional[PipettesConfiguration] = None):
     """
@@ -2900,6 +2908,20 @@ class Pipettes:
     if parse_firmware_version_date(version).year < 2022:
       raise RuntimeError(f"channel {channel} runs {version}; z-touch needs firmware from 2022")
 
+  def _warn_ztouch_on_soft_tips(self, channels: Iterable[int]) -> None:
+    """Warn where a channel carries a 50 uL tip: it bends under the force a Z-touch presses with."""
+    soft = sorted(
+      channel
+      for channel in channels
+      if isinstance(tip := self.get_mounted_tip(channel), HamiltonTip) and tip.nominal_volume == 50
+    )
+    if soft:
+      logger.warning(
+        "channels %s carry 50 uL tips, which bend under a Z-touch: the height touched may be off "
+        "and the tip may stay bent",
+        soft,
+      )
+
   async def probe_z_using_ztouch(
     self,
     channel_idx: int,
@@ -2911,23 +2933,16 @@ class Pipettes:
     acceleration: float = 800.0,
     detection_limiter_pwm: int = 1,
     push_force_pwm: int = 0,
-    end_tolerance: float = 0.5,
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
     move_channels_to_safe_pos_after: bool = False,
   ) -> Optional[float]:
-    """Lower a channel's tip until it presses on something, and say how high that is.
+    """Lower a channel's tip until it presses on something, and read the height.
 
-    The z-touch: the drive comes down at `approach_speed` to the start, then searches at
-    `search_speed` with its force held to `detection_limiter_pwm`, and stops where the tip meets
-    resistance. The channel says where its stop disc stopped; the tip bottom is the overhang
-    below it. Then the channel backs off by `post_detection_distance` and rests there, or goes to
-    Z safety instead when asked. A search that reached its end, within `end_tolerance`, touched
-    nothing and answers None.
-
-    The start is a tip bottom height, as the cLLD probe's; the end is a stop disc height, as
-    legacy sends it, so the default is the drive's floor and the search goes as far as it can.
-    Needs channel firmware from 2022 on, as discovery recorded it.
+    Approach at `approach_speed`, search at `search_speed` with the force held to
+    `detection_limiter_pwm`. Afterwards `post_detection_distance` above what it met, or Z safety
+    when asked. None when the search reached its end and met nothing. Channel firmware
+    from 2022 on.
 
     Args:
       channel_idx: which channel, 0-indexed from the back.
@@ -2939,7 +2954,6 @@ class Pipettes:
       acceleration: in mm/s2.
       detection_limiter_pwm: the force at which the search stops, 0 to 125.
       push_force_pwm: the push-down force once stopped, 0 to 125; 0 switches the drive off.
-      end_tolerance: how close to the end counts as having touched nothing, in mm.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
       post_detection_distance: how far the channel backs off afterwards, in mm; 0 stays.
       move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
@@ -2955,6 +2969,7 @@ class Pipettes:
     """
     self._require_channel(channel_idx)
     self._require_ztouch_firmware(channel_idx)
+    self._warn_ztouch_on_soft_tips([channel_idx])
     overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
@@ -2990,7 +3005,7 @@ class Pipettes:
       raise
     await self._record_where_they_stopped("z")
     tip_bottom = round(stop_disc - overhang, 2)
-    touched = None if tip_bottom - search_end_position <= end_tolerance else tip_bottom
+    touched = None if tip_bottom - search_end_position <= self._ztouch_end_allowance else tip_bottom
     if move_channels_to_safe_pos_after:
       await self.move_to_safe_z()
     elif post_detection_distance:
@@ -3453,23 +3468,15 @@ class Pipettes:
     z_cavity_bottom: Sequence[float],
     z_top: Sequence[float],
     search_speed: float,
-    below_floor: float,
-    end_tolerance: float,
-    start_spacing: float,
     approach_speed: float,
     n_replicates: int,
   ) -> Dict[int, List[Optional[float]]]:
     """Z-touch the floor of every container of one batch, the channels in a cascade, n times.
 
-    As `_probe_batch_liquid_heights` with the search swapped: each channel searches from its
-    container's top down to `below_floor` under its cavity bottom, and answers where its stop
-    disc stopped, so the height is the overhang below that. There is no clearance above the top,
-    as a liquid search has: nothing above it can be met, and everything below it is searched.
-    The channels go to their starts together first, each on its own drive at `approach_speed`,
-    so the cascade is the search itself: the searches set off `start_spacing` apart from there,
-    the lowest channel number first, and run on together. A channel that reached its end, within
-    `end_tolerance`, touched nothing and is None for the round. The channels stay where they
-    stopped: the next round starts with the approach again.
+    From the top to `search_limit_below_cavity_bottom` under the cavity bottom, on the stop
+    disc. The channels go to their starts together at `approach_speed`, then set off
+    `ztouch_cascade_interval` apart, lowest channel first. None where a channel reached the limit.
+    They stay where they stopped; the next round approaches again.
 
     Args:
       batch: the channels and which container each has, by job index.
@@ -3477,9 +3484,6 @@ class Pipettes:
       z_cavity_bottom: per job, on the deck in mm.
       z_top: per job, on the deck in mm.
       search_speed: in mm/s.
-      below_floor: how far under the modelled cavity bottom the search may go, in mm.
-      end_tolerance: how close to the end counts as having touched nothing, in mm.
-      start_spacing: how long after the previous channel each one sets off, in s.
       approach_speed: down to the starts, in mm/s.
       n_replicates: how many rounds.
 
@@ -3491,7 +3495,7 @@ class Pipettes:
       STARFirmwareError: As a channel answered.
     """
     searches = self._get_stop_disc_search_windows(
-      batch, overhangs, z_cavity_bottom, z_top, 0.0, below_floor
+      batch, overhangs, z_cavity_bottom, z_top, 0.0, self.search_limit_below_cavity_bottom
     )
     found: Dict[int, List[Optional[float]]] = {job: [] for job in batch.indices}
     for _ in range(n_replicates):
@@ -3501,7 +3505,7 @@ class Pipettes:
       results = await asyncio.gather(
         *(
           self._after(
-            index * start_spacing,
+            index * self.ztouch_cascade_interval,
             self._ztouch_search(channel, end, start, search_speed=search_speed),
           )
           for index, (channel, job, end, start) in enumerate(searches)
@@ -3514,7 +3518,7 @@ class Pipettes:
         raise failed[0]
       for (channel, job, end, _), stop_disc in zip(searches, results):
         stop_disc = cast(float, stop_disc)
-        touched = stop_disc - end > end_tolerance
+        touched = stop_disc - end > self._ztouch_end_allowance
         found[job].append(round(stop_disc - overhangs[channel], 2) if touched else None)
     return found
 
@@ -3526,9 +3530,6 @@ class Pipettes:
     search_speed: float = 10.0,
     n_replicates: int = 1,
     *,
-    below_floor: float = 5.0,
-    end_tolerance: float = 0.5,
-    start_spacing: float = 0.25,
     approach_speed: float = 125.0,
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_during: Optional[float] = None,
@@ -3537,12 +3538,10 @@ class Pipettes:
   ) -> List[Optional[float]]:
     """Touch the floor of each container with a channel's tip, and say how high it is.
 
-    `probe_liquid_heights` with the z-touch in place of the liquid search: the same cycles and
-    batches, the same moves between them, the channels of a batch searching together, and the
-    same heights at the end. Each search goes from the container's top down to `below_floor`
-    under its modelled cavity bottom, and stops where the tip presses on something. The channels
-    of a batch go to their starts together at `approach_speed`, then set off in a cascade,
-    `start_spacing` apart from the back. Needs channel firmware from 2022 on.
+    Batched as `probe_liquid_heights`, the z-touch in place of the liquid search: from the top to
+    `search_limit_below_cavity_bottom` under the cavity bottom, the channels of a batch to
+    their starts together at `approach_speed`, then a cascade `ztouch_cascade_interval` apart.
+    Channel firmware from 2022 on.
 
     Args:
       containers: any number; a whole plate is fine.
@@ -3552,10 +3551,6 @@ class Pipettes:
         None, spreading channels that share a container.
       search_speed: in mm/s.
       n_replicates: how many times each container is touched; the heights are averaged.
-      below_floor: how far under the modelled cavity bottom the search may go, in mm.
-      end_tolerance: how close to the end counts as having touched nothing, in mm.
-      start_spacing: how long after the previous channel each one sets off, in s. 0 starts them
-        all at once.
       approach_speed: down to the search starts, in mm/s.
       minimum_traverse_height_start: the height every low channel's lowest point is raised to
         before the first batch, in mm. Z safety when None.
@@ -3579,10 +3574,10 @@ class Pipettes:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be at least 1, is {n_replicates}")
-    if start_spacing < 0:
-      raise ValueError(f"start_spacing must be at least 0 s, is {start_spacing}")
-    for channel in use_channels or range(min(len(containers), self.num_channels)):
+    touching = list(use_channels or range(min(len(containers), self.num_channels)))
+    for channel in touching:
       self._require_ztouch_firmware(channel)
+    self._warn_ztouch_on_soft_tips(touching)
     channels, overhangs, batches = await self._prepare_batched(
       deck,
       containers,
@@ -3601,9 +3596,6 @@ class Pipettes:
         z_cavity_bottom=z_cavity_bottom,
         z_top=z_top,
         search_speed=search_speed,
-        below_floor=below_floor,
-        end_tolerance=end_tolerance,
-        start_spacing=start_spacing,
         approach_speed=approach_speed,
         n_replicates=n_replicates,
       ),
