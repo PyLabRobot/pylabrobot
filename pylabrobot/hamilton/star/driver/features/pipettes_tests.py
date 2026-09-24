@@ -457,7 +457,7 @@ class TestRequireISWAPParked(unittest.IsolatedAsyncioTestCase):
     async def not_parked(*args: Any, **kwargs: Any) -> bool:
       return False
 
-    iswap.request_parked = not_parked  # type: ignore[method-assign]
+    iswap.request_is_parked = not_parked  # type: ignore[method-assign]
     with self.assertRaises(RuntimeError):
       await self.pipettes._require_iswap_parked()
 
@@ -2143,6 +2143,14 @@ class TestWhereATipCommandLeavesTheChannels(unittest.IsolatedAsyncioTestCase):
         pipettes._min_spacing_between(channel, channel + 1),
         f"channels {channel} and {channel + 1} stand too close: {order}",
       )
+
+  async def test_spots_a_pitch_apart_in_floating_point_are_accepted(self):
+    # 130.7 - 121.7 is 8.999999999999986 in floating point; the command carries 9.0 mm.
+    pipettes, _, _ = await channels_over_a_rack()
+    _, ys, _ = pipettes._tip_command_positions(
+      {0: Coordinate(300.0, 130.7, 150.0), 1: Coordinate(300.0, 121.7, 150.0)}
+    )
+    self.assertEqual(ys[:2], [1307, 1217])
 
 
 class TestTipsOfDifferentKinds(unittest.IsolatedAsyncioTestCase):

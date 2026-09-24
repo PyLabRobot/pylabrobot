@@ -3049,7 +3049,7 @@ class iSWAP:
 
   # -- parking ---------------------------------------------------------------
 
-  async def request_parked(self, tolerance_increments: int = 2) -> bool:
+  async def request_is_parked(self, tolerance_increments: int = 2) -> bool:
     """Whether the arm is parked, judged from where its drives are.
 
     Each drive is checked against the parking stop in its stored table, which setup reads:
