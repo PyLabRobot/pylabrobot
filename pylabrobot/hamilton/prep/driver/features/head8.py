@@ -544,7 +544,7 @@ class Head8:
     for ch in use_channels:
       used = mounted[ch].tracker.get_used_volume()
       if not mounted[ch].tracker.is_disabled and used > 1e-6:
-        raise RuntimeError(f"Cannot drop tip on channel {ch} with volume {used} uL")
+        logger.warning("dropping the tip on channel %d with %s uL in it", ch, used)
     spots = [d for d in destinations if isinstance(d, TipSpot)]
     if len({id(spot) for spot in spots}) != len(spots):
       raise ValueError("each tip must go into a spot of its own")
