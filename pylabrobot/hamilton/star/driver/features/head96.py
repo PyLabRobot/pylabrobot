@@ -641,10 +641,10 @@ class Head96(Head):
     )
 
   async def request_last_lld_z_position(self) -> float:
-    """Request the Z-drive position the last cLLD search detected at. `H0 RH`.
+    """Request where the stop disc was when the last cLLD search detected. `H0 RH`.
 
     Returns:
-      The position, in mm.
+      The stop disc's Z position at detection, in mm.
     """
     resp = await self._driver.send_command(
       module=self.configuration.module, command="RH", fmt="rh#####"
@@ -792,7 +792,7 @@ class Head96(Head):
     except STARFirmwareError:
       await self.move_to_safe_z()
       raise
-    # RH is taken to be in stop disc terms; not yet confirmed on a device.
+    # RH is the stop disc at detection: on a device it read exactly `zi` below the RZ that followed.
     detected = round(await self.request_last_lld_z_position() - tip_overhang, 2)
     if move_to_safe_z_after:
       await self.move_to_safe_z()
