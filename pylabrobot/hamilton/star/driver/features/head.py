@@ -907,9 +907,10 @@ class Head:
     arm = self.resource.parent
     if arm is None:
       return
-    shaft = self.resource.get_item(HEAD_REFERENCE_SHAFT).location
-    if shaft is None:
-      return
+    # The drives report channel A1's axis: the shaft's centre, not the corner it is placed by.
+    shaft = self.resource.get_item(HEAD_REFERENCE_SHAFT).get_location_wrt(
+      self.resource, "c", "c", "b"
+    )
     here, on_the_arm = self.resource.location, arm.get_location_wrt(deck)
     self.resource.location = Coordinate(
       here.x,
