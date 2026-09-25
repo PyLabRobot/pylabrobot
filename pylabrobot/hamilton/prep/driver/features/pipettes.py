@@ -3096,7 +3096,7 @@ class Pipettes:
         )
       if channel >= len(self.channels) or self.channels[channel].zaxis is None:
         raise RuntimeError(f"channel {channel} has no Z axis in the firmware tree")
-    parallel = self._driver.second_io is not None
+    parallel = self._driver._second_io is not None
     found: Dict[int, List[Optional[float]]] = {job: [] for _, job in jobs}
     for _ in range(n_replicates):
       await self.move_tool_bottom_to_z_positions(

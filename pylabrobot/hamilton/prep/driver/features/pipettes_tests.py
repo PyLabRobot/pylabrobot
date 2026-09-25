@@ -2294,7 +2294,7 @@ def _batch_probe_setup(second_session: bool):
   deck[6].assign_child_resource(block, location=Coordinate(10, 10, 0))
   p = PrepSimulationDriver(deck=deck)
   if second_session:
-    p.second_io = _SimulatedIO(p)
+    p._second_io = _SimulatedIO(p)
   links: List[str] = []
   main_send, second_send = p.send_command, p.send_command_on_second_session
 
