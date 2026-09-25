@@ -369,6 +369,16 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
       ],
     )
 
+  async def test_each_stroke_follows_what_one_draw_takes_from_the_well(self):
+    for well in self.plate.get_all_items():
+      well.tracker.set_volume(300.0)
+    await self.head.mix(self.plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0))
+    well = self.plate.get_item("A1")
+    drop = round(well.compute_height_from_volume(300.0) - well.compute_height_from_volume(200.0), 1)
+    following = self.head.configuration.z_drive_mm_to_increments(drop)
+    self.assertIn(f"zd{following:04}", self.sent[1])
+    self.assertIn(f"ze{following:04}", self.sent[2])
+
   async def test_a_failed_stroke_raises_the_head(self):
     answer = self.driver.send_command
 
@@ -959,6 +969,9 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
     surface = bottom + well.compute_height_from_volume(170.0)
     self.assertAlmostEqual(fields["liquid_surface_no_lld"], surface * 10, delta=1)
     self.assertEqual(fields["minimum_traverse_height_start"], fields["liquid_surface_no_lld"])
+    # Following up by what 30 uL raises the well's surface.
+    rise = well.compute_height_from_volume(200.0) - well.compute_height_from_volume(170.0)
+    self.assertAlmostEqual(fields["surface_following_distance"], rise * 10, delta=1)
     self.assertEqual(self.tip_volumes(), {0.0})
     others = {w.tracker.get_used_volume() for w in self.plate.get_all_items()[1:]}
     self.assertEqual(others, {200.0})

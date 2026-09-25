@@ -1553,10 +1553,13 @@ class Head96(Head):
       raise ValueError("Invalid 96-head parameters:\n" + "\n".join(errors))
 
   @staticmethod
-  def _get_surface_drop(container: Container, height: float, volume: float) -> float:
-    """How far drawing `volume` uL lowers a surface `height` mm over the cavity bottom, in mm."""
+  def _get_surface_change(container: Container, height: float, volume: float) -> float:
+    """How far `volume` uL added moves a surface `height` mm over the cavity bottom, in mm.
+
+    A negative volume is drawn, and lowers it.
+    """
     held = container.compute_volume_from_height(height)
-    return round(height - container.compute_height_from_volume(max(held - volume, 0.0)), 1)
+    return round(container.compute_height_from_volume(max(held + volume, 0.0)) - height, 1)
 
   def _update_volume_from_surface(
     self, container: Container, surface: float, bottom: float
@@ -2140,7 +2143,8 @@ class Head96(Head):
         if surface_following_distance is None:
           # A container under all 96 gives what every channel draws; a well gives one's.
           given = liquid * len(pairs) if containers is None else liquid
-          drop = self._get_surface_drop(anchor, max(round(surface - bottom, 2), 0.0), given)
+          height = max(round(surface - bottom, 2), 0.0)
+          drop = -self._get_surface_change(anchor, height, -given)
           surface_following_distance = round(
             max(min(drop, surface - immersion_depth - floor), 0.0), 1
           )
@@ -2568,9 +2572,9 @@ class Head96(Head):
 
     Placed as `mix`. The firmware never searches: OFF dispenses at `liquid_height` above the
     cavity bottom, the cavity bottom when None; CAPACITIVE finds the surface by cLLD, sets the
-    tracker to the volume found and dispenses at the surface. The floor is the cavity bottom
-    unless given. `jet`, `blow_out` and `empty` pick the firmware's mode. Booked as `aspirate`;
-    the head goes to safe Z on a failure.
+    tracker to the volume found and dispenses at the surface, following it up. The floor is the
+    cavity bottom unless given. `jet`, `blow_out` and `empty` pick the firmware's mode. Booked as
+    `aspirate`; the head goes to safe Z on a failure.
 
     Args:
       resource: a plate of 96 wells or of one, its 96 wells, or a container.
@@ -2596,7 +2600,8 @@ class Head96(Head):
         None.
       cut_off_speed: the flow the dispense ends at, in uL/s. 5.0 when None.
       stop_back_volume: drawn back after the dispense, in uL. The class's, else 0.0, when None.
-      surface_following_distance: how far the tips follow the rising surface, in mm.
+      surface_following_distance: how far the tips follow the rising surface, in mm. Under
+        CAPACITIVE, how far the dispensed liquid raises the surface when None; never above the top.
       second_section_height: height of the container's narrower lower section, in mm.
       second_section_ratio: that section's bottom to top ratio, in tenths.
       blow_out_air_volume: air pushed out after the liquid in a blow-out mode, in uL. The
@@ -2703,6 +2708,12 @@ class Head96(Head):
           self._update_volume_from_surface(anchor, surface, bottom)
           # The search may have found more liquid than the model had.
           check_room(RuntimeError)
+        if surface_following_distance is None:
+          # A container under all 96 takes what every channel dispenses; a well takes one's.
+          given = sum(v for container, v in zip(givers, liquid) if container is anchor)
+          height = max(round(surface - bottom, 2), 0.0)
+          rise = self._get_surface_change(anchor, height, given)
+          surface_following_distance = round(max(min(rise, top - surface), 0.0), 1)
 
       async def send() -> None:
         await self._dispense_in_one_move(
@@ -2780,8 +2791,8 @@ class Head96(Head):
 
     Over a plate of many wells head channel A1 goes over well A1; over a single container, or a
     plate of one well, the channel array is centred over it. Each draw follows the surface down by
-    `mix.surface_following_distance` and each expel follows it back up, so the tips do not drift;
-    no stroke goes below the cavity bottom. OFF mixes at `offset` z above the cavity bottom, with
+    `mix.surface_following_distance`, by what one draw lowers it when None, and each expel follows
+    it back up, so the tips do not drift; no stroke goes below the cavity bottom. OFF mixes at `offset` z above the cavity bottom, with
     the blowout air drawn and expelled over the well. CAPACITIVE draws the air at the traverse
     height, finds the surface by cLLD, sets the tracker to the volume found, mixes
     `mix_position_from_liquid_surface` below it and expels the air once risen.
@@ -2826,7 +2837,21 @@ class Head96(Head):
     if swap_speed is None:
       swap_speed = self.default_mix_swap_speed
     anchor, a1, bottom, z_top = self._get_target(resource, offset)
-    following = mix.surface_following_distance or 0.0
+    # A container under all 96 gives what every channel draws; a well gives one's.
+    channels = sum(t is not None for t in self._get_mounted_tips())
+    per_draw = mix.volume * (
+      channels if self._get_containers_under_channels(resource) is None else 1
+    )
+
+    def get_following(height: float) -> float:
+      """How far each draw follows the surface down from `height` mm over the cavity bottom."""
+      if mix.surface_following_distance is not None:
+        return mix.surface_following_distance
+      if not anchor.supports_compute_height_volume_functions():
+        return 0.0
+      return max(-self._get_surface_change(anchor, max(height, 0.0), -per_draw), 0.0)
+
+    following = 0.0
     await self._move_over(a1, minimum_traverse_height_start, descent_speed)
 
     async def strokes() -> None:
@@ -2847,6 +2872,13 @@ class Head96(Head):
         await self.move_tool_bottom_to_z_position(minimum_traverse_height_end, speed=descent_speed)
 
     if lld_mode == LLDMode.OFF:
+      held = anchor.tracker.get_used_volume()
+      modelled = (
+        anchor.compute_height_from_volume(held)
+        if anchor.supports_compute_height_volume_functions()
+        else 0.0
+      )
+      following = get_following(modelled)
       start = a1.z + following
       swap_start = z_top + self.mix_swap_start_clearance
       try:
@@ -2875,6 +2907,7 @@ class Head96(Head):
       if anchor.supports_compute_height_volume_functions():
         anchor.tracker.set_volume(anchor.compute_volume_from_height(max(surface - bottom, 0.0)))
       start = max(round(surface - mix_position_from_liquid_surface, 2), bottom)
+      following = round(min(get_following(surface - bottom), start - bottom), 1)
       await self.move_tool_bottom_to_z_position(start, speed=swap_speed)
       await strokes()
     except BaseException:
