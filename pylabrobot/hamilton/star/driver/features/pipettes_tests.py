@@ -1,5 +1,6 @@
 import asyncio
 import math
+import re
 import unittest
 import unittest.mock
 from typing import Any, List, Literal, Optional, Tuple
@@ -9,6 +10,7 @@ from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes, PipettesConfiguration
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck
 
 
@@ -748,6 +750,645 @@ class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
     await self.pipettes.move_tool_bottom_to_z_positions({0: z})
     stop_disc = await self.pipettes.request_stop_disc_z_position(0)
     self.assertAlmostEqual(stop_disc - z, self.tip.get_size_z() - self.tip.fitting_depth, places=1)
+
+
+async def channels_over_a_rack() -> Tuple[Pipettes, Any, List[str]]:
+  """Simulated channels, a 300 uL rack on track 16, and every tip command sent from here on.
+
+  Returns:
+    The feature, the rack, and the `C0 TT`, `TP`, `TR`, `EP` and `ER` commands as sent, without
+    their ids.
+  """
+  from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL
+
+  pipettes = await simulated_channels()
+  deck = pipettes._driver.deck
+  assert deck is not None
+  carrier = TIP_CAR_480_A00(name="tip_carrier")
+  carrier[0] = rack = hamilton_96_tiprack_300uL(name="rack")
+  deck.assign_child_resource(carrier, track=16)
+
+  sent: List[str] = []
+  log = pipettes._driver._log_exchange  # type: ignore[attr-defined]
+
+  def recorded(written: str, read: Optional[str]) -> None:
+    if written[:4] in ("C0TT", "C0TP", "C0TR", "C0EP", "C0ER"):
+      sent.append(written)
+    log(written, read)
+
+  pipettes._driver._log_exchange = recorded  # type: ignore[attr-defined]
+  return pipettes, rack, sent
+
+
+class TestTipHandling(unittest.IsolatedAsyncioTestCase):
+  """A tip is a resource: picked up, it moves from its spot onto the channel's shaft, and back.
+
+  With tip tracking on, which is what makes a spot give up its tip.
+  """
+
+  def setUp(self):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+
+  async def test_a_pickup_sends_what_legacy_sends(self):
+    pipettes, rack, sent = await channels_over_a_rack()
+    await pipettes.pick_up_tips([rack.get_item("A1"), rack.get_item("B1")])
+    self.assertEqual(
+      sent,
+      [
+        "C0TTtt01tf0tl0519tv04000tg2tu0",
+        "C0TPxp04554 04554 00000&yp1458 1368 0000&tm1 1 0&tt01tp2244tz2164th2828td0",
+      ],
+    )
+
+  async def test_a_picked_up_tip_is_on_the_shaft_and_not_in_the_spot(self):
+    pipettes, rack, _ = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    tip = spot.tip
+    await pipettes.pick_up_tips([spot])
+    self.assertIs(pipettes.get_mounted_tip(0), tip)
+    self.assertIs(tip.parent, pipettes.shaft(0))
+    self.assertIsNone(spot.tip)
+    self.assertEqual((await pipettes.sense_tip_presence())[0], 1)
+
+  async def test_the_tip_bottom_is_its_overhang_below_the_stop_disc(self):
+    pipettes, rack, _ = await channels_over_a_rack()
+    tip = rack.get_item("A1").tip
+    await pipettes.pick_up_tips([rack.get_item("A1")])
+    bottom = await pipettes.request_tool_bottom_z_position(0)
+    stop_disc = await pipettes.request_stop_disc_z_position(0)
+    self.assertAlmostEqual(stop_disc - bottom, tip.get_size_z() - tip.fitting_depth, places=1)
+
+  async def test_two_spots_in_one_column_too_close_go_in_separate_commands(self):
+    """The channels cannot stand that close, so the spots are taken one command after the other."""
+    pipettes, rack, sent = await channels_over_a_rack()
+    spots = [rack.get_item("A1"), rack.get_item("B1")]
+
+    await pipettes.pick_up_tips(
+      spots, use_channels=[0, 3], offsets=[Coordinate.zero(), Coordinate(y=4)]
+    )
+
+    picked_up = [command for command in sent if command.startswith("C0TP")]
+    self.assertEqual(len(picked_up), 2)
+    self.assertIn("tm1 0&", picked_up[0])
+    self.assertIn("tm0 0 0 1 0&", picked_up[1])
+    self.assertEqual(
+      [pipettes.get_mounted_tip(channel) is not None for channel in (0, 3)], [True, True]
+    )
+
+  async def test_spots_in_different_columns_still_go_in_one_command(self):
+    """As legacy sends them: the firmware works through the columns itself."""
+    pipettes, rack, sent = await channels_over_a_rack()
+    spots = [rack.get_item("A1"), rack.get_item("B2")]
+
+    await pipettes.pick_up_tips(spots, use_channels=[0, 1])
+
+    picked_up = [command for command in sent if command.startswith("C0TP")]
+    self.assertEqual(len(picked_up), 1)
+    self.assertIn("tm1 1 0&", picked_up[0])
+
+  async def test_two_tips_going_into_one_column_too_close_go_in_separate_commands(self):
+    pipettes, rack, sent = await channels_over_a_rack()
+    spots = [rack.get_item("A1"), rack.get_item("B1")]
+    await pipettes.pick_up_tips(
+      spots, use_channels=[0, 3], offsets=[Coordinate.zero(), Coordinate(y=4)]
+    )
+    sent.clear()
+
+    await pipettes.drop_tips(
+      spots, use_channels=[0, 3], offsets=[Coordinate.zero(), Coordinate(y=4)]
+    )
+
+    self.assertEqual(len([command for command in sent if command.startswith("C0TR")]), 2)
+    self.assertEqual([pipettes.get_mounted_tip(channel) for channel in (0, 3)], [None, None])
+    self.assertTrue(all(spot.tip is not None for spot in spots))
+
+  async def test_a_tip_dropped_at_a_place_belongs_to_nothing(self):
+    """A coordinate is somewhere on the deck, not a spot: one command, and the tip is let go."""
+    pipettes, rack, sent = await channels_over_a_rack()
+    await pipettes.pick_up_tips([rack.get_item("A1")], use_channels=[0])
+    sent.clear()
+    deck = pipettes._driver.deck
+    assert deck is not None
+    over_the_waste = deck.get_trash_area().get_location_wrt(deck, x="c", y="c", z="b")
+
+    await pipettes.drop_tips([over_the_waste], use_channels=[0])
+
+    self.assertEqual(len([command for command in sent if command.startswith("C0TR")]), 1)
+    self.assertIsNone(pipettes.get_mounted_tip(0))
+    self.assertIsNone(rack.get_item("A1").tip)
+
+  async def test_a_traverse_height_the_tip_cannot_reach_is_refused(self):
+    """The command ends with the tip bottom at that height, so the stop disc ends an overhang up."""
+    pipettes, rack, sent = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    ceiling = round(pipettes.configuration.z_range[1] - 51.9, 2)  # a 300 uL tip's overhang
+
+    with self.assertRaises(ValueError):
+      await pipettes.pick_up_tips(
+        [spot], use_channels=[0], minimum_traverse_height_start=ceiling + 1
+      )
+    self.assertEqual(sent, [])
+
+    await pipettes.pick_up_tips([spot], use_channels=[0], minimum_traverse_height_start=ceiling)
+    self.assertTrue(any(command.startswith("C0TP") for command in sent))
+
+  async def test_a_drop_refuses_the_same_height_while_the_tip_is_still_on(self):
+    pipettes, rack, sent = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    await pipettes.pick_up_tips([spot], use_channels=[0])
+    sent.clear()
+    ceiling = round(pipettes.configuration.z_range[1] - 51.9, 2)
+
+    with self.assertRaises(ValueError):
+      await pipettes.drop_tips([spot], use_channels=[0], minimum_traverse_height_start=ceiling + 1)
+    self.assertEqual(sent, [])
+    self.assertIsNotNone(pipettes.get_mounted_tip(0))
+
+  async def test_a_model_that_cannot_be_updated_does_not_hide_the_devices_error(self):
+    """What the device said is the error worth having; a stale model is only logged."""
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    with (
+      patch.object(
+        pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError("the device"))
+      ),
+      patch.object(pipettes, "sense_tip_presence", AsyncMock(return_value=[1] + [0] * 7)),
+      patch.object(
+        pipettes.shaft(0), "mount_tip", unittest.mock.Mock(side_effect=RuntimeError("the model"))
+      ),
+    ):
+      with self.assertRaisesRegex(RuntimeError, "the device"):
+        await pipettes.pick_up_tips([spot])
+
+  async def test_a_channel_with_nothing_modelling_it_is_refused(self):
+    """A deck given after setup leaves the channels unmodelled: the tip would belong to nothing."""
+    pipettes, rack, sent = await channels_over_a_rack()
+    pipettes.resources = []
+    with self.assertRaises(RuntimeError):
+      await pipettes.pick_up_tips([rack.get_item("A1")])
+    self.assertIsNotNone(rack.get_item("A1").tip)
+    self.assertEqual(sent, [])
+
+  async def test_a_channel_carrying_a_tip_is_refused_another(self):
+    from pylabrobot.resources.errors import HasTipError
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    await pipettes.pick_up_tips([rack.get_item("A1")])
+    with self.assertRaises(HasTipError):
+      await pipettes.pick_up_tips([rack.get_item("B1")])
+
+  async def test_a_failed_pickup_moves_only_the_tips_the_channels_sense(self):
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spots = [rack.get_item("A1"), rack.get_item("B1")]
+    tips = [spot.tip for spot in spots]
+    with (
+      patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError)),
+      patch.object(pipettes, "sense_tip_presence", AsyncMock(return_value=[1, 0] + [0] * 6)),
+    ):
+      with self.assertRaises(RuntimeError):
+        await pipettes.pick_up_tips(spots)
+    self.assertIs(pipettes.get_mounted_tip(0), tips[0])
+    self.assertIsNone(pipettes.get_mounted_tip(1))
+    self.assertIs(tips[1].parent, spots[1])
+
+  async def test_a_failed_pickup_lifts_the_channels_out_of_the_rack(self):
+    """Whatever state a failure leaves them in, the channels come up to the traverse height."""
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    with patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError)):
+      with self.assertRaises(RuntimeError):
+        await pipettes.pick_up_tips([rack.get_item("A1")])
+    # The height the command would have travelled at: as high as a 300 uL tip goes.
+    self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), 282.8, places=1)
+
+  async def test_a_pickup_that_faults_on_one_channel_keeps_the_others_tips(self):
+    """Not every pick-up uses every channel: the error names the ones that faulted, by channel.
+
+    The channels cannot be asked here, so what the error says is what the model takes.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from pylabrobot.hamilton.star.driver.errors import HardwareError, STARFirmwareError
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spots = [rack.get_item("A1"), rack.get_item("C1")]
+    tips = [spot.tip for spot in spots]
+    failure = STARFirmwareError(
+      errors={
+        "Pipetting channel 3": HardwareError(
+          message="no tip picked up", trace_information=75, raw_response="", raw_module="P3"
+        )
+      },
+      raw_response="C0TPid0001er99/00 P3/75",
+    )
+    with (
+      patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=failure)),
+      patch.object(pipettes, "sense_tip_presence", AsyncMock(side_effect=RuntimeError)),
+    ):
+      with self.assertRaises(RuntimeError):
+        await pipettes.pick_up_tips(spots, use_channels=[0, 2])
+    self.assertIs(pipettes.get_mounted_tip(0), tips[0])
+    self.assertIsNone(pipettes.get_mounted_tip(2))
+    self.assertIs(tips[1].parent, spots[1])
+
+  async def test_a_cancelled_pickup_moves_only_the_tips_the_channels_sense(self):
+    """A cancellation is not an answer: what the channels carry is, and here they carry nothing."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spots = [rack.get_item("A1"), rack.get_item("B1")]
+    tips = [spot.tip for spot in spots]
+    with patch.object(
+      pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=asyncio.CancelledError)
+    ):
+      with self.assertRaises(asyncio.CancelledError):
+        await pipettes.pick_up_tips(spots)
+    self.assertIsNone(pipettes.get_mounted_tip(0))
+    self.assertIs(tips[0].parent, spots[0])
+    self.assertIs(tips[1].parent, spots[1])
+
+  async def test_a_cancelled_drop_leaves_the_tips_the_channels_still_carry(self):
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    tip = spot.tip
+    await pipettes.pick_up_tips([spot])
+    with patch.object(
+      pipettes, "_unchecked_fw_drop_tips", AsyncMock(side_effect=asyncio.CancelledError)
+    ):
+      with self.assertRaises(asyncio.CancelledError):
+        await pipettes.drop_tips([spot])
+    self.assertIs(pipettes.get_mounted_tip(0), tip)
+    self.assertIs(tip.parent, pipettes.shaft(0))
+    self.assertIsNone(spot.tip)
+
+  async def test_initialization_leaves_no_tips_on_the_channels(self):
+    pipettes, rack, _ = await channels_over_a_rack()
+    tip = rack.get_item("A1").tip
+    await pipettes.pick_up_tips([rack.get_item("A1")])
+    await pipettes.initialize()
+    self.assertIsNone(pipettes.get_mounted_tip(0))
+    self.assertIsNone(tip.parent)
+
+
+class TestWhereATipCommandLeavesTheChannels(unittest.IsolatedAsyncioTestCase):
+  """Only the channels a tip command names move, in Z as in Y.
+
+  As the device answers: `C0 TP` on one channel is followed by `rz +2450 +3343 +3343 ...` - the
+  traverse height for that channel, and the rest where they already stood.
+  """
+
+  def setUp(self):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+
+  async def test_a_pickup_moves_only_its_own_channel_in_z(self):
+    pipettes, rack, _ = await channels_over_a_rack()
+    before = await pipettes.request_stop_disc_z_positions()
+    tip = rack.get_item("A1").tip
+    overhang = tip.get_size_z() - tip.fitting_depth
+
+    await pipettes.pick_up_tips([rack.get_item("A1")])
+
+    # No height given, so it travels as high as this tip can: the disc ends at the drive's top.
+    after = await pipettes.request_stop_disc_z_positions()
+    self.assertAlmostEqual(
+      after[0],
+      pipettes.configuration.z_range[1],
+      places=1,
+      msg="the command ends with the tip's end at the traverse height, so the disc is above it",
+    )
+    lowest = await pipettes._unchecked_fw_request_lowest_z_positions()
+    self.assertAlmostEqual(lowest[0], pipettes.configuration.z_range[1] - overhang, places=1)
+    self.assertEqual(
+      [after[channel] for channel in range(1, 8)],
+      [before[channel] for channel in range(1, 8)],
+      "the channels the command does not name stay where they were",
+    )
+
+  async def test_a_pickup_brings_the_other_channels_along_in_y(self):
+    """The channels share a rail: sent `yp 2418 0000`, a device answers `ry +2418 +2328 ...`."""
+    pipettes, rack, _ = await channels_over_a_rack()
+
+    await pipettes.pick_up_tips([rack.get_item("A1")])
+
+    ys = await pipettes.request_y_positions()
+    order = [ys[channel] for channel in range(8)]
+    for channel in range(7):
+      self.assertGreaterEqual(
+        round(order[channel] - order[channel + 1], 2),
+        pipettes._min_spacing_between(channel, channel + 1),
+        f"channels {channel} and {channel + 1} stand too close: {order}",
+      )
+
+
+class TestTipsOfDifferentKinds(unittest.IsolatedAsyncioTestCase):
+  """A command names one tip type, so spots holding different tips go out in separate commands."""
+
+  def setUp(self):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+
+  async def two_racks(self) -> Tuple[Pipettes, Any, Any, List[str]]:
+    """Channels, a 1000 uL rack on track 6, a 300 uL rack on track 16, and the tip commands."""
+    from pylabrobot.resources.hamilton import (
+      TIP_CAR_480_A00,
+      hamilton_96_tiprack_1000uL,
+    )
+
+    pipettes, near, sent = await channels_over_a_rack()
+    deck = pipettes._driver.deck
+    assert deck is not None
+    carrier = TIP_CAR_480_A00(name="far_carrier")
+    carrier[0] = far = hamilton_96_tiprack_1000uL(name="far_rack")
+    deck.assign_child_resource(carrier, track=6)
+    return pipettes, far, near, sent
+
+  @staticmethod
+  def pickups(sent: List[str]) -> List[str]:
+    return [command for command in sent if command.startswith("C0TP")]
+
+  async def test_two_kinds_go_out_as_two_commands_in_ascending_x(self):
+    pipettes, far, near, sent = await self.two_racks()
+    await pipettes.pick_up_tips(
+      [near.get_item("A1"), near.get_item("B1"), far.get_item("C1"), far.get_item("D1")]
+    )
+    pickups = self.pickups(sent)
+    self.assertEqual(len(pickups), 2)
+    xs = [int(command[6:11]) for command in pickups]
+    self.assertLess(xs[0], xs[1], "the farther left rack is collected first")
+    tip_types = [command.split("tt")[1][:2] for command in pickups]
+    self.assertNotEqual(tip_types[0], tip_types[1])
+    patterns = [re.search(r"tm([01 ]+)", command).group(1) for command in pickups]  # type: ignore
+    self.assertEqual(patterns, ["0 0 1 1 0", "1 1 0"], "the 1000 uL spots are on channels 2 and 3")
+
+  async def test_each_channel_carries_the_tip_from_its_own_spot(self):
+    pipettes, far, near, _ = await self.two_racks()
+    spots = [near.get_item("A1"), far.get_item("C1")]
+    tips = [spot.tip for spot in spots]
+    await pipettes.pick_up_tips(spots, use_channels=[0, 2])
+    self.assertIs(pipettes.get_mounted_tip(0), tips[0])
+    self.assertIs(pipettes.get_mounted_tip(2), tips[1])
+    self.assertIsNone(pipettes.get_mounted_tip(1))
+
+  async def test_one_kind_across_two_racks_still_goes_out_as_one_command(self):
+    """X alone never splits a command, as legacy sends them."""
+    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL
+
+    pipettes, near, sent = await channels_over_a_rack()
+    deck = pipettes._driver.deck
+    assert deck is not None
+    carrier = TIP_CAR_480_A00(name="second_carrier")
+    carrier[0] = far = hamilton_96_tiprack_300uL(name="second_rack")
+    deck.assign_child_resource(carrier, track=6)
+
+    await pipettes.pick_up_tips([near.get_item("A1"), far.get_item("C1")])
+    self.assertEqual(len(self.pickups(sent)), 1)
+
+
+class TestTipHandlingUntracked(unittest.IsolatedAsyncioTestCase):
+  """With tip tracking off a spot is left as it is: a channel collects a fresh tip from it."""
+
+  async def test_an_untracked_spot_keeps_its_tip(self):
+    pipettes, rack, _ = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    await pipettes.pick_up_tips([spot])
+    mounted = pipettes.get_mounted_tip(0)
+    self.assertIsNotNone(mounted)
+    self.assertIsNotNone(spot.tip)
+    self.assertIsNot(spot.tip, mounted)
+
+
+class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
+  """The commands for Hamilton's tip racks match recorded runs.
+
+  Each rack on the holders the recordings picked up from, with the channels and with the 96-head,
+  as recorded, but for `td`: the recordings carry `td1`, and PyLabRobot sends `td0`, letting the
+  firmware take the pick-up process from the tip type. Tip tracking is on, so each tip goes back
+  into its spot.
+  """
+
+  def setUp(self):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+
+  async def test_nested_tip_racks_ground_truth(self):
+    from pylabrobot.resources.hamilton import (
+      hamilton_96_tiprack_10uL_NTR,
+      hamilton_96_tiprack_50uL_NTR,
+      hamilton_96_tiprack_300uL_NTR,
+      hamilton_mfx_carrier_L5_base,
+      hamilton_mfx_resourceholder_ntr,
+      hamilton_tip_carrier_L5_ntr_a00,
+    )
+
+    # rack, tip definition (without its index), pick-up tp, drop tp/tz (stop disc, ti1), NTR site
+    tips = {
+      "10uL": (hamilton_96_tiprack_10uL_NTR, "tf0tl0219tv00150tg1tu0", "1900", "tp1900tz1820", 0),
+      "50uL": (hamilton_96_tiprack_50uL_NTR, "tf0tl0424tv00650tg2tu0", "1920", "tp1920tz1840", 1),
+      "300uL": (hamilton_96_tiprack_300uL_NTR, "tf0tl0519tv04000tg2tu0", "1920", "tp1920tz1840", 2),
+    }
+    # holder, A1 x (0.1 mm), A1 y (0.1 mm) per rack
+    holders = {
+      "ntr4_module": ("09505", {"10uL": 4340, "50uL": 4340, "300uL": 4340}),
+      "ntr_carrier": ("07704", {"10uL": 1458, "50uL": 2418, "300uL": 3378}),
+    }
+
+    for holder_name, (xs, a1_y) in holders.items():
+      for size, (rack_fn, definition, tp, drop, site) in tips.items():
+        with self.subTest(holder=holder_name, tip=size):
+          pipettes, _, sent = await channels_over_a_rack()
+          deck = pipettes._driver.deck
+          assert deck is not None
+          module = hamilton_mfx_resourceholder_ntr("ntr4_module")
+          deck.assign_child_resource(
+            hamilton_mfx_carrier_L5_base("mfx_carrier", modules={3: module}),
+            location=Coordinate(932.5, 63, 100),
+          )
+          ntr_carrier = hamilton_tip_carrier_L5_ntr_a00("ntr_carrier")
+          deck.assign_child_resource(ntr_carrier, location=Coordinate(752.5, 63, 100))
+          holder = module if holder_name == "ntr4_module" else ntr_carrier.sites[site]
+          rack = rack_fn(f"{holder_name}_{size}")
+          holder.assign_child_resource(rack)
+          sent.clear()
+
+          spots = rack["A1:H1"]
+          await pipettes.pick_up_tips(spots)
+          await pipettes.drop_tips(spots)
+          head96 = pipettes._driver.head96
+          assert head96 is not None
+          await head96.pick_up_tips(rack)
+          await head96.drop_tips(rack)
+
+          tt = sent[0][4:8]
+          # As high as this tip can go: the ceiling less its length, from its definition.
+          length = re.search(r"tl(\d{4})", definition)
+          assert length is not None
+          th = 3347 - int(length.group(1))
+          xp = " ".join([xs] * 8)
+          yp = " ".join(f"{a1_y[size] - 90 * row:04}" for row in range(8))
+          self.assertEqual(
+            sent,
+            [
+              f"C0TT{tt}{definition}",
+              f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz1840th{th}td0",
+              f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th{th}te{th}ti1",
+              f"C0EPxs{xs}xd0yh{a1_y[size]}{tt}wu0za1840zh2450ze2450",
+              f"C0ERxs{xs}xd0yh{a1_y[size]}za1840zh2450ze2450",
+            ],
+          )
+
+  async def test_framed_tip_racks_on_tip_carrier_ground_truth(self):
+    from pylabrobot.resources.hamilton import (
+      TIP_CAR_480BC_A00,
+      hamilton_96_tiprack_10uL,
+      hamilton_96_tiprack_50uL,
+      hamilton_96_tiprack_300uL,
+      hamilton_96_tiprack_300uL_filter_slim,
+      hamilton_96_tiprack_1000uL_filter,
+    )
+
+    # rack, carrier x, site, tip definition (without its index), pick-up tp, drop tp/tz (stop disc,
+    # ti1)
+    tips = [
+      (hamilton_96_tiprack_10uL, 437.5, 0, "tf0tl0219tv00150tg1tu0", "2224", "tp2224tz2144"),
+      (hamilton_96_tiprack_50uL, 437.5, 1, "tf0tl0424tv00650tg2tu0", "2244", "tp2244tz2164"),
+      (hamilton_96_tiprack_300uL, 572.5, 0, "tf0tl0519tv04000tg2tu0", "2244", "tp2244tz2164"),
+      (
+        hamilton_96_tiprack_1000uL_filter,
+        572.5,
+        1,
+        "tf1tl0871tv10650tg3tu0",
+        "2264",
+        "tp2264tz2184",
+      ),
+      (
+        hamilton_96_tiprack_300uL_filter_slim,
+        572.5,
+        2,
+        "tf1tl0870tv03450tg3tu0",
+        "2264",
+        "tp2264tz2184",
+      ),
+    ]
+
+    for rack_fn, carrier_x, site, definition, tp, drop in tips:
+      with self.subTest(tip=rack_fn.__name__):
+        pipettes, _, sent = await channels_over_a_rack()
+        deck = pipettes._driver.deck
+        assert deck is not None
+        deck.unassign_child_resource(deck.get_resource("tip_carrier"))  # where this carrier goes
+        carrier = TIP_CAR_480BC_A00("ground_truth_carrier")
+        deck.assign_child_resource(carrier, location=Coordinate(carrier_x, 63, 100))
+        carrier[site] = rack = rack_fn(rack_fn.__name__)
+        sent.clear()
+
+        spots = rack["A1:H1"]
+        await pipettes.pick_up_tips(spots)
+        await pipettes.drop_tips(spots)
+        head96 = pipettes._driver.head96
+        assert head96 is not None
+        await head96.pick_up_tips(rack)
+        await head96.drop_tips(rack)
+
+        tt = sent[0][4:8]
+        # As high as this tip can go: the ceiling less its length, from its definition.
+        length = re.search(r"tl(\d{4})", definition)
+        assert length is not None
+        th = 3347 - int(length.group(1))
+        # A1 17.9 mm right of the carrier, 145.8 mm back on site 0, sites 96 mm apart (0.1 mm)
+        xs, a1_y = f"{round(carrier_x * 10) + 179:05}", 1458 + 960 * site
+        xp = " ".join([xs] * 8)
+        yp = " ".join(f"{a1_y - 90 * row:04}" for row in range(8))
+        self.assertEqual(
+          sent,
+          [
+            f"C0TT{tt}{definition}",
+            f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2164th{th}td0",
+            f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th{th}te{th}ti1",
+            f"C0EPxs{xs}xd0yh{a1_y}{tt}wu0za2164zh2450ze2450",
+            f"C0ERxs{xs}xd0yh{a1_y}za2164zh2450ze2450",
+          ],
+        )
+
+  async def test_framed_tip_racks_on_mfx_tip_module_ground_truth(self):
+    from pylabrobot.resources.hamilton import (
+      hamilton_96_tiprack_10uL,
+      hamilton_96_tiprack_50uL,
+      hamilton_96_tiprack_300uL,
+      hamilton_96_tiprack_300uL_filter_slim,
+      hamilton_96_tiprack_1000uL_filter,
+      hamilton_mfx_carrier_L5_base,
+      hamilton_mfx_tiprackholder_standard,
+    )
+
+    # rack, MFX slot, tip definition (without its index), pick-up tp, drop tp/tz (stop disc, ti1)
+    tips = [
+      (hamilton_96_tiprack_10uL, 0, "tf0tl0219tv00150tg1tu0", "2222", "tp2222tz2142"),
+      (hamilton_96_tiprack_50uL, 1, "tf0tl0424tv00650tg2tu0", "2242", "tp2242tz2162"),
+      (hamilton_96_tiprack_300uL, 4, "tf0tl0519tv04000tg2tu0", "2242", "tp2242tz2162"),
+      (hamilton_96_tiprack_1000uL_filter, 0, "tf1tl0871tv10650tg3tu0", "2262", "tp2262tz2182"),
+      (hamilton_96_tiprack_300uL_filter_slim, 1, "tf1tl0870tv03450tg3tu0", "2262", "tp2262tz2182"),
+    ]
+
+    for rack_fn, slot, definition, tp, drop in tips:
+      with self.subTest(tip=rack_fn.__name__):
+        pipettes, _, sent = await channels_over_a_rack()
+        deck = pipettes._driver.deck
+        assert deck is not None
+        module = hamilton_mfx_tiprackholder_standard("tip_module")
+        deck.assign_child_resource(
+          hamilton_mfx_carrier_L5_base("mfx_carrier", modules={slot: module}),
+          location=Coordinate(752.5, 63, 100),
+        )
+        rack = rack_fn(rack_fn.__name__)
+        module.assign_child_resource(rack)
+        sent.clear()
+
+        spots = rack["A1:H1"]
+        await pipettes.pick_up_tips(spots)
+        await pipettes.drop_tips(spots)
+        head96 = pipettes._driver.head96
+        assert head96 is not None
+        await head96.pick_up_tips(rack)
+        await head96.drop_tips(rack)
+
+        tt = sent[0][4:8]
+        # As high as this tip can go: the ceiling less its length, from its definition.
+        length = re.search(r"tl(\d{4})", definition)
+        assert length is not None
+        th = 3347 - int(length.group(1))
+        # A1 146.0 mm back on slot 0, slots 96 mm apart (0.1 mm)
+        xs, a1_y = "07705", 1460 + 960 * slot
+        xp = " ".join([xs] * 8)
+        yp = " ".join(f"{a1_y - 90 * row:04}" for row in range(8))
+        self.assertEqual(
+          sent,
+          [
+            f"C0TT{tt}{definition}",
+            f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2162th{th}td0",
+            f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th{th}te{th}ti1",
+            f"C0EPxs{xs}xd0yh{a1_y}{tt}wu0za2162zh2450ze2450",
+            f"C0ERxs{xs}xd0yh{a1_y}za2162zh2450ze2450",
+          ],
+        )
 
 
 def travel_time(distance: float, speed: float, acceleration: float) -> float:
