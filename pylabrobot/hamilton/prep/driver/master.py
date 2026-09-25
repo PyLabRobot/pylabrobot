@@ -418,12 +418,21 @@ class PrepDriver:
         logger.debug("[PHASE 4] Feature resources")
         self._place_reported_sites()
         await self._create_capability_resources()
+
       self._setup_finished = True
     except Exception:
+      # The deck said the device was working; it is not, and the link is about to go.
+      if self.lights is not None:
+        self.lights.stop_animation()
       await self._close()
       raise
 
     logger.info("%s", self.format_setup_summary())
+
+    # Setup got all the way here, so say so, and leave the deck as setup found it: dark. Setup
+    # stands at the green, so that a caller which stops or exits straight after still sees it.
+    if self.lights is not None:
+      await self.lights.hold("green", duration=self.lights.default_ready_seconds)
 
   async def _open(self) -> None:
     """Open the link and check that a Prep answers on it.
