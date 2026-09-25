@@ -52,6 +52,7 @@ from pylabrobot.resources.tip import Tip
 from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration
 from .errors import PREP_ERROR_CODES
+from .features.core_grippers import JAW_OPEN_EXTRA
 from .features.lights import Lights
 from .features.pipettes import Pipettes, PipettesConfiguration
 from .features.x_arm import XArm
@@ -305,6 +306,20 @@ class _RecordedTree:
         )
       )
     return None
+
+
+# What the device answered while its plate-held latch was set: the Pipettor refuses to drop the
+# tools, and MLPrep to initialize, whose own attempt to drop them is refused the same way.
+_TOOLS_HELD_BY_A_PLATE = "0xE000.0x0001.0x1000:0x01,0x0010,0x0F04"
+_INITIALIZE_WITH_A_PLATE = "0x0001.0x0001.0x2000:0x01,0x0001,0x0F0A;" + _TOOLS_HELD_BY_A_PLATE
+
+
+class _DeviceRefuses(Exception):
+  """A simulated answer that is the device's exception, as its entries."""
+
+  def __init__(self, entries: str):
+    super().__init__(entries)
+    self.entries = entries
 
 
 class _Simulated:
@@ -608,6 +623,11 @@ class SimulatedPipettes(_Simulated, Pipettes):
       arm.update_location_by_reference_point(x)
     self.update_location_by_reference_point(channel, y=y, z=z)
 
+  def _gripper_channels(self) -> Tuple[int, int]:
+    """The back and front channels the CoRe gripper tools ride: the two front-most."""
+    count = self.device.simulated_configuration.num_channels or 0
+    return count - 2, count - 1
+
   def _owner(self, request: TCPCommand) -> Optional[int]:
     """The channel the object a request is sent to belongs to, or None."""
     return self.device.tree.channel_of(request.dest)
@@ -615,6 +635,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
   async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
     # Each group answers its own commands, and none shares one with another.
     for answer in (
+      self._answer_grippers,
       self._answer_moves,
       self._answer_seeks,
       self._answer_drive_settings,
@@ -623,6 +644,61 @@ class SimulatedPipettes(_Simulated, Pipettes):
       answered = answer(request, method)
       if answered is not None:
         return answered
+    return None
+
+  def _answer_grippers(self, request: TCPCommand, method: str) -> Optional[Tuple[Any, str]]:
+    """The plate-held latch, and where each CoRe gripper command leaves the two tool channels.
+
+    Where the device reported them after each command; Z at the jaws once the tools are on.
+    """
+    if isinstance(request, PrepCmd.PrepGetPlateHeld):
+      return PrepCmd.PrepGetPlateHeld.Response(value=self._plate_held), "the pipettor's record"
+    if not isinstance(request, _GRIPPER_MOVES):
+      return None
+    back, front = self._gripper_channels()
+    if isinstance(request, PrepCmd.PrepPickUpTool):
+      # Left in the tools, shafts at the seek height; the tools go on the model after.
+      self._tools_from = (
+        request.tool_position_x,
+        request.rear_channel_position_y,
+        request.front_channel_position_y,
+      )
+      self._move(back, request.tool_position_x, request.rear_channel_position_y, request.tool_seek)
+      self._move(front, None, request.front_channel_position_y, request.tool_seek)
+    elif isinstance(request, PrepCmd.PrepDropTool):
+      if self._plate_held:
+        raise _DeviceRefuses(_TOOLS_HELD_BY_A_PLATE)
+      # Taken home from anywhere, shafts at the traverse height; the tools come off the model after.
+      height = self.device.simulated_default_minimum_traverse_height
+      if self._tools_from is not None and height is not None:
+        x, rear_y, front_y = self._tools_from
+        self._move(back, x, rear_y, height - self._mounted_length(back))
+        self._move(front, None, front_y, height - self._mounted_length(front))
+      self._tools_from = None
+    elif isinstance(request, PrepCmd.PrepPickUpPlate):
+      # Down to the grip height, jaws closed on the plate; the firmware does not lift it.
+      plate_top = request.plate_top_center
+      half = (request.plate.width + JAW_OPEN_EXTRA - 2 * request.grip_distance) / 2
+      self._grip = (plate_top.z_position - request.grip_height, request.grip_distance)
+      self._move(back, plate_top.x_position, plate_top.y_position + half, request.grip_height)
+      self._move(front, None, plate_top.y_position - half, request.grip_height)
+      self._plate_held = True
+    elif isinstance(request, (PrepCmd.PrepMovePlate, PrepCmd.PrepDropPlate)):
+      # Both jaws to the top less the grip's offset, spacing kept; a drop then opens them by the
+      # clearance and how far they closed.
+      plate_top = request.plate_top_center
+      half = (self._modelled_location(back)[1] - self._modelled_location(front)[1]) / 2
+      z = None if self._grip is None else plate_top.z_position - self._grip[0]
+      if isinstance(request, PrepCmd.PrepDropPlate):
+        half += request.clearance_y + (0.0 if self._grip is None else self._grip[1])
+        self._grip = None
+        self._plate_held = False
+      self._move(back, plate_top.x_position, plate_top.y_position + half, z)
+      self._move(front, None, plate_top.y_position - half, z)
+    elif isinstance(request, PrepCmd.PrepReleasePlate):
+      # What the jaws do is unmeasured: they are left where they are.
+      self._grip = None
+      self._plate_held = False
     return None
 
   def _answer_moves(self, request: TCPCommand, method: str) -> Optional[Tuple[Any, str]]:
@@ -986,7 +1062,11 @@ class _SimulatedSession(TCPSession):
         dest, hoi, f"{node.path} has no such method in the recorded firmware"
       ), True
 
-    answer = await self._driver._answer(request, node.path, method["name"])
+    try:
+      answer = await self._driver._answer(request, node.path, method["name"])
+    except _DeviceRefuses as refused:
+      logger.debug("%s read: simulation refuses as the device does: %s", SIMULATED_LINK, refused)
+      return HoiParams().add(refused.entries, Str).build(), True
     if answer is None:
       if isinstance(request, PrepCmd.PrepProbeRequest) or hasattr(type(request), "Response"):
         return self._refusal(dest, hoi, f"{node.path}.{method['name']} is not simulated"), True
@@ -1178,6 +1258,8 @@ class PrepSimulationDriver(PrepDriver):
     declared = "the declared configuration"
 
     if isinstance(request, PrepCmd.PrepInitialize):
+      if isinstance(self.pipettes, SimulatedPipettes) and self.pipettes._plate_held:
+        raise _DeviceRefuses(_INITIALIZE_WITH_A_PLATE)
       self.initialized = True
       return None
     if isinstance(request, PrepCmd.PrepGetIsInitialized):
