@@ -1619,12 +1619,13 @@ class TipPositionParameters:
   ) -> TipPositionParameters:
     """Build from an op location and tip (pickup).
 
-    z_seek default: z_position + fitting_depth + 5mm guard (tip-type-aware,
-    comparable to Nimbus/Vantage). z_seek_offset: additive mm on top of
-    computed default (None = 0).
+    A tip spot is the hole its tip hangs in, so `loc` is where the collar rests and where the
+    channel ends up - the same height whatever the tip's length. The seek starts a collar height
+    and 5 mm above it, clear of the tips' tops; z_seek_offset adds to that (None = 0).
     """
-    z = loc.z + tip.get_size_z() - tip.fitting_depth
-    z_seek = z + tip.fitting_depth + 5.0 + (z_seek_offset or 0.0)
+    collar = tip.collar_height if tip.has_collar_height else 0.0
+    z = loc.z
+    z_seek = loc.z + collar + 5.0 + (z_seek_offset or 0.0)
     return cls(
       default_values=False,
       channel=channel,
@@ -1668,14 +1669,13 @@ class TipDropParameters:
   ) -> TipDropParameters:
     """Build from an op location and tip (drop).
 
-    z_position uses (size_z - fitting_depth) so the tip bottom lands
-    at the spot surface (consistent with STAR and with pickup).
-    z_seek default: loc.z + size_z + 5mm so tip bottom clears adjacent tips during
-    lateral approach. z_seek_offset: additive mm on top of computed default
-    (None = 0).
+    The tip is let go a fitting depth below where its collar comes to rest, so that it is off the
+    channel by the time the collar is seated. The seek starts a collar height and 2 mm above the
+    spot, clear of the tips standing in the rack; z_seek_offset adds to that (None = 0).
     """
-    z = loc.z + (tip.get_size_z() - tip.fitting_depth)
-    z_seek = loc.z + tip.get_size_z() + 2.0 + (z_seek_offset or 0.0)
+    collar = tip.collar_height if tip.has_collar_height else 0.0
+    z = loc.z + collar - tip.fitting_depth
+    z_seek = loc.z + collar + 2.0 + (z_seek_offset or 0.0)
     return cls(
       default_values=False,
       channel=channel,
@@ -3090,6 +3090,31 @@ class PrepReleasePlate(PrepCommand[None]):
     return None
 
 
+@dataclass(frozen=True)
+class PrepGetPlateHeld(PrepStatusRequest["PrepGetPlateHeld.Response"]):
+  """GetPlateHeld (cmd=22, dest=Pipettor): whether the pipettor records a plate held.
+
+  Set by a finished pick-up and cleared by a drop or a release, and kept across a power cycle. Not a
+  sensor: a pick-up that closed on nothing sets it too.
+  """
+
+  command_id = 22
+  firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
+
+  @dataclass(frozen=True)
+  class Response:
+    value: PaddedBool
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetPlateHeld.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
 # CORE gripper tool definition for PrepPickUpTool (struct); matches instrument id=11.
 CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS = TipPickupParameters(
   default_values=False,
@@ -3186,6 +3211,61 @@ class PrepGetPositions(PrepStatusRequest["PrepGetPositions.Response"]):
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> PrepGetPositions.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetTipDefinitionHeld(PrepStatusRequest["PrepGetTipDefinitionHeld.Response"]):
+  """GetTipDefinitionHeld (cmd=13, dest=Pipettor): the definition of the tip the pipettor holds."""
+
+  command_id = 13
+  firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
+
+  @dataclass(frozen=True)
+  class Response:
+    value: Annotated[TipDefinition, Struct()]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetTipDefinitionHeld.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class ChannelDispenserVolumeParameters:
+  default_values: PaddedBool
+  channel: WEnum
+  volume: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool).add(self.channel, WEnum).add(self.volume, F32)
+    )
+
+
+@dataclass(frozen=True)
+class PrepGetCurrentDispenserVolume(PrepStatusRequest["PrepGetCurrentDispenserVolume.Response"]):
+  """GetCurrentDispenserVolume (cmd=24, dest=Pipettor): each channel's dispensing drive, in uL."""
+
+  command_id = 24
+  firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
+
+  @dataclass(frozen=True)
+  class Response:
+    volumes: Annotated[list[ChannelDispenserVolumeParameters], StructArray()]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetCurrentDispenserVolume.Response:
     """Decode the declared success response."""
     return parse_into_struct(HoiParamsParser(data), cls.Response)
 
@@ -3398,6 +3478,46 @@ class PrepYDriveGetPosition(PrepStatusRequest["PrepYDriveGetPosition.Response"])
   def parse_response_parameters(cls, data: bytes) -> PrepYDriveGetPosition.Response:
     """Decode the declared success response."""
     return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepZAxisMoveRelative(PrepCommand[None]):
+  """Move a channel along Z by a distance, in mm, positive up (cmd=5, dest=ZAxis). Runs before
+  initializing."""
+
+  command_id = 5
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  distance: F32 = math.nan
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.distance, F32)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepYAxisMoveRelative(PrepCommand[None]):
+  """Move a channel along Y by a distance, in mm (cmd=3, dest=YAxis). Runs before initializing."""
+
+  command_id = 3
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # A default only because `dest` comes first; every caller names it.
+  distance: F32 = math.nan
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.distance, F32)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
 
 
 @dataclass(frozen=True)
@@ -4338,6 +4458,24 @@ class PrepXAxisSeekToHomeFlag(PrepCommand["PrepXAxisSeekToHomeFlag.Response"]):
 
 
 @dataclass(frozen=True)
+class PrepXAxisMoveRelative(PrepCommand[None]):
+  """Move the X axis by a distance, in mm, positive to the right (cmd=4, dest=XAxis)."""
+
+  command_id = 4
+  firmware_path = "MLPrepRoot.XAxis"
+  distance: F64
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.distance, F64)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
 class PrepXAxisMoveAbsolute(PrepCommand[None]):
   """Move the X axis to a position in its own frame, in mm (cmd=3, dest=XAxis).
 
@@ -4653,6 +4791,52 @@ class PrepGetSafeSpeedsEnabled(PrepStatusRequest["PrepGetSafeSpeedsEnabled.Respo
   def parse_response_parameters(cls, data: bytes) -> PrepGetSafeSpeedsEnabled.Response:
     """Decode the declared success response."""
     return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepReleaseTips(PrepCommand[None]):
+  """ReleaseTips(channel) (dest=PipettorService): the squeeze drive lets go where the channel stands.
+
+  The id is read from the device's method table by name, as it differs between firmware versions.
+  """
+
+  firmware_path = None
+  dest: Address
+  command_id: int  # type: ignore[misc]
+  interface_id: int = 1  # type: ignore[misc]
+  channel: WEnum = 0
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channel, WEnum)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepSetSafeSpeedsEnabled(PrepCommand[None]):
+  """SetSafeSpeedsEnabled(value) (dest=MLPrep), at the ids the device's method table gives.
+
+  The id differs between firmware versions, so the caller reads it by name and passes it in.
+  """
+
+  firmware_path = None
+  dest: Address
+  command_id: int  # type: ignore[misc]
+  interface_id: int = 1  # type: ignore[misc]
+  value: PaddedBool = False
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.value, PaddedBool)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
 
 
 @dataclass(frozen=True)

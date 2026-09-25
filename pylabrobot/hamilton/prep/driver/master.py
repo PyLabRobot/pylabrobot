@@ -1375,6 +1375,23 @@ class PrepDriver:
     """Request how fast MLPrep drives Z, as a percentage of its full speed."""
     return int((await self.send_command(PrepCmd.PrepGetZSpeedScale())).value)
 
+  async def _set_safe_speeds_enabled(self, enabled: bool) -> None:
+    """Switch MLPrep's safe speeds on or off. Stays set until changed.
+
+    On, the device holds the Z drives to a low acceleration and raises the X jerk; `discover` reads
+    the state into the configuration. The command's id is read from the method table by name.
+
+    Args:
+      enabled: True for safe speeds.
+    """
+    mlprep = self.mlprep_address
+    method = await self.request_method_by_name(mlprep, "SetSafeSpeedsEnabled")
+    await self.send_command(
+      PrepCmd.PrepSetSafeSpeedsEnabled(
+        dest=mlprep, command_id=method.method_id, interface_id=method.interface_id, value=enabled
+      )
+    )
+
   async def set_x_speed_scale(self, percent: int) -> None:
     """Set how fast MLPrep drives X, as a percentage of its full speed. Stays set until changed.
 
