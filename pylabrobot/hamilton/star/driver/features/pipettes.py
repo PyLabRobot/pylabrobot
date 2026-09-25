@@ -35,6 +35,7 @@ from pylabrobot.hamilton.star.driver.errors import (
 )
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
+from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import (
   ChannelBatch,
   plan_batches,
@@ -185,6 +186,24 @@ class PipettesConfiguration:
   """Counted in increments per second squared, unlike the Z drive's."""
   dispensing_drive_current_limit_range: Tuple[int, int] = (0, 7)
   dispensing_drive_volume_range_increments: Tuple[int, int] = (0, 26_666)
+  # The pipetting commands' fields: volumes in 0.1 uL, speeds in 0.1 uL/s, distances in 0.1 mm,
+  # times in 0.1 s.
+  pipetting_volume_range_increments: Tuple[int, int] = (0, 12_500)
+  pipetting_speed_range_increments: Tuple[int, int] = (4, 5_000)
+  pipetting_distance_range_increments: Tuple[int, int] = (0, 3_600)
+  swap_speed_range_increments: Tuple[int, int] = (3, 1_600)
+  transport_air_volume_range_increments: Tuple[int, int] = (0, 500)
+  blow_out_air_volume_range_increments: Tuple[int, int] = (0, 9_999)
+  pre_wetting_volume_range_increments: Tuple[int, int] = (0, 999)
+  clot_detection_height_range_increments: Tuple[int, int] = (0, 500)
+  settling_time_range_increments: Tuple[int, int] = (0, 99)
+  mix_cycles_range: Tuple[int, int] = (0, 99)
+  mix_position_range_increments: Tuple[int, int] = (0, 900)
+  second_section_ratio_range_increments: Tuple[int, int] = (0, 10_000)
+  lld_sensitivity_range: Tuple[int, int] = (1, 4)
+  z_touch_off_position_range_increments: Tuple[int, int] = (0, 100)
+  dual_lld_height_difference_range_increments: Tuple[int, int] = (0, 99)
+  limit_curve_index_range: Tuple[int, int] = (0, 999)
 
   channel_size_z: float = 140.0
   """How tall to model a channel, in mm. Not read from anywhere: how far a channel extends is not
@@ -3653,14 +3672,19 @@ class Pipettes:
       pattern.append(False)
     return xs, ys, pattern
 
-  async def _record_after_command(self) -> None:
-    """Read back where a command left the arm and the channels, and record it."""
+  async def _record_after_command(self, channels: Optional[Iterable[int]] = None) -> None:
+    """Read back where a command left the arm and the channels, and record it.
+
+    Args:
+      channels: the channels the command moved along Z; every channel when None. Y is one read
+        for all channels either way.
+    """
     try:
       await self.arm.request_position()
     except Exception:
       logger.warning("could not read where the arm stopped; its model is stale")
     await self._record_where_they_stopped("y")
-    await self._record_where_they_stopped("z")
+    await self._record_where_they_stopped("z", channels)
 
   # -- tip pickup ----------------------------------------------------------------------------
 
@@ -4594,3 +4618,328 @@ class Pipettes:
       sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
       io=[f"{io:04}" for io in cup_upper_edge],
     )
+
+  async def _aspirate_in_one_move(
+    self,
+    use_channels: List[int],
+    locations: List[Coordinate],
+    lld_search_heights: List[float],
+    minimum_allowed_z_position_during: List[float],
+    piston_volumes: List[float],
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    lld_modes: Optional[List["Pipettes.LLDMode"]] = None,
+    clld_sensitivities: Optional[List[int]] = None,
+    plld_sensitivities: Optional[List[int]] = None,
+    detection_height_differences_for_dual_lld: Optional[List[float]] = None,
+    aspirate_positions_above_z_touch_off: Optional[List[float]] = None,
+    blow_out_air_volumes: Optional[List[float]] = None,
+    immersion_depths: Optional[List[float]] = None,
+    pre_wetting_volumes: Optional[List[float]] = None,
+    pre_mixes: Optional[List[Optional[Mix]]] = None,
+    mix_positions_from_liquid_surface: Optional[List[float]] = None,
+    flow_rates: Optional[List[float]] = None,
+    surface_following_distances: Optional[List[float]] = None,
+    second_section_heights: Optional[List[float]] = None,
+    second_section_ratios: Optional[List[float]] = None,
+    settling_times: Optional[List[float]] = None,
+    swap_speeds: Optional[List[float]] = None,
+    clot_detection_heights: Optional[List[float]] = None,
+    pull_out_distances_transport_air: Optional[List[float]] = None,
+    transport_air_volumes: Optional[List[float]] = None,
+    limit_curve_indices: Optional[List[int]] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> None:
+    """Aspirate at each place given, the channels together, in one `C0 AS`.
+
+    Positions and heights on the deck in mm, volumes in uL, speeds in mm/s or uL/s, times in s.
+    Arguments in the order the aspiration runs. No model update: `aspirate` does that. Fields
+    legacy never varied (aspiration type, TADM, recording, second-section search) go as it sent
+    them.
+
+    Args:
+      use_channels: which channels, 0-indexed from the back, ascending. Every list below is one
+        entry per channel, in this order.
+      locations: where each tip bottom goes; the z is the liquid surface when no LLD runs.
+      lld_search_heights: where each LLD search starts.
+      minimum_allowed_z_position_during: how low each tip bottom may go.
+      piston_volumes: what each piston draws.
+      minimum_traverse_height_start: tip bottom height the channels are raised to before the
+        command, if below it. `default_minimum_traverse_height` when None.
+      lld_modes: how each channel finds the liquid. OFF when None. ZTOUCH finds a floor, not a
+        liquid, and logs a warning.
+      clld_sensitivities: capacitive LLD sensitivity, 1 high to 4 low. 1 when None.
+      plld_sensitivities: pressure LLD sensitivity, 1 high to 4 low. 1 when None.
+      detection_height_differences_for_dual_lld: allowed difference of the two detections. 0.0
+        when None.
+      aspirate_positions_above_z_touch_off: aspiration height above a Z touch. 0.0 when None.
+      blow_out_air_volumes: air drawn before the liquid. 0.0 when None.
+      immersion_depths: how far into the liquid each tip goes; negative is out of it. 0.0 when None.
+      pre_wetting_volumes: drawn and returned first. 0.0 when None.
+      pre_mixes: a `Mix` per channel, mixed before the draw, None for no mixing.
+      mix_positions_from_liquid_surface: mixing depth under the surface. 0.0 when None.
+      flow_rates: 100.0 when None.
+      surface_following_distances: how far each tip follows the sinking surface. 0.0 when None.
+      second_section_heights: height of each container's narrower lower section above
+        `minimum_allowed_z_position_during`, for the surface following. 3.2 when None.
+      second_section_ratios: that section's bottom to top ratio, in tenths. 618.0 when None.
+      settling_times: wait in the liquid. 0.0 when None.
+      swap_speeds: speed of leaving the liquid. 100.0 when None.
+      clot_detection_heights: how far a clot may hold the tip back. 0.0 when None.
+      pull_out_distances_transport_air: rise before drawing transport air. 10.0 when None.
+      transport_air_volumes: air drawn after the liquid. 0.0 when None.
+      limit_curve_indices: TADM limit curve, 0 for none. 0 when None.
+      minimum_traverse_height_end: tip bottom height at the end. `default_minimum_traverse_height`
+        when None.
+
+    Raises:
+      ValueError: A list not one entry per channel, a value out of the firmware's range, an
+        unreachable position, or a tip filled past its capacity.
+      RuntimeError: A channel used carries no tip.
+    """
+    n = len(use_channels)
+
+    def per_channel(name: str, given: Optional[Sequence[Any]], default: Any) -> List[Any]:
+      if given is None:
+        return [default] * n
+      if len(given) != n:
+        raise ValueError(f"{name} must have one entry per channel, {n}, has {len(given)}")
+      return list(given)
+
+    def tenths(value: float) -> int:
+      return round(value * 10)
+
+    tips: Dict[int, Tip] = {}
+    for channel in use_channels:
+      tip = self.get_mounted_tip(channel)
+      if tip is None:
+        raise RuntimeError(f"channel {channel} carries no tip; an aspiration needs one")
+      tips[channel] = tip
+    modes = per_channel("lld_modes", lld_modes, self.LLDMode.OFF)
+    on_ztouch = [ch for ch, mode in zip(use_channels, modes) if mode == self.LLDMode.ZTOUCH]
+    if on_ztouch:
+      logger.warning(
+        "channels %s aspirate on Z touch, which finds a floor, not a liquid: the tips go to the "
+        "bottom and draw whatever is there",
+        on_ztouch,
+      )
+
+    places = per_channel("locations", locations, None)
+    volume = per_channel("piston_volumes", piston_volumes, None)
+    floor = per_channel(
+      "minimum_allowed_z_position_during", minimum_allowed_z_position_during, None
+    )
+    search = per_channel("lld_search_heights", lld_search_heights, None)
+    flow = per_channel("flow_rates", flow_rates, 100.0)
+    transport = per_channel("transport_air_volumes", transport_air_volumes, 0.0)
+    blow_out = per_channel("blow_out_air_volumes", blow_out_air_volumes, 0.0)
+    pre_wet = per_channel("pre_wetting_volumes", pre_wetting_volumes, 0.0)
+    clot = per_channel("clot_detection_heights", clot_detection_heights, 0.0)
+    immersion = per_channel("immersion_depths", immersion_depths, 0.0)
+    following = per_channel("surface_following_distances", surface_following_distances, 0.0)
+    swap = per_channel("swap_speeds", swap_speeds, 100.0)
+    settling = per_channel("settling_times", settling_times, 0.0)
+    clld = per_channel("clld_sensitivities", clld_sensitivities, 1)
+    plld = per_channel("plld_sensitivities", plld_sensitivities, 1)
+    dual_difference = per_channel(
+      "detection_height_differences_for_dual_lld", detection_height_differences_for_dual_lld, 0.0
+    )
+    above_touch_off = per_channel(
+      "aspirate_positions_above_z_touch_off", aspirate_positions_above_z_touch_off, 0.0
+    )
+    mix_position = per_channel(
+      "mix_positions_from_liquid_surface", mix_positions_from_liquid_surface, 0.0
+    )
+    section_height = per_channel("second_section_heights", second_section_heights, 3.2)
+    section_ratio = per_channel("second_section_ratios", second_section_ratios, 618.0)
+    pull_out = per_channel(
+      "pull_out_distances_transport_air", pull_out_distances_transport_air, 10.0
+    )
+    limit_curve = per_channel("limit_curve_indices", limit_curve_indices, 0)
+    mixes = per_channel("pre_mixes", pre_mixes, None)
+    mix_volume = [m.volume if m is not None else 0.0 for m in mixes]
+    mix_count = [m.repetitions if m is not None else 0 for m in mixes]
+    mix_speed = [m.flow_rate if m is not None else 100.0 for m in mixes]
+    mix_following = [(m.surface_following_distance or 0.0) if m is not None else 0.0 for m in mixes]
+
+    # A tip fills to one of two peaks that never coexist: the volume with the pre-wetting drawn
+    # first, or the volume with the transport air drawn after it, over what the tip holds already.
+    for index, channel in enumerate(use_channels):
+      held = tips[channel].tracker.volume
+      for label, extra in (("pre-wetting", pre_wet[index]), ("transport air", transport[index])):
+        peak = held + volume[index] + extra
+        if peak > tips[channel].maximal_volume:
+          raise ValueError(
+            f"channel {channel} would hold {peak:.1f} uL with its {label}, {held:.1f} uL in the "
+            f"tip already, over its tip's {tips[channel].maximal_volume:.1f} uL"
+          )
+
+    xs, ys, pattern = self._tip_command_positions(dict(zip(use_channels, places)))
+    # Both heights are the firmware's fields, any height the tips reach: the start is a floor the
+    # channels are raised to if below it, so one under them raises nothing. `aspirate` travels.
+    default = self.default_minimum_traverse_height
+    start = default if minimum_traverse_height_start is None else minimum_traverse_height_start
+    end = default if minimum_traverse_height_end is None else minimum_traverse_height_end
+    for channel, tip in tips.items():
+      overhang = tip.get_size_z() - tip.fitting_depth
+      self._check_reachable("z", round(start + overhang, 2))
+      self._check_reachable("z", round(end + overhang, 2))
+    traverse_start, traverse_end = tenths(start), tenths(end)
+
+    c = self.configuration
+    # A master command takes heights in tenths of a millimetre, not the Z drive's own increments.
+    z_range = (tenths(c.z_range[0]), tenths(c.z_range[1]))
+    surfaces = [tenths(location.z) for location in places]
+    floors = [tenths(z) for z in floor]
+    searches = [tenths(z) for z in search]
+    fields: List[Tuple[str, List[int], Tuple[int, int]]] = [
+      ("locations' z, in 0.1 mm,", surfaces, z_range),
+      ("minimum_allowed_z_position_during, in 0.1 mm,", floors, z_range),
+      ("lld_search_heights, in 0.1 mm,", searches, z_range),
+      (
+        "piston_volumes, in 0.1 uL,",
+        [tenths(v) for v in volume],
+        c.pipetting_volume_range_increments,
+      ),
+      ("flow_rates, in 0.1 uL/s,", [tenths(v) for v in flow], c.pipetting_speed_range_increments),
+      (
+        "transport_air_volumes, in 0.1 uL,",
+        [tenths(v) for v in transport],
+        c.transport_air_volume_range_increments,
+      ),
+      (
+        "blow_out_air_volumes, in 0.1 uL,",
+        [tenths(v) for v in blow_out],
+        c.blow_out_air_volume_range_increments,
+      ),
+      (
+        "pre_wetting_volumes, in 0.1 uL,",
+        [tenths(v) for v in pre_wet],
+        c.pre_wetting_volume_range_increments,
+      ),
+      (
+        "clot_detection_heights, in 0.1 mm,",
+        [tenths(v) for v in clot],
+        c.clot_detection_height_range_increments,
+      ),
+      ("swap_speeds, in 0.1 mm/s,", [tenths(v) for v in swap], c.swap_speed_range_increments),
+      (
+        "settling_times, in 0.1 s,",
+        [tenths(v) for v in settling],
+        c.settling_time_range_increments,
+      ),
+      (
+        "mix_volumes, in 0.1 uL,",
+        [tenths(v) for v in mix_volume],
+        c.pipetting_volume_range_increments,
+      ),
+      ("mix_cycles", list(mix_count), c.mix_cycles_range),
+      (
+        "mix_speeds, in 0.1 uL/s,",
+        [tenths(v) for v in mix_speed],
+        c.pipetting_speed_range_increments,
+      ),
+      (
+        "immersion_depths, in 0.1 mm,",
+        [abs(tenths(v)) for v in immersion],
+        c.pipetting_distance_range_increments,
+      ),
+      (
+        "surface_following_distances, in 0.1 mm,",
+        [tenths(v) for v in following],
+        c.pipetting_distance_range_increments,
+      ),
+      (
+        "pull_out_distances_transport_air, in 0.1 mm,",
+        [tenths(v) for v in pull_out],
+        c.pipetting_distance_range_increments,
+      ),
+      (
+        "second_section_heights, in 0.1 mm,",
+        [tenths(v) for v in section_height],
+        c.pipetting_distance_range_increments,
+      ),
+      (
+        "second_section_ratios, in tenths,",
+        [tenths(v) for v in section_ratio],
+        c.second_section_ratio_range_increments,
+      ),
+      ("clld_sensitivities", list(clld), c.lld_sensitivity_range),
+      ("plld_sensitivities", list(plld), c.lld_sensitivity_range),
+      (
+        "aspirate_positions_above_z_touch_off, in 0.1 mm,",
+        [tenths(v) for v in above_touch_off],
+        c.z_touch_off_position_range_increments,
+      ),
+      (
+        "detection_height_differences_for_dual_lld, in 0.1 mm,",
+        [tenths(v) for v in dual_difference],
+        c.dual_lld_height_difference_range_increments,
+      ),
+      (
+        "mix_positions_from_liquid_surface, in 0.1 mm,",
+        [tenths(v) for v in mix_position],
+        c.mix_position_range_increments,
+      ),
+      (
+        "mix_surface_following_distances, in 0.1 mm,",
+        [tenths(v) for v in mix_following],
+        c.pipetting_distance_range_increments,
+      ),
+      ("limit_curve_indices", list(limit_curve), c.limit_curve_index_range),
+    ]
+    errors: List[str] = []
+    for name, values, (low, high) in fields:
+      for channel, value in zip(use_channels, values):
+        if not low <= value <= high:
+          errors.append(f"channel {channel}: {name} must be between {low} and {high}, is {value}")
+    if errors:
+      raise ValueError("Invalid aspiration parameters:\n" + "\n".join(errors))
+
+    try:
+      await self._unchecked_fw_aspirate(
+        tip_pattern=pattern,
+        aspiration_type=[0] * n,
+        x_positions=xs,
+        y_positions=ys,
+        minimum_traverse_height_start=traverse_start,
+        minimum_z_end_position=traverse_end,
+        lld_search_height=searches,
+        clot_detection_height=[tenths(v) for v in clot],
+        liquid_surface_no_lld=surfaces,
+        pull_out_distance_transport_air=[tenths(v) for v in pull_out],
+        second_section_height=[tenths(v) for v in section_height],
+        second_section_ratio=[tenths(v) for v in section_ratio],
+        minimum_height=floors,
+        immersion_depth=[abs(tenths(v)) for v in immersion],
+        immersion_depth_direction=[1 if v < 0 else 0 for v in immersion],
+        surface_following_distance=[tenths(v) for v in following],
+        aspiration_volumes=[tenths(v) for v in volume],
+        aspiration_speed=[tenths(v) for v in flow],
+        transport_air_volume=[tenths(v) for v in transport],
+        blow_out_air_volume=[tenths(v) for v in blow_out],
+        pre_wetting_volume=[tenths(v) for v in pre_wet],
+        lld_mode=[mode.value for mode in modes],
+        clld_sensitivity=list(clld),
+        plld_sensitivity=list(plld),
+        aspirate_position_above_z_touch_off=[tenths(v) for v in above_touch_off],
+        detection_height_difference_for_dual_lld=[tenths(v) for v in dual_difference],
+        swap_speed=[tenths(v) for v in swap],
+        settling_time=[tenths(v) for v in settling],
+        mix_volume=[tenths(v) for v in mix_volume],
+        mix_cycles=list(mix_count),
+        mix_position_from_liquid_surface=[tenths(v) for v in mix_position],
+        mix_speed=[tenths(v) for v in mix_speed],
+        mix_surface_following_distance=[tenths(v) for v in mix_following],
+        limit_curve_index=list(limit_curve),
+        tadm_algorithm=False,
+        recording_mode=0,
+        use_2nd_section_aspiration=[False] * n,
+        retract_height_over_2nd_section_to_empty_tip=[0] * n,
+        dispensation_speed_during_emptying_tip=[500] * n,
+        dosing_drive_speed_during_2nd_section_search=[500] * n,
+        z_drive_speed_during_2nd_section_search=[300] * n,
+        cup_upper_edge=[0] * n,
+      )
+    finally:
+      await self._record_after_command(use_channels)
