@@ -59,5 +59,7 @@ unparseable = "unparseable"
 
 [files]
 extend-exclude = [
-    "*.ipynb"
+    "*.ipynb",
+    # Third-party libraries, shipped as their authors minified them.
+    "pylabrobot/visualizer3D/static/vendor/**",
 ]
