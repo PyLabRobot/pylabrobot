@@ -444,6 +444,12 @@ class SimulatedPipettes(_Simulated, Pipettes):
         {"rz": c.z_drive_mm_to_increments(self._modelled_z(channel))},
         f"where the model has channel {channel}'s stop disc",
       )
+    if command == "RD":
+      uL = self.device.dispensing_drive_uL.get(channel, 0.0)
+      return (
+        {"rd": c.dispensing_drive_uL_to_increments(uL)},
+        f"where channel {channel}'s piston stands",
+      )
     if command in ("ZL", "ZE"):
       return self._answer_liquid_search(channel, command, **kwargs)
     if command == "ZH":
@@ -1407,6 +1413,8 @@ class STARSimulationDriver(STARDriver):
     self.liquid_searches: Dict[int, Container] = {}
     # What each channel last detected liquid at, in mm on the deck; 0.0 until a search finds any.
     self.last_lld_heights: Dict[int, float] = {}
+    # Where each channel's piston stands, in uL.
+    self.dispensing_drive_uL: Dict[int, float] = {}
 
     # What each module says when asked whether it is initialized, and where things are.
     self.initialized = {module: initialized for module in ("C0", "I0", "R0", "H0")}
