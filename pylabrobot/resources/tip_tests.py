@@ -6,6 +6,7 @@ from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipPickupMethod,
   TipSize,
+  hamilton_96_tiprack_1000uL,
   hamilton_tip_300uL,
   hamilton_tip_300uL_filter,
   hamilton_tip_5000uL,
@@ -135,6 +136,34 @@ class TipTests(unittest.TestCase):
         self.assertNotEqual(first, second)
         self.assertEqual(first.get_size_x(), TIP_DIAMETER[size])
         self.assertEqual(first.get_size_y(), TIP_DIAMETER[size])
+
+  def test_state_carries_the_volume_and_a_change_to_it_is_announced(self):
+    """A tip's tracker was neither published nor wired to the state callbacks, so anything drawing
+    what a tip holds read a field that never arrived and drew the tip empty however full it was."""
+    tip = Tip(
+      name="tip", diameter=5, size_z=50, has_filter=False, maximal_volume=300, fitting_depth=8
+    )
+    seen: list = []
+    tip.register_state_update_callback(seen.append)
+    tip.tracker.set_volume(120.0)
+    self.assertEqual(tip.serialize_state()["volume"], 120.0)
+    self.assertEqual(tip.serialize_state()["max_volume"], 300)
+    self.assertEqual(len(seen), 1)
+    twin = Tip(
+      name="tip", diameter=5, size_z=50, has_filter=False, maximal_volume=300, fitting_depth=8
+    )
+    twin.load_state(tip.serialize_state())
+    self.assertEqual(twin.tracker.get_used_volume(), 120.0)
+
+  def test_a_tip_in_a_rack_still_announces_its_own_state(self):
+    """A spot registers on its tip's tracker to publish the spot, and the tracker kept one
+    callback, so the tip's own was dropped the moment it entered a rack."""
+    rack = hamilton_96_tiprack_1000uL(name="rack", with_tips=True)
+    tip = rack.get_item("A1").get_tip()
+    seen: list = []
+    tip.register_state_update_callback(seen.append)
+    tip.tracker.set_volume(50.0)
+    self.assertEqual([state["volume"] for state in seen], [50.0])
 
   def test_equality_includes_tool_and_tip_fields(self):
     """Matching resource geometry alone does not make different tips equal."""
