@@ -52,7 +52,7 @@ from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import Hamil
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources import Container, Coordinate, Tip
 from pylabrobot.resources.errors import HasTipError, NoTipError
-from pylabrobot.resources.hamilton import HamiltonTip, TipSize
+from pylabrobot.resources.hamilton import HamiltonTip, PrepDeck, TipSize
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.resource import Resource
@@ -1555,7 +1555,12 @@ class Pipettes:
     """
     if channel >= len(self.configuration.channels):
       return
-    window = getattr(self.configuration.channels[channel], f"{axis}_range")
+    configuration = self.configuration.channels[channel]
+    window = {
+      "x": configuration.x_range,
+      "y": configuration.y_range,
+      "z": configuration.z_range,
+    }[axis]
     if window is None:
       return
     low, high = window
@@ -3389,18 +3394,21 @@ class Pipettes:
         continue
       dest, tip, off = indexed[ch]
       if all_trash:
-        if self.deck is None:
+        deck = self.deck
+        if deck is None:
           raise ValueError(
             "Cannot drop tips to waste: the driver has no deck (assign one before drop_tips)."
           )
+        if not isinstance(deck, PrepDeck):
+          raise ValueError("Cannot drop tips to waste: the driver requires a PrepDeck.")
         waste_name = _CHANNEL_TO_WASTE_NAME.get(ch, "waste_mph")
-        waste = getattr(self.deck, "waste_positions", {}).get(waste_name)
+        waste = deck.waste_positions.get(waste_name)
         if waste is None:
           raise ValueError(
             f"Cannot drop tips to waste: deck has no waste position '{waste_name}'. "
             "Use a deck with waste_rear, waste_front (and waste_mph if using MPH)."
           )
-        loc = waste.get_location_wrt(self.deck, "c", "c", "t")
+        loc = waste.get_location_wrt(deck, "c", "c", "t")
         # The device's waste position is where the tip's end goes, down its chute, while a drop is
         # sent the height the collar rests at - the tip's length above that end.
         loc = Coordinate(loc.x, loc.y, loc.z + tip.get_size_z() - tip.collar_height)
@@ -3621,8 +3629,13 @@ class Pipettes:
       use_channels = [ch for ch in range(self.num_channels) if self.get_mounted_tip(ch) is not None]
     if not use_channels:
       return
-    waste = getattr(deck, "waste_block", None)
-    if waste is None:
+    if not isinstance(deck, PrepDeck):
+      raise RuntimeError("tips are discarded into a PrepDeck's waste block")
+    waste_name = deck.get_component_name("waste_block")
+    if not deck.has_resource(waste_name):
+      raise RuntimeError("tips are discarded into the deck's waste block; this deck has none")
+    waste = deck.get_resource(waste_name)
+    if not isinstance(waste, Trash):
       raise RuntimeError("tips are discarded into the deck's waste block; this deck has none")
     await self.drop_tips([waste] * len(use_channels), use_channels=use_channels, **kwargs)
 
@@ -3709,9 +3722,11 @@ class Pipettes:
       RuntimeError: If the deck has no waste sites, or a move did not leave a channel where it should.
     """
     deck = self._require_deck()
-    sites = getattr(deck, "waste_positions", None)
-    if not sites:
+    if not isinstance(deck, PrepDeck):
       raise RuntimeError("the waste sites are placed on a PrepDeck; this driver has another deck")
+    sites = deck.waste_positions
+    if not sites:
+      raise RuntimeError("the deck has no waste sites")
     at = await self.request_locations()
     present = await self.sense_tip_presence()
     carrying = [ch for ch, on in enumerate(present) if on]
