@@ -422,6 +422,25 @@ class SimulatedPipettes(_Simulated, Pipettes):
           },
           "what each channel last detected liquid at",
         )
+      if command == "AS":
+        # The command moves the channels itself: each involved one to its Y and, at the end, its
+        # tip bottom to `te`. That is what the model has to show when the driver reads back.
+        end = int(kwargs["te"]) / 10
+        # The per-channel lists run over the channels involved, in order, not over the pattern.
+        used = 0
+        for index, (involved, y) in enumerate(zip(kwargs["tm"], kwargs["yp"])):
+          if not involved:
+            continue
+          self.update_location_by_reference_point(
+            index, y=int(y) / 10, z=round(end + self._below_stop_disc(index), 2)
+          )
+          # The piston draws the blow-out air, the volume and the transport air, and stands there.
+          drawn = sum(int(kwargs[field][used]) for field in ("ba", "av", "ta")) / 10
+          self.device.dispensing_drive_uL[index] = round(
+            self.device.dispensing_drive_uL.get(index, 0.0) + drawn, 1
+          )
+          used += 1
+        return None
 
       return None
 
@@ -448,7 +467,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
       uL = self.device.dispensing_drive_uL.get(channel, 0.0)
       return (
         {"rd": c.dispensing_drive_uL_to_increments(uL)},
-        f"where channel {channel}'s piston stands",
+        f"where channel {channel}'s piston stands, from what it drew",
       )
     if command in ("ZL", "ZE"):
       return self._answer_liquid_search(channel, command, **kwargs)
@@ -1413,7 +1432,7 @@ class STARSimulationDriver(STARDriver):
     self.liquid_searches: Dict[int, Container] = {}
     # What each channel last detected liquid at, in mm on the deck; 0.0 until a search finds any.
     self.last_lld_heights: Dict[int, float] = {}
-    # Where each channel's piston stands, in uL.
+    # Where each channel's piston stands, in uL: what its aspirations drew.
     self.dispensing_drive_uL: Dict[int, float] = {}
 
     # What each module says when asked whether it is initialized, and where things are.
