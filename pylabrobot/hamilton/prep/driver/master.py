@@ -311,23 +311,18 @@ class PrepDriver:
     port: int = 2000,
     declared_configuration_json: Optional[str] = None,
     io: Optional[HamiltonTCPClient] = None,
-    use_two_sessions: bool = True,
-    second_io: Optional[HamiltonTCPClient] = None,
   ):
     """
     Args:
       deck: the deck positions are measured from.
-      host: the address the Prep answers on. Required unless `io` is given.
+      host: the address the Prep answers on. Required unless `io` is given. Opens two connections
+        so each channel can receive a command while the other's is in flight.
       port: the port it answers on.
       declared_configuration_json: path to a JSON file holding a declared configuration, as
         `save_configuration` writes one. The only way a configuration is read from a file. Against a
         physical device, discovery cross-checks it against what the device answers; against a
         simulated one, the device answers as it says.
       io: the link to drive the device through, instead of a TCP connection to `host`.
-      use_two_sessions: whether to open a second connection to `host`, so each channel node can be
-        sent a command beside the other's. Only with `host`: a given `io` has no second link but
-        `second_io`.
-      second_io: the second link, instead of a second TCP connection to `host`.
 
     Raises:
       ValueError: If neither `host` nor `io` is given.
@@ -337,14 +332,13 @@ class PrepDriver:
     self.declared: Dict[str, Any] = (
       {} if declared_configuration_json is None else read_configuration(declared_configuration_json)
     )
+    self._second_io: Optional[HamiltonTCPClient] = None
     if io is None:
       if not host:
         raise ValueError("host must be provided to reach a Prep over TCP")
       io = _PrepTCPClient(host=host, port=port)
-      if use_two_sessions and second_io is None:
-        second_io = _PrepTCPClient(host=host, port=port)
+      self._second_io = _PrepTCPClient(host=host, port=port)
     self.io: HamiltonTCPClient = io
-    self.second_io: Optional[HamiltonTCPClient] = second_io
     self._mlprep_address: Optional[Address] = None
     self.deck = deck
     # What the device reports about itself, read by `discover`. None until setup has run.
@@ -551,8 +545,8 @@ class PrepDriver:
           f"Expected root '{PREP_ROOT_NAME}' (Prep), but discovered '{root}'. Wrong instrument?"
         )
       self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
-      if self.second_io is not None:
-        await self.second_io.setup()
+      if self._second_io is not None:
+        await self._second_io.setup()
     except BaseException:
       await self._close()
       raise
@@ -560,8 +554,8 @@ class PrepDriver:
   async def _close(self) -> None:
     """Close the links and discard what was resolved on them."""
     try:
-      if self.second_io is not None:
-        await self.second_io.stop()
+      if self._second_io is not None:
+        await self._second_io.stop()
     finally:
       try:
         await self.io.stop()
@@ -757,12 +751,12 @@ class PrepDriver:
       RuntimeError: If there is no second session, or the command names a firmware path, not a
         `dest`.
     """
-    if self.second_io is None:
-      raise RuntimeError("no second session: built with use_two_sessions=False, or without a host")
+    if self._second_io is None:
+      raise RuntimeError("no second session: built with an injected io")
     if isinstance(command, PrepCommand) and command.dest == _UNRESOLVED:
       raise RuntimeError(f"{type(command).__name__} needs a dest= on the second session")
     read_timeout = self.default_read_timeout if read_timeout is None else read_timeout
-    return await self.second_io._session.execute(command, read_timeout=read_timeout)
+    return await self._second_io._session.execute(command, read_timeout=read_timeout)
 
   async def exchange(
     self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
