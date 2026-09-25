@@ -14,6 +14,7 @@ from pylabrobot.hamilton.star.driver.configuration import read_configuration
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.head96 import Head96, Head96Configuration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources.coordinate import Coordinate
@@ -390,3 +391,61 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(
       await self.head.request_y_position(), centre.y + c.channel_array_size_y / 2, delta=0.1
     )
+
+  async def _record_lld(
+    self, rh: Optional[int] = None, zl_error: Optional[str] = None
+  ) -> List[str]:
+    """Answer H0 ZL and RH as given, and record every PA, PB, ZL, RH and head ZA, in order."""
+    answer = self.driver.send_command
+    order: List[str] = []
+
+    async def lld(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      if module == "H0" and command in ("ZL", "RH", "PA", "PB", "ZA"):
+        wire = {key: value for key, value in kwargs.items() if len(key) == 2}
+        order.append(assemble_command(module, command, **wire))
+      if module + command == "H0ZL":
+        if zl_error is not None:
+          check_fw_string_error(zl_error)
+        return ""
+      if module + command == "H0RH":
+        return {"rh": rh}
+      if module + command in ("H0PA", "H0PB"):
+        return ""
+      return await answer(module, command, fmt=fmt, **kwargs)
+
+    self.driver.send_command = lld  # type: ignore[assignment]
+    return order
+
+  async def test_under_clld_the_air_goes_in_first_and_the_head_rises_once(self):
+    well = self.plate.get_item("A1")
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    overhang = await self.head._overhang_that_probes()
+    c = self.head.configuration
+    order = await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 5.0 + overhang))
+    await self.head.mix(
+      self.plate,
+      Mix(volume=50.0, repetitions=2, flow_rate=100.0),
+      lld_mode=LLDMode.CAPACITIVE,
+    )
+    self.assertEqual(
+      [command[2:4] for command in order if command[2:4] != "ZA"],
+      ["PA", "ZL", "RH", "PA", "PB", "PA", "PB", "PB"],
+    )
+    zl = next(command for command in order if command.startswith("H0ZL"))
+    self.assertIn(f"zh{c.z_drive_mm_to_increments(bottom + overhang):05}", zl)
+    self.assertIn("zi0000", zl)
+    # Down from the surface to 2 mm under it, then the strokes; the rise comes before the air out.
+    moves = [command for command in order if command.startswith("H0ZA")]
+    self.assertIn(f"za{c.z_drive_mm_to_increments(bottom + 3.0 + overhang):05}", moves[-2])
+    self.assertTrue(order.index(moves[-1]) < len(order) - 1 and order[-1].startswith("H0PB"))
+    self.assertAlmostEqual(well.tracker.get_used_volume(), well.compute_volume_from_height(5.0))
+
+  async def test_under_clld_no_liquid_raises_and_the_head_goes_up(self):
+    await self._record_lld(zl_error="H0ZLid0001er70")
+    with self.assertRaises(RuntimeError):
+      await self.head.mix(
+        self.plate,
+        Mix(volume=50.0, repetitions=1, flow_rate=100.0),
+        lld_mode=LLDMode.CAPACITIVE,
+      )
+    self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])

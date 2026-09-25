@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Uni
 
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.features.head import Head, HeadConfiguration
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -249,6 +250,10 @@ class Head96(Head):
   default_mix_blow_out_air_volume: float = 5.0
   # Mix: how far above the well top the swap into it starts, in mm.
   mix_swap_start_clearance: float = 5.0
+  # Mix under cLLD: how far below the surface found the tips mix, in mm.
+  default_mix_position_from_liquid_surface: float = 2.0
+  # How far above a container's top a liquid search starts, in mm.
+  search_start_clearance: float = 5.0
 
   def __init__(self, driver: "STARDriver", configuration: Optional[Head96Configuration] = None):
     """
@@ -1085,8 +1090,12 @@ class Head96(Head):
     offset: Optional[Coordinate] = None,
     *,
     minimum_traverse_height_start: Optional[float] = None,
+    lld_mode: LLDMode = LLDMode.OFF,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
+    search_speed: Optional[float] = None,
     descent_speed: Optional[float] = None,
     blow_out_air_volume: Optional[float] = None,
+    mix_position_from_liquid_surface: Optional[float] = None,
     swap_speed: Optional[float] = None,
     settling_time: float = 0.0,
     minimum_traverse_height_end: Optional[float] = None,
@@ -1095,35 +1104,52 @@ class Head96(Head):
 
     Over a plate of many wells head channel A1 goes over well A1; over a single container, or a
     plate of one well, the channel array is centred over it. Each draw follows the surface down by
-    `mix.surface_following_distance` to the cavity bottom and each expel follows it back up, so the
-    tips do not drift.
+    `mix.surface_following_distance` and each expel follows it back up, so the tips do not drift;
+    no stroke goes below the cavity bottom. OFF mixes at `offset` z above the cavity bottom, with
+    the blowout air drawn and expelled over the well. CAPACITIVE draws the air at the traverse
+    height, finds the surface by cLLD, sets the tracker to the volume found, mixes
+    `mix_position_from_liquid_surface` below it and expels the air once risen.
 
     Args:
       resource: a plate (well A1, or its one well), a container, or wells (the first).
       mix: volume, repetitions, flow rate and surface following distance.
-      offset: added to where head channel A1 goes, in mm.
+      offset: added to where head channel A1 goes, in mm. Its z is ignored under CAPACITIVE.
       minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other.
+      lld_sensor: which cLLD sensors trigger, under CAPACITIVE.
+      search_speed: in mm/s, under CAPACITIVE. `default_clld_search_speed` when None.
       descent_speed: to just above the well, in mm/s. `default_mix_descent_speed` when None.
-      blow_out_air_volume: air drawn above the well and expelled there after, in uL; 0 skips it.
+      blow_out_air_volume: air drawn before mixing and expelled after, in uL; 0 skips it.
         `default_mix_blow_out_air_volume` when None.
+      mix_position_from_liquid_surface: how far below the surface found the tips mix, in mm, under
+        CAPACITIVE. `default_mix_position_from_liquid_surface` when None.
       swap_speed: into and out of the well, in mm/s. `default_mix_swap_speed` when None.
       settling_time: wait after the last stroke, in s.
       minimum_traverse_height_end: tip bottom height after mixing, in mm. Safe Z when None.
 
     Raises:
       ValueError: If an argument is out of range.
-      RuntimeError: If the head carries no tips, the iSWAP is not parked, or the driver was given
-        no deck.
+      RuntimeError: If the head carries no tips, the iSWAP is not parked, the driver was given no
+        deck, or a CAPACITIVE search found no liquid.
     """
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
+    if lld_mode not in (LLDMode.OFF, LLDMode.CAPACITIVE):
+      raise ValueError(f"the 96-head mixes with lld_mode OFF or CAPACITIVE, not {lld_mode.name}")
     if settling_time < 0:
       raise ValueError(f"settling_time must be at least 0, is {settling_time}")
     if descent_speed is None:
       descent_speed = self.default_mix_descent_speed
     if blow_out_air_volume is None:
       blow_out_air_volume = self.default_mix_blow_out_air_volume
+    if mix_position_from_liquid_surface is None:
+      mix_position_from_liquid_surface = self.default_mix_position_from_liquid_surface
+    if mix_position_from_liquid_surface < 0:
+      raise ValueError(
+        "mix_position_from_liquid_surface must be at least 0, "
+        f"is {mix_position_from_liquid_surface}"
+      )
     if swap_speed is None:
       swap_speed = self.default_mix_swap_speed
     if isinstance(resource, Plate):
@@ -1136,11 +1162,13 @@ class Head96(Head):
       plate = anchor.parent if isinstance(anchor, Well) else None
       centred = not isinstance(plate, Plate) or plate.num_items == 1
     a1 = anchor.get_location_wrt(deck, x="c", y="c", z="cavity_bottom")
+    bottom = a1.z
     if centred:
       centre = self._position_centred_in(anchor)
       a1 = Coordinate(centre.x, centre.y, a1.z)
     a1 += offset or Coordinate.zero()
     z_top = anchor.get_location_wrt(deck, x="c", y="c", z="t").z
+    following = mix.surface_following_distance or 0.0
 
     await self._require_iswap_parked()
     if not await self.request_tip_presence():
@@ -1158,32 +1186,70 @@ class Head96(Head):
       self.move_to_y_position(a1.y),
     )
 
-    following = mix.surface_following_distance or 0.0
-    floor = a1.z
-    start = a1.z + following
-    swap_start = z_top + self.mix_swap_start_clearance
-    try:
-      await self.move_tool_bottom_to_z_position(swap_start, speed=descent_speed)
-      if blow_out_air_volume:
-        await self._aspirate(blow_out_air_volume, mix.flow_rate, minimum_height=floor)
-      await self.move_tool_bottom_to_z_position(start, speed=swap_speed)
+    async def strokes() -> None:
       for _ in range(mix.repetitions):
         await self._aspirate(
-          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=floor
+          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=bottom
         )
         await self._dispense(
-          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=floor
+          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=bottom
         )
       if settling_time:
         await asyncio.sleep(settling_time)
-      await self.move_tool_bottom_to_z_position(swap_start, speed=swap_speed)
+
+    async def rise() -> None:
+      if minimum_traverse_height_end is None:
+        await self.move_to_safe_z()
+      else:
+        await self.move_tool_bottom_to_z_position(minimum_traverse_height_end, speed=descent_speed)
+
+    if lld_mode == LLDMode.OFF:
+      start = a1.z + following
+      swap_start = z_top + self.mix_swap_start_clearance
+      try:
+        await self.move_tool_bottom_to_z_position(swap_start, speed=descent_speed)
+        if blow_out_air_volume:
+          await self._aspirate(blow_out_air_volume, mix.flow_rate, minimum_height=bottom)
+        await self.move_tool_bottom_to_z_position(start, speed=swap_speed)
+        await strokes()
+        await self.move_tool_bottom_to_z_position(swap_start, speed=swap_speed)
+        if blow_out_air_volume:
+          await self._dispense(blow_out_air_volume, mix.flow_rate)
+      except STARFirmwareError:
+        await self.move_to_safe_z()
+        raise
+      await rise()
+      return
+
+    # CAPACITIVE: the air in the tips before they reach the liquid, then down once.
+    try:
       if blow_out_air_volume:
-        await self._dispense(blow_out_air_volume, mix.flow_rate)
-    except STARFirmwareError:
+        await self._aspirate(blow_out_air_volume, mix.flow_rate, minimum_height=bottom)
+      overhang = await self._overhang_that_probes()
+      search_start = round(z_top + self.search_start_clearance + overhang, 2)
+      try:
+        await self._clld_search(
+          round(bottom + overhang, 2),
+          search_start,
+          search_speed=search_speed,
+          lld_sensor=lld_sensor,
+          post_detection_distance=0.0,
+        )
+      except STARFirmwareError as error:
+        if self._found_nothing(error):
+          raise RuntimeError(
+            f"no liquid found in {anchor.name} down to its cavity bottom"
+          ) from error
+        raise
+      surface = round(await self.request_last_lld_z_position() - overhang, 2)
+      if anchor.supports_compute_height_volume_functions():
+        anchor.tracker.set_volume(anchor.compute_volume_from_height(max(surface - bottom, 0.0)))
+      start = max(round(surface - mix_position_from_liquid_surface, 2), bottom)
+      await self.move_tool_bottom_to_z_position(start, speed=swap_speed)
+      await strokes()
+    except BaseException:
       await self.move_to_safe_z()
       raise
-
-    if minimum_traverse_height_end is None:
-      await self.move_to_safe_z()
-    else:
-      await self.move_tool_bottom_to_z_position(minimum_traverse_height_end, speed=descent_speed)
+    await rise()
+    if blow_out_air_volume:
+      await self._dispense(blow_out_air_volume, mix.flow_rate)
