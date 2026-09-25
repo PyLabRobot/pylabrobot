@@ -332,7 +332,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
   def _answer_liquid_search(
     self, channel: int, command: str, **kwargs: Any
   ) -> Optional[Tuple[Any, str]]:
-    """What `ZL` answers: the surface in the container the channel searches, or nothing.
+    """What `ZL` or `ZE` answers: the surface in the container the channel searches, or nothing.
 
     The stop disc ends `zi` above where the tip met the surface, as `zj` 1 leaves it, and the
     height is latched for `C0 RL`. A search that meets no liquid above `zh` ends there, zeroes
@@ -355,6 +355,9 @@ class SimulatedPipettes(_Simulated, Pipettes):
     )
     self.device.last_lld_heights[channel] = surface
     source = f"the liquid in {container.name}"
+    if command == "ZE":
+      # Two values as the device answers, the second 0 unless foam was searched through.
+      return {"if": [c.z_drive_mm_to_increments(detected), 0]}, source
     return None, source
 
   async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
@@ -420,7 +423,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
         {"rz": c.z_drive_mm_to_increments(self._modelled_z(channel))},
         f"where the model has channel {channel}'s stop disc",
       )
-    if command == "ZL":
+    if command in ("ZL", "ZE"):
       return self._answer_liquid_search(channel, command, **kwargs)
 
     # A channel's drive keeps what `AA` writes, and what its own `ZA` moves with.
