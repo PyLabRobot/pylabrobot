@@ -21,7 +21,7 @@ import logging
 import math
 import struct as _struct
 from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import (
   TYPE_CHECKING,
   Any,
@@ -53,7 +53,11 @@ from pylabrobot.hamilton.transport.tcp.messages import HoiParamsParser, parse_in
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
-from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import ChannelBatch, plan_batches
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import (
+  ChannelBatch,
+  plan_batches,
+  validate_channel_selections,
+)
 from pylabrobot.resources import Container, Coordinate, Tip
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
@@ -878,6 +882,10 @@ class Pipettes:
     # Read only by `probe_z_using_clld`: onto the calibration block with a needle, modes 0 and 1
     # detected at 21.86 mm and mode 2 went through to the end of the search.
     self.default_clld_detect_mode: int = 0
+    # Containers within this X distance share a batch, in mm.
+    self.default_x_grouping_tolerance: float = 0.1
+    # How far above a container's top a liquid search starts, in mm.
+    self.search_start_clearance: float = 5.0
     if use_v1_aspirate_dispense:
       self.configuration.use_v1_aspirate_dispense = True
     self.setup_finished: bool = False
@@ -3134,6 +3142,375 @@ class Pipettes:
       for (_, job), height in zip(jobs, heights):
         found[job].append(height)
     return found
+
+  def _plan_batched(
+    self,
+    deck: Resource,
+    containers: Sequence[Container],
+    use_channels: Optional[List[int]],
+    resource_offsets: Optional[List[Coordinate]],
+    x_grouping_tolerance: Optional[float],
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> Tuple[List[int], List[ChannelBatch]]:
+    """Check the channels against the containers and plan the batches; nothing is sent.
+
+    More containers than channels are dealt in cycles, one per channel each cycle, each cycle
+    planned into batches.
+
+    Args:
+      deck: what the containers are placed on.
+      containers: any number.
+      use_channels: which channels, 0-indexed from the back. The first len(containers) when None,
+        up to every channel.
+      resource_offsets: added to where each channel goes in its container, in mm, one per
+        container. Planned when None.
+      x_grouping_tolerance: containers within this X distance share a batch, in mm.
+        `default_x_grouping_tolerance` when None.
+      minimum_traverse_height_end: where the tips are to be left at the end, in mm, checked here
+        against each channel's reach.
+
+    Returns:
+      The channel each container gets, per container; and the batches in the order to run them.
+
+    Raises:
+      ValueError: If the channels or offsets do not match the containers, a channel cannot reach
+        the end, or no batch holds a container's channel.
+    """
+    if use_channels is None:
+      use_channels = list(range(min(len(containers), self.num_channels)))
+    if not containers:
+      raise ValueError("no containers to probe")
+    if not use_channels or len(set(use_channels)) != len(use_channels):
+      raise ValueError(f"use_channels must name distinct channels, is {use_channels}")
+    if resource_offsets is not None and len(resource_offsets) != len(containers):
+      raise ValueError(f"{len(resource_offsets)} offsets for {len(containers)} containers")
+    # A cycle is as many containers as there are channels, one each.
+    cycle = len(use_channels)
+    cycles = [list(containers[at : at + cycle]) for at in range(0, len(containers), cycle)]
+    channels = [use_channels[job % cycle] for job in range(len(containers))]
+    for dealt in cycles:
+      validate_channel_selections(dealt, self.num_channels, use_channels[: len(dealt)])
+    if minimum_traverse_height_end is not None:
+      for channel in use_channels:
+        self._check_reachable(channel, "z", minimum_traverse_height_end)
+    tolerance = (
+      self.default_x_grouping_tolerance if x_grouping_tolerance is None else x_grouping_tolerance
+    )
+    batches: List[ChannelBatch] = []
+    for number, dealt in enumerate(cycles):
+      first = number * cycle
+      offsets = None if resource_offsets is None else resource_offsets[first : first + len(dealt)]
+      for batch in plan_batches(
+        use_channels=use_channels[: len(dealt)],
+        containers=dealt,
+        channel_spacings=self.minimum_y_spacings,
+        wrt_resource=deck,
+        x_tolerance=tolerance,
+        resource_offsets=offsets,
+      ):
+        # The planner counts jobs within the cycle; the rest counts them over every container.
+        batches.append(replace(batch, indices=[first + job for job in batch.indices]))
+    return channels, batches
+
+  async def _check_tips_and_raise(
+    self, use_channels: Sequence[int], minimum_traverse_height_start: Optional[float]
+  ) -> None:
+    """Sense a tip on every channel used, then raise every low channel; X and Y stay put.
+
+    Args:
+      use_channels: which channels, 0-indexed from the back.
+      minimum_traverse_height_start: the height every low channel's tip bottom is raised to, in mm.
+        Z safety when None.
+
+    Raises:
+      RuntimeError: If a channel used carries no tip.
+    """
+    presence = await self.sense_tip_presence()
+    bare = [channel for channel in use_channels if not presence[channel]]
+    if bare:
+      raise RuntimeError(f"channels {bare} carry no tip")
+    if minimum_traverse_height_start is None:
+      await self.move_to_safe_z()
+    else:
+      here = await self.request_locations()
+      raises = {
+        ch: minimum_traverse_height_start
+        for ch, location in enumerate(here)
+        if location.z < minimum_traverse_height_start
+      }
+      if raises:
+        await self.move_tool_bottom_to_z_positions(raises)
+
+  async def _prepare_batched(
+    self,
+    deck: Resource,
+    containers: Sequence[Container],
+    use_channels: Optional[List[int]],
+    resource_offsets: Optional[List[Coordinate]],
+    x_grouping_tolerance: Optional[float],
+    minimum_traverse_height_start: Optional[float],
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> Tuple[List[int], List[ChannelBatch]]:
+    """Plan the batches, sense the tips and raise the channels; X and Y stay put.
+
+    Every other argument is `_plan_batched`'s.
+
+    Args:
+      minimum_traverse_height_start: the height every low channel's tip bottom is raised to, in mm.
+        Z safety when None.
+
+    Returns:
+      The channel each container gets, per container; and the batches in the order to run them.
+
+    Raises:
+      ValueError: As `_plan_batched`.
+      RuntimeError: If a channel used carries no tip.
+    """
+    channels, batches = self._plan_batched(
+      deck,
+      containers,
+      use_channels,
+      resource_offsets,
+      x_grouping_tolerance,
+      minimum_traverse_height_end,
+    )
+    await self._check_tips_and_raise(list(dict.fromkeys(channels)), minimum_traverse_height_start)
+    return channels, batches
+
+  async def _execute_batched(
+    self,
+    func: Callable[[ChannelBatch], Awaitable[_T]],
+    batches: Sequence[ChannelBatch],
+    minimum_traverse_height_during: Optional[float],
+  ) -> List[_T]:
+    """Take the channels to each batch in turn and run `func` there; Z safety on any failure.
+
+    Args:
+      func: what to do at a batch. It moves nothing in X or Y.
+      batches: as planned, in ascending X.
+      minimum_traverse_height_during: the height every low channel's tip bottom is raised to
+        between batches, in mm. Z safety when None.
+
+    Returns:
+      What `func` answered at each batch, in order.
+    """
+    results: List[_T] = []
+    try:
+      for index, batch in enumerate(batches):
+        raise_to = 0.0
+        if index > 0:
+          if minimum_traverse_height_during is None:
+            await self.move_to_safe_z()
+          else:
+            raise_to = minimum_traverse_height_during
+        await self.move_to_xy_positions(
+          batch.x_position,
+          batch.y_positions,
+          make_space=True,
+          minimum_traverse_height_start=raise_to,
+        )
+        results.append(await func(batch))
+    except BaseException:
+      # A firmware error, a cancellation, an interrupt: the channels come up before it goes on.
+      await self.move_to_safe_z()
+      raise
+    return results
+
+  async def _finish_batched_heights(
+    self,
+    per_batch: Sequence[Dict[int, List[Optional[float]]]],
+    channels: Sequence[int],
+    containers: Sequence[Container],
+    z_cavity_bottom: Sequence[float],
+    minimum_traverse_height_end: Optional[float],
+    what: str,
+  ) -> List[Optional[float]]:
+    """Turn the rounds of every batch into one height per container, and leave the channels.
+
+    Args:
+      per_batch: what each batch's rounds found, in mm on the deck, by job index.
+      channels: the channel each container got, per job.
+      containers: per job.
+      z_cavity_bottom: per job, on the deck in mm.
+      minimum_traverse_height_end: where the tips are left, in mm. Z safety when None.
+      what: what was searched for, for the error.
+
+    Returns:
+      The mean of the rounds above each container's cavity bottom, in mm; None where no round
+      found anything.
+
+    Raises:
+      RuntimeError: If something was found in some rounds and not in others.
+    """
+    found: Dict[int, List[Optional[float]]] = {}
+    for batch_found in per_batch:
+      for job, heights in batch_found.items():
+        found.setdefault(job, []).extend(heights)
+    above_bottom: List[Optional[float]] = []
+    inconsistent = []
+    for job, (channel, container) in enumerate(zip(channels, containers)):
+      rounds = found[job]
+      valid = [height for height in rounds if height is not None]
+      if not valid:
+        above_bottom.append(None)
+      elif len(valid) == len(rounds):
+        above_bottom.append(round(sum(valid) / len(valid) - z_cavity_bottom[job], 2))
+      else:
+        inconsistent.append(
+          f"channel {channel} in {container.name}: {len(valid)} of {len(rounds)} rounds"
+        )
+    if inconsistent:
+      await self.move_to_safe_z()
+      raise RuntimeError(
+        f"{what} found in some rounds and not in others, so it may be at the detection limit: "
+        + "; ".join(inconsistent)
+      )
+    if minimum_traverse_height_end is None:
+      await self.move_to_safe_z()
+    else:
+      await self.move_tool_bottom_to_z_positions(
+        {channel: minimum_traverse_height_end for channel in sorted(set(channels))}
+      )
+    return above_bottom
+
+  async def probe_liquid_heights(
+    self,
+    containers: Sequence[Container],
+    use_channels: Optional[List[int]] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
+    lld_mode: Union[Pipettes.LLDMode, Sequence[Pipettes.LLDMode], None] = None,
+    search_speed: float = 10.0,
+    n_replicates: int = 1,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_during: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+    x_grouping_tolerance: Optional[float] = None,
+  ) -> List[float]:
+    """Find the liquid surface in each container with a channel's tip, and say how high it stands.
+
+    Containers dealt to channels in cycles, each cycle planned into batches; the channels of a
+    batch search by cLLD, from just above the top to the cavity bottom. Every channel used carries
+    a tip; Z safety at the end unless told where to stay.
+
+    Args:
+      containers: any number; a whole plate is fine.
+      use_channels: which channels, 0-indexed from the back. The first len(containers) when None,
+        up to every channel.
+      resource_offsets: added to where each channel goes in its container, in mm. Planned when
+        None, spreading channels that share a container.
+      lld_mode: capacitive, one for all or one per container. Capacitive when None.
+      search_speed: in mm/s.
+      n_replicates: how many times each container is searched; the heights are averaged.
+      minimum_traverse_height_start: the height every low channel's tip bottom is raised to before
+        the first batch, in mm. Z safety when None.
+      minimum_traverse_height_during: the same, between batches. Z safety when None.
+      minimum_traverse_height_end: where the tips used are left, in mm. Z safety when None.
+      x_grouping_tolerance: containers within this X distance share a batch, in mm.
+        `default_x_grouping_tolerance` when None.
+
+    Returns:
+      How high the liquid stands above each container's cavity bottom, in mm, in the order given.
+      The bottom is known, so a container in which no liquid was met stands at 0.0.
+
+    Raises:
+      ValueError: If an argument is out of range, the lists do not match, or a mode is not
+        capacitive.
+      RuntimeError: If a channel used carries no tip, or liquid was found in some rounds and not in
+        others.
+    """
+    deck = self._require_deck()
+    if n_replicates < 1:
+      raise ValueError(f"n_replicates must be at least 1, is {n_replicates}")
+    if lld_mode is None:
+      modes = [self.LLDMode.CAPACITIVE] * len(containers)
+    elif isinstance(lld_mode, self.LLDMode):
+      modes = [lld_mode] * len(containers)
+    else:
+      modes = list(lld_mode)
+    if len(modes) != len(containers):
+      raise ValueError(f"{len(modes)} lld modes for {len(containers)} containers")
+    unsupported = [mode for mode in modes if mode != self.LLDMode.CAPACITIVE]
+    if unsupported:
+      raise ValueError(f"a liquid search is capacitive, not {unsupported[0]}: pressure has no seek")
+
+    channels, batches = await self._prepare_batched(
+      deck,
+      containers,
+      use_channels,
+      resource_offsets,
+      x_grouping_tolerance,
+      minimum_traverse_height_start,
+      minimum_traverse_height_end,
+    )
+    z_cavity_bottom = [c.get_location_wrt(deck, "c", "c", "cavity_bottom").z for c in containers]
+    z_top = [c.get_location_wrt(deck, "c", "c", "t").z for c in containers]
+    per_batch = await self._execute_batched(
+      lambda batch: self._probe_batch_liquid_heights(
+        batch,
+        containers,
+        z_cavity_bottom=z_cavity_bottom,
+        z_start=[round(top + self.search_start_clearance, 2) for top in z_top],
+        lld_modes=modes,
+        search_speed=search_speed,
+        n_replicates=n_replicates,
+      ),
+      batches,
+      minimum_traverse_height_during,
+    )
+    heights = await self._finish_batched_heights(
+      per_batch, channels, containers, z_cavity_bottom, minimum_traverse_height_end, "liquid"
+    )
+    # The bottom is known, so a container in which no liquid was met stands at 0.0.
+    return [0.0 if height is None else height for height in heights]
+
+  async def probe_liquid_volumes(
+    self,
+    containers: Sequence[Container],
+    use_channels: Optional[List[int]] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
+    lld_mode: Union[Pipettes.LLDMode, Sequence[Pipettes.LLDMode], None] = None,
+    search_speed: float = 10.0,
+    n_replicates: int = 1,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_during: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+    x_grouping_tolerance: Optional[float] = None,
+  ) -> List[float]:
+    """Find the liquid in each container as `probe_liquid_heights` does, and say how much there is.
+
+    Every container has to know its height-volume functions.
+
+    Args:
+      As `probe_liquid_heights`.
+
+    Returns:
+      The volume in each container, in uL, in the order given; what its function makes of a
+      height of 0.0 where no liquid was met.
+
+    Raises:
+      ValueError: If a container has no height-to-volume function, or as `probe_liquid_heights`.
+      RuntimeError: As `probe_liquid_heights`.
+    """
+    without = [c.name for c in containers if not c.supports_compute_height_volume_functions()]
+    if without:
+      raise ValueError(f"no height-to-volume function for {without}")
+    heights = await self.probe_liquid_heights(
+      containers,
+      use_channels,
+      resource_offsets,
+      lld_mode,
+      search_speed,
+      n_replicates,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      minimum_traverse_height_during=minimum_traverse_height_during,
+      minimum_traverse_height_end=minimum_traverse_height_end,
+      x_grouping_tolerance=x_grouping_tolerance,
+    )
+    return [
+      container.compute_volume_from_height(height) for container, height in zip(containers, heights)
+    ]
 
   async def probe_z_using_ztouch(
     self,
