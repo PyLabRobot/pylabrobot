@@ -2530,3 +2530,24 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
     driver.owe_motion_time(2.0)
     await driver.pay_motion_time()
     self.sleep.assert_awaited_once_with(0.5)
+
+
+class TestPressureMonitoring(unittest.IsolatedAsyncioTestCase):
+  """The pressure sensor and TADM commands, answered with replies recorded from a device."""
+
+  async def asyncSetUp(self):
+    self.pipettes, _ = await channels(width=REPORTED_WIDTH, positions=FRONTMOST)
+    self.send = unittest.mock.AsyncMock(return_value="")
+    self.pipettes._driver.send_command = self.send  # type: ignore[assignment]
+
+  def answer(self, *replies: str) -> None:
+    self.send.side_effect = list(replies)
+
+  async def test_request_channel_pressure(self):
+    self.answer("P8RPid0001rp-0123")
+    self.assertEqual(await self.pipettes.request_channel_pressure(7), -123)
+    self.assertEqual(self.send.call_args.kwargs, {"module": "P8", "command": "RP"})
+
+  async def test_auto_adjust_pressure_sensor(self):
+    await self.pipettes.auto_adjust_pressure_sensor(7)
+    self.assertEqual(self.send.call_args.kwargs, {"module": "P8", "command": "AC"})
