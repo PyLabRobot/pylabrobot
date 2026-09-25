@@ -360,6 +360,26 @@ class SimulatedPipettes(_Simulated, Pipettes):
       return {"if": [c.z_drive_mm_to_increments(detected), 0]}, source
     return None, source
 
+  def _answer_ztouch(self, channel: int, **kwargs: Any) -> Tuple[Any, str]:
+    """What `ZH` answers: the stop disc where the tip met the floor of the container under it.
+
+    The floor is the container's cavity bottom, as the model has it. Nothing under the tip, or a
+    floor below the search end, and the search runs to `za` and answers that, as the device does.
+    """
+    c = self.configuration
+    end = c.z_drive_increments_to_mm(int(kwargs["za"]))
+    container = self._container_under(channel)
+    deck = self._driver.deck
+    stopped = end
+    source = "the end of an untouched search"
+    if container is not None and deck is not None:
+      floor = container.get_location_wrt(deck, "c", "c", "cavity_bottom").z
+      touched = round(floor + self._below_stop_disc(channel), 2)
+      if touched > end:
+        stopped, source = touched, f"the floor of {container.name}"
+    self.update_location_by_reference_point(channel, z=stopped)
+    return {"rz": c.z_drive_mm_to_increments(stopped)}, source
+
   async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
     """What a read of the channels answers, taken from the model.
 
@@ -425,6 +445,8 @@ class SimulatedPipettes(_Simulated, Pipettes):
       )
     if command in ("ZL", "ZE"):
       return self._answer_liquid_search(channel, command, **kwargs)
+    if command == "ZH":
+      return self._answer_ztouch(channel, **kwargs)
 
     # A channel's drive keeps what `AA` writes, and what its own `ZA` moves with.
     stored = self.device.channel_drive_parameters.setdefault(

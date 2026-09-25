@@ -917,11 +917,129 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.sent, [])
 
 
-class TestLiquidProbingInSimulation(unittest.IsolatedAsyncioTestCase):
-  """The simulator answers the Z searches from the containers' trackers, through the real path.
+class TestZTouchFirmware(unittest.IsolatedAsyncioTestCase):
+  """`Px ZH` as it goes on the wire, byte for byte as legacy sends it."""
 
-  A tip on channel 0 and an Azenta plate with water in A1 and none in D1. The plate knows volume
-  from height only, so the simulator inverts it.
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+
+    async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      return {"rz": 20000}
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_legacys_defaults(self):
+    rz = await self.pipettes._unchecked_fw_probe_z_using_ztouch(
+      7, 31200, 9320, 932, 11652, 75, 1, 0
+    )
+    self.assertEqual(self.sent, ["P8ZHzb31200za09320zv11652zr075zu00932cg001cf000"])
+    self.assertEqual(rz, 20000)
+
+  async def test_a_window_a_speed_and_a_push_force(self):
+    await self.pipettes._unchecked_fw_probe_z_using_ztouch(0, 28142, 13983, 466, 11652, 75, 1, 10)
+    self.assertEqual(self.sent, ["P1ZHzb28142za13983zv11652zr075zu00466cg001cf010"])
+
+
+class TestZTouchProbing(unittest.IsolatedAsyncioTestCase):
+  """The z-touch probe: `Px ZH` on the stop disc, the tip bottom answered, then a back-off."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+    self.rz = 20000
+
+    async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      return {"rz": self.rz}
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+    self.pipettes.sense_tip_presence = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=[1] * self.pipettes.num_channels
+    )
+    self.pipettes.request_tip_overhang = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=51.9
+    )
+    self.recorded_z = unittest.mock.AsyncMock()
+    self.back_off = unittest.mock.AsyncMock()
+    self.safe_z = unittest.mock.AsyncMock()
+    self.pipettes._record_where_they_stopped = self.recorded_z  # type: ignore[method-assign]
+    self.pipettes.move_stop_disc_to_z_position = self.back_off  # type: ignore[method-assign]
+    self.pipettes.move_to_safe_z = self.safe_z  # type: ignore[method-assign]
+
+  async def test_it_searches_from_the_top_to_the_floor_and_answers_the_tip_bottom(self):
+    touched = await self.pipettes.probe_z_using_ztouch(0)
+    self.assertEqual(self.sent, ["P1ZHzb31200za09320zv11652zr075zu00932cg001cf000"])
+    stop_disc = self.pipettes.configuration.z_drive_increments_to_mm(20000)
+    self.assertEqual(touched, round(stop_disc - 51.9, 2))
+    self.recorded_z.assert_awaited_once_with("z")
+    self.back_off.assert_awaited_once_with(0, round(stop_disc + 2.0, 2))
+    self.safe_z.assert_not_awaited()
+
+  async def test_a_window_is_given_in_tip_bottom_heights_and_sent_on_the_stop_disc(self):
+    await self.pipettes.probe_z_using_ztouch(
+      2, search_start_position=250.0, search_end_position=150.0, post_detection_distance=0
+    )
+    c = self.pipettes.configuration
+    start, end = c.z_drive_mm_to_increments(301.9), c.z_drive_mm_to_increments(201.9)
+    self.assertEqual(self.sent, [f"P3ZHzb{start:05}za{end:05}zv11652zr075zu00932cg001cf000"])
+    self.back_off.assert_not_awaited()
+
+  async def test_safe_z_afterwards_instead_of_a_back_off(self):
+    await self.pipettes.probe_z_using_ztouch(0, move_channels_to_safe_pos_after=True)
+    self.safe_z.assert_awaited_once()
+    self.back_off.assert_not_awaited()
+
+  async def test_reaching_the_end_is_none(self):
+    self.rz = self.pipettes.configuration.z_drive_mm_to_increments(100.3)
+    self.assertIsNone(await self.pipettes.probe_z_using_ztouch(0))
+    self.back_off.assert_awaited_once()
+
+  async def test_old_firmware_and_a_bare_channel_are_refused_before_anything_is_sent(self):
+    recorded = self.pipettes.configuration.channels[0].firmware_version
+    self.pipettes.configuration.channels[0].firmware_version = "4.0S 2012-04-25"
+    with self.assertRaises(RuntimeError):
+      await self.pipettes.probe_z_using_ztouch(0)
+    self.pipettes.configuration.channels[0].firmware_version = recorded
+    self.pipettes.sense_tip_presence = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=[0] * self.pipettes.num_channels
+    )
+    with self.assertRaises(RuntimeError):
+      await self.pipettes.probe_z_using_ztouch(0)
+    self.assertEqual(self.sent, [])
+
+  async def test_an_argument_out_of_range_is_refused_before_anything_is_sent(self):
+    for kwargs in (
+      {"search_speed": 999.0},
+      {"search_end_position": 40.0},
+      {"search_start_position": 150.0, "search_end_position": 200.0},
+      {"detection_limiter_pwm": 126},
+      {"push_force_pwm": -1},
+    ):
+      with self.assertRaises(ValueError):
+        await self.pipettes.probe_z_using_ztouch(0, **kwargs)  # type: ignore[arg-type]
+    self.assertEqual(self.sent, [])
+    self.recorded_z.assert_not_awaited()
+    self.back_off.assert_not_awaited()
+
+  async def test_a_firmware_error_goes_to_safe_z(self):
+    async def failing(module: str, command: str, **kwargs: Any):
+      raise STARFirmwareError(errors={}, raw_response="")
+
+    self.pipettes._driver.send_command = failing  # type: ignore[assignment]
+    with self.assertRaises(STARFirmwareError):
+      await self.pipettes.probe_z_using_ztouch(0)
+    self.safe_z.assert_awaited_once()
+    self.recorded_z.assert_awaited_once()
+
+
+class TestLiquidProbingInSimulation(unittest.IsolatedAsyncioTestCase):
+  """The simulator answers the Z searches from the model, through the real path.
+
+  A tip on channel 0 and an Azenta plate with water in A1 and none in D1. The liquid comes from
+  the trackers and a touch stops on the cavity bottom. The plate knows volume from height only,
+  so the simulator inverts it.
   """
 
   async def asyncSetUp(self):
@@ -993,6 +1111,20 @@ class TestLiquidProbingInSimulation(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(await self.pipettes.probe_z_using_plld(0, search_end_position=floor))
     top = self.pipettes.configuration.z_range[1]
     self.assertEqual((await self.pipettes.request_stop_disc_z_positions())[0], top)
+
+  async def test_the_ztouch_probe_stops_on_the_floor_of_the_well(self):
+    floor = await self._over(self.d1)
+    touched = await self.pipettes.probe_z_using_ztouch(0)
+    assert touched is not None
+    self.assertAlmostEqual(touched, floor, delta=0.1)
+    stop_disc = (await self.pipettes.request_stop_disc_z_positions())[0]
+    overhang = await self.pipettes.request_tip_overhang(0)
+    self.assertAlmostEqual(stop_disc, touched + overhang + 2.0, delta=0.1)
+
+  async def test_a_ztouch_over_nothing_runs_to_the_end_and_answers_none(self):
+    await self._over(self.d1)
+    await self.pipettes.move_to_x_position(200.0)
+    self.assertIsNone(await self.pipettes.probe_z_using_ztouch(0))
 
 
 class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):

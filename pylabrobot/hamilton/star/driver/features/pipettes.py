@@ -155,6 +155,8 @@ class PipettesConfiguration:
   increments per second squared, unlike the positions and speeds beside it."""
   z_drive_current_limit_range: Tuple[int, int] = (0, 7)
   z_drive_current_limit_default: int = 3
+  z_touch_pwm_range: Tuple[int, int] = (0, 125)
+  """What a z-touch search's force limiter and push-down force are set in."""
   drive_parameters: Dict[str, int] = field(
     default_factory=lambda: {"zv": 5, "zr": 3, "yv": 4, "yr": 1}
   )
@@ -2701,6 +2703,216 @@ class Pipettes:
     if move_channels_to_safe_pos_after:
       await self.move_to_safe_z()
     return [round(stop_disc - overhang, 2) for stop_disc in detected]
+
+  async def _unchecked_fw_probe_z_using_ztouch(
+    self,
+    channel: int,
+    start_position: int,
+    end_position: int,
+    search_speed: int,
+    approach_speed: int,
+    acceleration: int,
+    detection_limiter_pwm: int,
+    push_force_pwm: int,
+  ) -> int:
+    """Send the z-touch search as given, in Z increments; the stop disc where it stopped. `Px ZH`.
+
+    Args:
+      channel: 0-indexed from the back.
+      start_position: stop disc height the search starts from (`zb`).
+      end_position: stop disc height it goes no lower than (`za`).
+      search_speed: search speed, increments/s (`zu`).
+      approach_speed: speed to the start, increments/s (`zv`).
+      acceleration: thousands of increments/s2 (`zr`).
+      detection_limiter_pwm: offset PWM limiter for the search, 0 to 125 (`cg`).
+      push_force_pwm: offset PWM push-down force, 0 to 125; 0 switches the drive off (`cf`).
+
+    Returns:
+      The stop disc's height where the search stopped, in Z increments (`rz`).
+    """
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel),
+      command="ZH",
+      zb=f"{start_position:05}",
+      za=f"{end_position:05}",
+      zv=f"{approach_speed:05}",
+      zr=f"{acceleration:03}",
+      zu=f"{search_speed:05}",
+      cg=f"{detection_limiter_pwm:03}",
+      cf=f"{push_force_pwm:03}",
+      fmt="rz#####",
+    )
+    return cast(int, resp["rz"])
+
+  async def _ztouch_search(
+    self,
+    channel: int,
+    end_position: float,
+    start_position: float,
+    *,
+    search_speed: float = 10.0,
+    approach_speed: float = 125.0,
+    acceleration: float = 800.0,
+    detection_limiter_pwm: int = 1,
+    push_force_pwm: int = 0,
+  ) -> float:
+    """Run one channel's z-touch search between two stop disc heights, every field checked.
+
+    As `_clld_search`: in stop disc terms, nothing sensed here, and where the channel stopped is
+    not recorded in the model, which the caller does once it has read the answer.
+
+    Args:
+      channel: 0-indexed from the back.
+      end_position: stop disc height it goes no lower than, in mm.
+      start_position: stop disc height the search starts from, in mm.
+      search_speed: in mm/s.
+      approach_speed: down to the start, in mm/s.
+      acceleration: in mm/s2.
+      detection_limiter_pwm: the force at which the search stops, 0 to 125.
+      push_force_pwm: the push-down force once stopped, 0 to 125; 0 switches the drive off.
+
+    Returns:
+      The stop disc height where the search stopped, in mm.
+
+    Raises:
+      ValueError: If a field is out of the drive's range.
+      STARFirmwareError: As the channel answers.
+    """
+    c = self.configuration
+    end = c.z_drive_mm_to_increments(end_position)
+    start = c.z_drive_mm_to_increments(start_position)
+    speed = c.z_drive_mm_to_increments(search_speed)
+    approach = c.z_drive_mm_to_increments(approach_speed)
+    ramp = c.z_drive_acceleration_mm_to_increments(acceleration)
+    for checked, (low, high), name in (
+      (end, c.z_range_increments, "search end, in increments,"),
+      (start, c.z_range_increments, "search start, in increments,"),
+      (speed, c.z_drive_speed_range_increments, "search_speed, in increments/s,"),
+      (approach, c.z_drive_speed_range_increments, "approach_speed, in increments/s,"),
+      (ramp, c.z_drive_acceleration_range_increments, "acceleration, in 1000 increments/s2,"),
+      (detection_limiter_pwm, c.z_touch_pwm_range, "detection_limiter_pwm"),
+      (push_force_pwm, c.z_touch_pwm_range, "push_force_pwm"),
+    ):
+      if not low <= checked <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {checked}")
+    stopped_at = await self._unchecked_fw_probe_z_using_ztouch(
+      channel,
+      start_position=start,
+      end_position=end,
+      search_speed=speed,
+      approach_speed=approach,
+      acceleration=ramp,
+      detection_limiter_pwm=detection_limiter_pwm,
+      push_force_pwm=push_force_pwm,
+    )
+    return c.z_drive_increments_to_mm(stopped_at)
+
+  def _require_ztouch_firmware(self, channel: int) -> None:
+    """Raise unless the channel's firmware, as discovery recorded it, is from 2022 on."""
+    version = self.configuration.channels[channel].firmware_version
+    if version is None:
+      raise RuntimeError(f"channel {channel} has no firmware version recorded; run setup first")
+    if parse_firmware_version_date(version).year < 2022:
+      raise RuntimeError(f"channel {channel} runs {version}; z-touch needs firmware from 2022")
+
+  async def probe_z_using_ztouch(
+    self,
+    channel_idx: int,
+    *,
+    search_start_position: Optional[float] = None,
+    search_end_position: Optional[float] = None,
+    search_speed: float = 10.0,
+    approach_speed: float = 125.0,
+    acceleration: float = 800.0,
+    detection_limiter_pwm: int = 1,
+    push_force_pwm: int = 0,
+    end_tolerance: float = 0.5,
+    allow_without_tip: bool = False,
+    post_detection_distance: float = 2.0,
+    move_channels_to_safe_pos_after: bool = False,
+  ) -> Optional[float]:
+    """Lower a channel's tip until it presses on something, and say how high that is.
+
+    The z-touch: the drive comes down at `approach_speed` to the start, then searches at
+    `search_speed` with its force held to `detection_limiter_pwm`, and stops where the tip meets
+    resistance. The channel says where its stop disc stopped; the tip bottom is the overhang
+    below it. Then the channel backs off by `post_detection_distance` and rests there, or goes to
+    Z safety instead when asked. A search that reached its end, within `end_tolerance`, touched
+    nothing and answers None.
+
+    The start is a tip bottom height, as the cLLD probe's; the end is a stop disc height, as
+    legacy sends it, so the default is the drive's floor and the search goes as far as it can.
+    Needs channel firmware from 2022 on, as discovery recorded it.
+
+    Args:
+      channel_idx: which channel, 0-indexed from the back.
+      search_start_position: tip bottom height the search starts from, in mm. As high as the tip
+        goes when None.
+      search_end_position: lowest tip bottom height, in mm. The drive's floor when None.
+      search_speed: in mm/s.
+      approach_speed: down to the start, in mm/s.
+      acceleration: in mm/s2.
+      detection_limiter_pwm: the force at which the search stops, 0 to 125.
+      push_force_pwm: the push-down force once stopped, 0 to 125; 0 switches the drive off.
+      end_tolerance: how close to the end counts as having touched nothing, in mm.
+      allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
+      post_detection_distance: how far the channel backs off afterwards, in mm; 0 stays.
+      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
+        instead of resting where the search left it.
+
+    Returns:
+      The tip bottom height where it stopped, in mm, or None if it reached the end.
+
+    Raises:
+      RuntimeError: If the channel carries no tip and `allow_without_tip` is False, or its
+        firmware predates 2022.
+      ValueError: If an argument is out of range.
+    """
+    self._require_channel(channel_idx)
+    self._require_ztouch_firmware(channel_idx)
+    overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
+    c = self.configuration
+    lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
+    top, floor = highest - overhang, round(lowest - overhang, 2)
+    if search_start_position is None:
+      search_start_position = top
+    if search_end_position is None:
+      search_end_position = floor
+    if not floor <= search_end_position <= top:
+      raise ValueError(
+        f"search_end_position must be between {floor} and {top} mm, is {search_end_position}"
+      )
+    if not search_end_position <= search_start_position <= top:
+      raise ValueError(
+        f"search_start_position must be between {search_end_position} and {top} mm, "
+        f"is {search_start_position}"
+      )
+    try:
+      stop_disc = await self._ztouch_search(
+        channel_idx,
+        round(search_end_position + overhang, 2),
+        round(search_start_position + overhang, 2),
+        search_speed=search_speed,
+        approach_speed=approach_speed,
+        acceleration=acceleration,
+        detection_limiter_pwm=detection_limiter_pwm,
+        push_force_pwm=push_force_pwm,
+      )
+    except STARFirmwareError:
+      # The search went out and stopped somewhere: read where, then come up.
+      await self._record_where_they_stopped("z")
+      await self.move_to_safe_z()
+      raise
+    await self._record_where_they_stopped("z")
+    tip_bottom = round(stop_disc - overhang, 2)
+    touched = None if tip_bottom - search_end_position <= end_tolerance else tip_bottom
+    if move_channels_to_safe_pos_after:
+      await self.move_to_safe_z()
+    elif post_detection_distance:
+      await self.move_stop_disc_to_z_position(
+        channel_idx, round(stop_disc + post_detection_distance, 2)
+      )
+    return touched
 
   # TODO: _unchecked_fw_ vs tip-presence-guarded versions
 
