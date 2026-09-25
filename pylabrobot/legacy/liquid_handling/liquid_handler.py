@@ -12,6 +12,7 @@ from typing import (
   Any,
   Awaitable,
   Callable,
+  Collection,
   Dict,
   List,
   Literal,
@@ -38,6 +39,9 @@ from pylabrobot.lib.liquid_handling.channel_positioning import (
   compute_channel_offsets,
 )
 from pylabrobot.lib.liquid_handling.tip_consolidation import plan_tip_consolidation
+from pylabrobot.lib.liquid_handling.tip_presence_probing import (
+  probe_tip_presence_via_pickup as _probe_tip_presence_via_pickup,
+)
 from pylabrobot.resources import (
   Container,
   Coordinate,
@@ -2822,6 +2826,9 @@ class LiquidHandler(Resource, Machine):
   ) -> Dict[str, bool]:
     """Probe tip presence by attempting pickup on each TipSpot.
 
+    Runs `pylabrobot.lib.liquid_handling.tip_presence_probing.probe_tip_presence_via_pickup` with
+    this handler's pick-up and drop: a channel a `ChannelizedError` names found no tip.
+
     Args:
       tip_spots: TipSpots to probe.
       use_channels: Channels to use (must match tip_spots length).
@@ -2845,54 +2852,32 @@ class LiquidHandler(Resource, Machine):
         f"Length mismatch: received {len(use_channels)} channels for "
         f"{len(tip_spots)} tip spots. One channel must be assigned per tip spot."
       )
+    if not tip_spots:
+      return {}
 
-    presence_flags = [True] * len(tip_spots)
     z_height = tip_spots[0].get_location_wrt(self.deck, z="top").z + 5
 
-    # Step 1: Cluster tip spots by x-coordinate
-    clusters_by_x: Dict[float, List[Tuple[TipSpot, int, int]]] = {}
-    for idx, tip_spot in enumerate(tip_spots):
-      assert tip_spot.location is not None, "TipSpot location must be at a location"
-      x = tip_spot.location.x
-      clusters_by_x.setdefault(x, []).append((tip_spot, use_channels[idx], idx))
+    async def pick_up(spots: List[TipSpot], channels: List[int]) -> None:
+      await self.pick_up_tips(
+        spots,
+        use_channels=channels,
+        minimum_traverse_height_at_beginning_of_a_command=z_height,
+        z_position_at_end_of_a_command=z_height,
+      )
 
-    sorted_clusters = [clusters_by_x[x] for x in sorted(clusters_by_x)]
-
-    # Step 2: Probe each cluster
-    for cluster in sorted_clusters:
-      tip_subset, channel_subset, index_subset = zip(*cluster)
-
+    async def drop(spots: List[TipSpot], channels: List[int]) -> None:
       try:
-        await self.pick_up_tips(
-          list(tip_subset),
-          use_channels=list(channel_subset),
-          minimum_traverse_height_at_beginning_of_a_command=z_height,
-          z_position_at_end_of_a_command=z_height,
-        )
-      except ChannelizedError as e:
-        for ch in e.errors:
-          if ch in channel_subset:
-            failed_local_idx = channel_subset.index(ch)
-            presence_flags[index_subset[failed_local_idx]] = False
-          else:
-            raise
+        await self.drop_tips(spots, use_channels=channels, z_position_at_end_of_a_command=z_height)
+      except Exception as e:
+        assert spots[0].location is not None, "TipSpot location must be at a location"
+        print(f"Warning: drop_tips failed for cluster at x={spots[0].location.x}: {e}")
 
-      # Step 3: Drop tips immediately after probing
-      if any(presence_flags[index] for index in index_subset):
-        spots = [ts for ts, _, i in cluster if presence_flags[i]]
-        use_channels = [uc for _, uc, i in cluster if presence_flags[i]]
-        try:
-          await self.drop_tips(
-            spots,
-            use_channels=use_channels,
-            # minimum_traverse_height_at_beginning_of_a_command=z_height,
-            z_position_at_end_of_a_command=z_height,
-          )
-        except Exception as e:
-          assert cluster[0][0].location is not None, "TipSpot location must be at a location"
-          print(f"Warning: drop_tips failed for cluster at x={cluster[0][0].location.x}: {e}")
+    def missed(error: Exception) -> Optional[Collection[int]]:
+      return list(error.errors) if isinstance(error, ChannelizedError) else None
 
-    return {ts.name: flag for ts, flag in zip(tip_spots, presence_flags)}
+    return await _probe_tip_presence_via_pickup(
+      tip_spots, use_channels, pick_up_tips=pick_up, drop_tips=drop, missed_channels=missed
+    )
 
   async def probe_tip_inventory(
     self,
