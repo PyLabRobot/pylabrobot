@@ -681,6 +681,174 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     y = await self.pipettes.probe_y_using_clld(1, "forward", allow_without_tip=True)
     self.assertEqual(y, 250.0 - 7.0 / 2)
 
+  def _mount_a_tip(self, overhang: float):
+    self._carry_tips(True)
+    self.pipettes.request_tip_overhang = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=overhang
+    )
+    self.pipettes.move_to_safe_z = self.moves  # type: ignore[method-assign]
+
+  def _answer_the_heights_with(self, reply: Any):
+    """Record everything, and answer every command with `reply`."""
+    recorded = self.pipettes._driver.send_command
+
+    async def answering(module: str, command: str, **kwargs: Any):
+      await recorded(module=module, command=command, **kwargs)
+      return reply
+
+    self.pipettes._driver.send_command = answering  # type: ignore[assignment]
+
+  async def test_z_firmware(self):
+    await self.pipettes._unchecked_fw_probe_z_using_clld(0, 9320, 31200, 932, 75, 10, 2, 1, 186)
+    self.assertEqual(self.sent, ["P1ZLzh09320zc31200zl00932zr075gt0010gl0002zj1zi0186"])
+
+  async def test_z_probe_searches_from_the_top_on_the_stop_disc_and_reads_the_height(self):
+    self._mount_a_tip(51.9)
+    self._answer_the_heights_with({"lh": [1234] * self.pipettes.num_channels})
+    z = await self.pipettes.probe_z_using_clld(1)
+    end = self.pipettes.configuration.z_range_increments[0]  # the drive's floor, on the stop disc
+    self.assertEqual(self.sent, [f"P2ZLzh{end:05}zc31200zl00932zr075gt0010gl0002zj1zi0186", "C0RL"])
+    self.assertEqual(z, 123.4)
+    self.moves.assert_not_awaited()
+
+  async def test_z_probe_window_is_in_tip_bottom_heights_and_sent_on_the_stop_disc(self):
+    self._mount_a_tip(51.9)
+    self._answer_the_heights_with({"lh": [1234] * self.pipettes.num_channels})
+    await self.pipettes.probe_z_using_clld(
+      2,
+      search_start_position=250.0,
+      search_end_position=150.0,
+      move_channels_to_safe_pos_after=True,
+    )
+    c = self.pipettes.configuration
+    start, end = c.z_drive_mm_to_increments(301.9), c.z_drive_mm_to_increments(201.9)
+    self.assertEqual(
+      self.sent, [f"P3ZLzh{end:05}zc{start:05}zl00932zr075gt0010gl0002zj1zi0186", "C0RL"]
+    )
+    self.moves.assert_awaited_once()
+
+  async def test_z_probe_refuses_a_window_or_a_setting_out_of_range(self):
+    self._mount_a_tip(51.9)
+    for kwargs in (
+      {"search_end_position": 40.0},
+      {"search_start_position": 300.0},
+      {"search_start_position": 150.0, "search_end_position": 200.0},
+      {"detection_drop": 1024},
+      {"post_detection_distance": 110.0},
+      {"post_detection_trajectory": 2},
+    ):
+      with self.assertRaises(ValueError):
+        await self.pipettes.probe_z_using_clld(0, **kwargs)  # type: ignore[arg-type]
+    self.assertEqual(self.sent, [])
+    self.moves.assert_not_awaited()
+
+  async def test_z_probe_goes_to_safe_z_on_a_firmware_error(self):
+    self._mount_a_tip(51.9)
+
+    async def failing(module: str, command: str, **kwargs: Any):
+      raise STARFirmwareError(errors={}, raw_response="")
+
+    self.pipettes._driver.send_command = failing  # type: ignore[assignment]
+    with self.assertRaises(STARFirmwareError):
+      await self.pipettes.probe_z_using_clld(0)
+    self.moves.assert_awaited_once()
+
+  async def test_z_probe_that_finds_nothing_goes_to_safe_z_and_answers_none(self):
+    self._mount_a_tip(51.9)
+    self._answer_the_search_with("ZL", "P2ZLid0001er70")
+    self.assertIsNone(await self.pipettes.probe_z_using_clld(1))
+    self.moves.assert_awaited_once()
+    self.assertNotIn("C0RL", self.sent)
+
+  async def test_z_probe_raises_any_other_channel_error(self):
+    self._mount_a_tip(51.9)
+    self._answer_the_search_with("ZL", "P2ZLid0001er99")
+    with self.assertRaises(STARFirmwareError):
+      await self.pipettes.probe_z_using_clld(1)
+    self.moves.assert_awaited_once()
+
+  async def test_z_probe_refuses_a_channel_without_a_tip(self):
+    self._carry_tips(False)
+    with self.assertRaises(RuntimeError):
+      await self.pipettes.probe_z_using_clld(0)
+    self.assertEqual(self.sent, [])
+
+  async def test_a_bare_channel_z_probes_on_its_stop_disc_when_allowed(self):
+    self._carry_tips(False)
+    self.pipettes.move_to_safe_z = self.moves  # type: ignore[method-assign]
+    self._answer_the_heights_with({"lh": [1234] * self.pipettes.num_channels})
+    z = await self.pipettes.probe_z_using_clld(1, allow_without_tip=True)
+    # No overhang: the window is the drive's own, floor to top.
+    floor, top = self.pipettes.configuration.z_range_increments
+    self.assertEqual(
+      self.sent, [f"P2ZLzh{floor:05}zc{top:05}zl00932zr075gt0010gl0002zj1zi0186", "C0RL"]
+    )
+    self.assertEqual(z, 123.4)
+
+
+class TestLiquidProbingInSimulation(unittest.IsolatedAsyncioTestCase):
+  """The simulator answers the Z searches from the containers' trackers, through the real path.
+
+  A tip on channel 0 and an Azenta plate with water in A1 and none in D1. The plate knows volume
+  from height only, so the simulator inverts it.
+  """
+
+  async def asyncSetUp(self):
+    from pylabrobot.resources import set_volume_tracking
+    from pylabrobot.resources.azenta.plates import azenta_96_wellplate_200uL_Vb_4titudeframestar
+    from pylabrobot.resources.hamilton import PLT_CAR_L5AC_A00, hamilton_tip_300uL
+    from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
+
+    set_volume_tracking(True)
+    self.addCleanup(set_volume_tracking, False)
+    self.deck = STARDeck()
+    plates = PLT_CAR_L5AC_A00(name="plates")
+    plates[0] = self.plate = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    self.deck.assign_child_resource(plates, track=30)
+    self.driver = STARSimulationDriver(deck=self.deck, declared_configuration_json=RECORDING_STAR)
+    await self.driver.setup()
+    assert self.driver.pipettes is not None
+    self.pipettes = self.driver.pipettes
+    self.a1, self.d1 = self.plate.get_well("A1"), self.plate.get_well("D1")
+    self.a1.tracker.set_volume(150.0)
+    shaft = next(
+      child for child in self.pipettes.resources[0].children if isinstance(child, TipMountingShaft)
+    )
+    shaft.mount_tip(hamilton_tip_300uL(name="tip"))
+
+  async def asyncTearDown(self):
+    await self.driver.stop()
+
+  def _surface(self, well) -> float:
+    """Where the tracker's water stands in `well`, in mm on the deck, by the well's own model."""
+    volume = well.tracker.get_used_volume()
+    low, high = 0.0, well.get_size_z()
+    for _ in range(40):
+      mid = (low + high) / 2
+      low, high = (mid, high) if well.compute_volume_from_height(mid) < volume else (low, mid)
+    return round(float(well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z) + low, 2)
+
+  async def _over(self, well) -> float:
+    """Put channel 0 over `well`; the well's cavity bottom height, in mm."""
+    centre = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom")
+    await self.pipettes.move_to_x_position(centre.x)
+    await self.pipettes.move_to_y_position(0, centre.y, make_space=True)
+    return float(centre.z)
+
+  async def test_the_clld_probe_finds_the_water_under_the_tip(self):
+    floor = await self._over(self.a1)
+    found = await self.pipettes.probe_z_using_clld(0, search_end_position=floor)
+    assert found is not None
+    self.assertAlmostEqual(found, self._surface(self.a1), delta=0.1)
+    self.assertAlmostEqual((await self.pipettes.request_last_lld_z_positions())[0], found)
+
+  async def test_a_clld_miss_answers_none_zeroes_the_latch_and_comes_up(self):
+    floor = await self._over(self.d1)
+    self.assertIsNone(await self.pipettes.probe_z_using_clld(0, search_end_position=floor))
+    self.assertEqual((await self.pipettes.request_last_lld_z_positions())[0], 0.0)
+    top = self.pipettes.configuration.z_range[1]
+    self.assertEqual((await self.pipettes.request_stop_disc_z_positions())[0], top)
+
 
 class TestWhatTheChannelsCarry(unittest.IsolatedAsyncioTestCase):
   """A simulated channel answers for the tip on its mounting shaft.
