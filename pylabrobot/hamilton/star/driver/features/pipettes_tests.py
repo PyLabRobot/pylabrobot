@@ -1004,9 +1004,23 @@ class TestZTouchProbing(unittest.IsolatedAsyncioTestCase):
     self.back_off.assert_not_awaited()
 
   async def test_reaching_the_end_is_none(self):
-    self.rz = self.pipettes.configuration.z_drive_mm_to_increments(100.3)
+    # The drive lands a few hundredths off the end it ran to.
+    self.rz = self.pipettes.configuration.z_drive_mm_to_increments(100.05)
     self.assertIsNone(await self.pipettes.probe_z_using_ztouch(0))
     self.back_off.assert_awaited_once()
+
+  async def test_a_50_uL_tip_under_a_z_touch_is_a_warning(self):
+    from pylabrobot.resources.hamilton.tip_creators import hamilton_tip_50uL
+
+    self.pipettes.get_mounted_tip = unittest.mock.Mock(  # type: ignore[method-assign]
+      return_value=hamilton_tip_50uL("soft")
+    )
+    with self.assertLogs(
+      "pylabrobot.hamilton.star.driver.features.pipettes", level="WARNING"
+    ) as logs:
+      await self.pipettes.probe_z_using_ztouch(2)
+    self.assertEqual(len(logs.output), 1)
+    self.assertIn("channels [2] carry 50 uL tips, which bend", logs.output[0])
 
   async def test_old_firmware_and_a_bare_channel_are_refused_before_anything_is_sent(self):
     recorded = self.pipettes.configuration.channels[0].firmware_version
@@ -1359,7 +1373,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     c = self.pipettes.configuration
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
     top = wells[0].get_location_wrt(self.deck, "c", "c", "t").z
-    end = c.z_drive_mm_to_increments(round(bottom - 5.0 + 51.9, 2))
+    end = c.z_drive_mm_to_increments(round(bottom - 1.0 + 51.9, 2))
     start = c.z_drive_mm_to_increments(round(top + 51.9, 2))
     self.assertEqual(
       self.sent,
@@ -1388,10 +1402,24 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
       self.assertEqual([c[:4] for c in self.sent], ["P1ZH", "P2ZH", "P3ZH", "P4ZH"])
       slept.clear()
       self.sent.clear()
-      await self.pipettes.probe_z_heights_using_ztouch(self._wells("A1", "B1"), start_spacing=0)
+      self.pipettes.ztouch_cascade_interval = 0.0
+      await self.pipettes.probe_z_heights_using_ztouch(self._wells("A1", "B1"))
       self.assertEqual(slept, [], "0 starts them all at once")
-    with self.assertRaises(ValueError):
-      await self.pipettes.probe_z_heights_using_ztouch(self._wells("A1"), start_spacing=-1)
+
+  async def test_a_50_uL_tip_under_a_z_touch_is_a_warning(self):
+    from pylabrobot.resources.hamilton.tip_creators import hamilton_tip_50uL
+
+    self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    mounted = self.pipettes.get_mounted_tip
+    self.pipettes.get_mounted_tip = unittest.mock.Mock(  # type: ignore[method-assign]
+      side_effect=lambda channel: hamilton_tip_50uL("soft") if channel == 1 else mounted(channel)
+    )
+    with self.assertLogs(
+      "pylabrobot.hamilton.star.driver.features.pipettes", level="WARNING"
+    ) as logs:
+      await self.pipettes.probe_z_heights_using_ztouch(self._wells("A1", "B1"))
+    self.assertEqual(len(logs.output), 1)
+    self.assertIn("channels [1] carry 50 uL tips, which bend", logs.output[0])
 
   async def test_a_floor_out_of_reach_is_none(self):
     self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
