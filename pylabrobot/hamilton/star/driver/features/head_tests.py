@@ -236,6 +236,53 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(any(spot.has_tip() for spot in self.tip_rack.get_all_items()))
     self.assertTrue(all(tip is not None and tip.parent is None for tip in tips))
 
+  def failing_on(self, failed: str):
+    answer = self.driver._answer
+
+    async def answering(module: str, command: str, **kwargs: Any):
+      if command == failed:
+        check_fw_string_error(f"C0{failed}id0001er99/00")
+      return await answer(module, command, **kwargs)
+
+    return patch.object(self.driver, "_answer", answering)
+
+  async def test_a_failed_pickup_takes_what_the_firmware_holds_and_reads_where_it_stopped(self):
+    shafts = self.head_resource.get_all_items()
+    # The guard reads no tips; after the failure the firmware holds that they are on.
+    held = AsyncMock(side_effect=[False, True])
+    read_z = AsyncMock(wraps=self.head.request_z_position)
+    with self.failing_on("EP"), patch.object(self.head, "request_tip_presence", held):
+      with patch.object(self.head, "request_z_position", read_z):
+        with self.assertRaises(STARFirmwareError):
+          await self.head.pick_up_tips(self.tip_rack)
+    self.assertTrue(all(shaft.has_tip() for shaft in shafts))
+    self.assertFalse(any(spot.has_tip() for spot in self.tip_rack.get_all_items()))
+    read_z.assert_awaited()
+
+  async def test_a_failed_drop_takes_what_the_firmware_holds(self):
+    await self.head.pick_up_tips(self.tip_rack)
+    held = AsyncMock(return_value=False)
+    with self.failing_on("ER"), patch.object(self.head, "request_tip_presence", held):
+      with self.assertRaises(STARFirmwareError):
+        await self.head.drop_tips(self.tip_rack)
+    self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+    self.assertTrue(all(spot.has_tip() for spot in self.tip_rack.get_all_items()))
+
+  async def test_the_piston_is_read_after_a_pickup_and_a_drop(self):
+    commands: List[str] = []
+    log = self.driver._log_exchange
+
+    def every(written: str, read: Optional[str]) -> None:
+      commands.append(written[:4])
+      log(written, read)
+
+    self.driver._log_exchange = every  # type: ignore[method-assign]
+    await self.head.pick_up_tips(self.tip_rack)
+    await self.head.drop_tips(self.tip_rack)
+    for command in ("C0EP", "C0ER"):
+      self.assertIn("H0RD", commands[commands.index(command) :])
+    self.assertEqual(commands[-1], "H0RD")
+
   async def test_return_tips_drops_them_in_the_rack_they_came_from(self):
     """Spots left empty before the pickup stay empty after the return."""
     for i in (0, 47):

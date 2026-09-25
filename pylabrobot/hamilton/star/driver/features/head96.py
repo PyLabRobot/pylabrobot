@@ -635,12 +635,29 @@ class Head96(Head):
     if not low <= location.y <= high:
       raise ValueError(f"y must be between {low} and {high}, is {location.y}")
 
-  async def _record_after_tip_command(self) -> None:
-    """Read back where a tip command left the arm and the head, and record it."""
-    if self.arm is not None:
-      await self.arm.request_position()
-    await self.request_y_position()
-    await self.request_z_position()
+  async def _record_after_tip_command(self, command_error: Optional[BaseException] = None) -> None:
+    """Read back where a tip command left the arm and the head, and record it.
+
+    Args:
+      command_error: the command's own failure, which a failed read-back does not hide.
+    """
+    try:
+      if self.arm is not None:
+        await self.arm.request_position()
+      await self.request_y_position()
+      await self.request_z_position()
+    except Exception:
+      if command_error is None:
+        raise
+      logger.exception("could not read back where the 96-head stopped")
+
+  async def _request_tips_after_failure(self) -> Optional[bool]:
+    """Whether the firmware holds that tips are mounted after a tip command failed; None unread."""
+    try:
+      return await self.request_tip_presence()
+    except Exception:
+      logger.warning("could not request whether the 96-head carries tips after the failure")
+      return None
 
   # -- tip pickup ----------------------------------------------------------------------------------
 
@@ -704,25 +721,35 @@ class Head96(Head):
       await self.move_dispensing_drive_to_position(
         self.configuration.dispensing_drive_position_before_rack_pickup
       )
-    await self._driver.send_command(
-      module="C0",
-      command="EP",
-      subsystem=self.configuration.module,
-      xs=f"{abs(round(location.x * 10)):05}",
-      xd=0 if location.x >= 0 else 1,
-      yh=f"{round(location.y * 10):04}",
-      tt=f"{tip_type_index:02}",
-      wu={"from_rack": 0, "from_waste": 1, "full_blowout": 2}[tip_pickup_method],
-      za=f"{round(location.z * 10):04}",
-      zh=f"{round(traverse_z * 10):04}",
-      ze=f"{round(end_z * 10):04}",
-    )
-
-    if self.resource is not None:
-      for shaft, tip in zip(self.resource.get_all_items(), tips):
-        if tip is not None:
-          shaft.mount_tip(tip)
-    await self._record_after_tip_command()
+    picked_up = False
+    command_error: Optional[BaseException] = None
+    try:
+      await self._driver.send_command(
+        module="C0",
+        command="EP",
+        subsystem=self.configuration.module,
+        xs=f"{abs(round(location.x * 10)):05}",
+        xd=0 if location.x >= 0 else 1,
+        yh=f"{round(location.y * 10):04}",
+        tt=f"{tip_type_index:02}",
+        wu={"from_rack": 0, "from_waste": 1, "full_blowout": 2}[tip_pickup_method],
+        za=f"{round(location.z * 10):04}",
+        zh=f"{round(traverse_z * 10):04}",
+        ze=f"{round(end_z * 10):04}",
+      )
+      picked_up = True
+    except BaseException as failure:
+      # A command can stop part way; what the firmware then holds is taken over the error.
+      command_error = failure
+      picked_up = bool(await self._request_tips_after_failure())
+      raise
+    finally:
+      if picked_up and self.resource is not None:
+        for shaft, tip in zip(self.resource.get_all_items(), tips):
+          if tip is not None:
+            shaft.mount_tip(tip)
+      await self._record_after_tip_command(command_error)
+    await self.dispensing_drive_request_uL_position()
 
   # -- tip drop ------------------------------------------------------------------------------------
 
@@ -765,28 +792,38 @@ class Head96(Head):
     )
     self._check_tip_command(location, traverse_z, end_z, skip_z=True)
 
-    await self._driver.send_command(
-      module="C0",
-      command="ER",
-      subsystem=self.configuration.module,
-      xs=f"{abs(round(location.x * 10)):05}",
-      xd=0 if location.x >= 0 else 1,
-      yh=f"{round(location.y * 10):04}",
-      za=f"{round(location.z * 10):04}",
-      zh=f"{round(traverse_z * 10):04}",
-      ze=f"{round(end_z * 10):04}",
-    )
-
-    if self.resource is not None:
-      for i, shaft in enumerate(self.resource.get_all_items()):
-        if not shaft.has_tip():
-          continue
-        tip = shaft.release_tip()
-        if isinstance(resource, TipRack) and isinstance(tip, Tip):
-          spot = resource.get_item(i)
-          if spot.tracks_tips:
-            spot.assign_tip(tip)
-    await self._record_after_tip_command()
+    dropped = False
+    command_error: Optional[BaseException] = None
+    try:
+      await self._driver.send_command(
+        module="C0",
+        command="ER",
+        subsystem=self.configuration.module,
+        xs=f"{abs(round(location.x * 10)):05}",
+        xd=0 if location.x >= 0 else 1,
+        yh=f"{round(location.y * 10):04}",
+        za=f"{round(location.z * 10):04}",
+        zh=f"{round(traverse_z * 10):04}",
+        ze=f"{round(end_z * 10):04}",
+      )
+      dropped = True
+    except BaseException as failure:
+      # A command can stop part way; what the firmware then holds is taken over the error.
+      command_error = failure
+      dropped = await self._request_tips_after_failure() is False
+      raise
+    finally:
+      if dropped and self.resource is not None:
+        for i, shaft in enumerate(self.resource.get_all_items()):
+          if not shaft.has_tip():
+            continue
+          tip = shaft.release_tip()
+          if isinstance(resource, TipRack) and isinstance(tip, Tip):
+            spot = resource.get_item(i)
+            if spot.tracks_tips:
+              spot.assign_tip(tip)
+      await self._record_after_tip_command(command_error)
+    await self.dispensing_drive_request_uL_position()
 
   async def return_tips(self, **kwargs) -> None:
     """Put the head's tips back in the tip rack they were picked up from.
