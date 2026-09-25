@@ -821,6 +821,78 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     stop_disc = await pipettes.request_stop_disc_z_position(0)
     self.assertAlmostEqual(stop_disc - bottom, tip.get_size_z() - tip.fitting_depth, places=1)
 
+  async def test_a_returned_tip_is_back_in_its_spot(self):
+    pipettes, rack, sent = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    tip = spot.tip
+    await pipettes.pick_up_tips([spot])
+    await pipettes.return_tips()
+    self.assertIs(tip.parent, spot)
+    self.assertIsNotNone(spot.tip)
+    self.assertIsNone(pipettes.get_mounted_tip(0))
+    self.assertEqual(sent[-1], "C0TRxp04554 00000&yp1458 0000&tm1 0&tp2244tz2164th2828te2828ti1")
+
+  async def test_a_tip_moved_to_another_channel_returns_to_its_own_spot(self):
+    """Where a tip goes back to is the tip's, not the channel's: it follows the tip across."""
+    pipettes, rack, sent = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    tip = spot.tip
+    await pipettes.pick_up_tips([spot])
+    shaft = pipettes.shaft(1)
+    assert shaft is not None
+    shaft.mount_tip(tip)
+    await pipettes.return_tips()
+    self.assertIs(tip.parent, spot)
+    self.assertEqual(
+      sent[-1], "C0TRxp00000 04554 00000&yp0000 1458 0000&tm0 1 0&tp2244tz2164th2828te2828ti1"
+    )
+
+  async def test_returning_only_some_channels_leaves_the_others_carrying(self):
+    pipettes, rack, _ = await channels_over_a_rack()
+    spots = [rack.get_item("A1"), rack.get_item("B1")]
+    tips = [spot.tip for spot in spots]
+    await pipettes.pick_up_tips(spots)
+    await pipettes.return_tips(use_channels=[1])
+    self.assertIs(tips[1].parent, spots[1])
+    self.assertIs(pipettes.get_mounted_tip(0), tips[0])
+
+  async def test_returning_with_no_tips_or_a_tip_from_no_spot_is_refused(self):
+    from pylabrobot.resources.hamilton import hamilton_tip_300uL
+
+    pipettes, _, _ = await channels_over_a_rack()
+    with self.assertRaises(RuntimeError):
+      await pipettes.return_tips()
+    shaft = pipettes.shaft(0)
+    assert shaft is not None
+    shaft.mount_tip(hamilton_tip_300uL(name="loose"))
+    with self.assertRaises(RuntimeError):
+      await pipettes.return_tips()
+
+  async def test_a_discarded_tip_belongs_to_nothing(self):
+    pipettes, rack, sent = await channels_over_a_rack()
+    tip = rack.get_item("A1").tip
+    await pipettes.pick_up_tips([rack.get_item("A1")])
+    await pipettes.discard_tips()
+    self.assertIsNone(tip.parent)
+    self.assertIsNone(pipettes.get_mounted_tip(0))
+    self.assertTrue(sent[-1].startswith("C0TR") and sent[-1].endswith("ti0"))
+
+  async def test_channels_that_are_not_neighbours_discard_as_legacy_does(self):
+    """Three tips on channels 0, 2 and 5 are packed 9 mm apart in the waste, as legacy packs them.
+
+    Channel 1 cannot fit between 0 and 2 there, and the firmware arranges that, so the command is
+    sent rather than refused: each pair taking part is checked by itself, as legacy checks it.
+    """
+    pipettes, rack, sent = await channels_over_a_rack()
+    spots = [rack.get_item(w) for w in ("A1", "C1", "F1")]
+    await pipettes.pick_up_tips(spots, use_channels=[0, 2, 5])
+    await pipettes.discard_tips()
+    self.assertEqual(
+      sent[-1],
+      "C0TRxp13400 00000 13400 00000 00000 13400 00000&yp3202 0000 3112 0000 0000 3022 0000"
+      "&tm1 0 1 0 0 1 0&tp1970tz1870th2828te2828ti0",
+    )
+
   async def test_two_spots_in_one_column_too_close_go_in_separate_commands(self):
     """The channels cannot stand that close, so the spots are taken one command after the other."""
     pipettes, rack, sent = await channels_over_a_rack()
@@ -1146,6 +1218,26 @@ class TestTipsOfDifferentKinds(unittest.IsolatedAsyncioTestCase):
     self.assertIs(pipettes.get_mounted_tip(2), tips[1])
     self.assertIsNone(pipettes.get_mounted_tip(1))
 
+  async def test_tips_of_two_kinds_are_returned_in_two_commands(self):
+    """A `DROP` lowers every tip to one height, so collars that differ cannot share a command."""
+    pipettes, far, near, sent = await self.two_racks()
+    await pipettes.pick_up_tips([near.get_item("A1"), far.get_item("C1")])
+    sent.clear()
+    await pipettes.return_tips()
+    drops = [command for command in sent if command.startswith("C0TR")]
+    self.assertEqual(len(drops), 2)
+    self.assertNotEqual(*[re.search(r"tp(\d+)", command).group(1) for command in drops])  # type: ignore
+
+  async def test_tips_of_two_kinds_are_discarded_in_one_command(self):
+    """A discard lets go from a height of its own, so the collars need not match."""
+    pipettes, far, near, sent = await self.two_racks()
+    await pipettes.pick_up_tips([near.get_item("A1"), far.get_item("C1")])
+    sent.clear()
+    await pipettes.discard_tips()
+    drops = [command for command in sent if command.startswith("C0TR")]
+    self.assertEqual(len(drops), 1)
+    self.assertTrue(drops[0].endswith("ti0"), "let go, rather than dropped into a spot")
+
   async def test_one_kind_across_two_racks_still_goes_out_as_one_command(self):
     """X alone never splits a command, as legacy sends them."""
     from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL
@@ -1172,6 +1264,9 @@ class TestTipHandlingUntracked(unittest.IsolatedAsyncioTestCase):
     self.assertIsNotNone(mounted)
     self.assertIsNotNone(spot.tip)
     self.assertIsNot(spot.tip, mounted)
+    await pipettes.return_tips()
+    self.assertIsNone(pipettes.get_mounted_tip(0))
+    self.assertEqual(len(spot.children), 1)
 
 
 class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
