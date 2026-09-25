@@ -4888,10 +4888,13 @@ class Pipettes:
       ),
       ("limit_curve_indices", list(limit_curve), c.limit_curve_index_range),
     ]
+    errors: List[str] = []
     for name, values, (low, high) in fields:
-      for value in values:
+      for channel, value in zip(use_channels, values):
         if not low <= value <= high:
-          raise ValueError(f"{name} must be between {low} and {high}, is {value}")
+          errors.append(f"channel {channel}: {name} must be between {low} and {high}, is {value}")
+    if errors:
+      raise ValueError("Invalid aspiration parameters:\n" + "\n".join(errors))
 
     try:
       await self._unchecked_fw_aspirate(
