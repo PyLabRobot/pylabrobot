@@ -2913,7 +2913,8 @@ class Pipettes:
     soft = sorted(
       channel
       for channel in channels
-      if isinstance(tip := self.get_mounted_tip(channel), HamiltonTip) and tip.nominal_volume == 50
+      if isinstance(tip := self.get_mounted_tip(channel), HamiltonTip)
+      and tip.model in ("hamilton_tip_50uL", "hamilton_tip_50uL_filter")
     )
     if soft:
       logger.warning(
