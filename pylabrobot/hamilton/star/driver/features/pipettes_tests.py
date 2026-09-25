@@ -2662,6 +2662,81 @@ class TestPressureMonitoring(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(await self.pipettes.read_tadm_curve(7))
 
 
+class TestAspirateFirmware(unittest.IsolatedAsyncioTestCase):
+  """`C0 AS` as legacy sends it: every field in the same order, at the same width."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      for swallowed in ("fmt", "read_timeout", "subsystem", "tip_pattern"):
+        kwargs.pop(swallowed, None)
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_the_raw_aspirate_is_legacy_aspirate_pip_to_the_character(self):
+    n = 2
+    await self.pipettes._unchecked_fw_aspirate(
+      tip_pattern=[True, True],
+      aspiration_type=[0] * n,
+      x_positions=[1234] * n,
+      y_positions=[2160, 1980],
+      minimum_traverse_height_start=2450,
+      minimum_z_end_position=2450,
+      lld_search_height=[1500] * n,
+      clot_detection_height=[60] * n,
+      liquid_surface_no_lld=[1200] * n,
+      pull_out_distance_transport_air=[100] * n,
+      second_section_height=[32] * n,
+      second_section_ratio=[6180] * n,
+      minimum_height=[1000] * n,
+      immersion_depth=[0] * n,
+      immersion_depth_direction=[0] * n,
+      surface_following_distance=[0] * n,
+      aspiration_volumes=[1000] * n,
+      aspiration_speed=[1000] * n,
+      transport_air_volume=[0] * n,
+      blow_out_air_volume=[0] * n,
+      pre_wetting_volume=[0] * n,
+      lld_mode=[0] * n,
+      clld_sensitivity=[1] * n,
+      plld_sensitivity=[1] * n,
+      aspirate_position_above_z_touch_off=[0] * n,
+      detection_height_difference_for_dual_lld=[0] * n,
+      swap_speed=[1000] * n,
+      settling_time=[0] * n,
+      mix_volume=[0] * n,
+      mix_cycles=[0] * n,
+      mix_position_from_liquid_surface=[0] * n,
+      mix_speed=[1000] * n,
+      mix_surface_following_distance=[0] * n,
+      limit_curve_index=[0] * n,
+      tadm_algorithm=False,
+      recording_mode=0,
+      use_2nd_section_aspiration=[False] * n,
+      retract_height_over_2nd_section_to_empty_tip=[60] * n,
+      dispensation_speed_during_emptying_tip=[500] * n,
+      dosing_drive_speed_during_2nd_section_search=[500] * n,
+      z_drive_speed_during_2nd_section_search=[300] * n,
+      cup_upper_edge=[0] * n,
+    )
+    self.assertEqual(
+      self.sent,
+      [
+        "C0ASat0 0tmTrue Truexp01234 01234yp2160 1980th2450te2450lp1500 1500ch060 060zl1200 1200"
+        "po0100 0100zu0032 0032zr06180 06180zx1000 1000ip0000 0000it0 0fp0000 0000av01000 01000"
+        "as1000 1000ta000 000ba0000 0000oa000 000lm0 0ll1 1lv1 1zo000 000ld00 00de1000 1000wt00 00"
+        "mv00000 00000mc00 00mp000 000ms1000 1000mh0000 0000gi000 000gj0gk0lk0 0ik0060 0060"
+        "sd0500 0500se0500 0500sz0300 0300io0000 0000"
+      ],
+    )
+
+  def test_z_touch_is_the_firmwares_fourth_lld_mode(self):
+    self.assertEqual(Pipettes.LLDMode.ZTOUCH.value, 4)
+
+
 class TestLiquidClassLookup(unittest.TestCase):
   """Every Hamilton tip finds its class, the ones without a filter included."""
 
