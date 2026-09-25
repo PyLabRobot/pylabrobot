@@ -143,6 +143,17 @@ class PrepDeck(Deck):
     """Serialize the deck and its component naming prefix."""
     return {**super().serialize(), "name_prefix": self._name_prefix}
 
+  @property
+  def waste_positions(self) -> Dict[str, Trash]:
+    """The waste sites, keyed as the driver names them: `waste_rear`, `waste_front`, `waste_mph`."""
+    found = {}
+    for name in ("waste_rear", "waste_front", "waste_mph"):
+      for waste in self.children:
+        if isinstance(waste, Trash) and waste.name == self.get_component_name(name):
+          found[name] = waste
+          break
+    return found
+
   def get_or_create_x_arm(
     self,
     name: str,

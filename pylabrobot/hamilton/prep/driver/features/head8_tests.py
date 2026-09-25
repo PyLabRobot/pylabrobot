@@ -149,9 +149,9 @@ def test_head8_full_flow():
   asyncio.run(_run())
 
 
-def test_head8_tip_trackers_pick_and_drop():
-  """8 TipTrackers stay in sync across pick_up_tips / drop_tips with tip tracking on."""
-  from pylabrobot.resources.tip_tracker import set_tip_tracking
+def test_head8_tips_move_between_spots_and_shafts():
+  """With tip tracking on, each tip moves off its spot onto its probe's shaft, and back."""
+  from pylabrobot.resources.tip_tracking import set_tip_tracking
 
   async def _run() -> None:
     set_tip_tracking(True)
@@ -161,14 +161,15 @@ def test_head8_tip_trackers_pick_and_drop():
       await p.setup()
       assert p.head8 is not None
       spots = tip_rack.column(0)
-      assert all(s.has_tip() for s in spots)
+      tips = [s.tip for s in spots]
+      assert all(t is not None for t in tips)
       await p.head8.pick_up_tips(spots)
-      assert all(not s.has_tip() for s in spots)
-      assert all(p.head8.head[i].has_tip for i in range(8))
-      assert all(t is not None for t in p.head8.get_mounted_tips())
+      assert all(s.tip is None for s in spots)
+      assert p.head8.get_mounted_tips() == tips
+      assert all(t.parent is p.head8.shaft(i) for i, t in enumerate(tips))
       await p.head8.drop_tips(spots)
-      assert all(s.has_tip() for s in spots)
-      assert all(not p.head8.head[i].has_tip for i in range(8))
+      assert [s.tip for s in spots] == tips
+      assert all(t is None for t in p.head8.get_mounted_tips())
       await p.stop()
     finally:
       set_tip_tracking(False)
@@ -216,8 +217,8 @@ def test_head8_move_to_position_sends_mph_wire_commands():
   asyncio.run(_run())
 
 
-def test_pick_up_tips_default_pre_position_sends_mph_move_then_pickup():
-  """Default pre_position=True moves the head before the one MphPickupTips."""
+def test_pick_up_tips_sends_the_move_over_the_spots_then_the_pickup():
+  """The head is taken over the spots before the one MphPickupTips, so it descends straight down."""
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
@@ -232,29 +233,6 @@ def test_pick_up_tips_default_pre_position_sends_mph_move_then_pickup():
     pickups = [i for i, c in enumerate(captured) if isinstance(c, PrepCmd.MphPickupTips)]
     assert len(pickups) == 1
     assert any(isinstance(c, PrepCmd.MphMoveToPosition) for c in captured[: pickups[0]])
-
-    await p.stop()
-
-  asyncio.run(_run())
-
-
-def test_pick_up_tips_pre_position_false_skips_mph_move():
-  """Explicit pre_position=False sends only MphPickupTips among MPH move/pickup pair."""
-
-  async def _run() -> None:
-    deck, tip_rack, _, _ = _make_deck()
-    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
-    await p.setup()
-    assert p.head8 is not None
-
-    captured, _ = _record_send(p)
-
-    await p.head8.pick_up_tips(tip_rack.column(1), pre_position=False)
-
-    mph_moves = [c for c in captured if isinstance(c, PrepCmd.MphMoveToPosition)]
-    pickups = [c for c in captured if isinstance(c, PrepCmd.MphPickupTips)]
-    assert mph_moves == []
-    assert len(pickups) == 1
 
     await p.stop()
 

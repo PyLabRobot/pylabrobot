@@ -193,7 +193,8 @@ def test_named_preps_share_a_resource_tree_and_reuse_their_components():
   asyncio.run(_run())
 
 
-def test_named_prep_drops_tips_at_its_own_waste_positions():
+@pytest.mark.parametrize("discard", [False, True])
+def test_named_prep_drops_tips_at_its_own_waste_positions(discard):
   """Tip disposal resolves prefixed waste names while caller-provided labware keeps its name."""
 
   async def _run() -> None:
@@ -207,7 +208,10 @@ def test_named_prep_drops_tips_at_its_own_waste_positions():
     )
     waste = prep.deck.get_resource("prep_a_waste_block")
     assert isinstance(waste, Trash)
-    await prep.pipettes.drop_tips([waste, waste], use_channels=[0, 1])
+    if discard:
+      await prep.pipettes.discard_tips(use_channels=[0, 1])
+    else:
+      await prep.pipettes.drop_tips([waste, waste], use_channels=[0, 1])
     assert all(tip is None for tip in prep.pipettes.get_mounted_tips())
     assert prep.get_resource("tips") is rack
     await prep.stop()

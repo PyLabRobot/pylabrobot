@@ -338,20 +338,21 @@ class TestPrepTransport(_SessionTest):
 
     io.on_write = respond
     bounds = await Pipettes(client).request_channel_bounds()
+    # The device answers in float32; the read gives back 0.01 mm.
     self.assertEqual(
       bounds,
       [
         dict(
-          x_min=0.5140037536621094,
-          x_max=299.5140075683594,
+          x_min=0.51,
+          x_max=299.51,
           y_min=0,
           y_max=385,
           z_min=19.5,
           z_max=167.5,
         ),
         dict(
-          x_min=0.5140037536621094,
-          x_max=299.5140075683594,
+          x_min=0.51,
+          x_max=299.51,
           y_min=-9,
           y_max=376,
           z_min=19.5,

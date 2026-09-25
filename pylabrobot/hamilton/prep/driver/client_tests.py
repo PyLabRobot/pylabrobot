@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from typing import List
 from unittest.mock import AsyncMock
 
 import pytest
@@ -222,32 +223,38 @@ def test_saved_configuration_holds_channel_count_and_head8(tmp_path):
   asyncio.run(_run())
 
 
+class _Records(logging.Handler):
+  """What a logger emits, collected whatever pytest's caplog does with it."""
+
+  def __init__(self) -> None:
+    super().__init__()
+    self.records: List[logging.LogRecord] = []
+
+  def emit(self, record: logging.LogRecord) -> None:
+    self.records.append(record)
+
+
 def test_setup_logs_one_summary_of_what_was_found(caplog):
   """Setup ends with one INFO block describing the device, as the STAR driver's does."""
 
   async def _run() -> None:
     p = PrepSimulationDriver(deck=STARLetDeck())
     assert p.format_setup_summary() == "[Hamilton Prep] not discovered yet"
-    # caplog listens on this logger directly. Whether a record also reaches caplog's root handler
-    # depends on `setup_logger` having run, which sets `propagate = False` on `pylabrobot` - so it
-    # is held off here for the duration, and each record is captured once either way.
     prep_logger = logging.getLogger("pylabrobot.hamilton.prep")
-    prep_logger.addHandler(caplog.handler)
-    propagated = prep_logger.propagate
-    prep_logger.propagate = False
+    records = _Records()
+    prep_logger.addHandler(records)
     try:
       with caplog.at_level(logging.DEBUG, logger="pylabrobot.hamilton.prep"):
         await p.setup()
     finally:
-      prep_logger.propagate = propagated
-      prep_logger.removeHandler(caplog.handler)
+      prep_logger.removeHandler(records)
     summary = p.format_setup_summary()
     assert summary.startswith("[Hamilton Prep] Connected on simulation (no link)")
     assert "  Pipettes: 2, v2 aspirate/dispense" in summary
     assert "    channel 0 (rear):" in summary
     assert "    channel 1 (front):" in summary
     assert "  8-channel head: none" in summary
-    infos = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    infos = [r.getMessage() for r in records.records if r.levelno == logging.INFO]
     assert infos == ["tips held at setup: none", summary]
     await p.stop()
 

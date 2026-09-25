@@ -22,7 +22,15 @@ from __future__ import annotations
 
 import logging
 import struct as _struct
-from typing import TYPE_CHECKING, Awaitable, Callable, List, Literal, Optional, Sequence, Union
+from typing import (
+  TYPE_CHECKING,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Union,
+  cast,
+)
 
 from pylabrobot.hamilton.liquid_class_resolver import (
   corrected_volumes_for_ops,
@@ -32,20 +40,22 @@ from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
 from pylabrobot.resources import Container, Coordinate, Tip, Trash
+from pylabrobot.resources.errors import HasTipError
+from pylabrobot.resources.n_channel_pipettes import (
+  SHAFT_DIAMETER,
+  SHAFT_LENGTH,
+  NChannelPipette,
+  TipMountingShaft,
+)
 from pylabrobot.resources.resource_state import (
-  TipDropIntent,
-  TipPickupIntent,
   VolumeTransferIntent,
   all_channels_succeeded,
-  finalize_tip_ops,
   finalize_volume_ops,
-  queue_tip_drops,
-  queue_tip_pickups,
   queue_volume_transfers,
   successes_from_failed_channels,
 )
 from pylabrobot.resources.tip_rack import TipSpot
-from pylabrobot.resources.tip_tracker import TipTracker
+from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well
 
 from .. import prep_commands as PrepCmd
@@ -88,6 +98,42 @@ _V2_MPH_CMD_IDS: frozenset = frozenset({29, 30, 31, 32, 33, 34})
 _PROBE_POS_TOLERANCE_MM: float = 1.0  # max deviation from expected 9mm pitch before raising
 
 
+def head8_pipette(name: str = "head8") -> NChannelPipette:
+  """The 8MPH as a resource: one column of eight tip mounting shafts, probe 0 at the back.
+
+  Only its channels are modelled, the grid the device reports, not the body around them: the
+  resource spans the shafts and nothing more. A tip a probe carries is its shaft's child.
+
+  Args:
+    name: what to call it.
+
+  Returns:
+    The pipette.
+  """
+  span_y = (NUM_PROBES - 1) * PROBE_PITCH_MM
+  return NChannelPipette(
+    name=name,
+    size_x=SHAFT_DIAMETER,
+    size_y=span_y + SHAFT_DIAMETER,
+    size_z=SHAFT_LENGTH,
+    # Where a tip is picked up: the axis of probe 0's shaft, at its end.
+    reference_point=Coordinate(SHAFT_DIAMETER / 2, span_y + SHAFT_DIAMETER / 2, 0),
+    ordered_items=create_ordered_items_2d(
+      TipMountingShaft,
+      name_prefix=name,
+      num_items_x=1,
+      num_items_y=NUM_PROBES,
+      dx=0,
+      dy=0,
+      dz=0,
+      item_dx=PROBE_PITCH_MM,
+      item_dy=PROBE_PITCH_MM,
+      tip_pickup_mode="core",
+    ),
+    model="hamilton_prep_8mph",
+  )
+
+
 class Head8:
   """8-channel Multi-Pipetting Head for the Hamilton Prep.
 
@@ -101,23 +147,22 @@ class Head8:
     self,
     driver: "PrepDriver",
     *,
-    default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ) -> None:
     """
     Args:
       driver: the driver to send commands through.
-      default_traverse_height: the height to travel at when a command names none, in mm.
       use_v1_aspirate_dispense: whether to aspirate and dispense with the v1 commands.
     """
     self._driver = driver
-    self._user_traverse_height = default_traverse_height
+    # The height to travel at when a command names none, in mm. Setup replaces it with what the device
+    # reports.
+    self.default_minimum_traverse_height: float = 167.5
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
     self.channels: List[PipetteChannel] = []  # built by discover
     self._supports_v2_pipetting: Optional[bool] = None
-    self.head: dict[int, TipTracker] = {
-      i: TipTracker(thing=f"Head8 channel {i}") for i in range(NUM_PROBES)
-    }
+    # The head's probes, each a shaft carrying the tip it has picked up.
+    self.resource: NChannelPipette = head8_pipette()
 
   @property
   def deck(self) -> Optional["Deck"]:
@@ -125,6 +170,9 @@ class Head8:
     return self._driver.deck
 
   async def _on_setup(self) -> None:
+    reported = await self._driver.request_default_traverse_height()
+    if reported is not None:
+      self.default_minimum_traverse_height = reported
     await self.discover()
     if self._use_v1_aspirate_dispense:
       self._supports_v2_pipetting = False
@@ -144,9 +192,8 @@ class Head8:
       logger.debug("MPH V2 aspirate/dispense support: True")
 
   async def _on_stop(self) -> None:
+    # The tips the probes carry are resources on their shafts, and stopping moves none.
     self._supports_v2_pipetting = None
-    for tracker in self.head.values():
-      tracker.clear()
 
   # -- session / discovery -------------------------------------------------------------------------
 
@@ -211,15 +258,35 @@ class Head8:
   # Movement
   # ----------------------------------------
 
-  def _resolve_traverse_height(self, final_z: Optional[float] = None) -> float:
-    if final_z is not None:
-      return final_z
-    if self._user_traverse_height is not None:
-      return self._user_traverse_height
-    height: Optional[float] = self._configuration.default_traverse_height
-    if height is None:
-      raise RuntimeError("No traverse height available; set default_traverse_height")
-    return height
+  def _resolve_traverse_height(self, minimum_traverse_height_end: Optional[float] = None) -> float:
+    """The height to leave the channels at: what is given, else `default_minimum_traverse_height`."""
+    if minimum_traverse_height_end is None:
+      return self.default_minimum_traverse_height
+    return minimum_traverse_height_end
+
+  def _check_reachable(self, axis: Literal["x", "y", "z"], value: float) -> None:
+    """Raise unless the head reaches a position along one axis.
+
+    The one gate a position passes through, as `Pipettes._check_reachable` is for the channels. The
+    head rides the channels' gantry, so X is theirs.
+
+    TODO: `GetChannelBounds` answers for the channels only, not for the MPH, so Y and Z go
+    unchecked. Check them here once a device reports the head's own windows.
+
+    Args:
+      axis: which axis - `x` along the gantry, `y` across it, `z` up and down.
+      value: where it would be sent, in mm.
+
+    Raises:
+      ValueError: If the head cannot reach it.
+    """
+    if axis != "x":
+      return
+    pipettes = self._driver.pipettes
+    if pipettes is None:
+      return
+    for channel in range(pipettes.num_channels):
+      pipettes._check_reachable(channel, "x", value)
 
   # -- tips ----------------------------------------------------------------------------------------
 
@@ -272,6 +339,9 @@ class Head8:
       z: Z height (e.g. traverse).
       via_lane: Use lane-aware move when True.
     """
+    self._check_reachable("x", x)
+    self._check_reachable("y", y)
+    self._check_reachable("z", z)
     if via_lane:
       await self._driver.send_command(
         PrepCmd.MphMoveToPositionViaLane(x_position=x, y_position=y, z_position=z)
@@ -287,70 +357,78 @@ class Head8:
 
   # -- tip pickup / drop ---------------------------------------------------------------------------
 
+  def shaft(self, channel: int) -> TipMountingShaft:
+    """The mounting shaft modelling a probe.
+
+    Args:
+      channel: which probe, 0 at the back.
+    """
+    return self.resource.get_item(channel)
+
   def get_mounted_tips(self) -> List[Optional[Tip]]:
-    """Tips currently mounted on the 8MPH (``None`` if empty)."""
-    return [self.head[i].get_tip() if self.head[i].has_tip else None for i in range(NUM_PROBES)]
+    """Tips currently mounted on the 8MPH (``None`` if empty): what each probe's shaft carries."""
+    tips: List[Optional[Tip]] = []
+    for i in range(NUM_PROBES):
+      tip = self.shaft(i).tip
+      tips.append(tip if isinstance(tip, Tip) else None)
+    return tips
 
   def _require_mounted_tips(self) -> List[Tip]:
     tips: List[Tip] = []
-    for i in range(NUM_PROBES):
-      tracker = self.head[i]
-      if not tracker.has_tip:
+    for tip in self.get_mounted_tips():
+      if tip is None:
         raise RuntimeError("No tips mounted on head8; call pick_up_tips first.")
-      tips.append(tracker.get_tip())
+      tips.append(tip)
     return tips
 
   def _require_mounted_tip(self) -> Tip:
     return self._require_mounted_tips()[0]
 
-  async def _finalize_head8_command(
-    self,
-    use_channels: Sequence[int],
-    *,
-    tip_intents: Optional[Sequence[Union[TipPickupIntent, TipDropIntent]]] = None,
-    volume_intents: Optional[Sequence[VolumeTransferIntent]] = None,
-    send: Callable[[], Awaitable[None]],
-  ) -> None:
-    error: Optional[BaseException] = None
-    try:
-      await send()
-      successes = all_channels_succeeded(use_channels)
-    except ChannelizedError as e:
-      error = e
-      successes = successes_from_failed_channels(use_channels, e.errors)
-    except BaseException as e:
-      error = e
-      successes = {ch: False for ch in use_channels}
-    if tip_intents is not None:
-      finalize_tip_ops(tip_intents, successes)
-    if volume_intents is not None:
-      finalize_volume_ops(volume_intents, successes)
-    if error is not None:
-      raise error
-
   async def pick_up_tips(
     self,
     tip_spots: Sequence[TipSpot],
     use_channels: Optional[Sequence[int]] = None,
-    *,
     offset: Coordinate = Coordinate.zero(),
-    final_z: Optional[float] = None,
-    seek_speed: float = 15.0,
+    minimum_traverse_height_start: Optional[float] = None,
     z_seek_offset: Optional[float] = None,
-    enable_tadm: bool = False,
+    seek_speed: float = 15.0,
     dispenser_volume: float = 0.0,
     dispenser_speed: float = 250.0,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    pre_position: bool = True,
+    enable_tadm: bool = False,
+    minimum_traverse_height_end: Optional[float] = None,
   ) -> None:
+    """Pick up a whole column of tips on the head's shafts.
+
+    In order: the head travels over the spots at the starting height, descends to the seek height,
+    presses onto the tips until they are seated, and rises to the ending height. The head takes the
+    column at once, so every shaft takes part.
+
+    Args:
+      tip_spots: the spot each shaft takes a tip from, one column of them.
+      use_channels: which shafts take them. The head takes all of them, so this only says so.
+      offset: how far the column's spots are missed by, in mm.
+      minimum_traverse_height_start: the height to travel over the spots at, in mm. The ending
+        height when None.
+      z_seek_offset: how far above the tip to stop descending before pressing on, in mm. A height
+        the tip type decides when None.
+      seek_speed: how fast to press onto the tips, in mm/s.
+      dispenser_volume: air to hold in the dispenser while picking up, in ul.
+      dispenser_speed: how fast to move that air, in ul/s.
+      enable_tadm: whether to record the pressure through the pick-up.
+      minimum_traverse_height_end: the height to leave the head at, in mm.
+        `default_minimum_traverse_height` when None.
+    """
     tip_spots = list(tip_spots)
     use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
     self._require_all_channels(use_channels, "pick_up_tips")
     if len(tip_spots) != NUM_PROBES:
       raise ValueError(f"pick_up_tips requires {NUM_PROBES} tip spots, got {len(tip_spots)}")
-    resolved_final_z = self._resolve_traverse_height(final_z)
+    resolved_end = self._resolve_traverse_height(minimum_traverse_height_end)
 
-    tips = [s.get_tip() for s in tip_spots]
+    for ch in use_channels:
+      if self.shaft(ch).has_tip():
+        raise RuntimeError(f"Channel {ch} already has a tip")
+    tips = [s.tip_for_pickup() for s in tip_spots]
     ref_spot = tip_spots[0]
     tip = tips[0]
     rack = ref_spot.parent
@@ -361,9 +439,12 @@ class Head8:
     )
     loc = ref_spot.get_location_wrt(self._require_deck(), "c", "c", "t") + offset
 
-    if pre_position:
-      traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
-      await self.move_to_position(loc.x, loc.y, traverse_h)
+    self._check_reachable("x", loc.x)
+    # Over the spots first, so the pick-up itself is straight down
+    traverse_h = (
+      resolved_end if minimum_traverse_height_start is None else minimum_traverse_height_start
+    )
+    await self.move_to_position(loc.x, loc.y, traverse_h)
 
     tip_position = PrepCmd.TipPositionParameters.for_op(
       PrepCmd.ChannelIndex.MPHChannel, loc, tip, z_seek_offset=z_seek_offset
@@ -374,25 +455,16 @@ class Head8:
       length=tip.get_size_z() - tip.fitting_depth,
       tip_type=PrepCmd.TipTypes.StandardVolume,
       has_filter=tip.has_filter,
-      is_needle=False,
+      is_needle=tip.maximal_volume == 0,  # a needle is closed: it holds no liquid
       is_tool=False,
     )
-    tip_intents = [
-      TipPickupIntent(
-        channel=ch,
-        tip_spot=spot,
-        tip=t,
-        channel_tracker=self.head[ch],
-      )
-      for ch, spot, t in zip(use_channels, tip_spots, tips)
-    ]
-    queue_tip_pickups(tip_intents)
 
-    async def _send() -> None:
+    picked_up = {ch: False for ch in use_channels}
+    try:
       await self._driver.send_command(
         PrepCmd.MphPickupTips(
           tip_position=tip_position,
-          final_z=resolved_final_z,
+          final_z=resolved_end,
           seek_speed=seek_speed,
           tip_definition=tip_definition,
           enable_tadm=enable_tadm,
@@ -401,27 +473,50 @@ class Head8:
           tip_mask=_FULL_TIP_MASK,
         )
       )
-
-    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
+      picked_up = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      # It can fail on some shafts and not others; the device says which
+      picked_up = successes_from_failed_channels(use_channels, e.errors)
+      raise
+    finally:
+      # A tip is a resource: once the device has it, it leaves its spot for the probe's shaft
+      for ch, taken in zip(use_channels, tips):
+        if picked_up[ch]:
+          self.shaft(ch).mount_tip(taken)
 
   async def drop_tips(
     self,
     destinations: Sequence[Union[TipSpot, Trash]],
     use_channels: Optional[Sequence[int]] = None,
-    *,
     offset: Coordinate = Coordinate.zero(),
-    final_z: Optional[float] = None,
-    seek_speed: float = 15.0,
     z_seek_offset: Optional[float] = None,
+    seek_speed: float = 15.0,
     tip_roll_off_distance: float = 0.0,
+    minimum_traverse_height_end: Optional[float] = None,
   ) -> None:
+    """Drop the head's tips into tip spots, or into the waste.
+
+    In order: the head descends to the seek height with the tips on it, lets go, and rises to the
+    ending height. The head drops the column at once, so every shaft takes part.
+
+    Args:
+      destinations: the spot each shaft drops its tip into, or the waste.
+      use_channels: which shafts drop them. The head drops all of them, so this only says so.
+      offset: how far the destinations are missed by, in mm.
+      z_seek_offset: how far above the destination the tip bottom stops, in mm. A height the drop
+        decides when None.
+      seek_speed: how fast to descend onto the destinations, in mm/s.
+      tip_roll_off_distance: how far the tips are rolled off as they are released, in mm.
+      minimum_traverse_height_end: the height to leave the head at, in mm.
+        `default_minimum_traverse_height` when None.
+    """
     destinations = list(destinations)
     use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
     self._require_all_channels(use_channels, "drop_tips")
     if len(destinations) != NUM_PROBES:
       raise ValueError(f"drop_tips requires {NUM_PROBES} destinations, got {len(destinations)}")
     tip = self._require_mounted_tip()
-    resolved_final_z = self._resolve_traverse_height(final_z)
+    resolved_end = self._resolve_traverse_height(minimum_traverse_height_end)
 
     ref_spot = destinations[0]
     is_trash = isinstance(ref_spot, Trash)
@@ -446,28 +541,40 @@ class Head8:
     )
     roll_off = 3.0 if (is_trash and tip_roll_off_distance == 0.0) else tip_roll_off_distance
     mounted = self._require_mounted_tips()
-    tip_intents = [
-      TipDropIntent(
-        channel=ch,
-        destination=dest,
-        tip=mounted[ch],
-        channel_tracker=self.head[ch],
-      )
-      for ch, dest in zip(use_channels, destinations)
-    ]
-    queue_tip_drops(tip_intents)
+    for ch in use_channels:
+      used = mounted[ch].tracker.get_used_volume()
+      if not mounted[ch].tracker.is_disabled and used > 1e-6:
+        raise RuntimeError(f"Cannot drop tip on channel {ch} with volume {used} uL")
+    spots = [d for d in destinations if isinstance(d, TipSpot)]
+    if len({id(spot) for spot in spots}) != len(spots):
+      raise ValueError("each tip must go into a spot of its own")
+    for spot in spots:
+      if spot.tracks_tips and spot.tip is not None:
+        raise HasTipError(f"{spot.name} already holds a tip")
 
-    async def _send() -> None:
+    dropped = {ch: False for ch in use_channels}
+    try:
       await self._driver.send_command(
         PrepCmd.MphDropTips(
           tip_position=tip_position,
-          final_z=resolved_final_z,
+          final_z=resolved_end,
           seek_speed=seek_speed,
           tip_roll_off_distance=roll_off,
         )
       )
-
-    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
+      dropped = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      # It can fail on some shafts and not others; the device says which
+      dropped = successes_from_failed_channels(use_channels, e.errors)
+      raise
+    finally:
+      # Once the device has let go, a tip goes into its spot, or to nothing in the waste
+      for ch, destination in zip(use_channels, destinations):
+        if not dropped[ch]:
+          continue
+        released = self.shaft(ch).release_tip()
+        if isinstance(destination, TipSpot) and destination.tracks_tips:
+          destination.assign_tip(cast(Tip, released))
 
   # -- shared LLD / TADM resolution helpers --------------------------------------------------------
 
@@ -480,7 +587,7 @@ class Head8:
   ) -> bool:
     """Determine whether LLD is active for this MPH pipetting call.
 
-    Unlike the PIP backend (which takes a per-channel list), the MPH accepts a
+    Unlike the pipetting channels (which take a per-channel list), the MPH accepts a
     single LLDMode because the ganged head operates as one unit.
     """
     if lld_mode is not None:
@@ -567,7 +674,7 @@ class Head8:
     ref_y: float,
     volume: float,
     tube_radius: float,
-    final_z: float,
+    minimum_traverse_height_end: float,
     z_minimum: float,
     z_fluid: float,
     z_air: float,
@@ -590,6 +697,7 @@ class Head8:
     PrepCmd.AspirateParametersNoLldAndTadm2,
     PrepCmd.AspirateParametersNoLldAndMonitoring2,
   ]:
+    self._check_reachable("x", ref_x)
     aspirate = PrepCmd.AspirateParameters(
       default_values=False,
       x_position=ref_x,
@@ -601,7 +709,7 @@ class Head8:
       volume,
       tube_radius,
       flow_rate=flow_rate,
-      z_final=final_z,
+      z_final=minimum_traverse_height_end,
       z_minimum=z_minimum,
       z_liquid_exit_speed=z_liquid_exit_speed,
       transport_air_volume=transport_air_volume,
@@ -672,7 +780,7 @@ class Head8:
     ref_y: float,
     volume: float,
     tube_radius: float,
-    final_z: float,
+    minimum_traverse_height_end: float,
     z_minimum: float,
     z_fluid: float,
     z_air: float,
@@ -695,6 +803,7 @@ class Head8:
     PrepCmd.AspirateParametersNoLldAndTadm,
     PrepCmd.AspirateParametersNoLldAndMonitoring,
   ]:
+    self._check_reachable("x", ref_x)
     aspirate = PrepCmd.AspirateParameters(
       default_values=False,
       x_position=ref_x,
@@ -706,7 +815,7 @@ class Head8:
       volume,
       tube_radius,
       flow_rate=flow_rate,
-      z_final=final_z,
+      z_final=minimum_traverse_height_end,
       z_minimum=z_minimum,
       z_liquid_exit_speed=z_liquid_exit_speed,
       transport_air_volume=transport_air_volume,
@@ -788,7 +897,7 @@ class Head8:
     ref_y: float,
     volume: float,
     tube_radius: float,
-    final_z: float,
+    minimum_traverse_height_end: float,
     z_minimum: float,
     z_fluid: float,
     z_air: float,
@@ -815,7 +924,7 @@ class Head8:
       volume,
       tube_radius,
       flow_rate=flow_rate,
-      z_final=final_z,
+      z_final=minimum_traverse_height_end,
       z_minimum=z_minimum,
       z_liquid_exit_speed=z_liquid_exit_speed,
       transport_air_volume=transport_air_volume,
@@ -859,7 +968,7 @@ class Head8:
     ref_y: float,
     volume: float,
     tube_radius: float,
-    final_z: float,
+    minimum_traverse_height_end: float,
     z_minimum: float,
     z_fluid: float,
     z_air: float,
@@ -886,7 +995,7 @@ class Head8:
       volume,
       tube_radius,
       flow_rate=flow_rate,
-      z_final=final_z,
+      z_final=minimum_traverse_height_end,
       z_minimum=z_minimum,
       z_liquid_exit_speed=z_liquid_exit_speed,
       transport_air_volume=transport_air_volume,
@@ -995,7 +1104,7 @@ class Head8:
     corrected = corrected_volumes_for_ops([tip_vol], hlcs, [disable_volume_correction])[0]
 
     traverse_z = self._resolve_traverse_height()
-    final_z_resolved = (
+    end_resolved = (
       z_final if z_final is not None else traverse_z - (tip.get_size_z() - tip.fitting_depth)
     )
 
@@ -1087,7 +1196,7 @@ class Head8:
       ref_y=ref_y,
       volume=corrected,
       tube_radius=tube_radius,
-      final_z=final_z_resolved,
+      minimum_traverse_height_end=end_resolved,
       z_minimum=resolved_z_minimum,
       z_fluid=resolved_z_fluid,
       z_air=resolved_z_air,
@@ -1138,13 +1247,20 @@ class Head8:
       ]
     queue_volume_transfers(volume_intents)
 
-    async def _send() -> None:
+    aspirated = {ch: False for ch in use_channels}
+    try:
       await self._driver.send_command(
         cmd_cls(aspirate_parameters=[param_struct]),  # type: ignore[arg-type]
         read_timeout=resolved_read_timeout if effective_lld else None,
       )
-
-    await self._finalize_head8_command(use_channels, volume_intents=volume_intents, send=_send)
+      aspirated = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      # It can fail on some shafts and not others; the device says which
+      aspirated = successes_from_failed_channels(use_channels, e.errors)
+      raise
+    finally:
+      # What each shaft moved is what its tip now holds, and the well no longer does.
+      finalize_volume_ops(volume_intents, aspirated)
 
   async def dispense(
     self,
@@ -1208,7 +1324,7 @@ class Head8:
     corrected = corrected_volumes_for_ops([tip_vol], hlcs, [disable_volume_correction])[0]
 
     traverse_z = self._resolve_traverse_height()
-    final_z_resolved = (
+    end_resolved = (
       z_final if z_final is not None else traverse_z - (tip.get_size_z() - tip.fitting_depth)
     )
 
@@ -1297,7 +1413,7 @@ class Head8:
       ref_y=ref_y,
       volume=corrected,
       tube_radius=tube_radius,
-      final_z=final_z_resolved,
+      minimum_traverse_height_end=end_resolved,
       z_minimum=resolved_z_minimum,
       z_fluid=resolved_z_fluid,
       z_air=resolved_z_air,
@@ -1346,10 +1462,17 @@ class Head8:
       ]
     queue_volume_transfers(volume_intents)
 
-    async def _send() -> None:
+    dispensed = {ch: False for ch in use_channels}
+    try:
       await self._driver.send_command(
         cmd_cls(dispense_parameters=[param_struct]),  # type: ignore[arg-type]
         read_timeout=resolved_read_timeout if effective_lld else None,
       )
-
-    await self._finalize_head8_command(use_channels, volume_intents=volume_intents, send=_send)
+      dispensed = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      # It can fail on some shafts and not others; the device says which
+      dispensed = successes_from_failed_channels(use_channels, e.errors)
+      raise
+    finally:
+      # What each shaft moved is what the well now holds, and its tip no longer does.
+      finalize_volume_ops(volume_intents, dispensed)
