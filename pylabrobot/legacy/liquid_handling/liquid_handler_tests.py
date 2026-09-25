@@ -523,6 +523,27 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
 
+  async def test_probe_tip_presence_via_pickup(self):
+    """Probed through the library's runner: a channel the ChannelizedError names found no tip."""
+    self.backend.request_tip_presence.side_effect = NotImplementedError()
+    # Unspecced, so they take the STAR's heights the probe passes, as the STAR backend does.
+    self.backend.pick_up_tips = unittest.mock.AsyncMock(
+      side_effect=[ChannelizedError(errors={1: RuntimeError("no tip")}), None]
+    )
+    self.backend.drop_tips = unittest.mock.AsyncMock()
+    spots = [self.tip_rack.get_item(well) for well in ("A1", "B1", "A2")]
+    found = await self.lh.probe_tip_presence_via_pickup(spots, use_channels=[0, 1, 2])
+    self.assertEqual(found, {spots[0].name: True, spots[1].name: False, spots[2].name: True})
+    self.assertEqual(
+      [call.kwargs["use_channels"] for call in self.backend.pick_up_tips.call_args_list],
+      [[0, 1], [2]],
+    )
+    self.assertEqual(
+      [call.kwargs["use_channels"] for call in self.backend.drop_tips.call_args_list],
+      [[0], [2]],
+    )
+    self.assertFalse(any(tracker.has_tip for tracker in self.lh.head.values()))
+
   async def test_consolidate_tip_inventory(self):
     """Execute library-planned transfers through the normal tracked tip operations."""
     self.tip_rack.set_tip_state([index >= 86 for index in range(96)])
