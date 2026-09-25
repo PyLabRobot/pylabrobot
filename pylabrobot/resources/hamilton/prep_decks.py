@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.deck import Deck, _built
+from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import prep_core_gripper_mount
 from pylabrobot.resources.hamilton.tip_creators import hamilton_teaching_needle_300uL
 from pylabrobot.resources.resource import Resource
@@ -148,9 +148,10 @@ class PrepDeck(Deck):
     """The waste sites, keyed as the driver names them: `waste_rear`, `waste_front`, `waste_mph`."""
     found = {}
     for name in ("waste_rear", "waste_front", "waste_mph"):
-      waste = _built(self.children, name, Trash)
-      if waste is not None:
-        found[name] = waste
+      for waste in self.children:
+        if isinstance(waste, Trash) and waste.name == self.get_component_name(name):
+          found[name] = waste
+          break
     return found
 
   def get_or_create_x_arm(

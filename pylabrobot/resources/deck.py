@@ -1,28 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, List, Mapping, Optional, Type, TypeVar, cast
+from typing import Any, List, Mapping, Optional, cast
 
 from pylabrobot.resources.errors import ResourceNotFoundError
 
 from .coordinate import Coordinate
 from .resource import Resource
 from .trash import Trash
-
-T = TypeVar("T", bound=Resource)
-
-
-def _built(resources: List[Resource], suffix: str, cls: Type[T]) -> Optional[T]:
-  """The resource a deck built and called `suffix`, whatever prefix it gave it.
-
-  Found by what it is called rather than held as an attribute, so a deck read back from a file
-  finds it too.
-  """
-  for resource in resources:
-    if isinstance(resource, cls) and (
-      resource.name == suffix or resource.name.endswith(f"_{suffix}")
-    ):
-      return resource
-  return None
 
 
 class Deck(Resource):
