@@ -398,3 +398,30 @@ def test_stop_closes_the_link_when_the_channels_do_not_go_up():
     assert p._setup_finished is False
 
   asyncio.run(_run())
+
+
+def test_the_driver_opens_a_second_session_for_channel_commands():
+  """From a host, a second link beside `io`; none with injected IO or simulation.
+
+  Commands go on it.
+  """
+
+  async def _run() -> None:
+    simulated = PrepSimulationDriver(deck=PrepDeck())
+    assert simulated._second_io is None
+    assert PrepDriver(deck=PrepDeck(), io=simulated.io)._second_io is None
+    channel_read = PrepCmd.PrepZDriveGetPosition(dest=Address(1, 238, 516))
+    with pytest.raises(RuntimeError, match="no second session"):
+      await simulated.send_command_on_second_session(channel_read)
+
+    driver = PrepDriver(deck=PrepDeck(), host="127.0.0.1")
+    assert driver._second_io is not None
+    assert driver._second_io is not driver.io
+    execute = AsyncMock(return_value="answer")
+    driver._second_io._session.execute = execute  # type: ignore[method-assign]
+    assert await driver.send_command_on_second_session(channel_read, read_timeout=5) == "answer"
+    execute.assert_awaited_once_with(channel_read, read_timeout=5)
+    with pytest.raises(RuntimeError, match="needs a dest="):
+      await driver.send_command_on_second_session(PrepCmd.PrepGetPositions())
+
+  asyncio.run(_run())

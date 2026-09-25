@@ -315,7 +315,8 @@ class PrepDriver:
     """
     Args:
       deck: the deck positions are measured from.
-      host: the address the Prep answers on. Required unless `io` is given.
+      host: the address the Prep answers on. Required unless `io` is given. Opens two connections
+        so each channel can receive a command while the other's is in flight.
       port: the port it answers on.
       declared_configuration_json: path to a JSON file holding a declared configuration, as
         `save_configuration` writes one. The only way a configuration is read from a file. Against a
@@ -331,10 +332,12 @@ class PrepDriver:
     self.declared: Dict[str, Any] = (
       {} if declared_configuration_json is None else read_configuration(declared_configuration_json)
     )
+    self._second_io: Optional[HamiltonTCPClient] = None
     if io is None:
       if not host:
         raise ValueError("host must be provided to reach a Prep over TCP")
       io = _PrepTCPClient(host=host, port=port)
+      self._second_io = _PrepTCPClient(host=host, port=port)
     self.io: HamiltonTCPClient = io
     self._mlprep_address: Optional[Address] = None
     self.deck = deck
@@ -542,16 +545,22 @@ class PrepDriver:
           f"Expected root '{PREP_ROOT_NAME}' (Prep), but discovered '{root}'. Wrong instrument?"
         )
       self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
+      if self._second_io is not None:
+        await self._second_io.setup()
     except BaseException:
       await self._close()
       raise
 
   async def _close(self) -> None:
-    """Close the link and discard what was resolved on it."""
+    """Close the links and discard what was resolved on them."""
     try:
-      await self.io.stop()
+      if self._second_io is not None:
+        await self._second_io.stop()
     finally:
-      self._mlprep_address = None
+      try:
+        await self.io.stop()
+      finally:
+        self._mlprep_address = None
 
   async def features_below_safe_z(self, tolerance: float = 0.5) -> List[str]:
     """Which channels report below where they are safe.
@@ -725,6 +734,29 @@ class PrepDriver:
       data = await session.execute(resolved, read_timeout=read_timeout)
       return command.parse_response_parameters(data)
     return await session.execute(command, read_timeout=read_timeout)
+
+  async def send_command_on_second_session(
+    self, command: TCPCommand[ResultT], *, read_timeout: Optional[float] = None
+  ) -> ResultT:
+    """Send a command on the second session, beside whatever the first has in flight.
+
+    Args:
+      command: the command, with its `dest` given, as each channel node's commands have it.
+      read_timeout: how long to wait for the answer, in seconds. `default_read_timeout` when None.
+
+    Returns:
+      The command's decoded response.
+
+    Raises:
+      RuntimeError: If there is no second session, or the command names a firmware path, not a
+        `dest`.
+    """
+    if self._second_io is None:
+      raise RuntimeError("no second session: built with an injected io")
+    if isinstance(command, PrepCommand) and command.dest == _UNRESOLVED:
+      raise RuntimeError(f"{type(command).__name__} needs a dest= on the second session")
+    read_timeout = self.default_read_timeout if read_timeout is None else read_timeout
+    return await self._second_io._session.execute(command, read_timeout=read_timeout)
 
   async def exchange(
     self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
