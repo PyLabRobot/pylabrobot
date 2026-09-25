@@ -30,8 +30,10 @@ class Head384Configuration(HeadConfiguration):
   initialize_command: str = "JI"
   tip_presence_command: str = "QK"
   position_command: str = "QJ"
+  defined_position_command: str = "EN"
   y_parameter: str = "yk"
   z_parameter: str = "je"
+  traverse_z_parameter: str = "zf"
   z_end_parameter: str = "zg"
   x_offset_parameter: str = "kd"
   head_types: Dict[int, str] = field(
@@ -80,6 +82,11 @@ class Head384Configuration(HeadConfiguration):
   y_drive_current_limit_default: int = 4
   z_drive_current_limit_default: int = 7
   current_limit_range: Tuple[int, int] = (0, 7)
+
+  # The top of what this head's master commands accept for a height, which is lower than what its
+  # Z drive reaches: the field is four digits in 0.1 mm and the commands document 3270 as its
+  # maximum, where the drive itself goes to 336.0 mm.
+  defined_position_minimum_height_default: float = 327.0
 
   def _require_head_type(self) -> str:
     """The head type, for the facts only it decides.
