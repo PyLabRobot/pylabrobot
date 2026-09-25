@@ -606,15 +606,15 @@ class Head96(Head):
     self,
     end_position: int,
     start_position: int,
-    post_detection_distance: int,
-    post_detection_trajectory: Literal[0, 1],
-    lld_mode: Optional[int],
-    detection_edge: int,
-    detection_drop: int,
     approach_speed: int,
     search_speed: int,
     acceleration: int,
     current_limit: int,
+    lld_mode: Optional[int],
+    detection_edge: int,
+    detection_drop: int,
+    post_detection_trajectory: Literal[0, 1],
+    post_detection_distance: int,
     immersion_mode: Optional[Literal[0, 1]],
   ):
     """Lower the head until its cLLD triggers, as given, in Z increments. `H0 ZL`.
@@ -622,15 +622,15 @@ class Head96(Head):
     Args:
       end_position: stop disc height it goes no lower than (`zh`).
       start_position: stop disc height the search starts from (`zc`).
-      post_detection_distance: how far it moves after detection (`zi`).
-      post_detection_trajectory: 0 down, 1 up (`zj`).
-      lld_mode: which sensors trigger, 0 to 3 (`lm`); None leaves it out.
-      detection_edge: edge steepness, 0 to 1023 (`gt`).
-      detection_drop: offset after the edge, 0 to 1023 (`gl`).
       approach_speed: to the search start (`zv`).
       search_speed: during the search (`zl`).
       acceleration: in the drive's acceleration increments (`zr`).
       current_limit: motor current limit (`zw`).
+      lld_mode: which sensors trigger, 0 to 3 (`lm`); None leaves it out.
+      detection_edge: edge steepness, 0 to 1023 (`gt`).
+      detection_drop: offset after the edge, 0 to 1023 (`gl`).
+      post_detection_trajectory: 0 down, 1 up (`zj`).
+      post_detection_distance: how far it moves after detection (`zi`).
       immersion_mode: 0 normal, 1 no lower than `end_position` (`dj`); None leaves it out.
     """
     c = self.configuration
@@ -686,46 +686,63 @@ class Head96(Head):
     }[lld_sensor]:
       raise RuntimeError(f"no tip on the channels that feed lld_sensor={lld_sensor!r}")
 
-  async def probe_z_using_clld(
+  async def _overhang_that_probes(self) -> float:
+    """How far below the stop disc the head probes: the tips' overhang, to 0.1 mm.
+
+    Raises:
+      RuntimeError: If the head reports no tips.
+    """
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips, so there is no overhang to measure")
+    reference = await self.request_z_position()
+    return round(reference - (await self.request_location()).z, 1)
+
+  def _found_nothing(self, error: STARFirmwareError) -> bool:
+    """Whether a firmware error says only that a search reached its end without detecting.
+
+    The head answers that with trace 70.
+    """
+    module = self.configuration.module
+    return bool(error.errors) and all(
+      e.raw_module == module and e.trace_information == 70 for e in error.errors.values()
+    )
+
+  async def _clld_search(
     self,
-    *,
-    search_start_position: Optional[float] = None,
-    search_end_position: Optional[float] = None,
-    tip_overhang: Optional[float] = None,
+    end_position: float,
+    start_position: float,
     approach_speed: Optional[float] = None,
     search_speed: Optional[float] = None,
     acceleration: Optional[float] = None,
+    current_limit: Optional[int] = None,
     lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
     detection_edge: Optional[int] = None,
     detection_drop: Optional[int] = None,
+    post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_distance: Optional[float] = None,
     limit_immersion_to_search_end: bool = False,
-    current_limit: Optional[int] = None,
-    move_to_safe_z_after: bool = False,
-  ) -> float:
-    """Lower the head's tips until its cLLD triggers, and read the tip bottom height it detected at.
+  ) -> None:
+    """Run the head's cLLD search between two stop disc heights, every field checked.
+
+    Stop disc terms; no tip check; a search that finds nothing raises the head's error.
 
     Args:
-      search_start_position: tip bottom height to search from, in mm. The highest when None.
-      search_end_position: lowest tip bottom height, in mm. The lowest when None.
-      tip_overhang: tips below the stop disc, in mm. Measured when None.
+      end_position: stop disc height it goes no lower than, in mm.
+      start_position: stop disc height the search starts from, in mm.
       approach_speed: to the search start, in mm/s. `z_drive_speed_default` when None.
       search_speed: in mm/s. `default_clld_search_speed` when None.
       acceleration: in mm/s2. `default_clld_acceleration` when None.
+      current_limit: `z_drive_current_limit_default` when None.
       lld_sensor: which cLLD sensors trigger.
       detection_edge: 0 to 1023. `default_clld_detection_edge` when None.
       detection_drop: 0 to 1023. `default_clld_detection_drop` when None.
-      post_detection_distance: in mm, positive up. `default_clld_post_detection_distance` when None.
-      limit_immersion_to_search_end: never go below `search_end_position` after detection.
-      current_limit: `z_drive_current_limit_default` when None.
-      move_to_safe_z_after: raise the head to safe Z afterwards.
-
-    Returns:
-      The tip bottom height at detection, in mm.
+      post_detection_trajectory: 0 moves down after detection, 1 up.
+      post_detection_distance: in mm. `default_clld_post_detection_distance` when None.
+      limit_immersion_to_search_end: never go below `end_position` after detection.
 
     Raises:
-      ValueError: If an argument is out of range, or a sensor is chosen on 2008 firmware.
-      RuntimeError: If the channels feeding the sensor carry no tips.
+      ValueError: If a field is out of range, or a sensor is chosen on 2008 firmware.
+      STARFirmwareError: As the head answers, a search that found nothing included.
     """
     c = self.configuration
     lld_modes = {"G11 or H12": 0, "A1 or B2": 1, "any": 2, "all": 3}
@@ -736,20 +753,22 @@ class Head96(Head):
       if lld_sensor != "any":
         raise ValueError(f"lld_sensor={lld_sensor!r} needs 2013 firmware, which has `lm`")
       lld_mode = None
+    if post_detection_trajectory not in (0, 1):
+      raise ValueError(f"post_detection_trajectory must be 0 or 1, is {post_detection_trajectory}")
     if approach_speed is None:
       approach_speed = c.z_drive_speed_default
     if search_speed is None:
       search_speed = self.default_clld_search_speed
     if acceleration is None:
       acceleration = self.default_clld_acceleration
+    if current_limit is None:
+      current_limit = c.z_drive_current_limit_default
     if detection_edge is None:
       detection_edge = self.default_clld_detection_edge
     if detection_drop is None:
       detection_drop = self.default_clld_detection_drop
     if post_detection_distance is None:
       post_detection_distance = self.default_clld_post_detection_distance
-    if current_limit is None:
-      current_limit = c.z_drive_current_limit_default
     if c.firmware_year < 2010 and not 0 <= current_limit <= 7:
       raise ValueError(
         f"current_limit must be between 0 and 7 on 2008 firmware, is {current_limit}"
@@ -757,19 +776,83 @@ class Head96(Head):
     for checked, name in ((detection_edge, "detection_edge"), (detection_drop, "detection_drop")):
       if not 0 <= checked <= 1023:
         raise ValueError(f"{name} must be between 0 and 1023, is {checked}")
-    distance = c.z_drive_mm_to_increments(abs(post_detection_distance))
-    if distance > 9999:
+    distance = c.z_drive_mm_to_increments(post_detection_distance)
+    if not 0 <= distance <= 9999:
       raise ValueError(
-        f"post_detection_distance must be within {c.z_drive_increments_to_mm(9999)} mm, "
+        f"post_detection_distance must be between 0 and {c.z_drive_increments_to_mm(9999)} mm, "
         f"is {post_detection_distance}"
       )
+    self._check_move("z", start_position, approach_speed, acceleration, current_limit)
+    self._check_move("z", end_position, search_speed, acceleration, current_limit)
+    ramp = c.z_drive_acceleration_mm_to_increments(acceleration)
+    if c.firmware_year < 2010:
+      # The search takes the 2008 thousands rounded down.
+      ramp = c.z_drive_mm_to_increments(acceleration) // 1000
+    try:
+      await self._unchecked_fw_probe_z_using_clld(
+        end_position=c.z_drive_mm_to_increments(end_position),
+        start_position=c.z_drive_mm_to_increments(start_position),
+        approach_speed=c.z_drive_mm_to_increments(approach_speed),
+        search_speed=c.z_drive_mm_to_increments(search_speed),
+        acceleration=ramp,
+        current_limit=current_limit,
+        lld_mode=lld_mode,
+        detection_edge=detection_edge,
+        detection_drop=detection_drop,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_distance=distance,
+        immersion_mode=1 if limit_immersion_to_search_end else None,
+      )
+    finally:
+      await self._record_where_it_stopped("z")
 
+  async def probe_z_using_clld(
+    self,
+    *,
+    search_start_position: Optional[float] = None,
+    search_end_position: Optional[float] = None,
+    tip_overhang: Optional[float] = None,
+    approach_speed: Optional[float] = None,
+    search_speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    current_limit: Optional[int] = None,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
+    detection_edge: Optional[int] = None,
+    detection_drop: Optional[int] = None,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_distance: Optional[float] = None,
+    limit_immersion_to_search_end: bool = False,
+    move_to_safe_z_position_after: bool = False,
+  ) -> float:
+    """Lower the head's tips until its cLLD triggers, and read the tip bottom height it detected at.
+
+    Args:
+      search_start_position: tip bottom height to search from, in mm. The highest when None.
+      search_end_position: lowest tip bottom height, in mm. The lowest when None.
+      tip_overhang: tips below the stop disc, in mm. Measured when None.
+      approach_speed: to the search start, in mm/s. `z_drive_speed_default` when None.
+      search_speed: in mm/s. `default_clld_search_speed` when None.
+      acceleration: in mm/s2. `default_clld_acceleration` when None.
+      current_limit: `z_drive_current_limit_default` when None.
+      lld_sensor: which cLLD sensors trigger.
+      detection_edge: 0 to 1023. `default_clld_detection_edge` when None.
+      detection_drop: 0 to 1023. `default_clld_detection_drop` when None.
+      post_detection_trajectory: 0 moves down after detection, 1 up.
+      post_detection_distance: in mm. `default_clld_post_detection_distance` when None.
+      limit_immersion_to_search_end: never go below `search_end_position` after detection.
+      move_to_safe_z_position_after: raise the head to safe Z afterwards.
+
+    Returns:
+      The tip bottom height at detection, in mm.
+
+    Raises:
+      ValueError: If an argument is out of range, or a sensor is chosen on 2008 firmware.
+      RuntimeError: If the channels feeding the sensor carry no tips.
+    """
+    c = self.configuration
     await self._require_tips_feeding(lld_sensor)
     if tip_overhang is None:
-      if not await self.request_tip_presence():
-        raise RuntimeError("the head reports no tips, so there is no overhang to measure")
-      reference = await self.request_z_position()
-      tip_overhang = round(reference - (await self.request_location()).z, 1)
+      tip_overhang = await self._overhang_that_probes()
     if search_start_position is None:
       search_start_position = round(c.z_range[1] - tip_overhang, 2)
     if search_end_position is None:
@@ -778,36 +861,28 @@ class Head96(Head):
       raise ValueError(
         f"search_end_position must be at least {c.min_tool_bottom_z}, is {search_end_position}"
       )
-    start = round(search_start_position + tip_overhang, 2)
-    end = round(search_end_position + tip_overhang, 2)
-    self._check_move("z", start, approach_speed, acceleration, current_limit)
-    self._check_move("z", end, search_speed, acceleration, current_limit)
-    ramp = c.z_drive_acceleration_mm_to_increments(acceleration)
-    if c.firmware_year < 2010:
-      # The search takes the 2008 thousands rounded down.
-      ramp = c.z_drive_mm_to_increments(acceleration) // 1000
 
     try:
-      await self._unchecked_fw_probe_z_using_clld(
-        end_position=c.z_drive_mm_to_increments(end),
-        start_position=c.z_drive_mm_to_increments(start),
-        post_detection_distance=distance,
-        post_detection_trajectory=1 if post_detection_distance >= 0 else 0,
-        lld_mode=lld_mode,
+      await self._clld_search(
+        round(search_end_position + tip_overhang, 2),
+        round(search_start_position + tip_overhang, 2),
+        approach_speed=approach_speed,
+        search_speed=search_speed,
+        acceleration=acceleration,
+        current_limit=current_limit,
+        lld_sensor=lld_sensor,
         detection_edge=detection_edge,
         detection_drop=detection_drop,
-        approach_speed=c.z_drive_mm_to_increments(approach_speed),
-        search_speed=c.z_drive_mm_to_increments(search_speed),
-        acceleration=ramp,
-        current_limit=current_limit,
-        immersion_mode=1 if limit_immersion_to_search_end else None,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_distance=post_detection_distance,
+        limit_immersion_to_search_end=limit_immersion_to_search_end,
       )
     except STARFirmwareError:
       await self.move_to_safe_z()
       raise
     # RH is the stop disc at detection: on a device it read exactly `zi` below the RZ that followed.
     detected = round(await self.request_last_lld_z_position() - tip_overhang, 2)
-    if move_to_safe_z_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
     return detected
 
