@@ -555,7 +555,6 @@ class SimulatedPipettes(_Simulated, Pipettes):
     channel_idx: int,
     here: float,
     end: float,
-    speed: float,
     detect_mode: int,
     sensitivity: int,
   ) -> Optional[float]:
@@ -565,7 +564,6 @@ class SimulatedPipettes(_Simulated, Pipettes):
       channel_idx: detecting channel, 0-indexed from the back.
       here: the arm's x where the search starts, in mm.
       end: search end in mm.
-      speed: arm speed in mm/s.
       detect_mode: cLLD detect mode; not modelled.
       sensitivity: cLLD sensitivity; not modelled.
 
@@ -577,7 +575,9 @@ class SimulatedPipettes(_Simulated, Pipettes):
       raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
     _, y, z = self._modelled_location(channel_idx)
     touched = self._touched_along(channel_idx, 0, here, end, y, z)
-    await arm.move_to_x_position(end if touched is None else touched, speed=speed)
+    await arm.move_to_x_position(
+      end if touched is None else touched, minimum_traverse_height_start=z
+    )
     return touched
 
   def _declared(self) -> PipettesConfiguration:
@@ -693,7 +693,8 @@ class SimulatedPipettes(_Simulated, Pipettes):
             SIMULATED_CLLD_PROBE_DIAMETER / 2,
           )
           touched = None if top is None else top - offset
-          self._move(seeking, None, None, seek.final_position_z)
+          stopped = seek.min_seek_height if touched is None else touched
+          self._move(seeking, None, None, max(seek.final_position_z, stopped))
         found = found or touched is not None
         results.append(
           PrepCmd.SeekResultParameters(

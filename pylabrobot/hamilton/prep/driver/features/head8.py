@@ -1186,7 +1186,7 @@ class Head8:
     is_tadm = tadm is not None
     use_v2 = self._resolve_command_version(command_version)
 
-    lld_defaults = _default_lld_params_fn(effective_lld, p_lld, c_lld)
+    lld_defaults = _default_lld_params_fn(effective_lld, p_lld, c_lld, lld_mode=lld_mode)
     lld_params = _lld_for_well_fn(effective_lld, lld, wg.top_of_well)
     resolved_tadm = tadm or PrepCmd.TadmParameters.default()
 
@@ -1219,7 +1219,9 @@ class Head8:
 
     resolved_read_timeout = read_timeout
     if resolved_read_timeout is None and effective_lld:
-      resolved_read_timeout = _lld_seek_timeout(lld_params, resolved_z_minimum)
+      resolved_read_timeout = _lld_seek_timeout(
+        lld_params, resolved_z_minimum, approach_from_z=end_resolved
+      )
 
     mounted = self._require_mounted_tips()
     if container is not None:
@@ -1404,7 +1406,7 @@ class Head8:
     effective_lld = self._resolve_effective_lld(lld_mode, lld, allowed_modes=_DISPENSE_ALLOWED_LLD)
     use_v2 = self._resolve_command_version(command_version)
 
-    lld_defaults = _default_lld_params_fn(effective_lld, c_lld=c_lld)
+    lld_defaults = _default_lld_params_fn(effective_lld, c_lld=c_lld, lld_mode=lld_mode)
     lld_params = _lld_for_well_fn(effective_lld, lld, wg.top_of_well)
 
     assemble = self._assemble_dispense_v2 if use_v2 else self._assemble_dispense_v1
@@ -1434,7 +1436,9 @@ class Head8:
 
     resolved_read_timeout = read_timeout
     if resolved_read_timeout is None and effective_lld:
-      resolved_read_timeout = _lld_seek_timeout(lld_params, resolved_z_minimum)
+      resolved_read_timeout = _lld_seek_timeout(
+        lld_params, resolved_z_minimum, approach_from_z=end_resolved
+      )
 
     mounted = self._require_mounted_tips()
     if container is not None:
