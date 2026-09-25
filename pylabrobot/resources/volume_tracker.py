@@ -155,6 +155,9 @@ class VolumeTracker(SerializableMixin):
       raise RuntimeError("Volume tracker is disabled. Call `enable()`.")
     self.pending_volume = self.volume
 
+    for callback in self._callbacks:
+      callback()
+
   def serialize(self) -> dict:
     """Serialize the volume tracker."""
     return {
