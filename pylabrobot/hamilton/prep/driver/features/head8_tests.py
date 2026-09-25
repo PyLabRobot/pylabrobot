@@ -471,6 +471,28 @@ def test_head8_aspirate_clld_sends_mphaspirate_with_lld2():
   asyncio.run(_run())
 
 
+def test_head8_aspirate_pressure_without_p_lld_raises():
+  """lld_mode=PRESSURE with no p_lld is refused and no aspirate is sent."""
+
+  async def _run() -> None:
+    deck, tip_rack, src_plate, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+
+    await p.head8.pick_up_tips(tip_rack.column(0))
+    captured, _ = _record_send(p)
+    with pytest.raises(ValueError, match="needs p_lld"):
+      await p.head8.aspirate(
+        wells=src_plate.column(0), volume=10, lld_mode=Pipettes.LLDMode.PRESSURE
+      )
+    assert captured == []
+
+    await p.stop()
+
+  asyncio.run(_run())
+
+
 def test_head8_aspirate_lld_and_tadm_sends_mphaspirate_with_lld_tadm2():
   """lld_mode=CAPACITIVE + tadm= → MphAspirateWithLldTadm2."""
 
