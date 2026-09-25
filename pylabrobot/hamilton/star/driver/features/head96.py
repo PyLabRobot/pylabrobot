@@ -1,16 +1,21 @@
 """The 96-head: the block of 96 pipettes that works a whole plate at once."""
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.features.head import Head, HeadConfiguration
+from pylabrobot.lib.liquid_handling.mix import Mix
+from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip
+from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.resources.well import Well
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.master import STARDriver
@@ -236,6 +241,14 @@ class Head96(Head):
   default_clld_detection_drop: int = 2
   # How far the head moves after detection, in mm; positive up.
   default_clld_post_detection_distance: float = 2.0
+  # Mix: down to just above the well, in mm/s.
+  default_mix_descent_speed: float = 80.0
+  # Mix: into and out of the well, in mm/s.
+  default_mix_swap_speed: float = 5.0
+  # Mix: air drawn above the well and expelled there after, in uL.
+  default_mix_blow_out_air_volume: float = 5.0
+  # Mix: how far above the well top the swap into it starts, in mm.
+  mix_swap_start_clearance: float = 5.0
 
   def __init__(self, driver: "STARDriver", configuration: Optional[Head96Configuration] = None):
     """
@@ -797,3 +810,298 @@ class Head96(Head):
     if move_to_safe_z_after:
       await self.move_to_safe_z()
     return detected
+
+  # ----------------------------------------
+  # Liquid handling
+  # ----------------------------------------
+
+  # -- aspirate and dispense in place ------------------------------------------------------------
+
+  async def _unchecked_fw_aspirate(
+    self,
+    volume: int,
+    flow_rate: int,
+    surface_following_distance: int,
+    minimum_height: int,
+  ):
+    """Draw on every channel, as given, in increments. `H0 PA`.
+
+    Args:
+      volume: dispensing drive travel (`da`).
+      flow_rate: dispensing drive speed (`dv`).
+      surface_following_distance: Z travel during the draw (`zd`).
+      minimum_height: stop disc height it goes no lower than (`zh`).
+    """
+    return await self._driver.send_command(
+      module=self.configuration.module,
+      command="PA",
+      pm="F" * 24,
+      dj="1",
+      da=f"{volume:05}",
+      dv=f"{flow_rate:05}",
+      dc="00000",
+      zd=f"{surface_following_distance:04}",
+      zh=f"{minimum_height:05}",
+      to="000",
+    )
+
+  async def _unchecked_fw_dispense(
+    self,
+    volume: int,
+    flow_rate: int,
+    stop_flow_rate: int,
+    stop_back_volume: int,
+    surface_following_distance: int,
+    minimum_height: int,
+  ):
+    """Expel on every channel, as given, in increments. `H0 PB`.
+
+    Args:
+      volume: dispensing drive travel (`db`).
+      flow_rate: dispensing drive speed (`dv`).
+      stop_flow_rate: dispensing drive stop speed (`du`).
+      stop_back_volume: drawn back at the end (`dd`).
+      surface_following_distance: Z travel during the expel (`ze`).
+      minimum_height: stop disc height it goes no lower than (`zh`).
+    """
+    return await self._driver.send_command(
+      module=self.configuration.module,
+      command="PB",
+      pm="F" * 24,
+      db=f"{volume:05}",
+      dv=f"{flow_rate:05}",
+      dd=f"{stop_back_volume:04}",
+      ze=f"{surface_following_distance:04}",
+      zh=f"{minimum_height:05}",
+      du=f"{stop_flow_rate:05}",
+    )
+
+  async def _resolve_stroke_floor(self, minimum_height: Optional[float]) -> int:
+    """The stop disc height a stroke goes no lower than, in Z increments.
+
+    Tip bottom terms when tips are on, stop disc terms when not; the lowest reachable when None.
+
+    Args:
+      minimum_height: in mm.
+
+    Raises:
+      ValueError: If it is out of reach.
+    """
+    c = self.configuration
+    overhang = 0.0
+    if await self.request_tip_presence():
+      overhang = await self._overhang_that_probes()
+    low = max(c.z_range[0] - overhang, c.min_tool_bottom_z)
+    high = c.z_range[1] - overhang
+    if minimum_height is None:
+      minimum_height = low
+    if not low <= minimum_height <= high:
+      raise ValueError(f"minimum_height must be between {low} and {high} mm, is {minimum_height}")
+    return c.z_drive_mm_to_increments(minimum_height + overhang)
+
+  async def _aspirate(
+    self,
+    volume: float,
+    flow_rate: Optional[float] = None,
+    surface_following_distance: float = 0.0,
+    minimum_height: Optional[float] = None,
+  ) -> None:
+    """Draw on every channel in place, every field checked; Z and piston move together.
+
+    Args:
+      volume: per channel, in uL.
+      flow_rate: in uL/s. `dispensing_drive_speed_default` when None.
+      surface_following_distance: how far down it follows the surface, in mm.
+      minimum_height: lowest tip bottom height, in mm. The lowest reachable when None.
+
+    Raises:
+      ValueError: If a field is out of range.
+    """
+    c = self.configuration
+    if flow_rate is None:
+      flow_rate = c.dispensing_drive_speed_default
+    following_max = c.z_drive_increments_to_mm(9999)
+    for checked, (low, high), name in (
+      (volume, c.dispensing_drive_range, "volume"),
+      (flow_rate, c.dispensing_drive_speed_range, "flow_rate"),
+      (surface_following_distance, (0.0, following_max), "surface_following_distance"),
+    ):
+      if not low <= checked <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {checked}")
+    floor = await self._resolve_stroke_floor(minimum_height)
+    try:
+      await self._unchecked_fw_aspirate(
+        volume=c.dispensing_drive_uL_to_increments(volume),
+        flow_rate=c.dispensing_drive_uL_to_increments(flow_rate),
+        surface_following_distance=c.z_drive_mm_to_increments(surface_following_distance),
+        minimum_height=floor,
+      )
+    finally:
+      await self._record_where_it_stopped("z")
+
+  async def _dispense(
+    self,
+    volume: float,
+    flow_rate: Optional[float] = None,
+    stop_flow_rate: float = 0.0,
+    stop_back_volume: float = 0.0,
+    surface_following_distance: float = 0.0,
+    minimum_height: Optional[float] = None,
+  ) -> None:
+    """Expel on every channel in place, every field checked; Z and piston move together.
+
+    Args:
+      volume: per channel, in uL.
+      flow_rate: in uL/s. `dispensing_drive_speed_default` when None.
+      stop_flow_rate: in uL/s.
+      stop_back_volume: drawn back at the end, in uL.
+      surface_following_distance: how far up it follows the surface, in mm.
+      minimum_height: lowest tip bottom height, in mm. The lowest reachable when None.
+
+    Raises:
+      ValueError: If a field is out of range.
+    """
+    c = self.configuration
+    if flow_rate is None:
+      flow_rate = c.dispensing_drive_speed_default
+    speed_max = c.dispensing_drive_speed_range[1]
+    following_max = c.z_drive_increments_to_mm(9999)
+    for checked, (low, high), name in (
+      (volume, c.dispensing_drive_range, "volume"),
+      (flow_rate, c.dispensing_drive_speed_range, "flow_rate"),
+      (stop_flow_rate, (0.0, speed_max), "stop_flow_rate"),
+      (stop_back_volume, (0.0, c.dispensing_drive_increments_to_uL(9999)), "stop_back_volume"),
+      (surface_following_distance, (0.0, following_max), "surface_following_distance"),
+    ):
+      if not low <= checked <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {checked}")
+    floor = await self._resolve_stroke_floor(minimum_height)
+    try:
+      await self._unchecked_fw_dispense(
+        volume=c.dispensing_drive_uL_to_increments(volume),
+        flow_rate=c.dispensing_drive_uL_to_increments(flow_rate),
+        stop_flow_rate=c.dispensing_drive_uL_to_increments(stop_flow_rate),
+        stop_back_volume=c.dispensing_drive_uL_to_increments(stop_back_volume),
+        surface_following_distance=c.z_drive_mm_to_increments(surface_following_distance),
+        minimum_height=floor,
+      )
+    finally:
+      await self._record_where_it_stopped("z")
+
+  # -- mix ---------------------------------------------------------------------------------------
+
+  async def _require_iswap_parked(self) -> None:
+    """Raise unless the iSWAP on this head's arm is parked; nothing to check without one.
+
+    Raises:
+      RuntimeError: If it is not parked.
+    """
+    iswap = None if self.arm is None else self.arm.iswap
+    if iswap is not None and not await iswap.request_is_parked():
+      raise RuntimeError(
+        "the iSWAP is not parked, and the head moves where it stands. "
+        "Call `await star.iswap.park()` first."
+      )
+
+  async def mix(
+    self,
+    resource: Union[Plate, Container, List[Well]],
+    mix: Mix,
+    offset: Optional[Coordinate] = None,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    descent_speed: Optional[float] = None,
+    blow_out_air_volume: Optional[float] = None,
+    swap_speed: Optional[float] = None,
+    settling_time: float = 0.0,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> None:
+    """Mix in place with the whole head: channel A1 over well A1, then `mix.repetitions` strokes.
+
+    Each draw follows the surface down by `mix.surface_following_distance` to the cavity bottom and
+    each expel follows it back up, so the tips do not drift.
+
+    Args:
+      resource: a plate (well A1), a container, or wells (the first).
+      mix: volume, repetitions, flow rate and surface following distance.
+      offset: added to where head channel A1 goes, in mm.
+      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      descent_speed: to just above the well, in mm/s. `default_mix_descent_speed` when None.
+      blow_out_air_volume: air drawn above the well and expelled there after, in uL; 0 skips it.
+        `default_mix_blow_out_air_volume` when None.
+      swap_speed: into and out of the well, in mm/s. `default_mix_swap_speed` when None.
+      settling_time: wait after the last stroke, in s.
+      minimum_traverse_height_end: tip bottom height after mixing, in mm. Safe Z when None.
+
+    Raises:
+      ValueError: If an argument is out of range.
+      RuntimeError: If the head carries no tips, the iSWAP is not parked, or the driver was given
+        no deck.
+    """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("containers are placed from the deck; this driver was given none")
+    if settling_time < 0:
+      raise ValueError(f"settling_time must be at least 0, is {settling_time}")
+    if descent_speed is None:
+      descent_speed = self.default_mix_descent_speed
+    if blow_out_air_volume is None:
+      blow_out_air_volume = self.default_mix_blow_out_air_volume
+    if swap_speed is None:
+      swap_speed = self.default_mix_swap_speed
+    if isinstance(resource, Plate):
+      anchor: Container = resource.get_item(0)
+    elif isinstance(resource, list):
+      anchor = resource[0]
+    else:
+      anchor = resource
+    a1 = anchor.get_location_wrt(deck, x="c", y="c", z="cavity_bottom") + (
+      offset or Coordinate.zero()
+    )
+    z_top = anchor.get_location_wrt(deck, x="c", y="c", z="t").z
+
+    await self._require_iswap_parked()
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips; pick up tips first")
+    # The head's own moves leave the channels where they are, so they go up first.
+    if self.arm is not None and self.arm.pipettes is not None:
+      await self.arm.pipettes.move_to_safe_z()
+    if minimum_traverse_height_start is None:
+      await self.move_to_safe_z()
+    else:
+      await self.move_tool_bottom_to_z_position(minimum_traverse_height_start, speed=descent_speed)
+    # Gentler X acceleration at low Y, where the head stands furthest out from the X drive.
+    await asyncio.gather(
+      self.move_to_x_position(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3),
+      self.move_to_y_position(a1.y),
+    )
+
+    following = mix.surface_following_distance or 0.0
+    floor = a1.z
+    start = a1.z + following
+    swap_start = z_top + self.mix_swap_start_clearance
+    try:
+      await self.move_tool_bottom_to_z_position(swap_start, speed=descent_speed)
+      if blow_out_air_volume:
+        await self._aspirate(blow_out_air_volume, mix.flow_rate, minimum_height=floor)
+      await self.move_tool_bottom_to_z_position(start, speed=swap_speed)
+      for _ in range(mix.repetitions):
+        await self._aspirate(
+          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=floor
+        )
+        await self._dispense(
+          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=floor
+        )
+      if settling_time:
+        await asyncio.sleep(settling_time)
+      await self.move_tool_bottom_to_z_position(swap_start, speed=swap_speed)
+      if blow_out_air_volume:
+        await self._dispense(blow_out_air_volume, mix.flow_rate)
+    except STARFirmwareError:
+      await self.move_to_safe_z()
+      raise
+
+    if minimum_traverse_height_end is None:
+      await self.move_to_safe_z()
+    else:
+      await self.move_tool_bottom_to_z_position(minimum_traverse_height_end, speed=descent_speed)
