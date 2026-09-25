@@ -783,6 +783,7 @@ class PipetteChannel:
     calibration: Optional[Address] = None,
     clld: Optional[Address] = None,
     zaxis: Optional[Address] = None,
+    ddrive: Optional[Address] = None,
   ) -> None:
     self.index = index
     self._driver = driver
@@ -794,7 +795,18 @@ class PipetteChannel:
     self.calibration = calibration
     self.clld = clld
     self.zaxis = zaxis
+    self.ddrive = ddrive
     self.bounds = bounds  # x_min..z_max from firmware, or None if unavailable
+
+  def _require_ddrive(self) -> Address:
+    """This channel's dispensing drive, `Dispenser.DDrive`.
+
+    Raises:
+      RuntimeError: If the channel has no dispensing drive.
+    """
+    if self.ddrive is None:
+      raise RuntimeError(f"channel {self.index} has no dispensing drive in the firmware tree")
+    return self.ddrive
 
   def __repr__(self) -> str:
     return (
@@ -1316,6 +1328,7 @@ class Pipettes:
         calibration=_drive_addr(drive_map.calibration_addrs, i),
         clld=_drive_addr(drive_map.clld_addrs, i),
         zaxis=_drive_addr(drive_map.zaxis_addrs, i),
+        ddrive=_drive_addr(drive_map.ddrive_addrs, i),
       )
       for i in range(num_channels)
     ]
@@ -1980,6 +1993,110 @@ class Pipettes:
     if channel not in volumes:
       raise RuntimeError(f"the device reported no dispensing drive volume for channel {channel}")
     return volumes[channel]
+
+  async def _empty_tip(
+    self,
+    channel: int,
+    position: float,
+    flow_rate: float,
+    reset_dispensing_drive_after: bool,
+    on_second_session: bool,
+  ) -> None:
+    """`empty_tip` on either session, its arguments already checked."""
+    ddrive = self.channels[channel]._require_ddrive()
+    targets = [position, 0.0] if reset_dispensing_drive_after and position != 0.0 else [position]
+    for target in targets:
+      command = PrepCmd.PrepDDriveMoveAbsolute(dest=ddrive, volume=target, speed=flow_rate)
+      if on_second_session:
+        await self._driver.send_command_on_second_session(command)
+      else:
+        await self._driver.send_command(command)
+    tip = self.get_mounted_tip(channel)
+    if tip is not None:
+      tip.tracker.set_volume(0.0)
+
+  def _check_empty_tip_arguments(self, channel: int, position: float, flow_rate: float) -> None:
+    """Refuse what `empty_tip` cannot do, before anything is sent."""
+    if not 0 <= channel < self.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
+    if position > 0:
+      raise ValueError(f"position must be at most 0.0 uL to empty a tip, is {position}")
+    if position < 0:
+      raise ValueError(f"position below 0.0 uL is not verified on the Prep, is {position}")
+    if flow_rate <= 0:
+      raise ValueError(f"flow_rate must be above 0 uL/s, is {flow_rate}")
+
+  async def empty_tip(
+    self,
+    channel: int,
+    position: Optional[float] = None,
+    *,
+    flow_rate: float = 200.0,
+    reset_dispensing_drive_after: bool = True,
+  ) -> None:
+    """Push everything out of one channel's tip where it stands. `DDrive.MoveAbsolute`.
+
+    The tip's tracker goes to 0; the liquid goes nowhere tracked. The drive keeps its own
+    acceleration and current.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      position: where to take the piston, in uL. 0.0, where an emptying dispense ends, when None;
+        below 0 is not verified on the Prep.
+      flow_rate: in uL/s.
+      reset_dispensing_drive_after: whether the piston returns to 0 afterwards.
+
+    Raises:
+      ValueError: If the channel does not exist, the position is not 0.0, or the flow rate is not
+        above 0, before anything is sent.
+      RuntimeError: If the channel has no dispensing drive in the firmware tree.
+    """
+    position = 0.0 if position is None else position
+    self._check_empty_tip_arguments(channel, position, flow_rate)
+    await self._empty_tip(channel, position, flow_rate, reset_dispensing_drive_after, False)
+
+  async def empty_tips(
+    self,
+    use_channels: Optional[List[int]] = None,
+    position: Optional[float] = None,
+    *,
+    flow_rate: float = 200.0,
+    reset_dispensing_drive_after: bool = True,
+  ) -> None:
+    """Empty several channels' tips where they stand. See `empty_tip`.
+
+    In parallel with a second session, one after the other without it.
+
+    Args:
+      use_channels: 0-indexed from the back. Every channel that senses a tip when None.
+      position: where to take the pistons, in uL. 0.0 when None.
+      flow_rate: in uL/s.
+      reset_dispensing_drive_after: whether the pistons return to 0 afterwards.
+
+    Raises:
+      ValueError: If a channel does not exist or is named twice, or a field is out of range.
+      RuntimeError: If a channel has no dispensing drive in the firmware tree.
+    """
+    if use_channels is None:
+      presence = await self.sense_tip_presence()
+      use_channels = [channel for channel, mounted in enumerate(presence) if mounted]
+    position = 0.0 if position is None else position
+    for channel in use_channels:
+      self._check_empty_tip_arguments(channel, position, flow_rate)
+    if len(set(use_channels)) != len(use_channels):
+      raise ValueError(f"use_channels must each be named once, are {use_channels}")
+    for channel in use_channels:
+      self.channels[channel]._require_ddrive()
+    if self._driver._second_io is not None:
+      await asyncio.gather(
+        *(
+          self._empty_tip(channel, position, flow_rate, reset_dispensing_drive_after, i > 0)
+          for i, channel in enumerate(use_channels)
+        )
+      )
+    else:
+      for channel in use_channels:
+        await self._empty_tip(channel, position, flow_rate, reset_dispensing_drive_after, False)
 
   # -- x position ----------------------------------------------------------------------------------
 

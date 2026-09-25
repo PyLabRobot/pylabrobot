@@ -3363,3 +3363,95 @@ def test_aspirate_sends_one_lld_category_per_command():
     await p.stop()
 
   _run(_t())
+
+
+def _empty_setup(second_session: bool):
+  """A simulated Prep with a 50 uL tip rack; every command recorded with the link it went on."""
+  deck = PrepDeck()
+  rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
+  p = PrepSimulationDriver(deck=deck)
+  if second_session:
+    p._second_io = _SimulatedIO(p)
+  sent: List[Tuple[str, Any]] = []
+  main_send, second_send = p.send_command, p.send_command_on_second_session
+
+  async def on_main(command, *args, **kwargs):
+    sent.append(("main", command))
+    return await main_send(command, *args, **kwargs)
+
+  async def on_second(command, *args, **kwargs):
+    sent.append(("second", command))
+    return await second_send(command, *args, **kwargs)
+
+  p.send_command = on_main  # type: ignore[method-assign]
+  p.send_command_on_second_session = on_second  # type: ignore[method-assign]
+  return p, rack, sent
+
+
+def test_empty_tip_moves_the_piston_to_rest_on_its_own_drive_and_empties_the_tracker():
+  """`DDrive.MoveAbsolute(0.0, flow_rate)` on the channel's own drive; the tip's tracker to 0."""
+
+  async def _t():
+    p, rack, sent = _empty_setup(False)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+    tip = p.pipettes.get_mounted_tip(1)
+    assert tip is not None
+    tip.tracker.set_volume(20.0)
+    sent.clear()
+    await p.pipettes.empty_tip(1, flow_rate=100.0)
+    (move,) = [c for _, c in sent if isinstance(c, PrepCmd.PrepDDriveMoveAbsolute)]
+    assert move.dest == p.pipettes.channels[1].ddrive
+    assert (move.volume, move.speed) == (0.0, 100.0)
+    assert tip.tracker.get_used_volume() == 0.0
+    await p.stop()
+
+  _run(_t())
+
+
+def test_empty_tip_refuses_a_position_other_than_rest_and_a_flow_rate_of_0():
+  """Above 0 is not emptying; below 0 is not verified on the Prep. Nothing is sent."""
+
+  async def _t():
+    p, rack, sent = _empty_setup(False)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+    sent.clear()
+    for kwargs, match in (
+      ({"channel": 0, "position": 5.0}, "at most 0.0"),
+      ({"channel": 0, "position": -5.0}, "not verified"),
+      ({"channel": 0, "flow_rate": 0.0}, "flow_rate"),
+      ({"channel": 2}, "channel must be"),
+    ):
+      with pytest.raises(ValueError, match=match):
+        await p.pipettes.empty_tip(**kwargs)
+    with pytest.raises(ValueError, match="named once"):
+      await p.pipettes.empty_tips([0, 0])
+    assert [c for _, c in sent if isinstance(c, PrepCmd.PrepDDriveMoveAbsolute)] == []
+    await p.stop()
+
+  _run(_t())
+
+
+@pytest.mark.parametrize("second_session", [False, True])
+def test_empty_tips_empties_every_channel_holding_a_tip(second_session):
+  """By default every channel sensing a tip; the second on the second session, if there is one."""
+
+  async def _t():
+    p, rack, sent = _empty_setup(second_session)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+    sent.clear()
+    with patch.object(p.pipettes, "sense_tip_presence", AsyncMock(return_value=[True, True])):
+      await p.pipettes.empty_tips()
+    moves = [(link, c) for link, c in sent if isinstance(c, PrepCmd.PrepDDriveMoveAbsolute)]
+    links = {c.dest: link for link, c in moves}
+    assert len(moves) == 2 and set(links) == {ch.ddrive for ch in p.pipettes.channels}
+    assert links[p.pipettes.channels[0].ddrive] == "main"
+    assert links[p.pipettes.channels[1].ddrive] == ("second" if second_session else "main")
+    await p.stop()
+
+  _run(_t())
