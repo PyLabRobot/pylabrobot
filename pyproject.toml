@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["typing_extensions", "websockets"]
+dependencies = ["typing_extensions", "websockets>=13"]
 
 [project.optional-dependencies]
 serial = ["pyserial"]
@@ -24,7 +24,7 @@ cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]
 odyssey = ["Pillow"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,opentrons,sila,pico,xarm,odyssey]"]
 test = [
   "pytest",
 ]
