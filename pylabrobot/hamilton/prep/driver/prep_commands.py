@@ -3459,6 +3459,40 @@ class PrepYAxisSeekCapacitiveLld(PrepCommand["PrepYAxisSeekCapacitiveLld.Respons
 
 
 @dataclass(frozen=True)
+class PrepZAxisSeekCapacitiveLld(PrepCommand["PrepZAxisSeekCapacitiveLld.Response"]):
+  """Seek a channel down, in its Z drive frame, until cLLD triggers (cmd=12, dest=ZAxis)."""
+
+  command_id = 12
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # Defaults only because `dest` comes first; every caller names them.
+  position: F32 = math.nan
+  velocity: F32 = math.nan
+  detect_mode: WEnum = 0
+  sensitivity: WEnum = 0
+
+  @dataclass(frozen=True)
+  class Response:
+    lld_detected: PaddedBool
+    detect_position: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.position, F32)
+      .add(self.velocity, F32)
+      .add(self.detect_mode, WEnum)
+      .add(self.sensitivity, WEnum)
+    )
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepZAxisSeekCapacitiveLld.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
 class PrepYDriveGetPosition(PrepStatusRequest["PrepYDriveGetPosition.Response"]):
   """Get a channel's Y drive position in its drive frame, in mm (cmd=9, dest=YDrive)."""
 
