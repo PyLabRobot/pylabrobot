@@ -298,10 +298,11 @@ class SimulatedPipettes(_Simulated, Pipettes):
   def _liquid_surface(self, channel: int) -> Tuple[Optional[Container], Optional[float]]:
     """The container a channel searches and where its liquid stands, in mm on the deck.
 
-    The container is the one under the tip. The surface is None for no container or an empty
-    one. A container that knows only volume from height is inverted by bisection over its depth.
+    The container is the one the batch search named, else the one under the tip. The surface is
+    None for no container or an empty one. A container that knows only volume from height is
+    inverted by bisection over its depth.
     """
-    container = self._container_under(channel)
+    container = self.device.liquid_searches.get(channel) or self._container_under(channel)
     if container is None:
       return None, None
     volume = container.tracker.get_used_volume()
@@ -471,6 +472,18 @@ class SimulatedPipettes(_Simulated, Pipettes):
     for channel in range(self.num_channels):
       self.update_location_by_reference_point(channel, z=self.configuration.z_range[1])
     return await super().probe_z_max()
+
+  async def _probe_batch_liquid_heights(
+    self, batch: Any, containers: Any, *args: Any, **kwargs: Any
+  ):
+    """Say which container each channel searches, so its searches are answered from it."""
+    self.device.liquid_searches = {
+      channel: containers[job] for channel, job in zip(batch.channels, batch.indices)
+    }
+    try:
+      return await super()._probe_batch_liquid_heights(batch, containers, *args, **kwargs)
+    finally:
+      self.device.liquid_searches = {}
 
   async def _unchecked_fw_move_lowest_point_to_z_positions(self, zs: Dict[int, float]):
     # A move is what puts a channel somewhere. Written after the move, not before: one the real
@@ -1389,6 +1402,9 @@ class STARSimulationDriver(STARDriver):
     self.defined_tip_lengths: Dict[int, float] = {}
     # What each channel's drive holds, by channel; filled from the power-on values when first asked.
     self.channel_drive_parameters: Dict[int, Dict[str, int]] = {}
+    # What each channel is searching for liquid in while a batch search runs, by channel. A search
+    # is answered from that container's tracker; without one, from whatever stands under the tip.
+    self.liquid_searches: Dict[int, Container] = {}
     # What each channel last detected liquid at, in mm on the deck; 0.0 until a search finds any.
     self.last_lld_heights: Dict[int, float] = {}
 
