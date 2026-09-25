@@ -3,6 +3,10 @@ from typing import Callable, Dict, Optional, cast
 from .container import Container
 from .coordinate import Coordinate
 from .resource import Resource
+from .well import CrossSectionType
+
+# Serialized for readers of the tree, but not constructor arguments.
+_DERIVED_KEYS = ("size_x", "size_y", "size_z", "cross_section_type")
 
 
 class PetriDish(Container):
@@ -38,17 +42,21 @@ class PetriDish(Container):
     )
     self.diameter = diameter
     self.height = height
+    self.cross_section_type = CrossSectionType.CIRCLE
 
   def serialize(self):
-    super_serialized = super().serialize()
-    for key in ["size_x", "size_y", "size_z"]:
-      super_serialized.pop(key, None)
-
     return {
-      **super_serialized,
+      **super().serialize(),
+      "cross_section_type": self.cross_section_type.value,
       "diameter": self.diameter,
       "height": self.height,
     }
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "PetriDish":
+    """Rebuild a dish from its diameter and height; its sizes and shape follow from them."""
+    data = {k: v for k, v in data.items() if k not in _DERIVED_KEYS}
+    return cast(PetriDish, super().deserialize(data, allow_marshal=allow_marshal))
 
 
 class PetriDishHolder(Resource):
