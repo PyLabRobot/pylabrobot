@@ -236,6 +236,44 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(any(spot.has_tip() for spot in self.tip_rack.get_all_items()))
     self.assertTrue(all(tip is not None and tip.parent is None for tip in tips))
 
+  async def test_return_tips_drops_them_in_the_rack_they_came_from(self):
+    """Spots left empty before the pickup stay empty after the return."""
+    for i in (0, 47):
+      self.tip_rack.get_item(i).unassign_tip()
+    tips = [spot.tip for spot in self.tip_rack.get_all_items()]
+    await self.head.pick_up_tips(self.tip_rack)
+    self.sent.clear()
+    await self.head.return_tips()
+    self.assertEqual(self.sent, ["C0ERxs01179xd0yh2418za2164zh2450ze2450"])
+    self.assertEqual([spot.tip for spot in self.tip_rack.get_all_items()], tips)
+    self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+
+  async def test_discard_tips_drops_them_in_the_96_trash(self):
+    await self.head.pick_up_tips(self.tip_rack)
+    self.sent.clear()
+    await self.head.discard_tips()
+    self.assertEqual(self.sent, ["C0ERxs00465xd1yh1788za2164zh2450ze2450"])
+    self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+
+  async def test_with_no_tips_return_refuses_before_anything_is_sent(self):
+    with self.assertRaises(RuntimeError):
+      await self.head.return_tips()
+    self.assertEqual(self.sent, [])
+
+  async def test_return_tips_refuses_tips_from_two_racks(self):
+    from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL_filter
+
+    other_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_02")
+    cast(Any, self.deck.get_resource("tip carrier"))[2] = other_rack
+    await self.head.pick_up_tips(self.tip_rack)
+    shaft = self.head_resource.get_item(5)
+    shaft.release_tip()
+    shaft.mount_tip(other_rack.get_item(5).tip_for_pickup())
+    self.sent.clear()
+    with self.assertRaisesRegex(RuntimeError, "not from spot 5 of tip_rack_01"):
+      await self.head.return_tips()
+    self.assertEqual(self.sent, [])
+
   async def test_a_refused_pickup_moves_nothing(self):
     """An empty rack is refused before anything is sent; an unreachable one after the tip type."""
     with self.assertRaises(ValueError):

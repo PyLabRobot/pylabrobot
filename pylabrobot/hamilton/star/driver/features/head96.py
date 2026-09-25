@@ -38,7 +38,7 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.resources.tip_rack import TipRack, tip_origin
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
 from pylabrobot.resources.well import Well
 
@@ -787,6 +787,57 @@ class Head96(Head):
           if spot.tracks_tips:
             spot.assign_tip(tip)
     await self._record_after_tip_command()
+
+  async def return_tips(self, **kwargs) -> None:
+    """Put the head's tips back in the tip rack they were picked up from.
+
+    The rack is found from each tip's origin. Channels without a tip are skipped.
+
+    Args:
+      kwargs: passed on to `drop_tips`.
+
+    Raises:
+      RuntimeError: If the driver was given no deck, the head is not modelled or carries no tips,
+        or a tip does not come from the spot with its channel's index in one tip rack on the deck.
+    """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    if self.resource is None:
+      raise RuntimeError("the head is not modelled, so where its tips came from is not known")
+    tip_rack: Optional[TipRack] = None
+    for index, shaft in enumerate(self.resource.get_all_items()):
+      tip = shaft.tip
+      if not isinstance(tip, Tip):
+        continue
+      spot = tip_origin(tip, deck)
+      if spot is None or not isinstance(spot.parent, TipRack):
+        raise RuntimeError(f"{tip.name} on {shaft.name} did not come from a tip rack on the deck")
+      if tip_rack is None:
+        tip_rack = spot.parent
+      if spot.parent is not tip_rack or tip_rack.get_item(index) is not spot:
+        raise RuntimeError(
+          f"{shaft.name}'s tip {tip.name} is not from spot {index} of {tip_rack.name}; the head "
+          "returns tips only to the one rack they were picked up from"
+        )
+    if tip_rack is None:
+      raise RuntimeError("No tips have been picked up.")
+    await self.drop_tips(tip_rack, **kwargs)
+
+  async def discard_tips(self, **kwargs) -> None:
+    """Drop the head's tips into the deck's 96-head trash, whatever the model says it carries.
+
+    Args:
+      kwargs: passed on to `drop_tips`.
+
+    Raises:
+      RuntimeError: If the driver was given no deck.
+      NotImplementedError: If the deck has no 96-head trash.
+    """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    await self.drop_tips(deck.get_trash_area96(), **kwargs)
 
   # ----------------------------------------
   # Probing
