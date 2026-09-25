@@ -1083,6 +1083,113 @@ class Head96(Head):
         "Call `await star.iswap.park()` first."
       )
 
+  def _get_target(
+    self, resource: Union[Plate, Container, List[Well]], offset: Optional[Coordinate]
+  ) -> Tuple[Container, Coordinate, float, float]:
+    """The container a head operation works in, where head channel A1 goes, its floor and its top.
+
+    Over a plate of many wells A1 goes over well A1; over a single container, or a plate of one
+    well, the channel array is centred over it.
+
+    Args:
+      resource: a plate (well A1, or its one well), a container, or wells (the first).
+      offset: added to where head channel A1 goes, in mm.
+
+    Returns:
+      The container; A1's position at its cavity bottom plus `offset`; its cavity bottom and top
+      Z, in deck mm.
+
+    Raises:
+      RuntimeError: If the driver was given no deck.
+    """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("containers are placed from the deck; this driver was given none")
+    if isinstance(resource, Plate):
+      anchor: Container = resource.get_item(0)
+      centred = resource.num_items == 1
+    elif isinstance(resource, list):
+      anchor, centred = resource[0], False
+    else:
+      anchor = resource
+      plate = anchor.parent if isinstance(anchor, Well) else None
+      centred = not isinstance(plate, Plate) or plate.num_items == 1
+    a1 = anchor.get_location_wrt(deck, x="c", y="c", z="cavity_bottom")
+    bottom = a1.z
+    if centred:
+      centre = self._position_centred_in(anchor)
+      a1 = Coordinate(centre.x, centre.y, a1.z)
+    a1 += offset or Coordinate.zero()
+    top = anchor.get_location_wrt(deck, x="c", y="c", z="t").z
+    return anchor, a1, bottom, top
+
+  async def _move_over(
+    self,
+    a1: Coordinate,
+    minimum_traverse_height_start: Optional[float],
+    descent_speed: Optional[float],
+  ) -> None:
+    """Bring the head, with tips, over a position: the channels up, the head up, then X and Y.
+
+    Args:
+      a1: where head channel A1 goes, in deck mm; its Z is not used.
+      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      descent_speed: to that height, in mm/s.
+
+    Raises:
+      RuntimeError: If the head carries no tips or the iSWAP is not parked.
+    """
+    await self._require_iswap_parked()
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips; pick up tips first")
+    # The head's own moves leave the channels where they are, so they go up first.
+    if self.arm is not None and self.arm.pipettes is not None:
+      await self.arm.pipettes.move_to_safe_z()
+    if minimum_traverse_height_start is None:
+      await self.move_to_safe_z()
+    else:
+      await self.move_tool_bottom_to_z_position(minimum_traverse_height_start, speed=descent_speed)
+    # Gentler X acceleration at low Y, where the head stands furthest out from the X drive.
+    await asyncio.gather(
+      self.move_to_x_position(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3),
+      self.move_to_y_position(a1.y),
+    )
+
+  async def _search_surface(
+    self,
+    bottom: float,
+    top: float,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"],
+    search_speed: Optional[float],
+  ) -> Optional[float]:
+    """Search down by cLLD from `search_start_clearance` over the top to the cavity bottom.
+
+    No move after detection: the tips stay on the surface.
+
+    Args:
+      bottom: the cavity bottom, in deck mm.
+      top: the container's top, in deck mm.
+      lld_sensor: which cLLD sensors trigger.
+      search_speed: in mm/s. `default_clld_search_speed` when None.
+
+    Returns:
+      The surface's height, tip bottom on the deck in mm; None when nothing was found.
+    """
+    overhang = await self._overhang_that_probes()
+    try:
+      await self._clld_search(
+        round(bottom + overhang, 2),
+        round(top + self.search_start_clearance + overhang, 2),
+        search_speed=search_speed,
+        lld_sensor=lld_sensor,
+        post_detection_distance=0.0,
+      )
+    except STARFirmwareError as error:
+      if self._found_nothing(error):
+        return None
+      raise
+    return round(await self.request_last_lld_z_position() - overhang, 2)
+
   async def mix(
     self,
     resource: Union[Plate, Container, List[Well]],
@@ -1132,9 +1239,6 @@ class Head96(Head):
       RuntimeError: If the head carries no tips, the iSWAP is not parked, the driver was given no
         deck, or a CAPACITIVE search found no liquid.
     """
-    deck = self._driver.deck
-    if deck is None:
-      raise RuntimeError("containers are placed from the deck; this driver was given none")
     if lld_mode not in (LLDMode.OFF, LLDMode.CAPACITIVE):
       raise ValueError(f"the 96-head mixes with lld_mode OFF or CAPACITIVE, not {lld_mode.name}")
     if settling_time < 0:
@@ -1152,39 +1256,9 @@ class Head96(Head):
       )
     if swap_speed is None:
       swap_speed = self.default_mix_swap_speed
-    if isinstance(resource, Plate):
-      anchor: Container = resource.get_item(0)
-      centred = resource.num_items == 1
-    elif isinstance(resource, list):
-      anchor, centred = resource[0], False
-    else:
-      anchor = resource
-      plate = anchor.parent if isinstance(anchor, Well) else None
-      centred = not isinstance(plate, Plate) or plate.num_items == 1
-    a1 = anchor.get_location_wrt(deck, x="c", y="c", z="cavity_bottom")
-    bottom = a1.z
-    if centred:
-      centre = self._position_centred_in(anchor)
-      a1 = Coordinate(centre.x, centre.y, a1.z)
-    a1 += offset or Coordinate.zero()
-    z_top = anchor.get_location_wrt(deck, x="c", y="c", z="t").z
+    anchor, a1, bottom, z_top = self._get_target(resource, offset)
     following = mix.surface_following_distance or 0.0
-
-    await self._require_iswap_parked()
-    if not await self.request_tip_presence():
-      raise RuntimeError("the head reports no tips; pick up tips first")
-    # The head's own moves leave the channels where they are, so they go up first.
-    if self.arm is not None and self.arm.pipettes is not None:
-      await self.arm.pipettes.move_to_safe_z()
-    if minimum_traverse_height_start is None:
-      await self.move_to_safe_z()
-    else:
-      await self.move_tool_bottom_to_z_position(minimum_traverse_height_start, speed=descent_speed)
-    # Gentler X acceleration at low Y, where the head stands furthest out from the X drive.
-    await asyncio.gather(
-      self.move_to_x_position(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3),
-      self.move_to_y_position(a1.y),
-    )
+    await self._move_over(a1, minimum_traverse_height_start, descent_speed)
 
     async def strokes() -> None:
       for _ in range(mix.repetitions):
@@ -1225,23 +1299,10 @@ class Head96(Head):
     try:
       if blow_out_air_volume:
         await self._aspirate(blow_out_air_volume, mix.flow_rate, minimum_height=bottom)
-      overhang = await self._overhang_that_probes()
-      search_start = round(z_top + self.search_start_clearance + overhang, 2)
-      try:
-        await self._clld_search(
-          round(bottom + overhang, 2),
-          search_start,
-          search_speed=search_speed,
-          lld_sensor=lld_sensor,
-          post_detection_distance=0.0,
-        )
-      except STARFirmwareError as error:
-        if self._found_nothing(error):
-          raise RuntimeError(
-            f"no liquid found in {anchor.name} down to its cavity bottom"
-          ) from error
-        raise
-      surface = round(await self.request_last_lld_z_position() - overhang, 2)
+      found = await self._search_surface(bottom, z_top, lld_sensor, search_speed)
+      if found is None:
+        raise RuntimeError(f"no liquid found in {anchor.name} down to its cavity bottom")
+      surface = found
       if anchor.supports_compute_height_volume_functions():
         anchor.tracker.set_volume(anchor.compute_volume_from_height(max(surface - bottom, 0.0)))
       start = max(round(surface - mix_position_from_liquid_surface, 2), bottom)
@@ -1253,3 +1314,104 @@ class Head96(Head):
     await rise()
     if blow_out_air_volume:
       await self._dispense(blow_out_air_volume, mix.flow_rate)
+
+  # -- liquid probing ----------------------------------------------------------------------------
+
+  async def probe_liquid_height(
+    self,
+    resource: Union[Plate, Container, List[Well]],
+    offset: Optional[Coordinate] = None,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
+    search_speed: Optional[float] = None,
+    n_replicates: int = 1,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> float:
+    """Find the liquid surface in a container with the whole head, and say how high it stands.
+
+    Positioned as `mix` is; searched by cLLD from `search_start_clearance` over the top to the
+    cavity bottom, `n_replicates` times, the tips staying on the surface between rounds. Safe Z at
+    the end unless told where to stay.
+
+    Args:
+      resource: a plate (well A1, or its one well), a container, or wells (the first).
+      offset: added to where head channel A1 goes, in mm; its z is not used.
+      lld_sensor: which cLLD sensors trigger.
+      search_speed: in mm/s. `default_clld_search_speed` when None.
+      n_replicates: how many searches; the heights are averaged.
+      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      minimum_traverse_height_end: where the tips are left, in mm. Safe Z when None.
+
+    Returns:
+      How high the liquid stands above the cavity bottom, in mm; 0.0 where none was met.
+
+    Raises:
+      ValueError: If an argument is out of range.
+      RuntimeError: If the head carries no tips, the iSWAP is not parked, the driver was given no
+        deck, or liquid was found in some rounds and not in others.
+    """
+    if n_replicates < 1:
+      raise ValueError(f"n_replicates must be at least 1, is {n_replicates}")
+    anchor, a1, bottom, top = self._get_target(resource, offset)
+    await self._move_over(a1, minimum_traverse_height_start, None)
+    try:
+      rounds = [
+        await self._search_surface(bottom, top, lld_sensor, search_speed)
+        for _ in range(n_replicates)
+      ]
+    except BaseException:
+      await self.move_to_safe_z()
+      raise
+    found = [surface for surface in rounds if surface is not None]
+    if found and len(found) != len(rounds):
+      await self.move_to_safe_z()
+      raise RuntimeError(
+        f"liquid found in {len(found)} of {len(rounds)} rounds in {anchor.name}, so it may be at "
+        "the detection limit"
+      )
+    if minimum_traverse_height_end is None:
+      await self.move_to_safe_z()
+    else:
+      await self.move_tool_bottom_to_z_position(minimum_traverse_height_end)
+    # The bottom is known, so a container in which no liquid was met stands at 0.0.
+    return round(sum(found) / len(found) - bottom, 2) if found else 0.0
+
+  async def probe_liquid_volume(
+    self,
+    resource: Union[Plate, Container, List[Well]],
+    offset: Optional[Coordinate] = None,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
+    search_speed: Optional[float] = None,
+    n_replicates: int = 1,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> float:
+    """Find the liquid as `probe_liquid_height` does, and say how much there is.
+
+    The container has to know its height-volume functions; over a plate it is well A1's volume.
+
+    Args:
+      As `probe_liquid_height`.
+
+    Returns:
+      The volume, in uL; what its function makes of 0.0 where no liquid was met.
+
+    Raises:
+      ValueError: If the container has no height-to-volume function, or as `probe_liquid_height`.
+      RuntimeError: As `probe_liquid_height`.
+    """
+    anchor = self._get_target(resource, offset)[0]
+    if not anchor.supports_compute_height_volume_functions():
+      raise ValueError(f"no height-to-volume function for {anchor.name}")
+    height = await self.probe_liquid_height(
+      resource,
+      offset,
+      lld_sensor,
+      search_speed,
+      n_replicates,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      minimum_traverse_height_end=minimum_traverse_height_end,
+    )
+    return anchor.compute_volume_from_height(height)

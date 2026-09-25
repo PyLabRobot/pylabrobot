@@ -449,3 +449,29 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
         lld_mode=LLDMode.CAPACITIVE,
       )
     self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])
+
+  async def test_probe_liquid_height_averages_the_rounds_from_the_cavity_bottom(self):
+    well = self.plate.get_item("A1")
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    overhang = await self.head._overhang_that_probes()
+    c = self.head.configuration
+    order = await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 4.0 + overhang))
+    height = await self.head.probe_liquid_height(self.plate, n_replicates=2)
+    self.assertAlmostEqual(height, 4.0, delta=0.01)
+    self.assertEqual(
+      [command[2:4] for command in order if command[2:4] in ("ZL", "RH")], ["ZL", "RH"] * 2
+    )
+    self.assertEqual(await self.head.request_z_position(), c.z_range[1])
+
+  async def test_probe_liquid_height_is_zero_where_nothing_is_met(self):
+    await self._record_lld(zl_error="H0ZLid0001er70")
+    self.assertEqual(await self.head.probe_liquid_height(self.plate), 0.0)
+
+  async def test_probe_liquid_volume_is_the_volume_at_the_height(self):
+    well = self.plate.get_item("A1")
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    overhang = await self.head._overhang_that_probes()
+    c = self.head.configuration
+    await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 4.0 + overhang))
+    volume = await self.head.probe_liquid_volume(self.plate)
+    self.assertAlmostEqual(volume, well.compute_volume_from_height(4.0), delta=1.0)
