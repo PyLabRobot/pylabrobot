@@ -8,7 +8,11 @@ from typing import Any, List, Literal, Optional, Tuple, Union
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
-from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes, PipettesConfiguration
+from pylabrobot.hamilton.star.driver.features.pipettes import (
+  Pipettes,
+  PipettesConfiguration,
+  TADMCurve,
+)
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources.coordinate import Coordinate
@@ -2551,3 +2555,72 @@ class TestPressureMonitoring(unittest.IsolatedAsyncioTestCase):
   async def test_auto_adjust_pressure_sensor(self):
     await self.pipettes.auto_adjust_pressure_sensor(7)
     self.assertEqual(self.send.call_args.kwargs, {"module": "P8", "command": "AC"})
+
+  async def test_set_and_request_tadm_mode(self):
+    await self.pipettes.set_tadm_mode(7)
+    self.assertEqual(self.send.call_args.kwargs, {"module": "P8", "command": "AF", "af": "1"})
+    await self.pipettes.set_tadm_mode(7, enabled=False)
+    self.assertEqual(self.send.call_args.kwargs["af"], "0")
+    self.answer("P8QFid0001qf1", "P8QFid0002qf0")
+    self.assertTrue(await self.pipettes.request_tadm_mode(7))
+    self.assertFalse(await self.pipettes.request_tadm_mode(7))
+
+  async def test_fifo_and_limit_curves(self):
+    await self.pipettes.clear_tadm_fifo(7)
+    self.assertEqual(self.send.call_args.kwargs, {"module": "P8", "command": "AN"})
+    await self.pipettes.reset_tadm_limit_curves(7)
+    self.assertEqual(self.send.call_args.kwargs, {"module": "P8", "command": "AQ"})
+
+  async def test_monitoring_session(self):
+    await self.pipettes.start_tadm_monitoring(7)
+    self.assertEqual(
+      self.send.call_args.kwargs,
+      {"module": "P8", "command": "BG", "gi": "000", "gj": "1", "gk": "2"},
+    )
+    await self.pipettes.start_tadm_monitoring(
+      7, storage_level="errors_only", limit_curve_index=5, measurement_id="REF0"
+    )
+    self.assertEqual(
+      self.send.call_args.kwargs,
+      {"module": "P8", "command": "BG", "gi": "005", "gj": "1", "gk": "1", "nr": "REF0"},
+    )
+    await self.pipettes.stop_tadm_monitoring(7)
+    self.assertEqual(self.send.call_args.kwargs, {"module": "P8", "command": "BH"})
+
+  async def test_monitoring_rejects_what_the_firmware_cannot_do(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes.start_tadm_monitoring(7, limit_curve_index=1000)
+    with self.assertRaises(ValueError):
+      await self.pipettes.start_tadm_monitoring(7, measurement_id="TOOLONG")
+    with self.assertRaises(ValueError):
+      await self.pipettes.start_tadm_monitoring(
+        7, enforce_limit_curve_control=False, storage_level="errors_only"
+      )
+    self.send.assert_not_called()
+
+  async def test_read_tadm_curve(self):
+    self.answer(
+      "P8QMid0001qm1",
+      "P8QLid0002qm1ql0003 0001 0000 0000 0000nrMHD0gd00000000-0000-0000-0000-000000000000",
+      "P8QNid0003qn-0439",
+      "P8QNid0004qn-0434",
+      "P8QNid0005qn+0012",
+    )
+    curve = await self.pipettes.read_tadm_curve(7, points_per_read=1)
+    self.assertEqual(curve, TADMCurve("MHD0", "dispense", False, [-439, -434, 12]))
+
+  async def test_read_tadm_curve_in_batches(self):
+    self.answer(
+      "P8QMid1qm1",
+      "P8QLid2qm1ql0005 0000 0000 0000 0000nrAAAAgd00000000-0000-0000-0000-000000000000",
+      "P8QNid3qn-0439 -0434 -0434",
+      "P8QNid4qn-0439 +0012",
+    )
+    curve = await self.pipettes.read_tadm_curve(7, points_per_read=3)
+    self.assertEqual(curve, TADMCurve("AAAA", "aspirate", False, [-439, -434, -434, -439, 12]))
+    qn = [call.kwargs for call in self.send.call_args_list if call.kwargs["command"] == "QN"]
+    self.assertEqual([(c["li"], c["ln"]) for c in qn], [("0000", "03"), ("0003", "02")])
+
+  async def test_read_tadm_curve_from_an_empty_fifo(self):
+    self.answer("P8QMid0001qm0")
+    self.assertIsNone(await self.pipettes.read_tadm_curve(7))
