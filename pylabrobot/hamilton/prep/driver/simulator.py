@@ -803,7 +803,14 @@ class SimulatedPipettes(_Simulated, Pipettes):
         detect_position=0.0 if touched is None else touched + offset,
       ), "the resource model" if touched is not None else "nothing in the way"
 
-    if isinstance(request, (PrepCmd.PrepZDriveGetPosition, PrepCmd.PrepZAxisSeekObstacle)):
+    if isinstance(
+      request,
+      (
+        PrepCmd.PrepZDriveGetPosition,
+        PrepCmd.PrepZAxisSeekObstacle,
+        PrepCmd.PrepZAxisSeekCapacitiveLld,
+      ),
+    ):
       owner = self._owner(request)
       if owner is None or owner >= len(SIMULATED_Z_DRIVE_OFFSETS):
         return None
@@ -813,6 +820,19 @@ class SimulatedPipettes(_Simulated, Pipettes):
         return PrepCmd.PrepZDriveGetPosition.Response(
           position=z + offset
         ), f"channel {owner}'s modelled Z in its drive frame"
+      if isinstance(request, PrepCmd.PrepZAxisSeekCapacitiveLld):
+        # Down from where it stands to the first resource under it, and left there.
+        bottom = self._bottom_offset(owner)
+        end = request.position - offset
+        top = _first_contact_below(
+          z + bottom, end + bottom, x, y, self._touchable(), SIMULATED_CLLD_PROBE_DIAMETER / 2
+        )
+        touched = None if top is None else top - bottom
+        self._move(owner, None, None, end if touched is None else touched)
+        return PrepCmd.PrepZAxisSeekCapacitiveLld.Response(
+          lld_detected=touched is not None,
+          detect_position=0.0 if touched is None else touched + offset,
+        ), "the resource model" if touched is not None else "nothing in the way"
       # Down from its start to the first resource under it, then left at its final height.
       bottom = self._bottom_offset(owner)
       top = _first_contact_below(
