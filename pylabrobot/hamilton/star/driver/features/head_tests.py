@@ -194,7 +194,8 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
         "C0ERxs01179xd0yh2418za2164zh2450ze2450",
         "H0DQdq11281dv13500du00000dr900000dw15",
         "C0EPxs01179xd0yh2418tt01wu0za2164zh2450ze2450",
-        "C0ERxs00420xd1yh1203za2164zh2450ze2450",
+        # The trash drop centres the array; legacy put A1 4.5 mm right and 58.5 mm forward of this.
+        "C0ERxs00465xd1yh1788za2164zh2450ze2450",
       ],
     )
 
@@ -371,3 +372,21 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(STARFirmwareError):
       await self.head.mix(self.plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0))
     self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])
+
+  async def test_a_one_well_plate_gets_the_array_centred_over_it(self):
+    from pylabrobot.resources.agenbio.plates import agenbio_1_troughplate_190mL_Fl
+    from pylabrobot.resources.hamilton.plate_carriers import PLT_CAR_L5AC_A00
+
+    carrier = PLT_CAR_L5AC_A00(name="trough carrier")
+    carrier[0] = trough_plate = agenbio_1_troughplate_190mL_Fl(name="trough")
+    self.deck.assign_child_resource(carrier, track=13)
+    trough = trough_plate.get_item(0)
+    centre = trough.get_location_wrt(self.deck, "c", "c", "b")
+    await self.head.mix(trough_plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0))
+    c = self.head.configuration
+    self.assertAlmostEqual(
+      await self.head.request_x_position(), centre.x - c.channel_array_size_x / 2, delta=0.1
+    )
+    self.assertAlmostEqual(
+      await self.head.request_y_position(), centre.y + c.channel_array_size_y / 2, delta=0.1
+    )

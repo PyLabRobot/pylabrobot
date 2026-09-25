@@ -1412,7 +1412,7 @@ class STARDriver:
         logger.debug("%s: initializing it was skipped", name)
         continue
       # A STAR deck carries a trash for the 96-head. A head told nowhere else to eject ejects there,
-      # centred over it, as legacy does.
+      # the channel array centred over it.
       if (
         name == "head96"
         and head.configuration.tip_discard_location is None

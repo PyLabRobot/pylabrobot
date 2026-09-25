@@ -369,10 +369,10 @@ class Head96(Head):
   # -- where the head goes -----------------------------------------------------------------------
 
   def _position_centred_in(self, resource: Resource) -> Coordinate:
-    """Where head channel A1 lands with the head centred over a resource, in deck mm.
+    """Where head channel A1 lands with the channel array centred over a resource, in deck mm.
 
-    The head is rigid and the resource is whatever it is being pointed at, so the array is put in
-    the middle of it and A1 falls half a channel pitch in from the array's own corner.
+    A1 is the array's back-left channel: half the array left of the resource's centre and half
+    the array behind it.
 
     Args:
       resource: what to centre over.
@@ -389,8 +389,8 @@ class Head96(Head):
     c = self.configuration
     location = resource.get_location_wrt(deck)
     return Coordinate(
-      location.x + (resource.get_size_x() - c.channel_array_size_x) / 2 + c.channel_pitch / 2,
-      location.y + (resource.get_size_y() - c.channel_array_size_y) / 2 + c.channel_pitch / 2,
+      location.x + (resource.get_size_x() - c.channel_array_size_x) / 2,
+      location.y + (resource.get_size_y() + c.channel_array_size_y) / 2,
       location.z,
     )
 
@@ -1091,13 +1091,15 @@ class Head96(Head):
     settling_time: float = 0.0,
     minimum_traverse_height_end: Optional[float] = None,
   ) -> None:
-    """Mix in place with the whole head: channel A1 over well A1, then `mix.repetitions` strokes.
+    """Mix in place with the whole head, then `mix.repetitions` strokes.
 
-    Each draw follows the surface down by `mix.surface_following_distance` to the cavity bottom and
-    each expel follows it back up, so the tips do not drift.
+    Over a plate of many wells head channel A1 goes over well A1; over a single container, or a
+    plate of one well, the channel array is centred over it. Each draw follows the surface down by
+    `mix.surface_following_distance` to the cavity bottom and each expel follows it back up, so the
+    tips do not drift.
 
     Args:
-      resource: a plate (well A1), a container, or wells (the first).
+      resource: a plate (well A1, or its one well), a container, or wells (the first).
       mix: volume, repetitions, flow rate and surface following distance.
       offset: added to where head channel A1 goes, in mm.
       minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
@@ -1126,13 +1128,18 @@ class Head96(Head):
       swap_speed = self.default_mix_swap_speed
     if isinstance(resource, Plate):
       anchor: Container = resource.get_item(0)
+      centred = resource.num_items == 1
     elif isinstance(resource, list):
-      anchor = resource[0]
+      anchor, centred = resource[0], False
     else:
       anchor = resource
-    a1 = anchor.get_location_wrt(deck, x="c", y="c", z="cavity_bottom") + (
-      offset or Coordinate.zero()
-    )
+      plate = anchor.parent if isinstance(anchor, Well) else None
+      centred = not isinstance(plate, Plate) or plate.num_items == 1
+    a1 = anchor.get_location_wrt(deck, x="c", y="c", z="cavity_bottom")
+    if centred:
+      centre = self._position_centred_in(anchor)
+      a1 = Coordinate(centre.x, centre.y, a1.z)
+    a1 += offset or Coordinate.zero()
     z_top = anchor.get_location_wrt(deck, x="c", y="c", z="t").z
 
     await self._require_iswap_parked()
