@@ -1,9 +1,10 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_volume_container_2segments_square_vbottom,
 )
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
   CrossSectionType,
@@ -96,6 +97,58 @@ def cor_axy_96_wellplate_500uL_Ub(name: str) -> Plate:
       material_z_thickness=1.18,  # measured
       cross_section_type=CrossSectionType.CIRCLE,
       name_prefix=name,
+    ),
+  )
+
+
+# # # # # # # # # # cor_axy_1_troughplate_rowVb # # # # # # # # # #
+
+# Liquid height over the cavity bottom (mm) -> volume (uL). The 100 mL point is set by 48 mL drawn
+# by hand lowering the surface 5.86 mm, as searched with the 96-head's cLLD.
+_cor_axy_1_troughplate_rowVb_height_volume_data = {
+  0.0: 0.0,
+  4.95: 15_000.0,
+  6.4: 30_000.0,
+  10.19: 60_000.0,
+  15.97: 100_000.0,
+  22.07: 150_000.0,
+  27.98: 200_000.0,
+  34.74: 250_000.0,
+  39.98: 290_000.0,
+}
+
+
+def cor_axy_1_troughplate_rowVb(name: str, lid: Optional[Lid] = None) -> Plate:
+  """
+  Axygen single-well reservoir, 8 V-bottom trenches across the rows
+  - Corning cat. no.: RES-SW8-HP-SI
+  - brand: Axygen
+  """
+  return Plate(
+    name=name,
+    size_x=127.76,
+    size_y=85.48,
+    size_z=43.5,
+    lid=lid,
+    model=cor_axy_1_troughplate_rowVb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=1,
+      num_items_y=1,
+      dx=(127.76 - 116.5) / 2,
+      dy=(85.48 - 70.5) / 2,
+      dz=3.2,
+      item_dx=None,
+      item_dy=None,
+      name_prefix=name,
+      size_x=116.5,
+      size_y=70.5,
+      size_z=39.98,
+      max_volume=290_000,
+      bottom_type=WellBottomType.V,
+      cross_section_type=CrossSectionType.RECTANGLE,
+      height_volume_data=_cor_axy_1_troughplate_rowVb_height_volume_data,
+      material_z_thickness=2.0,
     ),
   )
 
