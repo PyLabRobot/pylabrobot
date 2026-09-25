@@ -917,7 +917,7 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.tip_volumes(), {0.0})
     self.assertEqual(self.head.piston_position, 0.0)
 
-  async def test_capacitive_draws_the_air_first_then_at_the_surface_found(self):
+  async def test_capacitive_draws_the_air_first_then_under_the_surface_found(self):
     self.trough.tracker.set_volume(100_000.0)
     await self.head.aspirate(
       self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE, blow_out_air_volume=10.0
@@ -931,9 +931,24 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(fields["liquid_surface_no_lld"], (bottom + height) * 10, delta=1)
     self.assertEqual(fields["minimum_traverse_height_start"], fields["liquid_surface_no_lld"])
     self.assertEqual(fields["minimum_height"], round(bottom * 10))
+    # 2 mm under it, following it down by what 96 draws of 20 uL take from the trough.
+    self.assertEqual(fields["immersion_depth"], 20)
+    drop = height - self.trough.compute_height_from_volume(100_000.0 - 96 * 20.0)
+    self.assertAlmostEqual(fields["surface_following_distance"], drop * 10, delta=1)
     # Set to what the search measured, to the Z drive's resolution, then 96 draws booked.
     self.assertAlmostEqual(self.trough.tracker.get_used_volume(), 100_000.0 - 96 * 20.0, delta=50)
     self.assertEqual(self.head.piston_position, 30.0)
+
+  async def test_capacitive_immersion_and_following_stop_at_the_floor(self):
+    self.trough.tracker.set_volume(2_000.0)
+    await self.head.aspirate(self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE)
+    fields = self.sent[0][1]
+    lowest = (
+      fields["liquid_surface_no_lld"]
+      - fields["immersion_depth"]
+      - fields["surface_following_distance"]
+    )
+    self.assertGreaterEqual(lowest, fields["minimum_height"])
 
   async def test_capacitive_dispense_into_a_plate_books_each_well(self):
     await self.head.aspirate(self.plate, piston_volume=30.0)

@@ -293,6 +293,8 @@ class Head96(Head):
   mix_swap_start_clearance: float = 5.0
   # Mix under cLLD: how far below the surface found the tips mix, in mm.
   default_mix_position_from_liquid_surface: float = 2.0
+  # Aspirate under cLLD: how far below the surface found the tips draw, in mm.
+  default_aspirate_immersion_depth: float = 2.0
   # How far above a container's top a liquid search starts, in mm.
   search_start_clearance: float = 5.0
 
@@ -1550,6 +1552,12 @@ class Head96(Head):
     if errors:
       raise ValueError("Invalid 96-head parameters:\n" + "\n".join(errors))
 
+  @staticmethod
+  def _get_surface_drop(container: Container, height: float, volume: float) -> float:
+    """How far drawing `volume` uL lowers a surface `height` mm over the cavity bottom, in mm."""
+    held = container.compute_volume_from_height(height)
+    return round(height - container.compute_height_from_volume(max(held - volume, 0.0)), 1)
+
   def _update_volume_from_surface(
     self, container: Container, surface: float, bottom: float
   ) -> None:
@@ -1988,9 +1996,10 @@ class Head96(Head):
 
     Placed as `mix`. The firmware never searches: OFF draws at `liquid_height` above the cavity
     bottom, the cavity bottom when None; CAPACITIVE draws the blow-out air at the traverse height,
-    finds the surface by cLLD, sets the tracker to the volume found, draws at the surface and
-    refuses a container without liquid. The floor is the cavity bottom unless given. Over a plate
-    of 96 wells each well is booked to the channel over it; a single container gives to all 96.
+    finds the surface by cLLD, sets the tracker to the volume found, draws under the surface and
+    follows it down, and refuses a container without liquid. The floor is the cavity bottom unless
+    given. Over a plate of 96 wells each well is booked to the channel over it; a single container
+    gives to all 96.
     Booked before the command, committed on success; the head goes to safe Z on a failure.
 
     Args:
@@ -2009,13 +2018,15 @@ class Head96(Head):
       search_speed: of the driver's own search, in mm/s.
       approach_speed: down to that search's start, in mm/s. `z_drive_speed_default` when None.
       blow_out_air_volume: air drawn before the liquid, in uL. The class's, else 0.0, when None.
-      immersion_depth: how far into the liquid, in mm; negative is out of it.
+      immersion_depth: how far into the liquid, in mm; negative is out of it. Under CAPACITIVE,
+        `default_aspirate_immersion_depth` when None, and never below the floor.
       minimum_allowed_z_position_during: how low the tips may go, in mm on the deck. The cavity
         bottom when None.
       pre_wetting_volume: drawn and returned first, in uL. The class's, else 0.0, when None.
       pre_mix: mixed before the draw; None for no mixing.
       mix_position_from_liquid_surface: mixing depth under the surface, in mm.
-      surface_following_distance: how far the tips follow the sinking surface, in mm.
+      surface_following_distance: how far the tips follow the sinking surface, in mm. Under
+        CAPACITIVE, how far the drawn liquid lowers the surface when None; never below the floor.
       second_section_height: height of the container's narrower lower section, in mm.
       second_section_ratio: that section's bottom to top ratio, in tenths.
       settling_time: wait in the liquid, in s. The class's, else 0.0, when None.
@@ -2121,6 +2132,18 @@ class Head96(Head):
         surface = start = found
         if tracking:
           self._update_volume_from_surface(anchor, surface, bottom)
+        floor = (
+          bottom if minimum_allowed_z_position_during is None else minimum_allowed_z_position_during
+        )
+        if immersion_depth is None:
+          immersion_depth = min(self.default_aspirate_immersion_depth, max(surface - floor, 0.0))
+        if surface_following_distance is None:
+          # A container under all 96 gives what every channel draws; a well gives one's.
+          given = liquid * len(pairs) if containers is None else liquid
+          drop = self._get_surface_drop(anchor, max(round(surface - bottom, 2), 0.0), given)
+          surface_following_distance = round(
+            max(min(drop, surface - immersion_depth - floor), 0.0), 1
+          )
 
       async def send() -> None:
         await self._aspirate_in_one_move(
