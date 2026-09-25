@@ -1208,6 +1208,17 @@ class Head:
       await self._restore_drive_parameter("zv", speed, was_speed)
       await self._restore_drive_parameter("zr", acceleration, was_acceleration)
 
+  async def _overhang_that_probes(self) -> float:
+    """How far below the stop disc the head probes: the tips' overhang, to 0.1 mm.
+
+    Raises:
+      RuntimeError: If the head reports no tips.
+    """
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips, so there is no overhang to measure")
+    reference = await self.request_z_position()
+    return round(reference - (await self.request_location()).z, 1)
+
   async def move_tool_bottom_to_z_position(
     self,
     z: float,
@@ -1235,13 +1246,12 @@ class Head:
       ValueError: If the head carries no tips, or it cannot put their bottom at `z`.
     """
     c = self.configuration
-    try:
-      overhang = await self.request_tip_overhang()
-    except RuntimeError as no_tips:
+    if not await self.request_tip_presence():
       raise ValueError(
         "the head carries no tips, so it has no tool bottom to place; "
         "`move_stop_disc_to_z_position` is the move for a head with nothing on it"
-      ) from no_tips
+      )
+    overhang = await self._overhang_that_probes()
 
     # The drive works in stop-disc terms over `z_range`, so what the tip bottom reaches is that
     # window shifted down by the overhang, and no lower than the head may put one.

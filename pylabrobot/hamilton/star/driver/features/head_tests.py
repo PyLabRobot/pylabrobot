@@ -15,6 +15,7 @@ from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_s
 from pylabrobot.hamilton.star.driver.features.head96 import Head96, Head96Configuration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck, STARLetDeck
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
@@ -307,3 +308,66 @@ class TestProbeZUsingCLLD(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.head.probe_z_using_clld(tip_overhang=50.0, lld_sensor="A1 or B2")
     self.assertEqual(self.sent, [])
+
+
+class TestMix(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    from pylabrobot.resources import set_tip_tracking
+    from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL_filter
+    from pylabrobot.resources.hamilton.plate_carriers import PLT_CAR_L5AC_A00
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+    self.deck = STARLetDeck()
+    self.driver = STARSimulationDriver(
+      deck=self.deck, declared_configuration_json=RECORDING_STARLET
+    )
+    await self.driver.setup()
+    self.head = cast(Head96, self.driver.head96)
+    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car[1] = tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    self.deck.assign_child_resource(tip_car, track=1)
+    plate_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    plate_car[1] = self.plate = cor_96_wellplate_360uL_Fb(name="plate")
+    self.deck.assign_child_resource(plate_car, track=7)
+    await self.head.pick_up_tips(tip_rack)
+
+    self.sent: List[str] = []
+    answer = self.driver.send_command
+
+    async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      if module + command in ("H0PA", "H0PB"):
+        self.sent.append(assemble_command(module, command, **kwargs))
+        return ""
+      return await answer(module=module, command=command, fmt=fmt, **kwargs)
+
+    self.driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_the_strokes_are_sent_as_legacy_sends_them(self):
+    await self.head.mix(self.plate, Mix(volume=100.0, repetitions=2, flow_rate=200.0))
+    head = "pmFFFFFFFFFFFFFFFFFFFFFFFF"
+    self.assertEqual(
+      self.sent,
+      [
+        f"H0PA{head}dj1da00259dv10341dc00000zd0000zh47710to000",
+        f"H0PA{head}dj1da05170dv10341dc00000zd0000zh47730to000",
+        f"H0PB{head}db05170dv10341dd0000ze0000zh47730du00000",
+        f"H0PA{head}dj1da05170dv10341dc00000zd0000zh47730to000",
+        f"H0PB{head}db05170dv10341dd0000ze0000zh47730du00000",
+        f"H0PB{head}db00259dv10341dd0000ze0000zh36100du00000",
+      ],
+    )
+
+  async def test_a_failed_stroke_raises_the_head(self):
+    answer = self.driver.send_command
+
+    async def failing(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      if module + command == "H0PB":
+        check_fw_string_error("H0PBid0001er99/00")
+      return await answer(module, command, fmt=fmt, **kwargs)
+
+    self.driver.send_command = failing  # type: ignore[assignment]
+    with self.assertRaises(STARFirmwareError):
+      await self.head.mix(self.plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0))
+    self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])
