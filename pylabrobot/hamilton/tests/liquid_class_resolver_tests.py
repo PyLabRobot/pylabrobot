@@ -11,8 +11,8 @@ from pylabrobot.hamilton.liquid_class_resolver import (
   corrected_volumes_for_ops,
   resolve_hamilton_liquid_classes,
 )
-from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
-from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.star import get_star_liquid_class
+from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
+from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
 from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.liquid import Liquid
 
