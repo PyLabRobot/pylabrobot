@@ -16,9 +16,11 @@ no positions of its own. A read nothing here answers is refused with an exceptio
 a command that has not been simulated makes itself known.
 """
 
+import asyncio
 import dataclasses
 import json
 import logging
+import math
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple, cast, get_type_hints
 
@@ -73,30 +75,36 @@ RECORDING_PREP_HEAD8 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_head8.js
 FIRMWARE_TREE_V1_2_2 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_firmware_tree.json")
 FIRMWARE_TREE_V3_0_20 = os.path.join(_RECORDINGS, "prep_PRPBD1394_v3_0_20_firmware_tree.json")
 
-# Where PRPAA1087's channels reported themselves after it initialized on 2026-09-13, as (x, y, z) in
-# mm, by channel. What a simulated device answers until the resource model holds the channels.
+# Where the recorded device's channels reported themselves after initializing, as (x, y, z) in mm,
+# by channel: what a simulated device answers until the resource model holds the channels.
 SIMULATED_INITIALIZED_POSITIONS = {
   0: (289.489, 365.0148, 167.499),
   1: (289.489, 345.0123, 167.4954),
 }
 
-# The X axis profile PRPAA1087 read at an X speed scale of 100 percent, in mm/s and mm/s2. A simulated
-# axis keeps no profile, so setting one changes nothing it answers.
-# Each channel's Y drive frame reads deck Y plus this, rear first, as measured on PRPAA1087 (V1.2.2).
+# Each channel's Y drive frame reads deck Y plus this, rear first, as measured on the device.
 SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
-# Each channel's Z drive frame above the reported Z (rear, front), as PRPAA1087's read-only sweep read them.
+# Each channel's Z drive frame above the reported Z (rear, front), as the device's sweep read.
 SIMULATED_Z_DRIVE_OFFSETS = (171.784, 171.091)
-# What PRPAA1087's Z drives read for the PWM that limits how hard they push.
+# What the device's Z drives read for the PWM that limits how hard they push.
 SIMULATED_Z_DRIVE_PWM = 125
 # What a simulated channel touches with in a cLLD search, in mm: the probes' default
 # `stop_disc_diameter`, as simulated channels hold no tips.
 SIMULATED_CLLD_PROBE_DIAMETER = 7.0
-# The reported X less the X axis's own position, in mm, as on PRPAA1087 (V1.2.2).
+# The reported X less the X axis's own position, in mm, as on the device (V1.2.2).
 SIMULATED_X_AXIS_OFFSET = 0.193
-SIMULATED_X_VELOCITY = 400.0
-SIMULATED_X_ACCELERATION = 2250.0
+# Each axis's speed in mm/s and acceleration in mm/s2, as timed on the device (X at a speed scale
+# of 100 percent). A simulated axis keeps no profile: setting one changes nothing it answers.
+SIMULATED_X_SPEED, SIMULATED_X_ACCELERATION = 400.0, 2250.0
+SIMULATED_Y_SPEED, SIMULATED_Y_ACCELERATION = 345.0, 950.0
+SIMULATED_Z_SPEED, SIMULATED_Z_ACCELERATION = 142.0, 800.0
+_PROFILES = (
+  (SIMULATED_X_SPEED, SIMULATED_X_ACCELERATION),
+  (SIMULATED_Y_SPEED, SIMULATED_Y_ACCELERATION),
+  (SIMULATED_Z_SPEED, SIMULATED_Z_ACCELERATION),
+)
 
-# The speed scales PRPAA1087 read, in percent. A simulated device keeps none.
+# The speed scales the device read, in percent. A simulated device keeps none.
 SIMULATED_SPEED_SCALE = 100
 
 # What the deck light reads: off. A simulated device has no light.
@@ -883,13 +891,11 @@ class SimulatedXArm(_Simulated, XArm):
         value=x - SIMULATED_X_AXIS_OFFSET
       ), "where the model has the arm"
     if isinstance(request, PrepCmd.PrepXAxisGetVelocity):
-      return PrepCmd.PrepXAxisGetVelocity.Response(
-        value=SIMULATED_X_VELOCITY
-      ), "PRPAA1087's profile"
+      return PrepCmd.PrepXAxisGetVelocity.Response(value=SIMULATED_X_SPEED), "the device's profile"
     if isinstance(request, PrepCmd.PrepXAxisGetAcceleration):
       return (
         PrepCmd.PrepXAxisGetAcceleration.Response(value=SIMULATED_X_ACCELERATION),
-        "PRPAA1087's profile",
+        "the device's profile",
       )
     if isinstance(request, PrepCmd.PrepXAxisMoveAbsolute):
       # A channel with continuous cLLD on stops the arm where it touches a resource.
@@ -1111,14 +1117,51 @@ class PrepSimulationDriver(PrepDriver):
     """What the device would answer, asked of the feature the command is about.
 
     Each feature answers for its own model, so the logic stays where the model is; this only decides
-    who is asked, and answers what the device itself holds.
+    who is asked, and answers what the device itself holds. Keeping time, a move is recorded first
+    and then waited out, so whatever watches the model sees it for as long as the device takes.
     """
+    before = self._where_everything_is() if self.simulate_motion_time else None
+    answered = None
     for feature in (self.pipettes, self.x_arm):
       if isinstance(feature, _Simulated):
         answered = await feature.answer(request, path, method)
         if answered is not None:
-          return answered
-    return self._answer_for_device(request, path, method)
+          break
+    if answered is None:
+      answered = self._answer_for_device(request, path, method)
+    if before is not None:
+      seconds = self._motion_time(before, self._where_everything_is()) * self.motion_time_scale
+      if seconds > 0:
+        await asyncio.sleep(seconds)
+    return answered
+
+  def _where_everything_is(self) -> List[Tuple[float, float, float]]:
+    """Where the model has each channel, as (x, y, z) in mm: x is the arm's."""
+    if not isinstance(self.pipettes, SimulatedPipettes):
+      return []
+    count = self.simulated_configuration.num_channels or 0
+    return [self.pipettes._modelled_location(channel) for channel in range(count)]
+
+  @staticmethod
+  def _travel_time(distance: float, speed: float, acceleration: float) -> float:
+    """How long a move of `distance` takes, speeding up and slowing down at `acceleration`."""
+    distance = abs(distance)
+    if distance * acceleration < speed * speed:  # never reaches cruise
+      return 2 * math.sqrt(distance / acceleration)
+    return distance / speed + speed / acceleration
+
+  def _motion_time(
+    self, before: List[Tuple[float, float, float]], after: List[Tuple[float, float, float]]
+  ) -> float:
+    """How long the device takes from `before` to `after`, the slowest axis setting the time."""
+    return max(
+      [0.0]
+      + [
+        self._travel_time(end - start, speed, acceleration)
+        for was, now in zip(before, after)
+        for start, end, (speed, acceleration) in zip(was, now, _PROFILES)
+      ]
+    )
 
   def _answer_for_device(
     self, request: TCPCommand, path: str, method: str
