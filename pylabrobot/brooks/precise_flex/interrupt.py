@@ -1,25 +1,26 @@
-"""Notebook/asyncio interrupt handling: stop the in-flight operation, keep the connection.
+"""Notebook interrupt handling: stop the in-flight operation, keep the connection.
 
 When a user interrupts (Jupyter stop / Ctrl+C) while a command is awaiting a reply, we want to stop
 whatever the device is doing - motion or vision alike - and resync the connection rather than drop
 it. ``halt_on_interrupt`` wraps a blocking command: on interrupt it runs a channel-specific
-stop+resync that is itself protected against a second interrupt, then re-raises an
-``asyncio.CancelledError`` (preserving cancellation) or converts a ``KeyboardInterrupt`` to
+stop+resync that is itself protected against a second interrupt, then re-raises the active backend's
+cancellation (preserving cancellation) or converts a ``KeyboardInterrupt`` to
 ``OperationInterrupted``.
 
 Behavior by context:
 - Notebook: the kernel stays alive; the device is stopped and the connection resynced, so work
   continues in the same session.
-- Script via ``asyncio.run``: shutdown cancels the task, so the stop still fires before the process
+- Script shutdown cancels the task, so the stop still fires before the process
   exits (the connection survives only until the process ends).
 - Physical E-stop is a hardware path, not an interrupt: the in-flight command returns an error reply
   (``PreciseFlexError``) or times out, which is not caught here and propagates normally.
 """
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, Optional
+
+import anyio
 
 from pylabrobot.io.socket import Socket
 
@@ -29,17 +30,9 @@ logger = logging.getLogger(__name__)
 
 
 async def _run_to_completion(coro: Awaitable[None]) -> None:
-  """Await ``coro`` to completion even if the surrounding task is interrupted again.
-
-  Shields the work from cancellation and re-awaits if a second interrupt pops the await, so an
-  interrupt-triggered stop can never be left half-sent (double Ctrl+C is common in notebooks).
-  """
-  task = asyncio.ensure_future(coro)
-  while not task.done():
-    try:
-      await asyncio.shield(task)
-    except (KeyboardInterrupt, asyncio.CancelledError):
-      continue
+  """Await ``coro`` to completion despite surrounding task cancellation."""
+  with anyio.CancelScope(shield=True):
+    await coro
 
 
 async def drain(io: Socket, *, timeout: float = 0.5, max_lines: int = 50) -> None:
@@ -72,16 +65,16 @@ async def halt_and_resync(io: Socket, stop: Optional[bytes] = None) -> None:
 async def halt_on_interrupt(stop_action: Callable[[], Awaitable[None]]):
   """Wrap a blocking command so an interrupt stops the in-flight operation and keeps the connection.
 
-  On ``KeyboardInterrupt`` or ``asyncio.CancelledError``, runs ``stop_action`` to completion
-  (protected against a second interrupt), then re-raises ``CancelledError`` or converts a
-  ``KeyboardInterrupt`` to ``OperationInterrupted``. Any other exception (e.g. a ``PreciseFlexError``
-  from an error reply, as an E-stop produces) propagates unchanged.
+  On ``KeyboardInterrupt`` or backend cancellation, runs ``stop_action`` to completion, then
+  re-raises cancellation or converts a ``KeyboardInterrupt`` to ``OperationInterrupted``. Any other
+  exception (e.g. a ``PreciseFlexError`` from an error reply, as an E-stop produces) propagates
+  unchanged.
   """
   try:
     yield
-  except (KeyboardInterrupt, asyncio.CancelledError) as exc:
+  except (KeyboardInterrupt, anyio.get_cancelled_exc_class()) as exc:
     await _run_to_completion(stop_action())
-    if isinstance(exc, asyncio.CancelledError):
+    if isinstance(exc, anyio.get_cancelled_exc_class()):
       raise
     raise OperationInterrupted(
       "operation halted by interrupt; device stopped, connection alive"

@@ -1939,8 +1939,8 @@ class OperationInterrupted(Exception):
   """Raised when a user interrupt (Jupyter stop / Ctrl+C) halts an in-flight device operation.
 
   The device has been sent a stop and the connection has been resynced and left open, so the session
-  can continue. Raised in place of a bare ``KeyboardInterrupt``; an ``asyncio.CancelledError`` is
-  re-raised as-is rather than converted, so cancellation semantics are preserved.
+  can continue. Raised in place of a bare ``KeyboardInterrupt``; backend cancellation is re-raised
+  as-is rather than converted, so cancellation semantics are preserved.
   """
 
 

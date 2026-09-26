@@ -1,9 +1,10 @@
-import asyncio
 import logging
 import re
-import time
 from typing import Dict, Literal, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.high_res.settings import HighResLidValetSettings
 from pylabrobot.io.socket import Socket
 
@@ -40,7 +41,7 @@ class HighResLidValetError(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class HighResLidValet:
+class HighResLidValet(HasLifespan):
   """HighRes LidValet delidder.
 
   A benchtop delidder that removes and replaces plate lids with vacuum suction
@@ -90,6 +91,7 @@ class HighResLidValet:
     lid_retries: int = 4,
     lid_retry_delay: float = 1.5,
   ) -> None:
+    super().__init__()
     # None until setup() reads ACTIVE_HOTELS off the device.
     self._num_nests: Optional[int] = None
     self.ack_timeout = ack_timeout
@@ -101,7 +103,7 @@ class HighResLidValet:
     self.lid_retries = lid_retries
     self.lid_retry_delay = lid_retry_delay
     # One command owns the connection from its write until its completion reply.
-    self._command_lock = asyncio.Lock()
+    self._command_lock = anyio.Lock()
     self.io = Socket(
       human_readable_device_name="HighRes LidValet",
       host=host,
@@ -110,8 +112,11 @@ class HighResLidValet:
       write_timeout=ack_timeout,
     )
 
-  async def setup(self) -> None:
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the Socket transport and initialize every nest."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._best_effort_disconnect)
     self._num_nests = (await self.request_settings()).active_hotels
     # Reset every nest, refusing to start with a lid stuck in a suction cup.
     stuck = [
@@ -133,13 +138,12 @@ class HighResLidValet:
       raise RuntimeError("nest count unknown; call setup() first")
     return self._num_nests
 
-  async def stop(self) -> None:
-    """Ask the server to close this client's connection, then drop the socket."""
+  async def _best_effort_disconnect(self) -> None:
+    """Ask the server to close this client's connection when possible."""
     try:
       await self.io.write(b"disconnect\n")
     except Exception:  # the link may already be gone; closing locally still must happen
       logger.debug("[LidValet] disconnect not delivered", exc_info=True)
-    await self.io.stop()
 
   # === Command layer ===
 
@@ -149,9 +153,9 @@ class HighResLidValet:
 
   async def _read_chunk(self, timeout: float) -> str:
     """Read whatever is available, returning "" if nothing arrives in time."""
-    try:
-      data = await self.io.read(4096, timeout=timeout)
-    except TimeoutError:
+    with anyio.move_on_after(timeout) as scope:
+      data = await self.io.read(4096)
+    if scope.cancel_called:
       return ""
     return data.decode("ascii", errors="replace")
 
@@ -173,29 +177,35 @@ class HighResLidValet:
     A command occupies the connection until the controller reports completion,
     so concurrent callers are serialized rather than interleaving their replies.
     """
-    async with self._command_lock:
-      await self.io.write(f"{command}\n".encode("ascii"))
-      logger.debug("[LidValet] send: %s", command)
+    await self._command_lock.acquire()
+    try:
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self.io.write(f"{command}\n".encode("ascii"))
+        logger.debug("[LidValet] send: %s", command)
 
-      buffer = await self._read_chunk(self.ack_timeout)
-      if f"{ACK}{command}" not in buffer and OK not in buffer:
-        if not buffer:
-          raise HighResLidValetError(title=MSG_COMMUNICATION_TIMEOUT, message=command)
-        raise HighResLidValetError(title=MSG_INVALID_RESPONSE, message=repr(buffer))
+        buffer = await self._read_chunk(self.ack_timeout)
+        if f"{ACK}{command}" not in buffer and OK not in buffer:
+          if not buffer:
+            raise HighResLidValetError(title=MSG_COMMUNICATION_TIMEOUT, message=command)
+          raise HighResLidValetError(title=MSG_INVALID_RESPONSE, message=repr(buffer))
 
-      deadline = time.monotonic() + timeout
-      while True:
-        if ABORTED in buffer:
-          raise HighResLidValetError(title=MSG_ABORTED, message=command)
-        if ERROR in buffer:
-          raise HighResLidValetError(title=self._parse_error(buffer))
-        if OK in buffer:
-          logger.debug("[LidValet] recv: %s", buffer.strip())
-          return buffer
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
+        with anyio.move_on_after(timeout) as reply_scope:
+          while True:
+            if ABORTED in buffer:
+              raise HighResLidValetError(title=MSG_ABORTED, message=command)
+            if ERROR in buffer:
+              raise HighResLidValetError(title=self._parse_error(buffer))
+            if OK in buffer:
+              logger.debug("[LidValet] recv: %s", buffer.strip())
+              break
+            buffer += (await self.io.read(4096)).decode("ascii", errors="replace")
+        if reply_scope.cancel_called:
           raise HighResLidValetError(title=MSG_OPERATION_TIMEOUT, message=command)
-        buffer += await self._read_chunk(min(remaining, self.ack_timeout))
+      await anyio.lowlevel.checkpoint()
+      return buffer
+    finally:
+      self._command_lock.release()
 
   def _parse_state(self, buffer: str) -> LidValetState:
     if "BUSY" in buffer:
@@ -242,11 +252,11 @@ class HighResLidValet:
     """Poll ``nest`` until it is no longer busy."""
     self._validate_nest(nest)
     timeout = self.busy_timeout if timeout is None else timeout
-    deadline = time.monotonic() + timeout
-    while await self.request_is_busy(nest):
-      if time.monotonic() > deadline:
-        raise HighResLidValetError(title=MSG_BUSY, message=f"nest {nest}")
-      await asyncio.sleep(self.status_poll_interval)
+    with anyio.move_on_after(timeout) as scope:
+      while await self.request_is_busy(nest):
+        await anyio.sleep(self.status_poll_interval)
+    if scope.cancel_called:
+      raise HighResLidValetError(title=MSG_BUSY, message=f"nest {nest}")
 
   # === Operations ===
 
@@ -297,7 +307,7 @@ class HighResLidValet:
         last_error = error
         if attempt < self.lid_retries - 1:
           logger.warning("[LidValet] retry lidding nest %d: %s", nest, error)
-          await asyncio.sleep(self.lid_retry_delay)
+          await anyio.sleep(self.lid_retry_delay)
     assert last_error is not None
     raise last_error
 

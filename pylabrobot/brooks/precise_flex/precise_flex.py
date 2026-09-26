@@ -1,16 +1,36 @@
 """PreciseFlex driver - owns the socket I/O connection and device lifecycle."""
 
-import asyncio
 import dataclasses
 import logging
-import time
 import warnings
-from typing import Callable, ClassVar, Dict, List, Literal, NamedTuple, Optional, Sequence
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
+from functools import wraps
+from typing import (
+  Any,
+  AsyncIterator,
+  Awaitable,
+  Callable,
+  ClassVar,
+  Concatenate,
+  Dict,
+  List,
+  Literal,
+  NamedTuple,
+  Optional,
+  ParamSpec,
+  Sequence,
+  TypeVar,
+  cast,
+)
+
+import anyio
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.config import Axis, PreciseFlexConfiguration
 from pylabrobot.brooks.precise_flex.kinematics import JointPose
-from pylabrobot.events import coordinate_reference, emit_event, evented_operation
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.events import LifespanEventInfo, coordinate_reference, emit_event, evented_operation
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.rotation import Rotation
@@ -32,6 +52,21 @@ logger = logging.getLogger(__name__)
 
 # InRange sentinel that lets the controller blend through waypoints instead of stopping at each one.
 BLEND_IN_RANGE = -1
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def _admitted_motion(
+  method: Callable[Concatenate["PreciseFlex", _P], Awaitable[_R]],
+) -> Callable[Concatenate["PreciseFlex", _P], Awaitable[_R]]:
+  """Hold finite-motion admission for one public operation, including nested calls."""
+
+  @wraps(method)
+  async def wrapper(self: "PreciseFlex", *args: _P.args, **kwargs: _P.kwargs) -> _R:
+    async with self._motion_admission():
+      return await method(self, *args, **kwargs)
+
+  return cast(Callable[Concatenate["PreciseFlex", _P], Awaitable[_R]], wrapper)
 
 
 def _controller_reference(controller: "PreciseFlex") -> dict[str, object]:
@@ -121,7 +156,7 @@ def _snap_to_current(ik_joints: JointPose, current: JointPose, wrist: Optional[W
   return out
 
 
-class PreciseFlex:
+class PreciseFlex(HasLifespan):
   """Driver for PreciseFlex robotic arms.
 
   Owns the Socket I/O connection and device-level operations (power, attach,
@@ -197,6 +232,16 @@ class PreciseFlex:
         elsewhere. While unset (no configuration), ``park()`` falls back to ``movetosafe``.
     """
     super().__init__()
+    self._command_lock = anyio.Lock()
+    self._command_reconciled_callback: ContextVar[Optional[Callable[[str], None]]] = ContextVar(
+      "precise_flex_command_reconciled_callback", default=None
+    )
+    self._freedrive_active = False
+    self._freedrive_scope_token: Optional[object] = None
+    self._freedrive_transition_lock = anyio.Lock()
+    self._motion_admission_owner: ContextVar[Optional[int]] = ContextVar(
+      "precise_flex_motion_admission_owner", default=None
+    )
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
     self.timeout = timeout
     self.profile_index: int = 1
@@ -225,7 +270,7 @@ class PreciseFlex:
 
   # -- communication ---------------------------------------------------------
 
-  async def send_command(self, command: str) -> str:
+  async def send_command(self, command: str, *, read_deadline: Optional[float] = None) -> str:
     """Send one firmware command while retaining its enclosing operation context."""
     event_data = {
       "device": _controller_reference(self),
@@ -233,9 +278,51 @@ class PreciseFlex:
     }
     emit_event("precise_flex.firmware_command.started", **event_data)
     try:
-      await self.io.write(command.encode("utf-8") + b"\n")
-      reply = await self.io.readline()
-      result = self._parse_reply_ensure_successful(reply)
+      async with self._command_lock:
+        await anyio.lowlevel.checkpoint()
+        remaining = None if read_deadline is None else read_deadline - anyio.current_time()
+        if remaining is not None and remaining <= 0:
+          raise TimeoutError("polling deadline elapsed before command dispatch")
+        if remaining is not None:
+          # Socket.write's lock wait and pre-send checkpoint are cancellable. Its stream send
+          # is shielded internally, so a successful return means the write needs a reply.
+          write_completed = False
+          try:
+            with anyio.CancelScope(
+              deadline=read_deadline if read_deadline is not None else float("inf")
+            ):
+              await self.io.write(command.encode("utf-8") + b"\n", timeout=remaining)
+              write_completed = True
+          except TimeoutError:
+            # Socket.write only raises a timeout after entering its shielded send.
+            self.io._mark_connection_lost()
+            raise
+          if not write_completed:
+            raise TimeoutError("polling deadline elapsed before command dispatch")
+        with anyio.CancelScope(shield=True):
+          try:
+            # The polling deadline includes the lock wait, committed write, and reply.
+            with anyio.CancelScope(
+              deadline=read_deadline if read_deadline is not None else float("inf")
+            ) as reply_scope:
+              if remaining is None:
+                await self.io.write(command.encode("utf-8") + b"\n")
+              else:
+                await anyio.lowlevel.checkpoint_if_cancelled()
+              reply = await self.io.readline()
+            if reply_scope.cancelled_caught:
+              raise TimeoutError("polling deadline elapsed while waiting for command reply")
+          except TimeoutError:
+            if remaining is not None:
+              # The write may have committed; its late reply (or partial frame) still belongs here.
+              # Reject further writes until reconnect replaces the stream and clears its buffer.
+              self.io._mark_connection_lost()
+            raise
+          result = self._parse_reply_ensure_successful(reply)
+          callback = self._command_reconciled_callback.get()
+          if callback is not None:
+            callback(command)
+        await anyio.lowlevel.checkpoint()
     except BaseException as error:
       emit_event(
         "precise_flex.firmware_command.failed",
@@ -269,26 +356,40 @@ class PreciseFlex:
 
   # -- lifecycle -------------------------------------------------------------
 
-  @evented_operation(
-    "precise_flex.setup",
-    lambda self, skip_home=False: {
-      "device": _controller_reference(self),
-      "skip_home": skip_home,
-    },
-  )
-  async def setup(self, skip_home: bool = False):
-    """Initialize the PreciseFlex driver.
+  def _lifespan_event_info(self, **kwargs: Any) -> LifespanEventInfo:
+    """Describe controller setup and shutdown transitions."""
+    return LifespanEventInfo(
+      "precise_flex.setup",
+      "precise_flex.stop",
+      {"device": _controller_reference(self), "skip_home": kwargs.get("skip_home", False)},
+      {"device": _controller_reference(self)},
+    )
 
-    Opens the socket connection, sets response mode to PC, powers on the
-    robot, attaches it, and (optionally) homes it.
+  def _log_disconnected(self) -> None:
+    """Report the closed Socket after the owned connection exits."""
+    logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
-    Args:
-      skip_home: If True, skip the homing step during setup.
-    """
-    await self.io.setup()
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_home: bool = False,
+  ) -> None:
+    """Open and initialize the controller, registering rollback after each acquisition."""
+    await super()._enter_lifespan(stack)
+    if not isinstance(skip_home, bool):
+      raise TypeError("skip_home must be a bool")
+
+    stack.callback(self._log_disconnected)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._exit)
+
     await self.set_response_mode("pc")
     await self.power_on_robot()
+    stack.push_shielded_async_callback(self.power_off_robot)
     await self.attach(1)
+    stack.push_shielded_async_callback(self.detach)
+    stack.push_shielded_async_callback(self._force_stop_freedrive)
     if not skip_home:
       await self.home()
     logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
@@ -311,18 +412,6 @@ class PreciseFlex:
     self._log_configuration_summary(self._configuration)
     self._assess_configuration(self._configuration)
     await self._handle_out_of_range_axes()
-
-  @evented_operation(
-    "precise_flex.stop",
-    lambda self: {"device": _controller_reference(self)},
-  )
-  async def stop(self):
-    """Stop the PreciseFlex driver."""
-    await self.detach()
-    await self.power_off_robot()
-    await self._exit()
-    await self.io.stop()
-    logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
   # -- device-level commands -------------------------------------------------
 
@@ -396,6 +485,7 @@ class PreciseFlex:
     "precise_flex.recover_from_fault",
     lambda self: {"device": _controller_reference(self)},
   )
+  @_admitted_motion
   async def recover_from_fault(self) -> None:
     """Recover after a collision / fault that stopped the arm and dropped power, leaving it usable.
 
@@ -413,6 +503,7 @@ class PreciseFlex:
       PreciseFlexError: if a hard E-stop is engaged (release the button first) or power cannot be
         re-enabled.
     """
+    self._reject_motion_during_freedrive_scope()
     if await self.request_system_state() == PowerState.OFF_HARD_ESTOP:
       raise PreciseFlexError(
         -1028, "hard E-Stop engaged - release the E-stop button before recovering"
@@ -483,6 +574,7 @@ class PreciseFlex:
     "precise_flex.home",
     lambda self: {"device": _controller_reference(self)},
   )
+  @_admitted_motion
   async def home(self) -> None:
     """Home the robot associated with this thread.
 
@@ -491,8 +583,10 @@ class PreciseFlex:
       Requires robot to be attached.
       Waits until the homing is complete.
     """
+    self._reject_motion_during_freedrive_scope()
     await self.send_command("home")
 
+  @_admitted_motion
   async def home_all(self) -> None:
     """Home all robots.
 
@@ -500,6 +594,7 @@ class PreciseFlex:
       Requires power to be enabled.
       Requires that robots not be attached.
     """
+    self._reject_motion_during_freedrive_scope()
     await self.send_command("homeAll")
 
   async def _wait_for_eom(
@@ -531,16 +626,36 @@ class PreciseFlex:
     # kept open. Hardware-verified: a clean halt keeps power, attach, and the link (only a collision
     # trips -3122 and drops power, which needs explicit recovery).
     async with halt_on_interrupt(lambda: halt_and_resync(self.io, b"halt")):
-      previous = _floats(await self.send_command("wherej"))
-      deadline = time.monotonic() + timeout
-      while True:
-        await asyncio.sleep(poll_interval)
-        current = _floats(await self.send_command("wherej"))
-        if all(abs(c - p) < settle for c, p in zip(current, previous)):
-          return  # stopped moving
-        if time.monotonic() > deadline:
-          raise TimeoutError(f"motion did not settle within {timeout:.0f}s (current={current})")
-        previous = current
+      current: list[float] = []
+      # A zero timeout still permits two samples and one poll interval. Allow one second for
+      # the reads, but cap the interval allowance so this probe always has a finite deadline.
+      poll_timeout = timeout if timeout > 0 else 1.0 + min(max(poll_interval, 0.0), 1.0)
+      with anyio.move_on_after(poll_timeout) as scope:
+
+        async def sample() -> list[float]:
+          try:
+            return _floats(await self.send_command("wherej", read_deadline=scope.deadline))
+          except TimeoutError as exc:
+            if scope.cancel_called or anyio.current_time() >= scope.deadline:
+              raise TimeoutError(
+                f"motion did not settle within {timeout:.0f}s (current={current})"
+              ) from exc
+            raise
+
+        previous = await sample()
+        current = previous
+        await anyio.lowlevel.checkpoint_if_cancelled()
+        while True:
+          await anyio.sleep(poll_interval)
+          current = await sample()
+          await anyio.lowlevel.checkpoint_if_cancelled()
+          if all(abs(c - p) < settle for c, p in zip(current, previous)):
+            return  # stopped moving
+          if timeout <= 0:
+            raise TimeoutError(f"motion did not settle within {timeout:.0f}s (current={current})")
+          previous = current
+      if scope.cancel_called:
+        raise TimeoutError(f"motion did not settle within {timeout:.0f}s (current={current})")
 
   async def request_state(self) -> str:
     """Return state of motion.
@@ -723,6 +838,7 @@ class PreciseFlex:
   async def _move_j(self, profile_index: int, joint_coords: JointPose) -> None:
     """Move the robot using joint coordinates, handling rail configuration. Raw moveJ - the
     out-of-range guard lives in the caller (``_guarded_move_j``), not in this primitive."""
+    self._reject_motion_during_freedrive_scope()
     if self._has_rail:
       angles_str = (
         f"{joint_coords[Axis.BASE]} "
@@ -749,6 +865,7 @@ class PreciseFlex:
     range, but allows a single-axis move heading back into range. Does not wait for
     the motion to complete.
     """
+    self._reject_motion_during_freedrive_scope()
     await self.send_command(f"MoveOneAxis {int(axis)} {position} {self.profile_index}")
 
   async def _move_to_stored_location(self, location_index: int, profile_index: int) -> None:
@@ -761,6 +878,7 @@ class PreciseFlex:
     Note:
       Requires that the robot be attached.
     """
+    self._reject_motion_during_freedrive_scope()
     await self.send_command(f"move {location_index} {profile_index}")
 
   async def _move_to_stored_location_appro(self, location_index: int, profile_index: int) -> None:
@@ -775,6 +893,7 @@ class PreciseFlex:
     Note:
       Requires that the robot be attached.
     """
+    self._reject_motion_during_freedrive_scope()
     await self.send_command(f"moveAppro {location_index} {profile_index}")
 
   async def _set_joint_angles(
@@ -1177,6 +1296,7 @@ class PreciseFlex:
 
   # -- brakes, torque & freedrive -----------------------------------------------------------
 
+  @_admitted_motion
   async def release_brake(self, axis: int) -> None:
     """Release the axis brake.
 
@@ -1189,6 +1309,7 @@ class PreciseFlex:
     """
     await self.send_command(f"releaseBrake {axis}")
 
+  @_admitted_motion
   async def set_brake(self, axis: int) -> None:
     """Set the axis brake.
 
@@ -1200,6 +1321,7 @@ class PreciseFlex:
     """
     await self.send_command(f"setBrake {axis}")
 
+  @_admitted_motion
   async def zero_torque(self, enable: bool, axis_mask: int = 1) -> None:
     """Sets or clears zero torque mode for the selected robot.
 
@@ -1215,6 +1337,28 @@ class PreciseFlex:
     else:
       await self.send_command("zeroTorque 0")
 
+  def _reject_motion_during_freedrive_scope(self) -> None:
+    """Reject motion before device mutation while a freedrive scope owns the arm."""
+    if self._freedrive_scope_token is not None:
+      raise RuntimeError("Cannot move the arm while a freedrive scope is active")
+
+  @asynccontextmanager
+  async def _motion_admission(self) -> AsyncIterator[None]:
+    """Serialize finite motion with scope entry and parent freedrive cleanup."""
+    task_id = anyio.get_current_task().id
+    if self._motion_admission_owner.get() == task_id:
+      yield
+      return
+
+    self._reject_motion_during_freedrive_scope()
+    async with self._freedrive_transition_lock:
+      self._reject_motion_during_freedrive_scope()
+      token = self._motion_admission_owner.set(task_id)
+      try:
+        yield
+      finally:
+        self._motion_admission_owner.reset(token)
+
   @evented_operation(
     "precise_flex.start_freedrive",
     lambda self, free_axes=None: {
@@ -1222,14 +1366,8 @@ class PreciseFlex:
       "free_axes": [int(axis) for axis in free_axes] if free_axes is not None else None,
     },
   )
-  async def start_freedrive_mode(self, free_axes: Optional[List[int]] = None) -> None:
-    """Enter freedrive mode, allowing manual movement of the specified joints.
-
-    The robot must be attached to enter free mode.
-
-    Args:
-      free_axes: List of joint indices to free. Use [0] for all axes.
-    """
+  async def _start_freedrive_transition(self, free_axes: Optional[List[int]] = None) -> None:
+    """Enter freedrive while the caller holds the transition lock."""
     if free_axes is None:
       # Default to the positioning axes that exist; include the rail only when
       # fitted - freemode on an absent axis returns -2800 on a no-rail arm. The
@@ -1239,16 +1377,103 @@ class PreciseFlex:
       free_axes = [Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST]
       if has_rail:
         free_axes.append(Axis.RAIL)
-    for axis in free_axes:
-      await self.send_command(f"freemode {axis}")
+    entered_freedrive = False
+    try:
+      for axis in free_axes:
+        command = f"freemode {axis}"
+
+        def mark_reconciled(reconciled_command: str) -> None:
+          nonlocal entered_freedrive
+          if reconciled_command == command:
+            entered_freedrive = True
+            self._freedrive_active = True
+
+        token = self._command_reconciled_callback.set(mark_reconciled)
+        try:
+          await self.send_command(f"freemode {axis}")
+        finally:
+          self._command_reconciled_callback.reset(token)
+    except BaseException:
+      if entered_freedrive:
+        with anyio.CancelScope(shield=True):
+          await self._stop_freedrive_command()
+      raise
 
   @evented_operation(
     "precise_flex.stop_freedrive",
     lambda self: {"device": _controller_reference(self)},
   )
+  async def _stop_freedrive_transition(self) -> None:
+    """Exit freedrive while the caller holds the transition lock."""
+    await self._stop_freedrive_command()
+
+  async def _stop_freedrive_command(self) -> None:
+    """Send and reconcile the all-axis freedrive exit command without adding events."""
+    command = "freemode -1"
+
+    def mark_reconciled(reconciled_command: str) -> None:
+      if reconciled_command == command:
+        self._freedrive_active = False
+
+    token = self._command_reconciled_callback.set(mark_reconciled)
+    try:
+      await self.send_command(command)
+    finally:
+      self._command_reconciled_callback.reset(token)
+
+  async def start_freedrive_mode(self, free_axes: Optional[List[int]] = None) -> None:
+    """Enter durable freedrive mode, allowing manual movement of the specified joints."""
+    async with self._freedrive_transition_lock:
+      if self._freedrive_scope_token is not None:
+        raise RuntimeError("Cannot start freedrive while a freedrive scope is active")
+      await self._start_freedrive_transition(free_axes)
+
   async def stop_freedrive_mode(self) -> None:
-    """Exit freedrive mode for all axes."""
-    await self.send_command("freemode -1")
+    """Exit durable freedrive mode for all axes."""
+    async with self._freedrive_transition_lock:
+      if self._freedrive_scope_token is not None:
+        raise RuntimeError("Cannot stop freedrive while a freedrive scope is active")
+      await self._stop_freedrive_transition()
+
+  @asynccontextmanager
+  async def freedrive(self, free_axes: Optional[List[int]] = None) -> AsyncIterator[None]:
+    """Enable freedrive for the lifetime of this context."""
+    token = object()
+    async with self._freedrive_transition_lock:
+      if not self.is_active:
+        raise RuntimeError("Freedrive scopes require an active PreciseFlex lifespan")
+      if self._freedrive_scope_token is not None:
+        raise RuntimeError("Freedrive is already scoped")
+      if self._freedrive_active:
+        raise RuntimeError("Freedrive is already active")
+      self._freedrive_scope_token = token
+      try:
+        await self._start_freedrive_transition(free_axes)
+      except BaseException:
+        self._freedrive_scope_token = None
+        raise
+
+    try:
+      await anyio.lowlevel.checkpoint()
+      yield
+    finally:
+      with anyio.CancelScope(shield=True):
+        async with self._freedrive_transition_lock:
+          if self._freedrive_scope_token is token:
+            try:
+              await self._stop_freedrive_transition()
+            finally:
+              self._freedrive_scope_token = None
+
+  async def _force_stop_freedrive(self) -> None:
+    """Force tracked freedrive off before detach and invalidate scope ownership."""
+    async with self._freedrive_transition_lock:
+      try:
+        if self._freedrive_active or self._freedrive_scope_token is not None:
+          await self._stop_freedrive_transition()
+      finally:
+        self._freedrive_active = False
+        self._freedrive_scope_token = None
 
   @evented_operation(
     "precise_flex.halt",
@@ -1260,6 +1485,7 @@ class PreciseFlex:
 
   # -- gripper primitives -------------------------------------------------------------------
 
+  @_admitted_motion
   async def change_config(self, grip_mode: int = 0) -> None:
     """Change Robot configuration from Righty to Lefty or vice versa using customizable locations.
 
@@ -1273,8 +1499,10 @@ class PreciseFlex:
       1 = open gripper
       2 = close gripper
     """
+    self._reject_motion_during_freedrive_scope()
     await self.send_command(f"ChangeConfig {grip_mode}")
 
+  @_admitted_motion
   async def change_config2(self, grip_mode: int = 0) -> None:
     """Change Robot configuration from Righty to Lefty or vice versa using algorithm.
 
@@ -1288,6 +1516,7 @@ class PreciseFlex:
       1 = open gripper
       2 = close gripper
     """
+    self._reject_motion_during_freedrive_scope()
     await self.send_command(f"ChangeConfig2 {grip_mode}")
 
   async def _request_grip_close_pos(self) -> float:
@@ -1815,6 +2044,7 @@ class PreciseFlex:
   # left for the setup post-condition to raise on.
   _RECOVERY_ORDER = (Axis.GRIPPER, Axis.BASE, Axis.SHOULDER, Axis.ELBOW)
 
+  @_admitted_motion
   async def recover_axes_within_limits(
     self, speed_pct: float = 20.0, max_distance: Optional[float] = 5.0
   ) -> Dict[Axis, float]:
@@ -1842,9 +2072,23 @@ class PreciseFlex:
     if not outside:
       return {}
     prior_speed = await self._request_speed()
-    await self._set_speed(speed_pct)
     recovered: Dict[Axis, float] = {}
+    speed_changed = False
+    previous_callback = self._command_reconciled_callback.get()
+
+    def mark_speed_changed(command: str) -> None:
+      nonlocal speed_changed
+      speed_changed = True
+      if previous_callback is not None:
+        previous_callback(command)
+
     try:
+      token = self._command_reconciled_callback.set(mark_speed_changed)
+      try:
+        await self._set_speed(speed_pct)
+        speed_changed = True
+      finally:
+        self._command_reconciled_callback.reset(token)
       for axis in self._RECOVERY_ORDER:
         if axis not in outside:
           continue
@@ -1871,7 +2115,10 @@ class PreciseFlex:
         await self._wait_for_eom()
         recovered[axis] = target
     finally:
-      await self._set_speed(prior_speed)  # don't leave the profile at the slow recovery speed
+      # Don't leave the profile at the slow recovery speed when motion is interrupted.
+      if speed_changed:
+        with anyio.CancelScope(shield=True):
+          await self._set_speed(prior_speed)
     return recovered
 
   async def _is_robot_homed(self) -> bool:
@@ -2045,6 +2292,7 @@ class PreciseFlex:
       "speed_pct": speed_pct,
     },
   )
+  @_admitted_motion
   async def move_to_joint_position(
     self,
     position: JointPose,
@@ -2058,6 +2306,7 @@ class PreciseFlex:
       speed_pct: Movement speed override as a percentage (0-100). If None, uses the current
         speed setting.
     """
+    self._reject_motion_during_freedrive_scope()
     if speed_pct is not None:
       await self._set_speed(speed_pct)
     await self._guarded_move_j(lambda current: {**current, **position})
@@ -2083,6 +2332,7 @@ class PreciseFlex:
       "speed_pct": speed_pct,
     },
   )
+  @_admitted_motion
   async def move_to_location(
     self,
     location: Coordinate,
@@ -2105,6 +2355,7 @@ class PreciseFlex:
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
     """
+    self._reject_motion_during_freedrive_scope()
     if speed_pct is not None:
       await self._set_speed(speed_pct)
 
@@ -2194,6 +2445,7 @@ class PreciseFlex:
       "blend": blend,
     },
   )
+  @_admitted_motion
   async def move_through_cartesian_poses(
     self,
     poses: Sequence[PreciseFlexCartesianPose],
@@ -2219,6 +2471,7 @@ class PreciseFlex:
         ``-1`` so the controller may blend through intermediate waypoints instead of stopping
         at each one. The original profile is restored after the final waypoint is reached.
     """
+    self._reject_motion_during_freedrive_scope()
     if not poses:
       return
     if speed_pct is not None:
@@ -2232,19 +2485,34 @@ class PreciseFlex:
     if blend:
       original_profile = await self.request_motion_profile_values(profile_index)
       should_restore_profile = original_profile.in_range != BLEND_IN_RANGE
-      if should_restore_profile:
-        await self.set_motion_profile_values(*original_profile._replace(in_range=BLEND_IN_RANGE))
 
+    profile_changed = False
     try:
-      for target in targets:
-        await self._move_j(profile_index=profile_index, joint_coords=target)
-    finally:
-      # Let queued motion settle before returning or restoring the profile - restoring InRange
-      # mid-move would change the in-flight blend.
+      if should_restore_profile and original_profile is not None:
+        previous_callback = self._command_reconciled_callback.get()
+
+        def mark_profile_changed(command: str) -> None:
+          nonlocal profile_changed
+          profile_changed = True
+          if previous_callback is not None:
+            previous_callback(command)
+
+        token = self._command_reconciled_callback.set(mark_profile_changed)
+        try:
+          await self.set_motion_profile_values(*original_profile._replace(in_range=BLEND_IN_RANGE))
+          profile_changed = True
+        finally:
+          self._command_reconciled_callback.reset(token)
       try:
-        await self._wait_for_eom()
+        for target in targets:
+          await self._move_j(profile_index=profile_index, joint_coords=target)
       finally:
-        if should_restore_profile and original_profile is not None:
+        # Let queued motion settle before returning or restoring the profile - restoring InRange
+        # mid-move would change the in-flight blend.
+        await self._wait_for_eom()
+    finally:
+      if profile_changed and original_profile is not None:
+        with anyio.CancelScope(shield=True):
           await self.set_motion_profile_values(*original_profile)
 
   async def dest_c(self, arg1: int = 0) -> tuple[float, float, float, float, float, float, int]:
@@ -2332,6 +2600,7 @@ class PreciseFlex:
       "force_sensing": force_sensing,
     },
   )
+  @_admitted_motion
   async def move_gripper(
     self,
     width: float,
@@ -2348,6 +2617,7 @@ class PreciseFlex:
     mid-travel - it is intentionally not wrapped by the motion-wait interrupt guard. The move is short
     and force-limited, so this is a documented limitation rather than a hazard.
     """
+    self._reject_motion_during_freedrive_scope()
     logger.info(
       "[PreciseFlex %s] move_gripper: width_mm=%s force_sensing=%s",
       self.io._host,
@@ -2380,6 +2650,7 @@ class PreciseFlex:
       "force_sensing": force_sensing,
     },
   )
+  @_admitted_motion
   async def move_gripper_joint_position(
     self,
     position: float,
@@ -2390,6 +2661,7 @@ class PreciseFlex:
     This is the counterpart to :meth:`move_gripper` for integrations with
     taught joint-space routes. The caller owns the joint calibration.
     """
+    self._reject_motion_during_freedrive_scope()
     if force_sensing:
       await self._set_grip_close_pos(position)
       await self.send_command("gripper 2")
@@ -2427,6 +2699,7 @@ class PreciseFlex:
       "rail_position": float(rail_position),
     },
   )
+  @_admitted_motion
   async def move_rail(self, rail_position: float) -> None:
     """Move the rail to the specified position.
 
@@ -2436,6 +2709,7 @@ class PreciseFlex:
     Raises:
       RuntimeError: If the arm does not have a rail.
     """
+    self._reject_motion_during_freedrive_scope()
     if not self._has_rail:
       raise RuntimeError("This arm does not have a rail.")
     await self._set_rail_position(self._rail_position_index, rail_position)
@@ -2453,6 +2727,7 @@ class PreciseFlex:
       "grasp_force": float(grasp_force),
     },
   )
+  @_admitted_motion
   async def pick_up_at_joint_position(
     self,
     position: JointPose,
@@ -2468,6 +2743,7 @@ class PreciseFlex:
       finger_speed_pct: Finger closing speed as a percentage (0-100).
       grasp_force: Grasp force in Newtons.
     """
+    self._reject_motion_during_freedrive_scope()
     logger.info(
       "[PreciseFlex %s] pick_up: joints=%s, resource_width_mm=%s",
       self.io._host,
@@ -2489,6 +2765,7 @@ class PreciseFlex:
       "resource_width": float(resource_width),
     },
   )
+  @_admitted_motion
   async def drop_at_joint_position(
     self,
     position: JointPose,
@@ -2500,6 +2777,7 @@ class PreciseFlex:
       position: Joint pose to drop at.
       resource_width: Width of the held resource, in mm.
     """
+    self._reject_motion_during_freedrive_scope()
     logger.info(
       "[PreciseFlex %s] drop: joints=%s, resource_width_mm=%s",
       self.io._host,
@@ -2524,6 +2802,7 @@ class PreciseFlex:
       "grasp_force": float(grasp_force),
     },
   )
+  @_admitted_motion
   async def pick_up_at_location(
     self,
     location: Coordinate,
@@ -2548,6 +2827,7 @@ class PreciseFlex:
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
     """
+    self._reject_motion_during_freedrive_scope()
     logger.info(
       "[PreciseFlex %s] pick_up: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
       self.io._host,
@@ -2590,6 +2870,7 @@ class PreciseFlex:
       "resource_width": float(resource_width),
     },
   )
+  @_admitted_motion
   async def drop_at_location(
     self,
     location: Coordinate,
@@ -2610,6 +2891,7 @@ class PreciseFlex:
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
     """
+    self._reject_motion_during_freedrive_scope()
     logger.info(
       "[PreciseFlex %s] drop: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
       self.io._host,
@@ -2683,6 +2965,7 @@ class PreciseFlex:
     "precise_flex.park",
     lambda self: {"device": _controller_reference(self)},
   )
+  @_admitted_motion
   async def park(self) -> None:
     """Move to ``self.parking_position``; defaults at setup, reassignable at runtime.
 
@@ -2691,6 +2974,7 @@ class PreciseFlex:
     constants or any JointPose to park elsewhere. Falls back to the firmware ``movetosafe`` while it is
     unset. No collision checks against 3rd-party obstacles.
     """
+    self._reject_motion_during_freedrive_scope()
     if self.parking_position is not None:
       await self.move_to_joint_position(
         position=self._parking_pose_with_default_z(self.parking_position)

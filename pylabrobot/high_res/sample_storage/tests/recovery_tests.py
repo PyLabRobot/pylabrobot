@@ -1,32 +1,39 @@
 import unittest
-from typing import List
+from typing import Any, List
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.high_res.sample_storage.driver import HighResSampleStorage
 from pylabrobot.high_res.sample_storage.driver.errors import (
   HighResSampleStorageFault,
   PlateNotFoundError,
 )
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 def _ok(command: str, cid: int) -> List[str]:
   return [f"ACK! {command} {cid}", f"OK! {command} {cid}"]
 
 
-class ScriptedSocket:
+class ScriptedSocket(HasLifespan):
   """Replays an ordered (expected_command, response_lines) script, asserting the
   exact command sequence — used to verify multi-step recovery flows."""
 
   def __init__(self, script):
+    super().__init__()
     self.script = list(script)
     self.i = 0
     self.commands: List[str] = []
     self._queue: List[str] = []
 
-  async def setup(self):
-    pass
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("ScriptedSocket does not accept lifespan options")
+    stack.push_shielded_async_callback(self._close)
 
-  async def stop(self):
-    pass
+  async def _close(self) -> None:
+    await anyio.lowlevel.checkpoint()
 
   async def write(self, data: bytes, timeout=None):
     command = data.decode("ascii").rstrip("\r\n")
@@ -40,8 +47,24 @@ class ScriptedSocket:
     return self._queue.pop(0).encode("ascii") + b"\r\n"
 
 
-class HighResSampleStorageRecoveryTests(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
+class TestHighResSampleStorageRecovery(AnyioTestBase):
+  def assertEqual(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertEqual(*args, **kwargs)
+
+  def assertFalse(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertFalse(*args, **kwargs)
+
+  def assertRaises(self, *args: Any, **kwargs: Any) -> Any:
+    return self._assertions.assertRaises(*args, **kwargs)
+
+  def assertRaisesRegex(self, *args: Any, **kwargs: Any) -> Any:
+    return self._assertions.assertRaisesRegex(*args, **kwargs)
+
+  def assertTrue(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertTrue(*args, **kwargs)
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    self._assertions = unittest.TestCase()
     self.driver = HighResSampleStorage(host="10.253.253.253", name="sample_store", racks={})
     self.retrieval = self.driver
 

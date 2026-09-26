@@ -1,6 +1,7 @@
-import asyncio
+import inspect
 import logging
 import random
+from contextlib import ExitStack
 from dataclasses import dataclass
 from typing import (
   Any,
@@ -17,6 +18,9 @@ from typing import (
   cast,
 )
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import event_operation, resource_reference
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import (
@@ -81,7 +85,7 @@ class UnresolvedPlateTransfer:
   error_message: str
 
 
-class HighResSampleStorage(Resource):
+class HighResSampleStorage(Resource, HasLifespan):
   """Base device for HighRes Biosolutions sample stores.
 
   The TundraStore, SteriStore and AmbiStore are the same machine family behind a
@@ -165,6 +169,7 @@ class HighResSampleStorage(Resource):
       preferred_pickup_location=preferred_pickup_location,
       metadata=metadata,
     )
+    HasLifespan.__init__(self)
 
     # The device reports its configured nest numbers during setup. Their
     # robot-facing coordinates are intentionally undefined relative to the
@@ -196,7 +201,6 @@ class HighResSampleStorage(Resource):
       human_readable_device_name="HighRes sample store",
       host=host,
       port=port,
-      read_timeout=read_timeout,
       write_timeout=read_timeout,
     )
     self._host = host
@@ -204,11 +208,11 @@ class HighResSampleStorage(Resource):
     self._read_timeout = read_timeout
     self._motion_timeout = motion_timeout
     self._transport_invalidated = False
-    self._command_lock = asyncio.Lock()
+    self._command_lock = anyio.Lock()
     # A command lock prevents protocol responses from interleaving, but a plate
     # transfer also includes resource validation and bookkeeping on either side
     # of the hardware command. Keep that entire transaction atomic.
-    self._transfer_lock = asyncio.Lock()
+    self._transfer_lock = anyio.Lock()
     self._unresolved_transfer: Optional[UnresolvedPlateTransfer] = None
 
   @property
@@ -284,17 +288,17 @@ class HighResSampleStorage(Resource):
 
   # --- lifecycle ------------------------------------------------------------
 
-  async def setup(self, home: bool = False) -> None:
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, *, home: bool = False
+  ) -> None:
+    """Own the Socket connection and initialize the configured store."""
+    await super()._enter_lifespan(stack)
     if self._verification_warning is not None:
       logger.warning("%s", self._verification_warning)
-    await self.io.setup()
+
+    await stack.enter_async_context(self.io.lifespan())
     self._transport_invalidated = False
-    try:
-      await self._setup_connected(home=home)
-    except BaseException:
-      self._transport_invalidated = True
-      await self.io.stop()
-      raise
+    await self._setup_connected(home=home)
 
   async def _setup_connected(self, home: bool) -> None:
     version = await self.request_version()
@@ -305,8 +309,7 @@ class HighResSampleStorage(Resource):
       version.firmware_version,
     )
 
-    if not self._racks_loaded:
-      await self._load_racks_from_device()
+    staged_racks = None if self._racks_loaded else await self._discover_racks_from_device()
 
     if self._model_info.has_environment_control:
       await self.environment.refresh()
@@ -314,6 +317,7 @@ class HighResSampleStorage(Resource):
     nest_status = await self.request_nest_status()
     if not nest_status:
       raise RuntimeError("The sample store did not report any nests.")
+    staged_nests: Optional[List[PlateHolder]] = None
     if not self.nests:
       nest_numbers = sorted(nest_status)
       expected_nest_numbers = list(range(1, len(nest_numbers) + 1))
@@ -321,18 +325,46 @@ class HighResSampleStorage(Resource):
         raise RuntimeError(
           f"The sample store must report contiguous nest numbers starting at 1; got {nest_numbers}."
         )
-      for nest_number in nest_numbers:
-        nest = PlateHolder(
+      staged_nests = [
+        PlateHolder(
           name=f"{self.name}_nest_{nest_number}",
           size_x=127.76,
           size_y=85.48,
           size_z=0,
           pedestal_size_z=0,
         )
-        self.assign_child_resource(nest, location=None)
-        self.nests.append(nest)
+        for nest_number in nest_numbers
+      ]
     if home:
       await self.home()
+
+    with ExitStack() as publication_rollback:
+      if staged_racks is not None:
+        for stacker, rack in staged_racks.items():
+          publication_rollback.callback(self._rollback_rack_attachment, rack, stacker)
+          self._add_rack(rack, stacker=stacker)
+      if staged_nests is not None:
+        for nest in staged_nests:
+          publication_rollback.callback(self._rollback_nest_attachment, nest)
+          self.assign_child_resource(nest, location=None)
+          self.nests.append(nest)
+
+      if staged_racks is not None:
+        self._racks_loaded = True
+        logger.info("Loaded %d configured stackers for %s", len(self._racks_by_number), self.name)
+      publication_rollback.pop_all()
+
+  def _rollback_rack_attachment(self, rack: PlateCarrier, stacker: int) -> None:
+    """Remove one staged rack attachment after publication fails."""
+    if self._racks_by_number.get(stacker) is rack:
+      del self._racks_by_number[stacker]
+    rack.unassign()
+
+  def _rollback_nest_attachment(self, nest: PlateHolder) -> None:
+    """Remove one staged nest attachment after publication fails."""
+    if nest in self.nests:
+      self.nests.remove(nest)
+    nest.unassign()
 
   def _add_rack(self, rack: PlateCarrier, stacker: int) -> None:
     """Attach one rack under its physical stacker number."""
@@ -350,13 +382,14 @@ class HighResSampleStorage(Resource):
     if not isinstance(stacker, int) or isinstance(stacker, bool) or stacker < 1:
       raise ValueError(f"Stacker number must be a positive integer; got {stacker!r}.")
 
-  async def _load_racks_from_device(self) -> None:
-    """Create empty stacker resources from ``getstackerdimensions``."""
+  async def _discover_racks_from_device(self) -> Dict[int, PlateCarrier]:
+    """Build detached stacker resources from ``getstackerdimensions``."""
     dimensions = await self.request_stacker_dimensions()
     if not dimensions:
       raise RuntimeError("The sample store did not report any stacker dimensions.")
 
     reported_stackers = set()
+    racks: Dict[int, PlateCarrier] = {}
     for stacker_dimensions in sorted(dimensions, key=lambda value: value.stacker):
       stacker = stacker_dimensions.stacker
       if stacker in reported_stackers:
@@ -370,23 +403,59 @@ class HighResSampleStorage(Resource):
         slot_height=stacker_dimensions.slot_height,
         slot_count=stacker_dimensions.slot_count,
       )
-      self._add_rack(rack, stacker=stacker)
-
-    self._racks_loaded = True
-    logger.info("Loaded %d configured stackers for %s", len(self._racks_by_number), self.name)
-
-  async def stop(self) -> None:
-    logger.info("Stopping %s", self.name)
-    try:
-      await self.io.stop()
-    finally:
-      self._transport_invalidated = True
+      racks[stacker] = rack
+    return racks
 
   # --- transport ------------------------------------------------------------
 
-  async def _readline(self, timeout: Optional[float]) -> str:
-    raw = await self.io.readuntil(b"\n", timeout=timeout)
+  async def _readline(self) -> str:
+    raw = await self.io.readuntil(b"\n")
     return raw.decode("ascii", errors="replace").rstrip("\r\n")
+
+  @staticmethod
+  def _parse_envelope(token: str, line: str, command: str) -> Tuple[str, str]:
+    prefix = f"{token} "
+    if not line.startswith(prefix):
+      raise HighResSampleStorageProtocolError(command, line, f"expected {token} envelope")
+    echoed_command, separator, command_id = line[len(prefix) :].rpartition(" ")
+    if not separator or not echoed_command or not command_id.isdecimal():
+      raise HighResSampleStorageProtocolError(
+        command, line, f"expected '{token} <command> <numeric command ID>'"
+      )
+    return echoed_command, command_id
+
+  async def _read_command_response(self, command: str) -> Tuple[List[str], str, str]:
+    """Assemble the ACK, data lines and matching completion for one command."""
+    data_lines: List[str] = []
+    ack = await self._readline()
+    ack_command, command_id = self._parse_envelope(ACK_TOKEN, ack, command)
+    if ack_command != command:
+      raise HighResSampleStorageProtocolError(command, ack, f"ACK echoed command {ack_command!r}")
+
+    while True:
+      line = await self._readline()
+      completion_token = next(
+        (token for token in COMPLETION_TOKENS if line == token or line.startswith(f"{token} ")),
+        None,
+      )
+      if completion_token is None:
+        if line == ACK_TOKEN or line.startswith(f"{ACK_TOKEN} "):
+          raise HighResSampleStorageProtocolError(command, line, "received a second ACK")
+        data_lines.append(line)
+        continue
+
+      completion_command, completion_id = self._parse_envelope(completion_token, line, command)
+      if completion_command != command:
+        raise HighResSampleStorageProtocolError(
+          command, line, f"completion echoed command {completion_command!r}"
+        )
+      if completion_id != command_id:
+        raise HighResSampleStorageProtocolError(
+          command,
+          line,
+          f"completion command ID {completion_id!r} does not match ACK ID {command_id!r}",
+        )
+      return data_lines, completion_token, line
 
   async def _send_command(self, command: str, timeout: Optional[float] = None) -> List[str]:
     """Send a command and return its data lines (those between the ``ACK!`` echo
@@ -406,41 +475,12 @@ class HighResSampleStorage(Resource):
       timeout = self._read_timeout
     encoded_command = command.encode("ascii") + b"\r\n"
     async with self._command_lock:
+      if self._transport_invalidated:
+        raise ConnectionError("HighRes command stream invalidated; reconcile the transfer first")
       try:
-        await self.io.write(encoded_command)
-
-        data_lines: List[str] = []
-        ack = await self._readline(timeout)
-        ack_command, command_id = self._parse_envelope(ACK_TOKEN, ack, command)
-        if ack_command != command:
-          raise HighResSampleStorageProtocolError(
-            command, ack, f"ACK echoed command {ack_command!r}"
-          )
-
-        while True:
-          line = await self._readline(timeout)
-          completion_token = next(
-            (token for token in COMPLETION_TOKENS if line == token or line.startswith(f"{token} ")),
-            None,
-          )
-          if completion_token is None:
-            if line == ACK_TOKEN or line.startswith(f"{ACK_TOKEN} "):
-              raise HighResSampleStorageProtocolError(command, line, "received a second ACK")
-            data_lines.append(line)
-            continue
-
-          completion_command, completion_id = self._parse_envelope(completion_token, line, command)
-          if completion_command != command:
-            raise HighResSampleStorageProtocolError(
-              command, line, f"completion echoed command {completion_command!r}"
-            )
-          if completion_id != command_id:
-            raise HighResSampleStorageProtocolError(
-              command,
-              line,
-              f"completion command ID {completion_id!r} does not match ACK ID {command_id!r}",
-            )
-          break
+        with anyio.fail_after(timeout):
+          await self.io.write(encoded_command)
+          data_lines, completion_token, line = await self._read_command_response(command)
       except BaseException:
         # A timeout, cancellation, or malformed envelope can leave unread response
         # lines in the stream. Closing prevents the next command from consuming
@@ -449,10 +489,6 @@ class HighResSampleStorage(Resource):
           "Invalidating %s connection after incomplete command %r", self.name, command
         )
         self._transport_invalidated = True
-        try:
-          await self.io.stop()
-        except BaseException:
-          logger.exception("Failed to close invalid %s connection", self.name)
         raise
 
     if completion_token == COMPLETION_ERROR:
@@ -471,20 +507,10 @@ class HighResSampleStorage(Resource):
     if not self._transport_invalidated:
       return
     logger.info("Reconnecting to %s before transfer reconciliation", self.name)
-    await self.io.setup()
+    if not self.is_active or not self.io.is_active:
+      raise RuntimeError("Cannot reconnect HighRes transport outside an active lifespan")
+    await self.io.reconnect()
     self._transport_invalidated = False
-
-  @staticmethod
-  def _parse_envelope(token: str, line: str, command: str) -> Tuple[str, str]:
-    prefix = f"{token} "
-    if not line.startswith(prefix):
-      raise HighResSampleStorageProtocolError(command, line, f"expected {token} envelope")
-    echoed_command, separator, command_id = line[len(prefix) :].rpartition(" ")
-    if not separator or not echoed_command or not command_id.isdecimal():
-      raise HighResSampleStorageProtocolError(
-        command, line, f"expected '{token} <command> <numeric command ID>'"
-      )
-    return echoed_command, command_id
 
   # --- shared device queries ------------------------------------------------
 
@@ -818,17 +844,17 @@ class HighResSampleStorage(Resource):
     Returns ``False`` immediately if a door reports a contradictory or unknown
     state, or after the configured motion timeout expires.
     """
-    deadline = asyncio.get_running_loop().time() + self.motion_timeout
-    while True:
-      doors = await self.request_door_status()
-      if self._robot_doors_reached(doors, acceptable_states=(target,)):
-        return True
-      if not self._robot_doors_reached(doors, acceptable_states=(target, moving)):
-        return False
-      remaining = deadline - asyncio.get_running_loop().time()
-      if remaining <= 0:
-        return False
-      await asyncio.sleep(min(0.1, remaining))
+    with anyio.move_on_after(self.motion_timeout if self.motion_timeout > 0 else self.read_timeout):
+      while True:
+        doors = await self.request_door_status()
+        if self._robot_doors_reached(doors, acceptable_states=(target,)):
+          return True
+        if not self._robot_doors_reached(doors, acceptable_states=(target, moving)):
+          return False
+        if self.motion_timeout <= 0:
+          break
+        await anyio.sleep(0.1)
+    return False
 
   async def open_all_doors(self) -> None:
     """Open every pneumatic robot door.
@@ -1238,3 +1264,9 @@ class HighResSampleStorage(Resource):
       command=command,
       move=lambda: self._place(stacker, slot, nest_number),
     )
+
+
+_constructor_signature = inspect.signature(HighResSampleStorage.__init__)
+HighResSampleStorage.__signature__ = _constructor_signature.replace(  # type: ignore[attr-defined]
+  parameters=tuple(_constructor_signature.parameters.values())[1:]
+)
