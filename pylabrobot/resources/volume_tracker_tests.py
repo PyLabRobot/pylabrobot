@@ -54,3 +54,12 @@ class TestVolumeTracker(unittest.TestCase):
     tracker.register_callback(callback)
     tracker.set_volume(10)
     self.assertEqual(calls, [1])
+
+  def test_a_rollback_tells_the_callbacks(self):
+    """A failed operation is rolled back, and a listener is told the volume it last saw is gone."""
+    tracker = VolumeTracker(thing="test", max_volume=100, initial_volume=60)
+    seen: list = []
+    tracker.register_callback(lambda: seen.append(tracker.pending_volume))
+    tracker.remove_liquid(volume=20)
+    tracker.rollback()
+    self.assertEqual(seen, [40, 60])
