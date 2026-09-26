@@ -1,6 +1,7 @@
 from abc import ABCMeta
-from typing import Dict, Optional, Type
+from typing import Dict, Optional, Set, Type
 
+from pylabrobot.hamilton.protocol.text.framing import find_error_fields
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
@@ -529,6 +530,11 @@ _MODULE_NAME_BY_ID = {
 }
 
 
+def _module_ids():
+  """The module identifiers the device can report, in the order the master lists them."""
+  return tuple(_MODULE_NAME_BY_ID)
+
+
 def _module_id_to_module_name(id_):
   """Convert a module ID to a module name."""
   return _MODULE_NAME_BY_ID.get(id_, "Unknown Module")
@@ -800,10 +806,10 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       61: "Z-drive not initialized",
       62: "Z-drive movement error: drive locked or incremental sensor fault",
       63: "Z-drive movement error: position counter over/underflow",
-      70: "Rotation-drive initialization failed",
-      71: "Rotation-drive not initialized",
-      72: "Rotation-drive movement error: drive locked or incremental sensor fault",
-      73: "Rotation-drive movement error: position counter over/underflow",
+      70: "Elbow drive initialization failed",
+      71: "Elbow drive not initialized",
+      72: "Elbow drive movement error: drive locked or incremental sensor fault",
+      73: "Elbow drive movement error: position counter over/underflow",
       80: "Wrist twist drive initialization failed",
       81: "Wrist twist drive not initialized",
       82: "Wrist twist drive movement error: drive locked or incremental sensor fault",
@@ -812,8 +818,8 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       86: "Gripper drive: Auto adjustment of DMS digital potentiometer not possible",
       89: "Gripper drive movement error: drive locked or incremental sensor fault during gripping",
       90: "Gripper drive initialized failed",
-      91: "iSWAP not initialized. Call STARBackend.initialize_iswap().",
-      92: "Gripper drive movement error: drive locked or incremental sensor fault during release",
+      91: "Gripper drive not initialized: a movement command was sent before the drive was",
+      92: "Gripper drive movement error: drive locked or incremental sensor fault",
       93: "Gripper drive movement error: position counter over/underflow",
       94: "Plate not found",
       96: "Plate not available",
@@ -864,6 +870,26 @@ class STARFirmwareError(Exception):
     self.errors = errors
     self.raw_response = raw_response
     super().__init__(f"{errors}, {raw_response}")
+
+
+def channels_that_faulted(error: BaseException) -> Set[int]:
+  """Which pipetting channels a firmware error names, 0-indexed from the back.
+
+  A command over several channels is answered per module, so the error says which of them faulted
+  and which carried it out. Anything else - a cancellation, a master-only error, a lost connection -
+  names none.
+
+  Args:
+    error: what the command raised.
+
+  Returns:
+    The channels the error names.
+  """
+  if not isinstance(error, STARFirmwareError):
+    return set()
+  prefix = "Pipetting channel "
+  numbers = (name[len(prefix) :] for name in error.errors if name.startswith(prefix))
+  return {int(number) - 1 for number in numbers if number.isdigit()}
 
 
 def star_firmware_string_to_error(
@@ -932,3 +958,41 @@ def convert_star_module_error_to_plr_error(
     return TooLittleVolumeError(error.message)
 
   return None
+
+
+# Every module the master may report alongside itself, in the order it lists them in a reply.
+STAR_MODULE_ID_LENGTH = 2
+STAR_MASTER_MODULE_ID = "C0"
+STAR_OTHER_MODULE_IDS = tuple(m for m in _module_ids() if m != STAR_MASTER_MODULE_ID)
+
+
+def check_fw_string_error(resp: str):
+  """Raise an error if the firmware response is an error response.
+
+  Raises:
+    ValueError: if the format string is incompatible with the response.
+    HamiltonException: if the response contains an error.
+  """
+
+  errors_dict = find_error_fields(
+    resp,
+    module_id_length=STAR_MODULE_ID_LENGTH,
+    master_module_id=STAR_MASTER_MODULE_ID,
+    other_module_ids=STAR_OTHER_MODULE_IDS,
+  )
+  if len(errors_dict) == 0:
+    return
+
+  he = star_firmware_string_to_error(error_code_dict=errors_dict, raw_response=resp)
+
+  # If there is a faulty parameter error, request which parameter that is.
+  for module_name, error in he.errors.items():
+    if error.message == "Unknown parameter":
+      # temp. disabled until we figure out how to handle async in parse response (the
+      # background thread does not have an event loop, and I'm not sure if it should.)
+      # vp = await self.send_command(module=error.raw_module, command="VP", fmt="vp&&")["vp"]
+      # he[module_name].message += f" ({vp})"
+
+      he.errors[module_name].message += " (call lh.backend.request_name_of_last_faulty_parameter)"
+
+  raise he

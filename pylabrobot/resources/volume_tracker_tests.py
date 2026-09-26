@@ -44,3 +44,13 @@ class TestVolumeTracker(unittest.TestCase):
 
     with self.assertRaises(TooLittleLiquidError):
       tracker.remove_liquid(volume=100)
+
+  def test_a_callback_registered_twice_is_called_once(self):
+    """A tip that enters the same spot again registers the spot's callback again."""
+    tracker = VolumeTracker(thing="test", max_volume=100)
+    calls: list = []
+    callback = lambda: calls.append(1)  # noqa: E731
+    tracker.register_callback(callback)
+    tracker.register_callback(callback)
+    tracker.set_volume(10)
+    self.assertEqual(calls, [1])

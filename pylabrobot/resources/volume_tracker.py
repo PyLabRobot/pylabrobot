@@ -51,7 +51,8 @@ class VolumeTracker(SerializableMixin):
     self.volume = initial_volume or 0
     self.pending_volume = initial_volume or 0
 
-    self._callback: Optional[VolumeTrackerCallback] = None
+    # Everyone who wants to hear of a change: the thing tracked, and the spot a tip rests in.
+    self._callbacks: List[VolumeTrackerCallback] = []
 
   @property
   def is_disabled(self) -> bool:
@@ -70,8 +71,8 @@ class VolumeTracker(SerializableMixin):
     self.volume = volume
     self.pending_volume = volume
 
-    if self._callback is not None:
-      self._callback()
+    for callback in self._callbacks:
+      callback()
 
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]) -> None:
     """Set the liquids in the container.
@@ -97,8 +98,8 @@ class VolumeTracker(SerializableMixin):
 
     self.pending_volume -= volume
 
-    if self._callback is not None:
-      self._callback()
+    for callback in self._callbacks:
+      callback()
 
   def add_liquid(self, volume: float) -> None:
     """Add liquid to the container."""
@@ -110,8 +111,8 @@ class VolumeTracker(SerializableMixin):
 
     self.pending_volume += volume
 
-    if self._callback is not None:
-      self._callback()
+    for callback in self._callbacks:
+      callback()
 
   def get_used_volume(self) -> float:
     """Get the used volume of the container. Note that this includes pending operations."""
@@ -145,8 +146,8 @@ class VolumeTracker(SerializableMixin):
       raise RuntimeError(f"Volume tracker {self.thing} is disabled. Call `enable()`.")
     self.volume = self.pending_volume
 
-    if self._callback is not None:
-      self._callback()
+    for callback in self._callbacks:
+      callback()
 
   def rollback(self) -> None:
     """Rollback the pending operations."""
@@ -171,4 +172,6 @@ class VolumeTracker(SerializableMixin):
     self.max_volume = state["max_volume"]
 
   def register_callback(self, callback: VolumeTrackerCallback) -> None:
-    self._callback = callback
+    """Call `callback` on every change; one already registered is not added again."""
+    if callback not in self._callbacks:
+      self._callbacks.append(callback)

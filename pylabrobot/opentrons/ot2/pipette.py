@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
+from pylabrobot.opentrons.tracking import track_liquid_transfer
 from pylabrobot.opentrons.types import Mount
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -56,32 +56,6 @@ _COMPATIBLE_TIP_CAPACITIES: Dict[float, set] = {
 def _require_finite_coordinate(name: str, coordinate: Coordinate) -> None:
   if not all(math.isfinite(axis) for axis in coordinate):
     raise ValueError(f"{name} coordinates must be finite")
-
-
-@contextmanager
-def _track_liquid_transfer(
-  sources: Sequence[VolumeTracker], destinations: Sequence[VolumeTracker], volume: float
-) -> Iterator[None]:
-  """Stage all nozzle transfers and commit together when their command succeeds."""
-  trackers = [
-    tracker
-    for tracker in (*sources, *destinations)
-    if does_volume_tracking() and not tracker.is_disabled
-  ]
-  try:
-    for source, destination in zip(sources, destinations):
-      if source in trackers:
-        source.remove_liquid(volume)
-      if destination in trackers:
-        destination.add_liquid(volume)
-    yield
-  except BaseException:
-    for tracker in trackers:
-      tracker.rollback()
-    raise
-  else:
-    for tracker in trackers:
-      tracker.commit()
 
 
 class _OT2Pipette(ABC):
@@ -240,7 +214,7 @@ class _OT2Pipette(ABC):
   def _check_tip_pickup(self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate) -> None:
     """Check the pickup target before loading labware or changing tip trackers."""
     self._validate_position(
-      self._tip_command_location(tip_spots[0], offset + Coordinate(z=tip.total_tip_length))
+      self._tip_command_location(tip_spots[0], offset + Coordinate(z=tip.get_size_z()))
     )
 
   async def _pick_up_tips(
@@ -259,7 +233,9 @@ class _OT2Pipette(ABC):
       tip = tips[0]
       if not self.can_use_tip(tip):
         raise ValueError(f"{self.name} cannot use a {tip.maximal_volume:g} µL-capacity tip")
-      if any(other != tip for other in tips):
+      if any(other.model is None for other in tips):
+        raise ValueError("Tip models must be defined for comparison.")
+      if any(other.model != tip.model for other in tips):
         raise ValueError("All nozzles must use the same tip type")
       offset = offset or Coordinate.zero()
       _require_finite_coordinate("offset", offset)
@@ -276,7 +252,7 @@ class _OT2Pipette(ABC):
           self.pipette_id,
           binding.labware_id,
           rack.get_child_identifier(tip_spots[0]),
-          offset + Coordinate(z=tip.total_tip_length),
+          offset + Coordinate(z=tip.get_size_z()),
         )
       except BaseException:
         for tracker in tracked:
@@ -434,7 +410,7 @@ class _OT2Pipette(ABC):
       offset = offset or Coordinate.zero()
       container_trackers, location = self._liquid_targets(containers, offset, liquid_height)
 
-      with _track_liquid_transfer(container_trackers, tip_trackers, volume):
+      with track_liquid_transfer(container_trackers, tip_trackers, volume):
         await self._move_to(
           location,
           minimum_z_height=self.robot.traversal_height,
@@ -462,7 +438,7 @@ class _OT2Pipette(ABC):
       offset = offset or Coordinate.zero()
       container_trackers, location = self._liquid_targets(containers, offset, liquid_height)
 
-      with _track_liquid_transfer(tip_trackers, container_trackers, volume):
+      with track_liquid_transfer(tip_trackers, container_trackers, volume):
         await self._move_to(
           location,
           minimum_z_height=self.robot.traversal_height,
@@ -509,11 +485,11 @@ class _OT2Pipette(ABC):
       offset = offset or Coordinate.zero()
       container_trackers, location = self._liquid_targets(containers, offset, liquid_height)
       for repetition in range(repetitions):
-        with _track_liquid_transfer(container_trackers, tip_trackers, volume):
+        with track_liquid_transfer(container_trackers, tip_trackers, volume):
           if repetition == 0:
             await self._move_to(location, minimum_z_height=self.robot.traversal_height)
           await self._run.aspirate_in_place(self.pipette_id, volume, aspiration_flow_rate)
-        with _track_liquid_transfer(tip_trackers, container_trackers, volume):
+        with track_liquid_transfer(tip_trackers, container_trackers, volume):
           await self._run.dispense_in_place(self.pipette_id, volume, dispense_flow_rate)
       await self._retract_to_traversal_height()
 
@@ -731,7 +707,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     super()._check_tip_pickup(tip_spots, tip, offset)
     self._check_head8_pickup(tip_spots)
     primary = tip_spots[0].get_location_wrt(self.robot.deck, "c", "c", "b") + offset
-    nozzle_z = primary.z + tip.total_tip_length - tip.fitting_depth
+    nozzle_z = primary.z + tip.get_size_z() - tip.fitting_depth
     x_min, x_max = primary.x - 5, primary.x + 5
     channel_offsets = self.robot.geometry.channel_y_offsets()
     y_min = primary.y + channel_offsets[-1] - channel_offsets[0] - 5

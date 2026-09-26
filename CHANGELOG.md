@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- LI-COR Odyssey Classic (model 9120) infrared imaging system at `pylabrobot.li_cor.odyssey`
 - `StackerRetrieval` capability (`pylabrobot.capabilities.automated_retrieval.StackerRetrieval`) for sequential ("stacking access") plate storage: one or more single-ended LIFO `ResourceStack` stacks plus a loading tray, with `downstack`/`upstack` operations and a `StackerBackend` interface (plus `StackerChatterboxBackend`). Intended for devices like the Agilent BenchCel and HighRes MicroServe (#1113).
 - `AutomatedRetrieval` base capability (`pylabrobot.capabilities.automated_retrieval.AutomatedRetrieval`) that owns the loading tray and the plate-movement plumbing shared by the random-access `RandomAccessRetrieval` and the sequential `StackerRetrieval`. The former random-access `AutomatedRetrieval` is now `RandomAccessRetrieval` and extends this base.
 - HighRes Biosolutions MicroSpin centrifuge backend (`pylabrobot.centrifuge.highres.MicroSpinBackend`) speaking the device's ASCII command/response protocol over TCP/1000, plus a `MicroSpin(...)` factory.
@@ -16,10 +17,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - User guide notebook for the MicroSpin (`docs/user_guide/01_material-handling/centrifuge/highres_microspin.ipynb`).
 - `Plate`: optional `stacking_z_height` parameter -- the per-plate vertical pitch when plates are stacked directly on top of each other (`size_z` minus the nesting overlap), mirroring `NestedTipRack.stacking_z_height`. Because it is a physical dimension, plates that differ in it no longer compare equal; `Plate` also now serializes `stacking_z_height` and the pre-existing `plate_type` so both round-trip through `deserialize`/`copy`. (#1110)
 - `ResourceStack`: bare plates stacked in the z direction now nest into one another by their `stacking_z_height` (a stack of `N` identical plates is `size_z + (N - 1) * stacking_z_height` tall, for both `get_size_z()` and child placement). Plates without a `stacking_z_height`, and plates wearing a lid, do not nest, so existing behaviour is unchanged. (#1112)
+- `Resource.rotate_to(x=, y=, z=)`: set the rotation about each axis, where `rotate` turns by an amount. Axes left as `None` keep the angle they had, and each is normalised to `[0, 360)`. (#1249)
+- `Resource.rotate`, `rotate_to` and `rotated` take an optional `pivot_coordinate`: a point in the resource's own frame that stays where it is, so a resource can turn about its centre, an edge, or any other point rather than only about its origin. `location` carries by however far the turn moved that point. Raises `NoLocationError` when the resource has no location, since there is nothing to carry. (#1249)
+- `LinkBody` (`pylabrobot.resources.LinkBody`): one rigid member of a manipulator, an ordinary resource whose origin is a corner and which carries its `proximal_joint` and `distal_joint` as coordinates within it. The link is the line between the two joints and `length` is the distance, `None` on a member that ends the chain. A member turns about its proximal joint rather than its origin. (#1249)
+- `MechanicalGripper` (`pylabrobot.resources.MechanicalGripper`): a `LinkBody` that ends the chain, holding what it takes between two fingers. Its far end is a `tool_center_point` rather than a joint, it is sized to its body because `jaw_width` moves the fingers, and the jaws straddle the grip centre. (#1249)
+
+### Changed
+
+- `HamiltonDeck` and `HamiltonSTARDeck`: `num_tracks` replaces `num_rails` and `track=` replaces `rails=`; the old names are deprecated but keep working, as do decks saved with `num_rails`. A STAR deck counts two fewer tracks than it counted rails (STARlet 30, STAR 54) at the same positions, so a count passed positionally to `HamiltonSTARDeck` is now read as tracks.
+
+- Background reader task on `pylabrobot.hamilton.transport.tcp.HamiltonTCPClient` that owns the socket for the session, so `on_event` subscribers receive events between commands and a response arriving with no command waiting is dropped and logged instead of being handed to the next command (#1195).
+- Command serialization on `HamiltonTCPClient`: one command is in flight at a time. The lock spans write through terminal response and is released before the response is decoded, because error enrichment sends further commands through the same path (#1195).
+- `ObjectRegistry.clear()` (`pylabrobot.hamilton.transport.tcp.introspection`), used to drop path and address mappings that are scoped to a single connected session (#1195).
+
+- Background reader task on `pylabrobot.hamilton.transport.tcp.HamiltonTCPClient` that owns the socket for the session, so `on_event` subscribers receive events between commands and a response arriving with no command waiting is dropped and logged instead of being handed to the next command (#1195).
+- Command serialization on `HamiltonTCPClient`: one command is in flight at a time. The lock spans write through terminal response and is released before the response is decoded, because error enrichment sends further commands through the same path (#1195).
+- `ObjectRegistry.clear()` (`pylabrobot.hamilton.transport.tcp.introspection`), used to drop path and address mappings that are scoped to a single connected session (#1195).
 
 ### Fixed
 
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).
+- `HamiltonTCPClient` no longer retransmits a command after a failed read. A read timeout on a slow motion command previously re-sent it, which could execute the motion twice (#1195).
+- `HamiltonTCPClient.setup()` now resets all per-session state (client id, sequence numbers, instrument addresses, object registry) rather than carrying it into the new session, and refuses to run on an already-connected client instead of leaking the socket (#1195).
+- `HamiltonTCPClient` no longer recurses without bound when a device fails the introspection queries that error enrichment itself issues. Enrichment is now non-re-entrant and falls back to the static HC_RESULT tables, so a degraded instrument yields a terse error instead of a `RecursionError` (#1195).
+- `HamiltonTCPClient` no longer fails every command after the device sends a HARP control frame. MLPrep firmware sends one (options, no HOI body) shortly after registration; it was parsed as a command response and killed the reader. Frames with no routable message are skipped, as are unparsable frames, which is safe because frames are length-prefixed and consumed whole (#1195).
+
+### Changed
+
+- `HamiltonTCPClient` no longer reconnects automatically; `auto_reconnect` and `max_reconnect_attempts` are gone from its constructor. Recovery is `await client.stop()` followed by `await client.setup()`, matching every other transport in the library. `is_connected` remains for callers implementing their own policy (#1195).
+- `TCPCommand` declares `Response` and `uses_physical_channels` as class attributes instead of the transport inferring them by attribute probing. Commands with per-channel firmware errors must set `uses_physical_channels = True` to raise `ChannelizedError` (#1195).
 
 ## 0.2.1
 

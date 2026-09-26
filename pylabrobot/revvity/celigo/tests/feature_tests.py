@@ -343,13 +343,15 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
         set_analog_output_count=set_analog,
         set_digital_output=set_digital,
       ),
-      patch("pylabrobot.revvity.celigo.celigo.asyncio.sleep", new_callable=AsyncMock) as sleep,
+      patch(
+        "pylabrobot.revvity.celigo.celigo.asyncio", wraps=asyncio, sleep=AsyncMock()
+      ) as mock_asyncio,
     ):
       await celigo._initialize_safe_outputs()
 
     self.assertEqual(analog, [(0, 0), (1, 0), (2, 4095), (3, 0)])
     self.assertEqual(digital, [(bit, bit == 7) for bit in range(12)])
-    sleep.assert_awaited_once_with(0.025)
+    mock_asyncio.sleep.assert_awaited_once_with(0.025)
     self.assertIsNone(celigo._fluorescence_on_since)
 
   async def test_initialization_replays_vendor_tokens(self):
@@ -1151,10 +1153,13 @@ class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
         fire_table_index=0,
       )
 
+    # Patch the module reference, not the shared asyncio.sleep used by other threads.
     with (
       patch.object(celigo, "send_command", send_command),
       patch.object(celigo.galvo, "request_controller_status", request_status),
-      patch("pylabrobot.revvity.celigo.galvo.asyncio.sleep", new_callable=AsyncMock) as sleep,
+      patch(
+        "pylabrobot.revvity.celigo.galvo.asyncio", wraps=asyncio, sleep=AsyncMock()
+      ) as mock_asyncio,
     ):
       self.assertEqual(await celigo.galvo.move_both(1.0, 2.0), (1.0, 2.0))
 
@@ -1164,7 +1169,7 @@ class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
       [(0, 0), (1, 0)],
     )
     self.assertEqual(status_requests, 1)
-    sleep.assert_awaited_once_with(0.02)
+    mock_asyncio.sleep.assert_awaited_once_with(0.02)
 
 
 class _FocusCamera:

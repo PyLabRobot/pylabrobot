@@ -6,6 +6,7 @@ from pylabrobot.io.http import HTTP, HTTPError
 from pylabrobot.opentrons.errors import OpentronsError, OpentronsProtocolError
 from pylabrobot.opentrons.types import (
   CommandInfo,
+  InstrumentInfo,
   LabwareIdentity,
   ModuleInfo,
   Mount,
@@ -39,6 +40,15 @@ class OpentronsAPI:
 
   async def get_health(self) -> RobotInfo:
     return RobotInfo.from_response(await self._io.request("GET", "/health"))
+
+  async def get_instruments(self) -> Tuple[InstrumentInfo, ...]:
+    """Read Flex instrument identities before binding them to a run.
+
+    This endpoint can refresh robot-side instrument state; do not use it to
+    poll tip presence during pipetting. Use getTipPresence commands instead.
+    """
+    response = await self._io.request("GET", "/instruments")
+    return tuple(InstrumentInfo.from_response(data) for data in _data_list(response))
 
   async def get_mounted_pipettes(self) -> Tuple[MountedPipette, ...]:
     """Read the OT-2 mount endpoint without loading instruments into a run."""
