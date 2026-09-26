@@ -73,7 +73,7 @@ from pylabrobot.resources.resource_state import (
 )
 from pylabrobot.resources.tip_rack import TipSpot, tip_origin
 from pylabrobot.resources.trash import Trash
-from pylabrobot.resources.well import CrossSectionType, Well
+from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 
 from .. import prep_commands as PrepCmd
 from ..prep_commands import PIPETTOR_OBJECT_PATH
@@ -314,54 +314,229 @@ def _effective_radius(resource) -> float:
   return float(resource.get_size_x() / 2)
 
 
-def _build_container_segments(resource: object) -> list[PrepCmd.SegmentDescriptor]:
-  """Derive PrepCmd.SegmentDescriptor list from a Well's geometry for liquid-following.
+# Containers already warned about following a V- or U-bottom as a cylinder, by name.
+_warned_cylinder_fallback: set = set()
 
-  Each segment is a frustum.  The firmware uses area_bottom/area_top to
-  interpolate cross-sectional area A(z) within the segment and computes the
-  Z-axis following speed as dz/dt = Q / A(z), where Q is volumetric flow rate.
+# The most segments one channel has been sent and the device took; 150 were refused (0x0011).
+MAX_CONTAINER_SEGMENTS = 9
 
-  Returns [] when geometry cannot be determined; the firmware then falls back to
-  the tube_radius / cone model in PrepCmd.CommonParameters.
+
+def _merge_segments(
+  segments: Sequence[PrepCmd.SegmentDescriptor], limit: int = MAX_CONTAINER_SEGMENTS
+) -> list[PrepCmd.SegmentDescriptor]:
+  """The segments with neighbours of one area joined, then the closest pairs until `limit` are left.
+
+  A joined pair keeps its volume: its area is their volume over their height.
+
+  Args:
+    segments: bottom up, each of constant area.
+    limit: how many segments may be left.
+
+  Returns:
+    At most `limit` segments over the same height, holding the same volume.
   """
-  if not isinstance(resource, Well):
-    return []
-  well: Well = resource
+  merged = list(segments)
 
-  size_z = well.get_size_z()
+  def join(i: int) -> None:
+    a, b = merged[i], merged[i + 1]
+    height = a.height + b.height
+    area = (a.area_bottom * a.height + b.area_bottom * b.height) / height
+    merged[i : i + 2] = [PrepCmd.SegmentDescriptor(area_top=area, area_bottom=area, height=height)]
 
-  if well.cross_section_type == CrossSectionType.CIRCLE:
-    area = math.pi * (well.get_size_x() / 2) ** 2
-  elif well.cross_section_type == CrossSectionType.RECTANGLE:
-    area = well.get_size_x() * well.get_size_y()
-  else:
-    return []
-
-  if well.supports_compute_height_volume_functions():
-    # Non-linear geometry: approximate with N frustum segments by sampling dV/dh.
-    n_boundaries = 11  # 10 segments
-    heights = [size_z * i / (n_boundaries - 1) for i in range(n_boundaries)]
-    eps = size_z / (n_boundaries - 1) * 0.1
-
-    def area_at(h: float) -> float:
-      h_lo = max(0.0, h - eps)
-      h_hi = min(size_z, h + eps)
-      dv = well.compute_volume_from_height(h_hi) - well.compute_volume_from_height(h_lo)
-      return float(dv / (h_hi - h_lo))
-
-    return [
-      PrepCmd.SegmentDescriptor(
-        area_top=float(area_at(heights[i + 1])),
-        area_bottom=float(area_at(heights[i])),
-        height=float(heights[i + 1] - heights[i]),
-      )
-      for i in range(n_boundaries - 1)
+  i = 0
+  while i < len(merged) - 1:
+    if math.isclose(merged[i].area_bottom, merged[i + 1].area_bottom, rel_tol=1e-9):
+      join(i)
+    else:
+      i += 1
+  while len(merged) > limit:
+    differences = [
+      abs(merged[i].area_bottom - merged[i + 1].area_bottom) for i in range(len(merged) - 1)
     ]
+    join(differences.index(min(differences)))
+  return merged
 
-  # Simple geometry: single segment with constant cross-section.
+
+def _get_profile_segments(resource: object) -> list[PrepCmd.SegmentDescriptor]:
+  """A container's cross-section as firmware segments, bottom up from the cavity bottom.
+
+  One step per `height_volume_data` knot interval; else one per 0.5 mm of cavity depth from its
+  height-volume functions; else its footprint as one cylinder. Steps of one area are joined, and
+  the closest pairs, until `MAX_CONTAINER_SEGMENTS` are left.
+
+  Args:
+    resource: the container.
+
+  Returns:
+    The segments, each of constant area (dV/dh, in mm2); [] for a shape it cannot tell.
+
+  Raises:
+    ValueError: If the volume does not rise with height.
+  """
+  if not isinstance(resource, Container):
+    return []
+  try:
+    depth = resource.get_size_z() - resource.material_z_thickness
+  except NotImplementedError:
+    depth = resource.get_size_z()
+  if resource.height_volume_data:
+    knots = sorted(resource.height_volume_data.items())
+  elif resource.supports_compute_height_volume_functions():
+    steps = max(1, math.ceil(depth / 0.5))
+    heights = [depth * i / steps for i in range(steps + 1)]
+    knots = [(h, resource.compute_volume_from_height(h)) for h in heights]
+  else:
+    cross_section = resource.cross_section_type if isinstance(resource, Well) else None
+    if cross_section == CrossSectionType.CIRCLE:
+      area = math.pi * (resource.get_size_x() / 2) ** 2
+    elif cross_section == CrossSectionType.RECTANGLE:
+      area = resource.get_size_x() * resource.get_size_y()
+    else:
+      return []
+    bottom = resource.bottom_type if isinstance(resource, Well) else None
+    if (
+      bottom in (WellBottomType.V, WellBottomType.U)
+      and resource.name not in _warned_cylinder_fallback
+    ):
+      _warned_cylinder_fallback.add(resource.name)
+      logger.warning(
+        "%s has a %s-bottom but no height-volume data, so the tip follows it as a cylinder",
+        resource.name,
+        bottom.value,
+      )
+    return [PrepCmd.SegmentDescriptor(area_top=area, area_bottom=area, height=depth)]
+  segments = []
+  for (h0, v0), (h1, v1) in zip(knots, knots[1:]):
+    if h1 <= h0:
+      continue
+    if v1 <= v0:
+      raise ValueError(f"{resource.name}: the volume does not rise between {h0} and {h1} mm")
+    area = (v1 - v0) / (h1 - h0)
+    segments.append(PrepCmd.SegmentDescriptor(area_top=area, area_bottom=area, height=h1 - h0))
+  return _merge_segments(segments)
+
+
+def _get_profile_drop(
+  segments: Sequence[PrepCmd.SegmentDescriptor], liquid_height: float, volume: float
+) -> float:
+  """How far a surface sinks through the segments when `volume` leaves, in mm.
+
+  Args:
+    segments: bottom up from the cavity bottom; the top one extends upwards.
+    liquid_height: above the cavity bottom, in mm.
+    volume: drawn, in uL.
+
+  Returns:
+    The drop, down to the cavity bottom at most.
+  """
+  bases = [0.0]
+  for segment in segments[:-1]:
+    bases.append(bases[-1] + segment.height)
+  height, left, drop = liquid_height, volume, 0.0
+  for base, segment in reversed(list(zip(bases, segments))):
+    if height <= base:
+      continue
+    room = (height - base) * segment.area_bottom
+    if left <= room:
+      return drop + left / segment.area_bottom
+    left -= room
+    drop += height - base
+    height = base
+  return drop
+
+
+def _scale_areas(
+  segments: Sequence[PrepCmd.SegmentDescriptor], scale: float
+) -> list[PrepCmd.SegmentDescriptor]:
+  """The segments with every area multiplied by `scale`."""
   return [
-    PrepCmd.SegmentDescriptor(area_top=float(area), area_bottom=float(area), height=float(size_z))
+    PrepCmd.SegmentDescriptor(
+      area_top=s.area_top * scale, area_bottom=s.area_bottom * scale, height=s.height
+    )
+    for s in segments
   ]
+
+
+def _cut_profile(
+  segments: Sequence[PrepCmd.SegmentDescriptor], start: float
+) -> list[PrepCmd.SegmentDescriptor]:
+  """The profile from `start` up, as the firmware counts it: its segment 0 begins at `z_minimum`.
+
+  Args:
+    segments: bottom up from the cavity bottom.
+    start: `z_minimum` above the cavity bottom, in mm; below it, the first segment is extended.
+
+  Returns:
+    The segments from `start` up.
+
+  Raises:
+    ValueError: If `start` lies at or above the top of the profile.
+  """
+  if start <= 0:
+    first = segments[0]
+    extended = PrepCmd.SegmentDescriptor(
+      area_top=first.area_top, area_bottom=first.area_bottom, height=first.height - start
+    )
+    return [extended, *segments[1:]]
+  base = 0.0
+  for index, segment in enumerate(segments):
+    top = base + segment.height
+    if top > start:
+      shortened = PrepCmd.SegmentDescriptor(
+        area_top=segment.area_top, area_bottom=segment.area_bottom, height=top - start
+      )
+      return [shortened, *segments[index + 1 :]]
+    base = top
+  raise ValueError(f"z_minimum {start} mm above the cavity bottom lies above the profile")
+
+
+def _get_container_segments(
+  resource: object,
+  liquid_height: Optional[float] = None,
+  piston_volume: Optional[float] = None,
+  surface_following_distance: Optional[float] = None,
+  profile_start: float = 0.0,
+) -> list[PrepCmd.SegmentDescriptor]:
+  """The segments the firmware follows the surface by, for one channel's container.
+
+  Args:
+    resource: the container.
+    liquid_height: above the cavity bottom, in mm, where the draw starts. Needed with a distance.
+    piston_volume: what the piston moves, in uL. Needed with a distance.
+    surface_following_distance: how far the tip is to sink, in mm. None follows the profile as it
+      is; 0 returns no segments, for the caller to send with `tube_radius` 0.
+    profile_start: `z_minimum` above the cavity bottom, in mm, where the firmware's segment 0 begins.
+
+  Returns:
+    The profile from `profile_start` up; with a distance, its areas scaled so the tip sinks that.
+
+  Raises:
+    ValueError: If a distance is negative or given without the height and volume, or the profile
+      draws nothing.
+  """
+  segments = _get_profile_segments(resource)
+  if segments:
+    segments = _cut_profile(segments, profile_start)
+  if surface_following_distance is None or not segments:
+    return segments
+  if surface_following_distance < 0:
+    raise ValueError(
+      f"surface_following_distance must be at least 0, is {surface_following_distance}"
+    )
+  if surface_following_distance == 0:
+    return []
+  if liquid_height is None or piston_volume is None:
+    raise ValueError("a surface following distance needs the liquid height and piston volume")
+  above_start = liquid_height - profile_start
+  if _get_profile_drop(segments, above_start, piston_volume) <= 0:
+    raise ValueError(f"nothing is drawn from {liquid_height} mm, so there is no drop to scale")
+  # Scaled areas change which heights the draw spans, so the scale is solved, not divided out.
+  low, high = 1e-4, 1e4
+  for _ in range(80):
+    scale = math.sqrt(low * high)
+    drop = _get_profile_drop(_scale_areas(segments, scale), above_start, piston_volume)
+    low, high = (scale, high) if drop > surface_following_distance else (low, scale)
+  return _scale_areas(segments, math.sqrt(low * high))
 
 
 class _WellGeometry(NamedTuple):
@@ -4639,7 +4814,13 @@ class Pipettes:
       if container_segments is not None and i < len(container_segments):
         ch_segments[ch] = container_segments[i]
       elif auto_container_geometry:
-        ch_segments[ch] = _build_container_segments(indexed_ops[ch].resource)
+        ch_segments[ch] = _get_container_segments(
+          indexed_ops[ch].resource,
+          profile_start=z_minimum[i]
+          - indexed_ops[ch]
+          .resource.get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
+          .z,
+        )
       else:
         ch_segments[ch] = []
 

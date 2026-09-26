@@ -20,6 +20,7 @@ from pylabrobot.hamilton.prep.driver.features.head8 import PROBE_PITCH_MM, Head8
 from pylabrobot.hamilton.prep.driver.features.pipettes import (
   Pipettes,
   _build_pipettor_gantry_move_parameters,
+  _get_container_segments,
 )
 from pylabrobot.hamilton.prep.driver.simulator import RECORDING_PREP_HEAD8
 from pylabrobot.resources import Coordinate, Resource
@@ -295,6 +296,36 @@ def test_head8_v2_aspirate_sends_mphaspiratenolldmonitoring2():
     assert len(asp_cmds[0].aspirate_parameters) == 1, (
       "MPH sends a single struct element (probe-0 reference); firmware drives all 8 probes"
     )
+
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_head8_aspirate_container_segments_start_at_z_minimum():
+  """With auto_container_geometry, segment 0 begins at the z_minimum the command sends."""
+
+  async def _run() -> None:
+    deck, tip_rack, src_plate, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+
+    captured, _ = _record_send(p)
+
+    await p.head8.pick_up_tips(tip_rack.column(0))
+    wells = src_plate.column(0)
+    cavity_bottom_z = wells[0].get_location_wrt(deck, "c", "c", "cavity_bottom").z
+    profile_top = sum(s.height for s in _get_container_segments(wells[0]))
+    await p.head8.aspirate(
+      wells=wells, volume=10, z_minimum=cavity_bottom_z + 1.5, auto_container_geometry=True
+    )
+
+    asp = [c for c in captured if isinstance(c, PrepCmd.MphAspirateNoLldMonitoring2)]
+    params = asp[0].aspirate_parameters[0]
+    assert params.common.z_minimum == pytest.approx(cavity_bottom_z + 1.5)
+    sent_height = sum(s.height for s in params.container_description)
+    assert sent_height == pytest.approx(profile_top - 1.5)
 
     await p.stop()
 
