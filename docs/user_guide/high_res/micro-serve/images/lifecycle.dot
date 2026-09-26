@@ -1,0 +1,21 @@
+digraph microserve_lifecycle {
+  graph [bgcolor="#f8fafc", pad=0.25, rankdir=TB, ranksep=0.65, nodesep=0.7];
+  node [shape=box, style="rounded,filled", fillcolor="#e0f2fe", color="#0284c7",
+        fontcolor="#0f172a", fontname="Helvetica", fontsize=14, margin="0.17,0.12"];
+  edge [color="#475569", fontcolor="#475569", fontname="Helvetica", fontsize=12,
+        arrowsize=0.8];
+
+  disconnected [label="DISCONNECTED"];
+  connected [label="CONNECTED\nphysical state must be queried"];
+  needs_home [label="NOT HOMED\nor manual mode"];
+  homing [label="HOMING", fillcolor="#ede9fe", color="#8b5cf6"];
+  homed [label="HOMED + READY MODE\nnot busy", fillcolor="#dcfce7", color="#16a34a"];
+
+  disconnected -> connected [label="setup()\nopens transport only"];
+  connected -> disconnected [label="stop()\ncloses transport only", constraint=false];
+  connected -> needs_home [label="request_status()"];
+  connected -> homed [label="request_status()\nif already homed and idle"];
+  needs_home -> homing [label="home()\nclear beam · not busy\nready or manual mode"];
+  homing -> homed [label="home completion +\nstatus confirmation"];
+  homed -> homed [label="home() checks status\nwithout another home"];
+}
