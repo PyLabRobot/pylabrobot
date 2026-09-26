@@ -372,12 +372,28 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
   async def test_each_stroke_follows_what_one_draw_takes_from_the_well(self):
     for well in self.plate.get_all_items():
       well.tracker.set_volume(300.0)
-    await self.head.mix(self.plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0))
+    await self.head.mix(
+      self.plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0, auto_surface_following=True)
+    )
     well = self.plate.get_item("A1")
     drop = round(well.compute_height_from_volume(300.0) - well.compute_height_from_volume(200.0), 1)
     following = self.head.configuration.z_drive_mm_to_increments(drop)
     self.assertIn(f"zd{following:04}", self.sent[1])
     self.assertIn(f"ze{following:04}", self.sent[2])
+
+  async def test_auto_surface_following_needs_a_surface(self):
+    with self.assertRaises(ValueError):
+      Mix(
+        volume=100.0,
+        repetitions=1,
+        flow_rate=200.0,
+        surface_following_distance=1.0,
+        auto_surface_following=True,
+      )
+    auto = Mix(volume=100.0, repetitions=1, flow_rate=200.0, auto_surface_following=True)
+    with self.assertRaises(ValueError):
+      await self.head.mix(self.plate, auto, lld_mode=LLDMode.OFF)
+    self.assertEqual(self.sent, [])
 
   async def test_a_failed_stroke_raises_the_head(self):
     answer = self.driver.send_command
@@ -930,7 +946,11 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
   async def test_capacitive_draws_the_air_first_then_under_the_surface_found(self):
     self.trough.tracker.set_volume(100_000.0)
     await self.head.aspirate(
-      self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE, blow_out_air_volume=10.0
+      self.trough,
+      piston_volume=20.0,
+      lld_mode=LLDMode.CAPACITIVE,
+      blow_out_air_volume=10.0,
+      auto_surface_following=True,
     )
     fields = self.sent[0][1]
     bottom = self.trough.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
@@ -951,7 +971,9 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
 
   async def test_capacitive_immersion_and_following_stop_at_the_floor(self):
     self.trough.tracker.set_volume(2_000.0)
-    await self.head.aspirate(self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE)
+    await self.head.aspirate(
+      self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE, auto_surface_following=True
+    )
     fields = self.sent[0][1]
     lowest = (
       fields["liquid_surface_no_lld"]
@@ -960,9 +982,62 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
     )
     self.assertGreaterEqual(lowest, fields["minimum_height"])
 
+  async def test_capacitive_follows_nothing_unless_asked(self):
+    self.trough.tracker.set_volume(100_000.0)
+    await self.head.aspirate(self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE)
+    self.assertEqual(self.sent[0][1]["surface_following_distance"], 0)
+
+  async def test_auto_surface_following_searches_capacitive_when_no_mode_is_given(self):
+    self.trough.tracker.set_volume(100_000.0)
+    await self.head.aspirate(self.trough, piston_volume=20.0, auto_surface_following=True)
+    fields = self.sent[0][1]
+    height = self.trough.compute_height_from_volume(100_000.0)
+    drop = height - self.trough.compute_height_from_volume(100_000.0 - 96 * 20.0)
+    self.assertAlmostEqual(fields["surface_following_distance"], drop * 10, delta=1)
+
+  async def test_auto_surface_following_refused_beside_a_distance_or_without_a_surface(self):
+    refused: List[Dict[str, Any]] = [
+      {"surface_following_distance": 1.0},
+      {"lld_mode": LLDMode.OFF},
+    ]
+    for kwargs in refused:
+      for call in (self.head.aspirate, self.head.dispense):
+        with self.subTest(call=call.__name__, **kwargs), self.assertRaises(ValueError):
+          await call(self.trough, piston_volume=20.0, auto_surface_following=True, **kwargs)
+    self.assertEqual(self.sent, [])
+
+  async def test_auto_surface_following_under_off_follows_from_the_liquid_height(self):
+    self.trough.tracker.set_volume(100_000.0)
+    await self.head.aspirate(
+      self.trough,
+      piston_volume=20.0,
+      lld_mode=LLDMode.OFF,
+      liquid_height=10.0,
+      auto_surface_following=True,
+    )
+    held = self.trough.compute_volume_from_height(10.0)
+    drop = 10.0 - self.trough.compute_height_from_volume(held - 96 * 20.0)
+    self.assertAlmostEqual(self.sent[0][1]["surface_following_distance"], drop * 10, delta=1)
+
+  async def test_a_pre_mix_auto_follows_what_one_draw_takes_from_the_surface_found(self):
+    self.trough.tracker.set_volume(100_000.0)
+    pre_mix = Mix(volume=10.0, repetitions=2, flow_rate=100.0, auto_surface_following=True)
+    await self.head.aspirate(
+      self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE, pre_mix=pre_mix
+    )
+    fields = self.sent[0][1]
+    height = self.trough.compute_height_from_volume(100_000.0)
+    drop = height - self.trough.compute_height_from_volume(100_000.0 - 96 * 10.0)
+    self.assertAlmostEqual(fields["mix_surface_following_distance"], drop * 10, delta=1)
+    self.assertEqual(fields["surface_following_distance"], 0)
+    with self.assertRaises(ValueError):
+      await self.head.aspirate(self.trough, piston_volume=20.0, pre_mix=pre_mix)
+
   async def test_capacitive_dispense_into_a_plate_books_each_well(self):
     await self.head.aspirate(self.plate, piston_volume=30.0)
-    await self.head.dispense(self.plate, piston_volume=30.0, lld_mode=LLDMode.CAPACITIVE)
+    await self.head.dispense(
+      self.plate, piston_volume=30.0, lld_mode=LLDMode.CAPACITIVE, auto_surface_following=True
+    )
     fields = self.sent[1][1]
     well = self.plate.get_item("A1")
     bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z

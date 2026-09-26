@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import (
   TYPE_CHECKING,
   Any,
@@ -1553,6 +1553,32 @@ class Head96(Head):
       raise ValueError("Invalid 96-head parameters:\n" + "\n".join(errors))
 
   @staticmethod
+  def _get_lld_mode(
+    lld_mode: Optional[LLDMode],
+    auto_surface_following: bool,
+    surface_following_distance: float,
+    liquid_height: Optional[float],
+  ) -> LLDMode:
+    """The mode a call runs with: CAPACITIVE when None under auto surface following, else OFF.
+
+    Raises:
+      ValueError: Auto surface following beside a distance, or under OFF without a liquid height.
+    """
+    if not auto_surface_following:
+      return LLDMode.OFF if lld_mode is None else lld_mode
+    if surface_following_distance != 0.0:
+      raise ValueError(
+        "auto_surface_following beside a surface_following_distance: give one of them"
+      )
+    if lld_mode is None:
+      return LLDMode.CAPACITIVE
+    if lld_mode == LLDMode.OFF and liquid_height is None:
+      raise ValueError(
+        "auto_surface_following under lld_mode OFF needs a liquid_height to follow from"
+      )
+    return lld_mode
+
+  @staticmethod
   def _get_surface_change(container: Container, height: float, volume: float) -> float:
     """How far `volume` uL added moves a surface `height` mm over the cavity bottom, in mm.
 
@@ -1560,6 +1586,16 @@ class Head96(Head):
     """
     held = container.compute_volume_from_height(height)
     return round(container.compute_height_from_volume(max(held + volume, 0.0)) - height, 1)
+
+  def _get_mix_following(self, mix: Mix, container: Container, height: float, share: int) -> Mix:
+    """`mix` with its auto surface following as a distance: what one draw lowers a surface
+    `height` mm over the cavity bottom, `share` channels drawing from `container`."""
+    if not mix.auto_surface_following:
+      return mix
+    drop = -self._get_surface_change(container, height, -mix.volume * share)
+    return replace(
+      mix, surface_following_distance=round(max(drop, 0.0), 1), auto_surface_following=False
+    )
 
   def _update_volume_from_surface(
     self, container: Container, surface: float, bottom: float
@@ -1968,7 +2004,7 @@ class Head96(Head):
     volume: Optional[float] = None,
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
-    lld_mode: LLDMode = LLDMode.OFF,
+    lld_mode: Optional[LLDMode] = None,
     flow_rate: Optional[float] = None,
     *,
     hamilton_liquid_class: Optional[HamiltonLiquidClass] = None,
@@ -1984,7 +2020,8 @@ class Head96(Head):
     pre_wetting_volume: Optional[float] = None,
     pre_mix: Optional[Mix] = None,
     mix_position_from_liquid_surface: Optional[float] = None,
-    surface_following_distance: Optional[float] = None,
+    surface_following_distance: float = 0.0,
+    auto_surface_following: bool = False,
     second_section_height: Optional[float] = None,
     second_section_ratio: Optional[float] = None,
     settling_time: Optional[float] = None,
@@ -2011,7 +2048,8 @@ class Head96(Head):
       offset: added to where head channel A1 goes, in mm. Its z is ignored under CAPACITIVE.
       liquid_height: where an OFF draw goes above the cavity bottom, in mm. Refused under
         CAPACITIVE.
-      lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other.
+      lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other. OFF when
+        None; CAPACITIVE under `auto_surface_following`.
       flow_rate: in uL/s. The class's, else 100.0, when None.
       hamilton_liquid_class: looked up for the tip, water, `jet` and `blow_out` when None.
       jet: whether the later dispense is a jet, for the lookup.
@@ -2026,10 +2064,12 @@ class Head96(Head):
       minimum_allowed_z_position_during: how low the tips may go, in mm on the deck. The cavity
         bottom when None.
       pre_wetting_volume: drawn and returned first, in uL. The class's, else 0.0, when None.
-      pre_mix: mixed before the draw; None for no mixing.
+      pre_mix: mixed before the draw; None for no mixing. Its auto surface following needs a
+        surface, as the call's.
       mix_position_from_liquid_surface: mixing depth under the surface, in mm.
-      surface_following_distance: how far the tips follow the sinking surface, in mm. Under
-        CAPACITIVE, how far the drawn liquid lowers the surface when None; never below the floor.
+      surface_following_distance: how far the tips follow the sinking surface, in mm.
+      auto_surface_following: follow by how far the drawn liquid lowers the surface found, or at
+        `liquid_height` under OFF; never below the floor. Refused beside a distance.
       second_section_height: height of the container's narrower lower section, in mm.
       second_section_ratio: that section's bottom to top ratio, in tenths.
       settling_time: wait in the liquid, in s. The class's, else 0.0, when None.
@@ -2045,24 +2085,32 @@ class Head96(Head):
     Raises:
       ValueError: An argument out of range, both or neither of `volume` and `piston_volume`, a
         class beside `piston_volume`, no class for the tip, a liquid height under CAPACITIVE, a
-        resource the head cannot work, or a piston or tip without room for the draw.
+        resource the head cannot work, a piston or tip without room for the draw, or auto surface
+        following beside a distance or under OFF without a liquid height.
       RuntimeError: No deck, no tips, the iSWAP not parked, a container without height-volume
-        functions under CAPACITIVE, or no liquid found.
+        functions under CAPACITIVE or auto surface following, or no liquid found.
       TypeError: A tip that is not a Hamilton tip.
     """
+    lld_mode = self._get_lld_mode(
+      lld_mode, auto_surface_following, surface_following_distance, liquid_height
+    )
     if lld_mode not in (LLDMode.OFF, LLDMode.CAPACITIVE):
       raise ValueError(
         f"the 96-head aspirates with lld_mode OFF or CAPACITIVE, not {lld_mode.name}"
       )
     searched = lld_mode == LLDMode.CAPACITIVE
+    auto_mix = pre_mix is not None and pre_mix.auto_surface_following
+    if auto_mix and not searched and liquid_height is None:
+      raise ValueError("pre_mix's auto_surface_following under lld_mode OFF needs a liquid_height")
     if searched and liquid_height is not None:
       raise ValueError("liquid_height given under CAPACITIVE, whose search finds the surface")
     containers = self._get_containers_under_channels(resource)
     anchor, a1, bottom, top = self._get_target(resource, offset)
-    if searched and not anchor.supports_compute_height_volume_functions():
+    if (searched or auto_surface_following or auto_mix) and (
+      not anchor.supports_compute_height_volume_functions()
+    ):
       raise RuntimeError(
-        f"{anchor.name} has no height-volume functions, so what a search finds cannot become a "
-        "volume"
+        f"{anchor.name} has no height-volume functions, so a surface cannot become a volume"
       )
     tips = self._get_mounted_tips()
     tip = next(t for t in tips if t is not None)
@@ -2140,14 +2188,19 @@ class Head96(Head):
         )
         if immersion_depth is None:
           immersion_depth = min(self.default_aspirate_immersion_depth, max(surface - floor, 0.0))
-        if surface_following_distance is None:
-          # A container under all 96 gives what every channel draws; a well gives one's.
-          given = liquid * len(pairs) if containers is None else liquid
-          height = max(round(surface - bottom, 2), 0.0)
-          drop = -self._get_surface_change(anchor, height, -given)
-          surface_following_distance = round(
-            max(min(drop, surface - immersion_depth - floor), 0.0), 1
-          )
+      # A container under all 96 gives what every channel draws; a well gives one's.
+      share = len(pairs) if containers is None else 1
+      height = max(round(surface - bottom, 2), 0.0)
+      if auto_surface_following:
+        floor = (
+          bottom if minimum_allowed_z_position_during is None else minimum_allowed_z_position_during
+        )
+        drop = -self._get_surface_change(anchor, height, -liquid * share)
+        surface_following_distance = round(
+          max(min(drop, surface - (immersion_depth or 0.0) - floor), 0.0), 1
+        )
+      if pre_mix is not None:
+        pre_mix = self._get_mix_following(pre_mix, anchor, height, share)
 
       async def send() -> None:
         await self._aspirate_in_one_move(
@@ -2538,7 +2591,7 @@ class Head96(Head):
     volume: Optional[float] = None,
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
-    lld_mode: LLDMode = LLDMode.OFF,
+    lld_mode: Optional[LLDMode] = None,
     flow_rate: Optional[float] = None,
     *,
     hamilton_liquid_class: Optional[HamiltonLiquidClass] = None,
@@ -2555,7 +2608,8 @@ class Head96(Head):
     transport_air_volume: Optional[float] = None,
     cut_off_speed: Optional[float] = None,
     stop_back_volume: Optional[float] = None,
-    surface_following_distance: Optional[float] = None,
+    surface_following_distance: float = 0.0,
+    auto_surface_following: bool = False,
     second_section_height: Optional[float] = None,
     second_section_ratio: Optional[float] = None,
     blow_out_air_volume: Optional[float] = None,
@@ -2582,7 +2636,8 @@ class Head96(Head):
       offset: added to where head channel A1 goes, in mm. Its z is ignored under CAPACITIVE.
       liquid_height: where an OFF dispense goes above the cavity bottom, in mm. Refused under
         CAPACITIVE.
-      lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other.
+      lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other. OFF when
+        None; CAPACITIVE under `auto_surface_following`.
       flow_rate: in uL/s. The class's, else 120.0, when None.
       hamilton_liquid_class: looked up for the tip, water, `jet` and `blow_out` when None.
       jet: a jet from above the liquid, rather than at the surface.
@@ -2600,13 +2655,15 @@ class Head96(Head):
         None.
       cut_off_speed: the flow the dispense ends at, in uL/s. 5.0 when None.
       stop_back_volume: drawn back after the dispense, in uL. The class's, else 0.0, when None.
-      surface_following_distance: how far the tips follow the rising surface, in mm. Under
-        CAPACITIVE, how far the dispensed liquid raises the surface when None; never above the top.
+      surface_following_distance: how far the tips follow the rising surface, in mm.
+      auto_surface_following: follow by how far the dispensed liquid raises the surface found, or
+        at `liquid_height` under OFF; never above the top. Refused beside a distance.
       second_section_height: height of the container's narrower lower section, in mm.
       second_section_ratio: that section's bottom to top ratio, in tenths.
       blow_out_air_volume: air pushed out after the liquid in a blow-out mode, in uL. The
         class's, else 0.0, when None.
-      post_mix: mixed after the dispense; None for no mixing.
+      post_mix: mixed after the dispense; None for no mixing. Its auto surface following needs
+        a surface, as the call's.
       mix_position_from_liquid_surface: mixing depth under the surface, in mm.
       settling_time: wait after the dispense, in s. The class's, else 0.0, when None.
       swap_speed: speed of leaving the liquid, in mm/s. The class's, else 10.0, when None.
@@ -2620,24 +2677,33 @@ class Head96(Head):
     Raises:
       ValueError: An argument out of range, both or neither of `volume` and `piston_volume`, a
         class beside `piston_volume`, no class for the tip, a liquid height under CAPACITIVE, a
-        resource the head cannot work, a piston without the travel, or a container without room.
+        resource the head cannot work, a piston without the travel, a container without room, or
+        auto surface following beside a distance or under OFF without a liquid height.
       RuntimeError: No deck, no tips, the iSWAP not parked, a container without height-volume
-        functions under CAPACITIVE, no liquid found, or a container found without the room.
+        functions under CAPACITIVE or auto surface following, no liquid found, or a container
+        found without the room.
       TypeError: A tip that is not a Hamilton tip.
     """
+    lld_mode = self._get_lld_mode(
+      lld_mode, auto_surface_following, surface_following_distance, liquid_height
+    )
     if lld_mode not in (LLDMode.OFF, LLDMode.CAPACITIVE):
       raise ValueError(
         f"the 96-head dispenses with lld_mode OFF or CAPACITIVE, not {lld_mode.name}"
       )
     searched = lld_mode == LLDMode.CAPACITIVE
+    auto_mix = post_mix is not None and post_mix.auto_surface_following
+    if auto_mix and not searched and liquid_height is None:
+      raise ValueError("post_mix's auto_surface_following under lld_mode OFF needs a liquid_height")
     if searched and liquid_height is not None:
       raise ValueError("liquid_height given under CAPACITIVE, whose search finds the surface")
     containers = self._get_containers_under_channels(resource)
     anchor, a1, bottom, top = self._get_target(resource, offset)
-    if searched and not anchor.supports_compute_height_volume_functions():
+    if (searched or auto_surface_following or auto_mix) and (
+      not anchor.supports_compute_height_volume_functions()
+    ):
       raise RuntimeError(
-        f"{anchor.name} has no height-volume functions, so what a search finds cannot become a "
-        "volume"
+        f"{anchor.name} has no height-volume functions, so a surface cannot become a volume"
       )
     tips = self._get_mounted_tips()
     tip = next(t for t in tips if t is not None)
@@ -2708,12 +2774,15 @@ class Head96(Head):
           self._update_volume_from_surface(anchor, surface, bottom)
           # The search may have found more liquid than the model had.
           check_room(RuntimeError)
-        if surface_following_distance is None:
-          # A container under all 96 takes what every channel dispenses; a well takes one's.
-          given = sum(v for container, v in zip(givers, liquid) if container is anchor)
-          height = max(round(surface - bottom, 2), 0.0)
-          rise = self._get_surface_change(anchor, height, given)
-          surface_following_distance = round(max(min(rise, top - surface), 0.0), 1)
+      height = max(round(surface - bottom, 2), 0.0)
+      if auto_surface_following:
+        # A container under all 96 takes what every channel dispenses; a well takes one's.
+        given = sum(v for container, v in zip(givers, liquid) if container is anchor)
+        rise = self._get_surface_change(anchor, height, given)
+        surface_following_distance = round(max(min(rise, top - surface), 0.0), 1)
+      if post_mix is not None:
+        share = len(channels) if containers is None else 1
+        post_mix = self._get_mix_following(post_mix, anchor, height, share)
 
       async def send() -> None:
         await self._dispense_in_one_move(
@@ -2777,7 +2846,7 @@ class Head96(Head):
     offset: Optional[Coordinate] = None,
     *,
     minimum_traverse_height_start: Optional[float] = None,
-    lld_mode: LLDMode = LLDMode.OFF,
+    lld_mode: Optional[LLDMode] = None,
     lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
     search_speed: Optional[float] = None,
     descent_speed: Optional[float] = None,
@@ -2791,8 +2860,9 @@ class Head96(Head):
 
     Over a plate of many wells head channel A1 goes over well A1; over a single container, or a
     plate of one well, the channel array is centred over it. Each draw follows the surface down by
-    `mix.surface_following_distance`, by what one draw lowers it when None, and each expel follows
-    it back up, so the tips do not drift; no stroke goes below the cavity bottom. OFF mixes at `offset` z above the cavity bottom, with
+    `mix.surface_following_distance`, or by what one draw lowers the surface found under
+    `mix.auto_surface_following`, and each expel follows it back up, so the tips do not drift; no
+    stroke goes below the cavity bottom. OFF mixes at `offset` z above the cavity bottom, with
     the blowout air drawn and expelled over the well. CAPACITIVE draws the air at the traverse
     height, finds the surface by cLLD, sets the tracker to the volume found, mixes
     `mix_position_from_liquid_surface` below it and expels the air once risen.
@@ -2802,7 +2872,8 @@ class Head96(Head):
       mix: volume, repetitions, flow rate and surface following distance.
       offset: added to where head channel A1 goes, in mm. Its z is ignored under CAPACITIVE.
       minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
-      lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other.
+      lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other. OFF when
+        None; CAPACITIVE under `mix.auto_surface_following`, which OFF refuses.
       lld_sensor: which cLLD sensors trigger, under CAPACITIVE.
       search_speed: in mm/s, under CAPACITIVE. `default_clld_search_speed` when None.
       descent_speed: to just above the well, in mm/s. `default_mix_descent_speed` when None.
@@ -2819,8 +2890,12 @@ class Head96(Head):
       RuntimeError: If the head carries no tips, the iSWAP is not parked, the driver was given no
         deck, or a CAPACITIVE search found no liquid.
     """
+    if lld_mode is None:
+      lld_mode = LLDMode.CAPACITIVE if mix.auto_surface_following else LLDMode.OFF
     if lld_mode not in (LLDMode.OFF, LLDMode.CAPACITIVE):
       raise ValueError(f"the 96-head mixes with lld_mode OFF or CAPACITIVE, not {lld_mode.name}")
+    if mix.auto_surface_following and lld_mode == LLDMode.OFF:
+      raise ValueError("mix's auto_surface_following under lld_mode OFF has no surface to follow")
     if settling_time < 0:
       raise ValueError(f"settling_time must be at least 0, is {settling_time}")
     if descent_speed is None:
@@ -2837,6 +2912,10 @@ class Head96(Head):
     if swap_speed is None:
       swap_speed = self.default_mix_swap_speed
     anchor, a1, bottom, z_top = self._get_target(resource, offset)
+    if mix.auto_surface_following and not anchor.supports_compute_height_volume_functions():
+      raise RuntimeError(
+        f"{anchor.name} has no height-volume functions, so a surface cannot become a volume"
+      )
     # A container under all 96 gives what every channel draws; a well gives one's.
     channels = sum(t is not None for t in self._get_mounted_tips())
     per_draw = mix.volume * (
@@ -2845,10 +2924,8 @@ class Head96(Head):
 
     def get_following(height: float) -> float:
       """How far each draw follows the surface down from `height` mm over the cavity bottom."""
-      if mix.surface_following_distance is not None:
+      if not mix.auto_surface_following:
         return mix.surface_following_distance
-      if not anchor.supports_compute_height_volume_functions():
-        return 0.0
       return max(-self._get_surface_change(anchor, max(height, 0.0), -per_draw), 0.0)
 
     following = 0.0
@@ -2872,13 +2949,7 @@ class Head96(Head):
         await self.move_tool_bottom_to_z_position(minimum_traverse_height_end, speed=descent_speed)
 
     if lld_mode == LLDMode.OFF:
-      held = anchor.tracker.get_used_volume()
-      modelled = (
-        anchor.compute_height_from_volume(held)
-        if anchor.supports_compute_height_volume_functions()
-        else 0.0
-      )
-      following = get_following(modelled)
+      following = mix.surface_following_distance
       start = a1.z + following
       swap_start = z_top + self.mix_swap_start_clearance
       try:
