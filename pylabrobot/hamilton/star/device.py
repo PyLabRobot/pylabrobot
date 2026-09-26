@@ -11,6 +11,7 @@ from pylabrobot.hamilton.star.driver.features.head384 import Head384
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.master import STARDriver
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
@@ -142,6 +143,9 @@ class STARDevice(Resource):
   positions, millimetres - and stays reachable whatever is built on top of it. The device adds
   what the driver cannot know: where things are, and so which of them a command is about.
   """
+
+  # How a channel or a head senses the liquid: `star.LLDMode.CAPACITIVE`.
+  LLDMode = LLDMode
 
   def __init__(
     self,

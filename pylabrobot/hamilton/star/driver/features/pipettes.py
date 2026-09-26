@@ -27,6 +27,8 @@ from typing import (
   cast,
 )
 
+from typing_extensions import TypeAlias
+
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import (
@@ -34,6 +36,7 @@ from pylabrobot.hamilton.star.driver.errors import (
   STARFirmwareError,
   channels_that_faulted,
 )
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
 from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
@@ -355,16 +358,8 @@ class Pipettes:
   `configuration.channels`.
   """
 
-  class LLDMode(enum.Enum):
-    """How a channel senses the liquid. Numbered as the Prep's and the firmware's `lm`, so the
-    three read the same. Z touch finds a floor, not a liquid: an aspiration with it expects
-    liquid where there may be none, so `aspirate` warns when asked for it."""
-
-    OFF = 0
-    CAPACITIVE = 1
-    PRESSURE = 2
-    DUAL = 3
-    ZTOUCH = 4
+  # The STAR's one LLD enum, as its channels have always reached it.
+  LLDMode: TypeAlias = LLDMode
 
   class PressureLLDMode(enum.Enum):
     """What a pressure search stops at: the liquid, or the foam and then the liquid under it."""
@@ -3373,7 +3368,7 @@ class Pipettes:
     overhangs: Dict[int, float],
     z_cavity_bottom: Sequence[float],
     z_start: Sequence[float],
-    lld_modes: Sequence["Pipettes.LLDMode"],
+    lld_modes: Sequence[LLDMode],
     search_speed: float,
     n_replicates: int,
     approach_speed: Optional[float] = None,
@@ -3437,7 +3432,7 @@ class Pipettes:
     containers: Sequence[Container],
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: Union["Pipettes.LLDMode", Sequence["Pipettes.LLDMode"], None] = None,
+    lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
     *,
@@ -3532,7 +3527,7 @@ class Pipettes:
     containers: Sequence[Container],
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: Union["Pipettes.LLDMode", Sequence["Pipettes.LLDMode"], None] = None,
+    lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
     *,
@@ -4820,7 +4815,7 @@ class Pipettes:
     resource_offsets: Optional[List[Coordinate]],
     given_floors: Optional[Sequence[float]],
     liquid_heights: Sequence[Optional[float]],
-    lld_modes: Sequence["Pipettes.LLDMode"],
+    lld_modes: Sequence[LLDMode],
     searched: Sequence[int],
   ) -> Tuple[List[float], List[float], List[float], List[float], List[float]]:
     """The liquid_heights per container on the deck, in mm, before any search moves them.
@@ -4966,7 +4961,7 @@ class Pipettes:
     overhangs: Dict[int, float],
     z_cavity_bottom: Sequence[float],
     z_start: Sequence[float],
-    lld_modes: Sequence["Pipettes.LLDMode"],
+    lld_modes: Sequence[LLDMode],
     search_speed: float,
     approach_speed: float,
     surfaces: List[float],
@@ -5261,7 +5256,7 @@ class Pipettes:
     piston_volumes: List[float],
     *,
     minimum_traverse_height_start: Optional[float] = None,
-    lld_modes: Optional[List["Pipettes.LLDMode"]] = None,
+    lld_modes: Optional[List[LLDMode]] = None,
     clld_sensitivities: Optional[List[int]] = None,
     plld_sensitivities: Optional[List[int]] = None,
     detection_height_differences_for_dual_lld: Optional[List[float]] = None,
@@ -5584,7 +5579,7 @@ class Pipettes:
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
     liquid_heights: Optional[Sequence[Optional[float]]] = None,
-    lld_mode: Union["Pipettes.LLDMode", Sequence["Pipettes.LLDMode"]] = LLDMode.OFF,
+    lld_mode: Union[LLDMode, Sequence[LLDMode]] = LLDMode.OFF,
     flow_rates: Optional[Sequence[float]] = None,
     *,
     hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]] = None,
