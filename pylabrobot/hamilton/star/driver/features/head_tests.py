@@ -5,8 +5,8 @@ import pathlib
 import random
 import tempfile
 import unittest
-from typing import Any, List, Optional, cast
-from unittest.mock import patch
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR, RECORDING_STARLET
@@ -20,6 +20,7 @@ from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck, STARLetDeck
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
+from pylabrobot.resources.tip import Tip
 from pylabrobot.serializer import serialize
 
 # The 96-head on the device this package ships a recording of.
@@ -199,6 +200,13 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
         "C0ERxs00465xd1yh1788za2164zh2450ze2450",
       ],
     )
+
+  async def test_a_pickup_with_tips_on_refuses_before_anything_moves(self):
+    await self.head.pick_up_tips(self.tip_rack)
+    self.sent.clear()
+    with self.assertRaises(RuntimeError):
+      await self.head.pick_up_tips(self.tip_rack)
+    self.assertEqual(self.sent, [])
 
   async def test_tips_missing_from_a_rack_are_missing_from_the_head(self):
     rng = random.Random(0)
@@ -558,3 +566,436 @@ class TestHead96InSimulation(unittest.IsolatedAsyncioTestCase):
     )
     self.assertAlmostEqual(trough.tracker.get_used_volume(), 100_000.0, delta=50.0)
     self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])
+
+
+class _WireOnly:
+  """A driver that records what it is asked to send and answers nothing."""
+
+  def __init__(self) -> None:
+    self.sent: List[str] = []
+
+  async def send_command(self, module: str, command: str, **kwargs: Any) -> str:
+    wire = {key: value for key, value in kwargs.items() if len(key) == 2}
+    self.sent.append(assemble_command(module, command, **wire))
+    return ""
+
+
+async def _get_legacy_wire(command: str, **kwargs: Any) -> str:
+  """What legacy's `aspirate_core_96` (`EA`) or `dispense_core_96` (`ED`) assembles for kwargs."""
+  from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import STARBackend
+  from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_chatterbox import (
+    _DEFAULT_EXTENDED_CONFIGURATION,
+  )
+
+  backend = STARBackend()
+  backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+  backend._iswap_parked = True
+  sent = AsyncMock(return_value="")
+  backend.send_command = sent  # type: ignore[method-assign]
+  if command == "EA":
+    await backend.aspirate_core_96(**kwargs)
+  else:
+    await backend.dispense_core_96(**kwargs)
+  wire = {key: value for key, value in sent.call_args.kwargs.items() if len(key) == 2}
+  return assemble_command(sent.call_args.kwargs["module"], command, **wire)
+
+
+# Legacy's name for each field, this driver's, and the range legacy accepts.
+_EA_FIELDS = [
+  ("aspiration_type", "aspiration_type", 0, 2),
+  ("y_positions", "y_position", 1080, 5600),
+  ("minimum_traverse_height_at_beginning_of_a_command", "minimum_traverse_height_start", 0, 3425),
+  ("min_z_endpos", "minimum_z_end_position", 0, 3425),
+  ("lld_search_height", "lld_search_height", 0, 3425),
+  ("liquid_surface_no_lld", "liquid_surface_no_lld", 0, 3425),
+  ("pull_out_distance_transport_air", "pull_out_distance_transport_air", 0, 3425),
+  ("second_section_height", "second_section_height", 0, 3425),
+  ("second_section_ratio", "second_section_ratio", 0, 10000),
+  ("minimum_height", "minimum_height", 0, 3425),
+  ("immersion_depth", "immersion_depth", 0, 3600),
+  ("immersion_depth_direction", "immersion_depth_direction", 0, 1),
+  ("surface_following_distance", "surface_following_distance", 0, 990),
+  ("aspiration_volumes", "aspiration_volume", 0, 11500),
+  ("aspiration_speed", "aspiration_speed", 3, 5000),
+  ("transport_air_volume", "transport_air_volume", 0, 500),
+  ("blow_out_air_volume", "blow_out_air_volume", 0, 11500),
+  ("pre_wetting_volume", "pre_wetting_volume", 0, 11500),
+  ("lld_mode", "lld_mode", 0, 4),
+  ("gamma_lld_sensitivity", "clld_sensitivity", 1, 4),
+  ("swap_speed", "swap_speed", 3, 1000),
+  ("settling_time", "settling_time", 0, 99),
+  ("mix_volume", "mix_volume", 0, 11500),
+  ("mix_cycles", "mix_cycles", 0, 99),
+  ("mix_position_from_liquid_surface", "mix_position_from_liquid_surface", 0, 990),
+  ("speed_of_mix", "mix_speed", 3, 5000),
+  ("mix_surface_following_distance", "mix_surface_following_distance", 0, 990),
+  ("limit_curve_index", "limit_curve_index", 0, 999),
+  ("recording_mode", "recording_mode", 0, 2),
+]
+_ED_FIELDS = [
+  ("dispensing_mode", "dispensing_mode", 0, 4),
+  ("y_position", "y_position", 1080, 5600),
+  ("minimum_height", "minimum_height", 0, 3425),
+  ("lld_search_height", "lld_search_height", 0, 3425),
+  ("liquid_surface_no_lld", "liquid_surface_no_lld", 0, 3425),
+  ("pull_out_distance_transport_air", "pull_out_distance_transport_air", 0, 3425),
+  ("immersion_depth", "immersion_depth", 0, 3600),
+  ("immersion_depth_direction", "immersion_depth_direction", 0, 1),
+  ("surface_following_distance", "surface_following_distance", 0, 990),
+  ("second_section_height", "second_section_height", 0, 3425),
+  ("second_section_ratio", "second_section_ratio", 0, 10000),
+  ("minimum_traverse_height_at_beginning_of_a_command", "minimum_traverse_height_start", 0, 3425),
+  ("min_z_endpos", "minimum_z_end_position", 0, 3425),
+  ("dispense_volume", "dispense_volume", 0, 11500),
+  ("dispense_speed", "dispense_speed", 3, 5000),
+  ("cut_off_speed", "cut_off_speed", 3, 5000),
+  ("stop_back_volume", "stop_back_volume", 0, 999),
+  ("transport_air_volume", "transport_air_volume", 0, 500),
+  ("blow_out_air_volume", "blow_out_air_volume", 0, 11500),
+  ("lld_mode", "lld_mode", 0, 4),
+  ("side_touch_off_distance", "side_touch_off_distance", 0, 45),
+  ("gamma_lld_sensitivity", "clld_sensitivity", 1, 4),
+  ("swap_speed", "swap_speed", 3, 1000),
+  ("settling_time", "settling_time", 0, 99),
+  ("mixing_volume", "mix_volume", 0, 11500),
+  ("mixing_cycles", "mix_cycles", 0, 99),
+  ("mix_position_from_liquid_surface", "mix_position_from_liquid_surface", 0, 990),
+  ("speed_of_mixing", "mix_speed", 3, 5000),
+  ("mix_surface_following_distance", "mix_surface_following_distance", 0, 990),
+  ("limit_curve_index", "limit_curve_index", 0, 999),
+  ("recording_mode", "recording_mode", 0, 2),
+]
+
+
+def _get_value_sets(fields: List[Tuple[str, str, int, int]]) -> List[Tuple[dict, dict]]:
+  """Three (legacy kwargs, this driver's kwargs) pairs: every field low, then high, then random."""
+  rng = random.Random(0)
+  pairs = []
+  for draw in ("low", "high", "random"):
+    legacy: Dict[str, Any] = {}
+    ours: Dict[str, Any] = {}
+    for legacy_name, name, low, high in fields:
+      value = {"low": low, "high": high, "random": rng.randint(low, high)}[draw]
+      legacy[legacy_name], ours[name] = value, value
+    x = {"low": 0, "high": 30000, "random": rng.randint(1, 30000)}[draw]
+    direction = 0 if draw == "low" else 1
+    pattern = {
+      "low": [False] * 96,
+      "high": [True] * 96,
+      "random": [rng.random() < 0.5 for _ in range(96)],
+    }[draw]
+    tadm = draw != "low"
+    legacy.update(x_position=x, x_direction=direction, channel_pattern=pattern, tadm_algorithm=tadm)
+    ours.update(x_position=-x if direction else x, channel_pattern=pattern, tadm_algorithm=tadm)
+    pairs.append((legacy, ours))
+  return pairs
+
+
+class TestHead96AspirateDispenseWire(unittest.IsolatedAsyncioTestCase):
+  """`C0 EA` and `C0 ED` go out as legacy's `aspirate_core_96` and `dispense_core_96` send them."""
+
+  async def test_aspirate_is_sent_as_legacy_sends_it(self):
+    for legacy, ours in _get_value_sets(_EA_FIELDS):
+      with self.subTest(values=ours):
+        driver = _WireOnly()
+        await Head96(cast(Any, driver))._unchecked_fw_aspirate(**ours)
+        self.assertEqual(driver.sent, [await _get_legacy_wire("EA", **legacy)])
+
+  async def test_dispense_is_sent_as_legacy_sends_it(self):
+    for legacy, ours in _get_value_sets(_ED_FIELDS):
+      with self.subTest(values=ours):
+        driver = _WireOnly()
+        await Head96(cast(Any, driver))._unchecked_fw_dispense(**ours)
+        self.assertEqual(driver.sent, [await _get_legacy_wire("ED", **legacy)])
+
+
+class TestHead96PistonModel(unittest.IsolatedAsyncioTestCase):
+  """`piston_position` follows every stroke, and a failed one is read back from `H0 RD`."""
+
+  async def asyncSetUp(self):
+    self.driver = STARSimulationDriver(
+      deck=STARLetDeck(), declared_configuration_json=RECORDING_STARLET
+    )
+    await self.driver.setup()
+    self.head = cast(Head96, self.driver.head96)
+    self.rd = [0, 0]
+    self.failing: Optional[str] = None
+    answer = self.driver.send_command
+
+    async def stubbed(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      if module + command == "H0RD":
+        return {"rd": list(self.rd)}
+      if module + command in ("H0PA", "H0PB", "H0DQ"):
+        if module + command == self.failing:
+          check_fw_string_error(f"{module}{command}id0001er99/00")
+        return ""
+      return await answer(module, command, fmt=fmt, **kwargs)
+
+    self.driver.send_command = stubbed  # type: ignore[assignment]
+
+  def as_counted(self, uL: float) -> float:
+    c = self.head.configuration
+    return c.dispensing_drive_increments_to_uL(c.dispensing_drive_uL_to_increments(uL))
+
+  async def test_the_read_takes_the_hardware_counter(self):
+    self.rd = [1, 5170]
+    expected = self.head.configuration.dispensing_drive_increments_to_uL(5170)
+    self.assertEqual(await self.head.dispensing_drive_request_uL_position(), expected)
+    self.assertEqual(self.head.piston_position, expected)
+
+  async def test_initialization_reads_the_piston(self):
+    self.rd = [0, 1000]
+    await self.head.initialize(tip_discard_location=Coordinate(400.0, 300.0, 200.0))
+    expected = self.head.configuration.dispensing_drive_increments_to_uL(1000)
+    self.assertEqual(self.head.piston_position, expected)
+
+  async def test_strokes_move_the_model_as_the_drive_counts(self):
+    await self.head._aspirate_in_place(100.0)
+    self.assertEqual(self.head.piston_position, self.as_counted(100.0))
+    await self.head._dispense_in_place(60.0, stop_back_volume=2.0)
+    expected = self.as_counted(100.0) - self.as_counted(60.0) + self.as_counted(2.0)
+    self.assertAlmostEqual(self.head.piston_position, expected, places=2)
+    # Pushing out more than it holds leaves the piston at rest.
+    await self.head._dispense_in_place(500.0)
+    self.assertEqual(self.head.piston_position, 0.0)
+
+  async def test_the_dispensing_drive_move_records_where_it_was_sent(self):
+    await self.head.move_dispensing_drive_to_position(218.19)
+    self.assertEqual(self.head.piston_position, self.as_counted(218.19))
+
+  async def test_a_failed_command_reads_the_piston_back(self):
+    moves = {
+      "H0PA": lambda: self.head._aspirate_in_place(100.0),
+      "H0PB": lambda: self.head._dispense_in_place(100.0),
+      "H0DQ": lambda: self.head.move_dispensing_drive_to_position(100.0),
+    }
+    for failing, move in moves.items():
+      with self.subTest(command=failing):
+        self.failing = failing
+        self.rd = [0, 1234]
+        self.head.piston_position = 50.0
+        with self.assertRaises(STARFirmwareError):
+          await move()
+        expected = self.head.configuration.dispensing_drive_increments_to_uL(1234)
+        self.assertEqual(self.head.piston_position, expected)
+
+
+class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
+  """`aspirate` and `dispense` over a plate and a one-well trough, the raw commands recorded."""
+
+  async def asyncSetUp(self):
+    from pylabrobot.resources import set_tip_tracking, set_volume_tracking
+    from pylabrobot.resources.agenbio.plates import agenbio_1_troughplate_190mL_Fl
+    from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL_filter
+    from pylabrobot.resources.hamilton.plate_carriers import PLT_CAR_L5AC_A00
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+    set_volume_tracking(True)
+    self.addCleanup(set_volume_tracking, False)
+    self.deck = STARLetDeck()
+    self.driver = STARSimulationDriver(
+      deck=self.deck, declared_configuration_json=RECORDING_STARLET
+    )
+    await self.driver.setup()
+    self.head = cast(Head96, self.driver.head96)
+    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car[1] = tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    self.deck.assign_child_resource(tip_car, track=1)
+    plate_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    plate_car[1] = self.plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate_car[3] = trough_plate = agenbio_1_troughplate_190mL_Fl(name="trough")
+    self.deck.assign_child_resource(plate_car, track=7)
+    self.trough = trough_plate.get_item(0)
+    await self.head.pick_up_tips(tip_rack)
+    # Where the piston stands is read, never moved: the simulator leaves it where it started.
+    await self.head.dispensing_drive_request_uL_position()
+    shafts = cast(NChannelPipette, self.head.resource).get_all_items()
+    self.tips = [cast(Tip, shaft.tip) for shaft in shafts]
+    for well in self.plate.get_all_items():
+      well.tracker.set_volume(200.0)
+
+    self.sent: List[Tuple[str, Dict[str, Any]]] = []
+    self.failing = False
+    # How far a failed command moves the piston before it stops, in uL.
+    self.moved_before_failure = 0.0
+    self.moved = 0.0
+
+    def recorder(command: str):
+      async def record(**kwargs: Any) -> None:
+        self.sent.append((command, kwargs))
+        if self.failing:
+          self.moved = self.moved_before_failure
+          check_fw_string_error(f"C0{command}id0001er99/00")
+
+      return record
+
+    async def piston() -> float:
+      return self.head.piston_position + self.moved
+
+    self.head._unchecked_fw_aspirate = recorder("EA")  # type: ignore[method-assign]
+    self.head._unchecked_fw_dispense = recorder("ED")  # type: ignore[method-assign]
+    self.head.dispensing_drive_request_uL_position = piston  # type: ignore[method-assign]
+
+  def tip_volumes(self) -> Set[float]:
+    return {tip.tracker.get_used_volume() for tip in self.tips}
+
+  def well_volumes(self) -> Set[float]:
+    return {well.tracker.get_used_volume() for well in self.plate.get_all_items()}
+
+  async def test_off_over_a_plate_draws_at_the_cavity_bottom_and_books_each_well(self):
+    await self.head.aspirate(self.plate, 50.0)
+    self.assertEqual(
+      self.sent,
+      [
+        (
+          "EA",
+          {
+            "aspiration_type": 0,
+            "x_position": 2533,
+            "y_position": 2417,
+            "minimum_traverse_height_start": 2450,
+            "minimum_z_end_position": 2450,
+            "lld_search_height": 2018,
+            "liquid_surface_no_lld": 1866,
+            "pull_out_distance_transport_air": 100,
+            "minimum_height": 1866,
+            "second_section_height": 32,
+            "second_section_ratio": 6180,
+            "immersion_depth": 0,
+            "immersion_depth_direction": 0,
+            "surface_following_distance": 0,
+            # 50 uL, corrected by the water class of a 300 uL CoRe filter tip.
+            "aspiration_volume": 534,
+            "aspiration_speed": 1000,
+            "transport_air_volume": 0,
+            "blow_out_air_volume": 0,
+            "pre_wetting_volume": 50,
+            "lld_mode": 0,
+            "clld_sensitivity": 1,
+            "swap_speed": 20,
+            "settling_time": 10,
+            "mix_volume": 0,
+            "mix_cycles": 0,
+            "mix_position_from_liquid_surface": 0,
+            "mix_surface_following_distance": 0,
+            "mix_speed": 1000,
+            "channel_pattern": [True] * 96,
+            "limit_curve_index": 0,
+            "tadm_algorithm": False,
+            "recording_mode": 0,
+          },
+        )
+      ],
+    )
+    self.assertEqual(self.well_volumes(), {150.0})
+    self.assertEqual(self.tip_volumes(), {50.0})
+    self.assertEqual(self.head.piston_position, 53.4)
+
+  async def test_off_into_a_trough_centres_the_array_and_books_96_times(self):
+    await self.head.aspirate(self.plate, piston_volume=40.0, liquid_height=2.0)
+    self.assertEqual(self.sent[0][1]["liquid_surface_no_lld"], 1886)
+    await self.head.dispense(self.trough, piston_volume=40.0, jet=True, blow_out=True)
+    command, fields = self.sent[1]
+    self.assertEqual(command, "ED")
+    centre = self.trough.get_location_wrt(self.deck, "c", "c", "cavity_bottom")
+    c = self.head.configuration
+    self.assertEqual(
+      (fields["dispensing_mode"], fields["x_position"], fields["y_position"]),
+      (
+        1,
+        round((centre.x - c.channel_array_size_x / 2) * 10),
+        round((centre.y + c.channel_array_size_y / 2) * 10),
+      ),
+    )
+    self.assertEqual(
+      (fields["liquid_surface_no_lld"], fields["minimum_height"], fields["dispense_volume"]),
+      (round(centre.z * 10), round(centre.z * 10), 400),
+    )
+    self.assertEqual(self.trough.tracker.get_used_volume(), 96 * 40.0)
+    self.assertEqual(self.tip_volumes(), {0.0})
+    self.assertEqual(self.head.piston_position, 0.0)
+
+  async def test_capacitive_draws_the_air_first_then_at_the_surface_found(self):
+    self.trough.tracker.set_volume(100_000.0)
+    await self.head.aspirate(
+      self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE, blow_out_air_volume=10.0
+    )
+    fields = self.sent[0][1]
+    bottom = self.trough.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    height = self.trough.compute_height_from_volume(100_000.0)
+    # The air goes in in place beforehand; the command starts where the search left the tips.
+    self.assertEqual(self.driver.head96_dispensing_drive_uL, 10.0)
+    self.assertEqual((fields["blow_out_air_volume"], fields["lld_mode"]), (0, 0))
+    self.assertAlmostEqual(fields["liquid_surface_no_lld"], (bottom + height) * 10, delta=1)
+    self.assertEqual(fields["minimum_traverse_height_start"], fields["liquid_surface_no_lld"])
+    self.assertEqual(fields["minimum_height"], round(bottom * 10))
+    # Set to what the search measured, to the Z drive's resolution, then 96 draws booked.
+    self.assertAlmostEqual(self.trough.tracker.get_used_volume(), 100_000.0 - 96 * 20.0, delta=50)
+    self.assertEqual(self.head.piston_position, 30.0)
+
+  async def test_capacitive_dispense_into_a_plate_books_each_well(self):
+    await self.head.aspirate(self.plate, piston_volume=30.0)
+    await self.head.dispense(self.plate, piston_volume=30.0, lld_mode=LLDMode.CAPACITIVE)
+    fields = self.sent[1][1]
+    well = self.plate.get_item("A1")
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    surface = bottom + well.compute_height_from_volume(170.0)
+    self.assertAlmostEqual(fields["liquid_surface_no_lld"], surface * 10, delta=1)
+    self.assertEqual(fields["minimum_traverse_height_start"], fields["liquid_surface_no_lld"])
+    self.assertEqual(self.tip_volumes(), {0.0})
+    others = {w.tracker.get_used_volume() for w in self.plate.get_all_items()[1:]}
+    self.assertEqual(others, {200.0})
+
+  async def test_no_liquid_under_capacitive_raises_and_the_head_goes_up(self):
+    with self.assertRaises(RuntimeError):
+      await self.head.aspirate(self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE)
+    self.assertEqual(self.sent, [])
+    self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])
+
+  async def test_a_failed_command_rolls_back_and_raises_the_head(self):
+    self.failing = True
+    with self.assertRaises(STARFirmwareError):
+      await self.head.aspirate(self.plate, piston_volume=50.0)
+    self.assertEqual(self.well_volumes(), {200.0})
+    self.assertEqual(self.tip_volumes(), {0.0})
+    self.assertEqual(self.head.piston_position, 0.0)
+    self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])
+
+  async def test_what_a_failed_command_moved_is_booked_from_the_piston(self):
+    self.failing = True
+    self.moved_before_failure = 20.0
+    with self.assertRaises(STARFirmwareError):
+      await self.head.aspirate(self.plate, piston_volume=50.0)
+    self.assertEqual(self.well_volumes(), {180.0})
+    self.assertEqual(self.tip_volumes(), {20.0})
+
+  async def test_refusals_send_nothing_and_move_nothing(self):
+    z = await self.head.request_z_position()
+    refusals = {
+      "pressure": lambda: self.head.aspirate(self.plate, 5.0, lld_mode=LLDMode.PRESSURE),
+      "both volumes": lambda: self.head.aspirate(self.plate, 5.0, piston_volume=5.0),
+      "a height under cLLD": lambda: self.head.aspirate(
+        self.plate, 5.0, liquid_height=2.0, lld_mode=LLDMode.CAPACITIVE
+      ),
+      "eight wells": lambda: self.head.aspirate(self.plate.get_all_items()[:8], 5.0),
+      "one well of many": lambda: self.head.aspirate(self.plate.get_item("B1"), 5.0),
+      "a fast flow": lambda: self.head.aspirate(self.plate, piston_volume=5.0, flow_rate=900.0),
+      "past the piston": lambda: self.head.aspirate(self.plate, piston_volume=5_000.0),
+      "an empty piston": lambda: self.head.dispense(self.plate, piston_volume=5.0),
+      "z touch": lambda: self.head.dispense(self.plate, 5.0, lld_mode=LLDMode.ZTOUCH),
+    }
+    for name, refused in refusals.items():
+      with self.subTest(name):
+        with self.assertRaises(ValueError):
+          await refused()
+    self.assertEqual(self.sent, [])
+    self.assertEqual(await self.head.request_z_position(), z)
+
+  async def test_a_trough_without_room_is_refused(self):
+    await self.head.aspirate(self.plate, piston_volume=50.0)
+    self.trough.tracker.set_volume(self.trough.max_volume - 96 * 10.0)
+    with self.assertRaises(ValueError):
+      await self.head.dispense(self.trough, piston_volume=50.0)
+    self.assertEqual(len(self.sent), 1)
