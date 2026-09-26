@@ -1,31 +1,34 @@
-import time
 import typing
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.hid import HID
 
 
-class InhecoTECControlBox:
+class InhecoTECControlBox(HasLifespan):
   def __init__(
     self,
     vid=0x03EB,
     pid=0x2023,
     serial_number=None,
   ):
+    super().__init__()
     self.io = HID(
       human_readable_device_name="Inheco TEC Control Box",
       vid=vid,
       pid=pid,
       serial_number=serial_number,
+      max_input_report_size=64,
     )
+    self._transaction_lock = anyio.Lock()
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """
     If io.setup() fails, ensure that libusb drivers were installed as per docs.
     """
-    await self.io.setup()
-
-  async def stop(self):
-    await self.io.stop()
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
 
   @typing.no_type_check
   def _generate_packets(self, msg):
@@ -86,11 +89,14 @@ class InhecoTECControlBox:
 
   async def _read_until_end(self, timeout: int) -> str:
     """Read until a packet ends with a \\x00 byte. May read multiple packets."""
-    start = time.time()
     response = b""
-    while time.time() - start < timeout:
-      packet = await self.io.read(64, timeout=timeout)
-      if packet is not None and packet != b"":
+    with anyio.fail_after(timeout):
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      while True:
+        report = await self.io.read_to_boundary()
+        if not report.started_at_boundary or not report.ended_at_boundary:
+          raise RuntimeError("Incomplete Inheco HID report")
+        packet = report.data
         if packet.endswith(b"\x00"):
           response += packet.rstrip(b"\x00")  # strip trailing \x00's
           break
@@ -113,27 +119,29 @@ class InhecoTECControlBox:
     increase integrity of the communication."
     """
 
-    start = time.time()
-    while time.time() - start < timeout:
-      response = await self._read_until_end(timeout=int(timeout - (time.time() - start)))
+    with anyio.fail_after(timeout):
+      while True:
+        response = await self._read_until_end(timeout=timeout)
 
-      if response[:4] == command[:4].lower():
-        return response
-
-    raise TimeoutError("Timeout while waiting for response from device.")
+        if response[:4] == command[:4].lower():
+          return response
 
   async def send_command(self, command: str, timeout: int = 3):
     """Send a command to the device and return the response"""
     packets = self._generate_packets(command)
-    for packet in packets:
-      await self.io.write(bytes(packet[1:]), report_id=bytes(packet[0]))
+    async with self._transaction_lock:
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      with anyio.CancelScope(shield=True):
+        for packet in packets:
+          await self.io.write(bytes(packet[1:]), report_id=bytes(packet[0]))
 
-    response = await self._read_response(command, timeout=timeout)
+        response = await self._read_response(command, timeout=timeout)
+      await anyio.lowlevel.checkpoint()
 
-    if response[4] != "0":
-      raise RuntimeError(f"Error response from device: {response}")
+      if response[4] != "0":
+        raise RuntimeError(f"Error response from device: {response}")
 
-    return response[5:-1]  # cut off command, error status, and final checksum byte
+      return response[5:-1]  # cut off command, error status, and final checksum byte
 
   async def set_touchscreen(self, active: bool):
     await self.send_command(f"0ADD{1 if active else 0}")

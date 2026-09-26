@@ -1,6 +1,8 @@
-import asyncio
 import logging
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
+
+import anyio
 
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -40,17 +42,43 @@ class InhecoThermoShake(ResourceHolder, InhecoTemperatureController):
       model=model,
     )
     InhecoTemperatureController.__init__(self, index=index, interface=control_box)
+    self._shaking_transition_lock = anyio.Lock()
+    self._shaking_active = False
+    self._shaking_state_unknown = False
+    self._shaking_scope_token: Optional[object] = None
 
   async def _start_shaking_command(self):
     return await self.interface.send_command(f"{self.index}ASE1")
 
   async def stop_shaking(self):
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot stop shaking while a shaking scope is active")
+      return await self._stop_shaking_transition()
+
+  async def _stop_shaking_transition(self):
+    """Stop shaking while the caller holds the transition lock."""
     logger.info("[Inheco ThermoShake idx=%d] stop shaking", self.index)
-    return await self.interface.send_command(f"{self.index}ASE0")
+    self._shaking_state_unknown = True
+    try:
+      result = await self.interface.send_command(f"{self.index}ASE0")
+    except BaseException:
+      self._shaking_active = True
+      raise
+    self._shaking_active = False
+    self._shaking_state_unknown = False
+    return result
 
   async def set_shaker_speed(self, speed: float):
     if not (60 <= speed <= 2000):
       raise ValueError("Speed must be in the range 60 to 2000 RPM")
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot set shaker speed while a shaking scope is active")
+      return await self._set_shaker_speed(speed)
+
+  async def _set_shaker_speed(self, speed: float):
+    """Set shaker speed while the caller holds the transition lock."""
     return await self.interface.send_command(f"{self.index}SSR{speed}")
 
   async def set_shaker_shape(self, shape: int):
@@ -62,22 +90,77 @@ class InhecoThermoShake(ResourceHolder, InhecoTemperatureController):
     """
     if shape not in range(6):
       raise ValueError("Shape must be in the range 0 to 5")
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot set shaker shape while a shaking scope is active")
+      return await self._set_shaker_shape(shape)
+
+  async def _set_shaker_shape(self, shape: int):
+    """Set shaker shape while the caller holds the transition lock."""
     return await self.interface.send_command(f"{self.index}SSS{shape}")
 
   async def start_shaking(self, speed: float, shape: int = 0):
+    if not (60 <= speed <= 2000):
+      raise ValueError("Speed must be in the range 60 to 2000 RPM")
+    if shape not in range(6):
+      raise ValueError("Shape must be in the range 0 to 5")
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot start shaking while a shaking scope is active")
+      await self._start_shaking_transition(speed, shape)
+
+  async def _start_shaking_transition(self, speed: float, shape: int = 0) -> None:
+    """Configure and start shaking while the caller holds the transition lock."""
     logger.info(
       "[Inheco ThermoShake idx=%d] start shaking: speed=%.0f, shape=%d", self.index, speed, shape
     )
-    await self.set_shaker_speed(speed=speed)
-    await self.set_shaker_shape(shape=shape)
+    await self._set_shaker_speed(speed)
+    await self._set_shaker_shape(shape)
+    self._shaking_state_unknown = True
     await self._start_shaking_command()
+    self._shaking_active = True
+    self._shaking_state_unknown = False
 
   async def shake(self, speed: float, duration: float):
-    await self.start_shaking(speed=speed)
+    async with self.shaking(speed=speed):
+      await anyio.sleep(duration)
+
+  @asynccontextmanager
+  async def shaking(self, speed: float, shape: int = 0) -> AsyncIterator[None]:
+    """Temporarily shake using an already-active borrowed control box."""
+    if not (60 <= speed <= 2000):
+      raise ValueError("Speed must be in the range 60 to 2000 RPM")
+    if shape not in range(6):
+      raise ValueError("Shape must be in the range 0 to 5")
+    token = object()
+    async with self._shaking_transition_lock:
+      if not self.interface.is_active:
+        raise RuntimeError("Shaking scopes require an active InhecoTECControlBox lifespan")
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Shaking is already scoped")
+      if self._shaking_active or self._shaking_state_unknown:
+        raise RuntimeError("Shaking is already active")
+      await anyio.lowlevel.checkpoint()
+      try:
+        await self._start_shaking_transition(speed, shape)
+      except BaseException:
+        if self._shaking_active or self._shaking_state_unknown:
+          with anyio.CancelScope(shield=True):
+            await self._stop_shaking_transition()
+        raise
+      self._shaking_scope_token = token
+
     try:
-      await asyncio.sleep(duration)
+      await anyio.lowlevel.checkpoint()
+      yield
     finally:
-      await self.stop_shaking()
+      with anyio.CancelScope(shield=True):
+        async with self._shaking_transition_lock:
+          if self._shaking_scope_token is token:
+            try:
+              await self._stop_shaking_transition()
+            finally:
+              self._shaking_scope_token = None
 
 
 def inheco_thermoshake_ac(
