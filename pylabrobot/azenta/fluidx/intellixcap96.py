@@ -1,12 +1,26 @@
-import asyncio
 import dataclasses
 import logging
 import re
-from typing import Dict, FrozenSet, List, NamedTuple, Optional, Tuple
+from typing import (
+  Awaitable,
+  Callable,
+  Dict,
+  FrozenSet,
+  List,
+  NamedTuple,
+  Optional,
+  Tuple,
+  TypeVar,
+)
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 # Every reply is framed between STX (0x02) and ETX (0x03). A command is answered
 # with an ACK frame (a lone 0x06), a command-echo frame ("<cmd>OK"), and then a
@@ -431,7 +445,7 @@ def _loaded_profile(frames: List[str]) -> Optional[int]:
   return None
 
 
-class FluidXIntelliXcap96:
+class FluidXIntelliXcap96(HasLifespan):
   """FluidX IntelliXcap 96 automated screw-cap decapper.
 
   A benchtop instrument that decaps and recaps a 96-format rack of screw-cap
@@ -549,11 +563,15 @@ class FluidXIntelliXcap96:
         by homing. Disable to make a latched error raise instead.
       recover_timeout: timeout in seconds for the recovery home.
     """
+    super().__init__()
     self.command_delay = command_delay
     self.frame_gap = frame_gap
     self.poll_interval = poll_interval
     self.auto_recover = auto_recover
     self.recover_timeout = recover_timeout
+    self.timeout = timeout
+    self._transaction_lock = anyio.Lock()
+    self._frame_buffer = bytearray()
     self.io = Serial(
       human_readable_device_name="FluidX IntelliXcap 96",
       port=port,
@@ -561,11 +579,12 @@ class FluidXIntelliXcap96:
       bytesize=8,
       parity="N",
       stopbits=1,
-      timeout=timeout,
     )
 
-  async def setup(self) -> None:
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport and reject a device that is not ready."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
     status = await self.request_status()
     up = status.upper()
     if "BUSY" in up:
@@ -593,46 +612,72 @@ class FluidXIntelliXcap96:
       raise await self._latched_fault("StatusNotOK", status)
     logger.info("[IntelliXcap96 %s] connected: %s", self.io.port, status)
 
-  async def stop(self) -> None:
-    """Close the serial connection."""
-    await self.io.stop()
-
   # === Framed command layer ===
 
   async def _send(self, command: str) -> None:
     """Discard pending input, write a command with its terminator, then pace."""
     await self.io.reset_input_buffer()
+    self._frame_buffer.clear()
     await self.io.write(command.encode("ascii") + ETX)
-    await asyncio.sleep(self.command_delay)
+    await anyio.sleep(self.command_delay)
 
-  async def _read_frame(self) -> Optional[str]:
-    """Read one STX..ETX frame and return its payload, or None if none arrives."""
+  async def _read_frame(self) -> str:
+    """Assemble one STX..ETX frame, retaining a partial frame across quiet gaps."""
     while True:
-      byte = await self.io.read(1)
-      if byte == b"":
-        return None
-      if byte == STX:
-        break
-    buf = bytearray()
-    while True:
-      byte = await self.io.read(1)
-      if byte in (b"", ETX):
-        break
-      buf += byte
-    return buf.decode("ascii", errors="replace")
+      start = self._frame_buffer.find(STX)
+      if start >= 0:
+        del self._frame_buffer[:start]
+        end = self._frame_buffer.find(ETX, 1)
+        if end >= 0:
+          payload = bytes(self._frame_buffer[1:end])
+          del self._frame_buffer[: end + 1]
+          return payload.decode("ascii", errors="replace")
+      else:
+        self._frame_buffer.clear()
+      self._frame_buffer.extend(await self.io.read(1))
 
   async def send_command(self, command: str) -> List[str]:
     """Send a raw command and collect every reply frame until the reply goes quiet."""
-    await self._send(command)
+    async with self._transaction_lock:
+      with anyio.CancelScope(shield=True):
+        frames = await self._send_command_locked(command)
+    await anyio.lowlevel.checkpoint()
+    return frames
+
+  async def _send_command_locked(self, command: str) -> List[str]:
+    """Send and collect one command while the caller owns the transaction lock."""
     frames: List[str] = []
-    with self.io.temporary_timeout(self.frame_gap):
+    await self._send(command)
+    with anyio.fail_after(self.timeout):
       while True:
-        frame = await self._read_frame()
-        if frame is None:
+        with anyio.move_on_after(self.frame_gap) as gap:
+          frame = await self._read_frame()
+        if gap.cancel_called:
+          if self._frame_buffer:
+            continue
           break
         frames.append(frame)
     logger.debug("[IntelliXcap96] %r -> %r", command, frames)
     return frames
+
+  async def _reconcile(self, operation: Callable[[Callable[[], None]], Awaitable[T]]) -> T:
+    """Finish an accepted command's finite existing result path under cancellation."""
+    await self._transaction_lock.acquire()
+    transaction_open = True
+
+    def release_transaction() -> None:
+      nonlocal transaction_open
+      if transaction_open:
+        self._transaction_lock.release()
+        transaction_open = False
+
+    try:
+      with anyio.CancelScope(shield=True):
+        result = await operation(release_transaction)
+    finally:
+      release_transaction()
+    await anyio.lowlevel.checkpoint()
+    return result
 
   @staticmethod
   def _status_frame(frames: List[str]) -> Optional[str]:
@@ -719,6 +764,7 @@ class FluidXIntelliXcap96:
     timeout: float,
     name: str,
     fail_key: str,
+    release_transaction: Callable[[], None],
   ) -> None:
     """Wait for an operation's own answer frame instead of polling status.
 
@@ -734,24 +780,29 @@ class FluidXIntelliXcap96:
     """
     done = done_frame.upper()
     if any(_is_error_frame(f) for f in frames):
+      release_transaction()
       raise await self._latched_fault(fail_key, f"{name}: {frames!r}", frames)
     if any(f.upper() == done for f in frames):
       return
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
     failure: Optional[List[str]] = None
-    with self.io.temporary_timeout(self.frame_gap):
-      while loop.time() < deadline:
-        frame = await self._read_frame()
-        if frame is None:
-          await asyncio.sleep(self.poll_interval)
-          continue
-        if _is_error_frame(frame):
-          failure = [frame]
-          break
-        if frame.upper() == done:
-          return
+    try:
+      with anyio.fail_after(timeout) as timeout_scope:
+        while True:
+          with anyio.move_on_after(self.frame_gap) as gap:
+            frame = await self._read_frame()
+          if gap.cancel_called:
+            await anyio.sleep(self.poll_interval)
+            continue
+          if _is_error_frame(frame):
+            failure = [frame]
+            break
+          if frame.upper() == done:
+            return
+    except TimeoutError:
+      if not timeout_scope.cancelled_caught:
+        raise
     if failure is not None:
+      release_transaction()
       raise await self._latched_fault(fail_key, f"{name}: {failure!r}", failure)
     raise FluidXError(
       title=f"{name} timed out",
@@ -778,31 +829,34 @@ class FluidXIntelliXcap96:
     Returns every frame seen while waiting, so a caller can pick up an answer
     the instrument sends alongside its completion.
     """
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
     expected = {status.upper() for status in terminal_statuses}
     done = {frame.upper() for frame in done_frames}
     seen: List[str] = []
-    while loop.time() < deadline:
-      frames = await self.send_command(STATUS)
-      seen.extend(frames)
-      for frame in frames:
-        if frame.upper() in ("RETRYDECAP", "RETRYRECAP"):
-          # The instrument retries a failed stroke by itself; report the attempt.
-          logger.info("[IntelliXcap96 %s] %s: instrument reports %s", self.io.port, name, frame)
-      if any(_is_error_frame(f) for f in frames):
-        raise await self._latched_fault(fail_key, f"{name}: {frames!r}", frames)
-      if any(f.upper() in done for f in frames):
-        return seen
-      status = self._status_frame(frames)
-      if status is not None:
-        up = status.upper()
-        if up in expected:
-          return seen
-        if "MANUAL" in up:
-          # A halt needs an operator, so waiting out the timeout only delays the report.
-          raise await self._latched_fault("StatusManual", f"{name}: {frames!r}", frames)
-      await asyncio.sleep(self.poll_interval)
+    try:
+      with anyio.fail_after(timeout) as timeout_scope:
+        while True:
+          frames = await self.send_command(STATUS)
+          seen.extend(frames)
+          for frame in frames:
+            if frame.upper() in ("RETRYDECAP", "RETRYRECAP"):
+              # The instrument retries a failed stroke by itself; report the attempt.
+              logger.info("[IntelliXcap96 %s] %s: instrument reports %s", self.io.port, name, frame)
+          if any(_is_error_frame(f) for f in frames):
+            raise await self._latched_fault(fail_key, f"{name}: {frames!r}", frames)
+          if any(f.upper() in done for f in frames):
+            return seen
+          status = self._status_frame(frames)
+          if status is not None:
+            up = status.upper()
+            if up in expected:
+              return seen
+            if "MANUAL" in up:
+              # A halt needs an operator, so waiting out the timeout only delays the report.
+              raise await self._latched_fault("StatusManual", f"{name}: {frames!r}", frames)
+          await anyio.sleep(self.poll_interval)
+    except TimeoutError:
+      if not timeout_scope.cancelled_caught:
+        raise
     raise FluidXError(
       title=f"{name} timed out",
       message=f"did not reach {terminal_statuses!r} within {timeout}s",
@@ -903,29 +957,39 @@ class FluidXIntelliXcap96:
   async def open_tray(self, timeout: float = 15.0) -> None:
     """Open the loading tray. Also opens the safety door."""
     await self._ensure_ready()
-    frames = await self.send_command(OPEN_TRAY)
-    if self._require_accepted(OPEN_TRAY, frames, "Opening the tray", idempotent=True):
-      await self._wait_for_idle(
-        timeout,
-        "Opening the tray",
-        "OpenTrayWasNotSuccesful",
-        ("StatusOK", "StatusRECAP"),
-        done_frames=("OpenDONE",),
-      )
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(OPEN_TRAY)
+      if self._require_accepted(OPEN_TRAY, frames, "Opening the tray", idempotent=True):
+        release_transaction()
+        await self._wait_for_idle(
+          timeout,
+          "Opening the tray",
+          "OpenTrayWasNotSuccesful",
+          ("StatusOK", "StatusRECAP"),
+          done_frames=("OpenDONE",),
+        )
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] tray open", self.io.port)
 
   async def close_tray(self, timeout: float = 15.0) -> None:
     """Close the loading tray, moving it to the decap/recap position."""
     await self._ensure_ready()
-    frames = await self.send_command(CLOSE_TRAY)
-    if self._require_accepted(CLOSE_TRAY, frames, "Closing the tray", idempotent=True):
-      await self._wait_for_idle(
-        timeout,
-        "Closing the tray",
-        "CloseTrayWasNotSuccesful",
-        ("StatusOK", "StatusRECAP"),
-        done_frames=("CloseDONE",),
-      )
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(CLOSE_TRAY)
+      if self._require_accepted(CLOSE_TRAY, frames, "Closing the tray", idempotent=True):
+        release_transaction()
+        await self._wait_for_idle(
+          timeout,
+          "Closing the tray",
+          "CloseTrayWasNotSuccesful",
+          ("StatusOK", "StatusRECAP"),
+          done_frames=("CloseDONE",),
+        )
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] tray closed", self.io.port)
 
   async def _tray_move(self, command: str, name: str, timeout: float) -> None:
@@ -937,13 +1001,22 @@ class FluidXIntelliXcap96:
     Unit firmware V49 does not acknowledge these commands.
     """
     await self._ensure_ready()
-    echo = f"{command}OK"
-    frames = await self.send_command(command)
-    self._require_accepted(command, frames, name)
-    if frames.count(echo) < 2:
-      await self._wait_for_answer(
-        [f for f in frames if f != echo], echo, timeout, name, "TrayMoveWasNotSuccesful"
-      )
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      echo = f"{command}OK"
+      frames = await self._send_command_locked(command)
+      self._require_accepted(command, frames, name)
+      if frames.count(echo) < 2:
+        await self._wait_for_answer(
+          [f for f in frames if f != echo],
+          echo,
+          timeout,
+          name,
+          "TrayMoveWasNotSuccesful",
+          release_transaction,
+        )
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] %s", self.io.port, name.lower())
 
   async def extend_tray(self, timeout: float = 15.0) -> None:
@@ -993,9 +1066,14 @@ class FluidXIntelliXcap96:
 
   async def _home_sequence(self, timeout: float, name: str) -> None:
     """Send the home command and wait for it to finish. Also clears a latched error."""
-    frames = await self.send_command(HOME_ALL)
-    self._require_accepted(HOME_ALL, frames, name)
-    await self._wait_for_idle(timeout, name, "HomeNotSuccesful", done_frames=("ZDONE",))
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(HOME_ALL)
+      self._require_accepted(HOME_ALL, frames, name)
+      release_transaction()
+      await self._wait_for_idle(timeout, name, "HomeNotSuccesful", done_frames=("ZDONE",))
+
+    await self._reconcile(reconcile)
 
   async def _ensure_ready(self) -> str:
     """Return the current status, first clearing a latched error by homing.
@@ -1037,9 +1115,13 @@ class FluidXIntelliXcap96:
     operation, so completion is read from the answer frame.
     """
     await self._require_manual_mode(name)
-    frames = await self.send_command(command)
-    self._require_accepted(command, frames, name)
-    await self._wait_for_answer(frames, done_frame, timeout, name, fail_key)
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(command)
+      self._require_accepted(command, frames, name)
+      await self._wait_for_answer(frames, done_frame, timeout, name, fail_key, release_transaction)
+
+    await self._reconcile(reconcile)
 
   async def reset_error(self, timeout: Optional[float] = None) -> None:
     """Recover from ``StatusError`` or ``StatusMANUAL`` by homing all axes.
@@ -1102,15 +1184,20 @@ class FluidXIntelliXcap96:
     status = (await self._ensure_ready()).upper()
     if "RECAP" in status:
       raise _fault("NeedToRecap")
-    frames = await self.send_command(DECAP_START)
-    self._require_accepted(DECAP_START, frames, "Decapping")
-    await self._wait_for_idle(
-      timeout,
-      "Decapping",
-      "DecapWasNotSuccesful",
-      ("StatusRECAP",),
-      done_frames=("DecapDONE",),
-    )
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(DECAP_START)
+      self._require_accepted(DECAP_START, frames, "Decapping")
+      release_transaction()
+      await self._wait_for_idle(
+        timeout,
+        "Decapping",
+        "DecapWasNotSuccesful",
+        ("StatusRECAP",),
+        done_frames=("DecapDONE",),
+      )
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] decap complete", self.io.port)
 
   async def retry_decap(self, timeout: float = 60.0) -> None:
@@ -1132,16 +1219,21 @@ class FluidXIntelliXcap96:
     :meth:`recap`.
     """
     await self._ensure_ready()
-    frames = await self.send_command(RETRY_DECAP)
-    # The firmware acknowledges a forced retry as if it were a fresh decap.
-    self._require_accepted(RETRY_DECAP, frames, "Retrying the decap", echo=DECAP_START)
-    await self._wait_for_idle(
-      timeout,
-      "Retrying the decap",
-      "RetryDecapWasNotSuccesful",
-      ("StatusRECAP",),
-      done_frames=("DecapDONE",),
-    )
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(RETRY_DECAP)
+      # The firmware acknowledges a forced retry as if it were a fresh decap.
+      self._require_accepted(RETRY_DECAP, frames, "Retrying the decap", echo=DECAP_START)
+      release_transaction()
+      await self._wait_for_idle(
+        timeout,
+        "Retrying the decap",
+        "RetryDecapWasNotSuccesful",
+        ("StatusRECAP",),
+        done_frames=("DecapDONE",),
+      )
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] decap retry complete", self.io.port)
 
   async def recap(self, timeout: float = 60.0) -> None:
@@ -1153,15 +1245,20 @@ class FluidXIntelliXcap96:
     status = (await self._ensure_ready()).upper()
     if "RECAP" not in status:
       raise _fault("NeedToDecap")
-    frames = await self.send_command(RECAP_START)
-    self._require_accepted(RECAP_START, frames, "Recapping")
-    await self._wait_for_idle(
-      timeout,
-      "Recapping",
-      "RecapWasNotSuccesful",
-      ("StatusOK",),
-      done_frames=("RecapDONE",),
-    )
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(RECAP_START)
+      self._require_accepted(RECAP_START, frames, "Recapping")
+      release_transaction()
+      await self._wait_for_idle(
+        timeout,
+        "Recapping",
+        "RecapWasNotSuccesful",
+        ("StatusOK",),
+        done_frames=("RecapDONE",),
+      )
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] recap complete", self.io.port)
 
   async def waste(self, timeout: float = 60.0) -> None:
@@ -1190,15 +1287,20 @@ class FluidXIntelliXcap96:
     status = (await self._ensure_ready()).upper()
     if "RECAP" not in status:
       raise _fault("NeedToDecap", "waste requires caps held after decapping")
-    frames = await self.send_command(WASTE)
-    self._require_accepted(WASTE, frames, "Wasting caps")
-    await self._wait_for_idle(
-      timeout,
-      "Wasting caps",
-      "StoreWasNotSuccesful",
-      ("StatusOK",),
-      done_frames=("StoreDONE",),
-    )
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(WASTE)
+      self._require_accepted(WASTE, frames, "Wasting caps")
+      release_transaction()
+      await self._wait_for_idle(
+        timeout,
+        "Wasting caps",
+        "StoreWasNotSuccesful",
+        ("StatusOK",),
+        done_frames=("StoreDONE",),
+      )
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] waste complete", self.io.port)
 
   async def standby(self, timeout: float = 15.0) -> None:
@@ -1209,26 +1311,39 @@ class FluidXIntelliXcap96:
     """
     if "SLEEP" in (await self.request_status()).upper():
       return
-    frames = await self.send_command(STANDBY)
-    self._require_accepted(STANDBY, frames, "Entering standby")
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
-    while loop.time() < deadline:
-      if "SLEEP" in (await self.request_status()).upper():
-        logger.info("[IntelliXcap96 %s] standby", self.io.port)
-        return
-      await asyncio.sleep(self.poll_interval)
-    raise _fault("CannotGoInStandbyMode", "standby timed out")
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(STANDBY)
+      self._require_accepted(STANDBY, frames, "Entering standby")
+      release_transaction()
+      try:
+        with anyio.fail_after(timeout) as timeout_scope:
+          while True:
+            if "SLEEP" in (await self.request_status()).upper():
+              return
+            await anyio.sleep(self.poll_interval)
+      except TimeoutError:
+        if not timeout_scope.cancelled_caught:
+          raise
+        raise _fault("CannotGoInStandbyMode", "standby timed out") from None
+
+    await self._reconcile(reconcile)
+    logger.info("[IntelliXcap96 %s] standby", self.io.port)
 
   async def ready(self, timeout: float = 30.0) -> None:
     """Wake the decapper from standby if it is asleep."""
     if "SLEEP" not in (await self.request_status()).upper():
       return
-    frames = await self.send_command(READY)
-    self._require_accepted(READY, frames, "Waking from standby")
-    await self._wait_for_idle(
-      timeout, "Waking from standby", "StatusNotOK", done_frames=("ReadyDONE",)
-    )
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(READY)
+      self._require_accepted(READY, frames, "Waking from standby")
+      release_transaction()
+      await self._wait_for_idle(
+        timeout, "Waking from standby", "StatusNotOK", done_frames=("ReadyDONE",)
+      )
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] ready", self.io.port)
 
   # === Cartridge handling ===
@@ -1245,15 +1360,20 @@ class FluidXIntelliXcap96:
     if extended.caps_on_pins:
       raise _fault("CapsOnPins", "the cartridge cannot be ejected while caps are held")
     await self._ensure_ready()
-    frames = await self.send_command(CARTRIDGE_EJECT)
-    self._require_accepted(CARTRIDGE_EJECT, frames, "Ejecting the cartridge")
-    await self._wait_for_idle(
-      timeout,
-      "Ejecting the cartridge",
-      "CartridgeEjectWasNotSuccesful",
-      ("StatusCAREJECT",),
-      done_frames=("CarEjectDONE",),
-    )
+
+    async def reconcile(release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(CARTRIDGE_EJECT)
+      self._require_accepted(CARTRIDGE_EJECT, frames, "Ejecting the cartridge")
+      release_transaction()
+      await self._wait_for_idle(
+        timeout,
+        "Ejecting the cartridge",
+        "CartridgeEjectWasNotSuccesful",
+        ("StatusCAREJECT",),
+        done_frames=("CarEjectDONE",),
+      )
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] cartridge ejected", self.io.port)
 
   async def load_cartridge(self, timeout: float = 60.0) -> Optional[int]:
@@ -1270,29 +1390,39 @@ class FluidXIntelliXcap96:
     """
     if (await self.request_extended_status()).cartridge_installed:
       return None
-    frames = await self.send_command(CARTRIDGE_LOAD)
-    self._require_accepted(CARTRIDGE_LOAD, frames, "Loading the cartridge")
-    if any(_is_error_frame(f) for f in frames):
-      raise await self._latched_fault(
-        "CartridgeLoadWasNotSuccesful", f"Loading the cartridge: {frames!r}", frames
+
+    async def reconcile(release_transaction: Callable[[], None]) -> Optional[int]:
+      frames = await self._send_command_locked(CARTRIDGE_LOAD)
+      self._require_accepted(CARTRIDGE_LOAD, frames, "Loading the cartridge")
+      if any(_is_error_frame(f) for f in frames):
+        release_transaction()
+        raise await self._latched_fault(
+          "CartridgeLoadWasNotSuccesful", f"Loading the cartridge: {frames!r}", frames
+        )
+      release_transaction()
+      seen = await self._wait_for_idle(
+        timeout,
+        "Loading the cartridge",
+        "CartridgeLoadWasNotSuccesful",
+        ("StatusOK",),
+        done_frames=("CarLoadDONE", "ExtCarLoadDONE"),
       )
-    seen = await self._wait_for_idle(
-      timeout,
-      "Loading the cartridge",
-      "CartridgeLoadWasNotSuccesful",
-      ("StatusOK",),
-      done_frames=("CarLoadDONE", "ExtCarLoadDONE"),
-    )
-    profile = _loaded_profile(frames + seen)
+      return _loaded_profile(frames + seen)
+
+    profile = await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] cartridge loaded (profile %s)", self.io.port, profile)
     return profile
 
   async def reset_cartridge_counter(self) -> None:
     """Reset the installed cartridge's cycle counter to zero."""
     name = "Resetting the cartridge counter"
-    frames = await self.send_command(CARTRIDGE_COUNTER_RESET)
-    if self._require_accepted(CARTRIDGE_COUNTER_RESET, frames, name, idempotent=True):
-      self._require_answer(frames, "CarResetDONE", name)
+
+    async def reconcile(_release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(CARTRIDGE_COUNTER_RESET)
+      if self._require_accepted(CARTRIDGE_COUNTER_RESET, frames, name, idempotent=True):
+        self._require_answer(frames, "CarResetDONE", name)
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] cartridge counter reset", self.io.port)
 
   # === Settings ===
@@ -1306,9 +1436,13 @@ class FluidXIntelliXcap96:
     """
     command = ERROR_DETECTION_ON if enabled else ERROR_DETECTION_OFF
     name = "Enabling error detection" if enabled else "Disabling error detection"
-    frames = await self.send_command(command)
-    if self._require_accepted(command, frames, name, idempotent=True):
-      self._require_answer(frames, "ErrorDetectON" if enabled else "ErrorDetectOFF", name)
+
+    async def reconcile(_release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(command)
+      if self._require_accepted(command, frames, name, idempotent=True):
+        self._require_answer(frames, "ErrorDetectON" if enabled else "ErrorDetectOFF", name)
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] error detection %s", self.io.port, "on" if enabled else "off")
 
   async def set_dry_run_enabled(self, enabled: bool) -> None:
@@ -1321,9 +1455,13 @@ class FluidXIntelliXcap96:
     """
     command = DRY_RUN_ON if enabled else DRY_RUN_OFF
     name = "Enabling dry-run mode" if enabled else "Disabling dry-run mode"
-    frames = await self.send_command(command)
-    if self._require_accepted(command, frames, name, idempotent=True):
-      self._require_answer(frames, "DryRunON" if enabled else "DryRunOFF", name)
+
+    async def reconcile(_release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(command)
+      if self._require_accepted(command, frames, name, idempotent=True):
+        self._require_answer(frames, "DryRunON" if enabled else "DryRunOFF", name)
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] dry-run mode %s", self.io.port, "on" if enabled else "off")
 
   async def set_safety_door_enabled(self, enabled: bool) -> None:
@@ -1334,9 +1472,13 @@ class FluidXIntelliXcap96:
     """
     command = SAFETY_DOOR_ENABLE if enabled else SAFETY_DOOR_DISABLE
     name = "Enabling the safety door" if enabled else "Disabling the safety door"
-    frames = await self.send_command(command)
-    if self._require_accepted(command, frames, name, idempotent=True):
-      self._require_answer(frames, "DoorONDONE" if enabled else "DoorOFFDONE", name)
+
+    async def reconcile(_release_transaction: Callable[[], None]) -> None:
+      frames = await self._send_command_locked(command)
+      if self._require_accepted(command, frames, name, idempotent=True):
+        self._require_answer(frames, "DoorONDONE" if enabled else "DoorOFFDONE", name)
+
+    await self._reconcile(reconcile)
     logger.info("[IntelliXcap96 %s] safety door %s", self.io.port, "on" if enabled else "off")
 
   # === Manual recovery ===

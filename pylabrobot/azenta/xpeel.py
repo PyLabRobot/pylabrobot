@@ -1,7 +1,8 @@
 import logging
-import time
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple
+
+import anyio
 
 try:
   import serial  # type: ignore
@@ -11,10 +12,11 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 
-class XPeel:
+class XPeel(HasLifespan):
   """Serial driver for the Azenta XPeel automated plate seal remover (RS-232).
 
   Owns the hardware connection and provides generic send/receive plus device-level operations
@@ -70,11 +72,10 @@ class XPeel:
       rtscts=False,
     )
 
-  async def setup(self):
-    await self.io.setup()
-
-  async def stop(self):
-    await self.io.stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport for the driver's lifespan."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
 
   @classmethod
   def describe_error(cls, code: int) -> str:
@@ -105,35 +106,35 @@ class XPeel:
     await self.io.write(full_cmd.encode("ascii"))
 
     responses: List[str] = []
-    start = time.time()
-    while time.time() - start < self.response_timeout:
-      raw = await self.io.readline()
-      line = raw.decode("ascii", errors="ignore").strip()
-      if not line:
-        continue
+    with anyio.move_on_after(self.response_timeout) as response_scope:
+      while True:
+        raw = await self.io.readline()
+        line = raw.decode("ascii", errors="ignore").strip()
+        if not line:
+          continue
 
-      display_line = line
-      if line.startswith("*ready:"):
-        parsed = self.parse_ready_line(line)
-        if parsed:
-          code, desc = parsed
-          display_line = f"{line} [{desc}]"
+        display_line = line
+        if line.startswith("*ready:"):
+          parsed = self.parse_ready_line(line)
+          if parsed:
+            code, desc = parsed
+            display_line = f"{line} [{desc}]"
 
-      responses.append(display_line)
-      self.logger.info("Received: %s", display_line)
+        responses.append(display_line)
+        self.logger.info("Received: %s", display_line)
 
-      if line.startswith("*ack"):
-        if not wait_for_ready:
+        if line.startswith("*ack"):
+          if not wait_for_ready:
+            break
+          continue
+
+        if wait_for_ready and line.startswith("*ready"):
           break
-        continue
 
-      if wait_for_ready and line.startswith("*ready"):
-        break
+        if not wait_for_ready and not expect_ack:
+          break
 
-      if not wait_for_ready and not expect_ack:
-        break
-
-    if time.time() - start >= self.response_timeout:
+    if response_scope.cancelled_caught:
       self.logger.warning(
         "Timed out waiting for response to %s after %.2fs",
         full_cmd.strip(),

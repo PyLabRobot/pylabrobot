@@ -1,13 +1,17 @@
 import abc
-import asyncio
 import enum
 import logging
-import time
-from typing import Dict, Optional, Type
+from typing import Dict, List, Optional, Type
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger(__name__)
+
+_COMMAND_DELAY_SECONDS = 0.2
+_SETPOINT_SETTLE_SECONDS = 3.0
 
 
 class KBiosystemsError(Exception):
@@ -29,7 +33,7 @@ class KBiosystemsError(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class KBiosystemsSealer(abc.ABC):
+class KBiosystemsSealer(HasLifespan, abc.ABC):
   """Shared base for KBiosystems serial heat sealers (Ultraseal ePRO / XT Pro).
 
   Every model speaks the same ASCII-over-RS-232 core: a command is written with
@@ -39,8 +43,8 @@ class KBiosystemsSealer(abc.ABC):
   command was rejected. This base implements the transport, the status/error
   polling state machine, and the temperature and time commands shared by all
   models. Subclasses supply the model-specific status flags, error table,
-  temperature limits, human-readable name, ``setup``, ``seal``, and any extra
-  commands.
+  temperature limits, human-readable name, lifespan initialization, ``seal``,
+  and any extra commands.
 
   Serial settings: 9600 baud, 8 data bits, no parity, 1 stop bit, no handshake,
   CR (``\\r``) terminator.
@@ -76,6 +80,8 @@ class KBiosystemsSealer(abc.ABC):
     preheating_temperature: int = 100,
     offline_temperature: int = 20,
   ) -> None:
+    super().__init__()
+    self._command_lock = anyio.Lock()
     self.timeout = timeout
     self.settle_time = settle_time
     self.preheating_temperature = preheating_temperature
@@ -87,52 +93,66 @@ class KBiosystemsSealer(abc.ABC):
       bytesize=8,
       parity="N",
       stopbits=1,
-      timeout=0.2,
     )
 
   # === Subclass contract ===
 
   @abc.abstractmethod
-  async def setup(self) -> None:
-    """Open the connection and bring the sealer to a ready, pre-heated state."""
-
-  @abc.abstractmethod
   async def seal(self, temperature: int, duration: float) -> None:
     """Seal a plate at the given sealing temperature (C) and duration (s)."""
 
-  async def _open(self) -> None:
-    """Open the port, wait out the post-open settling, and clear the buffer."""
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own Serial and register offline-temperature cleanup before initialization."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._set_offline_temperature_for_exit)
     # The device drops characters for a few seconds after the port opens.
-    await asyncio.sleep(self.settle_time)
+    await anyio.sleep(self.settle_time)
     await self.io.reset_input_buffer()
 
-  async def stop(self) -> None:
-    """Return the heater to the offline temperature and close the port."""
+  async def _set_offline_temperature_for_exit(self) -> None:
+    """Return the heater to the configured offline temperature before Serial closes."""
     try:
       await self.set_temperature(self.offline_temperature)
     except (KBiosystemsError, TimeoutError) as e:
       logger.warning("[%s] could not set offline temperature: %s", self.io.port, e)
-    await self.io.stop()
 
   # === Command layer ===
 
   async def _read_line(self) -> str:
     """Read bytes until a CR terminator, skipping stray LF."""
-    start = time.time()
     buf = bytearray()
-    while True:
-      b = await self.io.read(1)
-      if b == b"":
-        if time.time() - start > self.timeout:
-          raise TimeoutError("Timeout while waiting for response from sealer.")
-        continue
-      if b == b"\r":
-        break
-      if b == b"\n":
-        continue
-      buf += b
+    try:
+      with anyio.fail_after(self.timeout):
+        while True:
+          b = await self.io.read(1)
+          if b == b"\r":
+            break
+          if b == b"\n":
+            continue
+          buf += b
+    except TimeoutError:
+      raise TimeoutError("Timeout while waiting for response from sealer.") from None
     return buf.decode("ascii", errors="replace")
+
+  async def _send_command(
+    self, command: str, read_reply: bool = True, reply_count: int = 1
+  ) -> List[str]:
+    """Serialize one write and all of its expected reply lines."""
+    async with self._command_lock:
+      await anyio.lowlevel.checkpoint()
+      await self.io.reset_input_buffer()
+      with anyio.CancelScope(shield=True):
+        await self.io.write((command + "\r").encode("ascii"))
+        await anyio.sleep(_COMMAND_DELAY_SECONDS)
+        if read_reply:
+          replies = [await self._read_line() for _ in range(reply_count)]
+        else:
+          replies = [""]
+      await anyio.lowlevel.checkpoint()
+    first = replies[0]
+    replies[0] = first if "syntax" in first else first.lstrip(command)
+    return replies
 
   async def send_command(self, command: str, read_reply: bool = True) -> str:
     """Send a command and return the reply with the echoed command stripped.
@@ -141,16 +161,8 @@ class KBiosystemsSealer(abc.ABC):
       command: command string without the CR terminator, e.g. "A160", "?".
       read_reply: if False, do not read a reply (used for commands that send none).
     """
-    await self.io.reset_input_buffer()
-    await self.io.write((command + "\r").encode("ascii"))
-    await asyncio.sleep(0.2)
-    if not read_reply:
-      return ""
-    text = await self._read_line()
-    if "syntax" in text:
-      return text
-    # The device echoes the command; an empty command trims whitespace only.
-    return text.lstrip(command) if command else text.strip()
+    replies = await self._send_command(command, read_reply=read_reply)
+    return replies[0].strip() if not command else replies[0]
 
   def _check(self, reply: str, allowed: set, command: str) -> str:
     if reply not in allowed or "syntax" in reply:
@@ -188,7 +200,7 @@ class KBiosystemsSealer(abc.ABC):
     status = await self.request_status()
     while status != self._READY:
       if status & self._BUSY:
-        await asyncio.sleep(0.5)
+        await anyio.sleep(0.5)
         status = await self._wait_for_busy_cleared()
         continue
 
@@ -214,22 +226,28 @@ class KBiosystemsSealer(abc.ABC):
     return status
 
   async def _wait_for_busy_cleared(self, timeout: float = 60.0) -> enum.IntFlag:
-    start = time.time()
-    status = await self.request_status()
-    while status & self._BUSY:
-      if time.time() - start > timeout:
-        raise KBiosystemsError(title="Timeout while waiting for busy flag to clear")
-      await asyncio.sleep(0.5)
-      status = await self.request_status()
-    return status
+    try:
+      with anyio.fail_after(timeout) as timeout_scope:
+        status = await self.request_status()
+        while status & self._BUSY:
+          await anyio.sleep(0.5)
+          status = await self.request_status()
+        return status
+    except TimeoutError:
+      if not timeout_scope.cancel_called:
+        raise
+      raise KBiosystemsError(title="Timeout while waiting for busy flag to clear") from None
 
   async def wait_for_sealing_temperature(self, timeout: float = 300.0) -> None:
     """Block until the heater reaches the setpoint (NotAtSealTemperature clears)."""
-    start = time.time()
-    while await self.request_status() & self._NOT_AT_SEAL_TEMPERATURE:
-      if time.time() - start > timeout:
-        raise TimeoutError("Timeout while waiting for sealing temperature.")
-      await asyncio.sleep(5.0)
+    try:
+      with anyio.fail_after(timeout) as timeout_scope:
+        while await self.request_status() & self._NOT_AT_SEAL_TEMPERATURE:
+          await anyio.sleep(5.0)
+    except TimeoutError:
+      if not timeout_scope.cancel_called:
+        raise
+      raise TimeoutError("Timeout while waiting for sealing temperature.") from None
 
   # === Parameters ===
 
@@ -242,7 +260,7 @@ class KBiosystemsSealer(abc.ABC):
     command = f"A{temperature:03d}"
     self._check(await self.send_command(command), {"ok"}, command)
     # The firmware needs a moment to accept the new setpoint.
-    await asyncio.sleep(3.0)
+    await anyio.sleep(_SETPOINT_SETTLE_SECONDS)
 
   async def set_sealing_time(self, seconds: float) -> None:
     """Set the sealing time in seconds (``B``)."""
