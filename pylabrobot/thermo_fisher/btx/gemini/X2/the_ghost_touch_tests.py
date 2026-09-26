@@ -1,11 +1,14 @@
 import json
 import shutil
 import subprocess
+import time
 import unittest
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional, cast
 from unittest.mock import AsyncMock, patch
 
+import anyio
 import pytest
 
 pytest.importorskip("numpy")
@@ -42,6 +45,18 @@ class _FakeAsyncSerial:
     self.setup = AsyncMock()
     self.stop = AsyncMock()
     self.reset_calls = 0
+
+  @asynccontextmanager
+  async def lifespan(self):
+    try:
+      await self.setup()
+    except BaseException:
+      await self.stop()
+      raise
+    try:
+      yield self
+    finally:
+      await self.stop()
 
   async def write(self, data: bytes) -> None:
     self.writes.append(data)
@@ -252,6 +267,131 @@ class TestTheGhostTouch(unittest.IsolatedAsyncioTestCase):
     self.assertIsNotNone(result)
     assert result is not None
     self.assertEqual(result.image_path, "unknown")
+
+  async def test_snapshot_waits_bound_stalled_capture(self):
+    touch = _TestGhostTouch()
+
+    async def stalled(_prefix):
+      await anyio.sleep_forever()
+
+    with patch.object(touch, "snapshot", stalled):
+      with anyio.fail_after(0.2):
+        self.assertIsNone(await touch.wait_for_states({STATE_MAIN_MENU}, 0.02, 0, "stalled"))
+      with anyio.fail_after(0.2):
+        self.assertIsNone(
+          await touch._wait_for_run_transition(timeout=0.02, interval=0, prefix="stalled")
+        )
+
+    with patch.object(touch, "_snapshot_run_poll", stalled):
+      with anyio.fail_after(0.2):
+        with self.assertRaisesRegex(TimeoutError, "Timed out waiting for run completion"):
+          await touch.wait_run_done(0.02)
+
+  async def test_frame_read_timeout_bounds_stalled_serial_read(self):
+    fake = _FakeAsyncSerial()
+    reads = 0
+
+    async def stalled(num_bytes: int = 1) -> bytes:
+      nonlocal reads
+      del num_bytes
+      reads += 1
+      await anyio.sleep_forever()
+      raise AssertionError("unreachable")
+
+    fake.read = stalled  # type: ignore[method-assign]
+    transport = _RSITransport("/dev/test", 115200, 0.08, 1, serial_io=fake)
+    await transport.setup()
+    try:
+      with anyio.fail_after(0.2):
+        with self.assertRaisesRegex(TimeoutError, "Failed to read full scap frame"):
+          await transport._read_frame_transaction()
+    finally:
+      await transport.stop()
+    self.assertEqual(reads, 1)
+
+  async def test_cancelled_capture_consumes_first_frame_before_next_request(self):
+    class LateSerial(_FakeAsyncSerial):
+      def __init__(self):
+        super().__init__()
+        self.first_delivered = False
+
+      async def read(self, num_bytes: int = 1) -> bytes:
+        del num_bytes
+        if not self.first_delivered:
+          await anyio.sleep(0.08)
+          self.first_delivered = True
+          return bytes((1, 1, 1, 0)) * (FRAME_W * FRAME_H) + b":"
+        return bytes((2, 2, 2, 0)) * (FRAME_W * FRAME_H) + b":"
+
+    fake = LateSerial()
+    transport = _RSITransport("/dev/test", 115200, 0.2, 1, serial_io=fake)
+    await transport.setup()
+    try:
+      with anyio.fail_after(1):
+        with anyio.move_on_after(0.05) as scope:
+          await transport.read_frame(retry=False)
+        self.assertTrue(scope.cancel_called)
+        second = await transport.read_frame(retry=False)
+      self.assertEqual(second.rgba[0, 0].tolist(), [2, 2, 2, 255])
+    finally:
+      await transport.stop()
+
+  async def test_screenshot_wait_allows_one_shielded_frame_timeout(self):
+    touch = _TheGhostTouch(port="/dev/test", timeout=0.12, retries=2)
+    fake = _FakeAsyncSerial()
+
+    async def slow_read(num_bytes: int = 1) -> bytes:
+      del num_bytes
+      await anyio.sleep(0.09)
+      return b""
+
+    fake.read = slow_read  # type: ignore[method-assign]
+    touch._transport = _RSITransport("/dev/test", 115200, 0.12, 2, serial_io=fake)
+    await touch._transport.setup()
+    try:
+      started = anyio.current_time()
+      with anyio.fail_after(1):
+        self.assertIsNone(
+          await touch.wait_for_states({STATE_MAIN_MENU}, timeout=0.05, interval=0, prefix="slow")
+        )
+      self.assertGreater(anyio.current_time() - started, 0.11)
+      self.assertLess(anyio.current_time() - started, 0.35)
+      started = anyio.current_time()
+      with anyio.fail_after(1):
+        self.assertIsNone(
+          await touch._wait_for_run_transition(timeout=0.05, interval=0, prefix="slow")
+        )
+      self.assertGreater(anyio.current_time() - started, 0.11)
+      self.assertLess(anyio.current_time() - started, 0.35)
+      started = anyio.current_time()
+      with anyio.fail_after(1):
+        with self.assertRaisesRegex(TimeoutError, "Timed out waiting for run completion"):
+          await touch.wait_run_done(0.05)
+      self.assertGreater(anyio.current_time() - started, 0.11)
+      self.assertLess(anyio.current_time() - started, 0.35)
+    finally:
+      await touch._transport.stop()
+
+  async def test_screenshot_wait_bounds_frame_processing_after_capture(self):
+    touch = _TheGhostTouch(port="/dev/test", timeout=0.2, retries=1)
+    fake = _FakeAsyncSerial(reads=[bytes(FRAME_BYTES) + b":"])
+    touch._transport = _RSITransport("/dev/test", 115200, 0.2, 1, serial_io=fake)
+
+    def slow_save(_frame, _prefix):
+      time.sleep(0.2)
+      return "image.png"
+
+    await touch._transport.setup()
+    try:
+      with patch.object(touch, "_save_frame", slow_save):
+        started = anyio.current_time()
+        with anyio.fail_after(1):
+          self.assertIsNone(
+            await touch.wait_for_states({STATE_MAIN_MENU}, timeout=0.07, interval=0, prefix="slow")
+          )
+        self.assertLess(anyio.current_time() - started, 0.15)
+    finally:
+      await touch._transport.stop()
 
   async def test_start_run_refuses_a_blind_second_go_tap(self):
     touch = _TestGhostTouch()

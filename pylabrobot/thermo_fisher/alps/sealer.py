@@ -1,13 +1,16 @@
 import abc
-import asyncio
 import enum
 import logging
-import time
 from typing import Dict, Optional, Type
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger(__name__)
+
+_COMMAND_DELAY_SECONDS = 0.2
 
 
 class ThermoScientificALPSError(Exception):
@@ -29,7 +32,7 @@ class ThermoScientificALPSError(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class ThermoScientificALPSSealer(abc.ABC):
+class ThermoScientificALPSSealer(HasLifespan, abc.ABC):
   """Shared base for Thermo Scientific ALPS serial heat sealers (300 / 3000 / 5000).
 
   Every model speaks the same ASCII-over-RS-232 core: a command is written with
@@ -38,7 +41,7 @@ class ThermoScientificALPSSealer(abc.ABC):
   ``ok``; ``?`` -> ``?3f`` -> ``3f``). This base implements the transport, the
   status/error polling state machine, and the temperature and time commands.
   Subclasses supply the model-specific status flags, error table,
-  human-readable name, ``setup``, ``seal``, and any extra commands.
+  human-readable name, ``seal``, and any extra commands.
 
   Shared commands (ASCII, CR-terminated):
     ?            read status byte, two hex digits (see the model's STATUS enum)
@@ -86,6 +89,7 @@ class ThermoScientificALPSSealer(abc.ABC):
     settle_time: float = 2.0,
     preheating_temperature: int = 100,
   ) -> None:
+    super().__init__()
     self.timeout = timeout
     self.settle_time = settle_time
     self.preheating_temperature = preheating_temperature
@@ -96,56 +100,47 @@ class ThermoScientificALPSSealer(abc.ABC):
       bytesize=8,
       parity="N",
       stopbits=1,
-      timeout=0.2,
     )
 
   # === Subclass contract ===
 
   @abc.abstractmethod
-  async def setup(self) -> None:
-    """Open the connection and bring the sealer to a ready, pre-heated state."""
-
-  @abc.abstractmethod
   async def seal(self, temperature: int, duration: float) -> None:
     """Seal a plate at the given sealing temperature (C) and duration (s)."""
 
-  async def _open(self) -> None:
-    """Open the port, wait out the post-open settling, and clear the buffer.
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own Serial, wait out the post-open settling, and clear the buffer.
 
     Emits the not-tested warning: no ALPS sealer driver has been verified
     against hardware in PyLabRobot yet.
     """
+    await super()._enter_lifespan(stack)
     logger.warning(
       "%s has NOT been tested against hardware in PyLabRobot. Please make a PR "
       "to remove this message if you have verified it on your hardware.",
       type(self).__name__,
     )
-    await self.io.setup()
+    await stack.enter_async_context(self.io.lifespan())
     # Give a USB-to-serial adapter a moment to settle after the port opens.
-    await asyncio.sleep(self.settle_time)
+    await anyio.sleep(self.settle_time)
     await self.io.reset_input_buffer()
-
-  async def stop(self) -> None:
-    """Close the port."""
-    await self.io.stop()
 
   # === Command layer ===
 
   async def _read_line(self) -> str:
     """Read bytes until a CR terminator, skipping stray LF."""
-    start = time.time()
     buf = bytearray()
-    while True:
-      b = await self.io.read(1)
-      if b == b"":
-        if time.time() - start > self.timeout:
-          raise TimeoutError("Timeout while waiting for response from sealer.")
-        continue
-      if b == b"\r":
-        break
-      if b == b"\n":
-        continue
-      buf += b
+    try:
+      with anyio.fail_after(self.timeout):
+        while True:
+          b = await self.io.read(1)
+          if b == b"\r":
+            break
+          if b == b"\n":
+            continue
+          buf += b
+    except TimeoutError:
+      raise TimeoutError("Timeout while waiting for response from sealer.") from None
     return buf.decode("ascii", errors="replace")
 
   async def send_command(self, command: str) -> str:
@@ -154,10 +149,13 @@ class ThermoScientificALPSSealer(abc.ABC):
     Args:
       command: command string without the CR terminator, e.g. "A160", "?".
     """
+    await anyio.lowlevel.checkpoint()
     await self.io.reset_input_buffer()
-    await self.io.write((command + "\r").encode("ascii"))
-    await asyncio.sleep(0.2)
-    text = await self._read_line()
+    with anyio.CancelScope(shield=True):
+      await self.io.write((command + "\r").encode("ascii"))
+      await anyio.sleep(_COMMAND_DELAY_SECONDS)
+      text = await self._read_line()
+    await anyio.lowlevel.checkpoint()
     return text.lstrip(command) if command else text.strip()
 
   # === State ===
@@ -189,7 +187,7 @@ class ThermoScientificALPSSealer(abc.ABC):
     status = await self.request_status()
     while status != self._READY:
       if status & self._BUSY:
-        await asyncio.sleep(0.5)
+        await anyio.sleep(0.5)
         status = await self._wait_for_busy_cleared()
         continue
 
@@ -210,22 +208,26 @@ class ThermoScientificALPSSealer(abc.ABC):
     return status
 
   async def _wait_for_busy_cleared(self, timeout: float = 60.0) -> enum.IntFlag:
-    start = time.time()
-    status = await self.request_status()
-    while status & self._BUSY:
-      if time.time() - start > timeout:
-        raise ThermoScientificALPSError(title="Timeout while waiting for the seal to complete")
-      await asyncio.sleep(0.5)
-      status = await self.request_status()
-    return status
+    try:
+      with anyio.fail_after(timeout):
+        status = await self.request_status()
+        while status & self._BUSY:
+          await anyio.sleep(0.5)
+          status = await self.request_status()
+        return status
+    except TimeoutError:
+      raise ThermoScientificALPSError(
+        title="Timeout while waiting for the seal to complete"
+      ) from None
 
   async def wait_for_sealing_temperature(self, timeout: float = 300.0) -> None:
     """Block until the heater reaches the setpoint (NotAtSealTemperature clears)."""
-    start = time.time()
-    while await self.request_status() & self._NOT_AT_SEAL_TEMPERATURE:
-      if time.time() - start > timeout:
-        raise TimeoutError("Timeout while waiting for sealing temperature.")
-      await asyncio.sleep(5.0)
+    try:
+      with anyio.fail_after(timeout):
+        while await self.request_status() & self._NOT_AT_SEAL_TEMPERATURE:
+          await anyio.sleep(5.0)
+    except TimeoutError:
+      raise TimeoutError("Timeout while waiting for sealing temperature.") from None
 
   # === Parameters ===
 

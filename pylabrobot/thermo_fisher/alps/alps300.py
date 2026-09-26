@@ -48,7 +48,6 @@ ERRORS = {
 _READY_MASK = (
   ALPS300Status.NotAtSealTemperature | ALPS300Status.FoilLow | ALPS300Status.ProceedOverridden
 )
-_SETUP_MASK = ALPS300Status.NotAtSealTemperature | ALPS300Status.ProceedOverridden
 
 
 class ThermoScientificALPS300(ThermoScientificALPSSealer):
@@ -62,11 +61,6 @@ class ThermoScientificALPS300(ThermoScientificALPSSealer):
   STATUS = ALPS300Status
   STATUS_MESSAGES = STATUS_MESSAGES
   ERRORS = ERRORS
-
-  async def setup(self) -> None:
-    await self._open()
-    await self.wait_for_idle(_SETUP_MASK)
-    await self.set_temperature(self.preheating_temperature)
 
   async def seal(self, temperature: int = 160, duration: float = 2.5) -> None:
     """Seal a plate.

@@ -62,11 +62,6 @@ class ThermoScientificALPS3000(ThermoScientificALPSSealer):
   STATUS_MESSAGES = STATUS_MESSAGES
   ERRORS = ERRORS
 
-  async def setup(self) -> None:
-    await self._open()
-    await self.wait_for_idle(_READY_MASK)
-    await self.set_temperature(self.preheating_temperature)
-
   async def seal(self, temperature: int = 160, duration: float = 2.5) -> None:
     """Seal a plate.
 

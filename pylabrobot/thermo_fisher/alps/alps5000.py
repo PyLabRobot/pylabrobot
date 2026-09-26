@@ -1,8 +1,10 @@
-import asyncio
 import enum
 import logging
-from typing import Dict
+from typing import Any, Dict
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.thermo_fisher.alps.sealer import (
   ThermoScientificALPSError,
   ThermoScientificALPSSealer,
@@ -100,11 +102,12 @@ class ThermoScientificALPS5000(ThermoScientificALPSSealer):
   STATUS_MESSAGES = STATUS_MESSAGES
   ERRORS = ERRORS
 
-  async def setup(self) -> None:
-    await self._open()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Own Serial through the base lifespan and initialize the instrument."""
+    await super()._enter_lifespan(stack, **kwargs)
     await self.wait_for_idle(_SETUP_MASK)
     await self.initialise()
-    await asyncio.sleep(_INIT_SECONDS)
+    await anyio.sleep(_INIT_SECONDS)
     await self.wait_for_idle(_SETUP_MASK)
     await self.set_temperature(self.preheating_temperature)
 

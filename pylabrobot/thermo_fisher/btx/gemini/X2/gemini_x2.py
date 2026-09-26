@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import (
   Any,
+  AsyncContextManager,
   Awaitable,
   Callable,
   Dict,
@@ -17,6 +17,10 @@ from typing import (
   TypeVar,
   Union,
 )
+
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 
 from .file_transfer_control import ProtocolDeletionPendingError, _FileTransferControl
 from .ht200 import BTXHT200
@@ -44,10 +48,7 @@ PlateHandlerResetState = Literal["unknown", "reset_confirmed", "continue_current
 
 
 class _GhostTouchSession(Protocol):
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
+  def lifespan(self) -> AsyncContextManager[Any]:
     pass
 
   async def ensure_home(self) -> Any:
@@ -116,7 +117,7 @@ class MatchedRunLogResult:
     }
 
 
-class BTXGeminiX2:
+class BTXGeminiX2(HasLifespan):
   """BTX Gemini X2 driver.
 
   The driver owns both mutually exclusive serial modes used by the device: Protocol Manager
@@ -138,6 +139,7 @@ class BTXGeminiX2:
   }
   LOG_POLL_TIMEOUT_SECONDS = 10.0
   LOG_POLL_INTERVAL_SECONDS = 0.5
+  LOG_POLL_FIRST_ATTEMPT_SECONDS = 0.5
 
   def __init__(
     self,
@@ -146,47 +148,42 @@ class BTXGeminiX2:
     plate_handler: Optional[BTXHT200] = None,
     temporary_protocol_prefix: str = DEFAULT_TEMPORARY_PROTOCOL_PREFIX,
   ) -> None:
+    super().__init__()
     self._file_transfer_control = _FileTransferControl(port=port)
     self.plate_handler = plate_handler if plate_handler is not None else BTXHT200()
     self._temporary_protocol_prefix = temporary_protocol_prefix
-    self._operation_lock = asyncio.Lock()
+    self._operation_lock = anyio.Lock()
     self._is_setup = False
+    self._mode_stack: AsyncExitStackWithShielding | None = None
 
   @property
   def port(self) -> Optional[str]:
     """The resolved serial port, if setup has discovered one."""
     return self._file_transfer_control.port
 
-  async def setup(self) -> None:
-    async with self._operation_lock:
-      if self._is_setup:
-        return
-      logger.info("Setting up BTX Gemini X2")
-      try:
-        await self._file_transfer_control.setup()
-        await self._ensure_temporary_protocol_prefix_order_safe(self._temporary_protocol_prefix)
-      except BaseException:
-        await self._stop_file_transfer_after_failure()
-        raise
-      self._is_setup = True
-      logger.info("BTX Gemini X2 ready on port %s", self.port)
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the currently selected serial mode and restore it after touchscreen use."""
+    await super()._enter_lifespan(stack)
+    logger.info("Setting up BTX Gemini X2")
+    mode_stack = AsyncExitStackWithShielding()
+    await stack.enter_async_context(mode_stack)
+    stack.push_shielded_async_callback(self._close_mode, mode_stack)
+    self._mode_stack = mode_stack
+    await mode_stack.enter_async_context(self._file_transfer_control.lifespan())
+    await self._ensure_temporary_protocol_prefix_order_safe(self._temporary_protocol_prefix)
+    self._is_setup = True
+    logger.warning(
+      "BTX Gemini X2 is unverified on physical hardware; please report verified behavior"
+    )
+    logger.info("BTX Gemini X2 ready on port %s", self.port)
 
-  async def stop(self) -> None:
+  async def _close_mode(self, mode_stack: AsyncExitStackWithShielding) -> None:
+    """Wait for the current operation, then close its serial mode."""
     async with self._operation_lock:
-      if not self._is_setup:
-        return
-      logger.info("Stopping BTX Gemini X2")
-      try:
-        await self._file_transfer_control.stop()
-      finally:
-        self._is_setup = False
-      logger.info("BTX Gemini X2 stopped")
-
-  async def _stop_file_transfer_after_failure(self) -> None:
-    try:
-      await self._file_transfer_control.stop()
-    except Exception:
-      logger.exception("Failed to close Gemini X2 after setup failure")
+      self._is_setup = False
+      self._mode_stack = None
+      await mode_stack.aclose()
+    logger.info("BTX Gemini X2 stopped")
 
   def _require_setup(self) -> None:
     if not self._is_setup:
@@ -262,40 +259,42 @@ class BTXGeminiX2:
       raise RuntimeError("Gemini X2 serial port is not resolved. Call setup() first.")
 
     logger.info("Switching Gemini X2 from file-transfer control to touchscreen control")
+    mode_stack = self._mode_stack
+    if mode_stack is None:
+      raise RuntimeError("Gemini X2 has no active serial mode.")
+    await anyio.lowlevel.checkpoint()
     try:
-      await self._file_transfer_control.stop()
+      with anyio.CancelScope(shield=True):
+        await mode_stack.aclose()
     except BaseException:
       self._is_setup = False
       raise
-    ghost_touch: _GhostTouchSession = _TheGhostTouch(port=port)
+    touch_stack = AsyncExitStackWithShielding()
     primary_error: BaseException | None = None
-    stop_error: Exception | None = None
-    restore_error: Exception | None = None
+    cleanup_error: BaseException | None = None
     try:
-      await ghost_touch.setup()
-      result = await action(ghost_touch)
+      ghost_touch: _GhostTouchSession = _TheGhostTouch(port=port)
+      async with touch_stack:
+        with anyio.CancelScope(shield=True):
+          await touch_stack.enter_async_context(ghost_touch.lifespan())
+        result = await action(ghost_touch)
     except BaseException as exc:
       primary_error = exc
     finally:
-      try:
-        await ghost_touch.stop()
-      except Exception as exc:
-        stop_error = exc
-        logger.exception("Failed to stop Gemini X2 touchscreen control")
-      try:
-        logger.info("Restoring Gemini X2 file-transfer control")
-        await self._file_transfer_control.setup()
-      except Exception as exc:
-        restore_error = exc
-        self._is_setup = False
-        logger.exception("Failed to restore Gemini X2 file-transfer control")
+      with anyio.CancelScope(shield=True):
+        try:
+          logger.info("Restoring Gemini X2 file-transfer control")
+          await mode_stack.enter_async_context(self._file_transfer_control.lifespan())
+        except BaseException as exc:
+          cleanup_error = exc
+          self._is_setup = False
+          logger.exception("Failed to restore Gemini X2 file-transfer control")
 
     if primary_error is not None:
       raise primary_error.with_traceback(primary_error.__traceback__)
-    if restore_error is not None:
-      raise restore_error
-    if stop_error is not None:
-      raise stop_error
+    if cleanup_error is not None:
+      raise cleanup_error
+    await anyio.lowlevel.checkpoint()
     return result
 
   async def prepare_temporary_protocol(
@@ -641,39 +640,46 @@ class BTXGeminiX2:
     before_logs: set[str],
     protocol_name: str,
   ) -> MatchedRunLogResult:
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + self.LOG_POLL_TIMEOUT_SECONDS
     after_logs = set(before_logs)
     new_logs: list[str] = []
-    while True:
-      after_logs = set(await self._file_transfer_control.list_log_files())
-      new_logs = sorted(after_logs - before_logs)
-      for log_path in new_logs:
-        text = await self._file_transfer_control.fetch_sd_file(log_path)
-        parsed = self.parse_run_log(text)
-        summary = parsed.get("summary")
-        if isinstance(summary, Mapping) and summary.get("protocol_name") == protocol_name:
-          return MatchedRunLogResult(
-            before_count=len(before_logs),
-            after_count=len(after_logs),
-            new_log_paths=tuple(new_logs),
-            matched_log_path=log_path,
-            matched_log=parsed,
-          )
-      if loop.time() >= deadline:
-        logger.warning(
-          "No new Gemini X2 run log matched protocol %s within %.1f seconds",
-          protocol_name,
-          self.LOG_POLL_TIMEOUT_SECONDS,
-        )
-        return MatchedRunLogResult(
-          before_count=len(before_logs),
-          after_count=len(after_logs),
-          new_log_paths=tuple(new_logs),
-          matched_log_path=None,
-          matched_log=None,
-        )
-      await asyncio.sleep(self.LOG_POLL_INTERVAL_SECONDS)
+    poll_budget = (
+      self.LOG_POLL_TIMEOUT_SECONDS
+      if self.LOG_POLL_TIMEOUT_SECONDS > 0
+      else self.LOG_POLL_FIRST_ATTEMPT_SECONDS
+    )
+    with anyio.move_on_after(poll_budget):
+      while True:
+        listed_logs = set(await self._file_transfer_control.list_log_files())
+        after_logs = listed_logs
+        new_logs = sorted(after_logs - before_logs)
+        for log_path in new_logs:
+          text = await self._file_transfer_control.fetch_sd_file(log_path)
+          parsed = self.parse_run_log(text)
+          summary = parsed.get("summary")
+          if isinstance(summary, Mapping) and summary.get("protocol_name") == protocol_name:
+            return MatchedRunLogResult(
+              before_count=len(before_logs),
+              after_count=len(after_logs),
+              new_log_paths=tuple(new_logs),
+              matched_log_path=log_path,
+              matched_log=parsed,
+            )
+        if self.LOG_POLL_TIMEOUT_SECONDS <= 0:
+          break
+        await anyio.sleep(self.LOG_POLL_INTERVAL_SECONDS)
+
+    logger.warning(
+      "No new Gemini X2 run log matched protocol %s within %.1f seconds",
+      protocol_name,
+      self.LOG_POLL_TIMEOUT_SECONDS,
+    )
+    return MatchedRunLogResult(
+      before_count=len(before_logs),
+      after_count=len(after_logs),
+      new_log_paths=tuple(new_logs),
+      matched_log_path=None,
+      matched_log=None,
+    )
 
   def _make_temporary_protocol_name(self, prefix: str) -> str:
     reserved_anchor = self._temporary_protocol_sort_anchor(prefix)
