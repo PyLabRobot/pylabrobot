@@ -87,11 +87,7 @@ class FlexDeck(Deck):
       deck.check_single_nozzle_clearance("C3", primary_nozzle="H1")
   """
 
-  def __init__(
-    self,
-    with_trash_bin: bool = False,
-    name: str = "flex_deck",
-  ) -> None:
+  def __init__(self, name: str = "flex_deck") -> None:
     super().__init__(size_x=_DECK_SIZE_X, size_y=_DECK_SIZE_Y, size_z=0.0, name=name)
 
     self._slot_holders: Dict[str, ResourceHolder] = {}
@@ -104,10 +100,6 @@ class FlexDeck(Deck):
       )
       self._slot_holders[slot_id] = holder
       super().assign_child_resource(holder, location=Coordinate(x=loc["x"], y=loc["y"], z=loc["z"]))
-
-    if with_trash_bin:
-      trash = Trash(name="trash", size_x=SLOT_WIDTH, size_y=SLOT_DEPTH, size_z=82.0)
-      self.assign_child_at_slot(trash, "A3")
 
   # --- Slot Validation ---
 
