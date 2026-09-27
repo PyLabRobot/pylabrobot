@@ -3,7 +3,7 @@ import math
 import re
 import unittest
 import unittest.mock
-from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union, cast
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
@@ -12,6 +12,7 @@ from pylabrobot.hamilton.star.driver.features.pipettes import (
   Pipettes,
   PipettesConfiguration,
   TADMCurve,
+  _get_channels_that_met_no_tip,
 )
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
@@ -2241,6 +2242,114 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(tip.parent)
 
 
+def _answer_pick_ups_as_the_device(pipettes: Pipettes, rack: Any, empty: List[str], other=""):
+  """Answer `C0 TP` over the `empty` spots as the device does, `P<n>08/75`, or with `other` in
+  their place; the other channels pick their tips up and sense them, until a drop takes them."""
+  driver = cast(Any, pipettes._driver)
+  answer, deck = driver._answer, driver.deck
+  centres = [
+    spot.get_location_wrt(deck, "c", "c", "b")
+    for spot in rack.get_all_items()
+    if spot.name in empty
+  ]
+
+  async def answered(module: str, command: str, **kwargs: Any):
+    involved = [ch for ch, on in enumerate(kwargs.get("tm", [])) if int(on)]
+    if module == "C0" and command == "TP":
+      missed = [
+        ch
+        for ch in involved
+        for c in centres
+        if abs(int(kwargs["xp"][ch]) / 10 - c.x) < 0.2
+        and abs(int(kwargs["yp"][ch]) / 10 - c.y) < 0.2
+      ]
+      if missed:
+        for ch in involved:
+          driver.tips_mounted[ch] = ch not in missed
+        check_fw_string_error(
+          "C0TPid0000er99/00 " + " ".join(f"P{ch + 1}{other or '08/75'}" for ch in missed)
+        )
+    if module == "C0" and command == "TR":
+      for ch in involved:
+        driver.tips_mounted[ch] = False
+    return await answer(module, command, **kwargs)
+
+  driver._answer = answered
+
+
+class TestProbeTipPresenceViaPickup(unittest.IsolatedAsyncioTestCase):
+  """Spots probed by picking their tips up and putting them back; empty ones answer as a device."""
+
+  async def test_full_spots_are_picked_up_and_put_back(self):
+    pipettes, rack, sent = await channels_over_a_rack()
+    spots = [rack.get_item(w) for w in ("A1", "B1")]
+    found = await pipettes.probe_tip_presence_via_pickup(spots, use_channels=[0, 1])
+    self.assertEqual(found, {spot.name: True for spot in spots})
+    self.assertEqual([c[:4] for c in sent], ["C0TT", "C0TP", "C0TR"])
+    self.assertTrue(all(spot.has_tip() for spot in spots))
+    self.assertEqual([pipettes.get_mounted_tip(ch) for ch in (0, 1)], [None, None])
+
+  async def test_an_empty_spot_is_found_and_the_other_tip_goes_back(self):
+    pipettes, rack, sent = await channels_over_a_rack()
+    spots = [rack.get_item(w) for w in ("A1", "B1")]
+    _answer_pick_ups_as_the_device(pipettes, rack, empty=["rack_tipspot_B1"])
+    found = await pipettes.probe_tip_presence_via_pickup(spots, use_channels=[0, 1])
+    self.assertEqual(found, {spots[0].name: True, spots[1].name: False})
+    drop = [c for c in sent if c.startswith("C0TR")]
+    self.assertEqual(len(drop), 1)
+    self.assertEqual(drop[0].split("&tm")[1].split("&")[0].split()[:2], ["1", "0"])
+    self.assertEqual([pipettes.get_mounted_tip(ch) for ch in (0, 1)], [None, None])
+    # The model is the caller's to correct: the missed spot still holds its tip there.
+    self.assertTrue(spots[1].has_tip())
+
+  async def test_any_other_pick_up_error_is_raised(self):
+    pipettes, rack, sent = await channels_over_a_rack()
+    spots = [rack.get_item(w) for w in ("A1", "B1")]
+    _answer_pick_ups_as_the_device(pipettes, rack, empty=["rack_tipspot_B1"], other="07/76")
+    with self.assertRaises(STARFirmwareError):
+      await pipettes.probe_tip_presence_via_pickup(spots, use_channels=[0, 1])
+    self.assertFalse(any(c.startswith("C0TR") for c in sent))
+
+  async def test_refusals_come_before_anything_moves(self):
+    from pylabrobot.resources.errors import HasTipError
+
+    pipettes, rack, sent = await channels_over_a_rack()
+    rack.get_item("B1").tracker.remove_tip()
+    with self.assertRaisesRegex(ValueError, "holds no tip in"):
+      await pipettes.probe_tip_presence_via_pickup([rack.get_item("B1")], use_channels=[0])
+    await pipettes.pick_up_tips([rack.get_item("C1")], use_channels=[1])
+    sent.clear()
+    with self.assertRaises(HasTipError):
+      await pipettes.probe_tip_presence_via_pickup([rack.get_item("A1")], use_channels=[1])
+    self.assertEqual(sent, [])
+
+  async def test_the_inventory_deals_a_column_two_channels_at_a_time(self):
+    pipettes, rack, sent = await channels_over_a_rack()
+    column = [rack.get_item(f"{row}1") for row in "ABCDEFGH"]
+    _answer_pick_ups_as_the_device(pipettes, rack, empty=["rack_tipspot_F1"])
+    found = await pipettes.probe_tip_inventory(column, use_channels=[0, 1])
+    self.assertEqual(found, {spot.name: spot.name != "rack_tipspot_F1" for spot in column})
+    # Four pick-ups of two; the third's rear tip alone goes back. A refused command is not logged.
+    drops = [c.split("&tm")[1].split("&")[0].split()[:2] for c in sent if c.startswith("C0TR")]
+    self.assertEqual(drops, [["1", "1"], ["1", "1"], ["1", "0"], ["1", "1"]])
+    self.assertEqual([pipettes.get_mounted_tip(ch) for ch in (0, 1)], [None, None])
+
+  def test_only_no_tip_picked_up_on_every_channel_named_is_a_miss(self):
+    def raised(response: str) -> Exception:
+      try:
+        check_fw_string_error(response)
+      except Exception as error:
+        return error
+      raise AssertionError("no error raised")
+
+    self.assertEqual(
+      _get_channels_that_met_no_tip(raised("C0TPid0001er99/00 P108/75 P308/75")), [0, 2]
+    )
+    self.assertIsNone(_get_channels_that_met_no_tip(raised("C0TPid0001er99/00 P108/75 P207/76")))
+    self.assertIsNone(_get_channels_that_met_no_tip(raised("C0TPid0001er08/00")))
+    self.assertIsNone(_get_channels_that_met_no_tip(RuntimeError("the link dropped")))
+
+
 class TestWhereATipCommandLeavesTheChannels(unittest.IsolatedAsyncioTestCase):
   """Only the channels a tip command names move, in Z as in Y.
 
@@ -3085,6 +3194,110 @@ class TestBlowOutAirDraw(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.sent, [])
 
 
+class TestEmptyTip(unittest.IsolatedAsyncioTestCase):
+  """`Px DS`: the piston moved where the tip stands, read before and after each move."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.driver = cast(STARSimulationDriver, self.pipettes._driver)
+    self.sent: List[str] = []
+    answer = self.pipettes._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      shown = {k: v for k, v in kwargs.items() if k not in ("fmt", "read_timeout", "subsystem")}
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **shown))
+      await asyncio.sleep(0)  # a reply takes time, so the other channels' commands go meanwhile
+      return await answer(module=module, command=command, **kwargs)
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_the_raw_move_carries_the_five_fields(self):
+    await self.pipettes._unchecked_fw_dispensing_drive_move(0, -960, 4267, 64, 5)
+    await self.pipettes._unchecked_fw_dispensing_drive_move(1, 960, 4267, 64, 5)
+    self.assertEqual(self.sent, ["P1DSds00960dt1dv04267dr064dw5", "P2DSds00960dt0dv04267dr064dw5"])
+
+  async def test_the_moves_are_the_ones_legacy_sends(self):
+    from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import STARBackend
+
+    legacy = STARBackend()
+    legacy._num_channels = 8
+    legacy_sent: List[str] = []
+    standing = {"rd": 0}
+
+    async def legacy_send(module: str, command: str, **kwargs: Any):
+      kwargs.pop("fmt", None)
+      legacy_sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      if command == "DS":
+        moved = int(kwargs["ds"]) * (1 if kwargs["dt"] == "0" else -1)
+        standing["rd"] += moved
+      return dict(standing)
+
+    legacy.send_command = legacy_send  # type: ignore[method-assign, assignment]
+    await legacy.empty_tip(channel_idx=2)
+    await self.pipettes.empty_tip(2)
+    self.assertEqual([s for s in self.sent if "DS" in s], [s for s in legacy_sent if "DS" in s])
+    self.assertEqual(
+      [s for s in self.sent if "DS" in s],
+      ["P3DSds00960dt1dv04267dr064dw5", "P3DSds00960dt0dv04267dr064dw5"],
+    )
+
+  async def test_an_empty_returns_the_piston_to_rest_by_default(self):
+    await self.pipettes.empty_tip(0)
+    self.assertEqual([s[:4] for s in self.sent], ["P1RD", "P1DS", "P1RD", "P1RD", "P1DS", "P1RD"])
+    self.assertEqual(self.pipettes.piston_positions[0], 0.0)
+    self.assertEqual(self.driver.dispensing_drive_uL[0], 0.0)
+
+  async def test_without_the_reset_the_piston_stays_at_the_bottom(self):
+    self.driver.dispensing_drive_uL[0] = 100.0
+    await self.pipettes.empty_tip(0, reset_dispensing_drive_after=False)
+    # From 100 uL down to -45 uL is 145 uL, 3093 increments.
+    self.assertIn("P1DSds03093dt1dv04267dr064dw5", self.sent)
+    self.assertEqual(self.pipettes.piston_positions[0], -45.0)
+    self.assertEqual(self.driver.dispensing_drive_uL[0], -45.0)
+    self.assertEqual(await self.pipettes.dispensing_drive_request_uL_position(0), -45.0)
+
+  async def test_a_field_out_of_range_is_refused_before_anything_is_sent(self):
+    for kwargs in (
+      {"flow_rate": 700.0},
+      {"flow_rate": 0.5},
+      {"acceleration": 30_000.0},
+      {"acceleration": 200.0},
+      {"current_limit": 8},
+    ):
+      with self.assertRaises(ValueError):
+        await self.pipettes.empty_tip(0, **kwargs)
+    with self.assertRaises(ValueError):
+      await self.pipettes.dispensing_drive_move_to_uL_position(
+        0, -46.0, flow_rate=200.0, acceleration=3000.0, current_limit=5
+      )
+    with self.assertRaises(ValueError):
+      await self.pipettes.empty_tips([0, 99])
+    with self.assertRaises(ValueError):
+      await self.pipettes.empty_tips([1, 1])
+    with self.assertRaises(ValueError):
+      await self.pipettes.empty_tip(0, 10.0)
+    self.assertEqual(self.sent, [])
+
+  async def test_a_partial_push_keeps_the_rest_of_the_held_air(self):
+    self.driver.dispensing_drive_uL[0] = 50.0
+    self.driver.transport_air_uL[0] = 5.0
+    self.pipettes._held_transport_air[0] = 5.0
+    await self.pipettes.dispensing_drive_move_to_uL_position(0, 47.0)
+    self.assertEqual(self.pipettes._held_transport_air, {0: 2.0})
+    self.assertEqual(self.driver.transport_air_uL, {0: 2.0})
+    self.assertEqual(self.pipettes.piston_positions[0], 47.0)
+
+  async def test_the_channels_empty_in_parallel(self):
+    for channel in (0, 3):
+      self.driver.dispensing_drive_uL[channel] = 50.0
+    await self.pipettes.empty_tips([0, 3], reset_dispensing_drive_after=False)
+    moves = [s[:4] for s in self.sent if s[2:4] == "DS"]
+    self.assertEqual(sorted(moves), ["P1DS", "P4DS"])
+    # Both channels read before either moves: the two run together.
+    self.assertEqual([s[:4] for s in self.sent[:2]], ["P1RD", "P4RD"])
+    self.assertEqual([self.pipettes.piston_positions[c] for c in (0, 3)], [-45.0, -45.0])
+
+
 class _SimulatedPlateWithWater(unittest.IsolatedAsyncioTestCase):
   """300 uL filter tips on four channels, a Corning plate with water in three wells of a column and
   none in the fourth. The plate knows height and volume both ways. Tracking is on for tips and
@@ -3583,6 +3796,47 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     self.assertIn(f"zl{surface}", sent[1])
     self.assertIn(f"zx{surface}", sent[1])
     self.assertEqual(self.wells[2].tracker.get_used_volume(), 40.0)
+
+
+class TestEmptyTipsInSimulation(_SimulatedPlateWithWater):
+  """`empty_tips` after an aspirate: the pistons, the held air and the tips' trackers."""
+
+  async def asyncSetUp(self):
+    await super().asyncSetUp()
+    self.written: List[str] = []
+    log = self.driver._log_exchange
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      self.written.append(written)
+      log(written, read)
+
+    self.driver._log_exchange = recorded  # type: ignore[method-assign]
+
+  def _get_sent_moves(self) -> List[str]:
+    return [s for s in self.written if s[2:4] == "DS"]
+
+  async def test_emptying_forgets_the_air_and_the_liquid_the_tips_held(self):
+    await self.pipettes.aspirate(
+      self.wells[:2], [50.0, 20.0], use_channels=[0, 1], transport_air_volumes=[5.0, 5.0]
+    )
+    self.assertEqual(self.pipettes._held_transport_air, {0: 5.0, 1: 5.0})
+    tips = [self.pipettes.get_mounted_tip(channel) for channel in (0, 1)]
+    await self.pipettes.empty_tips([0, 1], reset_dispensing_drive_after=False)
+    self.assertEqual(self.pipettes.piston_positions[:2], [-45.0, -45.0])
+    self.assertEqual(self.pipettes._held_transport_air, {})
+    self.assertEqual(self.driver.transport_air_uL, {})
+    for tip in tips:
+      assert tip is not None
+      self.assertEqual(tip.tracker.get_used_volume(), 0.0)
+    await self.pipettes.empty_tips(use_channels=[0, 1])
+    read = await self.pipettes.dispensing_drives_request_uL_positions([0, 1])
+    self.assertEqual(read[:2], [0.0, 0.0])
+    self.assertEqual(self.pipettes.piston_positions[:2], [0.0, 0.0])
+
+  async def test_with_no_channels_named_the_ones_carrying_tips_are_emptied(self):
+    await self.pipettes.empty_tips()
+    modules = sorted({s[:2] for s in self._get_sent_moves()})
+    self.assertEqual(modules, ["P1", "P2", "P3", "P4"])
 
 
 class TestBlowOutAirBeforeTheSearch(_SimulatedPlateWithWater):
