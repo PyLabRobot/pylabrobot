@@ -591,11 +591,18 @@ class Head8:
     single LLDMode because the ganged head operates as one unit.
     """
     if lld_mode is not None:
+      if lld_mode == Pipettes.LLDMode.ZTOUCH:
+        raise ValueError("ZTOUCH is run for the pipetting channels only, not the 8MPH")
       if lld_mode != Pipettes.LLDMode.OFF:
         if allowed_modes is not None and lld_mode not in allowed_modes:
           raise ValueError(
             f"Dispense does not support {lld_mode.name} LLD — only CAPACITIVE or OFF. "
             "Pressure-based LLD requires aspiration (plunger movement)."
+          )
+        if lld_mode in (Pipettes.LLDMode.PRESSURE, Pipettes.LLDMode.DUAL):
+          raise NotImplementedError(
+            f"{lld_mode.name} LLD is not supported on the Prep: its pressure search has not "
+            "detected liquid, and a missed search keeps drawing. Use CAPACITIVE."
           )
         return True
       return False

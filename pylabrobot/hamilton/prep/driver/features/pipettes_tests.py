@@ -6,6 +6,7 @@ import asyncio
 import functools
 import hashlib
 import inspect
+import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from unittest.mock import AsyncMock, patch
 
@@ -17,6 +18,7 @@ from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.features.pipettes import (
   MAX_CONTAINER_SEGMENTS,
   Pipettes,
+  _absolute_z_from_well,
   _get_container_segments,
   _get_profile_drop,
 )
@@ -41,12 +43,12 @@ from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import ChannelBatch
 from pylabrobot.resources import Container, Coordinate, PetriDish, Resource, Well
+from pylabrobot.resources.azenta.plates import azenta_96_wellplate_200uL_Vb_4titudeframestar
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
-  TooLittleLiquidError,
   TooLittleVolumeError,
 )
 from pylabrobot.resources.hamilton import (
@@ -80,6 +82,45 @@ def _record(p: PrepSimulationDriver, only: Any = object, names: bool = False) ->
 
   p.send_command = record  # type: ignore[method-assign]
   return sent
+
+
+def _clld_setup(second_session: bool, found: Optional[float]):
+  """A simulated Prep whose capacitive seeks find liquid `found` mm above the modelled bottom.
+
+  None finds nothing. Every command is recorded with the link it went on.
+  """
+  deck = PrepDeck()
+  rack = deck[1] = hamilton_96_tiprack_300uL_NTR(name="tips", with_tips=True)
+  plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+  p = PrepSimulationDriver(deck=deck)
+  if second_session:
+    p._second_io = _SimulatedIO(p)
+  sent: List[Tuple[str, Any]] = []
+  main_send, second_send = p.send_command, p.send_command_on_second_session
+
+  def answer(command: Any) -> PrepCmd.PrepZAxisSeekCapacitiveLld.Response:
+    if found is None:
+      return PrepCmd.PrepZAxisSeekCapacitiveLld.Response(lld_detected=False, detect_position=0.0)
+    # The search ends 1 mm under the modelled cavity bottom.
+    return PrepCmd.PrepZAxisSeekCapacitiveLld.Response(
+      lld_detected=True, detect_position=command.position + 1.0 + found
+    )
+
+  async def on_main(command, *args, **kwargs):
+    sent.append(("main", command))
+    if isinstance(command, PrepCmd.PrepZAxisSeekCapacitiveLld):
+      return answer(command)
+    return await main_send(command, *args, **kwargs)
+
+  async def on_second(command, *args, **kwargs):
+    sent.append(("second", command))
+    if isinstance(command, PrepCmd.PrepZAxisSeekCapacitiveLld):
+      return answer(command)
+    return await second_send(command, *args, **kwargs)
+
+  p.send_command = on_main  # type: ignore[method-assign]
+  p.send_command_on_second_session = on_second  # type: ignore[method-assign]
+  return p, rack, plate, sent
 
 
 def _index(sent: List[Any], command_type: Any) -> int:
@@ -219,20 +260,17 @@ def test_aspirate_takes_a_missing_liquid_height_from_the_tracked_volume():
   _run(_t())
 
 
-def test_aspirate_immerses_the_tip_below_the_surface_with_and_without_lld():
-  """Without LLD the aspirate height drops by the depth; with LLD the depth is the search's submerge."""
+def test_aspirate_immerses_the_tip_below_the_surface_given_or_found():
+  """The aspirate height drops by the depth, under a height given and under a surface found."""
 
   async def _t():
-    deck = PrepDeck()
-    tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
-    plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
-    p = PrepSimulationDriver(deck=deck)
+    p, rack, plate, sent = _clld_setup(second_session=False, found=4.0)
     await p.setup()
     assert p.pipettes is not None
     well = plate.get_item("A1")
-    bottom = well.get_location_wrt(deck, "c", "c", "cavity_bottom").z
-    await p.pipettes.pick_up_tips([tip_rack.get_item("A1")], use_channels=[0])
-    sent = _record(p)
+    bottom = well.get_location_wrt(p.deck, "c", "c", "cavity_bottom").z
+    await p.pipettes.pick_up_tips([rack.get_item("A1")], use_channels=[0])
+    sent.clear()
     await p.pipettes.aspirate(
       [well], piston_volumes=[0.0], use_channels=[0], liquid_heights=[5.0], immersion_depths=[2.0]
     )
@@ -243,9 +281,12 @@ def test_aspirate_immerses_the_tip_below_the_surface_with_and_without_lld():
       lld_mode=Pipettes.LLDMode.CAPACITIVE,
       immersion_depths=[1.5],
     )
-    plain, searched = [c.aspirate_parameters[0] for c in sent if isinstance(c, _ASPIRATE_COMMANDS)]
+    plain, searched = [
+      c.aspirate_parameters[0] for _, c in sent if isinstance(c, _ASPIRATE_COMMANDS)
+    ]
     assert plain.no_lld.z_fluid == pytest.approx(bottom + 3.0, abs=0.01)
-    assert searched.lld.z_submerge == pytest.approx(1.5)
+    assert isinstance(searched, PrepCmd.AspirateParametersNoLldAndMonitoring2)
+    assert searched.no_lld.z_fluid == pytest.approx(bottom + 2.5, abs=0.01)
     await p.stop()
 
   _run(_t())
@@ -356,18 +397,30 @@ def test_aspirate_refuses_a_clot_check_until_it_is_verified():
     assert p.pipettes is not None
     await p.pipettes.pick_up_tips([tip_rack.get_item("A1")], use_channels=[0])
     well = plate.get_item("A1")
-    kwargs: Dict[str, Any] = {
-      "piston_volumes": [5.0],
-      "use_channels": [0],
-      "lld_mode": Pipettes.LLDMode.CAPACITIVE,
-    }
+    bottom = well.get_location_wrt(deck, "c", "c", "cavity_bottom")
+    top = well.get_location_wrt(deck, "c", "c", "t").z
     sent = _record(p)
-    await p.pipettes.aspirate([well], clot_detection_heights=[0.0], **kwargs)
+    await p.pipettes._aspirate_in_one_move(
+      [0],
+      [bottom + Coordinate(0, 0, 3.0)],
+      [top],
+      [bottom.z],
+      [5.0],
+      tube_radii=[3.0],
+      lld_mode=Pipettes.LLDMode.CAPACITIVE,
+      clot_detection_heights=[0.0],
+    )
     c_lld = next(c for c in sent if isinstance(c, _ASPIRATE_COMMANDS)).aspirate_parameters[0].c_lld
     assert (c_lld.clot_check_enable, c_lld.z_clot_check) == (False, 0.0)
     sent.clear()
     with pytest.raises(ValueError, match="clot detection is not verified"):
-      await p.pipettes.aspirate([well], clot_detection_heights=[1.5], **kwargs)
+      await p.pipettes.aspirate(
+        [well],
+        piston_volumes=[5.0],
+        use_channels=[0],
+        liquid_heights=[3.0],
+        clot_detection_heights=[1.5],
+      )
     assert not any(isinstance(c, _ASPIRATE_COMMANDS) for c in sent)
     await p.stop()
 
@@ -422,18 +475,15 @@ def test_tadm_reads_answer_each_channel():
   _run(_t())
 
 
-def test_aspirate_sends_the_clld_sensitivity_it_is_given():
-  """clld_sensitivity replaces only the sensitivity in the capacitive LLD block."""
+def test_aspirate_searches_with_the_clld_sensitivity_it_is_given():
+  """clld_sensitivity goes to the driver's capacitive search; the draw after it has no LLD."""
 
   async def _t():
-    deck = PrepDeck()
-    tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
-    plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
-    p = PrepSimulationDriver(deck=deck)
+    p, rack, plate, sent = _clld_setup(second_session=False, found=4.0)
     await p.setup()
     assert p.pipettes is not None
-    await p.pipettes.pick_up_tips([tip_rack.get_item("A1")], use_channels=[0])
-    sent = _record(p)
+    await p.pipettes.pick_up_tips([rack.get_item("A1")], use_channels=[0])
+    sent.clear()
     await p.pipettes.aspirate(
       [plate.get_item("A1")],
       piston_volumes=[0.0],
@@ -441,8 +491,10 @@ def test_aspirate_sends_the_clld_sensitivity_it_is_given():
       lld_mode=Pipettes.LLDMode.CAPACITIVE,
       clld_sensitivity=2,
     )
-    c_lld = next(c for c in sent if isinstance(c, _ASPIRATE_COMMANDS)).aspirate_parameters[0].c_lld
-    assert (c_lld.default_values, c_lld.sensitivity, c_lld.detect_mode) == (False, 2, 0)
+    (seek,) = [c for _, c in sent if isinstance(c, PrepCmd.PrepZAxisSeekCapacitiveLld)]
+    assert seek.sensitivity == 2
+    (draw,) = [c for _, c in sent if isinstance(c, _ASPIRATE_COMMANDS)]
+    assert isinstance(draw, PrepCmd.PrepAspirateNoLldMonitoringV2)
     await p.stop()
 
   _run(_t())
@@ -1369,6 +1421,21 @@ def test_probe_z_using_clld_defaults_lowest_z_to_the_bottom_of_the_channel_z_ran
     p.pipettes.configuration.channels[1].z_range = None
     with pytest.raises(RuntimeError, match="Z range has not been read"):
       await p.pipettes.probe_z_using_clld(1, search_start_position=160.0, allow_without_tip=True)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_floor_search_under_the_channel_reach_ends_at_its_lowest_z():
+  """10 mm under the modelled bottom, but no lower than the channel's Z range."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    p.pipettes.configuration.channels[0].z_range = (18.0, 167.5)
+    assert p.pipettes._get_floor_search_end(0, 40.0) == pytest.approx(30.0)
+    assert p.pipettes._get_floor_search_end(0, 22.0) == pytest.approx(18.0)
     await p.stop()
 
   _run(_t())
@@ -2834,6 +2901,22 @@ def test_a_surface_following_distance_counts_from_z_minimum():
   assert _get_profile_drop(segments, start - 2.0, 25.0) == pytest.approx(0.3, abs=1e-4)
 
 
+def test_a_containers_top_is_its_own_top_on_the_deck():
+  """The top, and z_air above it, is the container's top: its material thickness counted once."""
+  deck = PrepDeck()
+  glass = PetriDish(name="glass", diameter=77.0, height=86.0, material_z_thickness=11.0)
+  deck[6].assign_child_by_anchor(glass, parent_anchor=("c", "c", "t"), child_anchor=("c", "c", "b"))
+  plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+  azenta = deck[2] = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="azenta")
+  wells = [plate.get_well("A1"), azenta.get_well("A1")]
+  for container in [glass, *wells]:
+    top = container.get_location_wrt(deck, "c", "c", "t").z
+    geometry = _absolute_z_from_well(container, deck)
+    assert geometry.top_of_well == pytest.approx(top)
+    assert geometry.z_air == pytest.approx(top + 2.0)
+  assert _absolute_z_from_well(glass, deck).top_of_well == pytest.approx(99.5)
+
+
 def _probe_liquid_setup():
   """A simulated Prep with a plate and a dish without height-volume functions.
 
@@ -3037,12 +3120,6 @@ _GOLDEN_ASPIRATE_CALLS: Dict[str, Tuple[int, str, Optional[List[int]], Dict[str,
       "immersion_depths": [1.0, 1.5],
     },
   ),
-  "capacitive LLD, read_timeout given": (
-    300,
-    "A1:B1",
-    [0, 1],
-    {"volumes": [10.0, 10.0], "lld_mode": Pipettes.LLDMode.CAPACITIVE, "read_timeout": 30.0},
-  ),
   "mix, immersion": (
     300,
     "A1:B1",
@@ -3076,9 +3153,8 @@ _GOLDEN_ASPIRATE_CALLS: Dict[str, Tuple[int, str, Optional[List[int]], Dict[str,
     {
       **_ASPIRATE_TWO,
       "command_version": "v1",
-      "z_fluid": [10.0, 11.0],
+      "liquid_heights": [2.97, 3.97],
       "minimum_allowed_z_positions_during": [5.0, 6.0],
-      "z_bottom_search_offset": [1.0, 1.5],
     },
   ),
   "times, speeds, volumes given": (
@@ -3119,6 +3195,12 @@ _GOLDEN_ASPIRATE_CALLS: Dict[str, Tuple[int, str, Optional[List[int]], Dict[str,
     "A1:B1",
     [0, 1],
     {**_ASPIRATE_TWO, "surface_following_distances": [0.0, 2.0]},
+  ),
+  "pull-out distances": (
+    300,
+    "A1:B1",
+    [0, 1],
+    {**_ASPIRATE_TWO, "pull_out_distances_transport_air": [5.0, 7.5]},
   ),
 }
 
@@ -3170,49 +3252,67 @@ async def _capture_aspirate(name: str) -> List[str]:
 # name: each aspirate frame's read timeout, then the SHA-256 of its bytes
 _GOLDEN_ASPIRATE_FRAMES: Dict[str, List[str]] = {
   "piston volumes, heights": [
-    "60.0 4a9e16bf10ef7f31d6d6e7b1312115061c5c6950d4ee9205e6c6c774bd4dd740",
+    "60.0 6ad183795e5b3311e414ecd3e35eba9e88563e12f859fba06a7c4a9b1217ced6",
   ],
   "class volumes, tracked heights": [
-    "60.0 38d6bfbc3a9e4d36258e6a98791191f1dfbc44d52b4d9ac69a6cbdb5ae556b6e",
+    "60.0 a1b8039eb9ded58e15417b3c9989536497c747254d2acb0fcd11e331394ec5d8",
   ],
   "50 uL tips, classes given": [
-    "60.0 f8fe364b8b35b10c77daa56cf99db9fe1ad5bab2366339f425f8c4efb7135ae3",
+    "60.0 82000cfb56c2f719cc2daaa3fe4f5a3215b77390dbe98202bb80bfdad27d2dd3",
   ],
-  "channel 0 alone": ["60.0 e5cdcb46ec932553d7901c07a227d03769424d7c694e3df42d14aeea7540b68a"],
-  "channel 1 alone": ["60.0 fd6b68d105f381b4e96a8423d7509b9e122c251ca112def419e9e27cae4578f7"],
+  "channel 0 alone": [
+    "60.0 b93e712f89d5fec55f4fb2babcc6e0f7e16b117da4047d8e93bbeaf819ed21d3",
+  ],
+  "channel 1 alone": [
+    "60.0 188eeac64cb0d75d6b25fff345c479ae355832b318114818393c1e50af928d3f",
+  ],
   "channels given front first": [
-    "60.0 b5c6148899a435077a8ab70d22581417679a4865b7fabe1a9f881a3b8a09cd60",
+    "60.0 7ed2056d1ea97ae7214f8afddc4995bc3dfd95193668a3a0810e7720371de148",
   ],
-  "use_channels None": ["60.0 4a9e16bf10ef7f31d6d6e7b1312115061c5c6950d4ee9205e6c6c774bd4dd740"],
-  "v1": ["60.0 ee7d3df414101f7df8178f8979539534afabc3d89e7af8cbe1a1749391d16071"],
-  "v2 given": ["60.0 4a9e16bf10ef7f31d6d6e7b1312115061c5c6950d4ee9205e6c6c774bd4dd740"],
-  "capacitive LLD": ["62.094 f26ce6d307a03e855b6c46edb53e2c82ec87d7ed83efafd48d517a2c6e77b4ef"],
+  "use_channels None": [
+    "60.0 6ad183795e5b3311e414ecd3e35eba9e88563e12f859fba06a7c4a9b1217ced6",
+  ],
+  "v1": [
+    "60.0 d7cfb329c7883cd7d6405e08dfb121f60ddb2e308013f1fce347ad711ca00061",
+  ],
+  "v2 given": [
+    "60.0 6ad183795e5b3311e414ecd3e35eba9e88563e12f859fba06a7c4a9b1217ced6",
+  ],
+  "capacitive LLD": [
+    "60.0 bc242d0707bdb46ce3912d87c9a03b12eef97aea530c88e31d55556e861df03f",
+  ],
   "capacitive LLD, one per container": [
-    "62.094 f26ce6d307a03e855b6c46edb53e2c82ec87d7ed83efafd48d517a2c6e77b4ef",
+    "60.0 bc242d0707bdb46ce3912d87c9a03b12eef97aea530c88e31d55556e861df03f",
   ],
   "capacitive LLD, v1, sensitivity, immersion": [
-    "62.094 48befe0ba080ccf5e048dfe4549889bf71683f06e26ae81ae27e2ff9b5ca019f",
+    "60.0 260b952a86b59c10fa0b6128d55dfd7387222335c731a22b6dbe0e595c00ced6",
   ],
-  "capacitive LLD, read_timeout given": [
-    "30.0 f26ce6d307a03e855b6c46edb53e2c82ec87d7ed83efafd48d517a2c6e77b4ef",
+  "mix, immersion": [
+    "60.0 d0ffa40ce78d5748b832863b467b6368b427091e37496c708dfb3a85fcf9c896",
   ],
-  "mix, immersion": ["60.0 920c42c02c8749b7b00d022c097838e57086103dadcb94ecaf967e990c83cbda"],
   "tadm, end height, z_air": [
     "60.0 bfad748ab52d3c51608b0985da1030ce83a3107349303a9648cd3abc579af733",
   ],
-  "z values given, v1": ["60.0 d9fe620d4ba996942e435c6977876e05bc26acf4a5d388604e92e619e910ba14"],
-  "times, speeds, volumes given": [
-    "60.0 da7e1372a80c75a5fecbc12a41113b74712b5bcf83622c69f4dc5d01886ab66c",
+  "z values given, v1": [
+    "60.0 21e21697827773d77389f5d48c29f56c20fcafa0de16f84acfe741c0a54a0388",
   ],
-  "offsets of one X": ["60.0 5d7b5dc2a0df517e456fda99f4c3391d762d8c9c18ec585afef53f6bf2fc051b"],
+  "times, speeds, volumes given": [
+    "60.0 fb0457eaec694dd56688a3fc171e1798517d0f67f2c924e3e2b346a7eb3c0b14",
+  ],
+  "offsets of one X": [
+    "60.0 ac800239a1c72e9b3dd18196440f1fad2b6c8899726484f193cf83a7a783b75c",
+  ],
   "channels sharing a dish": [
-    "60.0 dffe23c5435a3ee76833db413d916081ae356229328b223b71cff8df56572891",
+    "60.0 18f7c7a753b49ca71788bc3eed2004565831f866f783a477a9004c1c3ce9bbda",
   ],
   "container segments given": [
-    "60.0 f5f9d38f58411c840e3f5b558c7f667d31a5e258b5e3792ebabef4a37fc9d57f",
+    "60.0 ad0777dc5fe2c1bd2ab572d676062187767bdc255f5f13801bd7939157cabf97",
   ],
   "surface following distances": [
-    "60.0 5763eca12d07f7f4c0a21d83b7608adaa1bc5fe3c5b2a6caa0818b54576b50d9",
+    "60.0 22a3f422c303e40378c1229750852ff9a8df32af3ce8d7a79cfafda40d8dba3e",
+  ],
+  "pull-out distances": [
+    "60.0 a058cd6c0b7e44a00c1e24e6e54b944b8844f4b86c372570793d57e0650164d3",
   ],
 }
 
@@ -3244,7 +3344,16 @@ def test_aspirate_keywords_are_the_stars_in_its_order_and_the_preps_own_after():
   prep, star = _keywords(Pipettes.aspirate), _keywords(STARPipettes.aspirate)
   shared = [name for name in star if name in prep]
   assert prep[: len(shared)] == shared
-  for old in ("minimum_allowed_z_position_during", "mix", "mix_position_from_liquid_surface"):
+  for old in (
+    "minimum_allowed_z_position_during",
+    "mix",
+    "mix_position_from_liquid_surface",
+    "z_fluid",
+    "z_bottom_search_offset",
+    "lld",
+    "p_lld",
+    "read_timeout",
+  ):
     assert old not in prep
 
 
@@ -3330,13 +3439,8 @@ def test_aspirate_refuses_what_the_model_decides_before_any_command():
       rack_300 = deck[1] = hamilton_96_tiprack_300uL_NTR(name="tips_300", with_tips=True)
       rack_50 = deck[3] = hamilton_96_tiprack_50uL_NTR(name="tips_50", with_tips=True)
       plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
-      dish = PetriDish(name="dish", diameter=77.0, height=30.0, material_z_thickness=2.0)
-      deck[6].assign_child_by_anchor(
-        dish, parent_anchor=("c", "c", "t"), child_anchor=("c", "c", "b")
-      )
       for well in plate.get_all_items():
         well.tracker.set_volume(200.0)
-      dish.tracker.set_volume(180.0)
       p = PrepSimulationDriver(deck=deck)
       await p.setup()
       assert p.pipettes is not None
@@ -3348,15 +3452,8 @@ def test_aspirate_refuses_what_the_model_decides_before_any_command():
         "piston_volumes": [10.0, 10.0],
         "liquid_heights": [3.0] * 2,
       }
-      apart = [Coordinate(-5.0, 0, 0), Coordinate(5.0, 0, 0)]
+      searching: Dict[str, Any] = {"use_channels": [0, 1], "piston_volumes": [10.0, 10.0]}
       capacitive, pressure = Pipettes.LLDMode.CAPACITIVE, Pipettes.LLDMode.PRESSURE
-      seek_0 = PrepCmd.PLldParameters(
-        default_values=False,
-        sensitivity=1,
-        dispenser_seek_speed=0.0,
-        lld_height_difference=0.0,
-        detect_mode=0,
-      )
       sent = _record(p)
       refusals: List[Tuple[Any, str, Sequence[Container], Dict[str, Any]]] = [
         (NoTipError, "no tip is mounted", two, both),
@@ -3374,18 +3471,28 @@ def test_aspirate_refuses_what_the_model_decides_before_any_command():
         (ValueError, "flow_rates length", plate["A1"], {**one, "flow_rates": [50.0, 50.0]}),
         (ValueError, "flow_rates must be above 0", plate["A1"], {**one, "flow_rates": [0.0]}),
         (ValueError, "clot detection", plate["A1"], {**one, "clot_detection_heights": [1.5]}),
-        (ValueError, "outside channel", two, {**both, "minimum_traverse_height_end": 200.0}),
         (
-          TooLittleLiquidError,
-          "dish holds 180.0 uL, 190.0 uL asked for",
-          [dish, dish],
-          {**both, "piston_volumes": [150.0, 40.0], "resource_offsets": apart},
+          ValueError,
+          "one of z_air and pull_out",
+          plate["A1"],
+          {**one, "z_air": [60.0], "pull_out_distances_transport_air": [5.0]},
         ),
+        (ValueError, "outside channel", two, {**both, "minimum_traverse_height_end": 200.0}),
         (TooLittleVolumeError, "room for", two, {**both, "piston_volumes": [10.0, 70.0]}),
-        (ValueError, "PRESSURE LLD needs p_lld", two, {**both, "lld_mode": pressure}),
-        (ValueError, "1 to 630", two, {**both, "lld_mode": capacitive, "p_lld": seek_0}),
+        (
+          NotImplementedError,
+          "PRESSURE LLD is not supported",
+          two,
+          {**searching, "lld_mode": pressure},
+        ),
         (ValueError, "must be LLDMode", two, {**both, "lld_mode": [capacitive, "capacitive"]}),
         (ValueError, "1 lld modes for 2", two, {**both, "lld_mode": [capacitive]}),
+        (
+          ValueError,
+          "finds the surface or the floor itself",
+          two,
+          {**both, "lld_mode": capacitive},
+        ),
         (ValueError, "cannot be mixed", two, {**both, "lld_mode": [capacitive, pressure]}),
       ]
       for error, match, containers, kwargs in refusals:
@@ -3402,8 +3509,8 @@ def test_aspirate_refuses_what_the_model_decides_before_any_command():
   _run(_t())
 
 
-def test_aspirate_sends_one_lld_category_per_command():
-  """Modes OFF and CAPACITIVE at one X: one command each, the pressure block the firmware's own."""
+def test_aspirate_sends_one_command_per_lld_mode():
+  """Modes OFF and CAPACITIVE at one X: one command each, both without the firmware's LLD."""
 
   async def _t():
     deck = PrepDeck()
@@ -3418,15 +3525,11 @@ def test_aspirate_sends_one_lld_category_per_command():
       plate["A1:B1"],
       use_channels=[0, 1],
       piston_volumes=[10.0, 20.0],
-      liquid_heights=[3.0, 3.0],
+      liquid_heights=[3.0, None],
       lld_mode=[Pipettes.LLDMode.OFF, Pipettes.LLDMode.CAPACITIVE],
     )
-    assert [type(c) for c in sent] == [
-      PrepCmd.PrepAspirateNoLldMonitoringV2,
-      PrepCmd.PrepAspirateWithLldV2,
-    ]
+    assert [type(c) for c in sent] == [PrepCmd.PrepAspirateNoLldMonitoringV2] * 2
     assert [len(c.aspirate_parameters) for c in sent] == [1, 1]
-    assert sent[1].aspirate_parameters[0].p_lld == PrepCmd.PLldParameters.default()
     await p.stop()
 
   _run(_t())
@@ -3587,6 +3690,199 @@ def _probe_setup():
   return p, rack, sent
 
 
+_ZTOUCH = Pipettes.LLDMode.ZTOUCH
+
+
+def _ztouch_setup(second_session: bool, touch: Optional[float]):
+  """A simulated Prep whose seeks for a floor answer `touch` mm under the modelled cavity bottom.
+
+  None answers as an untouched search does: a detection about 1 mm below its end. Every command
+  is recorded with the link it went on.
+  """
+  deck = PrepDeck()
+  rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
+  plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+  p = PrepSimulationDriver(deck=deck)
+  if second_session:
+    p._second_io = _SimulatedIO(p)
+  sent: List[Tuple[str, Any]] = []
+  main_send, second_send = p.send_command, p.send_command_on_second_session
+
+  def answer(command: Any) -> PrepCmd.PrepZAxisSeekObstacle.Response:
+    # The search ends 10 mm under the modelled cavity bottom.
+    end = command.end_position
+    met = end - 0.9 if touch is None else end + 10.0 - touch
+    return PrepCmd.PrepZAxisSeekObstacle.Response(obstacle_detected=True, position=met)
+
+  async def on_main(command, *args, **kwargs):
+    sent.append(("main", command))
+    if isinstance(command, PrepCmd.PrepZAxisSeekObstacle):
+      return answer(command)
+    return await main_send(command, *args, **kwargs)
+
+  async def on_second(command, *args, **kwargs):
+    sent.append(("second", command))
+    if isinstance(command, PrepCmd.PrepZAxisSeekObstacle):
+      return answer(command)
+    return await second_send(command, *args, **kwargs)
+
+  p.send_command = on_main  # type: ignore[method-assign]
+  p.send_command_on_second_session = on_second  # type: ignore[method-assign]
+  return p, rack, plate, sent
+
+
+@pytest.mark.parametrize("second_session", [False, True])
+def test_aspirate_on_ztouch_touches_each_floor_then_draws_just_off_it_without_lld(second_session):
+  """Each channel's seek on its own link, both before the draw; the draw 0.2 mm off the floor."""
+
+  async def _t():
+    p, rack, plate, sent = _ztouch_setup(second_session, touch=0.3)
+    set_volume_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+      wells = plate["A1:B1"]
+      wells[0].tracker.set_volume(5.0)
+      wells[1].tracker.set_volume(200.0)
+      sent.clear()
+      with (
+        patch.object(pipettes_logger, "warning") as warning,
+        patch.object(pipettes_logger, "info") as info,
+      ):
+        await p.pipettes.aspirate(
+          wells, use_channels=[0, 1], piston_volumes=[10.0, 10.0], lld_mode=_ZTOUCH
+        )
+      warned = " ".join(str(c.args) for c in warning.call_args_list)
+      assert "aspirate on Z touch" in warned and "50 uL tips" in warned
+      assert any("the rest is air" in str(c.args) for c in info.call_args_list)
+      seeks = [(link, c) for link, c in sent if isinstance(c, PrepCmd.PrepZAxisSeekObstacle)]
+      assert [link for link, _ in seeks] == (["main", "second"] if second_session else ["main"] * 2)
+      assert [c.dest for _, c in seeks] == [p.pipettes.channels[ch].zaxis for ch in (0, 1)]
+      commands = [c for _, c in sent]
+      (draw,) = [c for c in commands if isinstance(c, _ASPIRATE_COMMANDS)]
+      assert isinstance(draw, PrepCmd.PrepAspirateNoLldMonitoringV2)
+      assert commands.index(draw) > commands.index(seeks[-1][1])
+      for entry, well in zip(draw.aspirate_parameters, wells):
+        floor = well.get_location_wrt(p.deck, "c", "c", "cavity_bottom").z - 0.3
+        assert entry.no_lld.z_fluid == pytest.approx(floor + 0.2)
+        assert entry.common.z_minimum == pytest.approx(floor + 0.2)
+      # A1 held 5 uL: it gives those, and the tip takes the rest as air.
+      assert [w.tracker.get_used_volume() for w in wells] == [0.0, 190.0]
+      tips = [p.pipettes.get_mounted_tip(ch) for ch in (0, 1)]
+      assert [t.tracker.get_used_volume() for t in tips if t is not None] == [5.0, 10.0]
+    finally:
+      set_volume_tracking(False)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_parallel_ztouch_seeks_set_off_in_a_cascade_lowest_channel_first():
+  """With a second session the seeks start `ztouch_cascade_interval` apart, channel 0 first."""
+
+  async def _t():
+    p, rack, plate, sent = _ztouch_setup(True, touch=0.3)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+    p.pipettes.ztouch_cascade_interval = 0.2
+    started: Dict[Any, float] = {}
+    main_send, second_send = p.send_command, p.send_command_on_second_session
+
+    async def on_main(command, *args, **kwargs):
+      if isinstance(command, PrepCmd.PrepZAxisSeekObstacle):
+        started[command.dest] = time.monotonic()
+      return await main_send(command, *args, **kwargs)
+
+    async def on_second(command, *args, **kwargs):
+      if isinstance(command, PrepCmd.PrepZAxisSeekObstacle):
+        started[command.dest] = time.monotonic()
+      return await second_send(command, *args, **kwargs)
+
+    p.send_command = on_main  # type: ignore[method-assign]
+    p.send_command_on_second_session = on_second  # type: ignore[method-assign]
+    floors = await p.pipettes._probe_batch_floors(
+      ChannelBatch(
+        x_position=plate["A1"][0].get_location_wrt(p.deck, "c", "c", "c").x,
+        indices=[0, 1],
+        channels=[1, 0],
+      ),
+      z_cavity_bottom=[
+        plate[w][0].get_location_wrt(p.deck, "c", "c", "cavity_bottom").z for w in ("B1", "A1")
+      ],
+      z_top=[plate[w][0].get_location_wrt(p.deck, "c", "c", "t").z for w in ("B1", "A1")],
+      search_speed=10.0,
+    )
+    rear, front = (p.pipettes.channels[ch].zaxis for ch in (0, 1))
+    assert started[front] - started[rear] >= 0.19
+    assert all(len(v) == 1 and v[0] is not None for v in floors.values())
+    await p.stop()
+
+  _run(_t())
+
+
+def test_aspirate_on_ztouch_refuses_an_untouched_floor_with_nothing_drawn():
+  """A seek that reaches its end untouched refuses the batch before its draw; a height beside
+  ZTOUCH is refused before anything is sent."""
+
+  async def _t():
+    p, rack, plate, sent = _ztouch_setup(second_session=True, touch=None)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+    wells = plate["A1:B1"]
+    sent.clear()
+    with pytest.raises(ValueError, match="finds the surface or the floor itself"):
+      await p.pipettes.aspirate(
+        wells, piston_volumes=[5.0, 5.0], liquid_heights=[2.0, None], lld_mode=_ZTOUCH
+      )
+    assert sent == []
+    with pytest.raises(RuntimeError, match="channel 0 met no floor in plate_well_A1"):
+      await p.pipettes.aspirate(wells, piston_volumes=[5.0, 5.0], lld_mode=_ZTOUCH)
+    commands = [c for _, c in sent]
+    seeks = [i for i, c in enumerate(commands) if isinstance(c, PrepCmd.PrepZAxisSeekObstacle)]
+    assert len(seeks) == 2
+    assert not any(isinstance(c, _ASPIRATE_COMMANDS) for c in commands)
+    assert any(isinstance(c, PrepCmd.PrepMoveZUpToSafe) for c in commands[seeks[-1] :])
+    tips = [p.pipettes.get_mounted_tip(ch) for ch in (0, 1)]
+    assert [t.tracker.get_used_volume() for t in tips if t is not None] == [0.0, 0.0]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_aspirate_runs_ztouch_and_off_in_batches_of_their_own():
+  """ZTOUCH beside OFF at one X: a command each, both without LLD; only the ZTOUCH one seeks."""
+
+  async def _t():
+    p, rack, plate, sent = _ztouch_setup(second_session=False, touch=0.2)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+    wells = plate["A1:B1"]
+    sent.clear()
+    await p.pipettes.aspirate(
+      wells,
+      use_channels=[0, 1],
+      piston_volumes=[5.0, 5.0],
+      liquid_heights=[None, 3.0],
+      lld_mode=[_ZTOUCH, Pipettes.LLDMode.OFF],
+    )
+    commands = [c for _, c in sent]
+    seeks = [c for c in commands if isinstance(c, PrepCmd.PrepZAxisSeekObstacle)]
+    assert [c.dest for c in seeks] == [p.pipettes.channels[0].zaxis]
+    draws = [c for c in commands if isinstance(c, _ASPIRATE_COMMANDS)]
+    assert [type(c) for c in draws] == [PrepCmd.PrepAspirateNoLldMonitoringV2] * 2
+    bottoms = [w.get_location_wrt(p.deck, "c", "c", "cavity_bottom").z for w in wells]
+    heights = sorted(e.no_lld.z_fluid for c in draws for e in c.aspirate_parameters)
+    # The touched floor 0.2 under the model, the draw 0.2 over it.
+    assert heights == pytest.approx(sorted([bottoms[0] - 0.2 + 0.2, bottoms[1] + 3.0]))
+    await p.stop()
+
+  _run(_t())
+
+
 _DISPENSE_COMMANDS: Tuple[Any, ...] = (
   PrepCmd.PrepDispenseNoLld,
   PrepCmd.PrepDispenseWithLld,
@@ -3649,19 +3945,12 @@ _GOLDEN_DISPENSE_CALLS: Dict[
     [0, 1],
     {"lld_mode": _CAPACITIVE, "command_version": "v1"},
   ),
-  "LLD by an lld block": (
+  "LLD with clld_sensitivity": (
     300,
     "A1:B1",
     _TWO,
     [0, 1],
-    {"lld": PrepCmd.LldParameters(False, 50.0, 4.0, 1.0, 0.5)},
-  ),
-  "LLD with clld_sensitivity, read_timeout": (
-    300,
-    "A1:B1",
-    _TWO,
-    [0, 1],
-    {"lld_mode": _CAPACITIVE, "clld_sensitivity": 2, "read_timeout": 90.0},
+    {"lld_mode": _CAPACITIVE, "clld_sensitivity": 2},
   ),
   "LLD with heights given, v1": (
     300,
@@ -3710,6 +3999,13 @@ _GOLDEN_DISPENSE_CALLS: Dict[
     [0, 1],
     {"lld_mode": _CAPACITIVE, "immersion_depths": [1.0, 1.5]},
   ),
+  "pull-out distances": (
+    300,
+    "A1:B1",
+    _TWO,
+    [0, 1],
+    {"liquid_heights": [3.0, 4.0], "pull_out_distances_transport_air": [5.0, 7.5]},
+  ),
   "z values given": (
     300,
     "A1:B1",
@@ -3717,10 +4013,9 @@ _GOLDEN_DISPENSE_CALLS: Dict[
     [0, 1],
     {
       "minimum_traverse_height_end": 100.0,
-      "z_fluid": [10.0, 11.0],
+      "liquid_heights": [2.97, 3.97],
       "z_air": [60.0, 61.0],
       "minimum_allowed_z_positions_during": [5.0, 6.0],
-      "z_bottom_search_offset": [1.0, 1.5],
     },
   ),
   "times, speeds, volumes given": (
@@ -3788,7 +4083,6 @@ _GOLDEN_DISPENSE_CALLS: Dict[
     {"piston_volumes": [5.0, 10.0], "lld_mode": Pipettes.LLDMode.OFF},
   ),
   "channels sharing a dish": (300, "dish", _TWO, [0, 1], {"liquid_heights": [5.0, 5.0]}),
-  "read_timeout without LLD": (300, "A1:B1", _TWO, [0, 1], {"read_timeout": 30.0}),
 }
 
 
@@ -3838,14 +4132,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -3856,7 +4150,7 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -3867,7 +4161,7 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -3878,14 +4172,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e7422800040000000040280004009a99b941280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "04000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -3896,14 +4190,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -3914,13 +4208,13 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "04000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e00140017010200010005000200000020000400010000001e00280117010200000020000400"
     "010000001e002600170102000000280004001f854f4128000400486185422800040000000000280004000000"
     "a0401e00640017010200000017010200010028000400c3f5e040280004003333e74228000400000000402800"
     "04009a99b941280004000000f042280004000000a040280004001f855b402800040000000000280004000000"
-    "0000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040280004009a999d41"
+    "0000280004000000803f06000400000000001e002c0017010200000028000400c3f5e04028000400713d8841"
     "170102000000280004000000004028000400000000001e002400170102000100280004000000000028000400"
     "000000000401020000002800040000007a431e00140017010200010017010200010028000400000090401e00"
     "14001701020001000500020000002000040001000000",
@@ -3932,116 +4226,88 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
   "capacitive LLD": [
-    "62.094 "
-    "c8020630000002000100ffff00e00100001000000213c4020000000001032b0000011f00a4021e004e011701"
+    "60.0 "
+    "84020630000002000100ffff00e0010000100000021380020000000001032a0000011f0060021e002c011701"
     "0200000020000400020000001e002600170102000000280004001f854f412800040048619742280004000000"
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
-    "0400000000002800040000000000280004000000803f06000400000000001e00260017010200000028000400"
-    "9a998d41280004000000a040280004000000004028000400000000001e002400170102000000200004000300"
-    "0000170102000000280004000000000020000400000000001e00240017010200010028000400000000002800"
-    "0400000000000401020000002800040000007a431e0014001701020001001701020001002800040000009040"
-    "1e00140017010200010005000200000020000400010000001e004e0117010200000020000400010000001e00"
-    "2600170102000000280004001f854f4128000400486185422800040000000000280004000000a0401f000000"
-    "1e00640017010200000017010200010028000400c3f5e040280004003333e742280004000000004028000400"
-    "9a99b941280004000000f042280004000000a040280004001f855b4028000400000000002800040000000000"
-    "280004000000803f06000400000000001e002600170102000000280004009a998d41280004000000a0402800"
-    "04000000004028000400000000001e0024001701020000002000040003000000170102000000280004000000"
-    "000020000400000000001e002400170102000100280004000000000028000400000000000401020000002800"
-    "040000007a431e00140017010200010017010200010028000400000090401e00140017010200010005000200"
-    "00002000040001000000",
+    "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
+    "9a998d41280004009a99dd41170102000000280004000000004028000400000000001e002400170102000100"
+    "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
+    "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
+    "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
+    "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
+    "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
+    "00002800040000000000280004000000803f06000400000000001e002c00170102000000280004009a998d41"
+    "280004009a99dd41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
+    "0400000090401e0014001701020001000500020000002000040001000000",
   ],
   "capacitive LLD, v1": [
-    "62.094 "
-    "c0020630000002000100ffff00e00100001000000213bc02000000000103060000011f009c021e004a011701"
+    "60.0 "
+    "7c020630000002000100ffff00e001000010000002137802000000000103050000011f0058021e0028011701"
     "0200000020000400020000001e002600170102000000280004001f854f412800040048619742280004000000"
     "0000280004000000a0401e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "04000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b40280004000000"
-    "00002800040000000000280004000000803f06000400000000001e002600170102000000280004009a998d41"
-    "280004000000a040280004000000004028000400000000001e00240017010200000020000400030000001701"
-    "02000000280004000000000020000400000000001e0024001701020001002800040000000000280004000000"
-    "00000401020000002800040000007a431e00140017010200010017010200010028000400000090401e001400"
-    "17010200010005000200000020000400010000001e004a0117010200000020000400010000001e0026001701"
-    "02000000280004001f854f4128000400486185422800040000000000280004000000a0401e00640017010200"
-    "000017010200010028000400c3f5e040280004003333e7422800040000000040280004009a99b94128000400"
-    "0000f042280004000000a040280004001f855b4028000400000000002800040000000000280004000000803f"
-    "06000400000000001e002600170102000000280004009a998d41280004000000a04028000400000000402800"
-    "0400000000001e00240017010200000020000400030000001701020000002800040000000000200004000000"
-    "00001e002400170102000100280004000000000028000400000000000401020000002800040000007a431e00"
-    "140017010200010017010200010028000400000090401e001400170102000100050002000000200004000100"
-    "0000",
+    "00002800040000000000280004000000803f06000400000000001e002c00170102000000280004009a998d41"
+    "280004009a99dd41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
+    "0400000090401e00140017010200010005000200000020000400010000001e00280117010200000020000400"
+    "010000001e002600170102000000280004001f854f4128000400486185422800040000000000280004000000"
+    "a0401e00640017010200000017010200010028000400c3f5e040280004003333e74228000400000000402800"
+    "04009a99b941280004000000f042280004000000a040280004001f855b402800040000000000280004000000"
+    "0000280004000000803f06000400000000001e002c00170102000000280004009a998d41280004009a99dd41"
+    "170102000000280004000000004028000400000000001e002400170102000100280004000000000028000400"
+    "000000000401020000002800040000007a431e00140017010200010017010200010028000400000090401e00"
+    "14001701020001000500020000002000040001000000",
   ],
-  "LLD by an lld block": [
-    "70.1175 "
-    "c8020630000002000100ffff00e00100001000000213c4020000000001032b0000011f00a4021e004e011701"
+  "LLD with clld_sensitivity": [
+    "60.0 "
+    "84020630000002000100ffff00e0010000100000021380020000000001032a0000011f0060021e002c011701"
     "0200000020000400020000001e002600170102000000280004001f854f412800040048619742280004000000"
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
-    "0400000000002800040000000000280004000000803f06000400000000001e00260017010200000028000400"
-    "000048422800040000008040280004000000803f280004000000003f1e002400170102000000200004000300"
-    "0000170102000000280004000000000020000400000000001e00240017010200010028000400000000002800"
-    "0400000000000401020000002800040000007a431e0014001701020001001701020001002800040000009040"
-    "1e00140017010200010005000200000020000400010000001e004e0117010200000020000400010000001e00"
-    "2600170102000000280004001f854f4128000400486185422800040000000000280004000000a0401f000000"
-    "1e00640017010200000017010200010028000400c3f5e040280004003333e742280004000000004028000400"
-    "9a99b941280004000000f042280004000000a040280004001f855b4028000400000000002800040000000000"
-    "280004000000803f06000400000000001e002600170102000000280004000000484228000400000080402800"
-    "04000000803f280004000000003f1e0024001701020000002000040003000000170102000000280004000000"
-    "000020000400000000001e002400170102000100280004000000000028000400000000000401020000002800"
-    "040000007a431e00140017010200010017010200010028000400000090401e00140017010200010005000200"
-    "00002000040001000000",
-  ],
-  "LLD with clld_sensitivity, read_timeout": [
-    "90.0 "
-    "c8020630000002000100ffff00e00100001000000213c4020000000001032b0000011f00a4021e004e011701"
-    "0200000020000400020000001e002600170102000000280004001f854f412800040048619742280004000000"
-    "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
-    "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
-    "0400000000002800040000000000280004000000803f06000400000000001e00260017010200000028000400"
-    "9a998d41280004000000a040280004000000004028000400000000001e002400170102000000200004000200"
-    "0000170102000000280004000000000020000400000000001e00240017010200010028000400000000002800"
-    "0400000000000401020000002800040000007a431e0014001701020001001701020001002800040000009040"
-    "1e00140017010200010005000200000020000400010000001e004e0117010200000020000400010000001e00"
-    "2600170102000000280004001f854f4128000400486185422800040000000000280004000000a0401f000000"
-    "1e00640017010200000017010200010028000400c3f5e040280004003333e742280004000000004028000400"
-    "9a99b941280004000000f042280004000000a040280004001f855b4028000400000000002800040000000000"
-    "280004000000803f06000400000000001e002600170102000000280004009a998d41280004000000a0402800"
-    "04000000004028000400000000001e0024001701020000002000040002000000170102000000280004000000"
-    "000020000400000000001e002400170102000100280004000000000028000400000000000401020000002800"
-    "040000007a431e00140017010200010017010200010028000400000090401e00140017010200010005000200"
-    "00002000040001000000",
+    "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
+    "9a998d41280004009a99dd41170102000000280004000000004028000400000000001e002400170102000100"
+    "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
+    "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
+    "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
+    "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
+    "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
+    "00002800040000000000280004000000803f06000400000000001e002c00170102000000280004009a998d41"
+    "280004009a99dd41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
+    "0400000090401e0014001701020001000500020000002000040001000000",
   ],
   "LLD with heights given, v1": [
-    "62.5 "
-    "c0020630000002000100ffff00e00100001000000213bc02000000000103060000011f009c021e004a011701"
+    "60.0 "
+    "7c020630000002000100ffff00e001000010000002137802000000000103050000011f0058021e0028011701"
     "0200000020000400020000001e002600170102000000280004001f854f412800040048619742280004000000"
     "0000280004000000a0401e006400170102000000170102000100280004000000a040280004000000c8422800"
     "04000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b40280004000000"
-    "00002800040000000000280004000000803f06000400000000001e002600170102000000280004009a998d41"
-    "280004000000a040280004000000004028000400000000001e00240017010200000020000400030000001701"
-    "02000000280004000000000020000400000000001e0024001701020001002800040000000000280004000000"
-    "00000401020000002800040000007a431e00140017010200010017010200010028000400000090401e001400"
-    "17010200010005000200000020000400010000001e004a0117010200000020000400010000001e0026001701"
-    "02000000280004001f854f4128000400486185422800040000000000280004000000a0401e00640017010200"
-    "0000170102000100280004000000c040280004000000c8422800040000000040280004009a99b94128000400"
-    "0000f042280004000000a040280004001f855b4028000400000000002800040000000000280004000000803f"
-    "06000400000000001e002600170102000000280004009a998d41280004000000a04028000400000000402800"
-    "0400000000001e00240017010200000020000400030000001701020000002800040000000000200004000000"
-    "00001e002400170102000100280004000000000028000400000000000401020000002800040000007a431e00"
-    "140017010200010017010200010028000400000090401e001400170102000100050002000000200004000100"
-    "0000",
+    "00002800040000000000280004000000803f06000400000000001e002c00170102000000280004009a998d41"
+    "2800040000007042170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
+    "0400000090401e00140017010200010005000200000020000400010000001e00280117010200000020000400"
+    "010000001e002600170102000000280004001f854f4128000400486185422800040000000000280004000000"
+    "a0401e006400170102000000170102000100280004000000c040280004000000c84228000400000000402800"
+    "04009a99b941280004000000f042280004000000a040280004001f855b402800040000000000280004000000"
+    "0000280004000000803f06000400000000001e002c00170102000000280004009a998d412800040000007442"
+    "170102000000280004000000004028000400000000001e002400170102000100280004000000000028000400"
+    "000000000401020000002800040000007a431e00140017010200010017010200010028000400000090401e00"
+    "14001701020001000500020000002000040001000000",
   ],
   "lld_mode all OFF": [
     "60.0 "
@@ -4050,27 +4316,25 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
   "heights, offsets, flow rates, blow-out air": [
-    # Two X, 0.5 mm apart: a batch each, lower X first; each entry is the bytes it had when the
-    # two went in one command.
     "60.0 "
     "54010630000002000100ffff00e0010000100000021350010000000001032a0000011f0030011e002c011701"
     "0200000020000400010000001e002600170102000000280004001f854f412800040048618542280004000000"
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e7422800040000000040280004009a99b941280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e0014001701020001000500020000002000040001000000",
     "60.0 "
@@ -4079,7 +4343,7 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400e17a0041280004003333"
     "e742280004000000004028000400cdcc44412800040000004842280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "e17a3041280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "e17a304128000400713da841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4090,14 +4354,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "54742241280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "54742241280004002a3aa141170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c00170102000000280004004a7b0041"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400a53d9041170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4108,36 +4372,52 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "e17a1041280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "e17a104128000400713da041170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400e17a1841"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713da841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
   "capacitive LLD, immersion": [
-    "62.094 "
-    "c8020630000002000100ffff00e00100001000000213c4020000000001032b0000011f00a4021e004e011701"
+    "60.0 "
+    "84020630000002000100ffff00e0010000100000021380020000000001032a0000011f0060021e002c011701"
     "0200000020000400020000001e002600170102000000280004001f854f412800040048619742280004000000"
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
-    "0400000000002800040000000000280004000000803f06000400000000001e00260017010200000028000400"
-    "9a998d41280004000000a040280004000000803f28000400000000001e002400170102000000200004000300"
-    "0000170102000000280004000000000020000400000000001e00240017010200010028000400000000002800"
-    "0400000000000401020000002800040000007a431e0014001701020001001701020001002800040000009040"
-    "1e00140017010200010005000200000020000400010000001e004e0117010200000020000400010000001e00"
-    "2600170102000000280004001f854f4128000400486185422800040000000000280004000000a0401f000000"
-    "1e00640017010200000017010200010028000400c3f5e040280004003333e742280004000000004028000400"
-    "9a99b941280004000000f042280004000000a040280004001f855b4028000400000000002800040000000000"
-    "280004000000803f06000400000000001e002600170102000000280004009a998d41280004000000a0402800"
-    "04000000c03f28000400000000001e0024001701020000002000040003000000170102000000280004000000"
-    "000020000400000000001e002400170102000100280004000000000028000400000000000401020000002800"
-    "040000007a431e00140017010200010017010200010028000400000090401e00140017010200010005000200"
-    "00002000040001000000",
+    "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
+    "9a998541280004009a99dd41170102000000280004000000004028000400000000001e002400170102000100"
+    "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
+    "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
+    "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
+    "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
+    "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
+    "00002800040000000000280004000000803f06000400000000001e002c00170102000000280004009a998141"
+    "280004009a99dd41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
+    "0400000090401e0014001701020001000500020000002000040001000000",
+  ],
+  "pull-out distances": [
+    "60.0 "
+    "84020630000002000100ffff00e0010000100000021380020000000001032a0000011f0060021e002c011701"
+    "0200000020000400020000001e002600170102000000280004001f854f412800040048619742280004000000"
+    "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
+    "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
+    "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
+    "e17a204128000400e17a7041170102000000280004000000004028000400000000001e002400170102000100"
+    "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
+    "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
+    "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
+    "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
+    "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
+    "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400e17a3041"
+    "28000400713d9441170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
+    "0400000090401e0014001701020001000500020000002000040001000000",
   ],
   "z values given": [
     "60.0 "
@@ -4146,14 +4426,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e006400170102000000170102000100280004000000a040280004000000"
     "c842280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "000020412800040000007042170102000000280004000000803f28000400000000001e002400170102000100"
+    "000020412800040000007042170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e006400170102000000170102000100280004000000c040280004000000c8422800"
     "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c001701020000002800040000003041"
-    "2800040000007442170102000000280004000000c03f28000400000000001e00240017010200010028000400"
+    "2800040000007442170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4164,14 +4444,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "803f280004000000f0411f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000a04128000400cdcc4441280004000000f0422800040000000040280004001f855b402800"
     "0400000000002800040000000000280004000000003f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000402800"
     "0400000020421f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "04000000c841280004009a99b941280004000000f0422800040000004040280004001f855b40280004000000"
     "00002800040000000000280004000000c03f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4183,14 +4463,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "1800280004000000f041280004000000f041280004000000c0401e0064001701020000001701020001002800"
     "0400c3f5e040280004003333e742280004000000004028000400cdcc4441280004000000f042280004000000"
     "a040280004001f855b4028000400000000002800040000000000280004000000803f06000400000000001e00"
-    "2c0017010200000028000400c3f5e040280004009a999d411701020000002800040000000040280004000000"
+    "2c0017010200000028000400c3f5e04028000400713d88411701020000002800040000000040280004000000"
     "00001e002400170102000100280004000000000028000400000000000401020000002800040000007a431e00"
     "140017010200010017010200010028000400000090401e001400170102000100050002000000200004000100"
     "00001e002c0117010200000020000400010000001e002600170102000000280004001f854f41280004004861"
     "85422800040000000000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5"
     "e040280004003333e7422800040000000040280004009a99b941280004000000f042280004000000a0402800"
     "04001f855b4028000400000000002800040000000000280004000000803f06000400000000001e002c001701"
-    "0200000028000400c3f5e040280004009a999d41170102000000280004000000004028000400000000001e00"
+    "0200000028000400c3f5e04028000400713d8841170102000000280004000000004028000400000000001e00"
     "2400170102000100280004000000000028000400000000000401020000002800040000007a431e0014001701"
     "0200010017010200010028000400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4201,13 +4481,13 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "04000000004028000400cdcc4441280004000000f042280004000000a04028000400b71d3840280004000000"
     "8040280004002e5ee43f280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e00140017010200010005000200000020000400010000001e00280117010200000020000400"
     "010000001e002600170102000000280004001f854f4128000400486185422800040000000000280004000000"
     "a0401e00640017010200000017010200010028000400c3f5e040280004003333e74228000400000000402800"
     "04009a99b941280004000000f042280004000000a040280004001f855b402800040000000000280004000000"
-    "0000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040280004009a999d41"
+    "0000280004000000803f06000400000000001e002c0017010200000028000400c3f5e04028000400713d8841"
     "170102000000280004000000004028000400000000001e002400170102000100280004000000000028000400"
     "000000000401020000002800040000007a431e00140017010200010017010200010028000400000090401e00"
     "14001701020001000500020000002000040001000000",
@@ -4224,7 +4504,7 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "f541280004001666f54128000400d7a3d03f1e001800280004009b6cf241280004009b6cf24128000400c3f5"
     "a83e1e00640017010200000017010200010028000400c3f5e040280004003333e74228000400000000402800"
     "0400cdcc4441280004000000f042280004000000a040280004001f855b402800040000000000280004000000"
-    "0000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040280004009a999d41"
+    "0000280004000000803f06000400000000001e002c0017010200000028000400c3f5e04028000400713d8841"
     "170102000000280004000000004028000400000000001e002400170102000100280004000000000028000400"
     "000000000401020000002800040000007a431e00140017010200010017010200010028000400000090401e00"
     "140017010200010005000200000020000400010000001e00280217010200000020000400010000001e002600"
@@ -4237,7 +4517,7 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "d03f1e001800280004009b6cf241280004009b6cf24128000400c3f5a83e1e00640017010200000017010200"
     "010028000400c3f5e040280004003333e7422800040000000040280004009a99b941280004000000f0422800"
     "04000000a040280004001f855b4028000400000000002800040000000000280004000000803f060004000000"
-    "00001e002c0017010200000028000400c3f5e040280004009a999d4117010200000028000400000000402800"
+    "00001e002c0017010200000028000400c3f5e04028000400713d884117010200000028000400000000402800"
     "0400000000001e00240017010200010028000400000000002800040000000000040102000000280004000000"
     "7a431e00140017010200010017010200010028000400000090401e0014001701020001000500020000002000"
     "040001000000",
@@ -4249,13 +4529,13 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401e006400170102000000170102000100280004000000a040280004003333e7422800"
     "04000000004028000400cdcc4441280004000000f042280004000000a0402800040060a85440280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e00140017010200010005000200000020000400010000001e00280117010200000020000400"
     "010000001e002600170102000000280004001f854f4128000400486185422800040000000000280004000000"
     "a0401e006400170102000000170102000100280004000000c040280004003333e74228000400000000402800"
     "04009a99b941280004000000f042280004000000a04028000400552552402800040000000000280004000000"
-    "0000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040280004009a999d41"
+    "0000280004000000803f06000400000000001e002c0017010200000028000400c3f5e04028000400713d8841"
     "170102000000280004000000004028000400000000001e002400170102000100280004000000000028000400"
     "000000000401020000002800040000007a431e00140017010200010017010200010028000400000090401e00"
     "14001701020001000500020000002000040001000000",
@@ -4267,14 +4547,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "00002800040000007a431f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e742280004000000803f28000400cdcc5441280004000000c843280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000000006000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "040000002041280004000000a041280004000000f0422800040000000000280004001f855b40280004000000"
     "00002800040000000000280004000000000006000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4285,14 +4565,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "e74228000400000000402800040000002041280004000000f042280004000000a040280004001f855b402800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
     "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4303,14 +4583,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "fa4228000400000020412800040000002041280004000000f0422800040000000000280004001f855b402800"
     "0400000000002800040000000000280004000000000006000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333fa422800"
     "040000002041280004000000a041280004000000f0422800040000000000280004001f855b40280004000000"
     "00002800040000000000280004000000000006000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4321,14 +4601,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
     "fa422800040000002041280004000000a040280004000000f0422800040000000000280004001f855b402800"
     "0400000000002800040000000000280004000000000006000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
+    "c3f5e04028000400713d8841170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
     "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333fa422800"
     "0400000020412800040000002041280004000000f0422800040000000000280004001f855b40280004000000"
     "00002800040000000000280004000000000006000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "28000400713d8841170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4339,32 +4619,14 @@ _GOLDEN_DISPENSE_FRAMES: Dict[str, List[str]] = {
     "0000280004000000a0401f0000001e0064001701020000001701020001002800040000007841280004003333"
     "e742280004000000004028000400cdcc4441280004000000f042280004000000a0402800040000001a422800"
     "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "0000a4412800040000003e42170102000000280004000000004028000400000000001e002400170102000100"
+    "0000a441280004000000f441170102000000280004000000004028000400000000001e002400170102000100"
     "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
     "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
     "20000400010000001e00260017010200000028000400cd8c4a43280004008e655d4328000400000000002800"
     "04000000a0401f0000001e0064001701020000001701020001002800040000007841280004003333e7422800"
     "040000000040280004009a99b941280004000000f042280004000000a0402800040000001a42280004000000"
     "00002800040000000000280004000000803f06000400000000001e002c00170102000000280004000000a441"
-    "2800040000003e42170102000000280004000000004028000400000000001e00240017010200010028000400"
-    "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
-    "0400000090401e0014001701020001000500020000002000040001000000",
-  ],
-  "read_timeout without LLD": [
-    "60.0 "
-    "84020630000002000100ffff00e0010000100000021380020000000001032a0000011f0060021e002c011701"
-    "0200000020000400020000001e002600170102000000280004001f854f412800040048619742280004000000"
-    "0000280004000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333"
-    "e742280004000000004028000400cdcc4441280004000000f042280004000000a040280004001f855b402800"
-    "0400000000002800040000000000280004000000803f06000400000000001e002c0017010200000028000400"
-    "c3f5e040280004009a999d41170102000000280004000000004028000400000000001e002400170102000100"
-    "280004000000000028000400000000000401020000002800040000007a431e00140017010200010017010200"
-    "010028000400000090401e00140017010200010005000200000020000400010000001e002c01170102000000"
-    "20000400010000001e002600170102000000280004001f854f41280004004861854228000400000000002800"
-    "04000000a0401f0000001e00640017010200000017010200010028000400c3f5e040280004003333e7422800"
-    "040000000040280004009a99b941280004000000f042280004000000a040280004001f855b40280004000000"
-    "00002800040000000000280004000000803f06000400000000001e002c0017010200000028000400c3f5e040"
-    "280004009a999d41170102000000280004000000004028000400000000001e00240017010200010028000400"
+    "280004000000f441170102000000280004000000004028000400000000001e00240017010200010028000400"
     "0000000028000400000000000401020000002800040000007a431e0014001701020001001701020001002800"
     "0400000090401e0014001701020001000500020000002000040001000000",
   ],
@@ -4490,23 +4752,350 @@ def test_dispense_refuses_before_booking_or_sending():
         ({"piston_volumes": [5.0], "flow_rates": [0.0]}, "flow_rates must be above 0"),
         ({"piston_volumes": [5.0], "blow_out_air_volumes": [1.0]}, "blow-out air on aspirate"),
         ({"piston_volumes": [5.0], "swap_speeds": [1.0, 1.0]}, "swap_speeds length"),
+        (
+          {"piston_volumes": [5.0], "z_air": [60.0], "pull_out_distances_transport_air": [5.0]},
+          "one of z_air and pull_out",
+        ),
         ({"piston_volumes": [5.0], "side_touch_off_distance": 1.0}, "no side touch-off"),
         ({"piston_volumes": [5.0], "post_mixes": [Mix(5.0, 2, 50.0)]}, "post-mixing"),
         ({"piston_volumes": [5.0], "mix_positions_from_liquid_surface": [1.0]}, "post-mixing"),
         ({"piston_volumes": [5.0], "limit_curve_indices": [1]}, "limit curve 0"),
         ({"piston_volumes": [5.0], "post_mixes": [None, None]}, "post_mixes length"),
         ({"piston_volumes": [5.0], "minimum_traverse_height_end": 500.0}, "outside channel"),
+        (
+          {"piston_volumes": [5.0], "lld_mode": _CAPACITIVE},
+          "finds the surface or the floor itself",
+        ),
       ):
         with pytest.raises(ValueError, match=match):
           await p.pipettes.dispense([well], use_channels=[0], liquid_heights=[2.0], **kwargs)
-      with pytest.raises(TooLittleLiquidError, match="a tip holding 0 uL asked to give 5.0"):
-        await p.pipettes.dispense(
-          [well], use_channels=[0], liquid_heights=[2.0], piston_volumes=[5.0]
-        )
       assert sent == []
       assert well.tracker.get_used_volume() == 0.0
       await p.stop()
     finally:
       set_volume_tracking(False)
+
+  _run(_t())
+
+
+@pytest.mark.parametrize("second_session", [False, True])
+def test_dispense_on_ztouch_touches_each_floor_then_dispenses_just_above_it_without_lld(
+  second_session,
+):
+  """Each channel's seek on its own link before the dispense, which goes 0.2 mm off the floor."""
+
+  async def _t():
+    p, rack, plate, sent = _ztouch_setup(second_session, touch=0.3)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+    wells = plate["A1:B1"]
+    sent.clear()
+    with patch.object(pipettes_logger, "warning") as warning:
+      await p.pipettes.dispense(wells, piston_volumes=[5.0, 5.0], lld_mode=_ZTOUCH)
+    assert "dispense on Z touch" in " ".join(str(c.args) for c in warning.call_args_list)
+    seeks = [(link, c) for link, c in sent if isinstance(c, PrepCmd.PrepZAxisSeekObstacle)]
+    assert [link for link, _ in seeks] == (["main", "second"] if second_session else ["main"] * 2)
+    assert [c.dest for _, c in seeks] == [p.pipettes.channels[ch].zaxis for ch in (0, 1)]
+    commands = [c for _, c in sent]
+    (push,) = [c for c in commands if isinstance(c, _DISPENSE_COMMANDS)]
+    assert isinstance(push, PrepCmd.PrepDispenseNoLldV2)
+    assert commands.index(push) > commands.index(seeks[-1][1])
+    for entry, well in zip(push.dispense_parameters, wells):
+      floor = well.get_location_wrt(p.deck, "c", "c", "cavity_bottom").z - 0.3
+      assert entry.no_lld.z_fluid == pytest.approx(floor + 0.2)
+      assert entry.common.z_minimum == pytest.approx(floor)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_dispense_on_ztouch_refuses_an_untouched_floor_with_nothing_dispensed():
+  """A seek that reaches its end untouched refuses the batch before its dispense."""
+
+  async def _t():
+    p, rack, plate, sent = _ztouch_setup(second_session=True, touch=None)
+    set_volume_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+      tips = [p.pipettes.get_mounted_tip(ch) for ch in (0, 1)]
+      for tip in tips:
+        assert tip is not None
+        tip.tracker.set_volume(20.0)
+      wells = plate["A1:B1"]
+      sent.clear()
+      with pytest.raises(RuntimeError, match="channel 0 met no floor in plate_well_A1"):
+        await p.pipettes.dispense(wells, piston_volumes=[5.0, 5.0], lld_mode=_ZTOUCH)
+      commands = [c for _, c in sent]
+      seeks = [i for i, c in enumerate(commands) if isinstance(c, PrepCmd.PrepZAxisSeekObstacle)]
+      assert len(seeks) == 2
+      assert not any(isinstance(c, _DISPENSE_COMMANDS) for c in commands)
+      assert any(isinstance(c, PrepCmd.PrepMoveZUpToSafe) for c in commands[seeks[-1] :])
+      assert [t.tracker.get_used_volume() for t in tips if t is not None] == [20.0, 20.0]
+      assert [w.tracker.get_used_volume() for w in wells] == [0.0, 0.0]
+    finally:
+      set_volume_tracking(False)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_dispense_runs_ztouch_and_off_in_batches_of_their_own():
+  """ZTOUCH beside OFF at one X: a command each, both without LLD; only the ZTOUCH one seeks."""
+
+  async def _t():
+    p, rack, plate, sent = _ztouch_setup(second_session=False, touch=0.0)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+    wells = plate["A1:B1"]
+    sent.clear()
+    await p.pipettes.dispense(
+      wells,
+      use_channels=[0, 1],
+      piston_volumes=[5.0, 5.0],
+      liquid_heights=[None, 3.0],
+      lld_mode=[_ZTOUCH, Pipettes.LLDMode.OFF],
+    )
+    commands = [c for _, c in sent]
+    seeks = [c for c in commands if isinstance(c, PrepCmd.PrepZAxisSeekObstacle)]
+    assert [c.dest for c in seeks] == [p.pipettes.channels[0].zaxis]
+    pushes = [c for c in commands if isinstance(c, _DISPENSE_COMMANDS)]
+    assert [type(c) for c in pushes] == [PrepCmd.PrepDispenseNoLldV2] * 2
+    bottoms = [w.get_location_wrt(p.deck, "c", "c", "cavity_bottom").z for w in wells]
+    heights = sorted(e.no_lld.z_fluid for c in pushes for e in c.dispense_parameters)
+    assert heights == pytest.approx(sorted([bottoms[0] + 0.2, bottoms[1] + 3.0]))
+    await p.stop()
+
+  _run(_t())
+
+
+@pytest.mark.parametrize("second_session", [False, True])
+def test_aspirate_on_capacitive_searches_each_channel_then_draws_at_the_surface_without_lld(
+  second_session,
+):
+  """Each channel's seek on its own link before the draw; the draw at the surface, no LLD; the
+  tracker takes the measured volume, with a warning when it is 20 % off."""
+
+  async def _t():
+    p, rack, plate, sent = _clld_setup(second_session, found=4.0)
+    set_volume_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+      wells = plate["A1:B1"]
+      wells[0].tracker.set_volume(120.0)
+      wells[1].tracker.set_volume(200.0)
+      sent.clear()
+      probe = p.pipettes._probe_batch_liquid_heights
+      with (
+        patch.object(pipettes_logger, "warning") as warning,
+        patch.object(p.pipettes, "_probe_batch_liquid_heights", wraps=probe) as spy,
+      ):
+        await p.pipettes.aspirate(
+          wells, use_channels=[0, 1], piston_volumes=[10.0, 10.0], lld_mode=_CAPACITIVE
+        )
+      tops = [w.get_location_wrt(p.deck, "c", "c", "t").z for w in wells]
+      assert spy.call_args.kwargs["z_start"] == pytest.approx([t + 2.0 for t in tops], abs=0.01)
+      warned = [str(c.args) for c in warning.call_args_list if "measured" in str(c.args)]
+      assert len(warned) == 1 and "plate_well_B1" in warned[0]
+      seeks = [(link, c) for link, c in sent if isinstance(c, PrepCmd.PrepZAxisSeekCapacitiveLld)]
+      assert [link for link, _ in seeks] == (["main", "second"] if second_session else ["main"] * 2)
+      commands = [c for _, c in sent]
+      (draw,) = [c for c in commands if isinstance(c, _ASPIRATE_COMMANDS)]
+      assert isinstance(draw, PrepCmd.PrepAspirateNoLldMonitoringV2)
+      assert commands.index(draw) > commands.index(seeks[-1][1])
+      for entry, well in zip(draw.aspirate_parameters, wells):
+        bottom = well.get_location_wrt(p.deck, "c", "c", "cavity_bottom").z
+        assert entry.no_lld.z_fluid == pytest.approx(bottom + 4.0)
+        assert well.tracker.get_used_volume() == pytest.approx(126.0 - 10.0)
+      await p.stop()
+    finally:
+      set_volume_tracking(False)
+
+  _run(_t())
+
+
+def test_capacitive_refuses_a_container_without_liquid_or_height_volume_functions():
+  """No liquid found: refused, nothing drawn or booked. No height-volume functions: refused before
+  any command."""
+
+  async def _t():
+    p, rack, plate, sent = _clld_setup(second_session=False, found=None)
+    set_volume_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+      well = plate.get_item("A1")
+      well.tracker.set_volume(100.0)
+      sent.clear()
+      with pytest.raises(RuntimeError, match="channel 0 found no liquid in plate_well_A1"):
+        await p.pipettes.aspirate(
+          [well], use_channels=[0], piston_volumes=[10.0], lld_mode=_CAPACITIVE
+        )
+      assert not any(isinstance(c, _ASPIRATE_COMMANDS) for _, c in sent)
+      assert well.tracker.get_used_volume() == 100.0
+      dish = PetriDish(name="dish", diameter=77.0, height=30.0, material_z_thickness=2.0)
+      p.deck[6].assign_child_by_anchor(
+        dish, parent_anchor=("c", "c", "t"), child_anchor=("c", "c", "b")
+      )
+      sent.clear()
+      for call in (p.pipettes.aspirate, p.pipettes.dispense):
+        with pytest.raises(RuntimeError, match="Generate a height_volume_data dictionary"):
+          await call([dish], use_channels=[0], piston_volumes=[1.0], lld_mode=_CAPACITIVE)
+      assert sent == []
+      await p.stop()
+    finally:
+      set_volume_tracking(False)
+
+  _run(_t())
+
+
+def test_dispense_on_capacitive_searches_then_dispenses_at_the_surface_without_lld():
+  """The dispense goes at the surface found, no LLD; too little room as measured refuses it."""
+
+  async def _t():
+    p, rack, plate, sent = _clld_setup(second_session=False, found=4.0)
+    set_volume_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+      plate.get_item("H12").tracker.set_volume(100.0)
+      await p.pipettes.aspirate(
+        [plate.get_item("H12")], use_channels=[0], piston_volumes=[20.0], liquid_heights=[5.0]
+      )
+      well = plate.get_item("A1")
+      sent.clear()
+      await p.pipettes.dispense(
+        [well], use_channels=[0], piston_volumes=[5.0], lld_mode=_CAPACITIVE
+      )
+      (push,) = [c for _, c in sent if isinstance(c, _DISPENSE_COMMANDS)]
+      assert isinstance(push, PrepCmd.PrepDispenseNoLldV2)
+      bottom = well.get_location_wrt(p.deck, "c", "c", "cavity_bottom").z
+      assert push.dispense_parameters[0].no_lld.z_fluid == pytest.approx(bottom + 4.0)
+      assert well.tracker.get_used_volume() == pytest.approx(126.0 + 5.0)
+      sent.clear()
+      well.tracker.set_volume(0.0)
+      with patch.object(well, "compute_volume_from_height", return_value=356.0):
+        with pytest.raises(RuntimeError, match="room for 4.0 uL as measured"):
+          await p.pipettes.dispense(
+            [well], use_channels=[0], piston_volumes=[5.0], lld_mode=_CAPACITIVE
+          )
+      assert not any(isinstance(c, _DISPENSE_COMMANDS) for _, c in sent)
+      await p.stop()
+    finally:
+      set_volume_tracking(False)
+
+  _run(_t())
+
+
+@pytest.mark.parametrize("tracking", [True, False])
+def test_shortfalls_warn_and_move_air_only_while_volumes_are_tracked(tracking):
+  """A container holding less than drawn, or a tip less than dispensed: the command goes ahead,
+  the rest is air, with a warning while tracking; with tracking off, nothing is checked."""
+
+  async def _t():
+    set_volume_tracking(tracking)
+    try:
+      deck = PrepDeck()
+      rack = deck[1] = hamilton_96_tiprack_300uL_NTR(name="tips", with_tips=True)
+      plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+      dish = PetriDish(name="dish", diameter=77.0, height=30.0, material_z_thickness=2.0)
+      deck[6].assign_child_by_anchor(
+        dish, parent_anchor=("c", "c", "t"), child_anchor=("c", "c", "b")
+      )
+      if tracking:
+        dish.tracker.set_volume(180.0)
+      p = PrepSimulationDriver(deck=deck)
+      await p.setup()
+      assert p.pipettes is not None
+      await p.pipettes.pick_up_tips(rack["A1:B1"], use_channels=[0, 1])
+      sent = _record(p, only=(*_ASPIRATE_COMMANDS, *_DISPENSE_COMMANDS))
+      with patch.object(pipettes_logger, "warning") as warning:
+        await p.pipettes.aspirate(
+          [dish, dish],
+          use_channels=[0, 1],
+          piston_volumes=[150.0, 40.0],
+          liquid_heights=[5.0, 5.0],
+          resource_offsets=[Coordinate(-5.0, 0, 0), Coordinate(5.0, 0, 0)],
+        )
+        well = plate.get_item("A1")
+        await p.pipettes.dispense([well], use_channels=[0], piston_volumes=[200.0])
+      warned = " ".join(c.args[0] % c.args[1:] for c in warning.call_args_list)
+      assert len(sent) == 3
+      if tracking:
+        assert "which holds 30.0 uL; the rest is air" in warned
+        assert "from a tip holding 150.0 uL; the rest is air" in warned
+        assert dish.tracker.get_used_volume() == 0.0
+        assert well.tracker.get_used_volume() == 150.0
+      else:
+        assert "the rest is air" not in warned
+      await p.stop()
+    finally:
+      set_volume_tracking(False)
+
+  _run(_t())
+
+
+def test_capacitive_search_goes_under_the_model_and_the_floor_follows_a_surface_found_there():
+  """The search ends 1 mm under the modelled bottom; a surface under it is warned of, books
+  nothing, and becomes the aspirate height and the floor sent."""
+
+  async def _t():
+    p, rack, plate, sent = _clld_setup(second_session=False, found=-0.5)
+    set_volume_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+      well = plate.get_item("A1")
+      well.tracker.set_volume(100.0)
+      bottom = well.get_location_wrt(p.deck, "c", "c", "cavity_bottom").z
+      sent.clear()
+      with patch.object(pipettes_logger, "warning") as warning:
+        await p.pipettes.aspirate(
+          [well], use_channels=[0], piston_volumes=[10.0], lld_mode=_CAPACITIVE
+        )
+      warned = " ".join(c.args[0] % c.args[1:] for c in warning.call_args_list)
+      assert "0.50 mm below its modelled cavity bottom" in warned
+      (seek,) = [c for _, c in sent if isinstance(c, PrepCmd.PrepZAxisSeekCapacitiveLld)]
+      assert seek.position - SIMULATED_Z_DRIVE_OFFSETS[0] == pytest.approx(bottom - 1.0, abs=0.02)
+      (draw,) = [c for _, c in sent if isinstance(c, _ASPIRATE_COMMANDS)]
+      entry = draw.aspirate_parameters[0]
+      assert entry.no_lld.z_fluid == pytest.approx(bottom - 0.5, abs=0.01)
+      assert entry.common.z_minimum == pytest.approx(bottom - 0.5, abs=0.01)
+      assert well.tracker.get_used_volume() == pytest.approx(90.0)
+      await p.stop()
+    finally:
+      set_volume_tracking(False)
+
+  _run(_t())
+
+
+def test_transport_air_height_is_the_pipetting_height_plus_the_pull_out_distance_by_default():
+  """No z_air and no pull-out given: 10 mm over the aspirate and the dispense height."""
+
+  async def _t():
+    deck = PrepDeck()
+    rack = deck[1] = hamilton_96_tiprack_300uL_NTR(name="tips", with_tips=True)
+    plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips(rack["A1"], use_channels=[0])
+    well = plate.get_item("A1")
+    bottom = well.get_location_wrt(deck, "c", "c", "cavity_bottom").z
+    sent = _record(p, only=(*_ASPIRATE_COMMANDS, *_DISPENSE_COMMANDS))
+    await p.pipettes.aspirate([well], use_channels=[0], piston_volumes=[5.0], liquid_heights=[3.0])
+    await p.pipettes.dispense([well], use_channels=[0], piston_volumes=[5.0], liquid_heights=[4.0])
+    draw, push = sent
+    assert draw.aspirate_parameters[0].no_lld.z_air == pytest.approx(bottom + 13.0, abs=0.01)
+    assert push.dispense_parameters[0].no_lld.z_air == pytest.approx(bottom + 14.0, abs=0.01)
+    await p.stop()
 
   _run(_t())
