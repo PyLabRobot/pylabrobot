@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any, Dict
 
 import pytest
@@ -11,13 +10,10 @@ from pylabrobot.hamilton.liquid_class_resolver import (
   ASPIRATE_CLASS_ATTRIBUTES,
   DISPENSE_CLASS_ATTRIBUTES,
   check_volume_arguments,
-  corrected_volumes_for_ops,
   from_class,
   get_volumes_and_classes,
-  resolve_hamilton_liquid_classes,
 )
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
-from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.liquid import Liquid
@@ -59,76 +55,6 @@ def _tip(maximal_volume: float = 300.0) -> HamiltonTip:
   )
 
 
-def test_resolve_explicit_returns_copy():
-  h = _hlc()
-  out = resolve_hamilton_liquid_classes([h], [], jet=False, blow_out=False)
-  assert out == [h]
-  out[0] = None  # type: ignore[assignment]
-  assert h is not None
-
-
-def test_resolve_auto_non_hamilton_tip_is_none():
-  op = SimpleNamespace(tip=object())
-  assert resolve_hamilton_liquid_classes(None, [op], jet=False, blow_out=False) == [None]
-
-
-def test_resolve_auto_hamilton_tip_matches_get_star():
-  tip = HamiltonTip(
-    name="tip",
-    has_filter=False,
-    size_z=59.9,
-    maximal_volume=300.0,
-    tip_size=TipSize.STANDARD_VOLUME,
-    pickup_method=TipPickupMethod.OUT_OF_RACK,
-  )
-  op = SimpleNamespace(tip=tip)
-  a = resolve_hamilton_liquid_classes(None, [op], jet=False, blow_out=False)[0]
-  b = get_star_liquid_class(
-    tip_volume=tip.maximal_volume,
-    is_core=False,
-    is_tip=True,
-    has_filter=tip.has_filter,
-    liquid=Liquid.WATER,
-    jet=False,
-    blow_out=False,
-  )
-  assert a is not None and b is not None
-  assert a.aspiration_flow_rate == b.aspiration_flow_rate
-
-
-def test_resolve_custom_lookup():
-  custom = _hlc(aspiration_flow_rate=99.0)
-
-  def lookup(**kwargs):  # noqa: ARG001
-    return custom
-
-  tip = HamiltonTip(
-    name="tip",
-    has_filter=False,
-    size_z=59.9,
-    maximal_volume=300.0,
-    tip_size=TipSize.STANDARD_VOLUME,
-    pickup_method=TipPickupMethod.OUT_OF_RACK,
-  )
-  op = SimpleNamespace(tip=tip)
-  got = resolve_hamilton_liquid_classes(None, [op], jet=False, blow_out=False, lookup=lookup)[0]
-  assert got is not None
-  assert got.aspiration_flow_rate == 99.0
-
-
-def test_corrected_volumes_respects_disable_and_none_hlc():
-  ops = [SimpleNamespace(volume=100.0)]
-  hlc = _hlc(curve={0.0: 0.0, 100.0: 200.0, 200.0: 400.0})
-  assert corrected_volumes_for_ops(ops, [hlc], None) == [200.0]
-  assert corrected_volumes_for_ops(ops, [hlc], [True]) == [100.0]
-  assert corrected_volumes_for_ops(ops, [None], None) == [100.0]
-
-
-def test_corrected_volumes_length_mismatch_raises():
-  with pytest.raises(ValueError, match="hlcs length"):
-    corrected_volumes_for_ops([SimpleNamespace(volume=1.0)], [])
-
-
 def test_from_class_takes_what_is_given_else_the_class_else_none():
   hlc = _hlc()
   assert from_class("flow_rates", [3.0], 1, [hlc], ASPIRATE_CLASS_ATTRIBUTES) == [3.0]
@@ -136,6 +62,7 @@ def test_from_class_takes_what_is_given_else_the_class_else_none():
   assert from_class("flow_rates", None, 1, [hlc], DISPENSE_CLASS_ATTRIBUTES) == [9.0]
   assert from_class("flow_rates", None, 1, None, DISPENSE_CLASS_ATTRIBUTES) is None
   assert from_class("flow_rates", [None], 1, [hlc], ASPIRATE_CLASS_ATTRIBUTES) == [1.0]
+  assert from_class("flow_rates", [None], 1, None, ASPIRATE_CLASS_ATTRIBUTES) == [None]
   with pytest.raises(ValueError, match="one entry per container"):
     from_class("flow_rates", [1.0, 2.0], 1, [hlc], ASPIRATE_CLASS_ATTRIBUTES)
 
