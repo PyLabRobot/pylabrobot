@@ -53,7 +53,7 @@ from pylabrobot.resources.resource_state import (
   queue_volume_transfers,
   successes_from_failed_channels,
 )
-from pylabrobot.resources.tip_rack import TipSpot
+from pylabrobot.resources.tip_rack import TipSpot, tip_origin
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 from .. import prep_commands as PrepCmd
@@ -589,6 +589,29 @@ class Head8:
         released = self.shaft(ch).release_tip()
         if isinstance(destination, TipSpot) and destination.tracks_tips:
           destination.assign_tip(cast(Tip, released))
+
+  async def return_tips(self, use_channels: Optional[Sequence[int]] = None, **kwargs) -> None:
+    """Return all eight tips to the spots they were picked up from.
+
+    Args:
+      use_channels: all eight channels, in order. Defaults to all eight channels.
+      kwargs: passed on to `drop_tips`.
+
+    Raises:
+      ValueError: If `use_channels` does not select all eight channels in order.
+      RuntimeError: If there is no deck, any channel has no tip, or a tip's original spot
+        is not on the deck.
+    """
+    channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
+    self._require_all_channels(channels, "return_tips")
+    deck = self._require_deck()
+    spots: List[TipSpot] = []
+    for ch, tip in enumerate(self._require_mounted_tips()):
+      spot = tip_origin(tip, deck)
+      if spot is None:
+        raise RuntimeError(f"the spot channel {ch}'s tip {tip.name} came from is not on the deck")
+      spots.append(spot)
+    await self.drop_tips(spots, use_channels=channels, **kwargs)
 
   # -- shared LLD / TADM resolution helpers --------------------------------------------------------
 
