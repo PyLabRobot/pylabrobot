@@ -56,7 +56,7 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
     self.assertNotIn("configureNozzleLayout", types)
     moves = [c for c in self.api.submit_command.await_args_list if c.args[1] == "moveToCoordinates"]
     self.assertEqual(moves[0].args[2]["coordinates"], {"x": 178.3, "y": 154.2, "z": 109.0})
-    self.assertEqual(moves[1].args[2]["coordinates"], {"x": 187.3, "y": 154.2, "z": 109.0})
+    self.assertEqual(moves[2].args[2]["coordinates"], {"x": 187.3, "y": 154.2, "z": 109.0})
     self.assertEqual(types.count("aspirateInPlace"), 1)
     self.assertEqual(types.count("dispenseInPlace"), 1)
 

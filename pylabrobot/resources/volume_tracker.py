@@ -88,32 +88,6 @@ class VolumeTracker(SerializableMixin):
     )
     self.set_volume(sum(volume for _, volume in liquids))
 
-  def remove_liquid(self, volume: float) -> None:
-    """Remove liquid from the container."""
-
-    if (volume - self.get_used_volume()) > 1e-6:
-      raise TooLittleLiquidError(
-        f"Not enough liquid in container: {volume}uL > {self.get_used_volume()}uL."
-      )
-
-    self.pending_volume -= volume
-
-    for callback in self._callbacks:
-      callback()
-
-  def add_liquid(self, volume: float) -> None:
-    """Add liquid to the container."""
-
-    if (volume - self.get_free_volume()) > 1e-6:
-      raise TooLittleVolumeError(
-        f"Not enough space in container: {volume}uL > {self.get_free_volume()}uL."
-      )
-
-    self.pending_volume += volume
-
-    for callback in self._callbacks:
-      callback()
-
   def get_used_volume(self) -> float:
     """Get the used volume of the container. Note that this includes pending operations."""
     return self.pending_volume
@@ -121,6 +95,36 @@ class VolumeTracker(SerializableMixin):
   def get_free_volume(self) -> float:
     """Get the free volume of the container. Note that this includes pending operations."""
     return self.max_volume - self.get_used_volume()
+
+  def validate_remove_liquid(self, volume: float) -> None:
+    """Check available liquid without changing volumes or notifying callbacks."""
+    if (volume - self.get_used_volume()) > 1e-6:
+      raise TooLittleLiquidError(
+        f"Not enough liquid in container: {volume}uL > {self.get_used_volume()}uL."
+      )
+
+  def remove_liquid(self, volume: float) -> None:
+    """Remove liquid from the container."""
+    self.validate_remove_liquid(volume)
+    self.pending_volume -= volume
+
+    for callback in self._callbacks:
+      callback()
+
+  def validate_add_liquid(self, volume: float) -> None:
+    """Check available capacity without changing volumes or notifying callbacks."""
+    if (volume - self.get_free_volume()) > 1e-6:
+      raise TooLittleVolumeError(
+        f"Not enough space in container: {volume}uL > {self.get_free_volume()}uL."
+      )
+
+  def add_liquid(self, volume: float) -> None:
+    """Add liquid to the container."""
+    self.validate_add_liquid(volume)
+    self.pending_volume += volume
+
+    for callback in self._callbacks:
+      callback()
 
   def get_liquids(self, top_volume: float) -> List[Tuple[Optional[Liquid], float]]:
     """Get the liquids in the top `top_volume` uL.

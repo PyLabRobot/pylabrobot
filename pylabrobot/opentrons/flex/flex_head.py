@@ -42,10 +42,14 @@ from typing import (
   cast,
 )
 
+from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.flex.pipette_defaults import FlowRates, flow_rates
 from pylabrobot.opentrons.operations import OperationLock, instrument_operation
-from pylabrobot.opentrons.tracking import track_liquid_transfer
+from pylabrobot.opentrons.tracking import (
+  track_liquid_transfer,
+  validate_liquid_transfer,
+)
 from pylabrobot.resources import (
   Container,
   Plate,
@@ -467,6 +471,43 @@ class _FlexHead:
     self._check_pipetting_clearance(target, position)
     return position
 
+  @staticmethod
+  def _validate_mix_parameters(
+    volume: float,
+    repetitions: int,
+    aspirate_flow_rate: Optional[float],
+    dispense_flow_rate: Optional[float],
+  ) -> None:
+    """Validate the parameters shared by standalone and transfer mixing."""
+    if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
+      raise ValueError("repetitions must be a positive integer")
+    if not math.isfinite(volume) or volume <= 0:
+      raise ValueError("volume must be finite and positive")
+    for rate in (aspirate_flow_rate, dispense_flow_rate):
+      if rate is not None and (not math.isfinite(rate) or rate <= 0):
+        raise ValueError("flow rates must be finite and positive")
+
+  async def _mix_in_place(
+    self,
+    container_trackers: List[VolumeTracker],
+    volume: float,
+    repetitions: int,
+    aspirate_flow_rate: Optional[float],
+    dispense_flow_rate: Optional[float],
+    final_push_out: Optional[float],
+  ) -> None:
+    """Run tracked mixing strokes at the current position without priming or moving."""
+    tip_trackers = [tip.tracker for tip in self._channel_tips if tip is not None]
+    for cycle in range(repetitions):
+      with track_liquid_transfer(container_trackers, tip_trackers, volume):
+        await self.aspirate_in_place(volume, flow_rate=aspirate_flow_rate)
+      with track_liquid_transfer(tip_trackers, container_trackers, volume):
+        await self.dispense_in_place(
+          volume,
+          flow_rate=dispense_flow_rate,
+          push_out=final_push_out if cycle == repetitions - 1 else 0,
+        )
+
   async def _pipette(
     self,
     verb: str,
@@ -478,33 +519,69 @@ class _FlexHead:
     container_trackers: List[VolumeTracker],
     *,
     center_nozzle_array: bool = False,
+    post_mix: Optional[Mix] = None,
+    pre_mix: Optional[Mix] = None,
   ) -> None:
     """Position from PLR geometry, pipette in place, then retract vertically.
 
     Heights are measured from the cavity floor. Container operations center the
-    complete nozzle array; well operations locate the active primary nozzle. Stage
+    complete nozzle array; well operations locate the active primary nozzle. Validate
     volumes before motion and commit once the plunger command succeeds.
     """
+    mix = pre_mix if pre_mix is not None else post_mix
+    if mix is not None:
+      self._validate_mix_parameters(mix.volume, mix.repetitions, mix.flow_rate, mix.flow_rate)
+      for tip in self._channel_tips:
+        if tip is not None:
+          remaining = max(0, tip.tracker.get_used_volume() - (volume if post_mix else 0))
+          if remaining + mix.volume > min(tip.maximal_volume, self.max_volume):
+            raise ValueError("Mix volume exceeds pipette or tip capacity")
     position = self._pipetting_position(target, offset, liquid_height, center_nozzle_array)
-    clearance = max(self.flex.traversal_height, position.z)
     tip_trackers = [tip.tracker for tip in self._channel_tips if tip is not None]
     sources, destinations = (
       (container_trackers, tip_trackers)
       if verb == "aspirate"
       else (tip_trackers, container_trackers)
     )
-    with track_liquid_transfer(sources, destinations, volume):
-      await self.move_to_position(
-        x=position.x, y=position.y, z=clearance, minimum_z_height=clearance
+    validate_liquid_transfer(sources, destinations, volume)
+    if post_mix is not None:
+      # Only the part of the mixing draw beyond the dispense needs existing liquid.
+      additional_volume = max(0, post_mix.volume - volume)
+      validate_liquid_transfer(container_trackers, tip_trackers, additional_volume)
+    if pre_mix is not None:
+      validate_liquid_transfer(container_trackers, tip_trackers, pre_mix.volume)
+    clearance = max(self.flex.traversal_height, position.z)
+    await self.move_to_position(x=position.x, y=position.y, z=clearance, minimum_z_height=clearance)
+    if verb == "aspirate":
+      await self.prepare_to_aspirate()
+    await self.move_to_position(
+      x=position.x, y=position.y, z=position.z, minimum_z_height=position.z
+    )
+    if pre_mix is not None:
+      await self._mix_in_place(
+        container_trackers,
+        pre_mix.volume,
+        pre_mix.repetitions,
+        pre_mix.flow_rate,
+        pre_mix.flow_rate,
+        final_push_out=0,
       )
-      if verb == "aspirate":
-        await self.prepare_to_aspirate()
-      current = await self.request_position()
-      await self.move_relative("z", position.z - current.z)
+    with track_liquid_transfer(sources, destinations, volume):
       if verb == "aspirate":
         await self.aspirate_in_place(volume, flow_rate=flow_rate)
       else:
-        await self.dispense_in_place(volume, flow_rate=flow_rate)
+        await self.dispense_in_place(
+          volume, flow_rate=flow_rate, push_out=0 if post_mix is not None else None
+        )
+    if post_mix is not None:
+      await self._mix_in_place(
+        container_trackers,
+        post_mix.volume,
+        post_mix.repetitions,
+        post_mix.flow_rate,
+        post_mix.flow_rate,
+        final_push_out=None,
+      )
     await self.move_to_safe_z()
 
   async def _configure_nozzle_layout(self, configuration_params: Dict[str, Any]) -> None:
@@ -1782,6 +1859,7 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float] = None,
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
+    pre_mix: Optional[Mix] = None,
   ) -> None:
     """Aspirate ``volume`` uL from ``target`` using PLR coordinates and in-place aspiration.
 
@@ -1802,24 +1880,35 @@ class FlexHead8(_FlexHead):
 
     ``column`` is the transitional bridge for the old ``aspirate(plate,
     column=c)`` call and takes a ``Plate`` target; prefer ``plate.column(c)``.
+
+    ``pre_mix=Mix(volume, repetitions, flow_rate)`` mixes at the aspiration
+    height before the final draw. The head primes once above the plate and
+    descends once. All mixing dispenses use zero push-out, so the final draw
+    needs no lift or priming. Each stroke is tracked separately. Surface-following
+    settings are ignored; mixing stays at the aspiration height.
     """
     self._require_use_channels_match_mounted(use_channels)
     if column is not None:
       await self._aspirate_column(
-        cast(Plate, target), column, volume, flow_rate, offset, liquid_height
+        cast(Plate, target), column, volume, flow_rate, offset, liquid_height, pre_mix
       )
       return
     if isinstance(target, (list, tuple)):
       await self._aspirate_wells(
-        list(target), volume, use_channels, flow_rate, offset, liquid_height
+        list(target), volume, use_channels, flow_rate, offset, liquid_height, pre_mix
       )
       return
     if isinstance(target, Well):  # Well is a Container, so check it first
-      await self._aspirate_single_well(target, volume, flow_rate, offset, liquid_height)
+      await self._aspirate_single_well(target, volume, flow_rate, offset, liquid_height, pre_mix)
       return
     if isinstance(target, Container):
       await self.aspirate_container(
-        target, volume, flow_rate=flow_rate, offset=offset, liquid_height=liquid_height
+        target,
+        volume,
+        flow_rate=flow_rate,
+        offset=offset,
+        liquid_height=liquid_height,
+        pre_mix=pre_mix,
       )
       return
     raise TypeError(
@@ -1865,6 +1954,7 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float],
     offset: Optional[Coordinate],
     liquid_height: Optional[float],
+    pre_mix: Optional[Mix] = None,
   ) -> None:
     """Aspirate one well with the mounted single nozzle using its PLR coordinates.
 
@@ -1878,7 +1968,9 @@ class FlexHead8(_FlexHead):
     well_name = parent.get_child_identifier(well)
     self._require_reach_in_single_layout(parent, well_name)
     staged_trackers = self._container_trackers(well)
-    await self._pipette("aspirate", well, volume, flow_rate, offset, liquid_height, staged_trackers)
+    await self._pipette(
+      "aspirate", well, volume, flow_rate, offset, liquid_height, staged_trackers, pre_mix=pre_mix
+    )
 
   async def _liquid_column_target(
     self, wells: List[Well], use_channels: Optional[Sequence[int]]
@@ -1926,6 +2018,7 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float],
     offset: Optional[Coordinate],
     liquid_height: Optional[float],
+    pre_mix: Optional[Mix] = None,
   ) -> None:
     """Aspirate a PLR-native column (a list of wells) -- one anchored ``aspirate``.
 
@@ -1939,7 +2032,7 @@ class FlexHead8(_FlexHead):
       raise ValueError("aspirate: the target well sequence is empty.")
     anchor, staged_trackers = await self._liquid_column_target(wells, use_channels)
     await self._pipette(
-      "aspirate", anchor, volume, flow_rate, offset, liquid_height, staged_trackers
+      "aspirate", anchor, volume, flow_rate, offset, liquid_height, staged_trackers, pre_mix=pre_mix
     )
 
   async def _aspirate_column(
@@ -1950,6 +2043,7 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float] = None,
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
+    pre_mix: Optional[Mix] = None,
   ) -> None:
     """Aspirate a column using its rearmost well as the coordinate anchor.
 
@@ -1968,7 +2062,14 @@ class FlexHead8(_FlexHead):
     await self._ensure_all_mode()
     staged_trackers = self._well_trackers(column_wells)
     await self._pipette(
-      "aspirate", column_wells[0], volume, flow_rate, offset, liquid_height, staged_trackers
+      "aspirate",
+      column_wells[0],
+      volume,
+      flow_rate,
+      offset,
+      liquid_height,
+      staged_trackers,
+      pre_mix=pre_mix,
     )
 
   @instrument_operation
@@ -2001,13 +2102,7 @@ class FlexHead8(_FlexHead):
     Each successful stroke commits its own volume transfer; a failure leaves
     the completed strokes tracked and does not attempt further movement.
     """
-    if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
-      raise ValueError("repetitions must be a positive integer")
-    if not math.isfinite(volume) or volume <= 0:
-      raise ValueError("volume must be finite and positive")
-    for rate in (aspirate_flow_rate, dispense_flow_rate):
-      if rate is not None and (not math.isfinite(rate) or rate <= 0):
-        raise ValueError("flow rates must be finite and positive")
+    self._validate_mix_parameters(volume, repetitions, aspirate_flow_rate, dispense_flow_rate)
     if final_push_out is not None and (not math.isfinite(final_push_out) or final_push_out < 0):
       raise ValueError("final_push_out must be finite and non-negative")
     self._require_mounted_tip()
@@ -2029,24 +2124,17 @@ class FlexHead8(_FlexHead):
       raise ValueError("mix: the target well sequence is empty")
     anchor, trackers = await self._liquid_column_target(wells, use_channels)
     position = self._pipetting_position(anchor, offset, liquid_height)
-    clearance = max(self.flex.traversal_height, position.z)
     tip_trackers = [tip.tracker for tip in tips]
-    for cycle in range(repetitions):
-      with track_liquid_transfer(trackers, tip_trackers, volume):
-        if cycle == 0:
-          await self.move_to_position(
-            x=position.x, y=position.y, z=clearance, minimum_z_height=clearance
-          )
-          await self.prepare_to_aspirate()
-          current = await self.request_position()
-          await self.move_relative("z", position.z - current.z)
-        await self.aspirate_in_place(volume, flow_rate=aspirate_flow_rate)
-      with track_liquid_transfer(tip_trackers, trackers, volume):
-        await self.dispense_in_place(
-          volume,
-          flow_rate=dispense_flow_rate,
-          push_out=final_push_out if cycle == repetitions - 1 else 0,
-        )
+    validate_liquid_transfer(trackers, tip_trackers, volume)
+    clearance = max(self.flex.traversal_height, position.z)
+    await self.move_to_position(x=position.x, y=position.y, z=clearance, minimum_z_height=clearance)
+    await self.prepare_to_aspirate()
+    await self.move_to_position(
+      x=position.x, y=position.y, z=position.z, minimum_z_height=position.z
+    )
+    await self._mix_in_place(
+      trackers, volume, repetitions, aspirate_flow_rate, dispense_flow_rate, final_push_out
+    )
     await self.move_to_safe_z()
 
   @instrument_operation
@@ -2060,6 +2148,7 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float] = None,
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
+    post_mix: Optional[Mix] = None,
   ) -> None:
     """Dispense ``volume`` uL into ``target`` using PLR coordinates and in-place dispensing.
 
@@ -2069,24 +2158,36 @@ class FlexHead8(_FlexHead):
     ``configureNozzleLayout`` is emitted (the layout is fixed at pickup). See
     :meth:`aspirate` for the full contract; ``column`` is the same transitional
     bridge for the old ``dispense(plate, column=c)`` call.
+
+    ``post_mix=Mix(volume, repetitions, flow_rate)`` mixes at the dispense position before
+    retracting, with volume in uL per tip. The initial and intermediate
+    dispenses use zero push-out so mixing needs no lift or priming. Only the
+    last stroke uses the default push-out. Mixing uses ``post_mix.flow_rate`` for both strokes.
+    Surface-following settings are ignored, as mixing stays at the dispense height.
+    Each completed stroke is tracked separately; a failure stops without further movement.
     """
     self._require_use_channels_match_mounted(use_channels)
     if column is not None:
       await self._dispense_column(
-        cast(Plate, target), column, volume, flow_rate, offset, liquid_height
+        cast(Plate, target), column, volume, flow_rate, offset, liquid_height, post_mix
       )
       return
     if isinstance(target, (list, tuple)):
       await self._dispense_wells(
-        list(target), volume, use_channels, flow_rate, offset, liquid_height
+        list(target), volume, use_channels, flow_rate, offset, liquid_height, post_mix
       )
       return
     if isinstance(target, Well):  # Well is a Container, so check it first
-      await self._dispense_single_well(target, volume, flow_rate, offset, liquid_height)
+      await self._dispense_single_well(target, volume, flow_rate, offset, liquid_height, post_mix)
       return
     if isinstance(target, Container):
       await self.dispense_container(
-        target, volume, flow_rate=flow_rate, offset=offset, liquid_height=liquid_height
+        target,
+        volume,
+        flow_rate=flow_rate,
+        offset=offset,
+        liquid_height=liquid_height,
+        post_mix=post_mix,
       )
       return
     raise TypeError(
@@ -2101,6 +2202,7 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float],
     offset: Optional[Coordinate],
     liquid_height: Optional[float],
+    post_mix: Optional[Mix] = None,
   ) -> None:
     """Dispense to one well with the mounted single nozzle -- the mirror of
     :meth:`_aspirate_single_well`."""
@@ -2109,7 +2211,16 @@ class FlexHead8(_FlexHead):
     well_name = parent.get_child_identifier(well)
     self._require_reach_in_single_layout(parent, well_name)
     staged_trackers = self._container_trackers(well)
-    await self._pipette("dispense", well, volume, flow_rate, offset, liquid_height, staged_trackers)
+    await self._pipette(
+      "dispense",
+      well,
+      volume,
+      flow_rate,
+      offset,
+      liquid_height,
+      staged_trackers,
+      post_mix=post_mix,
+    )
 
   async def _dispense_wells(
     self,
@@ -2119,6 +2230,7 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float],
     offset: Optional[Coordinate],
     liquid_height: Optional[float],
+    post_mix: Optional[Mix] = None,
   ) -> None:
     """Dispense a PLR-native column (a list of wells) -- one anchored ``dispense``."""
     self._require_mounted_tip()
@@ -2126,7 +2238,14 @@ class FlexHead8(_FlexHead):
       raise ValueError("dispense: the target well sequence is empty.")
     anchor, staged_trackers = await self._liquid_column_target(wells, use_channels)
     await self._pipette(
-      "dispense", anchor, volume, flow_rate, offset, liquid_height, staged_trackers
+      "dispense",
+      anchor,
+      volume,
+      flow_rate,
+      offset,
+      liquid_height,
+      staged_trackers,
+      post_mix=post_mix,
     )
 
   async def _dispense_column(
@@ -2137,6 +2256,7 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float] = None,
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
+    post_mix: Optional[Mix] = None,
   ) -> None:
     """Dispense a column using its rearmost well as the coordinate anchor.
 
@@ -2153,7 +2273,14 @@ class FlexHead8(_FlexHead):
     await self._ensure_all_mode()
     staged_trackers = self._well_trackers(column_wells)
     await self._pipette(
-      "dispense", column_wells[0], volume, flow_rate, offset, liquid_height, staged_trackers
+      "dispense",
+      column_wells[0],
+      volume,
+      flow_rate,
+      offset,
+      liquid_height,
+      staged_trackers,
+      post_mix=post_mix,
     )
 
   # --- Single-cavity container (trough/reservoir) liquid handling ---
@@ -2166,6 +2293,7 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float] = None,
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
+    pre_mix: Optional[Mix] = None,
   ) -> None:
     """Aspirate ``volume`` uL per channel from one single-cavity container.
 
@@ -2174,6 +2302,7 @@ class FlexHead8(_FlexHead):
     offset-shifted row still fits, and ALL nozzle mode. Each channel holding
     a tip draws ``volume``, so the container's single tracker is staged with
     the total and settled as one op.
+    ``pre_mix`` follows :meth:`aspirate` and mixes before the final draw.
     """
     self._require_mounted_tip()
     self._require_span_fits_container(container, 0.0, _EIGHT_CHANNEL_Y_SPAN, offset)
@@ -2188,6 +2317,7 @@ class FlexHead8(_FlexHead):
       liquid_height,
       staged_trackers,
       center_nozzle_array=True,
+      pre_mix=pre_mix,
     )
 
   @instrument_operation
@@ -2198,11 +2328,13 @@ class FlexHead8(_FlexHead):
     flow_rate: Optional[float] = None,
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
+    post_mix: Optional[Mix] = None,
   ) -> None:
     """Dispense ``volume`` uL per channel into one single-cavity container.
 
     Mirrors ``aspirate_container``: same addressing, same pre-wire guards,
     and the container's single tracker staged with the total.
+    ``post_mix`` follows :meth:`dispense` and mixes before retracting.
     """
     self._require_mounted_tip()
     self._require_span_fits_container(container, 0.0, _EIGHT_CHANNEL_Y_SPAN, offset)
@@ -2217,6 +2349,7 @@ class FlexHead8(_FlexHead):
       liquid_height,
       staged_trackers,
       center_nozzle_array=True,
+      post_mix=post_mix,
     )
 
   @instrument_operation
