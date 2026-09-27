@@ -436,15 +436,17 @@ class _FlexHead:
     offset: Optional[Coordinate],
     liquid_height: Optional[float],
     container_trackers: List[VolumeTracker],
+    *,
+    center_nozzle_array: bool = False,
   ) -> None:
     """Position from PLR geometry, pipette in place, then retract vertically.
 
-    Heights are measured from the cavity floor. Bare containers center the
-    complete nozzle array; wells locate the active primary nozzle. Stage
+    Heights are measured from the cavity floor. Container operations center the
+    complete nozzle array; well operations locate the active primary nozzle. Stage
     volumes before motion and commit once the plunger command succeeds.
     """
     position = target.get_location_wrt(self.flex.deck, x="c", y="c", z="cavity_bottom")
-    if not isinstance(target, Well):
+    if center_nozzle_array:
       if self.channels == 8:
         position.y += _EIGHT_CHANNEL_Y_SPAN / 2
       elif self.channels == 96:
@@ -2088,6 +2090,7 @@ class FlexHead8(_FlexHead):
       offset,
       liquid_height,
       staged_trackers,
+      center_nozzle_array=True,
     )
 
   @instrument_operation
@@ -2116,6 +2119,7 @@ class FlexHead8(_FlexHead):
       offset,
       liquid_height,
       staged_trackers,
+      center_nozzle_array=True,
     )
 
   @instrument_operation
@@ -2675,7 +2679,14 @@ class FlexHead96(_FlexHead):
       anchor = target
       staged_trackers = self._container_trackers(target)
     await self._pipette(
-      "aspirate", anchor, volume, flow_rate, offset, liquid_height, staged_trackers
+      "aspirate",
+      anchor,
+      volume,
+      flow_rate,
+      offset,
+      liquid_height,
+      staged_trackers,
+      center_nozzle_array=not isinstance(target, Plate),
     )
 
   @instrument_operation
@@ -2705,7 +2716,14 @@ class FlexHead96(_FlexHead):
       anchor = target
       staged_trackers = self._container_trackers(target)
     await self._pipette(
-      "dispense", anchor, volume, flow_rate, offset, liquid_height, staged_trackers
+      "dispense",
+      anchor,
+      volume,
+      flow_rate,
+      offset,
+      liquid_height,
+      staged_trackers,
+      center_nozzle_array=not isinstance(target, Plate),
     )
 
   @instrument_operation

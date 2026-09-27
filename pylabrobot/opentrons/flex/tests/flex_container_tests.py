@@ -28,6 +28,7 @@ from pylabrobot.resources import (
   set_volume_tracking,
 )
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.corning import cor_axy_1_troughplate_rowVb
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 from pylabrobot.resources.resource import Resource
@@ -233,6 +234,29 @@ class TestFlexHead8ContainerOps(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     self.flex, self.api, self.head = await _flex_head8(self)
+
+  async def test_reservoir_well_centers_array_for_aspirate_and_dispense(self):
+    """A single-well reservoir centers all 8 tips, despite being a Well."""
+    rack = flex_96_tiprack_50ul(name="rack")
+    reservoir = cor_axy_1_troughplate_rowVb(name="reservoir")
+    self.flex.deck.assign_child_at_slot(rack, "C1")
+    self.flex.deck.assign_child_at_slot(reservoir, "D1")
+    cavity = reservoir.get_item("A1")
+    cavity.tracker.set_volume(100000)
+    await self.head.pick_up_tips(rack, column=0)
+    for operation in (self.head.aspirate_container, self.head.dispense_container):
+      with self.subTest(operation=operation.__name__):
+        self.api.submit_command.reset_mock()
+        await operation(cavity, volume=10)
+        moves = [
+          c for c in self.api.submit_command.await_args_list if c.args[1] == "moveToCoordinates"
+        ]
+        self.assertEqual(moves[0].args[2]["coordinates"], {"x": 63.88, "y": 74.24, "z": 109.0})
+        self.assertEqual(
+          pipetting_location(self.api, cavity, self.head.channels),
+          {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
+        )
+    self.assertAlmostEqual(cavity.tracker.volume, 100000)
 
   async def test_aspirate_container_centers_nozzle_row(self):
     rack = flex_96_tiprack_50ul(name="rack")
@@ -571,6 +595,29 @@ class TestFlexHead96ContainerOps(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     self.flex, self.api, self.head = await _flex_head96(self)
+
+  async def test_reservoir_well_centers_array_for_aspirate_and_dispense(self):
+    """A single-well reservoir centers all 96 tips, despite being a Well."""
+    rack = flex_96_tiprack_50ul(name="rack")
+    reservoir = cor_axy_1_troughplate_rowVb(name="reservoir")
+    self.flex.deck.assign_child_at_slot(rack, "C1")
+    self.flex.deck.assign_child_at_slot(reservoir, "D1")
+    cavity = reservoir.get_item("A1")
+    cavity.tracker.set_volume(100000)
+    await self.head.pick_up_tips(rack)
+    for operation in (self.head.aspirate, self.head.dispense):
+      with self.subTest(operation=operation.__name__):
+        self.api.submit_command.reset_mock()
+        await operation(cavity, volume=10)
+        moves = [
+          c for c in self.api.submit_command.await_args_list if c.args[1] == "moveToCoordinates"
+        ]
+        self.assertEqual(moves[0].args[2]["coordinates"], {"x": 14.38, "y": 74.24, "z": 109.0})
+        self.assertEqual(
+          pipetting_location(self.api, cavity, self.head.channels),
+          {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
+        )
+    self.assertAlmostEqual(cavity.tracker.volume, 100000)
 
   async def test_aspirate_container_centers_grid_and_tracks_96_channels(self):
     rack = flex_96_tiprack_50ul(name="rack")
