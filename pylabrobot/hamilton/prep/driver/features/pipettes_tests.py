@@ -1541,7 +1541,7 @@ def test_x_arm_move_sets_speed_and_acceleration_for_the_axis_move_and_puts_them_
     await p.x_arm.move_to_x_position(200.0)
     move = _index(sent, PrepCmd.PrepXAxisMoveAbsolute)
     assert sent[move].position == pytest.approx(200.0 - SIMULATED_X_AXIS_OFFSET, abs=1e-3)
-    assert _last_before(sent, PrepCmd.PrepXAxisSetVelocity, move).value == 320.0
+    assert _last_before(sent, PrepCmd.PrepXAxisSetVelocity, move).value == 240.0
     assert _last_before(sent, PrepCmd.PrepXAxisSetAcceleration, move).value == 1800.0
     assert _last_after(sent, PrepCmd.PrepXAxisSetVelocity, move).value == 400.0
     assert _last_after(sent, PrepCmd.PrepXAxisSetAcceleration, move).value == 2250.0

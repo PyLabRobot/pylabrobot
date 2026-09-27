@@ -192,6 +192,41 @@ def test_force_initialize_skips_is_initialized_check():
   asyncio.run(_run())
 
 
+def test_setup_switches_safe_speeds_to_what_is_asked_and_sets_the_x_speed_scale(tmp_path):
+  """Safe speeds switch only when the device reports otherwise; X runs at the arm's default speed."""
+
+  async def _run() -> None:
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    declared = str(tmp_path / "declared.json")
+    p.save_configuration(declared)
+    await p.stop()
+    with open(declared, encoding="utf-8") as f:
+      saved = json.load(f)
+    saved["device"]["safe_speeds_enabled"] = True
+    with open(declared, "w", encoding="utf-8") as f:
+      json.dump(saved, f)
+
+    for asked, switched in ((False, [False]), (True, [])):
+      q = PrepSimulationDriver(deck=PrepDeck(), declared_configuration_json=declared)
+      sent: list = []
+      send = q.send_command
+
+      async def record(command, *args, _sent=sent, _send=send, **kwargs):
+        _sent.append(command)
+        return await _send(command, *args, **kwargs)
+
+      q.send_command = record  # type: ignore[method-assign]
+      await q.setup(enable_safe_speeds=asked)
+      assert [c.value for c in sent if isinstance(c, PrepCmd.PrepSetSafeSpeedsEnabled)] == switched
+      assert q.configuration is not None and q.configuration.safe_speeds_enabled is asked
+      # The simulator reports 100 %: the X-arm's 240 mm/s default is 40 % of the scale.
+      assert [c.value for c in sent if isinstance(c, PrepCmd.PrepSetXSpeedScale)] == [40]
+      await q.stop()
+
+  asyncio.run(_run())
+
+
 def test_saved_configuration_holds_channel_count_and_head8(tmp_path):
   """What a device reports it has fitted is saved, and a declaration of it drives the simulator."""
 
