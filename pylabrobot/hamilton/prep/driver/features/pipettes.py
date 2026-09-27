@@ -827,6 +827,13 @@ class PipetteChannel:
       return None
     return await self._driver.request_firmware_string(self.node_info, method_id=8, interface_id=1)
 
+  async def _request_y_drive_position(self) -> float:
+    """Read the raw drive position for internal axis-offset calculations."""
+    if self.ydrive is None:
+      raise RuntimeError(f"channel {self.index} has no Y drive in the firmware tree")
+    response = await self._driver.send_command(PrepCmd.PrepYDriveGetPosition(dest=self.ydrive))
+    return float(response.position)
+
   async def request_y_drive_position(self) -> float:
     """Request this channel's Y drive position.
 
@@ -836,9 +843,13 @@ class PipetteChannel:
     Raises:
       RuntimeError: If the channel has no Y drive.
     """
-    if self.ydrive is None:
-      raise RuntimeError(f"channel {self.index} has no Y drive in the firmware tree")
-    response = await self._driver.send_command(PrepCmd.PrepYDriveGetPosition(dest=self.ydrive))
+    return round(await self._request_y_drive_position(), 2)
+
+  async def _request_z_drive_position(self) -> float:
+    """Read the raw drive position for internal axis-offset calculations."""
+    if self.zdrive is None:
+      raise RuntimeError(f"channel {self.index} has no Z drive in the firmware tree")
+    response = await self._driver.send_command(PrepCmd.PrepZDriveGetPosition(dest=self.zdrive))
     return float(response.position)
 
   async def request_z_drive_position(self) -> float:
@@ -850,10 +861,7 @@ class PipetteChannel:
     Raises:
       RuntimeError: If the channel has no Z drive.
     """
-    if self.zdrive is None:
-      raise RuntimeError(f"channel {self.index} has no Z drive in the firmware tree")
-    response = await self._driver.send_command(PrepCmd.PrepZDriveGetPosition(dest=self.zdrive))
-    return float(response.position)
+    return round(await self._request_z_drive_position(), 2)
 
   async def request_z_drive_pwm(self) -> int:
     """Request this channel's Z drive PWM, the limit on how hard it pushes.
@@ -1558,12 +1566,13 @@ class Pipettes:
     resource = self.resources[channel]
     if resource.location is None or resource.parent is None:
       return None
-    return (
+    location = (
       resource.location
       + resource.parent.get_location_wrt(self.deck)
       + self._reference_anchor(resource)
       - Coordinate(0, 0, self._mounted_length(channel))
     )
+    return Coordinate(round(location.x, 2), round(location.y, 2), round(location.z, 2))
 
   def update_location_by_reference_point(
     self, channel: int, y: Optional[float] = None, z: Optional[float] = None
@@ -1920,7 +1929,8 @@ class Pipettes:
       raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
     if not (await self.sense_tip_presence())[channel]:
       return None
-    return (await self._driver.send_command(PrepCmd.PrepGetTipDefinitionHeld())).value
+    tip = (await self._driver.send_command(PrepCmd.PrepGetTipDefinitionHeld())).value
+    return replace(tip, volume=round(tip.volume, 2), length=round(tip.length, 2))
 
   async def request_tip_overhangs(self) -> Dict[int, Optional[float]]:
     """Read how far the tip on each channel stands below its stop disc, in mm.
@@ -1936,7 +1946,7 @@ class Pipettes:
       return {channel: None for channel in range(self.num_channels)}
     presence = await self.sense_tip_presence()
     return {
-      channel: attached_tip_info.length if presence[channel] else None
+      channel: round(attached_tip_info.length, 2) if presence[channel] else None
       for channel in range(self.num_channels)
     }
 
@@ -1970,7 +1980,7 @@ class Pipettes:
     """
     response = await self._driver.send_command(PrepCmd.PrepGetCurrentDispenserVolume())
     return {
-      channel: entry.volume
+      channel: round(entry.volume, 2)
       for entry in response.volumes
       if (channel := self.channel_of(entry.channel)) is not None
     }
@@ -2389,7 +2399,7 @@ class Pipettes:
     tip_presence = await self.sense_tip_presence()
     if channel < len(tip_presence) and tip_presence[channel]:
       z += await self.request_held_tip_length()
-    return z
+    return round(z, 2)
 
   async def request_held_tip_length(self) -> float:
     """Request the length of the tip the channels hold, below the stop disc.
@@ -2401,7 +2411,9 @@ class Pipettes:
       The tip's length beyond the fitting depth in mm, 0 when no tip is held.
     """
     raw = await self._driver.request_by_name(PIPETTOR_OBJECT_PATH, "GetTipDefinitionHeld")
-    return float(parse_into_struct(HoiParamsParser(raw), PrepCmd.HeldTipDefinition).value.length)
+    return round(
+      float(parse_into_struct(HoiParamsParser(raw), PrepCmd.HeldTipDefinition).value.length), 2
+    )
 
   async def move_tool_bottom_to_z_positions(
     self,
@@ -2974,7 +2986,7 @@ class Pipettes:
     if arm is None:
       raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
     channel = self.channels[channel_idx]
-    offset = await arm.request_axis_offset()
+    offset = await arm._request_axis_offset()
     step = 0.1  # mm between status reads
     # The steps are what the search is: a speed above them only overshoots between reads, and one
     # below them makes the search take longer than the surface is worth.
@@ -3174,7 +3186,7 @@ class Pipettes:
       raise RuntimeError(f"channel {channel_idx} has no Y axis in the firmware tree")
 
     # Y drive frame offset
-    offset = await channel.request_y_drive_position() - here.y
+    offset = await channel._request_y_drive_position() - here.y
 
     # Seek until the channel detects or the search ends
     try:
@@ -3468,7 +3480,7 @@ class Pipettes:
       searches = []
       for i, (channel, job) in enumerate(jobs):
         # The drive frame is the tip bottom plus an offset, read where the channel now stands
-        offset = await self.channels[channel].request_z_drive_position() - here[channel].z
+        offset = await self.channels[channel]._request_z_drive_position() - here[channel].z
         timeout = (z_start[job] - z_cavity_bottom[job]) / search_speed + 30
         searches.append((channel, z_cavity_bottom[job], offset, timeout, parallel and i > 0))
 
@@ -3863,7 +3875,8 @@ class Pipettes:
       x_grouping_tolerance=x_grouping_tolerance,
     )
     return [
-      container.compute_volume_from_height(height) for container, height in zip(containers, heights)
+      round(container.compute_volume_from_height(height), 2)
+      for container, height in zip(containers, heights)
     ]
 
   async def probe_z_using_ztouch(
@@ -3973,7 +3986,7 @@ class Pipettes:
       raise RuntimeError(f"channel {channel_idx} has no Z axis in the firmware tree")
 
     # Z drive frame offset of the stop disc: the reported Z is the held tip's bottom
-    offset = await channel.request_z_drive_position() - (here.z + held)
+    offset = await channel._request_z_drive_position() - (here.z + held)
 
     # Seek until the tip bottom meets an obstacle or reaches the floor
     try:

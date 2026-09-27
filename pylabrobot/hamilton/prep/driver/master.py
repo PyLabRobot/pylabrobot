@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import (
   Any,
   AsyncIterator,
@@ -1198,7 +1198,7 @@ class PrepDriver:
       The height, or None if the device does not answer it.
     """
     result = await self.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=self.mlprep_address))
-    return None if result is None else float(result.value)
+    return None if result is None else round(float(result.value), 2)
 
   async def request_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
     """Firmware object tree. ``print(await prep.request_firmware_tree())`` for a diagnostic dump."""
@@ -1215,7 +1215,10 @@ class PrepDriver:
     )
     if result is None or not result.definitions:
       return ()
-    return tuple(result.definitions)
+    return tuple(
+      replace(tip, volume=round(tip.volume, 2), length=round(tip.length, 2))
+      for tip in result.definitions
+    )
 
   # ----------------------------------------
   # Discovery and initialization
