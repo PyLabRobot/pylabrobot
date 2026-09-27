@@ -57,6 +57,7 @@ from .errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from .features.calibration import Calibration
 from .features.core_grippers import CoreGrippers
 from .features.head8 import Head8
+from .features.heater_shaker import PrepHamiltonHeaterShaker
 from .features.lights import Lights
 from .features.method import MethodLifecycle
 from .features.pipettes import TIP_FITTING_DEPTH, Pipettes, channels_named
@@ -64,6 +65,7 @@ from .features.x_arm import XArm
 from .prep_commands import (
   _UNRESOLVED,
   DECK_CONFIGURATION_OBJECT_PATH,
+  HEATER_SHAKER_ROOT_PATH,
   MLPREP_CPU_OBJECT_PATH,
   MLPREP_OBJECT_PATH,
   MLPREP_SERVICE_OBJECT_PATH,
@@ -76,7 +78,12 @@ logger = logging.getLogger(__name__)
 
 # What a declaration and a device have to agree on for the one to stand for the other: what is
 # fitted. Identity and set-up are the device's own.
-_DECLARATION_MUST_MATCH = ("num_channels", "head8_installed", "has_enclosure")
+_DECLARATION_MUST_MATCH = (
+  "num_channels",
+  "head8_installed",
+  "has_enclosure",
+  "heater_shaker_installed",
+)
 
 # The PrepDeck waste position for each channel a waste site names.
 _WASTE_SITE_NAMES = {
@@ -352,6 +359,7 @@ class PrepDriver:
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
     self.lights: Optional[Lights] = None
+    self.hs: Optional[PrepHamiltonHeaterShaker] = None
     # How long to wait for a command's answer, in seconds. A command that takes longer than any
     # this device performs is one it is not going to answer, and a caller waiting on it cannot halt
     # the device or say so. Initializing names its own.
@@ -455,6 +463,11 @@ class PrepDriver:
         self.head8.default_minimum_traverse_height = self.pipettes.default_minimum_traverse_height
         if default_minimum_traverse_height is not None:
           self.head8.default_minimum_traverse_height = default_minimum_traverse_height
+
+      if self.configuration is not None and self.configuration.heater_shaker_installed:
+        if self.hs is None:
+          self.hs = PrepHamiltonHeaterShaker(self)
+        await self.hs._on_setup()
 
       # What the device was left holding, and where it was left standing: read before anything moves laterally,
       # then raise what can be raised. The 8-channel head is not raised: no move of its Z alone is known.
@@ -654,6 +667,11 @@ class PrepDriver:
         await self.pipettes._on_stop()
       if self.head8 is not None:
         await self.head8._on_stop()
+      if self.hs is not None:
+        try:
+          await self.hs._on_stop()
+        except Exception:
+          logger.warning("could not stop the heater shaker", exc_info=True)
       if self.lights is not None:
         # A colour stands on the device without a host to hold it, so a driver that let go mid-hold
         # would leave the deck lit for good.
@@ -1104,6 +1122,7 @@ class PrepDriver:
       num_channels=num_channels,
       head8_installed=head8_installed,
       has_enclosure=has_enclosure,
+      heater_shaker_installed=await self.request_heater_shaker_installed(),
       safe_speeds_enabled=safe_speeds_enabled,
       deck_bounds=deck_bounds,
       deck_sites=deck_sites,
@@ -1412,6 +1431,11 @@ class PrepDriver:
     if c.head8_installed:
       head8 = "installed" if self.head8 is not None else "none, but the device reports it installed"
     lines.append(f"  8-channel head: {head8}")
+    if c.heater_shaker_installed:
+      hs = "installed" if self.hs is not None else "none, but the device reports it installed"
+      if self.hs is not None and self.hs.configuration.firmware_version:
+        hs += f", firmware {self.hs.configuration.firmware_version}"
+      lines.append(f"  heater shaker: {hs}")
     return "\n".join(lines)
 
   # ----------------------------------------
@@ -1703,6 +1727,29 @@ class PrepDriver:
     try:
       await self.request_method_by_name(MLPREP_OBJECT_PATH, "SetDeckLight")
     except (RuntimeError, PrepMethodNotFoundError):
+      return False
+    return True
+
+  # ----------------------------------------
+  # Heater shaker
+  # ----------------------------------------
+
+  async def request_heater_shaker_installed(self) -> bool:
+    """Request whether a heater shaker is fitted and assembled.
+
+    True when the firmware has a HeaterShakerRoot and MLPrepService reports no errors assembling it.
+    It is `hs`, built at setup if this answers True.
+    """
+    if await self._resolve_optional(HEATER_SHAKER_ROOT_PATH) is None:
+      return False
+    try:
+      errors = _fragment_values(
+        await self.request_by_name(MLPREP_SERVICE_OBJECT_PATH, "GetHHSAssemblyInstantiationErrors")
+      )
+    except (RuntimeError, PrepMethodNotFoundError):
+      return False
+    if errors:
+      logger.warning("the heater shaker is present but not assembled: %s", errors)
       return False
     return True
 

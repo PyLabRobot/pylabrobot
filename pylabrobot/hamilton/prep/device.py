@@ -7,6 +7,7 @@ from typing import AsyncIterator, Optional
 from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
 from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.prep.driver.features.head8 import Head8
+from pylabrobot.hamilton.prep.driver.features.heater_shaker import PrepHamiltonHeaterShaker
 from pylabrobot.hamilton.prep.driver.features.lights import Lights
 from pylabrobot.hamilton.prep.driver.features.method import MethodLifecycle
 from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
@@ -131,6 +132,11 @@ class PrepDevice(Resource):
   def head8(self) -> Optional[Head8]:
     """The 8-channel head, on a device that has one."""
     return self.driver.head8
+
+  @property
+  def heater_shaker(self) -> Optional[PrepHamiltonHeaterShaker]:
+    """The heater shaker, on a device that has one."""
+    return self.driver.hs
 
   @property
   def core_grippers(self) -> Optional[CoreGrippers]:

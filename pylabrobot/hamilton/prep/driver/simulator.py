@@ -53,11 +53,19 @@ from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration
 from .errors import PREP_ERROR_CODES
 from .features.core_grippers import JAW_OPEN_EXTRA
+from .features.heater_shaker import PrepHamiltonHeaterShaker
 from .features.lights import Lights
 from .features.pipettes import Pipettes, PipettesConfiguration
 from .features.x_arm import XArm
 from .master import PrepDriver, _ResolvedPrepCommand
-from .prep_commands import MPH_OBJECT_PATH, PrepCommand
+from .prep_commands import (
+  HEATER_OBJECT_PATH,
+  HEATER_SHAKER_CPU_OBJECT_PATH,
+  HEATER_SHAKER_ROOT_PATH,
+  MPH_OBJECT_PATH,
+  SHAKER_OBJECT_PATH,
+  PrepCommand,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,12 +79,18 @@ _RECORDINGS = os.path.join(os.path.dirname(__file__), "recordings")
 # The recorded device as it saved itself (MLPrep Runtime V1.2.2): a simulated Prep unless told
 # otherwise.
 RECORDING_PREP = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2.json")
-# The same, declared with an 8-channel head. No device with one has been recorded.
+# The same, declared with an 8-channel head.
 RECORDING_PREP_HEAD8 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_head8.json")
+# A device with two channels, an 8-channel head, an enclosure and a heater shaker (V3.0.20).
+RECORDING_PREP_HEATER_SHAKER = os.path.join(_RECORDINGS, "prep_PRPBC1317_v3_0_20.json")
 
-# The firmware trees read off two devices. V1.2.2 is what a simulated Prep runs unless told otherwise.
+# The firmware trees read off three devices. V1.2.2 is what a simulated Prep runs unless told otherwise.
 FIRMWARE_TREE_V1_2_2 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_firmware_tree.json")
 FIRMWARE_TREE_V3_0_20 = os.path.join(_RECORDINGS, "prep_PRPBD1394_v3_0_20_firmware_tree.json")
+# V3.0.20 read off the device with a heater shaker, whose tree also holds its 8-channel head.
+FIRMWARE_TREE_V3_0_20_HEATER_SHAKER = os.path.join(
+  _RECORDINGS, "prep_PRPBC1317_v3_0_20_firmware_tree.json"
+)
 
 # Where the recorded device's channels reported themselves after initializing, as (x, y, z) in mm,
 # by channel: what a simulated device answers until the resource model holds the channels.
@@ -122,6 +136,17 @@ _NOT_SUPPORTED = next(
 # recorded, so these addresses are not a device's.
 _MPH_ROOT_ADDRESS = Address(0xE001, 1, 0xBF00)
 _MPH_ADDRESS = Address(0xE001, 1, 0x1000)
+# Where a heater shaker's objects are, as a device with one reported them.
+_HEATER_SHAKER_ROOT_ADDRESS = Address(0xE002, 1, 0xBF00)
+_HEATER_SHAKER_OBJECTS = (
+  ("HeaterShakerCpu", HEATER_SHAKER_CPU_OBJECT_PATH, Address(0xE002, 1, 0xC100)),
+  ("Heater", HEATER_OBJECT_PATH, Address(0xE002, 1, 0x1000)),
+  ("Shaker", SHAKER_OBJECT_PATH, Address(0xE002, 1, 0x2000)),
+)
+# What a simulated heater shaker reads before it is told to heat, and the ranges it reports, as a
+# device with one answered them.
+SIMULATED_HEATER_SHAKER_TEMPERATURE = 22.9
+SIMULATED_HEATER_SHAKER_FIRMWARE = "S.1.00.01.0101 2018-05-02 (XRP Heater Shaker)"
 
 
 def _encode(response: Any) -> HoiParams:
@@ -166,11 +191,13 @@ class _RecordedObject:
 class _RecordedTree:
   """A firmware tree read off a device, which a simulated device answers introspection from."""
 
-  def __init__(self, path: str, head8_installed: bool):
+  def __init__(self, path: str, head8_installed: bool, heater_shaker_installed: bool = False):
     """
     Args:
       path: a recorded firmware tree.
       head8_installed: whether to add the 8-channel head's objects, which no recorded tree holds.
+      heater_shaker_installed: whether the heater shaker's objects are there: added when the tree has
+        none, taken out when it has them.
     """
     with open(path, encoding="utf-8") as f:
       recorded = json.load(f)
@@ -178,6 +205,12 @@ class _RecordedTree:
     self.root = self._read(recorded["tree"])
     if head8_installed and not any(c.name == "MphRoot" for c in self.root.children):
       self.root.children.append(self._head8_objects())
+    has_heater_shaker = any(c.name == "HeaterShakerRoot" for c in self.root.children)
+    if heater_shaker_installed and not has_heater_shaker:
+      self.root.children.append(self._heater_shaker_objects())
+    if not heater_shaker_installed and has_heater_shaker:
+      # A tree read off a device with one, declared without: the device it stands for has none.
+      self.root.children = [c for c in self.root.children if c.name != "HeaterShakerRoot"]
     self._by_address: Dict[Address, _RecordedObject] = {}
     self._index(self.root)
 
@@ -198,18 +231,18 @@ class _RecordedTree:
     for child in node.children:
       self._index(child)
 
-  def _head8_objects(self) -> _RecordedObject:
-    """`MphRoot.MPH`, carrying the root's recorded introspection methods and the commands the driver
-    sends the head, at the ids it sends them at."""
+  def _declared_methods(self, path: str) -> List[Dict[str, Any]]:
+    """The root's recorded introspection methods, and the commands the driver sends the object at
+    `path`, at the ids it sends them at."""
     introspection = [m for m in self.root.methods if m["interface_id"] == 0]
     commands: Dict[Tuple[int, int], str] = {}
     pending = list(PrepCommand.__subclasses__())
     while pending:
       cls = pending.pop()
       pending.extend(cls.__subclasses__())
-      if cls.firmware_path == MPH_OBJECT_PATH and cls.command_id is not None:
+      if cls.firmware_path == path and cls.command_id is not None:
         commands[(cls.interface_id, cls.command_id)] = cls.__name__
-    methods = introspection + [
+    return introspection + [
       {
         "name": name,
         "interface_id": interface_id,
@@ -225,13 +258,17 @@ class _RecordedTree:
       }
       for (interface_id, method_id), name in sorted(commands.items())
     ]
+
+  def _head8_objects(self) -> _RecordedObject:
+    """`MphRoot.MPH`, answering the commands the driver sends the head."""
+    introspection = [m for m in self.root.methods if m["interface_id"] == 0]
     mph = _RecordedObject(
       path=MPH_OBJECT_PATH,
       name="MPH",
       version="",
       address=_MPH_ADDRESS,
       interfaces=list(self.root.interfaces),
-      methods=methods,
+      methods=self._declared_methods(MPH_OBJECT_PATH),
       children=[],
     )
     return _RecordedObject(
@@ -242,6 +279,29 @@ class _RecordedTree:
       interfaces=list(self.root.interfaces),
       methods=introspection,
       children=[mph],
+    )
+
+  def _heater_shaker_objects(self) -> _RecordedObject:
+    """`HeaterShakerRoot` and the objects under it, answering the commands the driver sends them."""
+    return _RecordedObject(
+      path=HEATER_SHAKER_ROOT_PATH,
+      name="HeaterShakerRoot",
+      version="",
+      address=_HEATER_SHAKER_ROOT_ADDRESS,
+      interfaces=list(self.root.interfaces),
+      methods=[m for m in self.root.methods if m["interface_id"] == 0],
+      children=[
+        _RecordedObject(
+          path=path,
+          name=name,
+          version="",
+          address=address,
+          interfaces=list(self.root.interfaces),
+          methods=self._declared_methods(path),
+          children=[],
+        )
+        for name, path, address in _HEATER_SHAKER_OBJECTS
+      ],
     )
 
   def get(self, address: Address) -> Optional[_RecordedObject]:
@@ -1012,6 +1072,88 @@ class SimulatedXArm(_Simulated, XArm):
     return None
 
 
+class SimulatedHeaterShaker(_Simulated, PrepHamiltonHeaterShaker):
+  """The heater shaker, answering for itself. It reaches a temperature the moment it is told to."""
+
+  def __init__(self, driver: PrepDriver) -> None:
+    super().__init__(driver)
+    self._initialized = False
+    self._locked = False
+    self._heating = False
+    self._target = 0.0
+    self._current = SIMULATED_HEATER_SHAKER_TEMPERATURE
+    self._status = PrepCmd.ShakerStatus.InactiveShaking
+    self._speed = 0.0
+
+  async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
+    if isinstance(request, PrepCmd.PrepHHSGetFirmwareVersion):
+      return PrepCmd.PrepHHSGetFirmwareVersion.Response(
+        firmware_version=SIMULATED_HEATER_SHAKER_FIRMWARE
+      ), "the device's firmware"
+    if isinstance(request, PrepCmd.PrepHHSGetTemperatureRange):
+      return PrepCmd.PrepHHSGetTemperatureRange.Response(
+        minimum_temperature=0.0,
+        maximum_temperature=115.0,
+        maximum_supervision_tolerance=115.0,
+        maximum_security_tolerance=115.0,
+      ), "the device's ranges"
+    if isinstance(request, PrepCmd.PrepHHSGetSpeedRange):
+      return PrepCmd.PrepHHSGetSpeedRange.Response(
+        minimum_velocity=25.0,
+        maximum_velocity=2500.0,
+        minimum_acceleration=625.0,
+        maximum_acceleration=12500.0,
+      ), "the device's ranges"
+    if isinstance(request, PrepCmd.PrepHHSInitialize):
+      self._initialized = True
+      return None
+    if isinstance(request, PrepCmd.PrepHHSGetIsInitialized):
+      return PrepCmd.PrepHHSGetIsInitialized.Response(
+        is_initialized=self._initialized
+      ), "whether it was initialized"
+    if isinstance(request, PrepCmd.PrepHHSSetPlateLockState):
+      self._locked = bool(request.locked)
+      return None
+    if isinstance(request, PrepCmd.PrepHHSGetPlateLockState):
+      return PrepCmd.PrepHHSGetPlateLockState.Response(locked=self._locked), "the modelled lock"
+    if isinstance(request, (PrepCmd.PrepHHSEnableShaking, PrepCmd.PrepHHSEnablePeriodicShaking)):
+      periodic = isinstance(request, PrepCmd.PrepHHSEnablePeriodicShaking)
+      self._status = (
+        PrepCmd.ShakerStatus.PeriodicShaking if periodic else PrepCmd.ShakerStatus.ContinuousShaking
+      )
+      self._speed = float(request.shaking_speed)
+      return None
+    if isinstance(request, PrepCmd.PrepHHSDisableShaking):
+      self._status = PrepCmd.ShakerStatus.InactiveShaking
+      self._speed = 0.0
+      return None
+    if isinstance(request, PrepCmd.PrepHHSGetShakingStatus):
+      return PrepCmd.PrepHHSGetShakingStatus.Response(
+        shaker_status=int(self._status),
+        current_speed=self._speed,
+        target_speed=self._speed,
+        remaining_shaking_time=0,
+        remaining_shaking_time_status=int(PrepCmd.ShakingTimeStatus.Inactive),
+        shaking_period=0,
+        shaking_active_time=0,
+      ), "the modelled shaker"
+    if isinstance(request, PrepCmd.PrepHHSStartHeating):
+      self._heating = True
+      self._target = self._current = float(request.target_temperature)
+      return None
+    if isinstance(request, PrepCmd.PrepHHSStopHeating):
+      self._heating = False
+      self._target = 0.0
+      return None
+    if isinstance(request, PrepCmd.PrepHHSGetHeaterStatus):
+      return PrepCmd.PrepHHSGetHeaterStatus.Response(
+        heating=self._heating,
+        current_temperature=self._current,
+        target_temperature=self._target,
+      ), "the modelled heater"
+    return None
+
+
 class _SimulatedSession(TCPSession):
   """A session whose other end is the simulator: requests are built as for TCP, and answered with
   frames the real decoder reads."""
@@ -1186,7 +1328,9 @@ class PrepSimulationDriver(PrepDriver):
     self.simulated_pipettes: Optional[PipettesConfiguration] = self.declared.get("pipettes")
     self.firmware_tree_json = firmware_tree_json or FIRMWARE_TREE_V1_2_2
     self.tree = _RecordedTree(
-      self.firmware_tree_json, head8_installed=bool(configuration.head8_installed)
+      self.firmware_tree_json,
+      head8_installed=bool(configuration.head8_installed),
+      heater_shaker_installed=configuration.heater_shaker_installed,
     )
     self.initialized = initialized
     self.simulated_default_minimum_traverse_height = default_minimum_traverse_height
@@ -1198,6 +1342,8 @@ class PrepSimulationDriver(PrepDriver):
     self.x_arm = SimulatedXArm(self)
     if configuration.num_channels:
       self.pipettes = SimulatedPipettes(self)
+    if configuration.heater_shaker_installed:
+      self.hs = SimulatedHeaterShaker(self)
 
   def describe_link(self) -> str:
     return "simulation (no link)"
@@ -1229,7 +1375,7 @@ class PrepSimulationDriver(PrepDriver):
     """
     before = self._where_everything_is() if self.simulate_motion_time else None
     answered = None
-    for feature in (self.pipettes, self.x_arm):
+    for feature in (self.pipettes, self.x_arm, self.hs):
       if isinstance(feature, _Simulated):
         answered = await feature.answer(request, path, method)
         if answered is not None:
@@ -1355,6 +1501,8 @@ class PrepSimulationDriver(PrepDriver):
         return HoiParams().add(c.serial_number, Str), declared
       if method == "GetModuleVersion" and c.firmware_version is not None:
         return HoiParams().add(c.firmware_version, Str), declared
+      if method == "GetHHSAssemblyInstantiationErrors" and c.heater_shaker_installed:
+        return HoiParams(), declared
       if method in ("IsParked", "IsSpread"):
         # Neither is modelled: a simulated device's channels are where the model has them.
         return HoiParams().add(False, PaddedBool), "not modelled"
