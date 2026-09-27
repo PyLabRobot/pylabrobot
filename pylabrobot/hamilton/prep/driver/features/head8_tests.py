@@ -24,11 +24,14 @@ from pylabrobot.hamilton.prep.driver.features.pipettes import (
   _get_profile_drop,
 )
 from pylabrobot.hamilton.prep.driver.simulator import RECORDING_PREP_HEAD8
-from pylabrobot.resources import Coordinate, Resource
+from pylabrobot.lib.liquid_handling.mix import Mix
+from pylabrobot.resources import Container, Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import Cor_Axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+from pylabrobot.resources.errors import TooLittleLiquidError
 from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
 from pylabrobot.resources.tip_tracker import does_tip_tracking, set_tip_tracking
+from pylabrobot.resources.volume_tracker import does_volume_tracking, set_volume_tracking
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -799,5 +802,223 @@ def test_head8_takes_the_tips_class_and_refuses_what_one_piston_cannot_do():
     assert [w.tracker.get_used_volume() for w in wells] == [pytest.approx(50.0)] * 8
     assert [w.tracker.get_used_volume() for w in dst_plate.column(0)] == [pytest.approx(50.0)] * 8
     await p.stop()
+
+  asyncio.run(_run())
+
+
+@pytest.mark.parametrize("version", ["v1", "v2"])
+@pytest.mark.parametrize("lld", [False, True])
+@pytest.mark.parametrize("tadm", [False, True])
+def test_head8_pre_mix_encoded_in_all_aspiration_variants(version, lld, tadm):
+  async def _run():
+    deck, rack, plate, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    try:
+      await p.head8.pick_up_tips(rack.column(0))
+      captured, _ = _record_send(p)
+      await p.head8.aspirate(
+        containers=plate.column(0),
+        volume=5,
+        pre_mix=Mix(volume=20, repetitions=3, flow_rate=40),
+        mix_position_from_liquid_surface=2,
+        disable_volume_correction=True,
+        lld_mode=Pipettes.LLDMode.CAPACITIVE if lld else Pipettes.LLDMode.OFF,
+        tadm=PrepCmd.TadmParameters.default() if tadm else None,
+        command_version=version,
+      )
+      command_type = Head8._ASPIRATE_CMD[(lld, tadm, version == "v2")]
+      commands: list[Any] = [c for c in captured if isinstance(c, command_type)]
+      assert len(commands) == 1
+      block = commands[0].aspirate_parameters[0].mix
+      assert (block.volume, block.cycles, block.speed, block.z_offset) == (20, 3, 40, 2)
+      assert not block.default_values
+    finally:
+      await p.stop()
+
+  asyncio.run(_run())
+
+
+@pytest.mark.parametrize("version", ["v1", "v2"])
+@pytest.mark.parametrize("repetitions", [1, 5])
+@pytest.mark.parametrize("fail_mix", [False, True])
+def test_head8_mix_cycles_and_volume_tracking(version, repetitions, fail_mix):
+  async def _run():
+    deck, rack, plate, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    previous_tracking = does_volume_tracking()
+    set_volume_tracking(True)
+    try:
+      await p.head8.pick_up_tips(rack.column(0))
+      wells = plate.column(0)
+      for well in wells:
+        well.tracker.set_volume(100)
+      captured = []
+      orig_send = p.send_command
+      asp_type = Head8._ASPIRATE_CMD[(False, False, version == "v2")]
+      disp_type = Head8._DISPENSE_CMD[(False, version == "v2")]
+
+      async def recording(command, **kwargs):
+        captured.append(command)
+        if fail_mix and isinstance(command, asp_type):
+          raise RuntimeError("mix failed")
+        return await orig_send(command, **kwargs)
+
+      p.send_command = recording  # type: ignore[method-assign]
+
+      async def run_mix():
+        assert p.head8 is not None
+        await p.head8.mix(
+          containers=wells,
+          mix=Mix(volume=20, repetitions=repetitions, flow_rate=40),
+          command_version=version,
+        )
+
+      if fail_mix:
+        with pytest.raises(RuntimeError, match="mix failed"):
+          await run_mix()
+      else:
+        await run_mix()
+      asp: list[Any] = [c for c in captured if isinstance(c, asp_type)]
+      disp: list[Any] = [c for c in captured if isinstance(c, disp_type)]
+      assert len(asp) == 1
+      assert disp == []
+      a = asp[0].aspirate_parameters[0]
+      assert a.mix.cycles == repetitions
+      assert not a.mix.default_values
+      assert a.mix.volume == 20
+      assert a.mix.speed == 40
+      assert a.common.liquid_volume == 0
+      assert a.common.transport_air_volume == 0
+      assert a.aspirate.prewet_volume == a.aspirate.blowout_volume == 0
+      assert [w.tracker.get_used_volume() for w in wells] == [100] * 8
+      assert [t.tracker.get_used_volume() for t in p.head8._require_mounted_tips()] == [0] * 8
+    finally:
+      set_volume_tracking(previous_tracking)
+      await p.stop()
+
+  asyncio.run(_run())
+
+
+@pytest.mark.parametrize(
+  "spec, message",
+  [
+    (Mix(volume=0, repetitions=2, flow_rate=40), "volume"),
+    (Mix(volume=float("nan"), repetitions=2, flow_rate=40), "volume"),
+    (Mix(volume=20, repetitions=0, flow_rate=40), "repetitions"),
+    (Mix(volume=20, repetitions=256, flow_rate=40), "repetitions"),
+    (Mix(volume=20, repetitions=2, flow_rate=0), "flow_rate"),
+    (Mix(volume=20, repetitions=2, flow_rate=float("inf")), "flow_rate"),
+    (Mix(volume=20, repetitions=2, flow_rate=40, auto_surface_following=True), "surface following"),
+    (
+      Mix(volume=20, repetitions=2, flow_rate=40, surface_following_distance=1),
+      "surface following",
+    ),
+    (Mix(volume=100, repetitions=2, flow_rate=40), "capacity"),
+  ],
+)
+def test_head8_mix_rejects_invalid_spec_before_sending(spec, message):
+  async def _run():
+    deck, rack, plate, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    try:
+      await p.head8.pick_up_tips(rack.column(0))
+      captured, _ = _record_send(p)
+      with pytest.raises(ValueError, match=message):
+        await p.head8.mix(containers=plate.column(0), mix=spec)
+      assert captured == []
+    finally:
+      await p.stop()
+
+  asyncio.run(_run())
+
+
+@pytest.mark.parametrize("read_timeout", [None, 123])
+def test_head8_pre_mix_timeout_and_transient_volume_validation(read_timeout):
+  async def _run():
+    deck, rack, plate, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    previous_tracking = does_volume_tracking()
+    set_volume_tracking(True)
+    try:
+      await p.head8.pick_up_tips(rack.column(0))
+      wells = plate.column(0)
+      for well in wells:
+        well.tracker.set_volume(10)
+      captured = []
+      orig_send = p.send_command
+
+      async def recording(command, **kwargs):
+        captured.append((command, kwargs))
+        return await orig_send(command, **kwargs)
+
+      p.send_command = recording  # type: ignore[method-assign]
+      spec = Mix(volume=20, repetitions=10, flow_rate=5)
+      with pytest.raises(TooLittleLiquidError, match="too little liquid"):
+        await p.head8.aspirate(containers=wells, volume=5, pre_mix=spec)
+      assert captured == []
+      for well in wells:
+        well.tracker.set_volume(100)
+      await p.head8.aspirate(
+        containers=wells,
+        volume=5,
+        pre_mix=spec,
+        lld_mode=Pipettes.LLDMode.OFF,
+        disable_volume_correction=True,
+        read_timeout=read_timeout,
+      )
+      timeouts = [
+        kw["read_timeout"]
+        for c, kw in captured
+        if isinstance(c, PrepCmd.MphAspirateNoLldMonitoring2)
+      ]
+      assert timeouts == [
+        read_timeout if read_timeout is not None else p.default_read_timeout + 100
+      ]
+      assert [w.tracker.get_used_volume() for w in wells] == [95] * 8
+      assert [t.tracker.get_used_volume() for t in p.head8._require_mounted_tips()] == [5] * 8
+      captured.clear()
+      with pytest.raises(ValueError, match="empty tips"):
+        await p.head8.mix(containers=wells, mix=spec)
+      assert captured == []
+    finally:
+      set_volume_tracking(previous_tracking)
+      await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_head8_mix_shared_container_requires_eight_draws_and_returns_them():
+  async def _run():
+    deck, rack, _, _ = _make_deck()
+    trough = Container("trough", size_x=30, size_y=80, size_z=30, material_z_thickness=1)
+    deck.assign_child_resource(trough, location=Coordinate(100, 100, 0))
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    previous_tracking = does_volume_tracking()
+    set_volume_tracking(True)
+    try:
+      await p.head8.pick_up_tips(rack.column(0))
+      captured, _ = _record_send(p)
+      trough.tracker.set_volume(100)
+      spec = Mix(volume=20, repetitions=3, flow_rate=40)
+      with pytest.raises(TooLittleLiquidError):
+        await p.head8.mix(containers=[trough], mix=spec)
+      assert captured == []
+      trough.tracker.set_volume(500)
+      await p.head8.mix(containers=[trough], mix=spec)
+      assert trough.tracker.get_used_volume() == 500
+      assert [t.tracker.get_used_volume() for t in p.head8._require_mounted_tips()] == [0] * 8
+    finally:
+      set_volume_tracking(previous_tracking)
+      await p.stop()
 
   asyncio.run(_run())
