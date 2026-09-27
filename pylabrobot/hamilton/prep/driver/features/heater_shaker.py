@@ -265,6 +265,10 @@ class PrepHamiltonHeaterShaker:
     self._check_in_range("speed", speed, self.configuration.speed_range)
     self._check_in_range("acceleration", acceleration, self.configuration.acceleration_range)
 
+  async def stop_shaking(self) -> None:
+    """Stop shaking. TODO(device): whether the command waits for the drive, or this must poll."""
+    await self._unchecked_fw_stop_shaking()
+
   async def start_shaking(
     self,
     speed: float,
@@ -274,7 +278,7 @@ class PrepHamiltonHeaterShaker:
     acceleration: Optional[float] = None,
     leave_locked: Optional[bool] = None,
   ) -> None:
-    """Lock the plate and start shaking continuously; returns once the shaker reports running.
+    """Stop shaking, lock the plate, and start continuously; return once it reports running.
 
     Args:
       speed: rpm.
@@ -293,6 +297,7 @@ class PrepHamiltonHeaterShaker:
     acceleration = self.default_shaking_acceleration if acceleration is None else acceleration
     leave_locked = self.default_leave_locked if leave_locked is None else leave_locked
     self._check_shaking(speed, acceleration)
+    await self.stop_shaking()
     await self.lock_plate()
     await self._unchecked_fw_start_shaking(
       speed, duration or 0, leave_locked, direction, acceleration
@@ -311,7 +316,7 @@ class PrepHamiltonHeaterShaker:
     acceleration: Optional[float] = None,
     leave_locked: Optional[bool] = None,
   ) -> None:
-    """Lock the plate and shake for `on_time` of every `period`.
+    """Stop shaking, lock the plate, and shake for `on_time` of every `period`.
 
     Args:
       speed: rpm.
@@ -331,14 +336,11 @@ class PrepHamiltonHeaterShaker:
     self._check_shaking(speed, acceleration)
     if not 0 < on_time <= period:
       raise ValueError(f"on_time must be within 1 to period ({period}), is {on_time}")
+    await self.stop_shaking()
     await self.lock_plate()
     await self._unchecked_fw_start_periodic_shaking(
       speed, period, on_time, duration or 0, leave_locked, direction, acceleration
     )
-
-  async def stop_shaking(self) -> None:
-    """Stop shaking. TODO(device): whether the command waits for the drive, or this must poll."""
-    await self._unchecked_fw_stop_shaking()
 
   async def shake(
     self,
@@ -371,8 +373,8 @@ class PrepHamiltonHeaterShaker:
     return await self._driver.send_command(PrepCmd.PrepHHSGetHeaterStatus())
 
   async def measure_temperature(self) -> float:
-    """The measured temperature, in °C."""
-    return float((await self.request_heater_status()).current_temperature)
+    """The measured temperature, in °C, rounded to two decimal places."""
+    return round(float((await self.request_heater_status()).current_temperature), 2)
 
   async def start_temperature_control(
     self,
