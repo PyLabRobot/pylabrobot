@@ -17,12 +17,30 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
 )
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.stanley.cups import (
   StanleyCup_QUENCHER_FLOWSTATE_TUMBLER,
 )
 
 
 class HamiltonDeckTests(unittest.TestCase):
+  def test_a_turned_deck_places_carriers_as_an_upright_one_does(self):
+    """Fit and overlap are checked along the deck's axes, whichever way the deck stands."""
+    for angle in (0, 90, 37.5):
+      with self.subTest(angle=angle):
+        room = Resource("room", size_x=9000, size_y=9000, size_z=3000)
+        room.location = Coordinate.zero()
+        body = Resource("body", size_x=1200, size_y=800, size_z=900, rotation=Rotation(z=angle))
+        room.assign_child_resource(body, location=Coordinate(4000, 4000, 0))
+        deck = STARLetDeck()
+        body.assign_child_resource(deck, location=Coordinate(50, 50, 0))
+        tips = TIP_CAR_480_A00(name="tip_carrier")
+        deck.assign_child_resource(tips, track=1)
+        deck.assign_child_resource(PLT_CAR_L5AC_A00(name="plate_carrier"), track=7)
+        self.assertEqual(deck.compute_right_track_of_carrier(tips), 6)
+        with self.assertRaisesRegex(ValueError, "occupied"):
+          deck.assign_child_resource(PLT_CAR_L5AC_A00(name="clash"), track=2)
+
   def test_rails_is_deprecated(self):
     """`rails` still places a resource, and says it is deprecated."""
     deck = STARLetDeck()
@@ -150,7 +168,7 @@ class HamiltonDeckTests(unittest.TestCase):
           │
     (31)  ├── waste_block               Resource              (775.000, 115.000, 100.000)
           │   ├── teaching_tip_rack     TipRack               (780.900, 461.100, 100.000)
-          │   ├── core_grippers         HamiltonCoreGrippers  (797.500, 085.500, 200.500)
+          │   ├── core_grippers         HamiltonCoreGrippers  (778.000, 085.500, 200.500)
           │
     (32)  ├── trash                     Trash                 (800.000, 190.600, 137.100)
     """[1:]
@@ -224,9 +242,28 @@ class HamiltonDeckTests(unittest.TestCase):
     for deck, x in ((STARDeck(), 1337.5), (STARLetDeck(), 797.5)):
       with self.subTest(deck=type(deck).__name__):
         holder = deck.get_resource("core_grippers")
-        self.assertAlmostEqual(holder.get_location_wrt(deck).x, x)
+        self.assertAlmostEqual(holder.get_location_wrt(deck, x="c").x, x)
         self.assertAlmostEqual(holder.get_location_wrt(deck).z, 200.5)
         self.assertAlmostEqual(holder.get_location_wrt(deck, z="t").z, 220.0)
+
+  def test_core_gripper_tools_stand_where_the_channels_take_them(self):
+    """Both holders are centred on the x the channels take the tools at, and so are their tools."""
+    pickup_x = {
+      ("STARDeck", "1000uL-at-waste"): 1338.0,
+      ("STARDeck", "1000uL-5mL-on-waste"): 1337.5,
+      ("STARLetDeck", "1000uL-at-waste"): 798.0,
+      ("STARLetDeck", "1000uL-5mL-on-waste"): 797.5,
+    }
+    for factory in (STARDeck, STARLetDeck):
+      for grippers in ("1000uL-at-waste", "1000uL-5mL-on-waste"):
+        x = pickup_x[(factory.__name__, grippers)]
+        with self.subTest(deck=factory.__name__, grippers=grippers):
+          deck = factory(core_grippers=grippers)
+          holder = deck.get_resource("core_grippers")
+          assert isinstance(holder, HamiltonCoreGrippers)
+          self.assertAlmostEqual(holder.get_location_wrt(deck, x="c").x, x)
+          for tool in (holder.front_tool, holder.back_tool):
+            self.assertAlmostEqual(tool.get_location_wrt(deck, x="c").x, x)
 
   def test_core_gripper_tools_belong_to_the_mount_and_are_not_structure(self):
     """The deck owns the two parked tools; a serialized deck leaves them out, as it leaves out the
@@ -268,9 +305,11 @@ class HamiltonDeckTests(unittest.TestCase):
           self.assertEqual(mount.back_tool.name, "custom_deck_core_grippers_back")
           restored = Resource.deserialize(deck.serialize())
           restored.load_all_state(deck.serialize_all_state())
+          # The tools parked in the mount are state, so the restored deck has everything but them.
+          parked = {mount.front_tool.name, mount.back_tool.name}
           self.assertEqual(
             sorted(child.name for child in restored.get_all_children()),
-            sorted(child.name for child in deck.get_all_children()),
+            sorted(child.name for child in deck.get_all_children() if child.name not in parked),
           )
           self.assertEqual(restored.get_resource(mount.name).serialize(), mount.serialize())
           plate = cor_96_wellplate_360uL_Fb("user_plate")
