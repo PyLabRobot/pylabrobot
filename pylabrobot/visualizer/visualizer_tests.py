@@ -15,11 +15,13 @@ from pylabrobot.resources import (
   Resource,
   cor_96_wellplate_360uL_Fb,
 )
+from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL
 from pylabrobot.visualizer import Visualizer
 from pylabrobot.visualizer.visualizer import (
   _build_method_registry,
   _sanitize_floats,
   _serialize_resource_tree,
+  _state_of,
 )
 
 
@@ -359,6 +361,20 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
       call_args["data"]["plate_01_well_H12"]["volume"],
       500,
     )
+
+
+class VisualizerHeldToolTests(unittest.TestCase):
+  def test_a_racked_tip_is_its_spots_state_not_a_resource_in_the_tree(self):
+    """A tip serializes without a location, which the page cannot draw; its spot shows it."""
+    rack = hamilton_96_tiprack_300uL(name="rack", with_tips=True)
+    spot = rack.get_item("A1")
+    self.assertTrue(spot.children)
+
+    tree = _serialize_resource_tree(rack)
+    spot_data = next(child for child in tree["children"] if child["name"] == spot.name)
+    self.assertEqual(spot_data["children"], [])
+    self.assertNotIn(spot.get_tip().name, _state_of(rack))
+    self.assertIn(spot.name, _state_of(rack))
 
 
 class TestVisualizerMetadataHandling(unittest.TestCase):
