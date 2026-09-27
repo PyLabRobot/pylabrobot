@@ -1,3 +1,4 @@
+import logging
 import textwrap
 import unittest
 from typing import cast
@@ -15,7 +16,9 @@ from pylabrobot.resources.hamilton import (
   STARLetDeck,
   STARPlusDeck,
   hamilton_96_tiprack_300uL_filter,
+  hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
+  hamilton_core_gripper_tool,
 )
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.stanley.cups import (
@@ -24,6 +27,35 @@ from pylabrobot.resources.stanley.cups import (
 
 
 class HamiltonDeckTests(unittest.TestCase):
+  def test_the_safe_deck_height_follows_the_longest_tip_when_asked(self):
+    deck = STARDeck()
+    self.assertEqual(deck.safe_deck_height, 245.0)
+    carrier = TIP_CAR_480_A00(name="tip_carrier")
+    carrier[0] = hamilton_96_tiprack_1000uL(name="rack")
+    deck.assign_child_resource(carrier, track=20)
+    # The 1000 uL rack decides: 334.7 - 87.1 - 5.
+    self.assertEqual(deck._update_safe_deck_height_from_tips(334.7), 242.6)
+    self.assertEqual(deck.safe_deck_height, 242.6)
+
+  def test_what_hangs_from_a_carried_tool_is_not_checked(self):
+    deck = STARDeck()
+    arm = Resource(name="arm", size_x=10, size_y=10, size_z=10, category="x_arm")
+    deck.assign_child_resource(arm, location=Coordinate(0, 0, 300))
+    tool = hamilton_core_gripper_tool("tool")
+    arm.assign_child_resource(tool, location=Coordinate.zero())
+    logger_name = "pylabrobot.resources.hamilton.hamilton_decks"
+    # assertNoLogs needs Python 3.10; a sentinel gives assertLogs something, and nothing else may.
+    with self.assertLogs(logger_name, level="WARNING") as captured:
+      logging.getLogger(logger_name).warning("sentinel")
+      tool.assign_child_resource(
+        Resource(name="plate", size_x=5, size_y=5, size_z=5), location=None
+      )
+    self.assertEqual(captured.output, [f"WARNING:{logger_name}:sentinel"])
+    with self.assertLogs(logger_name, level="WARNING"):
+      deck.assign_child_resource(
+        Resource(name="tower", size_x=5, size_y=5, size_z=5), location=Coordinate(500, 100, 300)
+      )
+
   def test_a_turned_deck_places_carriers_as_an_upright_one_does(self):
     """Fit and overlap are checked along the deck's axes, whichever way the deck stands."""
     for angle in (0, 90, 37.5):
