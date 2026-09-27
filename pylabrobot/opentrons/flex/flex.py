@@ -1,8 +1,10 @@
 import logging
 import math
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
+from urllib.parse import quote
 
 from pylabrobot.io.http import HTTP
+from pylabrobot.io.http_serial import HTTPSerial
 from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
 from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.errors import OpentronsError
@@ -114,19 +116,28 @@ class Flex:
   :mod:`pylabrobot.opentrons.flex.flex_head`.
 
   ``connect()`` opens the transport for health/discovery queries; ``setup()``
-  also creates a run, homes, and composes the heads.
+  also creates a run, homes, and composes the heads. Use ``host="robot.local"``
+  for Ethernet/Wi-Fi, or ``serial_port="/dev/cu.usbmodem1201"`` (``"COM3"``
+  on Windows) for the USB-B bridge. USB requires ``pylabrobot[serial]`` and
+  exclusive access to the port; close the Opentrons App first.
   """
 
   def __init__(
     self,
-    host: str,
+    host: Optional[str] = None,
     port: int = 31950,
     deck: Optional[FlexDeck] = None,
     io: Optional[HTTP] = None,
     command_timeout: float = 30.0,
     command_poll_interval: float = 0.05,
+    *,
+    serial_port: Optional[str] = None,
   ) -> None:
-    if "://" in host:
+    if (host is None) == (serial_port is None):
+      raise ValueError("Specify exactly one of host or serial_port")
+    if serial_port is not None and not serial_port:
+      raise ValueError("serial_port must not be empty")
+    if host is not None and (not host or "://" in host):
       raise ValueError("host must be a hostname or IP address without a URL scheme")
     if not 1 <= port <= 65535:
       raise ValueError("port must be between 1 and 65535")
@@ -136,17 +147,33 @@ class Flex:
       raise ValueError("command_poll_interval must be finite and non-negative")
 
     self.host, self.port = host, port
-    self.base_url = f"http://{host}:{port}"
+    self.base_url = (
+      f"http://{host}:{port}"
+      if host is not None
+      else f"http+serial://{quote(serial_port or '', safe='')}"
+    )
     self.command_timeout = command_timeout
     self.command_poll_interval = command_poll_interval
     # Built here rather than on connect: a pylabrobot io refuses construction
     # once a capture is armed, so a robot built first can still be recorded.
-    self.io: HTTP = io or HTTP(
-      human_readable_device_name="Opentrons Flex",
-      base_url=self.base_url,
-      headers={"Opentrons-Version": HTTP_API_VERSION},
-      timeout=command_timeout,
-    )
+    self.serial_port = serial_port
+    self.io: HTTP
+    if io is not None:
+      self.io = io
+    elif serial_port is not None:
+      self.io = HTTPSerial(
+        human_readable_device_name="Opentrons Flex",
+        port=serial_port,
+        headers={"Opentrons-Version": HTTP_API_VERSION},
+        timeout=command_timeout,
+      )
+    else:
+      self.io = HTTP(
+        human_readable_device_name="Opentrons Flex",
+        base_url=self.base_url,
+        headers={"Opentrons-Version": HTTP_API_VERSION},
+        timeout=command_timeout,
+      )
     self._api = OpentronsAPI(self.io)
     self._operation_lock = OperationLock()
     self._connected = False
@@ -239,10 +266,9 @@ class Flex:
     self.robot_model = health.model
     self._connected = True
     logger.info(
-      "Connected to robot '%s' at %s:%s (API %s, model: %s)",
+      "Connected to robot '%s' at %s (API %s, model: %s)",
       health.name,
-      self.host,
-      self.port,
+      self.base_url,
       self.api_version,
       self.robot_model,
     )
@@ -291,7 +317,7 @@ class Flex:
     pipettes = self._parse_pipettes(instruments_data)
 
     if not pipettes:
-      raise OpentronsError("No pipette detected", f"{self.host}:{self.port}")
+      raise OpentronsError("No pipette detected", self.base_url)
 
     if any(pip.channels == 96 for pip in pipettes) and len(pipettes) > 1:
       raise OpentronsError(
