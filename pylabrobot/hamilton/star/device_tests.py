@@ -219,7 +219,7 @@ class TestTurnedDevice(unittest.IsolatedAsyncioTestCase):
   """A device turned in the room sets up as one standing square."""
 
   async def test_a_turned_device_puts_its_parts_where_an_upright_one_does(self):
-    for factory in (STARLet, STARPlus):
+    for factory in (STARlet, STARPlus):
       for angle in (90, -90, 37.5):
         with self.subTest(device=factory.__name__, angle=angle):
           placed = []
