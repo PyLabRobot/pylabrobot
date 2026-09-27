@@ -197,9 +197,12 @@ class HTTPSerialTests(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(peer.requests[0].startswith(b"GET /health HTTP/1.1"))
 
   def test_flex_rejects_ambiguous_connection(self):
-    for kwargs in ({}, {"host": "robot", "serial_port": "/dev/test"}, {"serial_port": ""}):
-      with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
-        Flex(**kwargs)
+    with self.assertRaises(ValueError):
+      Flex()
+    with self.assertRaises(ValueError):
+      Flex(host="robot", serial_port="/dev/test")
+    with self.assertRaises(ValueError):
+      Flex(serial_port="")
 
 
 if __name__ == "__main__":
