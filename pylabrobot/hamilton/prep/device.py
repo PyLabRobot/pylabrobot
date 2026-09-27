@@ -29,6 +29,10 @@ PREP_SIZE_Z = 575.0
 # It also places Prep.glb, so it moves with PREP_FIRST_SLOT_LOCATION.
 PREP_DECK_LOCATION = Coordinate(29.20, 88.02, 50.0)
 
+# The device's model with a heater shaker fitted: Prep.glb's frame opened at the back left, where the
+# heater shaker stands in place of spot_0_3, without that spot's position labels.
+PREP_HEATER_SHAKER_MODEL = "Prep_heater_shaker"
+
 
 class PrepDevice(Resource):
   """The complete modelling and control interface for a Hamilton Prep.
@@ -105,6 +109,8 @@ class PrepDevice(Resource):
       default_minimum_traverse_height=default_minimum_traverse_height,
       use_v1_aspirate_dispense=use_v1_aspirate_dispense,
     )
+    if self.driver.hs is not None:
+      self.model = PREP_HEATER_SHAKER_MODEL
 
   async def stop(self, skip_raise_to_z_safety: bool = False):
     """Put the device down.

@@ -242,3 +242,31 @@ def test_stop_stops_shaking_and_temperature_control():
     assert PrepCmd.PrepHHSStopHeating in kinds
 
   asyncio.run(run())
+
+
+def test_a_device_with_a_heater_shaker_is_drawn_with_its_spot_cut_out():
+  """The device's model switches to the frame with spot_0_3 cut out, and that model ships."""
+  from pylabrobot.hamilton.prep.device import PREP_HEATER_SHAKER_MODEL, Prep
+
+  async def run():
+    prep = Prep(
+      simulation=True,
+      declared_configuration_json=RECORDING_PREP_HEATER_SHAKER,
+      firmware_tree_json=FIRMWARE_TREE_V3_0_20_HEATER_SHAKER,
+    )
+    assert prep.model == "Prep"
+    await prep.setup()
+    assert prep.model == PREP_HEATER_SHAKER_MODEL
+    await prep.stop()
+    plain = Prep(
+      simulation=True,
+      declared_configuration_json=RECORDING_PREP,
+      firmware_tree_json=FIRMWARE_TREE_V1_2_2,
+    )
+    await plain.setup()
+    assert plain.model == "Prep"
+    await plain.stop()
+
+  asyncio.run(run())
+  model_dir = os.path.join(os.path.dirname(__file__), "..", "..", "resource_model")
+  assert os.path.isfile(os.path.join(model_dir, PREP_HEATER_SHAKER_MODEL + ".glb"))
