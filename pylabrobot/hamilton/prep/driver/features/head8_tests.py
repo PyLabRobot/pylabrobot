@@ -1063,3 +1063,27 @@ def test_a_channel_sent_into_the_heads_clearance_is_refused_unless_it_may_make_s
     await p.stop()
 
   asyncio.run(_run())
+
+
+def test_move_to_safe_z_raises_the_head_where_it_stands():
+  """Straight up to the traverse height, with the tips' length taken off what probe 0 carries."""
+
+  async def _run() -> None:
+    deck, tip_rack, *_ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    await p.head8.pick_up_tips(tip_rack.column(0))
+    await p.head8.move_to_position(150.0, 250.0, 100.0)
+    captured, _ = _record_send(p)
+    tip = p.head8.get_mounted_tip(0)
+    assert tip is not None
+    z = await p.head8.move_to_safe_z()
+    assert z == pytest.approx(167.5 - (tip.get_size_z() - tip.fitting_depth))
+    moves = [c for c in captured if isinstance(c, PrepCmd.MphMoveToPosition)]
+    assert [(m.x_position, m.y_position) for m in moves] == [(150.0, 250.0)]
+    at = p.head8.get_reference_point_location()
+    assert at is not None and at.z == pytest.approx(z)
+    await p.stop()
+
+  asyncio.run(_run())

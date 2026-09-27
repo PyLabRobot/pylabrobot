@@ -449,6 +449,26 @@ class Head8:
     finally:
       await self._record_where_it_stopped()
 
+  async def move_to_safe_z(self) -> float:
+    """Raise the head straight up to its traverse height, where it stands in X and Y.
+
+    An ordinary move to a known height, as the STAR's heads raise: `move_to_position` to where the
+    device reports the head, at `default_minimum_traverse_height`.
+
+    Returns:
+      Where the bottom of what probe 0 carries is sent, in mm.
+
+    Raises:
+      RuntimeError: If nothing models where the head is.
+    """
+    await self._record_where_it_stopped()
+    at = self.get_reference_point_location()
+    if at is None:
+      raise RuntimeError("where the head is is not known; have you called `prep.setup()`?")
+    z = self.default_minimum_traverse_height - self._mounted_length()
+    await self.move_to_position(at.x, at.y, z)
+    return z
+
   # ----------------------------------------
   # Tips and liquid handling
   # ----------------------------------------
