@@ -12,6 +12,7 @@ from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
 from pylabrobot.opentrons.flex.flex_wire import (
+  MOVABLE_TRASH_SLOTS,
   ROBOT_AXES,
   _require_robot_commands,
 )
@@ -35,7 +36,7 @@ from pylabrobot.opentrons.types import (
   RunInfo,
 )
 from pylabrobot.resources import Container, Plate, Resource, TipRack
-from pylabrobot.resources.opentrons.flex_deck import FlexDeck
+from pylabrobot.resources.opentrons.flex_deck import SLOT_DEPTH, SLOT_WIDTH, FlexDeck
 from pylabrobot.resources.trash import Trash
 
 logger = logging.getLogger(__name__)
@@ -230,6 +231,30 @@ class Flex:
     self.deck = deck
     self._stub_labware.clear()
 
+  async def _load_trash_configuration(self) -> None:
+    """Place the local trash resource at the first movable bin configured on the robot."""
+    fixtures = await self._api.get_deck_configuration()
+    fixture = next((f for f in fixtures if f.fixture_id == "trashBinAdapter"), None)
+    slot = fixture.cutout_id.removeprefix("cutout") if fixture is not None else None
+    if slot is not None and slot not in MOVABLE_TRASH_SLOTS:
+      raise OpentronsError(f"Invalid trash cutout reported by the robot: {fixture}")
+    try:
+      trash = self.deck.get_trash_area()
+    except ValueError:
+      trash = None
+    if slot is not None:
+      occupant = self.deck.get_resource_at_slot(slot)
+      if occupant is not None and occupant is not trash:
+        raise OpentronsError(
+          f"Robot trash slot {slot} is occupied by '{occupant.name}' in the deck"
+        )
+    if trash is not None:
+      self.deck.unassign_child_resource(trash)
+    if slot is not None:
+      if trash is None:
+        trash = Trash(name="trash", size_x=SLOT_WIDTH, size_y=SLOT_DEPTH, size_z=82.0)
+      self.deck.assign_child_at_slot(trash, slot)
+
   # --- Lifecycle ---
 
   @serialized
@@ -256,12 +281,13 @@ class Flex:
 
   @serialized
   async def connect(self) -> None:
-    """Open the link and confirm the robot answers. Starts no run, moves nothing."""
+    """Open the link and load the robot's trash location. Starts no run, moves nothing."""
     if self._connected:
       return
     await self.io.setup()
     try:
       health = await self._api.get_health()
+      await self._load_trash_configuration()
     except BaseException:
       await self.io.stop()
       raise

@@ -44,6 +44,7 @@ from typing import (
 
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
+from pylabrobot.opentrons.flex.flex_wire import MOVABLE_TRASH_SLOTS
 from pylabrobot.opentrons.flex.pipette_defaults import FlowRates, flow_rates
 from pylabrobot.opentrons.operations import OperationLock, instrument_operation
 from pylabrobot.opentrons.tracking import (
@@ -385,11 +386,11 @@ class _FlexHead:
   def _trash_addressable_area(self, trash: Trash) -> str:
     """The movable-trash addressable area for the slot this trash sits in."""
     slot = self.flex.deck.get_slot(trash)
-    if slot not in _MOVABLE_TRASH_SLOTS:
+    if slot not in MOVABLE_TRASH_SLOTS:
       raise OpentronsError(
         "Trash is not in a trash slot",
         f"'{trash.name}' is in slot {slot!r}. A Flex accepts a movable trash only in "
-        f"{', '.join(sorted(_MOVABLE_TRASH_SLOTS))}.",
+        f"{', '.join(sorted(MOVABLE_TRASH_SLOTS))}.",
       )
     return f"movableTrash{slot}"
 
@@ -1137,9 +1138,6 @@ _ROBOT_FRONT_LIMIT = 51.8
 _ROBOT_REAR_LIMIT = 493.8 - 169.42
 
 _NUM_CHANNELS = 8
-
-# The slots a Flex accepts a movable trash in (shared-data ot3_standard.json).
-_MOVABLE_TRASH_SLOTS = frozenset({"A1", "B1", "C1", "D1", "A3", "B3", "C3", "D3"})
 
 # Default aspirate/dispense position: 1mm above the well bottom, matching the
 # Opentrons Python-API default. The raw Protocol-Engine /commands API defaults
