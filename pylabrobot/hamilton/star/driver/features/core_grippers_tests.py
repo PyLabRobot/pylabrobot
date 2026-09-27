@@ -9,6 +9,7 @@ from pylabrobot.hamilton.star.driver.errors import HardwareError, STARFirmwareEr
 from pylabrobot.hamilton.star.driver.features.x_arm_tests import RECORDED_DEVICE, declaring
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.azenta.plates import azenta_96_wellplate_200uL_Vb_4titudeframestar
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError
 from pylabrobot.resources.hamilton import PLT_CAR_L5AC_A00, STARDeck, hamilton_tip_300uL
 
@@ -279,6 +280,130 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.check(gripper_y_margin=40, enable_recovery=False)
     self.assertEqual(self.sent, [])
+
+
+class TestResourceByResource(unittest.IsolatedAsyncioTestCase):
+  """`pick_up_resource`, `drop_resource` and `return_resource`: the wire and the tree."""
+
+  async def asyncSetUp(self):
+    self.star = STAR(simulation=True)
+    await self.star.setup()
+    self.carrier = PLT_CAR_L5AC_A00(name="plate_carrier")
+    self.star.deck.assign_child_resource(self.carrier, track=30)
+    self.carrier[0] = self.plate = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    assert self.star.core_grippers is not None
+    self.grippers = self.star.core_grippers
+    self.sent: List[str] = []
+    answer = self.grippers._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      if command in ("ZP", "ZR"):
+        wire = {k: v for k, v in kwargs.items() if len(k) == 2}
+        self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      return await answer(module=module, command=command, **kwargs)
+
+    self.grippers._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_refused_without_the_tools(self):
+    with self.assertRaises(RuntimeError):
+      await self.grippers.pick_up_resource(self.plate)
+    self.assertEqual(self.sent, [])
+
+  async def test_pick_up_sends_what_legacy_sends_and_hangs_it_on_the_front_tool(self):
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate)
+    # Legacy: the centre, 5 mm below the top, open to its width + 3.0 mm and closed to it - 3.0 mm.
+    self.assertEqual(
+      self.sent, ["C0ZPxs08204xd0yj1142yv0050zj1964zy0500yo0885yg0825yw15th2800te2800"]
+    )
+    self.assertIs(self.plate.parent, self.grippers._front_tool())
+
+  async def test_drop_into_a_site_sends_the_put_down_and_the_tree_follows(self):
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate)
+    await self.grippers.drop_resource(
+      self.carrier[2], press_on_distance=1.5, x_acceleration_level=2
+    )
+    self.assertEqual(self.sent[1], "C0ZRxs08204xd0xg2yj3062zj1964zi015zy0500yo0885th2800te2800")
+    self.assertIs(self.plate.parent, self.carrier[2])
+    self.assertIsNone(self.grippers._held_resource)
+
+  async def test_a_coordinate_puts_its_centre_bottom_there_on_the_deck(self):
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate)
+    await self.grippers.drop_resource(Coordinate(400.0, 200.0, 100.0))
+    # Let go 5 mm below its top: 100 + 16.1 - 5.
+    self.assertEqual(self.sent[1], "C0ZRxs04000xd0yj2000zj1111zi000zy0500yo0885th2800te2800")
+    self.assertIs(self.plate.parent, self.star.deck)
+    ccb = self.plate.get_location_wrt(self.star.deck, "c", "c", "b")
+    self.assertEqual((ccb.x, ccb.y, ccb.z), (400.0, 200.0, 100.0))
+
+  async def test_a_coordinate_inside_a_carrier_is_refused_before_anything_is_sent(self):
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate)
+    site = self.carrier[2].get_location_wrt(self.star.deck, "c", "c", "b")
+    with self.assertRaisesRegex(ValueError, "plate_carrier"):
+      await self.grippers.drop_resource(site)
+    self.assertEqual(len(self.sent), 1)
+    self.assertIs(self.grippers._held_resource, self.plate)
+
+  async def test_return_puts_it_back_where_it_was_taken_from(self):
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate)
+    await self.grippers.return_resource()
+    self.assertEqual(self.sent[1], "C0ZRxs08204xd0yj1142zj1964zi000zy0500yo0885th2800te2800")
+    self.assertIs(self.plate.parent, self.carrier[0])
+
+  async def test_drop_without_holding_raises(self):
+    await self.grippers.pick_up_tools()
+    with self.assertRaises(RuntimeError):
+      await self.grippers.drop_resource(self.carrier[2])
+    with self.assertRaises(RuntimeError):
+      await self.grippers.return_resource()
+
+  async def test_a_second_pick_up_while_holding_is_refused(self):
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate)
+    with self.assertRaises(RuntimeError):
+      await self.grippers.pick_up_resource(self.plate)
+    self.assertEqual(len(self.sent), 1)
+
+  async def test_gripped_more_than_20_mm_below_its_top_is_refused(self):
+    await self.grippers.pick_up_tools()
+    with self.assertRaisesRegex(ValueError, "pipetting head"):
+      await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=20.5)
+    self.assertEqual(self.sent, [])
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=12.0)
+    self.assertEqual(len(self.sent), 1)
+
+  async def test_the_grip_line_is_checked_against_its_own_reach(self):
+    await self.grippers.pick_up_tools()
+    pipettes = self.grippers._pipettes
+    low, high = pipettes.configuration.z_range
+    # The tool's grip line is 22 mm below the stop disc and 2 mm above the tool's bottom.
+    pipettes.configuration.z_range = (low, 196.4 + 22.0 - 0.5)
+    with self.assertRaisesRegex(ValueError, "grip line reaches"):
+      await self.grippers.pick_up_resource(
+        self.plate, minimum_traverse_height_start=210.0, minimum_traverse_height_end=210.0
+      )
+    pipettes.configuration.z_range = (196.4 - 2.0 + 0.5, high)
+    with self.assertRaisesRegex(ValueError, "grip line reaches"):
+      await self.grippers.pick_up_resource(self.plate)
+    self.assertEqual(self.sent, [])
+    pipettes.configuration.z_range = (low, high)
+    await self.grippers.pick_up_resource(self.plate)
+    self.assertEqual(len(self.sent), 1)
+
+  async def test_out_of_range_arguments_send_nothing(self):
+    await self.grippers.pick_up_tools()
+    for kwargs in ({"grip_strength": 100}, {"squeeze_mm": 50.0}, {"z_speed": 0.0}):
+      with self.assertRaises(ValueError, msg=str(kwargs)):
+        await self.grippers.pick_up_resource(self.plate, **kwargs)
+    await self.grippers.pick_up_resource(self.plate)
+    for drop_kwargs in ({"press_on_distance": 100.0}, {"x_acceleration_level": 6}):
+      with self.assertRaises(ValueError, msg=str(drop_kwargs)):
+        await self.grippers.drop_resource(self.carrier[2], **drop_kwargs)
+    self.assertEqual(len(self.sent), 1)
 
 
 class TestMounting(unittest.IsolatedAsyncioTestCase):
