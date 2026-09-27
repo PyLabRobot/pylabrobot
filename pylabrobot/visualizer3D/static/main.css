@@ -437,6 +437,33 @@ main {
   outline-offset: -2px;
 }
 
+/* Too many devices to fit side by side: a picker, then the chosen device's buttons alone. */
+.dt-picker {
+  display: none;
+  flex-shrink: 0;
+  height: 51px;
+  border: 1.5px solid #ced4da;
+  border-radius: 6px;
+  background: #f8f9fa;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  cursor: pointer;
+}
+.dt-picker:focus-visible {
+  outline: 2px solid #1a4b8c;
+  outline-offset: -2px;
+}
+#navbar-device-tools.compact .dt-picker {
+  display: block;
+}
+#navbar-device-tools.compact .dt-group:not(.selected),
+#navbar-device-tools.compact .dt-label {
+  display: none;
+}
+
 /* The panels as the existing visualizer's dropdowns: white over a blur, a grey border, dragged by
    their background, the figures laid out in a row with room around them. */
 .dt-panel {

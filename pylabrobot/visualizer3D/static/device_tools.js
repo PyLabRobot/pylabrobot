@@ -68,6 +68,11 @@ export function initDeviceTools({ onSelect }) {
   const moved = new Map();
   /** Devices whose panels have been shown: a device opens its panels once, when it arrives. */
   const shown = new Set();
+  /** Feature buttons, by panel id. */
+  const buttonOf = new Map();
+  /** The device picker, and the name of the device it shows when the groups do not fit. */
+  let pickerEl = null;
+  let selected = null;
 
   // ------------------------------------------------------------------ reading the tree
 
@@ -487,12 +492,30 @@ export function initDeviceTools({ onSelect }) {
     layOut();
   }
 
+  /** Mark the selected device's group, the one a compact navbar shows, and set the picker to it. */
+  function showSelected() {
+    if (!containerEl) return;
+    const compact = containerEl.classList.contains("compact");
+    for (const group of containerEl.querySelectorAll(".dt-group")) {
+      const isSelected = group.dataset.name === selected;
+      group.classList.toggle("selected", isSelected);
+      // A compact navbar hides the name that would open a collapsed group again.
+      if (compact && isSelected) {
+        for (const part of group.querySelectorAll(".collapsed")) part.classList.remove("collapsed");
+      }
+    }
+    if (pickerEl && selected !== null) pickerEl.value = selected;
+  }
+
   function toggle(device, kind, button) {
     const id = idOf(device, kind);
     if (open.has(id)) {
       close(id);
       return;
     }
+    // The device last used is the one a compact navbar keeps showing.
+    selected = world.names[device];
+    showSelected();
     const element = document.createElement("div");
     element.className = `dt-panel mt-panel-${kind}`;
     element.id = id;
@@ -529,20 +552,57 @@ export function initDeviceTools({ onSelect }) {
     containerEl.classList.toggle("more-right", scrollLeft + clientWidth < scrollWidth - 1);
   }
 
+  /** Groups side by side while they fit; otherwise a picker and the selected device's buttons. */
+  function compactIfCrowded() {
+    if (!containerEl) return;
+    containerEl.classList.remove("compact");
+    const crowded = containerEl.scrollWidth > containerEl.clientWidth + 1;
+    containerEl.classList.toggle("compact", crowded);
+    showSelected();
+    // A hidden group's buttons are nowhere to hang a panel from.
+    if (crowded) for (const [id, panel] of [...open]) if (panel.name !== selected) close(id);
+    markOverflow();
+    layOut();
+  }
+
+  /** Show another device in the compact navbar, with the same panels open as the last one. */
+  function select(name) {
+    const kinds = [...open.values()].filter((p) => p.name === selected).map((p) => p.kind);
+    for (const [id, panel] of [...open]) if (panel.name === selected) close(id);
+    selected = name;
+    showSelected();
+    const device = world.indexOfName.get(name);
+    for (const kind of kinds) {
+      const button = buttonOf.get(idOf(device, kind));
+      if (button) toggle(device, kind, button);
+    }
+  }
+
   function rebuild() {
     // What was open comes back, by device name: a scene arriving is no reason to close a panel.
     const wasOpen = [...open.values()].map((panel) => [panel.name, panel.kind]);
-    const buttonOf = new Map();
+    buttonOf.clear();
     for (const id of [...open.keys()]) close(id);
     if (!containerEl) return;
     containerEl.textContent = "";
+    pickerEl = null;
     if (!world) return;
+    const names = devices().map((device) => world.names[device]);
+    if (!names.includes(selected)) selected = names[0] ?? null;
+    // Shown only when the groups do not fit side by side.
+    pickerEl = document.createElement("select");
+    pickerEl.className = "dt-picker";
+    pickerEl.title = "Device whose features are shown";
+    for (const name of names) pickerEl.add(new Option(name, name));
+    pickerEl.addEventListener("change", () => select(pickerEl.value));
+    containerEl.appendChild(pickerEl);
     // One button a device, carrying the device's name and nothing else, as the existing
     // visualizer's navbar has one per liquid handler.
     for (const device of devices()) {
       const parts = partsOf(device);
       const group = document.createElement("div");
       group.className = "dt-group";
+      group.dataset.name = world.names[device];
 
       const label = document.createElement("button");
       label.className = "dt-label";
@@ -578,7 +638,11 @@ export function initDeviceTools({ onSelect }) {
       }
       containerEl.appendChild(group);
     }
+    showSelected();
+    compactIfCrowded();
+    const compact = containerEl.classList.contains("compact");
     for (const [name, kind] of wasOpen) {
+      if (compact && name !== selected) continue;
       const device = world.indexOfName.get(name);
       const button = device === undefined ? undefined : buttonOf.get(idOf(device, kind));
       if (button) toggle(device, kind, button);
@@ -587,12 +651,12 @@ export function initDeviceTools({ onSelect }) {
     for (const device of devices()) {
       if (shown.has(world.names[device])) continue;
       shown.add(world.names[device]);
+      if (compact && world.names[device] !== selected) continue;
       for (const { kind } of KINDS) {
         const button = buttonOf.get(idOf(device, kind));
         if (button && !open.has(idOf(device, kind))) toggle(device, kind, button);
       }
     }
-    markOverflow();
   }
 
   /** Whether any of these resources stands under this device. */
@@ -634,8 +698,12 @@ export function initDeviceTools({ onSelect }) {
       { passive: false },
     );
     new ResizeObserver(markOverflow).observe(containerEl);
-    // A group sliding open or shut changes what there is to scroll, not the cluster's own size.
-    containerEl.addEventListener("transitionend", markOverflow);
+    // The bar changing width, or a group sliding open or shut, can make the groups fit or not.
+    if (containerEl.parentElement)
+      new ResizeObserver(compactIfCrowded).observe(containerEl.parentElement);
+    containerEl.addEventListener("transitionend", (event) => {
+      if (event.propertyName === "max-width") compactIfCrowded();
+    });
   }
   return { rebuild, refresh };
 }
