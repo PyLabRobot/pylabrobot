@@ -2776,7 +2776,6 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_z_move_is_waited_out_before_the_next_command(self):
     pipettes = await self.timed_channels(simulate_motion_time=True)
-    c = pipettes.configuration
     z = await pipettes.request_stop_disc_z_position(0)
     await pipettes.move_stop_disc_to_z_position(0, z - 50.0)
     self.sleep.assert_not_awaited()
@@ -2784,7 +2783,7 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
     await pipettes.request_stop_disc_z_position(0)
     self.sleep.assert_awaited_once()
     waited = self.sleep.await_args_list[0].args[0]
-    expected = travel_time(50.0, c.z_drive_speed_default, c.z_drive_acceleration_default)
+    expected = travel_time(50.0, pipettes.default_z_speed, pipettes.default_z_acceleration)
     self.assertAlmostEqual(waited, expected, places=3)
 
   async def test_channels_moving_together_take_as_long_as_the_farthest(self):

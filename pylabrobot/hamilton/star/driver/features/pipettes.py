@@ -47,7 +47,7 @@ from pylabrobot.hamilton.star.driver.errors import (
   channels_that_faulted,
 )
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
-from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
+from pylabrobot.hamilton.star.driver.lock import CHANNEL_MODULE_LETTERS, _FirmwareLock
 from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import (
@@ -89,11 +89,6 @@ ChannelType = Literal["ML_STAR", "ML_STAR_RPC"]
 HeadType = Literal["ML_STAR", "ML_STAR_PLE", "ML_STAR_RPC"]
 StopDiscType = Literal["core_i", "core_ii"]
 PressureADC = Literal["Renesas_X9268", "Analog_Devices_AD5263"]
-
-
-# The letters a channel's module is addressed by, in order from the back. `channel_id` spells an
-# address with them and `channel_from_module` reads one back.
-CHANNEL_MODULE_LETTERS = "123456789ABCDEFG"
 
 
 @dataclass
@@ -182,14 +177,9 @@ class PipettesConfiguration:
 
   # -- what a channel's own Z drive accepts, for the moves addressed to the channel itself --
   z_drive_speed_range_increments: Tuple[int, int] = (20, 15_000)
-  z_drive_speed_default: float = 125.0
-  """How fast a channel's Z drive moves when the caller names nothing, in mm/s."""
   z_drive_acceleration_range_increments: Tuple[int, int] = (5, 150)
-  z_drive_acceleration_default: float = 800.0
-  """How hard it accelerates when the caller names nothing, in mm/s2. Counted in thousands of
-  increments per second squared, unlike the positions and speeds beside it."""
+  """Counted in thousands of increments per second squared, unlike the speeds beside it."""
   z_drive_current_limit_range: Tuple[int, int] = (0, 7)
-  z_drive_current_limit_default: int = 3
   z_touch_pwm_range: Tuple[int, int] = (0, 125)
   """What a z-touch search's force limiter and push-down force are set in."""
   drive_parameters: Dict[str, int] = field(
@@ -411,6 +401,10 @@ class Pipettes:
   default_z_speed: float = 125.0
   # Z acceleration when the caller names none, in mm/s2.
   default_z_acceleration: float = 800.0
+  # Z drive current limit when the caller names none.
+  default_z_current_limit: int = 3
+  # Height the channels travel at when a command names none, in mm.
+  default_minimum_traverse_height: float = 245.0
   # Containers within this X distance are probed in one batch, in mm.
   default_x_grouping_tolerance: float = 0.1
   # How far above a container's top a liquid search starts, in mm: enough to clear a brim-full
@@ -451,9 +445,6 @@ class Pipettes:
     # the next dispense pushes it all out ahead of the liquid, then draws its own.
     self._held_transport_air: Dict[int, float] = {}
     self.configuration = configuration or PipettesConfiguration()
-    # The height the channels travel at when a command names none, in mm. Legacy STARBackend's
-    # channel traversal height.
-    self.default_minimum_traverse_height: float = 245.0
 
   # -- addressing ------------------------------------------------------------
 
@@ -1553,19 +1544,18 @@ class Pipettes:
     Args:
       channel: which channel to move, 0-indexed from the back.
       z: where to put its stop disc, in mm on the deck.
-      speed: how fast, in mm/s. Defaults to `configuration.z_drive_speed_default`.
-      acceleration: how hard, in mm/s2. Defaults to `configuration.z_drive_acceleration_default`.
-      current_limit: the motor current limit. Defaults to
-        `configuration.z_drive_current_limit_default`.
+      speed: how fast, in mm/s. Defaults to `default_z_speed`.
+      acceleration: how hard, in mm/s2. Defaults to `default_z_acceleration`.
+      current_limit: the motor current limit. Defaults to `default_z_current_limit`.
 
     Raises:
       ValueError: If an argument is outside what the drive accepts.
     """
     self._require_channel(channel)
     c = self.configuration
-    speed = c.z_drive_speed_default if speed is None else speed
-    acceleration = c.z_drive_acceleration_default if acceleration is None else acceleration
-    current_limit = c.z_drive_current_limit_default if current_limit is None else current_limit
+    speed = self.default_z_speed if speed is None else speed
+    acceleration = self.default_z_acceleration if acceleration is None else acceleration
+    current_limit = self.default_z_current_limit if current_limit is None else current_limit
 
     self._check_reachable("z", z)
     for checked, (low, high), name in (
@@ -1676,10 +1666,9 @@ class Pipettes:
     Args:
       channel: which channel to move, 0-indexed from the back.
       z: where to put the bottom of its tip, in mm on the deck.
-      speed: how fast, in mm/s. Defaults to `configuration.z_drive_speed_default`.
-      acceleration: how hard, in mm/s2. Defaults to `configuration.z_drive_acceleration_default`.
-      current_limit: the motor current limit. Defaults to
-        `configuration.z_drive_current_limit_default`.
+      speed: how fast, in mm/s. Defaults to `default_z_speed`.
+      acceleration: how hard, in mm/s2. Defaults to `default_z_acceleration`.
+      current_limit: the motor current limit. Defaults to `default_z_current_limit`.
 
     Raises:
       ValueError: If the channel carries no tip, or it cannot put the tip bottom at `z`.
@@ -2924,8 +2913,7 @@ class Pipettes:
       approach_speed: above the start position, in mm/s.
       search_speed: in mm/s.
       acceleration: in mm/s2.
-      z_current_limit: Z drive current limit, 0 to 7.
-        `configuration.z_drive_current_limit_default` when None.
+      z_current_limit: Z drive current limit, 0 to 7. `default_z_current_limit` when None.
       tip_has_filter: whether the tip has a filter. What the model says of the mounted tip when
         None, and no filter if the model has none.
       dispensing_speed: of the dispensing drive during the search, in mm/s.
@@ -2962,7 +2950,7 @@ class Pipettes:
     if post_detection_trajectory not in (0, 1):
       raise ValueError(f"post_detection_trajectory must be 0 or 1, is {post_detection_trajectory}")
     if z_current_limit is None:
-      z_current_limit = c.z_drive_current_limit_default
+      z_current_limit = self.default_z_current_limit
     if tip_has_filter is None:
       tip = self.get_mounted_tip(channel)
       tip_has_filter = tip is not None and tip.has_filter
