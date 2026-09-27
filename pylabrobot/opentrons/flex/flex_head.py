@@ -2187,7 +2187,7 @@ class FlexHead8(_FlexHead):
       deck = deck.parent
     if deck is None:
       raise ValueError("Labware must be assigned to a Flex deck")
-    well_y = labware.get_item(well).get_location_wrt(deck, y="c").y
+    well_y: float = labware.get_item(well).get_location_wrt(deck, y="c").y
     mount_y = well_y - _SINGLE_NOZZLE_Y[nozzle]
     return (
       mount_y + _PIPETTE_BODY_BACK_Y >= _ROBOT_FRONT_LIMIT
