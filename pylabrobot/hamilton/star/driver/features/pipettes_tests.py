@@ -1886,6 +1886,28 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(pipettes.get_mounted_tip(0))
     self.assertTrue(sent[-1].startswith("C0TR") and sent[-1].endswith("ti0"))
 
+  async def test_consolidating_moves_the_last_tips_into_the_first_empty_spots(self):
+    """Ported from legacy's `test_consolidate_tip_inventory`: planned [1, 3, 5] x3 then [1].
+
+    Channels 1, 3 and 5 stand too far apart for spots 9 mm apart, so each tip goes alone.
+    """
+    pipettes, rack, sent = await channels_over_a_rack()
+    rack.set_tip_state([index >= 86 for index in range(96)])
+    tips = [spot.tip for spot in rack.get_all_items()[86:]]
+    await pipettes.consolidate_tip_inventory([rack], use_channels=[1, 3, 5])
+    self.assertEqual([spot.has_tip() for spot in rack.get_all_items()], [True] * 10 + [False] * 86)
+    self.assertEqual([spot.tip for spot in rack.get_all_items()[:10]], tips)
+    self.assertTrue(
+      all(pipettes.get_mounted_tip(ch) is None for ch in range(pipettes.num_channels))
+    )
+
+    def channels(prefix: str) -> List[int]:
+      masks = [c.split("&tm")[1].split("&")[0].split() for c in sent if c.startswith(prefix)]
+      return [mask.index("1") for mask in masks]
+
+    self.assertEqual(channels("C0TP"), [1, 3, 5] * 3 + [1])
+    self.assertEqual(channels("C0TR"), [1, 3, 5] * 3 + [1])
+
   async def test_channels_that_are_not_neighbours_discard_as_legacy_does(self):
     """Three tips on channels 0, 2 and 5 are packed 9 mm apart in the waste, as legacy packs them.
 
