@@ -146,11 +146,13 @@ class TestBetweenSlotArcGuard(unittest.IsolatedAsyncioTestCase):
     await self.head.aspirate(self.plate.column(0), volume=50)  # -> plate (C2), a new slot
 
     moves = self._coordinate_moves(self.api)
-    self.assertEqual(len(moves), before + 1, "one safe move should precede the cross-slot aspirate")
-    self.assertAlmostEqual(moves[-1].args[2]["minimumZHeight"], traversal_z(self.flex.deck))
+    self.assertEqual(
+      len(moves), before + 2, "safe travel and vertical descent should precede aspiration"
+    )
+    self.assertAlmostEqual(moves[-2].args[2]["minimumZHeight"], traversal_z(self.flex.deck))
     # Vertical descent immediately precedes aspiration.
     types = [c.args[1] for c in self.api.submit_command.await_args_list]
-    self.assertEqual(types[types.index("aspirateInPlace") - 1], "moveRelative")
+    self.assertEqual(types[types.index("aspirateInPlace") - 1], "moveToCoordinates")
 
   async def test_moving_within_the_same_labware_also_arcs_high(self):
     await self.head.pick_up_tips(self.rack, column=0)
@@ -158,7 +160,7 @@ class TestBetweenSlotArcGuard(unittest.IsolatedAsyncioTestCase):
     n = len(self._coordinate_moves(self.api))
     await self.head.dispense(self.plate.column(1), volume=50)  # same plate -> safe coordinate move
     self.assertEqual(
-      len(self._coordinate_moves(self.api)), n + 1, "within-slot move must also arc high"
+      len(self._coordinate_moves(self.api)), n + 2, "within-slot move must also arc high"
     )
 
 

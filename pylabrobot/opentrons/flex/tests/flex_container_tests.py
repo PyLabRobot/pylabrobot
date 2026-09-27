@@ -207,7 +207,7 @@ class TestFlexHead1ContainerOps(unittest.IsolatedAsyncioTestCase):
         self.api,
         "submit_command",
         AsyncMock(
-          side_effect=[self.api.submit_command.return_value] * 4
+          side_effect=[self.api.submit_command.return_value] * 3
           + [RuntimeError("pipetting failed")]
         ),
       ) as submit,
@@ -399,7 +399,7 @@ class TestFlexHead8ContainerOps(unittest.IsolatedAsyncioTestCase):
         self.api,
         "submit_command",
         AsyncMock(
-          side_effect=[self.api.submit_command.return_value] * 4
+          side_effect=[self.api.submit_command.return_value] * 3
           + [RuntimeError("pipetting failed")]
         ),
       ) as submit,
@@ -437,7 +437,7 @@ class TestFlexHead8ContainerOps(unittest.IsolatedAsyncioTestCase):
         self.api,
         "submit_command",
         AsyncMock(
-          side_effect=[self.api.submit_command.return_value] * 3
+          side_effect=[self.api.submit_command.return_value] * 2
           + [RuntimeError("pipetting failed")]
         ),
       ) as submit,
@@ -710,7 +710,7 @@ class TestFlexHead96ContainerOps(unittest.IsolatedAsyncioTestCase):
         self.api,
         "submit_command",
         AsyncMock(
-          side_effect=[self.api.submit_command.return_value] * 4
+          side_effect=[self.api.submit_command.return_value] * 3
           + [RuntimeError("pipetting failed")]
         ),
       ) as submit,

@@ -19,6 +19,22 @@ class TestVolumeTracker(unittest.TestCase):
     self.assertEqual(tracker.get_free_volume(), 80)
     self.assertEqual(tracker.get_used_volume(), 20)
 
+  def test_validation_preserves_pending_volume_and_callbacks(self):
+    """Read-only checks use the pending volume without changing or notifying it."""
+    tracker = VolumeTracker(thing="test", max_volume=100, initial_volume=60)
+    tracker.remove_liquid(20)
+    calls = []
+    tracker.register_callback(lambda: calls.append(tracker.get_used_volume()))
+    tracker.validate_remove_liquid(40)
+    tracker.validate_add_liquid(60)
+    with self.assertRaises(TooLittleLiquidError):
+      tracker.validate_remove_liquid(41)
+    with self.assertRaises(TooLittleVolumeError):
+      tracker.validate_add_liquid(61)
+    self.assertEqual(tracker.volume, 60)
+    self.assertEqual(tracker.get_used_volume(), 40)
+    self.assertEqual(calls, [])
+
   def test_add_liquid(self):
     tracker = VolumeTracker(thing="test", max_volume=100)
 
