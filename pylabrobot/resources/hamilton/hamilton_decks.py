@@ -4,7 +4,7 @@ import importlib
 import logging
 import warnings
 from abc import ABCMeta
-from typing import Optional, cast
+from typing import Optional, Tuple, cast
 
 from pylabrobot.resources.carrier import Carrier, ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
@@ -60,6 +60,18 @@ AUTOLOAD_BELT_MODEL = "{frame}_autoload_tray_belt_frame"
 # must not be treated as though they do - a fitted autoload otherwise makes rail 1 unassignable,
 # because the sled's box reaches over the deck's front edge and up past a carrier's height.
 _DEVICE_PARTS = frozenset({"autoload_sled", "autoload_loading_tray"})
+
+
+def _get_size_on_deck(resource: Resource) -> Tuple[float, float, float]:
+  """A resource's extent along the deck's axes: its own box, turned as it stands on the deck."""
+  corners = [
+    Coordinate(x, y, z).rotated(resource.rotation)
+    for x in (0, resource.get_size_x())
+    for y in (0, resource.get_size_y())
+    for z in (0, resource.get_size_z())
+  ]
+  xs, ys, zs = [c.x for c in corners], [c.y for c in corners], [c.z for c in corners]
+  return max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)
 
 
 def track_for_x_coordinate(x: float) -> int:
@@ -233,7 +245,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Returns:
       The track, counted from 1.
     """
-    end_x = carrier.get_location_wrt(self).x + carrier.get_absolute_size_x()
+    end_x = carrier.get_location_wrt(self).x + _get_size_on_deck(carrier)[0]
     return track_for_x_coordinate(end_x) - 1
 
   def get_carrier_at_track(self, track: int) -> Carrier:
@@ -319,7 +331,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     if device is None:
       y = self.get_absolute_size_y() - size_y
     else:
-      back_of_device = (device.get_absolute_size_y() - self.location.y) if self.location else 0.0
+      back_of_device = (device.get_size_y() - self.location.y) if self.location else 0.0
       y = back_of_device - ARM_BACK_FROM_DEVICE_BACK - size_y
     self.assign_child_resource(x_arm, location=Coordinate(x - reference_point_from_left, y, arm_z))
     return x_arm
@@ -410,7 +422,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     frame = FRAME_BY_NUM_TRACKS.get(self.num_tracks)
     tray = Resource(
       name=name,
-      size_x=self.get_absolute_size_x() - from_first_carrier_x - left,
+      size_x=self.get_size_x() - from_first_carrier_x - left,
       size_y=front_ahead_y - back_ahead_y,
       size_z=size_z,
       category="autoload_loading_tray",
@@ -575,14 +587,12 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     if not ignore_collision and should_check_collision(resource):
       if resource_location is not None:  # collision detection
+        size_x, size_y, size_z = _get_size_on_deck(resource)
         if (
-          resource_location.x + resource.get_absolute_size_x()
-          > self.track_to_location(self.num_tracks + 1 + beyond).x
+          resource_location.x + size_x > self.track_to_location(self.num_tracks + 1 + beyond).x
           and track is not None
         ):
-          raise ValueError(
-            f"Resource with width {resource.get_absolute_size_x()} does not fit at track {track}."
-          )
+          raise ValueError(f"Resource with width {size_x} does not fit at track {track}.")
 
         # Check if there is space for this new resource.
         for og_resource in self.children:
@@ -591,30 +601,24 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
           og_x = cast(Coordinate, og_resource.location).x
           og_y = cast(Coordinate, og_resource.location).y
           og_z = cast(Coordinate, og_resource.location).z
+          og_size_x, og_size_y, og_size_z = _get_size_on_deck(og_resource)
 
           # A resource is not allowed to overlap with another resource. Resources overlap when
           # their bounding boxes intersect on all three axes. The z axis is included so a resource
           # above the deck plane does not block placement beneath it.
           x_overlap = any(
             [
-              og_x <= resource_location.x < og_x + og_resource.get_absolute_size_x(),
-              og_x
-              < resource_location.x + resource.get_absolute_size_x()
-              < og_x + og_resource.get_absolute_size_x(),
+              og_x <= resource_location.x < og_x + og_size_x,
+              og_x < resource_location.x + size_x < og_x + og_size_x,
             ]
           )
           y_overlap = any(
             [
-              og_y <= resource_location.y < og_y + og_resource.get_absolute_size_y(),
-              og_y
-              < resource_location.y + resource.get_absolute_size_y()
-              < og_y + og_resource.get_absolute_size_y(),
+              og_y <= resource_location.y < og_y + og_size_y,
+              og_y < resource_location.y + size_y < og_y + og_size_y,
             ]
           )
-          z_overlap = (
-            og_z < resource_location.z + resource.get_absolute_size_z()
-            and resource_location.z < og_z + og_resource.get_absolute_size_z()
-          )
+          z_overlap = og_z < resource_location.z + size_z and resource_location.z < og_z + og_size_z
           if x_overlap and y_overlap and z_overlap:
             raise ValueError(
               f"Location {resource_location} is already occupied by resource '{og_resource.name}'."
