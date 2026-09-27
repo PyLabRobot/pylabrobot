@@ -3,7 +3,8 @@
 pylabrobot.lib.liquid_handling package
 ======================================
 
-Shared channel positioning, pipette batch planning, tip consolidation planning, and tip spot finding.
+Shared channel positioning, pipette batch planning, tip consolidation planning, and probing
+tip presence by pick-up.
 
 .. autosummary::
   :toctree: _autosummary
@@ -14,4 +15,5 @@ Shared channel positioning, pipette batch planning, tip consolidation planning, 
     errors
     pipette_batch_scheduling
     tip_consolidation
+    tip_presence_probing
     tip_spot_finding
