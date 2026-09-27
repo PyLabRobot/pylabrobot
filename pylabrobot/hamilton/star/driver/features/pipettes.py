@@ -29,6 +29,13 @@ from typing import (
 
 from typing_extensions import TypeAlias
 
+from pylabrobot.hamilton.liquid_class_resolver import (
+  ASPIRATE_CLASS_ATTRIBUTES,
+  check_volume_arguments,
+  from_class,
+  get_volumes_and_classes,
+  per_container,
+)
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import (
@@ -38,7 +45,6 @@ from pylabrobot.hamilton.star.driver.errors import (
 )
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
-from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
 from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import (
@@ -51,7 +57,6 @@ from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipDropMethod, TipPickupMethod
-from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMountingShaft
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
@@ -4659,45 +4664,6 @@ class Pipettes:
 
   # -- what aspirating and dispensing share --------------------------------------------------------
 
-  @staticmethod
-  def _per_container(name: str, given: Optional[Sequence[Any]], n: int) -> Optional[List[Any]]:
-    """`given` as a list of one entry per container; None stays None.
-
-    Raises:
-      ValueError: Not one entry per container.
-    """
-    if given is None:
-      return None
-    if len(given) != n:
-      raise ValueError(f"{name} must have one entry per container, {n}, has {len(given)}")
-    return list(given)
-
-  @staticmethod
-  def _check_volume_arguments(
-    volumes: Optional[Sequence[float]],
-    piston_volumes: Optional[Sequence[float]],
-    hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]],
-    how_moved: str,
-  ) -> None:
-    """Raise unless exactly one of `volumes` and `piston_volumes` is given, without a class beside
-    `piston_volumes`.
-
-    Args:
-      volumes: liquid per container, corrected by a class; or None.
-      piston_volumes: piston travel per container, as given; or None.
-      hamilton_liquid_classes: the classes given, if any.
-      how_moved: "drawn" or "pushed out", for the refusals.
-    """
-    if (volumes is None) == (piston_volumes is None):
-      raise ValueError(
-        f"give volumes, which a liquid class corrects, or piston_volumes, {how_moved} as given; "
-        "not both and not neither"
-      )
-    if piston_volumes is not None and hamilton_liquid_classes is not None:
-      raise ValueError(
-        f"piston_volumes are {how_moved} as given; a liquid class would correct them"
-      )
-
   def _get_channel_of_each_container(self, n: int, use_channels: Optional[List[int]]) -> List[int]:
     """The channel each of `n` containers is dealt to, in cycles, as `_prepare_batched` deals them.
 
@@ -4748,67 +4714,6 @@ class Pipettes:
         raise TypeError(f"channel {channel} carries {tip.name}, not a Hamilton tip")
       tips.append(tip)
     return presence, tips
-
-  def _get_volumes_and_classes(
-    self,
-    containers: Sequence[Container],
-    channel_of: Sequence[int],
-    tips: Sequence[HamiltonTip],
-    volumes: Optional[Sequence[float]],
-    piston_volumes: Optional[Sequence[float]],
-    hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]],
-    jets: Sequence[bool],
-    blow_outs: Sequence[bool],
-  ) -> Tuple[List[float], List[float], Optional[List[HamiltonLiquidClass]]]:
-    """The liquid asked per container, the piston volume that moves it, and the classes used.
-
-    Args:
-      containers: per job.
-      channel_of: the channel of each container, per job.
-      tips: per job, the tip on its channel.
-      volumes: liquid per container, corrected by a class; or None.
-      piston_volumes: piston travel per container, as given, the liquid counting the same; or None.
-      hamilton_liquid_classes: one per container; looked up for the tip, water, `jets` and
-        `blow_outs` when None.
-      jets: per job, for the lookup.
-      blow_outs: per job, for the lookup.
-
-    Returns:
-      The liquid per job, the piston volume per job, and the classes, None with `piston_volumes`.
-
-    Raises:
-      ValueError: Lists not one per container, or no class known for a channel's tip.
-    """
-    n = len(containers)
-    if volumes is None:
-      assert piston_volumes is not None
-      piston = self._per_container("piston_volumes", piston_volumes, n) or []
-      return list(piston), piston, None
-    liquid = self._per_container("volumes", volumes, n)
-    assert liquid is not None
-    classes = self._per_container("hamilton_liquid_classes", hamilton_liquid_classes, n)
-    if classes is None:
-      classes = []
-      for job, tip in enumerate(tips):
-        found = get_star_liquid_class(
-          tip_volume=tip.maximal_volume,
-          is_core=False,
-          is_tip=True,
-          has_filter=tip.has_filter,
-          liquid=Liquid.WATER,
-          jet=jets[job],
-          blow_out=blow_outs[job],
-        )
-        if found is None:
-          raise ValueError(
-            f"no liquid class is known for channel {channel_of[job]}'s tip on "
-            f"{containers[job].name}: {tip.maximal_volume} uL, "
-            f"{'with' if tip.has_filter else 'without'} filter, water, jet={jets[job]}, "
-            f"blow_out={blow_outs[job]}. Give hamilton_liquid_classes, or piston_volumes"
-          )
-        classes.append(found)
-    piston = [round(hlc.compute_corrected_volume(v), 2) for hlc, v in zip(classes, liquid)]
-    return liquid, piston, classes
 
   def _get_pipetting_heights(
     self,
@@ -5653,7 +5558,8 @@ class Pipettes:
       minimum_allowed_z_positions_during: how low each tip bottom may go, in mm on the deck. The
         cavity bottom plus the offset's z when None. Below the cavity bottom is allowed: the tip
         then presses onto the well's floor and draws with suction, as a harvest wants.
-      pre_wetting_volumes: drawn and returned first, in uL.
+      pre_wetting_volumes: drawn and returned first, in uL. The class's over-aspirate volume, else
+        0.0, when None.
       pre_mixes: a `Mix` per container, mixed before the draw, None for no mixing.
       mix_positions_from_liquid_surface: mixing depth under the surface, in mm, per container. 0.0
         when None.
@@ -5700,7 +5606,7 @@ class Pipettes:
     during = default if minimum_traverse_height_during is None else minimum_traverse_height_during
     end = default if minimum_traverse_height_end is None else minimum_traverse_height_end
 
-    modes = self._per_container(
+    modes = per_container(
       "lld_mode", [lld_mode] * n if isinstance(lld_mode, self.LLDMode) else list(lld_mode), n
     )
     assert modes is not None
@@ -5710,7 +5616,7 @@ class Pipettes:
     searched = [
       job for job in range(n) if modes[job] in (self.LLDMode.CAPACITIVE, self.LLDMode.PRESSURE)
     ]
-    self._check_volume_arguments(volumes, piston_volumes, hamilton_liquid_classes, "drawn")
+    check_volume_arguments(volumes, piston_volumes, hamilton_liquid_classes, "drawn")
 
     channel_of = self._get_channel_of_each_container(n, use_channels)
     presence, tips = await self._check_channels_before_pipetting(
@@ -5722,9 +5628,9 @@ class Pipettes:
         sorted({channel_of[job] for job in touched}),
         [containers[job].name for job in touched],
       )
-    jets = self._per_container("jet", jet, n) or [False] * n
-    blow_outs = self._per_container("blow_out", blow_out, n) or [False] * n
-    liquid, drawn, classes = self._get_volumes_and_classes(
+    jets = per_container("jet", jet, n) or [False] * n
+    blow_outs = per_container("blow_out", blow_out, n) or [False] * n
+    liquid, drawn, classes = get_volumes_and_classes(
       containers,
       channel_of,
       tips,
@@ -5734,52 +5640,31 @@ class Pipettes:
       jets,
       blow_outs,
     )
-    heights = self._per_container("liquid_heights", liquid_heights, n) or [None] * n
-    mixes = self._per_container("pre_mixes", pre_mixes, n) or [None] * n
+    heights = per_container("liquid_heights", liquid_heights, n) or [None] * n
+    mixes = per_container("pre_mixes", pre_mixes, n) or [None] * n
 
-    def from_class(
-      name: str, given: Optional[Sequence[Any]], read: Callable[[HamiltonLiquidClass], Any]
-    ) -> Optional[List[Any]]:
+    def by_class(name: str, given: Optional[Sequence[Any]]) -> Optional[List[Any]]:
       """What is given, else what the liquid classes say, else nothing: legacy's own defaults."""
-      values = self._per_container(name, given, n)
-      if values is None and classes is not None:
-        values = [read(hlc) for hlc in classes]
-      return values
+      return from_class(name, given, n, classes, ASPIRATE_CLASS_ATTRIBUTES)
 
     per_container_settings = {
-      "flow_rates": from_class("flow_rates", flow_rates, lambda hlc: hlc.aspiration_flow_rate),
-      "clot_detection_heights": from_class(
-        "clot_detection_heights",
-        clot_detection_heights,
-        lambda hlc: hlc.aspiration_clot_retract_height,
-      ),
-      "blow_out_air_volumes": from_class(
-        "blow_out_air_volumes", blow_out_air_volumes, lambda hlc: hlc.aspiration_blow_out_volume
-      ),
-      "pre_wetting_volumes": self._per_container("pre_wetting_volumes", pre_wetting_volumes, n),
-      "immersion_depths": self._per_container("immersion_depths", immersion_depths, n),
-      "mix_positions_from_liquid_surface": self._per_container(
+      "flow_rates": by_class("flow_rates", flow_rates),
+      "clot_detection_heights": by_class("clot_detection_heights", clot_detection_heights),
+      "blow_out_air_volumes": by_class("blow_out_air_volumes", blow_out_air_volumes),
+      "pre_wetting_volumes": by_class("pre_wetting_volumes", pre_wetting_volumes),
+      "immersion_depths": per_container("immersion_depths", immersion_depths, n),
+      "mix_positions_from_liquid_surface": per_container(
         "mix_positions_from_liquid_surface", mix_positions_from_liquid_surface, n
       ),
-      "second_section_heights": self._per_container(
-        "second_section_heights", second_section_heights, n
-      ),
-      "second_section_ratios": self._per_container(
-        "second_section_ratios", second_section_ratios, n
-      ),
-      "pull_out_distances_transport_air": self._per_container(
+      "second_section_heights": per_container("second_section_heights", second_section_heights, n),
+      "second_section_ratios": per_container("second_section_ratios", second_section_ratios, n),
+      "pull_out_distances_transport_air": per_container(
         "pull_out_distances_transport_air", pull_out_distances_transport_air, n
       ),
-      "limit_curve_indices": self._per_container("limit_curve_indices", limit_curve_indices, n),
-      "settling_times": from_class(
-        "settling_times", settling_times, lambda hlc: hlc.aspiration_settling_time
-      ),
-      "swap_speeds": from_class("swap_speeds", swap_speeds, lambda hlc: hlc.aspiration_swap_speed),
-      "transport_air_volumes": from_class(
-        "transport_air_volumes",
-        transport_air_volumes,
-        lambda hlc: hlc.aspiration_air_transport_volume,
-      ),
+      "limit_curve_indices": per_container("limit_curve_indices", limit_curve_indices, n),
+      "settling_times": by_class("settling_times", settling_times),
+      "swap_speeds": by_class("swap_speeds", swap_speeds),
+      "transport_air_volumes": by_class("transport_air_volumes", transport_air_volumes),
     }
     # What each piston travels besides the liquid: blow-out air before it, transport air after.
     blow_out_air = per_container_settings["blow_out_air_volumes"] or [0.0] * n
@@ -5825,14 +5710,14 @@ class Pipettes:
       standing[channel] += blow_out_air[job] + drawn[job] + transport_air[job]
       filled[channel] += blow_out_air[job] + drawn[job] + transport_air[job]
 
-    given_floors = self._per_container(
+    given_floors = per_container(
       "minimum_allowed_z_positions_during", minimum_allowed_z_positions_during, n
     )
     floors, sent_floors, tops, searches, surfaces = self._get_pipetting_heights(
       deck, containers, resource_offsets, given_floors, heights, modes, searched
     )
     tracking = does_volume_tracking()
-    following = self._per_container("surface_following_distances", surface_following_distances, n)
+    following = per_container("surface_following_distances", surface_following_distances, n)
     _, overhangs, batches = await self._prepare_batched(
       deck,
       containers,
