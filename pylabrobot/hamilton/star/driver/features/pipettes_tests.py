@@ -737,7 +737,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
       2,
       search_start_position=250.0,
       search_end_position=150.0,
-      move_channels_to_safe_pos_after=True,
+      move_to_safe_z_position_after=True,
     )
     c = self.pipettes.configuration
     start, end = c.z_drive_mm_to_increments(301.9), c.z_drive_mm_to_increments(201.9)
@@ -873,7 +873,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
       search_end_position=150.0,
       pressure_mode=Pipettes.PressureLLDMode.FOAM,
       dispense_back_volume=10.0,
-      move_channels_to_safe_pos_after=True,
+      move_to_safe_z_position_after=True,
     )
     c = self.pipettes.configuration
     start, end = c.z_drive_mm_to_increments(301.9), c.z_drive_mm_to_increments(201.9)
@@ -1000,7 +1000,7 @@ class TestZTouchProbing(unittest.IsolatedAsyncioTestCase):
     self.back_off.assert_not_awaited()
 
   async def test_safe_z_afterwards_instead_of_a_back_off(self):
-    await self.pipettes.probe_z_using_ztouch(0, move_channels_to_safe_pos_after=True)
+    await self.pipettes.probe_z_using_ztouch(0, move_to_safe_z_position_after=True)
     self.safe_z.assert_awaited_once()
     self.back_off.assert_not_awaited()
 
@@ -1377,7 +1377,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     c = self.pipettes.configuration
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
     top = wells[0].get_location_wrt(self.deck, "c", "c", "t").z
-    end = c.z_drive_mm_to_increments(round(bottom - 1.0 + 51.9, 2))
+    end = c.z_drive_mm_to_increments(round(bottom - 10.0 + 51.9, 2))
     start = c.z_drive_mm_to_increments(round(top + 51.9, 2))
     self.assertEqual(
       self.sent,
@@ -1392,6 +1392,16 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     )
     self.tool_bottoms.assert_not_awaited()
     self.assertEqual(self.safe_z.await_count, 2)
+
+  async def test_a_floor_search_ends_no_lower_than_the_drive_reaches(self):
+    self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    wells = self._wells("A1")
+    c = self.pipettes.configuration
+    bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    lowest = round(bottom - 3.0 + 51.9, 2)
+    c.z_range = (lowest, c.z_range[1])
+    await self.pipettes.probe_z_heights_using_ztouch(wells)
+    self.assertIn(f"za{c.z_drive_mm_to_increments(lowest):05}", self.sent[0])
 
   async def test_floors_set_off_in_a_cascade_from_the_back(self):
     self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
@@ -1429,7 +1439,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
     wells = self._wells("A1")
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    self.rz = self.pipettes.configuration.z_drive_mm_to_increments(round(bottom - 5.0 + 51.9, 2))
+    self.rz = self.pipettes.configuration.z_drive_mm_to_increments(round(bottom - 10.0 + 51.9, 2))
     self.assertEqual(await self.pipettes.probe_z_heights_using_ztouch(wells), [None])
 
   async def test_an_interrupted_batch_brings_the_channels_up_before_it_propagates(self):
@@ -1446,7 +1456,9 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
     wells = self._wells("A1")
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    at_the_end = self.pipettes.configuration.z_drive_mm_to_increments(round(bottom - 5.0 + 51.9, 2))
+    at_the_end = self.pipettes.configuration.z_drive_mm_to_increments(
+      round(bottom - 10.0 + 51.9, 2)
+    )
     self.rz = [at_the_end, 22300]
     with self.assertRaises(RuntimeError):
       await self.pipettes.probe_z_heights_using_ztouch(wells, n_replicates=2)
@@ -2764,7 +2776,6 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_z_move_is_waited_out_before_the_next_command(self):
     pipettes = await self.timed_channels(simulate_motion_time=True)
-    c = pipettes.configuration
     z = await pipettes.request_stop_disc_z_position(0)
     await pipettes.move_stop_disc_to_z_position(0, z - 50.0)
     self.sleep.assert_not_awaited()
@@ -2772,7 +2783,7 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
     await pipettes.request_stop_disc_z_position(0)
     self.sleep.assert_awaited_once()
     waited = self.sleep.await_args_list[0].args[0]
-    expected = travel_time(50.0, c.z_drive_speed_default, c.z_drive_acceleration_default)
+    expected = travel_time(50.0, pipettes.default_z_speed, pipettes.default_z_acceleration)
     self.assertAlmostEqual(waited, expected, places=3)
 
   async def test_channels_moving_together_take_as_long_as_the_farthest(self):
@@ -3060,6 +3071,16 @@ class TestAspirateInOneMove(unittest.IsolatedAsyncioTestCase):
     )
     self.pipettes._record_after_command.assert_awaited_once()  # type: ignore[attr-defined]
 
+  async def test_a_mix_with_auto_surface_following_is_refused_unresolved(self):
+    from pylabrobot.lib.liquid_handling.mix import Mix
+
+    auto_mix = Mix(volume=10.0, repetitions=2, flow_rate=50.0, auto_surface_following=True)
+    with self.assertRaises(ValueError):
+      await self.pipettes._aspirate_in_one_move(
+        [0, 1], self.locations, self.searches, self.floors, [10.0, 10.0], pre_mixes=[auto_mix, None]
+      )
+    self.fw.assert_not_awaited()
+
   async def test_wells_a_pitch_apart_in_floating_point_are_accepted(self):
     # 145.7 - 136.7 is 8.999999999999986 in floating point; the firmware gets 9.0 mm.
     locations = [Coordinate(300.0, 145.7, 150.0), Coordinate(300.0, 136.7, 150.0)]
@@ -3298,6 +3319,13 @@ class TestEmptyTip(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([self.pipettes.piston_positions[c] for c in (0, 3)], [-45.0, -45.0])
 
 
+def _get_fields(command: str, name: str) -> List[int]:
+  """The values of one field of a sent firmware command."""
+  found = re.search(rf"&{name}(\d+(?: \d+)*)", command)
+  assert found is not None, f"no {name} in {command}"
+  return [int(v) for v in found.group(1).split()]
+
+
 class _SimulatedPlateWithWater(unittest.IsolatedAsyncioTestCase):
   """300 uL filter tips on four channels, a Corning plate with water in three wells of a column and
   none in the fourth. The plate knows height and volume both ways. Tracking is on for tips and
@@ -3514,6 +3542,95 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
       "mv00300 00000 00300&mc03 00 03&mp000 000 000&ms0500 1000 0500&mh0015 0000 0015&", sent[1]
     )
 
+  async def test_auto_surface_following_searches_capacitive_and_follows_each_draw(self):
+    sent = self._record_aspirations("P1ZL", "P2ZL")
+    await self.pipettes.aspirate(
+      self.wells[:2], piston_volumes=[50.0, 20.0], auto_surface_following=True
+    )
+    self.assertEqual([c[:4] for c in sent], ["P1ZL", "P2ZL", "C0AS"])
+    a1, b1 = self.wells[0], self.wells[1]
+    drops = [
+      a1.compute_height_from_volume(150.0) - a1.compute_height_from_volume(100.0),
+      b1.compute_height_from_volume(100.0) - b1.compute_height_from_volume(80.0),
+    ]
+    for tenths, drop in zip(_get_fields(sent[-1], "fp"), drops):
+      self.assertAlmostEqual(tenths, drop * 10, delta=1)
+
+  async def test_auto_surface_following_under_off_follows_from_the_liquid_height(self):
+    sent = self._record_aspirations()
+    well = self.wells[0]
+    await self.pipettes.aspirate(
+      [well],
+      piston_volumes=[30.0],
+      liquid_heights=[3.0],
+      lld_mode=Pipettes.LLDMode.OFF,
+      auto_surface_following=True,
+    )
+    drop = 3.0 - well.compute_height_from_volume(well.compute_volume_from_height(3.0) - 30.0)
+    self.assertAlmostEqual(_get_fields(sent[0], "fp")[0], drop * 10, delta=1)
+
+  async def test_two_channels_in_one_container_follow_what_both_draw(self):
+    from pylabrobot.resources import PetriDish
+
+    area = math.pi * 15.0**2
+    dish = PetriDish(
+      name="dish",
+      diameter=30.0,
+      height=15.0,
+      material_z_thickness=2.0,
+      compute_volume_from_height=lambda h: h * area,
+      compute_height_from_volume=lambda v: v / area,
+    )
+    self.deck.assign_child_resource(dish, location=Coordinate(250.0, 200.0, 100.0))
+    dish.tracker.set_volume(2_000.0)
+    sent = self._record_aspirations()
+    await self.pipettes.aspirate(
+      [dish, dish],
+      piston_volumes=[100.0, 100.0],
+      use_channels=[0, 1],
+      lld_mode=Pipettes.LLDMode.OFF,
+      liquid_heights=[5.0, 5.0],
+      auto_surface_following=True,
+    )
+    # Both draws lower the one surface: 200 uL over the dish's area, not 100.
+    self.assertEqual(_get_fields(sent[0], "fp")[:2], [round(200.0 / area * 10)] * 2)
+
+  async def test_a_pre_mix_auto_follows_what_one_mixing_draw_takes(self):
+    from pylabrobot.lib.liquid_handling.mix import Mix
+
+    sent = self._record_aspirations()
+    well = self.wells[0]
+    await self.pipettes.aspirate(
+      [well],
+      piston_volumes=[10.0],
+      lld_mode=Pipettes.LLDMode.CAPACITIVE,
+      pre_mixes=[Mix(volume=30.0, repetitions=3, flow_rate=50.0, auto_surface_following=True)],
+    )
+    drop = well.compute_height_from_volume(150.0) - well.compute_height_from_volume(120.0)
+    self.assertAlmostEqual(_get_fields(sent[-1], "mh")[0], drop * 10, delta=1)
+    self.assertEqual(_get_fields(sent[-1], "fp")[0], 0)
+
+  async def test_auto_surface_following_refused_beside_a_distance_or_without_a_surface(self):
+    from pylabrobot.lib.liquid_handling.mix import Mix
+
+    sent = self._record_aspirations("P1ZL", "C0DS")
+    auto_mix = Mix(volume=10.0, repetitions=2, flow_rate=50.0, auto_surface_following=True)
+    refused: List[Dict[str, Any]] = [
+      {"auto_surface_following": True, "surface_following_distances": [1.0]},
+      {"auto_surface_following": True, "lld_mode": Pipettes.LLDMode.OFF},
+    ]
+    for call, mixes in (
+      (self.pipettes.aspirate, "pre_mixes"),
+      (self.pipettes.dispense, "post_mixes"),
+    ):
+      for kwargs in refused + [{mixes: [auto_mix]}]:
+        with (
+          self.subTest(call=call.__name__, refused=sorted(kwargs)),
+          self.assertRaises(ValueError),
+        ):
+          await call(self.wells[:1], piston_volumes=[10.0], **kwargs)
+    self.assertEqual(sent, [])
+
   async def test_a_bare_channel_is_refused_before_anything_else(self):
     # Channel 4 has no tip; the sensed refusal comes before the class lookup or any command.
     sent = self._record_aspirations("C0RT", "C0RZ", "C0ZA")
@@ -3615,8 +3732,8 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
       Pipettes.LLDMode.ZTOUCH,
     ]
     await self.pipettes.aspirate(self.wells, piston_volumes=[10.0] * 4, lld_mode=modes)
-    # The touch first, then the two liquid searches, each its own way; then one command for all
-    # four, the LLD off everywhere, starting at the lowest height any tip rests at: the floor.
+    # The touch, then the two searches, each its own way; then one command for all four, LLD off,
+    # from the lowest height any tip rests at: 0.2 mm off the floor touched.
     self.assertEqual(
       [c[:4] for c in sent], ["P4ZA", "P4ZH", "P2ZA", "P3ZA", "P2ZL", "P3ZE", "C0RL", "C0AS"]
     )
@@ -3628,7 +3745,7 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     start = self.pipettes.configuration.z_drive_mm_to_increments(round(top + 2.0 + overhang, 2))
     self.assertIn(f"zc{start:05}", sent[4])
     self.assertIn(f"lp{round((top + 2.0) * 10):04}", sent[-1])
-    floor = self._surface_field(self.wells[3], 0.0)
+    floor = f"{int(self._surface_field(self.wells[3], 0.0)) + 2:04}"
     self.assertIn(f"th{floor}te2450", sent[-1])
     # The OFF channel draws at the cavity bottom, the searched ones where they found the liquid.
     self.assertIn(
@@ -3637,16 +3754,16 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
       sent[-1],
     )
 
-  async def test_a_z_touch_draws_from_the_floor(self):
+  async def test_a_z_touch_draws_just_off_the_floor(self):
     sent = self._record_aspirations("P1ZA", "P1ZH")
     with self.assertLogs("pylabrobot.hamilton.star.driver.features.pipettes", level="INFO") as logs:
       await self.pipettes.aspirate(
         self.wells[3:4], piston_volumes=[10.0], lld_mode=Pipettes.LLDMode.ZTOUCH
       )
-    # Approach to the top, the touch, the draw from the floor with zx there and the LLD off; the
-    # empty well gives nothing and the air is an info line, not a warning.
+    # Approach to the top, the touch, the draw 0.2 mm off the floor with zx there and the LLD off;
+    # the empty well gives nothing and the air is an info line, not a warning.
     self.assertEqual([c[:4] for c in sent], ["P1ZA", "P1ZH", "C0AS"])
-    floor = self._surface_field(self.wells[3], 0.0)
+    floor = f"{int(self._surface_field(self.wells[3], 0.0)) + 2:04}"
     self.assertIn(f"th{floor}te2450", sent[-1])
     self.assertIn(f"zl{floor}", sent[-1])
     self.assertIn(f"zx{floor}", sent[-1])
@@ -4157,6 +4274,56 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     self.assertEqual([tip.tracker.get_used_volume() for tip in tips if tip is not None], [0.0, 0.0])
     self.assertEqual(self.pipettes.piston_positions[:2], [0.0, 0.0])
     self.assertEqual((await self.pipettes.dispensing_drives_request_uL_positions())[:2], [0.0, 0.0])
+
+  async def test_auto_surface_following_follows_what_each_dispense_adds(self):
+    from pylabrobot.lib.liquid_handling.mix import Mix
+
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[50.0])
+    sent = self._record("P1ZL")
+    b1 = self.wells[1]
+    await self.pipettes.dispense(
+      [b1],
+      piston_volumes=[50.0],
+      auto_surface_following=True,
+      post_mixes=[Mix(volume=20.0, repetitions=2, flow_rate=50.0, auto_surface_following=True)],
+    )
+    self.assertEqual([c[:4] for c in sent], ["P1ZL", "C0DS"])
+    rise = b1.compute_height_from_volume(150.0) - b1.compute_height_from_volume(100.0)
+    drop = b1.compute_height_from_volume(150.0) - b1.compute_height_from_volume(130.0)
+    self.assertAlmostEqual(_get_fields(sent[-1], "fp")[0], rise * 10, delta=1)
+    self.assertAlmostEqual(_get_fields(sent[-1], "mh")[0], drop * 10, delta=1)
+
+  async def test_a_following_post_mix_beside_a_container_without_a_model(self):
+    from pylabrobot.lib.liquid_handling.mix import Mix
+    from pylabrobot.resources import PetriDish
+
+    area = math.pi * 15.0**2
+    modelled = PetriDish(
+      name="modelled",
+      diameter=30.0,
+      height=15.0,
+      material_z_thickness=2.0,
+      compute_volume_from_height=lambda h: h * area,
+      compute_height_from_volume=lambda v: v / area,
+    )
+    plain = PetriDish(name="plain", diameter=30.0, height=15.0, material_z_thickness=2.0)
+    self.deck.assign_child_resource(modelled, location=Coordinate(250.0, 250.0, 100.0))
+    self.deck.assign_child_resource(plain, location=Coordinate(250.0, 150.0, 100.0))
+    modelled.tracker.set_volume(2_000.0)
+    await self.pipettes.aspirate(self.wells[:2], piston_volumes=[50.0, 50.0])
+    sent = self._record()
+    await self.pipettes.dispense(
+      [modelled, plain],
+      piston_volumes=[50.0, 50.0],
+      use_channels=[0, 1],
+      liquid_heights=[5.0, 5.0],
+      post_mixes=[
+        Mix(volume=20.0, repetitions=2, flow_rate=50.0, auto_surface_following=True),
+        None,
+      ],
+    )
+    # Only the mixing channel's container is read; one draw of 20 uL lowers the risen surface.
+    self.assertEqual(_get_fields(sent[-1], "mh")[:2], [round(20.0 / area * 10), 0])
 
   async def test_a_jet_with_blow_out_takes_the_classs_fields_and_the_pistons_rest(self):
     from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class

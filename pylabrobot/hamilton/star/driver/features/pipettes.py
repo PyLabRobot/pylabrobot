@@ -47,7 +47,7 @@ from pylabrobot.hamilton.star.driver.errors import (
   channels_that_faulted,
 )
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
-from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
+from pylabrobot.hamilton.star.driver.lock import CHANNEL_MODULE_LETTERS, _FirmwareLock
 from pylabrobot.lib.liquid_handling.channel_positioning import compute_channel_offsets
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import (
@@ -89,11 +89,6 @@ ChannelType = Literal["ML_STAR", "ML_STAR_RPC"]
 HeadType = Literal["ML_STAR", "ML_STAR_PLE", "ML_STAR_RPC"]
 StopDiscType = Literal["core_i", "core_ii"]
 PressureADC = Literal["Renesas_X9268", "Analog_Devices_AD5263"]
-
-
-# The letters a channel's module is addressed by, in order from the back. `channel_id` spells an
-# address with them and `channel_from_module` reads one back.
-CHANNEL_MODULE_LETTERS = "123456789ABCDEFG"
 
 
 @dataclass
@@ -182,14 +177,9 @@ class PipettesConfiguration:
 
   # -- what a channel's own Z drive accepts, for the moves addressed to the channel itself --
   z_drive_speed_range_increments: Tuple[int, int] = (20, 15_000)
-  z_drive_speed_default: float = 125.0
-  """How fast a channel's Z drive moves when the caller names nothing, in mm/s."""
   z_drive_acceleration_range_increments: Tuple[int, int] = (5, 150)
-  z_drive_acceleration_default: float = 800.0
-  """How hard it accelerates when the caller names nothing, in mm/s2. Counted in thousands of
-  increments per second squared, unlike the positions and speeds beside it."""
+  """Counted in thousands of increments per second squared, unlike the speeds beside it."""
   z_drive_current_limit_range: Tuple[int, int] = (0, 7)
-  z_drive_current_limit_default: int = 3
   z_touch_pwm_range: Tuple[int, int] = (0, 125)
   """What a z-touch search's force limiter and push-down force are set in."""
   drive_parameters: Dict[str, int] = field(
@@ -411,17 +401,27 @@ class Pipettes:
   default_z_speed: float = 125.0
   # Z acceleration when the caller names none, in mm/s2.
   default_z_acceleration: float = 800.0
+  # Z drive current limit when the caller names none.
+  default_z_current_limit: int = 3
+  # Height the channels travel at when a command names none, in mm.
+  default_minimum_traverse_height: float = 245.0
   # Containers within this X distance are probed in one batch, in mm.
   default_x_grouping_tolerance: float = 0.1
   # How far above a container's top a liquid search starts, in mm: enough to clear a brim-full
   # well; more above a trough or tube, whose fill can dome.
   search_start_clearance: float = 5.0
   well_search_start_clearance: float = 2.0
-  # A search, for liquid or a floor, stops looking this far below the modelled cavity bottom, in
-  # mm: the seating error of a plate, no more.
+  # A liquid search stops looking this far below the modelled cavity bottom, in mm: the seating
+  # error of a plate, no more.
   search_limit_below_cavity_bottom: float = 1.0
+  # A Z-touch looks this far below the modelled cavity bottom, in mm: a floor off the model is
+  # still met; each end no lower than the channel reaches.
+  ztouch_search_limit_below_cavity_bottom: float = 10.0
   # The channels of a batch set off on their Z-touch one after another, this long apart, in s.
   ztouch_cascade_interval: float = 0.25
+  # A Z-touch aspirate lifts the tip this far off the cavity bottom it touched, in mm, so the
+  # channels drawing together do not press on what lies underneath.
+  ztouch_aspirate_height_above_bottom: float = 0.2
   # A Z-touch dispense lifts the tip this far off the cavity bottom it touched, in mm, so the
   # orifice is not sealed on it.
   ztouch_dispense_height_above_bottom: float = 0.2
@@ -445,9 +445,6 @@ class Pipettes:
     # the next dispense pushes it all out ahead of the liquid, then draws its own.
     self._held_transport_air: Dict[int, float] = {}
     self.configuration = configuration or PipettesConfiguration()
-    # The height the channels travel at when a command names none, in mm. Legacy STARBackend's
-    # channel traversal height.
-    self.default_minimum_traverse_height: float = 245.0
 
   # -- addressing ------------------------------------------------------------
 
@@ -1372,8 +1369,8 @@ class Pipettes:
     # spacing and be in descending order
     channel_locations = dict(enumerate(positions))
 
-    for channel_idx, y in ys.items():
-      channel_locations[channel_idx] = y
+    for channel, y in ys.items():
+      channel_locations[channel] = y
 
     if make_space:
       # For the channels to the back of `back_channel`, make sure the space between them
@@ -1381,10 +1378,10 @@ class Pipettes:
       # make sure the channel behind it is spaced correctly, updating if needed.
       use_channels = list(ys.keys())
       back_channel = min(use_channels)
-      for channel_idx in range(back_channel, 0, -1):
-        pair_spacing = self._min_spacing_between(channel_idx - 1, channel_idx)
-        if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < pair_spacing:
-          channel_locations[channel_idx - 1] = channel_locations[channel_idx] + pair_spacing
+      for channel in range(back_channel, 0, -1):
+        pair_spacing = self._min_spacing_between(channel - 1, channel)
+        if (channel_locations[channel - 1] - channel_locations[channel]) < pair_spacing:
+          channel_locations[channel - 1] = channel_locations[channel] + pair_spacing
 
       # Position intermediate channels between back_channel and front_channel.
       front_channel = max(use_channels)
@@ -1396,10 +1393,10 @@ class Pipettes:
       # Similarly for the channels to the front of `front_channel`, make sure they are all
       # spaced by the per-pair minimum. This time, we iterate from back (closest to
       # `front_channel`) to the frontmost channel.
-      for channel_idx in range(front_channel, self.num_channels - 1):
-        pair_spacing = self._min_spacing_between(channel_idx, channel_idx + 1)
-        if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < pair_spacing:
-          channel_locations[channel_idx + 1] = channel_locations[channel_idx] - pair_spacing
+      for channel in range(front_channel, self.num_channels - 1):
+        pair_spacing = self._min_spacing_between(channel, channel + 1)
+        if (channel_locations[channel] - channel_locations[channel + 1]) < pair_spacing:
+          channel_locations[channel + 1] = channel_locations[channel] - pair_spacing
 
     # Quick checks before movement. The channels stay in order, so the two ends bound the rest.
     for channel in (0, self.num_channels - 1):
@@ -1547,19 +1544,18 @@ class Pipettes:
     Args:
       channel: which channel to move, 0-indexed from the back.
       z: where to put its stop disc, in mm on the deck.
-      speed: how fast, in mm/s. Defaults to `configuration.z_drive_speed_default`.
-      acceleration: how hard, in mm/s2. Defaults to `configuration.z_drive_acceleration_default`.
-      current_limit: the motor current limit. Defaults to
-        `configuration.z_drive_current_limit_default`.
+      speed: how fast, in mm/s. Defaults to `default_z_speed`.
+      acceleration: how hard, in mm/s2. Defaults to `default_z_acceleration`.
+      current_limit: the motor current limit. Defaults to `default_z_current_limit`.
 
     Raises:
       ValueError: If an argument is outside what the drive accepts.
     """
     self._require_channel(channel)
     c = self.configuration
-    speed = c.z_drive_speed_default if speed is None else speed
-    acceleration = c.z_drive_acceleration_default if acceleration is None else acceleration
-    current_limit = c.z_drive_current_limit_default if current_limit is None else current_limit
+    speed = self.default_z_speed if speed is None else speed
+    acceleration = self.default_z_acceleration if acceleration is None else acceleration
+    current_limit = self.default_z_current_limit if current_limit is None else current_limit
 
     self._check_reachable("z", z)
     for checked, (low, high), name in (
@@ -1670,10 +1666,9 @@ class Pipettes:
     Args:
       channel: which channel to move, 0-indexed from the back.
       z: where to put the bottom of its tip, in mm on the deck.
-      speed: how fast, in mm/s. Defaults to `configuration.z_drive_speed_default`.
-      acceleration: how hard, in mm/s2. Defaults to `configuration.z_drive_acceleration_default`.
-      current_limit: the motor current limit. Defaults to
-        `configuration.z_drive_current_limit_default`.
+      speed: how fast, in mm/s. Defaults to `default_z_speed`.
+      acceleration: how hard, in mm/s2. Defaults to `default_z_acceleration`.
+      current_limit: the motor current limit. Defaults to `default_z_current_limit`.
 
     Raises:
       ValueError: If the channel carries no tip, or it cannot put the tip bottom at `z`.
@@ -1753,18 +1748,18 @@ class Pipettes:
     return uL
 
   async def dispensing_drives_request_uL_positions(
-    self, channels: Optional[List[int]] = None
+    self, use_channels: Optional[List[int]] = None
   ) -> List[Optional[float]]:
     """Read where the dispensing drives stand, in uL, the channels together, and record them.
 
     Args:
-      channels: which channels, 0-indexed from the back. Every channel when None.
+      use_channels: which channels, 0-indexed from the back. Every channel when None.
 
     Returns:
       One entry per channel of the device: the piston's position in uL, 0.0 at rest, air and
       liquid alike, for a channel asked; None for one not asked, whose record is left alone.
     """
-    asked = list(range(self.num_channels)) if channels is None else channels
+    asked = list(range(self.num_channels)) if use_channels is None else use_channels
     read = await asyncio.gather(*(self.dispensing_drive_request_uL_position(ch) for ch in asked))
     positions: List[Optional[float]] = [None] * self.num_channels
     for channel, uL in zip(asked, read):
@@ -2296,7 +2291,7 @@ class Pipettes:
 
   async def _diameter_that_probes(
     self,
-    channel_idx: int,
+    channel: int,
     allow_without_tip: bool,
     tip_bottom_diameter: float,
     stop_disc_diameter: float,
@@ -2305,7 +2300,7 @@ class Pipettes:
     allowed.
 
     Args:
-      channel_idx: the probing channel.
+      channel: the probing channel.
       allow_without_tip: whether a channel with no tip on it may probe.
       tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
       stop_disc_diameter: diameter of the stop disc in mm, when none is.
@@ -2316,19 +2311,19 @@ class Pipettes:
     Raises:
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
     """
-    has_tip = bool((await self.sense_tip_presence())[channel_idx])
+    has_tip = bool((await self.sense_tip_presence())[channel])
     if not has_tip and not allow_without_tip:
       raise RuntimeError(
-        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+        f"no tip on channel {channel}; pass allow_without_tip=True to probe without one"
       )
     return tip_bottom_diameter if has_tip else stop_disc_diameter
 
-  async def _overhang_that_probes(self, channel_idx: int, allow_without_tip: bool) -> float:
+  async def _overhang_that_probes(self, channel: int, allow_without_tip: bool) -> float:
     """How far below the stop disc the channel probes: the tip's overhang, or 0 when bare and
     allowed.
 
     Args:
-      channel_idx: the probing channel.
+      channel: the probing channel.
       allow_without_tip: whether a channel with no tip on it may probe.
 
     Returns:
@@ -2337,17 +2332,17 @@ class Pipettes:
     Raises:
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
     """
-    if not (await self.sense_tip_presence())[channel_idx]:
+    if not (await self.sense_tip_presence())[channel]:
       if not allow_without_tip:
         raise RuntimeError(
-          f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+          f"no tip on channel {channel}; pass allow_without_tip=True to probe without one"
         )
       return 0.0
-    return round(await self.request_tip_overhang(channel_idx), 1)
+    return round(await self.request_tip_overhang(channel), 1)
 
   async def probe_x_using_clld(
     self,
-    channel_idx: int,
+    channel: int,
     direction: Literal["left", "right"],
     *,
     search_end_position: Optional[float] = None,
@@ -2360,7 +2355,7 @@ class Pipettes:
     """Probe a conductive surface along X with a channel's cLLD, from where the arm stands.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       direction: "left" (decreasing x) or "right" (increasing x).
       search_end_position: where the search ends, in mm. The end of the reach in `direction` when
         None.
@@ -2378,9 +2373,9 @@ class Pipettes:
       RuntimeError: If no configuration has been read, or the channel carries no tip and
         `allow_without_tip` is False.
     """
-    self._require_channel(channel_idx)
+    self._require_channel(channel)
     diameter = await self._diameter_that_probes(
-      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+      channel, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
     )
     device = self._driver.configuration
     if device is None:
@@ -2457,7 +2452,7 @@ class Pipettes:
 
   async def probe_y_using_clld(
     self,
-    channel_idx: int,
+    channel: int,
     direction: Literal["forward", "backward"],
     *,
     search_start_position: Optional[float] = None,
@@ -2474,7 +2469,7 @@ class Pipettes:
     """Probe a conductive surface along Y with a channel's cLLD, never past its neighbours.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       direction: "forward" (decreasing y) or "backward" (increasing y).
       search_start_position: where to search from, in mm. Where the channel stands when None.
       search_end_position: where the search ends, in mm. As far as the neighbour allows when None.
@@ -2497,9 +2492,9 @@ class Pipettes:
       RuntimeError: If no configuration has been read, or the channel carries no tip and
         `allow_without_tip` is False.
     """
-    self._require_channel(channel_idx)
+    self._require_channel(channel)
     diameter = await self._diameter_that_probes(
-      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+      channel, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
     )
     c = self.configuration
     device = self._driver.configuration
@@ -2510,12 +2505,12 @@ class Pipettes:
 
     # What the channel may reach without meeting a neighbour
     ys = await self.request_y_positions()
-    if channel_idx > 0:
-      high = ys[channel_idx - 1] - self._min_spacing_between(channel_idx, channel_idx - 1)
+    if channel > 0:
+      high = ys[channel - 1] - self._min_spacing_between(channel, channel - 1)
     else:
       high = device.pip_maximal_y_position
-    if channel_idx < self.num_channels - 1:
-      low = ys[channel_idx + 1] + self._min_spacing_between(channel_idx, channel_idx + 1)
+    if channel < self.num_channels - 1:
+      low = ys[channel + 1] + self._min_spacing_between(channel, channel + 1)
     elif self.arm.side == "left":
       low = device.left_arm_min_y_position
     else:
@@ -2528,16 +2523,16 @@ class Pipettes:
         raise ValueError(f"{name} must be between {low} and {high} mm, is {value}")
 
     if search_start_position is not None:
-      await self.move_to_y_position(channel_idx, search_start_position)
-    here = await self.request_y_position(channel_idx)
+      await self.move_to_y_position(channel, search_start_position)
+    here = await self.request_y_position(channel)
     if direction == "backward":
       end = high if search_end_position is None else search_end_position
       if end < here:
-        raise ValueError(f"channel {channel_idx} cannot search backward from {here} to {end} mm")
+        raise ValueError(f"channel {channel} cannot search backward from {here} to {end} mm")
     else:
       end = low if search_end_position is None else search_end_position
       if end > here:
-        raise ValueError(f"channel {channel_idx} cannot search forward from {here} to {end} mm")
+        raise ValueError(f"channel {channel} cannot search forward from {here} to {end} mm")
 
     end_increments = c.y_drive_mm_to_increments(end)
     speed_increments = c.y_drive_mm_to_increments(search_speed)
@@ -2554,7 +2549,7 @@ class Pipettes:
     found = True
     try:
       await self._unchecked_fw_probe_y_using_clld(
-        channel_idx,
+        channel,
         end_position=end_increments,
         detection_edge=detection_edge,
         search_speed=speed_increments,
@@ -2562,20 +2557,20 @@ class Pipettes:
         current_limit=current_limit,
       )
     except STARFirmwareError as error:
-      if not self._found_nothing(error, self.channel_id(channel_idx)):
+      if not self._found_nothing(error, self.channel_id(channel)):
         raise
       found = False
-    detected = await self.request_y_position(channel_idx)
+    detected = await self.request_y_position(channel)
 
     # Back away from the surface, no further than the neighbour behind the move allows.
     if direction == "backward":
       await self.move_to_y_position(
-        channel_idx, detected - min(post_detection_distance, detected - low)
+        channel, detected - min(post_detection_distance, detected - low)
       )
       surface = detected + diameter / 2
     else:
       await self.move_to_y_position(
-        channel_idx, detected + min(post_detection_distance, high - detected)
+        channel, detected + min(post_detection_distance, high - detected)
       )
       surface = detected - diameter / 2
     return round(surface, 1) if found else None
@@ -2697,7 +2692,7 @@ class Pipettes:
 
   async def probe_z_using_clld(
     self,
-    channel_idx: int,
+    channel: int,
     *,
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
@@ -2708,14 +2703,14 @@ class Pipettes:
     post_detection_trajectory: Literal[0, 1] = 1,
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
-    move_channels_to_safe_pos_after: bool = False,
+    move_to_safe_z_position_after: bool = False,
   ) -> Optional[float]:
     """Lower a channel's tip until its cLLD triggers, and read the height it detected at.
 
     Z safety first on a firmware error; None when nothing was found.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       search_start_position: tip bottom height to search from, in mm. As high as the tip goes
         when None.
       search_end_position: lowest tip bottom height, in mm. The drive's floor when None.
@@ -2726,7 +2721,7 @@ class Pipettes:
       post_detection_trajectory: 0 moves down after detection, 1 up.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
       post_detection_distance: how far it moves after detection, in mm.
-      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
+      move_to_safe_z_position_after: whether to raise every channel to Z safety afterwards,
         instead of resting where the search left it.
 
     Returns:
@@ -2736,9 +2731,9 @@ class Pipettes:
       RuntimeError: If the channel carries no tip and `allow_without_tip` is False.
       ValueError: If an argument is out of range.
     """
-    self._require_channel(channel_idx)
+    self._require_channel(channel)
     # The search runs on the stop disc, which sits the overhang above the tip bottom.
-    overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
+    overhang = await self._overhang_that_probes(channel, allow_without_tip)
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
     top, floor = highest - overhang, round(lowest - overhang, 2)
@@ -2755,7 +2750,7 @@ class Pipettes:
       )
     try:
       await self._clld_search(
-        channel_idx,
+        channel,
         search_end_position + overhang,
         round(search_start_position + overhang, 2),
         search_speed=search_speed,
@@ -2767,12 +2762,12 @@ class Pipettes:
       )
     except STARFirmwareError as error:
       await self.move_to_safe_z()
-      if not self._found_nothing(error, self.channel_id(channel_idx)):
+      if not self._found_nothing(error, self.channel_id(channel)):
         raise
       return None
-    if move_channels_to_safe_pos_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
-    return (await self.request_last_lld_z_positions())[channel_idx]
+    return (await self.request_last_lld_z_positions())[channel]
 
   async def _unchecked_fw_probe_z_using_plld(
     self,
@@ -2918,8 +2913,7 @@ class Pipettes:
       approach_speed: above the start position, in mm/s.
       search_speed: in mm/s.
       acceleration: in mm/s2.
-      z_current_limit: Z drive current limit, 0 to 7.
-        `configuration.z_drive_current_limit_default` when None.
+      z_current_limit: Z drive current limit, 0 to 7. `default_z_current_limit` when None.
       tip_has_filter: whether the tip has a filter. What the model says of the mounted tip when
         None, and no filter if the model has none.
       dispensing_speed: of the dispensing drive during the search, in mm/s.
@@ -2956,7 +2950,7 @@ class Pipettes:
     if post_detection_trajectory not in (0, 1):
       raise ValueError(f"post_detection_trajectory must be 0 or 1, is {post_detection_trajectory}")
     if z_current_limit is None:
-      z_current_limit = c.z_drive_current_limit_default
+      z_current_limit = self.default_z_current_limit
     if tip_has_filter is None:
       tip = self.get_mounted_tip(channel)
       tip_has_filter = tip is not None and tip.has_filter
@@ -3056,14 +3050,14 @@ class Pipettes:
 
   async def probe_z_using_plld(
     self,
-    channel_idx: int,
+    channel: int,
     *,
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
     pressure_mode: Optional["Pipettes.PressureLLDMode"] = None,
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
-    move_channels_to_safe_pos_after: bool = False,
+    move_to_safe_z_position_after: bool = False,
     **search: Any,
   ) -> Optional[List[float]]:
     """Lower a channel's tip until the pressure says it met the liquid, and read the height.
@@ -3071,14 +3065,14 @@ class Pipettes:
     Other search settings pass to `_plld_search` by name and take its defaults.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       search_start_position: tip bottom height to search from, in mm. As high as the tip goes
         when None.
       search_end_position: lowest tip bottom height, in mm. The drive's floor when None.
       pressure_mode: what the search stops at. The liquid when None.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
       post_detection_distance: how far it moves after detection, in mm.
-      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
+      move_to_safe_z_position_after: whether to raise every channel to Z safety afterwards,
         instead of resting where the search left it.
       search: the rest of `_plld_search`'s settings, by name.
 
@@ -3090,8 +3084,8 @@ class Pipettes:
       RuntimeError: If the channel carries no tip and `allow_without_tip` is False.
       ValueError: If an argument is out of range.
     """
-    self._require_channel(channel_idx)
-    overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
+    self._require_channel(channel)
+    overhang = await self._overhang_that_probes(channel, allow_without_tip)
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
     top, floor = highest - overhang, round(lowest - overhang, 2)
@@ -3108,7 +3102,7 @@ class Pipettes:
       )
     try:
       detected = await self._plld_search(
-        channel_idx,
+        channel,
         search_end_position + overhang,
         round(search_start_position + overhang, 2),
         mode=pressure_mode,
@@ -3117,10 +3111,10 @@ class Pipettes:
       )
     except STARFirmwareError as error:
       await self.move_to_safe_z()
-      if not self._found_nothing(error, self.channel_id(channel_idx)):
+      if not self._found_nothing(error, self.channel_id(channel)):
         raise
       return None
-    if move_channels_to_safe_pos_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
     return [round(stop_disc - overhang, 2) for stop_disc in detected]
 
@@ -3251,7 +3245,7 @@ class Pipettes:
 
   async def probe_z_using_ztouch(
     self,
-    channel_idx: int,
+    channel: int,
     *,
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
@@ -3262,7 +3256,7 @@ class Pipettes:
     push_force_pwm: int = 0,
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
-    move_channels_to_safe_pos_after: bool = False,
+    move_to_safe_z_position_after: bool = False,
   ) -> Optional[float]:
     """Lower a channel's tip until it presses on something, and read the height.
 
@@ -3272,7 +3266,7 @@ class Pipettes:
     from 2022 on.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       search_start_position: tip bottom height the search starts from, in mm. As high as the tip
         goes when None.
       search_end_position: lowest tip bottom height, in mm. The drive's floor when None.
@@ -3283,7 +3277,7 @@ class Pipettes:
       push_force_pwm: the push-down force once stopped, 0 to 125; 0 switches the drive off.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
       post_detection_distance: how far the channel backs off afterwards, in mm; 0 stays.
-      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
+      move_to_safe_z_position_after: whether to raise every channel to Z safety afterwards,
         instead of resting where the search left it.
 
     Returns:
@@ -3294,10 +3288,10 @@ class Pipettes:
         firmware predates 2022.
       ValueError: If an argument is out of range.
     """
-    self._require_channel(channel_idx)
-    self._require_ztouch_firmware(channel_idx)
-    self._warn_ztouch_on_soft_tips([channel_idx])
-    overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
+    self._require_channel(channel)
+    self._require_ztouch_firmware(channel)
+    self._warn_ztouch_on_soft_tips([channel])
+    overhang = await self._overhang_that_probes(channel, allow_without_tip)
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
     top, floor = highest - overhang, round(lowest - overhang, 2)
@@ -3316,7 +3310,7 @@ class Pipettes:
       )
     try:
       stop_disc = await self._ztouch_search(
-        channel_idx,
+        channel,
         round(search_end_position + overhang, 2),
         round(search_start_position + overhang, 2),
         search_speed=search_speed,
@@ -3333,11 +3327,11 @@ class Pipettes:
     await self._record_where_they_stopped("z")
     tip_bottom = round(stop_disc - overhang, 2)
     touched = None if tip_bottom - search_end_position <= self._ztouch_end_allowance else tip_bottom
-    if move_channels_to_safe_pos_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
     elif post_detection_distance:
       await self.move_stop_disc_to_z_position(
-        channel_idx, round(stop_disc + post_detection_distance, 2)
+        channel, round(stop_disc + post_detection_distance, 2)
       )
     return touched
 
@@ -3554,7 +3548,7 @@ class Pipettes:
     """The stop disc window each channel of a batch searches, lowest channel number first.
 
     From `z_start`, capped at the drive's top, down to `below_bottom` under the cavity bottom,
-    both plus the channel's overhang.
+    capped at the drive's bottom, both plus the channel's overhang.
 
     Args:
       batch: the channels and which container each has, by job index.
@@ -3566,10 +3560,10 @@ class Pipettes:
     Returns:
       (channel, job, end, start) per channel, the heights in mm.
     """
-    top = self.configuration.z_range[1]
+    bottom, top = self.configuration.z_range
     windows = []
     for channel, job in sorted(zip(batch.channels, batch.indices)):
-      end = round(z_cavity_bottom[job] - below_bottom + overhangs[channel], 2)
+      end = round(max(z_cavity_bottom[job] - below_bottom + overhangs[channel], bottom), 2)
       start = round(min(z_start[job] + overhangs[channel], top), 2)
       windows.append((channel, job, end, start))
     return windows
@@ -3804,7 +3798,7 @@ class Pipettes:
   ) -> Dict[int, List[Optional[float]]]:
     """Z-touch the floor of every container of one batch, the channels in a cascade, n times.
 
-    From the top to `search_limit_below_cavity_bottom` under the cavity bottom, on the stop
+    From the top to `ztouch_search_limit_below_cavity_bottom` under the cavity bottom, on the stop
     disc. The channels go to their starts together at `approach_speed`, then set off
     `ztouch_cascade_interval` apart, lowest channel first. None where a channel reached the limit.
     They stay where they stopped; the next round approaches again.
@@ -3826,7 +3820,7 @@ class Pipettes:
       STARFirmwareError: As a channel answered.
     """
     searches = self._get_stop_disc_search_windows(
-      batch, overhangs, z_cavity_bottom, z_top, self.search_limit_below_cavity_bottom
+      batch, overhangs, z_cavity_bottom, z_top, self.ztouch_search_limit_below_cavity_bottom
     )
     found: Dict[int, List[Optional[float]]] = {job: [] for job in batch.indices}
     for _ in range(n_replicates):
@@ -3870,7 +3864,7 @@ class Pipettes:
     """Touch the floor of each container with a channel's tip, and say how high it is.
 
     Batched as `probe_liquid_heights`, the z-touch in place of the liquid search: from the top to
-    `search_limit_below_cavity_bottom` under the cavity bottom, the channels of a batch to
+    `ztouch_search_limit_below_cavity_bottom` under the cavity bottom, the channels of a batch to
     their starts together at `approach_speed`, then a cascade `ztouch_cascade_interval` apart.
     Channel firmware from 2022 on.
 
@@ -4122,8 +4116,8 @@ class Pipettes:
       begin_tip_pick_up_process: where the pick-up begins, in mm. The lowest location plus the
         collar height when None.
       end_tip_pick_up_process: where it ends, in mm. The lowest location when None.
-      minimum_traverse_height_start: how high the channels travel first, in mm.
-        `default_minimum_traverse_height` when None.
+      minimum_traverse_height_start: how high the channels travel first, in mm. As high as the
+        tips allow when None; never below 245.0.
       pickup_method: out of a rack or out of wash liquid. The tip's own when None.
 
     Returns:
@@ -4245,8 +4239,8 @@ class Pipettes:
       begin_tip_pick_up_process: where the pick-up begins, in mm. The spot plus the collar height
         when None.
       end_tip_pick_up_process: where it ends, in mm. The spot when None.
-      minimum_traverse_height_start: how high the channels travel first, in mm.
-        `default_minimum_traverse_height` when None.
+      minimum_traverse_height_start: how high the channels travel first, in mm. As high as the
+        tips allow when None; never below 245.0.
       pickup_method: out of a rack or out of wash liquid. The tip's own when None.
       x_tolerance: how far apart in X two spots may be and still go out in one command, in mm.
         None lets any two share one, as legacy sends them: the firmware works through the columns
@@ -4372,7 +4366,8 @@ class Pipettes:
       drop_method: how to let the tips go.
       begin_tip_deposit_process: where the deposit begins, in mm.
       end_tip_deposit_process: where it ends, in mm.
-      minimum_traverse_height_start: how high the channels travel first, in mm.
+      minimum_traverse_height_start: how high the channels travel first, in mm. As high as the
+        tips allow when None; never below 245.0.
       minimum_traverse_height_end: where the channels are left, in mm.
 
     Returns:
@@ -4514,7 +4509,8 @@ class Pipettes:
         None.
       begin_tip_deposit_process: where the deposit begins, in mm.
       end_tip_deposit_process: where it ends, in mm.
-      minimum_traverse_height_start: how high the channels travel first, in mm.
+      minimum_traverse_height_start: how high the channels travel first, in mm. As high as the
+        tips allow when None; never below 245.0.
       minimum_traverse_height_end: where the channels are left, in mm.
       x_tolerance: how far apart in X two spots may be and still go out in one command, in mm.
         None lets any two share one, as legacy sends them.
@@ -5209,7 +5205,7 @@ class Pipettes:
       if height is None:
         raise RuntimeError(
           f"channel {channel} met no floor in {containers[job].name} down to "
-          f"{self.search_limit_below_cavity_bottom} mm under its modelled cavity bottom"
+          f"{self.ztouch_search_limit_below_cavity_bottom} mm under its modelled cavity bottom"
         )
       logger.info(
         "channel %d touched the floor of %s at %.2f mm, the model has it at %.2f mm",
@@ -5655,6 +5651,11 @@ class Pipettes:
     )
     limit_curve = per_channel("limit_curve_indices", limit_curve_indices, 0)
     mixes = per_channel("pre_mixes", pre_mixes, None)
+    if any(m is not None and m.auto_surface_following for m in mixes):
+      raise ValueError(
+        "a mix's auto_surface_following is resolved by `aspirate`, which knows the surface; "
+        "give this layer a surface_following_distance"
+      )
     mix_volume = [m.volume if m is not None else 0.0 for m in mixes]
     mix_count = [m.repetitions if m is not None else 0 for m in mixes]
     mix_speed = [m.flow_rate if m is not None else 100.0 for m in mixes]
@@ -5842,6 +5843,142 @@ class Pipettes:
     finally:
       await self._record_after_command(use_channels)
 
+  def _get_lld_modes(
+    self,
+    containers: Sequence[Container],
+    lld_mode: Union[LLDMode, Sequence[LLDMode], None],
+    auto_surface_following: bool,
+    surface_following_distances: Optional[Sequence[float]],
+    liquid_heights: Optional[Sequence[Optional[float]]],
+    mixes: Optional[Sequence[Optional[Mix]]],
+    mixes_name: str,
+  ) -> List[LLDMode]:
+    """Each container's LLD mode: CAPACITIVE when None under auto surface following, else OFF.
+
+    Args:
+      containers: per job.
+      lld_mode: one for all, one per job, or None.
+      auto_surface_following: whether the tips follow by what the volume moves.
+      surface_following_distances: per job, or None.
+      liquid_heights: per job, or None.
+      mixes: per job, or None.
+      mixes_name: what the caller calls them, for a list that does not match.
+
+    Raises:
+      ValueError: Auto surface following beside a distance; auto surface following, the call's
+        or a mix's, under OFF without a liquid height.
+      RuntimeError: Auto surface following in a container without height-volume functions.
+    """
+    n = len(containers)
+    if lld_mode is None:
+      lld_mode = LLDMode.CAPACITIVE if auto_surface_following else LLDMode.OFF
+    modes = per_container(
+      "lld_mode", [lld_mode] * n if isinstance(lld_mode, LLDMode) else list(lld_mode), n
+    )
+    assert modes is not None
+    distances = per_container("surface_following_distances", surface_following_distances, n)
+    if auto_surface_following and distances is not None and any(d != 0.0 for d in distances):
+      raise ValueError(
+        "auto_surface_following beside surface_following_distances: give one of them"
+      )
+    heights = per_container("liquid_heights", liquid_heights, n) or [None] * n
+    mixed = per_container(mixes_name, mixes, n) or [None] * n
+    following = [
+      job
+      for job in range(n)
+      if auto_surface_following or (mixed[job] is not None and mixed[job].auto_surface_following)
+    ]
+    bare = [
+      containers[job].name
+      for job in following
+      if modes[job] == LLDMode.OFF and heights[job] is None
+    ]
+    if bare:
+      raise ValueError(
+        f"auto_surface_following under lld_mode OFF needs a liquid_height to follow from: {bare}"
+      )
+    unmodelled = [
+      containers[job].name
+      for job in following
+      if not containers[job].supports_compute_height_volume_functions()
+    ]
+    if unmodelled:
+      raise RuntimeError(
+        f"{unmodelled} have no height-volume functions, so a surface cannot become a volume"
+      )
+    return modes
+
+  @staticmethod
+  def _get_surface_change(container: Container, height: float, volume: float) -> float:
+    """How far `volume` uL added moves a surface `height` mm over the cavity bottom, in mm.
+
+    A negative volume is drawn, and lowers it.
+
+    Raises:
+      ValueError: The surface is outside the container's height-volume data.
+    """
+    try:
+      held = container.compute_volume_from_height(height)
+    except ValueError as error:
+      raise ValueError(
+        f"{container.name}'s surface at {height} mm is outside its height-volume data, so the "
+        "following it takes cannot be worked out"
+      ) from error
+    return round(container.compute_height_from_volume(max(held + volume, 0.0)) - height, 1)
+
+  def _get_auto_followings(
+    self,
+    containers: Sequence[Container],
+    volumes: Sequence[float],
+    heights: Sequence[float],
+    limits: Sequence[float],
+  ) -> List[float]:
+    """How far each tip follows the surface one batch moves, in mm, within its limit.
+
+    Channels in one container move its surface together; never less than 0.
+
+    Args:
+      containers: per channel of the batch.
+      volumes: per channel, in uL; negative is drawn.
+      heights: per channel, the surface over the cavity bottom, in mm.
+      limits: per channel, the travel it has: down to its floor, or up to the container's top.
+    """
+    followings = []
+    for container, height, limit in zip(containers, heights, limits):
+      moved = sum(v for c, v in zip(containers, volumes) if c is container)
+      change = abs(self._get_surface_change(container, height, moved))
+      followings.append(round(max(min(change, limit), 0.0), 1))
+    return followings
+
+  def _get_mix_followings(
+    self,
+    containers: Sequence[Container],
+    mixes: Sequence[Optional[Mix]],
+    heights: Sequence[float],
+    limits: Sequence[float],
+  ) -> List[Optional[Mix]]:
+    """Each mix, its auto surface following made a distance: what one draw lowers the surface.
+
+    Args:
+      containers: per channel of the batch.
+      mixes: per channel, or None.
+      heights: per channel, the surface over the cavity bottom when the mix runs, in mm.
+      limits: per channel, how far down the tip has to go, in mm.
+    """
+    resolved: List[Optional[Mix]] = []
+    for container, mix, height, limit in zip(containers, mixes, heights, limits):
+      if mix is None or not mix.auto_surface_following:
+        resolved.append(mix)
+        continue
+      # One draw on every channel mixing in this container lowers its surface together.
+      drawn = sum(m.volume for c, m in zip(containers, mixes) if c is container and m is not None)
+      drop = -self._get_surface_change(container, height, -drawn)
+      distance = round(max(min(drop, limit), 0.0), 1)
+      resolved.append(
+        dataclasses.replace(mix, surface_following_distance=distance, auto_surface_following=False)
+      )
+    return resolved
+
   async def aspirate(
     self,
     containers: Sequence[Container],
@@ -5849,7 +5986,7 @@ class Pipettes:
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
     liquid_heights: Optional[Sequence[Optional[float]]] = None,
-    lld_mode: Union[LLDMode, Sequence[LLDMode]] = LLDMode.OFF,
+    lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     flow_rates: Optional[Sequence[float]] = None,
     *,
     hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]] = None,
@@ -5865,6 +6002,7 @@ class Pipettes:
     pre_mixes: Optional[Sequence[Optional[Mix]]] = None,
     mix_positions_from_liquid_surface: Optional[Sequence[float]] = None,
     surface_following_distances: Optional[Sequence[float]] = None,
+    auto_surface_following: bool = False,
     second_section_heights: Optional[Sequence[float]] = None,
     second_section_ratios: Optional[Sequence[float]] = None,
     settling_times: Optional[Sequence[float]] = None,
@@ -5888,13 +6026,14 @@ class Pipettes:
     other's, draw at the surface found, set the tracker to the measured volume, warning when it
     is 20 % off, and refuse a container without liquid; their blow-out air is drawn beforehand
     at the traverse height, by `Px DC`, since the command would draw it with the tip on the
-    liquid; ZTOUCH touches the floor first, as `probe_z_heights_using_ztouch`, draws from it,
-    and refuses a container whose floor is not met; DUAL is not implemented. A draw past what a
-    container holds goes ahead and takes air, with a warning, an info line under ZTOUCH, where
-    emptying is the point. `volumes` with a liquid class, which corrects the piston volume and
-    fills what is not given, or `piston_volumes` as given. The tracker books what moved per
-    batch, before its command, committed on success; it never places a tip. Keyword arguments in
-    the order the aspiration runs; per-container lists in the containers' order.
+    liquid; ZTOUCH touches the floor first, as `probe_z_heights_using_ztouch`, draws
+    `ztouch_aspirate_height_above_bottom` above it, and refuses a container whose floor is not
+    met; DUAL is not implemented. A draw past what a container holds goes ahead and takes air,
+    with a warning, an info line under ZTOUCH, where emptying is the point. `volumes` with a
+    liquid class, which corrects the piston volume and fills what is not given, or
+    `piston_volumes` as given. The tracker books what moved per batch, before its command,
+    committed on success; it never places a tip. Keyword arguments in the order the aspiration
+    runs; per-container lists in the containers' order.
 
     Args:
       containers: any number.
@@ -5906,7 +6045,8 @@ class Pipettes:
       liquid_heights: where each OFF draw goes, above the cavity bottom, in mm. The cavity bottom
         when None. Refused for a container with an LLD mode, whose search finds the surface.
       lld_mode: how the liquid, or under ZTOUCH the floor, is found, one for all or one per
-        container. OFF goes to the surface as given. DUAL refuses.
+        container. OFF goes to the surface as given. DUAL refuses. OFF when None; CAPACITIVE under
+        `auto_surface_following`.
       flow_rates: in uL/s. The class's, else 100.0, when None.
       hamilton_liquid_classes: one per container. Looked up for the channel's tip, water, `jet`
         and `blow_out` when None.
@@ -5923,11 +6063,15 @@ class Pipettes:
         then presses onto the well's floor and draws with suction, as a harvest wants.
       pre_wetting_volumes: drawn and returned first, in uL. The class's over-aspirate volume, else
         0.0, when None.
-      pre_mixes: a `Mix` per container, mixed before the draw, None for no mixing.
+      pre_mixes: a `Mix` per container, mixed before the draw, None for no mixing. Its auto
+        surface following needs a surface, as the call's.
       mix_positions_from_liquid_surface: mixing depth under the surface, in mm, per container. 0.0
         when None.
       surface_following_distances: how far each tip follows the sinking surface, in mm. 0.0 when
         None.
+      auto_surface_following: follow by how far each batch's draw lowers the surface found, or the
+        one at `liquid_heights` under OFF; never below the floor, so nothing under ZTOUCH. Refused
+        beside a distance.
       second_section_heights: height of each container's narrower lower section, in mm. 3.2 when
         None.
       second_section_ratios: that section's bottom to top ratio, in tenths. 618.0 when None.
@@ -5951,11 +6095,13 @@ class Pipettes:
     Raises:
       ValueError: An argument out of range, lists that do not match, both or neither of `volumes`
         and `piston_volumes`, a class beside `piston_volumes`, no class for a channel's tip, a
-        liquid height beside an LLD mode, or a piston or a tip without room for its draws from
-        where it stands.
+        liquid height beside an LLD mode, a piston or a tip without room for its draws from where
+        it stands, or auto surface following beside a distance, under OFF without a liquid height,
+        or over a surface outside the container's height-volume data.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
-        container without height-volume functions under CAPACITIVE or PRESSURE, no liquid found
-        where the channels searched, or no floor met where they touched.
+        container without height-volume functions under CAPACITIVE, PRESSURE or auto surface
+        following, no liquid found where the channels searched, or no floor met where they
+        touched.
       NotImplementedError: DUAL.
       TooLittleVolumeError: A tip without room for what it is to draw.
     """
@@ -5969,10 +6115,15 @@ class Pipettes:
     during = default if minimum_traverse_height_during is None else minimum_traverse_height_during
     end = default if minimum_traverse_height_end is None else minimum_traverse_height_end
 
-    modes = per_container(
-      "lld_mode", [lld_mode] * n if isinstance(lld_mode, self.LLDMode) else list(lld_mode), n
+    modes = self._get_lld_modes(
+      containers,
+      lld_mode,
+      auto_surface_following,
+      surface_following_distances,
+      liquid_heights,
+      pre_mixes,
+      "pre_mixes",
     )
-    assert modes is not None
     if self.LLDMode.DUAL in modes:
       raise NotImplementedError("DUAL is not implemented; use CAPACITIVE or PRESSURE")
     touched = [job for job in range(n) if modes[job] == self.LLDMode.ZTOUCH]
@@ -6122,6 +6273,13 @@ class Pipettes:
         sent_floors=sent_floors,
         given_floors=given_floors,
       )
+      # The tip lifts off the bottom it touched, and so does the floor sent, so the draw does not
+      # press on it.
+      for job in batch.indices:
+        if job in touched:
+          surfaces[job] = round(surfaces[job] + self.ztouch_aspirate_height_above_bottom, 2)
+          if given_floors is None:
+            sent_floors[job] = surfaces[job]
       await self._search_liquid_of_batch(
         batch,
         searched=searched,
@@ -6157,6 +6315,26 @@ class Pipettes:
         "minimum_traverse_height_start": min(surfaces[job] for job in down) if down else raised_to,
         "lld_modes": [self.LLDMode.OFF] * len(jobs),
       }
+      # The surfaces the tips start from are known only now, after the batch's search.
+      here = [containers[job] for job in jobs]
+      heights_now = [max(round(surfaces[job] - floors[job], 2), 0.0) for job in jobs]
+      immersion = per_container_settings["immersion_depths"] or [0.0] * n
+      mix_depth = per_container_settings["mix_positions_from_liquid_surface"] or [0.0] * n
+      if auto_surface_following:
+        batch_following: Optional[List[float]] = self._get_auto_followings(
+          here,
+          [-liquid[job] for job in jobs],
+          heights_now,
+          [surfaces[job] - immersion[job] - sent_floors[job] for job in jobs],
+        )
+      else:
+        batch_following = None if following is None else [following[job] for job in jobs]
+      batch_mixes = self._get_mix_followings(
+        here,
+        [mixes[job] for job in jobs],
+        heights_now,
+        [surfaces[job] - mix_depth[job] - sent_floors[job] for job in jobs],
+      )
       await self._aspirate_in_one_move(
         batch.channels,
         [
@@ -6166,8 +6344,8 @@ class Pipettes:
         [searches[job] for job in jobs],
         [sent_floors[job] for job in jobs],
         [drawn[job] for job in jobs],
-        pre_mixes=[mixes[job] for job in jobs],
-        surface_following_distances=None if following is None else [following[job] for job in jobs],
+        pre_mixes=batch_mixes,
+        surface_following_distances=batch_following,
         minimum_traverse_height_end=end if last else during,
         **kwargs_to_start_from_current_positions,
         **per_channel_settings,
@@ -6454,6 +6632,11 @@ class Pipettes:
     )
     limit_curve = per_channel("limit_curve_indices", limit_curve_indices, 0)
     mixes = per_channel("post_mixes", post_mixes, None)
+    if any(m is not None and m.auto_surface_following for m in mixes):
+      raise ValueError(
+        "a mix's auto_surface_following is resolved by `dispense`, which knows the surface; "
+        "give this layer a surface_following_distance"
+      )
     mix_volume = [m.volume if m is not None else 0.0 for m in mixes]
     mix_count = [m.repetitions if m is not None else 0 for m in mixes]
     # Idle without a mix; 1.0, as legacy's dispense sends it, so the commands match.
@@ -6628,7 +6811,7 @@ class Pipettes:
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
     liquid_heights: Optional[Sequence[Optional[float]]] = None,
-    lld_mode: Union[LLDMode, Sequence[LLDMode]] = LLDMode.OFF,
+    lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     flow_rates: Optional[Sequence[float]] = None,
     *,
     hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]] = None,
@@ -6645,6 +6828,7 @@ class Pipettes:
     cut_off_speeds: Optional[Sequence[float]] = None,
     stop_back_volumes: Optional[Sequence[float]] = None,
     surface_following_distances: Optional[Sequence[float]] = None,
+    auto_surface_following: bool = False,
     second_section_heights: Optional[Sequence[float]] = None,
     second_section_ratios: Optional[Sequence[float]] = None,
     blow_out_air_volumes: Optional[Sequence[float]] = None,
@@ -6684,7 +6868,8 @@ class Pipettes:
       liquid_heights: where each OFF dispense goes, above the cavity bottom, in mm. The cavity
         bottom when None. Refused for a container with an LLD mode, whose search finds the surface.
       lld_mode: how the liquid, or under ZTOUCH the floor, is found, one for all or one per
-        container. OFF goes to the height given. PRESSURE and DUAL refuse.
+        container. OFF goes to the height given. PRESSURE and DUAL refuse. OFF when None;
+        CAPACITIVE under `auto_surface_following`.
       flow_rates: in uL/s. The class's, else 120.0, when None.
       hamilton_liquid_classes: one per container. Looked up for the channel's tip, water, `jet`
         and `blow_out` when None.
@@ -6705,12 +6890,16 @@ class Pipettes:
       stop_back_volumes: drawn back after each dispense, in uL. The class's, else 0.0, when None.
       surface_following_distances: how far each tip follows the rising surface, in mm. 0.0 when
         None.
+      auto_surface_following: follow by how far each batch's dispense raises the surface found, or
+        the one at `liquid_heights` under OFF; never above the top. Refused beside a distance. An
+        empty container has no surface to find: give OFF and `liquid_heights` there.
       second_section_heights: height of each container's narrower lower section, in mm. 3.2 when
         None.
       second_section_ratios: that section's bottom to top ratio, in tenths. 618.0 when None.
       blow_out_air_volumes: air pushed out after the liquid in a blow-out mode, in uL. The
         class's, else 0.0, when None.
-      post_mixes: a `Mix` per container, mixed after the dispense, None for no mixing.
+      post_mixes: a `Mix` per container, mixed after the dispense, None for no mixing. Its auto
+        surface following needs a surface, as the call's.
       mix_positions_from_liquid_surface: mixing depth under the surface, in mm, per container. 0.0
         when None.
       settling_times: wait after the dispense, in s. The class's, else 0.0, when None.
@@ -6731,11 +6920,13 @@ class Pipettes:
       ValueError: An argument out of range, lists that do not match, both or neither of `volumes`
         and `piston_volumes`, a class beside `piston_volumes`, no class for a channel's tip, a
         liquid height beside an LLD mode, a pressure or dual LLD mode, a piston without the travel
-        for its dispenses, or a container without room for them.
+        for its dispenses, a container without room for them, or auto surface following beside a
+        distance, under OFF without a liquid height, or over a surface outside the container's
+        height-volume data.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
-        container without height-volume functions under CAPACITIVE, no liquid found where the
-        channels searched, a container the search found without the room, or no floor met where
-        they touched.
+        container without height-volume functions under CAPACITIVE or auto surface following, no
+        liquid found where the channels searched, a container the search found without the room,
+        or no floor met where they touched.
     """
     deck = self._driver.deck
     if deck is None:
@@ -6747,10 +6938,15 @@ class Pipettes:
     during = default if minimum_traverse_height_during is None else minimum_traverse_height_during
     end = default if minimum_traverse_height_end is None else minimum_traverse_height_end
 
-    modes = per_container(
-      "lld_mode", [lld_mode] * n if isinstance(lld_mode, self.LLDMode) else list(lld_mode), n
+    modes = self._get_lld_modes(
+      containers,
+      lld_mode,
+      auto_surface_following,
+      surface_following_distances,
+      liquid_heights,
+      post_mixes,
+      "post_mixes",
     )
-    assert modes is not None
     for job, mode in enumerate(modes):
       if mode in (self.LLDMode.PRESSURE, self.LLDMode.DUAL):
         raise ValueError(
@@ -6922,6 +7118,35 @@ class Pipettes:
         "minimum_traverse_height_start": min(surfaces[job] for job in down) if down else raised_to,
         "lld_modes": [self.LLDMode.OFF] * len(jobs),
       }
+      # The surfaces the tips start from are known only now, after the batch's search.
+      here = [containers[job] for job in jobs]
+      heights_now = [max(round(surfaces[job] - floors[job], 2), 0.0) for job in jobs]
+      if auto_surface_following:
+        batch_following: Optional[List[float]] = self._get_auto_followings(
+          here,
+          [liquid[job] for job in jobs],
+          heights_now,
+          [tops[job] - surfaces[job] for job in jobs],
+        )
+      else:
+        batch_following = None if following is None else [following[job] for job in jobs]
+      # Only a post-mix that follows needs where the dispense left the surface.
+      rises = [0.0] * len(jobs)
+      for i, job in enumerate(jobs):
+        mix = mixes[job]
+        if mix is not None and mix.auto_surface_following:
+          given = sum(liquid[j] for j in jobs if containers[j] is containers[job])
+          rises[i] = max(self._get_surface_change(containers[job], heights_now[i], given), 0.0)
+      mix_depth = per_container_settings["mix_positions_from_liquid_surface"] or [0.0] * n
+      # A post-mix runs in the surface the dispense raised.
+      batch_mixes = self._get_mix_followings(
+        here,
+        [mixes[job] for job in jobs],
+        [height + rise for height, rise in zip(heights_now, rises)],
+        [
+          surfaces[job] + rise - mix_depth[job] - sent_floors[job] for rise, job in zip(rises, jobs)
+        ],
+      )
       await self._dispense_in_one_move(
         batch.channels,
         [
@@ -6935,8 +7160,8 @@ class Pipettes:
         blow_outs=[blow_outs[job] for job in jobs],
         empties=[empties[job] for job in jobs],
         side_touch_off_distance=side_touch_off_distance,
-        post_mixes=[mixes[job] for job in jobs],
-        surface_following_distances=None if following is None else [following[job] for job in jobs],
+        post_mixes=batch_mixes,
+        surface_following_distances=batch_following,
         minimum_traverse_height_end=end if last else during,
         **kwargs_to_start_from_current_positions,
         **per_channel_settings,
