@@ -14,6 +14,7 @@ from pylabrobot.hamilton.star.driver.configuration import read_configuration
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.head96 import Head96, Head96Configuration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources.coordinate import Coordinate
@@ -194,7 +195,8 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
         "C0ERxs01179xd0yh2418za2164zh2450ze2450",
         "H0DQdq11281dv13500du00000dr900000dw15",
         "C0EPxs01179xd0yh2418tt01wu0za2164zh2450ze2450",
-        "C0ERxs00420xd1yh1203za2164zh2450ze2450",
+        # The trash drop centres the array; legacy put A1 4.5 mm right and 58.5 mm forward of this.
+        "C0ERxs00465xd1yh1788za2164zh2450ze2450",
       ],
     )
 
@@ -370,4 +372,189 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
     self.driver.send_command = failing  # type: ignore[assignment]
     with self.assertRaises(STARFirmwareError):
       await self.head.mix(self.plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0))
+    self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])
+
+  async def test_a_one_well_plate_gets_the_array_centred_over_it(self):
+    from pylabrobot.resources.agenbio.plates import agenbio_1_troughplate_190mL_Fl
+    from pylabrobot.resources.hamilton.plate_carriers import PLT_CAR_L5AC_A00
+
+    carrier = PLT_CAR_L5AC_A00(name="trough carrier")
+    carrier[0] = trough_plate = agenbio_1_troughplate_190mL_Fl(name="trough")
+    self.deck.assign_child_resource(carrier, track=13)
+    trough = trough_plate.get_item(0)
+    centre = trough.get_location_wrt(self.deck, "c", "c", "b")
+    await self.head.mix(trough_plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0))
+    c = self.head.configuration
+    self.assertAlmostEqual(
+      await self.head.request_x_position(), centre.x - c.channel_array_size_x / 2, delta=0.1
+    )
+    self.assertAlmostEqual(
+      await self.head.request_y_position(), centre.y + c.channel_array_size_y / 2, delta=0.1
+    )
+
+  async def _record_lld(
+    self, rh: Optional[int] = None, zl_error: Optional[str] = None
+  ) -> List[str]:
+    """Answer H0 ZL and RH as given, and record every PA, PB, ZL, RH and head ZA, in order."""
+    answer = self.driver.send_command
+    order: List[str] = []
+
+    async def lld(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any):
+      if module == "H0" and command in ("ZL", "RH", "PA", "PB", "ZA"):
+        wire = {key: value for key, value in kwargs.items() if len(key) == 2}
+        order.append(assemble_command(module, command, **wire))
+      if module + command == "H0ZL":
+        if zl_error is not None:
+          check_fw_string_error(zl_error)
+        return ""
+      if module + command == "H0RH":
+        return {"rh": rh}
+      if module + command in ("H0PA", "H0PB"):
+        return ""
+      return await answer(module, command, fmt=fmt, **kwargs)
+
+    self.driver.send_command = lld  # type: ignore[assignment]
+    return order
+
+  async def test_under_clld_the_air_goes_in_first_and_the_head_rises_once(self):
+    well = self.plate.get_item("A1")
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    overhang = await self.head._overhang_that_probes()
+    c = self.head.configuration
+    order = await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 5.0 + overhang))
+    await self.head.mix(
+      self.plate,
+      Mix(volume=50.0, repetitions=2, flow_rate=100.0),
+      lld_mode=LLDMode.CAPACITIVE,
+    )
+    self.assertEqual(
+      [command[2:4] for command in order if command[2:4] != "ZA"],
+      ["PA", "ZL", "RH", "PA", "PB", "PA", "PB", "PB"],
+    )
+    zl = next(command for command in order if command.startswith("H0ZL"))
+    self.assertIn(f"zh{c.z_drive_mm_to_increments(bottom + overhang):05}", zl)
+    self.assertIn("zi0000", zl)
+    # Down from the surface to 2 mm under it, then the strokes; the rise comes before the air out.
+    moves = [command for command in order if command.startswith("H0ZA")]
+    self.assertIn(f"za{c.z_drive_mm_to_increments(bottom + 3.0 + overhang):05}", moves[-2])
+    self.assertTrue(order.index(moves[-1]) < len(order) - 1 and order[-1].startswith("H0PB"))
+    self.assertAlmostEqual(well.tracker.get_used_volume(), well.compute_volume_from_height(5.0))
+
+  async def test_under_clld_no_liquid_raises_and_the_head_goes_up(self):
+    await self._record_lld(zl_error="H0ZLid0001er70")
+    with self.assertRaises(RuntimeError):
+      await self.head.mix(
+        self.plate,
+        Mix(volume=50.0, repetitions=1, flow_rate=100.0),
+        lld_mode=LLDMode.CAPACITIVE,
+      )
+    self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])
+
+  async def test_probe_liquid_height_averages_the_rounds_from_the_cavity_bottom(self):
+    well = self.plate.get_item("A1")
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    overhang = await self.head._overhang_that_probes()
+    c = self.head.configuration
+    order = await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 4.0 + overhang))
+    height = await self.head.probe_liquid_height(self.plate, n_replicates=2)
+    self.assertAlmostEqual(height, 4.0, delta=0.01)
+    self.assertEqual(
+      [command[2:4] for command in order if command[2:4] in ("ZL", "RH")], ["ZL", "RH"] * 2
+    )
+    self.assertEqual(await self.head.request_z_position(), c.z_range[1])
+
+  async def test_probe_liquid_height_is_zero_where_nothing_is_met(self):
+    await self._record_lld(zl_error="H0ZLid0001er70")
+    self.assertEqual(await self.head.probe_liquid_height(self.plate), 0.0)
+
+  async def test_probe_liquid_volume_is_the_volume_at_the_height(self):
+    well = self.plate.get_item("A1")
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    overhang = await self.head._overhang_that_probes()
+    c = self.head.configuration
+    await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 4.0 + overhang))
+    volume = await self.head.probe_liquid_volume(self.plate)
+    self.assertAlmostEqual(volume, well.compute_volume_from_height(4.0), delta=1.0)
+
+
+class TestHead96InSimulation(unittest.IsolatedAsyncioTestCase):
+  """The simulator answers the head's searches and strokes from the model, with no stubs."""
+
+  async def asyncSetUp(self):
+    from pylabrobot.resources import set_tip_tracking
+    from pylabrobot.resources.agenbio.plates import agenbio_1_troughplate_190mL_Fl
+    from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL_filter
+    from pylabrobot.resources.hamilton.plate_carriers import PLT_CAR_L5AC_A00
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+    self.deck = STARLetDeck()
+    self.driver = STARSimulationDriver(
+      deck=self.deck, declared_configuration_json=RECORDING_STARLET
+    )
+    await self.driver.setup()
+    self.head = cast(Head96, self.driver.head96)
+    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car[1] = tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    self.deck.assign_child_resource(tip_car, track=1)
+    plate_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    plate_car[1] = self.plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate_car[3] = self.trough_plate = agenbio_1_troughplate_190mL_Fl(name="trough")
+    self.deck.assign_child_resource(plate_car, track=7)
+    await self.head.pick_up_tips(tip_rack)
+
+  def height_of(self, container, volume: float) -> float:
+    return float(round(container.compute_height_from_volume(volume), 2))
+
+  async def test_the_surface_is_read_from_the_tracker(self):
+    well = self.plate.get_item("A1")
+    well.tracker.set_volume(150.0)
+    height = await self.head.probe_liquid_height(self.plate)
+    self.assertAlmostEqual(height, self.height_of(well, 150.0), delta=0.02)
+
+  async def test_rh_is_the_stop_disc_zi_below_where_the_head_stops(self):
+    self.plate.get_item("A1").tracker.set_volume(150.0)
+    # The search does not move in X or Y: the head goes over the plate first.
+    await self.head._move_over(self.head._get_target(self.plate, None)[1], None, None)
+    await self.head.probe_z_using_clld(post_detection_distance=4.0)
+    self.assertAlmostEqual(
+      await self.head.request_z_position(),
+      await self.head.request_last_lld_z_position() + 4.0,
+      delta=0.01,
+    )
+
+  async def test_an_empty_well_reads_zero(self):
+    self.assertEqual(await self.head.probe_liquid_height(self.plate), 0.0)
+
+  async def test_a_one_well_trough_is_found_with_the_array_centred(self):
+    trough = self.trough_plate.get_item(0)
+    trough.tracker.set_volume(100_000.0)
+    height = await self.head.probe_liquid_height(self.trough_plate)
+    self.assertAlmostEqual(height, self.height_of(trough, 100_000.0), delta=0.02)
+
+  async def test_a_sensor_reads_only_its_own_corner(self):
+    g11 = self.plate.get_item("G11")
+    g11.tracker.set_volume(150.0)
+    self.assertEqual(await self.head.probe_liquid_height(self.plate, lld_sensor="A1 or B2"), 0.0)
+    height = await self.head.probe_liquid_height(self.plate, lld_sensor="G11 or H12")
+    self.assertAlmostEqual(height, self.height_of(g11, 150.0), delta=0.02)
+
+  async def test_a_mix_moves_the_piston_and_leaves_the_liquid(self):
+    trough = self.trough_plate.get_item(0)
+    trough.tracker.set_volume(100_000.0)
+    mix = Mix(volume=50.0, repetitions=3, flow_rate=100.0, surface_following_distance=1.0)
+    await self.head.mix(self.trough_plate, mix, offset=Coordinate(0, 0, 5.0))
+    self.assertAlmostEqual(self.driver.head96_dispensing_drive_uL, 0.0, delta=0.05)
+    self.assertEqual(trough.tracker.get_used_volume(), 100_000.0)
+
+  async def test_a_mix_under_clld_runs_end_to_end(self):
+    trough = self.trough_plate.get_item(0)
+    trough.tracker.set_volume(100_000.0)
+    await self.head.mix(
+      self.trough_plate,
+      Mix(volume=50.0, repetitions=2, flow_rate=100.0),
+      lld_mode=LLDMode.CAPACITIVE,
+    )
+    self.assertAlmostEqual(trough.tracker.get_used_volume(), 100_000.0, delta=50.0)
     self.assertEqual(await self.head.request_z_position(), self.head.configuration.z_range[1])

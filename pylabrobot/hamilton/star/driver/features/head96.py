@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Uni
 
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.features.head import Head, HeadConfiguration
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -249,6 +250,10 @@ class Head96(Head):
   default_mix_blow_out_air_volume: float = 5.0
   # Mix: how far above the well top the swap into it starts, in mm.
   mix_swap_start_clearance: float = 5.0
+  # Mix under cLLD: how far below the surface found the tips mix, in mm.
+  default_mix_position_from_liquid_surface: float = 2.0
+  # How far above a container's top a liquid search starts, in mm.
+  search_start_clearance: float = 5.0
 
   def __init__(self, driver: "STARDriver", configuration: Optional[Head96Configuration] = None):
     """
@@ -369,10 +374,10 @@ class Head96(Head):
   # -- where the head goes -----------------------------------------------------------------------
 
   def _position_centred_in(self, resource: Resource) -> Coordinate:
-    """Where head channel A1 lands with the head centred over a resource, in deck mm.
+    """Where head channel A1 lands with the channel array centred over a resource, in deck mm.
 
-    The head is rigid and the resource is whatever it is being pointed at, so the array is put in
-    the middle of it and A1 falls half a channel pitch in from the array's own corner.
+    A1 is the array's back-left channel: half the array left of the resource's centre and half
+    the array behind it.
 
     Args:
       resource: what to centre over.
@@ -389,8 +394,8 @@ class Head96(Head):
     c = self.configuration
     location = resource.get_location_wrt(deck)
     return Coordinate(
-      location.x + (resource.get_size_x() - c.channel_array_size_x) / 2 + c.channel_pitch / 2,
-      location.y + (resource.get_size_y() - c.channel_array_size_y) / 2 + c.channel_pitch / 2,
+      location.x + (resource.get_size_x() - c.channel_array_size_x) / 2,
+      location.y + (resource.get_size_y() + c.channel_array_size_y) / 2,
       location.z,
     )
 
@@ -606,15 +611,15 @@ class Head96(Head):
     self,
     end_position: int,
     start_position: int,
-    post_detection_distance: int,
-    post_detection_trajectory: Literal[0, 1],
-    lld_mode: Optional[int],
-    detection_edge: int,
-    detection_drop: int,
     approach_speed: int,
     search_speed: int,
     acceleration: int,
     current_limit: int,
+    lld_mode: Optional[int],
+    detection_edge: int,
+    detection_drop: int,
+    post_detection_trajectory: Literal[0, 1],
+    post_detection_distance: int,
     immersion_mode: Optional[Literal[0, 1]],
   ):
     """Lower the head until its cLLD triggers, as given, in Z increments. `H0 ZL`.
@@ -622,15 +627,15 @@ class Head96(Head):
     Args:
       end_position: stop disc height it goes no lower than (`zh`).
       start_position: stop disc height the search starts from (`zc`).
-      post_detection_distance: how far it moves after detection (`zi`).
-      post_detection_trajectory: 0 down, 1 up (`zj`).
-      lld_mode: which sensors trigger, 0 to 3 (`lm`); None leaves it out.
-      detection_edge: edge steepness, 0 to 1023 (`gt`).
-      detection_drop: offset after the edge, 0 to 1023 (`gl`).
       approach_speed: to the search start (`zv`).
       search_speed: during the search (`zl`).
       acceleration: in the drive's acceleration increments (`zr`).
       current_limit: motor current limit (`zw`).
+      lld_mode: which sensors trigger, 0 to 3 (`lm`); None leaves it out.
+      detection_edge: edge steepness, 0 to 1023 (`gt`).
+      detection_drop: offset after the edge, 0 to 1023 (`gl`).
+      post_detection_trajectory: 0 down, 1 up (`zj`).
+      post_detection_distance: how far it moves after detection (`zi`).
       immersion_mode: 0 normal, 1 no lower than `end_position` (`dj`); None leaves it out.
     """
     c = self.configuration
@@ -686,46 +691,63 @@ class Head96(Head):
     }[lld_sensor]:
       raise RuntimeError(f"no tip on the channels that feed lld_sensor={lld_sensor!r}")
 
-  async def probe_z_using_clld(
+  async def _overhang_that_probes(self) -> float:
+    """How far below the stop disc the head probes: the tips' overhang, to 0.1 mm.
+
+    Raises:
+      RuntimeError: If the head reports no tips.
+    """
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips, so there is no overhang to measure")
+    reference = await self.request_z_position()
+    return round(reference - (await self.request_location()).z, 1)
+
+  def _found_nothing(self, error: STARFirmwareError) -> bool:
+    """Whether a firmware error says only that a search reached its end without detecting.
+
+    The head answers that with trace 70.
+    """
+    module = self.configuration.module
+    return bool(error.errors) and all(
+      e.raw_module == module and e.trace_information == 70 for e in error.errors.values()
+    )
+
+  async def _clld_search(
     self,
-    *,
-    search_start_position: Optional[float] = None,
-    search_end_position: Optional[float] = None,
-    tip_overhang: Optional[float] = None,
+    end_position: float,
+    start_position: float,
     approach_speed: Optional[float] = None,
     search_speed: Optional[float] = None,
     acceleration: Optional[float] = None,
+    current_limit: Optional[int] = None,
     lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
     detection_edge: Optional[int] = None,
     detection_drop: Optional[int] = None,
+    post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_distance: Optional[float] = None,
     limit_immersion_to_search_end: bool = False,
-    current_limit: Optional[int] = None,
-    move_to_safe_z_after: bool = False,
-  ) -> float:
-    """Lower the head's tips until its cLLD triggers, and read the tip bottom height it detected at.
+  ) -> None:
+    """Run the head's cLLD search between two stop disc heights, every field checked.
+
+    Stop disc terms; no tip check; a search that finds nothing raises the head's error.
 
     Args:
-      search_start_position: tip bottom height to search from, in mm. The highest when None.
-      search_end_position: lowest tip bottom height, in mm. The lowest when None.
-      tip_overhang: tips below the stop disc, in mm. Measured when None.
+      end_position: stop disc height it goes no lower than, in mm.
+      start_position: stop disc height the search starts from, in mm.
       approach_speed: to the search start, in mm/s. `z_drive_speed_default` when None.
       search_speed: in mm/s. `default_clld_search_speed` when None.
       acceleration: in mm/s2. `default_clld_acceleration` when None.
+      current_limit: `z_drive_current_limit_default` when None.
       lld_sensor: which cLLD sensors trigger.
       detection_edge: 0 to 1023. `default_clld_detection_edge` when None.
       detection_drop: 0 to 1023. `default_clld_detection_drop` when None.
-      post_detection_distance: in mm, positive up. `default_clld_post_detection_distance` when None.
-      limit_immersion_to_search_end: never go below `search_end_position` after detection.
-      current_limit: `z_drive_current_limit_default` when None.
-      move_to_safe_z_after: raise the head to safe Z afterwards.
-
-    Returns:
-      The tip bottom height at detection, in mm.
+      post_detection_trajectory: 0 moves down after detection, 1 up.
+      post_detection_distance: in mm. `default_clld_post_detection_distance` when None.
+      limit_immersion_to_search_end: never go below `end_position` after detection.
 
     Raises:
-      ValueError: If an argument is out of range, or a sensor is chosen on 2008 firmware.
-      RuntimeError: If the channels feeding the sensor carry no tips.
+      ValueError: If a field is out of range, or a sensor is chosen on 2008 firmware.
+      STARFirmwareError: As the head answers, a search that found nothing included.
     """
     c = self.configuration
     lld_modes = {"G11 or H12": 0, "A1 or B2": 1, "any": 2, "all": 3}
@@ -736,20 +758,22 @@ class Head96(Head):
       if lld_sensor != "any":
         raise ValueError(f"lld_sensor={lld_sensor!r} needs 2013 firmware, which has `lm`")
       lld_mode = None
+    if post_detection_trajectory not in (0, 1):
+      raise ValueError(f"post_detection_trajectory must be 0 or 1, is {post_detection_trajectory}")
     if approach_speed is None:
       approach_speed = c.z_drive_speed_default
     if search_speed is None:
       search_speed = self.default_clld_search_speed
     if acceleration is None:
       acceleration = self.default_clld_acceleration
+    if current_limit is None:
+      current_limit = c.z_drive_current_limit_default
     if detection_edge is None:
       detection_edge = self.default_clld_detection_edge
     if detection_drop is None:
       detection_drop = self.default_clld_detection_drop
     if post_detection_distance is None:
       post_detection_distance = self.default_clld_post_detection_distance
-    if current_limit is None:
-      current_limit = c.z_drive_current_limit_default
     if c.firmware_year < 2010 and not 0 <= current_limit <= 7:
       raise ValueError(
         f"current_limit must be between 0 and 7 on 2008 firmware, is {current_limit}"
@@ -757,19 +781,83 @@ class Head96(Head):
     for checked, name in ((detection_edge, "detection_edge"), (detection_drop, "detection_drop")):
       if not 0 <= checked <= 1023:
         raise ValueError(f"{name} must be between 0 and 1023, is {checked}")
-    distance = c.z_drive_mm_to_increments(abs(post_detection_distance))
-    if distance > 9999:
+    distance = c.z_drive_mm_to_increments(post_detection_distance)
+    if not 0 <= distance <= 9999:
       raise ValueError(
-        f"post_detection_distance must be within {c.z_drive_increments_to_mm(9999)} mm, "
+        f"post_detection_distance must be between 0 and {c.z_drive_increments_to_mm(9999)} mm, "
         f"is {post_detection_distance}"
       )
+    self._check_move("z", start_position, approach_speed, acceleration, current_limit)
+    self._check_move("z", end_position, search_speed, acceleration, current_limit)
+    ramp = c.z_drive_acceleration_mm_to_increments(acceleration)
+    if c.firmware_year < 2010:
+      # The search takes the 2008 thousands rounded down.
+      ramp = c.z_drive_mm_to_increments(acceleration) // 1000
+    try:
+      await self._unchecked_fw_probe_z_using_clld(
+        end_position=c.z_drive_mm_to_increments(end_position),
+        start_position=c.z_drive_mm_to_increments(start_position),
+        approach_speed=c.z_drive_mm_to_increments(approach_speed),
+        search_speed=c.z_drive_mm_to_increments(search_speed),
+        acceleration=ramp,
+        current_limit=current_limit,
+        lld_mode=lld_mode,
+        detection_edge=detection_edge,
+        detection_drop=detection_drop,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_distance=distance,
+        immersion_mode=1 if limit_immersion_to_search_end else None,
+      )
+    finally:
+      await self._record_where_it_stopped("z")
 
+  async def probe_z_using_clld(
+    self,
+    *,
+    search_start_position: Optional[float] = None,
+    search_end_position: Optional[float] = None,
+    tip_overhang: Optional[float] = None,
+    approach_speed: Optional[float] = None,
+    search_speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    current_limit: Optional[int] = None,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
+    detection_edge: Optional[int] = None,
+    detection_drop: Optional[int] = None,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_distance: Optional[float] = None,
+    limit_immersion_to_search_end: bool = False,
+    move_to_safe_z_position_after: bool = False,
+  ) -> float:
+    """Lower the head's tips until its cLLD triggers, and read the tip bottom height it detected at.
+
+    Args:
+      search_start_position: tip bottom height to search from, in mm. The highest when None.
+      search_end_position: lowest tip bottom height, in mm. The lowest when None.
+      tip_overhang: tips below the stop disc, in mm. Measured when None.
+      approach_speed: to the search start, in mm/s. `z_drive_speed_default` when None.
+      search_speed: in mm/s. `default_clld_search_speed` when None.
+      acceleration: in mm/s2. `default_clld_acceleration` when None.
+      current_limit: `z_drive_current_limit_default` when None.
+      lld_sensor: which cLLD sensors trigger.
+      detection_edge: 0 to 1023. `default_clld_detection_edge` when None.
+      detection_drop: 0 to 1023. `default_clld_detection_drop` when None.
+      post_detection_trajectory: 0 moves down after detection, 1 up.
+      post_detection_distance: in mm. `default_clld_post_detection_distance` when None.
+      limit_immersion_to_search_end: never go below `search_end_position` after detection.
+      move_to_safe_z_position_after: raise the head to safe Z afterwards.
+
+    Returns:
+      The tip bottom height at detection, in mm.
+
+    Raises:
+      ValueError: If an argument is out of range, or a sensor is chosen on 2008 firmware.
+      RuntimeError: If the channels feeding the sensor carry no tips.
+    """
+    c = self.configuration
     await self._require_tips_feeding(lld_sensor)
     if tip_overhang is None:
-      if not await self.request_tip_presence():
-        raise RuntimeError("the head reports no tips, so there is no overhang to measure")
-      reference = await self.request_z_position()
-      tip_overhang = round(reference - (await self.request_location()).z, 1)
+      tip_overhang = await self._overhang_that_probes()
     if search_start_position is None:
       search_start_position = round(c.z_range[1] - tip_overhang, 2)
     if search_end_position is None:
@@ -778,36 +866,28 @@ class Head96(Head):
       raise ValueError(
         f"search_end_position must be at least {c.min_tool_bottom_z}, is {search_end_position}"
       )
-    start = round(search_start_position + tip_overhang, 2)
-    end = round(search_end_position + tip_overhang, 2)
-    self._check_move("z", start, approach_speed, acceleration, current_limit)
-    self._check_move("z", end, search_speed, acceleration, current_limit)
-    ramp = c.z_drive_acceleration_mm_to_increments(acceleration)
-    if c.firmware_year < 2010:
-      # The search takes the 2008 thousands rounded down.
-      ramp = c.z_drive_mm_to_increments(acceleration) // 1000
 
     try:
-      await self._unchecked_fw_probe_z_using_clld(
-        end_position=c.z_drive_mm_to_increments(end),
-        start_position=c.z_drive_mm_to_increments(start),
-        post_detection_distance=distance,
-        post_detection_trajectory=1 if post_detection_distance >= 0 else 0,
-        lld_mode=lld_mode,
+      await self._clld_search(
+        round(search_end_position + tip_overhang, 2),
+        round(search_start_position + tip_overhang, 2),
+        approach_speed=approach_speed,
+        search_speed=search_speed,
+        acceleration=acceleration,
+        current_limit=current_limit,
+        lld_sensor=lld_sensor,
         detection_edge=detection_edge,
         detection_drop=detection_drop,
-        approach_speed=c.z_drive_mm_to_increments(approach_speed),
-        search_speed=c.z_drive_mm_to_increments(search_speed),
-        acceleration=ramp,
-        current_limit=current_limit,
-        immersion_mode=1 if limit_immersion_to_search_end else None,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_distance=post_detection_distance,
+        limit_immersion_to_search_end=limit_immersion_to_search_end,
       )
     except STARFirmwareError:
       await self.move_to_safe_z()
       raise
     # RH is the stop disc at detection: on a device it read exactly `zi` below the RZ that followed.
     detected = round(await self.request_last_lld_z_position() - tip_overhang, 2)
-    if move_to_safe_z_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
     return detected
 
@@ -1003,63 +1083,62 @@ class Head96(Head):
         "Call `await star.iswap.park()` first."
       )
 
-  async def mix(
-    self,
-    resource: Union[Plate, Container, List[Well]],
-    mix: Mix,
-    offset: Optional[Coordinate] = None,
-    *,
-    minimum_traverse_height_start: Optional[float] = None,
-    descent_speed: Optional[float] = None,
-    blow_out_air_volume: Optional[float] = None,
-    swap_speed: Optional[float] = None,
-    settling_time: float = 0.0,
-    minimum_traverse_height_end: Optional[float] = None,
-  ) -> None:
-    """Mix in place with the whole head: channel A1 over well A1, then `mix.repetitions` strokes.
+  def _get_target(
+    self, resource: Union[Plate, Container, List[Well]], offset: Optional[Coordinate]
+  ) -> Tuple[Container, Coordinate, float, float]:
+    """The container a head operation works in, where head channel A1 goes, its floor and its top.
 
-    Each draw follows the surface down by `mix.surface_following_distance` to the cavity bottom and
-    each expel follows it back up, so the tips do not drift.
+    Over a plate of many wells A1 goes over well A1; over a single container, or a plate of one
+    well, the channel array is centred over it.
 
     Args:
-      resource: a plate (well A1), a container, or wells (the first).
-      mix: volume, repetitions, flow rate and surface following distance.
+      resource: a plate (well A1, or its one well), a container, or wells (the first).
       offset: added to where head channel A1 goes, in mm.
-      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
-      descent_speed: to just above the well, in mm/s. `default_mix_descent_speed` when None.
-      blow_out_air_volume: air drawn above the well and expelled there after, in uL; 0 skips it.
-        `default_mix_blow_out_air_volume` when None.
-      swap_speed: into and out of the well, in mm/s. `default_mix_swap_speed` when None.
-      settling_time: wait after the last stroke, in s.
-      minimum_traverse_height_end: tip bottom height after mixing, in mm. Safe Z when None.
+
+    Returns:
+      The container; A1's position at its cavity bottom plus `offset`; its cavity bottom and top
+      Z, in deck mm.
 
     Raises:
-      ValueError: If an argument is out of range.
-      RuntimeError: If the head carries no tips, the iSWAP is not parked, or the driver was given
-        no deck.
+      RuntimeError: If the driver was given no deck.
     """
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
-    if settling_time < 0:
-      raise ValueError(f"settling_time must be at least 0, is {settling_time}")
-    if descent_speed is None:
-      descent_speed = self.default_mix_descent_speed
-    if blow_out_air_volume is None:
-      blow_out_air_volume = self.default_mix_blow_out_air_volume
-    if swap_speed is None:
-      swap_speed = self.default_mix_swap_speed
     if isinstance(resource, Plate):
       anchor: Container = resource.get_item(0)
+      centred = resource.num_items == 1
     elif isinstance(resource, list):
-      anchor = resource[0]
+      anchor, centred = resource[0], False
     else:
       anchor = resource
-    a1 = anchor.get_location_wrt(deck, x="c", y="c", z="cavity_bottom") + (
-      offset or Coordinate.zero()
-    )
-    z_top = anchor.get_location_wrt(deck, x="c", y="c", z="t").z
+      plate = anchor.parent if isinstance(anchor, Well) else None
+      centred = not isinstance(plate, Plate) or plate.num_items == 1
+    a1 = anchor.get_location_wrt(deck, x="c", y="c", z="cavity_bottom")
+    bottom = a1.z
+    if centred:
+      centre = self._position_centred_in(anchor)
+      a1 = Coordinate(centre.x, centre.y, a1.z)
+    a1 += offset or Coordinate.zero()
+    top = anchor.get_location_wrt(deck, x="c", y="c", z="t").z
+    return anchor, a1, bottom, top
 
+  async def _move_over(
+    self,
+    a1: Coordinate,
+    minimum_traverse_height_start: Optional[float],
+    descent_speed: Optional[float],
+  ) -> None:
+    """Bring the head, with tips, over a position: the channels up, the head up, then X and Y.
+
+    Args:
+      a1: where head channel A1 goes, in deck mm; its Z is not used.
+      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      descent_speed: to that height, in mm/s.
+
+    Raises:
+      RuntimeError: If the head carries no tips or the iSWAP is not parked.
+    """
     await self._require_iswap_parked()
     if not await self.request_tip_presence():
       raise RuntimeError("the head reports no tips; pick up tips first")
@@ -1076,32 +1155,263 @@ class Head96(Head):
       self.move_to_y_position(a1.y),
     )
 
-    following = mix.surface_following_distance or 0.0
-    floor = a1.z
-    start = a1.z + following
-    swap_start = z_top + self.mix_swap_start_clearance
+  async def _search_surface(
+    self,
+    bottom: float,
+    top: float,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"],
+    search_speed: Optional[float],
+  ) -> Optional[float]:
+    """Search down by cLLD from `search_start_clearance` over the top to the cavity bottom.
+
+    No move after detection: the tips stay on the surface.
+
+    Args:
+      bottom: the cavity bottom, in deck mm.
+      top: the container's top, in deck mm.
+      lld_sensor: which cLLD sensors trigger.
+      search_speed: in mm/s. `default_clld_search_speed` when None.
+
+    Returns:
+      The surface's height, tip bottom on the deck in mm; None when nothing was found.
+    """
+    overhang = await self._overhang_that_probes()
     try:
-      await self.move_tool_bottom_to_z_position(swap_start, speed=descent_speed)
-      if blow_out_air_volume:
-        await self._aspirate(blow_out_air_volume, mix.flow_rate, minimum_height=floor)
-      await self.move_tool_bottom_to_z_position(start, speed=swap_speed)
+      await self._clld_search(
+        round(bottom + overhang, 2),
+        round(top + self.search_start_clearance + overhang, 2),
+        search_speed=search_speed,
+        lld_sensor=lld_sensor,
+        post_detection_distance=0.0,
+      )
+    except STARFirmwareError as error:
+      if self._found_nothing(error):
+        return None
+      raise
+    return round(await self.request_last_lld_z_position() - overhang, 2)
+
+  async def mix(
+    self,
+    resource: Union[Plate, Container, List[Well]],
+    mix: Mix,
+    offset: Optional[Coordinate] = None,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    lld_mode: LLDMode = LLDMode.OFF,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
+    search_speed: Optional[float] = None,
+    descent_speed: Optional[float] = None,
+    blow_out_air_volume: Optional[float] = None,
+    mix_position_from_liquid_surface: Optional[float] = None,
+    swap_speed: Optional[float] = None,
+    settling_time: float = 0.0,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> None:
+    """Mix in place with the whole head, then `mix.repetitions` strokes.
+
+    Over a plate of many wells head channel A1 goes over well A1; over a single container, or a
+    plate of one well, the channel array is centred over it. Each draw follows the surface down by
+    `mix.surface_following_distance` and each expel follows it back up, so the tips do not drift;
+    no stroke goes below the cavity bottom. OFF mixes at `offset` z above the cavity bottom, with
+    the blowout air drawn and expelled over the well. CAPACITIVE draws the air at the traverse
+    height, finds the surface by cLLD, sets the tracker to the volume found, mixes
+    `mix_position_from_liquid_surface` below it and expels the air once risen.
+
+    Args:
+      resource: a plate (well A1, or its one well), a container, or wells (the first).
+      mix: volume, repetitions, flow rate and surface following distance.
+      offset: added to where head channel A1 goes, in mm. Its z is ignored under CAPACITIVE.
+      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other.
+      lld_sensor: which cLLD sensors trigger, under CAPACITIVE.
+      search_speed: in mm/s, under CAPACITIVE. `default_clld_search_speed` when None.
+      descent_speed: to just above the well, in mm/s. `default_mix_descent_speed` when None.
+      blow_out_air_volume: air drawn before mixing and expelled after, in uL; 0 skips it.
+        `default_mix_blow_out_air_volume` when None.
+      mix_position_from_liquid_surface: how far below the surface found the tips mix, in mm, under
+        CAPACITIVE. `default_mix_position_from_liquid_surface` when None.
+      swap_speed: into and out of the well, in mm/s. `default_mix_swap_speed` when None.
+      settling_time: wait after the last stroke, in s.
+      minimum_traverse_height_end: tip bottom height after mixing, in mm. Safe Z when None.
+
+    Raises:
+      ValueError: If an argument is out of range.
+      RuntimeError: If the head carries no tips, the iSWAP is not parked, the driver was given no
+        deck, or a CAPACITIVE search found no liquid.
+    """
+    if lld_mode not in (LLDMode.OFF, LLDMode.CAPACITIVE):
+      raise ValueError(f"the 96-head mixes with lld_mode OFF or CAPACITIVE, not {lld_mode.name}")
+    if settling_time < 0:
+      raise ValueError(f"settling_time must be at least 0, is {settling_time}")
+    if descent_speed is None:
+      descent_speed = self.default_mix_descent_speed
+    if blow_out_air_volume is None:
+      blow_out_air_volume = self.default_mix_blow_out_air_volume
+    if mix_position_from_liquid_surface is None:
+      mix_position_from_liquid_surface = self.default_mix_position_from_liquid_surface
+    if mix_position_from_liquid_surface < 0:
+      raise ValueError(
+        "mix_position_from_liquid_surface must be at least 0, "
+        f"is {mix_position_from_liquid_surface}"
+      )
+    if swap_speed is None:
+      swap_speed = self.default_mix_swap_speed
+    anchor, a1, bottom, z_top = self._get_target(resource, offset)
+    following = mix.surface_following_distance or 0.0
+    await self._move_over(a1, minimum_traverse_height_start, descent_speed)
+
+    async def strokes() -> None:
       for _ in range(mix.repetitions):
         await self._aspirate(
-          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=floor
+          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=bottom
         )
         await self._dispense(
-          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=floor
+          mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=bottom
         )
       if settling_time:
         await asyncio.sleep(settling_time)
-      await self.move_tool_bottom_to_z_position(swap_start, speed=swap_speed)
+
+    async def rise() -> None:
+      if minimum_traverse_height_end is None:
+        await self.move_to_safe_z()
+      else:
+        await self.move_tool_bottom_to_z_position(minimum_traverse_height_end, speed=descent_speed)
+
+    if lld_mode == LLDMode.OFF:
+      start = a1.z + following
+      swap_start = z_top + self.mix_swap_start_clearance
+      try:
+        await self.move_tool_bottom_to_z_position(swap_start, speed=descent_speed)
+        if blow_out_air_volume:
+          await self._aspirate(blow_out_air_volume, mix.flow_rate, minimum_height=bottom)
+        await self.move_tool_bottom_to_z_position(start, speed=swap_speed)
+        await strokes()
+        await self.move_tool_bottom_to_z_position(swap_start, speed=swap_speed)
+        if blow_out_air_volume:
+          await self._dispense(blow_out_air_volume, mix.flow_rate)
+      except STARFirmwareError:
+        await self.move_to_safe_z()
+        raise
+      await rise()
+      return
+
+    # CAPACITIVE: the air in the tips before they reach the liquid, then down once.
+    try:
       if blow_out_air_volume:
-        await self._dispense(blow_out_air_volume, mix.flow_rate)
-    except STARFirmwareError:
+        await self._aspirate(blow_out_air_volume, mix.flow_rate, minimum_height=bottom)
+      found = await self._search_surface(bottom, z_top, lld_sensor, search_speed)
+      if found is None:
+        raise RuntimeError(f"no liquid found in {anchor.name} down to its cavity bottom")
+      surface = found
+      if anchor.supports_compute_height_volume_functions():
+        anchor.tracker.set_volume(anchor.compute_volume_from_height(max(surface - bottom, 0.0)))
+      start = max(round(surface - mix_position_from_liquid_surface, 2), bottom)
+      await self.move_tool_bottom_to_z_position(start, speed=swap_speed)
+      await strokes()
+    except BaseException:
       await self.move_to_safe_z()
       raise
+    await rise()
+    if blow_out_air_volume:
+      await self._dispense(blow_out_air_volume, mix.flow_rate)
 
+  # -- liquid probing ----------------------------------------------------------------------------
+
+  async def probe_liquid_height(
+    self,
+    resource: Union[Plate, Container, List[Well]],
+    offset: Optional[Coordinate] = None,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
+    search_speed: Optional[float] = None,
+    n_replicates: int = 1,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> float:
+    """Find the liquid surface in a container with the whole head, and say how high it stands.
+
+    Positioned as `mix` is; searched by cLLD from `search_start_clearance` over the top to the
+    cavity bottom, `n_replicates` times, the tips staying on the surface between rounds. Safe Z at
+    the end unless told where to stay.
+
+    Args:
+      resource: a plate (well A1, or its one well), a container, or wells (the first).
+      offset: added to where head channel A1 goes, in mm; its z is not used.
+      lld_sensor: which cLLD sensors trigger.
+      search_speed: in mm/s. `default_clld_search_speed` when None.
+      n_replicates: how many searches; the heights are averaged.
+      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      minimum_traverse_height_end: where the tips are left, in mm. Safe Z when None.
+
+    Returns:
+      How high the liquid stands above the cavity bottom, in mm; 0.0 where none was met.
+
+    Raises:
+      ValueError: If an argument is out of range.
+      RuntimeError: If the head carries no tips, the iSWAP is not parked, the driver was given no
+        deck, or liquid was found in some rounds and not in others.
+    """
+    if n_replicates < 1:
+      raise ValueError(f"n_replicates must be at least 1, is {n_replicates}")
+    anchor, a1, bottom, top = self._get_target(resource, offset)
+    await self._move_over(a1, minimum_traverse_height_start, None)
+    try:
+      rounds = [
+        await self._search_surface(bottom, top, lld_sensor, search_speed)
+        for _ in range(n_replicates)
+      ]
+    except BaseException:
+      await self.move_to_safe_z()
+      raise
+    found = [surface for surface in rounds if surface is not None]
+    if found and len(found) != len(rounds):
+      await self.move_to_safe_z()
+      raise RuntimeError(
+        f"liquid found in {len(found)} of {len(rounds)} rounds in {anchor.name}, so it may be at "
+        "the detection limit"
+      )
     if minimum_traverse_height_end is None:
       await self.move_to_safe_z()
     else:
-      await self.move_tool_bottom_to_z_position(minimum_traverse_height_end, speed=descent_speed)
+      await self.move_tool_bottom_to_z_position(minimum_traverse_height_end)
+    # The bottom is known, so a container in which no liquid was met stands at 0.0.
+    return round(sum(found) / len(found) - bottom, 2) if found else 0.0
+
+  async def probe_liquid_volume(
+    self,
+    resource: Union[Plate, Container, List[Well]],
+    offset: Optional[Coordinate] = None,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
+    search_speed: Optional[float] = None,
+    n_replicates: int = 1,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> float:
+    """Find the liquid as `probe_liquid_height` does, and say how much there is.
+
+    The container has to know its height-volume functions; over a plate it is well A1's volume.
+
+    Args:
+      As `probe_liquid_height`.
+
+    Returns:
+      The volume, in uL; what its function makes of 0.0 where no liquid was met.
+
+    Raises:
+      ValueError: If the container has no height-to-volume function, or as `probe_liquid_height`.
+      RuntimeError: As `probe_liquid_height`.
+    """
+    anchor = self._get_target(resource, offset)[0]
+    if not anchor.supports_compute_height_volume_functions():
+      raise ValueError(f"no height-to-volume function for {anchor.name}")
+    height = await self.probe_liquid_height(
+      resource,
+      offset,
+      lld_sensor,
+      search_speed,
+      n_replicates,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      minimum_traverse_height_end=minimum_traverse_height_end,
+    )
+    return anchor.compute_volume_from_height(height)

@@ -62,6 +62,7 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 )
 from pylabrobot.resources.hamilton.tip_creators import TipDropMethod, TipPickupMethod
 from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,29 @@ SIMULATED_CHANNEL_DRIVE_PARAMETERS = {"zv": 12_000, "zr": 75, "yv": 6_000, "yr":
 
 # What its scanner reads. A simulated deck holds no carriers, so nothing.
 SIMULATED_BARCODE: Optional[str] = None
+
+
+def _get_container_under(deck: Resource, x: float, y: float) -> Optional[Container]:
+  """The smallest container on the deck whose footprint holds the point, or None.
+
+  A stand-in for a lookup by position the model does not have yet: every container is asked in
+  turn, which is fine for a deck of hundreds and no more.
+  """
+  found: Optional[Container] = None
+  for resource in deck.get_all_children():
+    if not isinstance(resource, Container) or isinstance(resource, Trash):
+      continue
+    corner = resource.get_location_wrt(deck)
+    if not (
+      corner.x <= x <= corner.x + resource.get_size_x()
+      and corner.y <= y <= corner.y + resource.get_size_y()
+    ):
+      continue
+    if found is None or resource.get_size_x() * resource.get_size_y() < (
+      found.get_size_x() * found.get_size_y()
+    ):
+      found = resource
+  return found
 
 
 class _UnusedTransport(IOBase):
@@ -270,30 +294,12 @@ class SimulatedPipettes(_Simulated, Pipettes):
     super().update_location_by_reference_point(channel, y=y, z=z)
 
   def _container_under(self, channel: int) -> Optional[Container]:
-    """The smallest container on the deck whose footprint has the channel's tip over it, or None.
-
-    A stand-in for a lookup by position the model does not have yet: every container is asked in
-    turn, which is fine for a deck of hundreds and no more.
-    """
+    """The smallest container on the deck whose footprint has the channel's tip over it, or None."""
     deck = self._driver.deck
     point = self.get_reference_point_location(channel)
     if deck is None or point is None:
       return None
-    found: Optional[Container] = None
-    for resource in deck.get_all_children():
-      if not isinstance(resource, Container) or isinstance(resource, Trash):
-        continue
-      corner = resource.get_location_wrt(deck)
-      if not (
-        corner.x <= point.x <= corner.x + resource.get_size_x()
-        and corner.y <= point.y <= corner.y + resource.get_size_y()
-      ):
-        continue
-      if found is None or resource.get_size_x() * resource.get_size_y() < (
-        found.get_size_x() * found.get_size_y()
-      ):
-        found = resource
-    return found
+    return _get_container_under(deck, point.x, point.y)
 
   def _liquid_surface(self, channel: int) -> Tuple[Optional[Container], Optional[float]]:
     """The container a channel searches and where its liquid stands, in mm on the deck.
@@ -829,7 +835,8 @@ class _SimulatedHead(_Simulated, Head):
       # arm there is nothing to read, and it answers from the middle of its travel.
       deck = self.device.deck
       if self.resource is not None and self.resource.location is not None and deck is not None:
-        y = round(self.resource.get_item(HEAD_REFERENCE_SHAFT).get_location_wrt(deck).y, 2)
+        shaft = self.resource.get_item(HEAD_REFERENCE_SHAFT)
+        y = round(shaft.get_location_wrt(deck, "c", "c", "b").y, 2)
       else:
         # Nothing models it yet, so where it parks: the home slot of its own stored table.
         y = c.y_drive_increments_to_mm(self._stored("py")["home"] + c.predefined_y_position_origin)
@@ -963,6 +970,92 @@ class SimulatedHead96(_SimulatedHead, Head96):
     if parameter in documented:
       return documented[parameter]
     return super()._simulated_drive_parameter(parameter)
+
+  def _modelled_z(self) -> float:
+    """Where the model has the head's stop disc, in mm on the deck."""
+    deck = self.device.deck
+    if self.resource is None or self.resource.location is None or deck is None:
+      return self._z_safety
+    return round(self.resource.get_item(HEAD_REFERENCE_SHAFT).get_location_wrt(deck).z, 2)
+
+  def _answer_clld_search(self, **kwargs: Any) -> Tuple[Any, str]:
+    """What `ZL` answers: the surface under the sensing channels, or nothing.
+
+    `lm` picks the sensing channels, those with a tip only: G11/H12, A1/B2, or all four corners.
+    Each detects at its container's surface plus its tip's overhang; either sensor triggers first
+    at the highest, both only at the lowest. The stop disc ends `zi` above where it detected, as
+    `zj` 1 leaves it, and the height is latched for `RH`. A search that meets no liquid above `zh`
+    ends there, zeroes the latch, and answers as the device does, with trace 70.
+    """
+    c = self.configuration
+    deck = self.device.deck
+    end = c.z_drive_increments_to_mm(int(kwargs["zh"]))
+    mode = int(kwargs.get("lm", 2))
+    names = {0: ("G11", "H12"), 1: ("A1", "B2")}.get(mode, ("A1", "B2", "G11", "H12"))
+    detections: List[Tuple[float, Optional[Container]]] = []
+    if self.resource is not None and deck is not None:
+      for name in names:
+        shaft = self.resource.get_item(name)
+        bottom = shaft.tip_bottom()
+        if not shaft.has_tip() or bottom is None:
+          continue
+        point = shaft.get_location_wrt(deck, "c", "c", "b")
+        container = _get_container_under(deck, point.x, point.y)
+        if container is None or not container.supports_compute_height_volume_functions():
+          continue
+        volume = container.tracker.get_used_volume()
+        if volume <= 0:
+          continue
+        surface = container.get_location_wrt(deck, "c", "c", "cavity_bottom").z + round(
+          container.compute_height_from_volume(volume), 2
+        )
+        detections.append((round(surface - bottom.z, 2), container))
+    if mode == 3 and len(detections) < len(names):
+      detections = []
+    detected, found_in = (
+      (min if mode == 3 else max)(detections, key=lambda d: d[0]) if detections else (end - 1, None)
+    )
+    if found_in is None or detected < end:
+      self.update_location_by_reference_point(z=end)
+      self.device.head96_last_lld_z = 0.0
+      check_fw_string_error("H0ZLid0000er70")
+      raise AssertionError("unreachable: a trace-70 answer raises")
+    retreat = c.z_drive_increments_to_mm(int(kwargs.get("zi", 0)))
+    up = str(kwargs.get("zj", 1)) == "1"
+    self.update_location_by_reference_point(z=round(detected + (retreat if up else -retreat), 2))
+    self.device.head96_last_lld_z = detected
+    return None, f"the liquid in {found_in.name}"
+
+  def _answer_stroke(self, command: str, **kwargs: Any) -> Tuple[Any, str]:
+    """What `PA` or `PB` does: Z follows the surface by `zd` down or `ze` up, never below `zh`,
+    and the piston draws `da` or pushes `db` out and draws `dd` back. The liquid is the layer
+    above's to book: a mix returns what it draws."""
+    c = self.configuration
+    z = self._modelled_z()
+    floor = c.z_drive_increments_to_mm(int(kwargs["zh"]))
+    piston = self.device.head96_dispensing_drive_uL
+    if command == "PA":
+      z = max(z - c.z_drive_increments_to_mm(int(kwargs.get("zd", 0))), floor)
+      piston += c.dispensing_drive_increments_to_uL(int(kwargs["da"]))
+    else:
+      z = min(z + c.z_drive_increments_to_mm(int(kwargs.get("ze", 0))), c.z_range[1])
+      pushed = c.dispensing_drive_increments_to_uL(int(kwargs["db"]))
+      drawn_back = c.dispensing_drive_increments_to_uL(int(kwargs.get("dd", 0)))
+      piston = max(piston - pushed, 0.0) + drawn_back
+    self.update_location_by_reference_point(z=round(z, 2))
+    self.device.head96_dispensing_drive_uL = round(piston, 2)
+    return None, f"the 96-head's piston at {self.device.head96_dispensing_drive_uL} uL"
+
+  async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
+    if module == self.configuration.module:
+      if command == "ZL":
+        return self._answer_clld_search(**kwargs)
+      if command == "RH":
+        increments = self.configuration.z_drive_mm_to_increments(self.device.head96_last_lld_z)
+        return {"rh": increments}, "where the 96-head last detected liquid"
+      if command in ("PA", "PB"):
+        return self._answer_stroke(command, **kwargs)
+    return await super().answer(module, command, **kwargs)
 
 
 class SimulatedHead384(_SimulatedHead, Head384):
@@ -1442,6 +1535,10 @@ class STARSimulationDriver(STARDriver):
     self.last_lld_heights: Dict[int, float] = {}
     # Where each channel's piston stands, in uL: what its aspirations drew.
     self.dispensing_drive_uL: Dict[int, float] = {}
+    # Where the 96-head's stop disc last detected liquid, in mm on the deck; 0.0 until one does.
+    self.head96_last_lld_z: float = 0.0
+    # Where the 96-head's piston stands, in uL: what its strokes drew.
+    self.head96_dispensing_drive_uL: float = 0.0
 
     # What each module says when asked whether it is initialized, and where things are.
     self.initialized = {module: initialized for module in ("C0", "I0", "R0", "H0")}
