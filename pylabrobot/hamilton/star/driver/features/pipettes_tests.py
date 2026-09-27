@@ -737,7 +737,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
       2,
       search_start_position=250.0,
       search_end_position=150.0,
-      move_channels_to_safe_pos_after=True,
+      move_to_safe_z_position_after=True,
     )
     c = self.pipettes.configuration
     start, end = c.z_drive_mm_to_increments(301.9), c.z_drive_mm_to_increments(201.9)
@@ -873,7 +873,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
       search_end_position=150.0,
       pressure_mode=Pipettes.PressureLLDMode.FOAM,
       dispense_back_volume=10.0,
-      move_channels_to_safe_pos_after=True,
+      move_to_safe_z_position_after=True,
     )
     c = self.pipettes.configuration
     start, end = c.z_drive_mm_to_increments(301.9), c.z_drive_mm_to_increments(201.9)
@@ -1000,7 +1000,7 @@ class TestZTouchProbing(unittest.IsolatedAsyncioTestCase):
     self.back_off.assert_not_awaited()
 
   async def test_safe_z_afterwards_instead_of_a_back_off(self):
-    await self.pipettes.probe_z_using_ztouch(0, move_channels_to_safe_pos_after=True)
+    await self.pipettes.probe_z_using_ztouch(0, move_to_safe_z_position_after=True)
     self.safe_z.assert_awaited_once()
     self.back_off.assert_not_awaited()
 

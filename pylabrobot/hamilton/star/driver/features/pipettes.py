@@ -1372,8 +1372,8 @@ class Pipettes:
     # spacing and be in descending order
     channel_locations = dict(enumerate(positions))
 
-    for channel_idx, y in ys.items():
-      channel_locations[channel_idx] = y
+    for channel, y in ys.items():
+      channel_locations[channel] = y
 
     if make_space:
       # For the channels to the back of `back_channel`, make sure the space between them
@@ -1381,10 +1381,10 @@ class Pipettes:
       # make sure the channel behind it is spaced correctly, updating if needed.
       use_channels = list(ys.keys())
       back_channel = min(use_channels)
-      for channel_idx in range(back_channel, 0, -1):
-        pair_spacing = self._min_spacing_between(channel_idx - 1, channel_idx)
-        if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < pair_spacing:
-          channel_locations[channel_idx - 1] = channel_locations[channel_idx] + pair_spacing
+      for channel in range(back_channel, 0, -1):
+        pair_spacing = self._min_spacing_between(channel - 1, channel)
+        if (channel_locations[channel - 1] - channel_locations[channel]) < pair_spacing:
+          channel_locations[channel - 1] = channel_locations[channel] + pair_spacing
 
       # Position intermediate channels between back_channel and front_channel.
       front_channel = max(use_channels)
@@ -1396,10 +1396,10 @@ class Pipettes:
       # Similarly for the channels to the front of `front_channel`, make sure they are all
       # spaced by the per-pair minimum. This time, we iterate from back (closest to
       # `front_channel`) to the frontmost channel.
-      for channel_idx in range(front_channel, self.num_channels - 1):
-        pair_spacing = self._min_spacing_between(channel_idx, channel_idx + 1)
-        if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < pair_spacing:
-          channel_locations[channel_idx + 1] = channel_locations[channel_idx] - pair_spacing
+      for channel in range(front_channel, self.num_channels - 1):
+        pair_spacing = self._min_spacing_between(channel, channel + 1)
+        if (channel_locations[channel] - channel_locations[channel + 1]) < pair_spacing:
+          channel_locations[channel + 1] = channel_locations[channel] - pair_spacing
 
     # Quick checks before movement. The channels stay in order, so the two ends bound the rest.
     for channel in (0, self.num_channels - 1):
@@ -1753,18 +1753,18 @@ class Pipettes:
     return uL
 
   async def dispensing_drives_request_uL_positions(
-    self, channels: Optional[List[int]] = None
+    self, use_channels: Optional[List[int]] = None
   ) -> List[Optional[float]]:
     """Read where the dispensing drives stand, in uL, the channels together, and record them.
 
     Args:
-      channels: which channels, 0-indexed from the back. Every channel when None.
+      use_channels: which channels, 0-indexed from the back. Every channel when None.
 
     Returns:
       One entry per channel of the device: the piston's position in uL, 0.0 at rest, air and
       liquid alike, for a channel asked; None for one not asked, whose record is left alone.
     """
-    asked = list(range(self.num_channels)) if channels is None else channels
+    asked = list(range(self.num_channels)) if use_channels is None else use_channels
     read = await asyncio.gather(*(self.dispensing_drive_request_uL_position(ch) for ch in asked))
     positions: List[Optional[float]] = [None] * self.num_channels
     for channel, uL in zip(asked, read):
@@ -2296,7 +2296,7 @@ class Pipettes:
 
   async def _diameter_that_probes(
     self,
-    channel_idx: int,
+    channel: int,
     allow_without_tip: bool,
     tip_bottom_diameter: float,
     stop_disc_diameter: float,
@@ -2305,7 +2305,7 @@ class Pipettes:
     allowed.
 
     Args:
-      channel_idx: the probing channel.
+      channel: the probing channel.
       allow_without_tip: whether a channel with no tip on it may probe.
       tip_bottom_diameter: diameter of the tip bottom in mm, when a tip is mounted.
       stop_disc_diameter: diameter of the stop disc in mm, when none is.
@@ -2316,19 +2316,19 @@ class Pipettes:
     Raises:
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
     """
-    has_tip = bool((await self.sense_tip_presence())[channel_idx])
+    has_tip = bool((await self.sense_tip_presence())[channel])
     if not has_tip and not allow_without_tip:
       raise RuntimeError(
-        f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+        f"no tip on channel {channel}; pass allow_without_tip=True to probe without one"
       )
     return tip_bottom_diameter if has_tip else stop_disc_diameter
 
-  async def _overhang_that_probes(self, channel_idx: int, allow_without_tip: bool) -> float:
+  async def _overhang_that_probes(self, channel: int, allow_without_tip: bool) -> float:
     """How far below the stop disc the channel probes: the tip's overhang, or 0 when bare and
     allowed.
 
     Args:
-      channel_idx: the probing channel.
+      channel: the probing channel.
       allow_without_tip: whether a channel with no tip on it may probe.
 
     Returns:
@@ -2337,17 +2337,17 @@ class Pipettes:
     Raises:
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
     """
-    if not (await self.sense_tip_presence())[channel_idx]:
+    if not (await self.sense_tip_presence())[channel]:
       if not allow_without_tip:
         raise RuntimeError(
-          f"no tip on channel {channel_idx}; pass allow_without_tip=True to probe without one"
+          f"no tip on channel {channel}; pass allow_without_tip=True to probe without one"
         )
       return 0.0
-    return round(await self.request_tip_overhang(channel_idx), 1)
+    return round(await self.request_tip_overhang(channel), 1)
 
   async def probe_x_using_clld(
     self,
-    channel_idx: int,
+    channel: int,
     direction: Literal["left", "right"],
     *,
     search_end_position: Optional[float] = None,
@@ -2360,7 +2360,7 @@ class Pipettes:
     """Probe a conductive surface along X with a channel's cLLD, from where the arm stands.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       direction: "left" (decreasing x) or "right" (increasing x).
       search_end_position: where the search ends, in mm. The end of the reach in `direction` when
         None.
@@ -2378,9 +2378,9 @@ class Pipettes:
       RuntimeError: If no configuration has been read, or the channel carries no tip and
         `allow_without_tip` is False.
     """
-    self._require_channel(channel_idx)
+    self._require_channel(channel)
     diameter = await self._diameter_that_probes(
-      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+      channel, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
     )
     device = self._driver.configuration
     if device is None:
@@ -2457,7 +2457,7 @@ class Pipettes:
 
   async def probe_y_using_clld(
     self,
-    channel_idx: int,
+    channel: int,
     direction: Literal["forward", "backward"],
     *,
     search_start_position: Optional[float] = None,
@@ -2474,7 +2474,7 @@ class Pipettes:
     """Probe a conductive surface along Y with a channel's cLLD, never past its neighbours.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       direction: "forward" (decreasing y) or "backward" (increasing y).
       search_start_position: where to search from, in mm. Where the channel stands when None.
       search_end_position: where the search ends, in mm. As far as the neighbour allows when None.
@@ -2497,9 +2497,9 @@ class Pipettes:
       RuntimeError: If no configuration has been read, or the channel carries no tip and
         `allow_without_tip` is False.
     """
-    self._require_channel(channel_idx)
+    self._require_channel(channel)
     diameter = await self._diameter_that_probes(
-      channel_idx, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
+      channel, allow_without_tip, tip_bottom_diameter, stop_disc_diameter
     )
     c = self.configuration
     device = self._driver.configuration
@@ -2510,12 +2510,12 @@ class Pipettes:
 
     # What the channel may reach without meeting a neighbour
     ys = await self.request_y_positions()
-    if channel_idx > 0:
-      high = ys[channel_idx - 1] - self._min_spacing_between(channel_idx, channel_idx - 1)
+    if channel > 0:
+      high = ys[channel - 1] - self._min_spacing_between(channel, channel - 1)
     else:
       high = device.pip_maximal_y_position
-    if channel_idx < self.num_channels - 1:
-      low = ys[channel_idx + 1] + self._min_spacing_between(channel_idx, channel_idx + 1)
+    if channel < self.num_channels - 1:
+      low = ys[channel + 1] + self._min_spacing_between(channel, channel + 1)
     elif self.arm.side == "left":
       low = device.left_arm_min_y_position
     else:
@@ -2528,16 +2528,16 @@ class Pipettes:
         raise ValueError(f"{name} must be between {low} and {high} mm, is {value}")
 
     if search_start_position is not None:
-      await self.move_to_y_position(channel_idx, search_start_position)
-    here = await self.request_y_position(channel_idx)
+      await self.move_to_y_position(channel, search_start_position)
+    here = await self.request_y_position(channel)
     if direction == "backward":
       end = high if search_end_position is None else search_end_position
       if end < here:
-        raise ValueError(f"channel {channel_idx} cannot search backward from {here} to {end} mm")
+        raise ValueError(f"channel {channel} cannot search backward from {here} to {end} mm")
     else:
       end = low if search_end_position is None else search_end_position
       if end > here:
-        raise ValueError(f"channel {channel_idx} cannot search forward from {here} to {end} mm")
+        raise ValueError(f"channel {channel} cannot search forward from {here} to {end} mm")
 
     end_increments = c.y_drive_mm_to_increments(end)
     speed_increments = c.y_drive_mm_to_increments(search_speed)
@@ -2554,7 +2554,7 @@ class Pipettes:
     found = True
     try:
       await self._unchecked_fw_probe_y_using_clld(
-        channel_idx,
+        channel,
         end_position=end_increments,
         detection_edge=detection_edge,
         search_speed=speed_increments,
@@ -2562,20 +2562,20 @@ class Pipettes:
         current_limit=current_limit,
       )
     except STARFirmwareError as error:
-      if not self._found_nothing(error, self.channel_id(channel_idx)):
+      if not self._found_nothing(error, self.channel_id(channel)):
         raise
       found = False
-    detected = await self.request_y_position(channel_idx)
+    detected = await self.request_y_position(channel)
 
     # Back away from the surface, no further than the neighbour behind the move allows.
     if direction == "backward":
       await self.move_to_y_position(
-        channel_idx, detected - min(post_detection_distance, detected - low)
+        channel, detected - min(post_detection_distance, detected - low)
       )
       surface = detected + diameter / 2
     else:
       await self.move_to_y_position(
-        channel_idx, detected + min(post_detection_distance, high - detected)
+        channel, detected + min(post_detection_distance, high - detected)
       )
       surface = detected - diameter / 2
     return round(surface, 1) if found else None
@@ -2697,7 +2697,7 @@ class Pipettes:
 
   async def probe_z_using_clld(
     self,
-    channel_idx: int,
+    channel: int,
     *,
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
@@ -2708,14 +2708,14 @@ class Pipettes:
     post_detection_trajectory: Literal[0, 1] = 1,
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
-    move_channels_to_safe_pos_after: bool = False,
+    move_to_safe_z_position_after: bool = False,
   ) -> Optional[float]:
     """Lower a channel's tip until its cLLD triggers, and read the height it detected at.
 
     Z safety first on a firmware error; None when nothing was found.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       search_start_position: tip bottom height to search from, in mm. As high as the tip goes
         when None.
       search_end_position: lowest tip bottom height, in mm. The drive's floor when None.
@@ -2726,7 +2726,7 @@ class Pipettes:
       post_detection_trajectory: 0 moves down after detection, 1 up.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
       post_detection_distance: how far it moves after detection, in mm.
-      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
+      move_to_safe_z_position_after: whether to raise every channel to Z safety afterwards,
         instead of resting where the search left it.
 
     Returns:
@@ -2736,9 +2736,9 @@ class Pipettes:
       RuntimeError: If the channel carries no tip and `allow_without_tip` is False.
       ValueError: If an argument is out of range.
     """
-    self._require_channel(channel_idx)
+    self._require_channel(channel)
     # The search runs on the stop disc, which sits the overhang above the tip bottom.
-    overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
+    overhang = await self._overhang_that_probes(channel, allow_without_tip)
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
     top, floor = highest - overhang, round(lowest - overhang, 2)
@@ -2755,7 +2755,7 @@ class Pipettes:
       )
     try:
       await self._clld_search(
-        channel_idx,
+        channel,
         search_end_position + overhang,
         round(search_start_position + overhang, 2),
         search_speed=search_speed,
@@ -2767,12 +2767,12 @@ class Pipettes:
       )
     except STARFirmwareError as error:
       await self.move_to_safe_z()
-      if not self._found_nothing(error, self.channel_id(channel_idx)):
+      if not self._found_nothing(error, self.channel_id(channel)):
         raise
       return None
-    if move_channels_to_safe_pos_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
-    return (await self.request_last_lld_z_positions())[channel_idx]
+    return (await self.request_last_lld_z_positions())[channel]
 
   async def _unchecked_fw_probe_z_using_plld(
     self,
@@ -3056,14 +3056,14 @@ class Pipettes:
 
   async def probe_z_using_plld(
     self,
-    channel_idx: int,
+    channel: int,
     *,
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
     pressure_mode: Optional["Pipettes.PressureLLDMode"] = None,
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
-    move_channels_to_safe_pos_after: bool = False,
+    move_to_safe_z_position_after: bool = False,
     **search: Any,
   ) -> Optional[List[float]]:
     """Lower a channel's tip until the pressure says it met the liquid, and read the height.
@@ -3071,14 +3071,14 @@ class Pipettes:
     Other search settings pass to `_plld_search` by name and take its defaults.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       search_start_position: tip bottom height to search from, in mm. As high as the tip goes
         when None.
       search_end_position: lowest tip bottom height, in mm. The drive's floor when None.
       pressure_mode: what the search stops at. The liquid when None.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
       post_detection_distance: how far it moves after detection, in mm.
-      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
+      move_to_safe_z_position_after: whether to raise every channel to Z safety afterwards,
         instead of resting where the search left it.
       search: the rest of `_plld_search`'s settings, by name.
 
@@ -3090,8 +3090,8 @@ class Pipettes:
       RuntimeError: If the channel carries no tip and `allow_without_tip` is False.
       ValueError: If an argument is out of range.
     """
-    self._require_channel(channel_idx)
-    overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
+    self._require_channel(channel)
+    overhang = await self._overhang_that_probes(channel, allow_without_tip)
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
     top, floor = highest - overhang, round(lowest - overhang, 2)
@@ -3108,7 +3108,7 @@ class Pipettes:
       )
     try:
       detected = await self._plld_search(
-        channel_idx,
+        channel,
         search_end_position + overhang,
         round(search_start_position + overhang, 2),
         mode=pressure_mode,
@@ -3117,10 +3117,10 @@ class Pipettes:
       )
     except STARFirmwareError as error:
       await self.move_to_safe_z()
-      if not self._found_nothing(error, self.channel_id(channel_idx)):
+      if not self._found_nothing(error, self.channel_id(channel)):
         raise
       return None
-    if move_channels_to_safe_pos_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
     return [round(stop_disc - overhang, 2) for stop_disc in detected]
 
@@ -3251,7 +3251,7 @@ class Pipettes:
 
   async def probe_z_using_ztouch(
     self,
-    channel_idx: int,
+    channel: int,
     *,
     search_start_position: Optional[float] = None,
     search_end_position: Optional[float] = None,
@@ -3262,7 +3262,7 @@ class Pipettes:
     push_force_pwm: int = 0,
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
-    move_channels_to_safe_pos_after: bool = False,
+    move_to_safe_z_position_after: bool = False,
   ) -> Optional[float]:
     """Lower a channel's tip until it presses on something, and read the height.
 
@@ -3272,7 +3272,7 @@ class Pipettes:
     from 2022 on.
 
     Args:
-      channel_idx: which channel, 0-indexed from the back.
+      channel: which channel, 0-indexed from the back.
       search_start_position: tip bottom height the search starts from, in mm. As high as the tip
         goes when None.
       search_end_position: lowest tip bottom height, in mm. The drive's floor when None.
@@ -3283,7 +3283,7 @@ class Pipettes:
       push_force_pwm: the push-down force once stopped, 0 to 125; 0 switches the drive off.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
       post_detection_distance: how far the channel backs off afterwards, in mm; 0 stays.
-      move_channels_to_safe_pos_after: whether to raise every channel to Z safety afterwards,
+      move_to_safe_z_position_after: whether to raise every channel to Z safety afterwards,
         instead of resting where the search left it.
 
     Returns:
@@ -3294,10 +3294,10 @@ class Pipettes:
         firmware predates 2022.
       ValueError: If an argument is out of range.
     """
-    self._require_channel(channel_idx)
-    self._require_ztouch_firmware(channel_idx)
-    self._warn_ztouch_on_soft_tips([channel_idx])
-    overhang = await self._overhang_that_probes(channel_idx, allow_without_tip)
+    self._require_channel(channel)
+    self._require_ztouch_firmware(channel)
+    self._warn_ztouch_on_soft_tips([channel])
+    overhang = await self._overhang_that_probes(channel, allow_without_tip)
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
     top, floor = highest - overhang, round(lowest - overhang, 2)
@@ -3316,7 +3316,7 @@ class Pipettes:
       )
     try:
       stop_disc = await self._ztouch_search(
-        channel_idx,
+        channel,
         round(search_end_position + overhang, 2),
         round(search_start_position + overhang, 2),
         search_speed=search_speed,
@@ -3333,11 +3333,11 @@ class Pipettes:
     await self._record_where_they_stopped("z")
     tip_bottom = round(stop_disc - overhang, 2)
     touched = None if tip_bottom - search_end_position <= self._ztouch_end_allowance else tip_bottom
-    if move_channels_to_safe_pos_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
     elif post_detection_distance:
       await self.move_stop_disc_to_z_position(
-        channel_idx, round(stop_disc + post_detection_distance, 2)
+        channel, round(stop_disc + post_detection_distance, 2)
       )
     return touched
 
