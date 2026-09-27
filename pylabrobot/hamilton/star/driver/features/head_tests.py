@@ -236,6 +236,91 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(any(spot.has_tip() for spot in self.tip_rack.get_all_items()))
     self.assertTrue(all(tip is not None and tip.parent is None for tip in tips))
 
+  def failing_on(self, failed: str):
+    answer = self.driver._answer
+
+    async def answering(module: str, command: str, **kwargs: Any):
+      if command == failed:
+        check_fw_string_error(f"C0{failed}id0001er99/00")
+      return await answer(module, command, **kwargs)
+
+    return patch.object(self.driver, "_answer", answering)
+
+  async def test_a_failed_pickup_takes_what_the_firmware_holds_and_reads_where_it_stopped(self):
+    shafts = self.head_resource.get_all_items()
+    # The guard reads no tips; after the failure the firmware holds that they are on.
+    held = AsyncMock(side_effect=[False, True])
+    read_z = AsyncMock(wraps=self.head.request_z_position)
+    with self.failing_on("EP"), patch.object(self.head, "request_tip_presence", held):
+      with patch.object(self.head, "request_z_position", read_z):
+        with self.assertRaises(STARFirmwareError):
+          await self.head.pick_up_tips(self.tip_rack)
+    self.assertTrue(all(shaft.has_tip() for shaft in shafts))
+    self.assertFalse(any(spot.has_tip() for spot in self.tip_rack.get_all_items()))
+    read_z.assert_awaited()
+
+  async def test_a_failed_drop_takes_what_the_firmware_holds(self):
+    await self.head.pick_up_tips(self.tip_rack)
+    held = AsyncMock(return_value=False)
+    with self.failing_on("ER"), patch.object(self.head, "request_tip_presence", held):
+      with self.assertRaises(STARFirmwareError):
+        await self.head.drop_tips(self.tip_rack)
+    self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+    self.assertTrue(all(spot.has_tip() for spot in self.tip_rack.get_all_items()))
+
+  async def test_the_piston_is_read_after_a_pickup_and_a_drop(self):
+    commands: List[str] = []
+    log = self.driver._log_exchange
+
+    def every(written: str, read: Optional[str]) -> None:
+      commands.append(written[:4])
+      log(written, read)
+
+    self.driver._log_exchange = every  # type: ignore[method-assign]
+    await self.head.pick_up_tips(self.tip_rack)
+    await self.head.drop_tips(self.tip_rack)
+    for command in ("C0EP", "C0ER"):
+      self.assertIn("H0RD", commands[commands.index(command) :])
+    self.assertEqual(commands[-1], "H0RD")
+
+  async def test_return_tips_drops_them_in_the_rack_they_came_from(self):
+    """Spots left empty before the pickup stay empty after the return."""
+    for i in (0, 47):
+      self.tip_rack.get_item(i).unassign_tip()
+    tips = [spot.tip for spot in self.tip_rack.get_all_items()]
+    await self.head.pick_up_tips(self.tip_rack)
+    self.sent.clear()
+    await self.head.return_tips()
+    self.assertEqual(self.sent, ["C0ERxs01179xd0yh2418za2164zh2450ze2450"])
+    self.assertEqual([spot.tip for spot in self.tip_rack.get_all_items()], tips)
+    self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+
+  async def test_discard_tips_drops_them_in_the_96_trash(self):
+    await self.head.pick_up_tips(self.tip_rack)
+    self.sent.clear()
+    await self.head.discard_tips()
+    self.assertEqual(self.sent, ["C0ERxs00465xd1yh1788za2164zh2450ze2450"])
+    self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+
+  async def test_with_no_tips_return_refuses_before_anything_is_sent(self):
+    with self.assertRaises(RuntimeError):
+      await self.head.return_tips()
+    self.assertEqual(self.sent, [])
+
+  async def test_return_tips_refuses_tips_from_two_racks(self):
+    from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL_filter
+
+    other_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_02")
+    cast(Any, self.deck.get_resource("tip carrier"))[2] = other_rack
+    await self.head.pick_up_tips(self.tip_rack)
+    shaft = self.head_resource.get_item(5)
+    shaft.release_tip()
+    shaft.mount_tip(other_rack.get_item(5).tip_for_pickup())
+    self.sent.clear()
+    with self.assertRaisesRegex(RuntimeError, "not from spot 5 of tip_rack_01"):
+      await self.head.return_tips()
+    self.assertEqual(self.sent, [])
+
   async def test_a_refused_pickup_moves_nothing(self):
     """An empty rack is refused before anything is sent; an unreachable one after the tip type."""
     with self.assertRaises(ValueError):
