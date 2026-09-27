@@ -1434,6 +1434,9 @@ class STARDriver:
         else:
           logger.debug("%s reports itself uninitialized - initializing", name)
           await head.initialize()
+      elif isinstance(head, Head96):
+        # Initialization reads the piston; skipped, it is read here, as it stands.
+        await head._record_piston_position()
       # Probing how far a head reaches retracts it, so it doubles as the safety retract and
       # runs on every setup rather than only the first. The floor is what the drive documents.
       retracted = await head.probe_z_max()

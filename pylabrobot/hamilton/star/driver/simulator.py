@@ -1046,15 +1046,74 @@ class SimulatedHead96(_SimulatedHead, Head96):
     self.device.head96_dispensing_drive_uL = round(piston, 2)
     return None, f"the 96-head's piston at {self.device.head96_dispensing_drive_uL} uL"
 
+  def _get_tip_overhang(self) -> float:
+    """How far the tip on channel A1 hangs below the stop disc, in mm; 0.0 with none on."""
+    if self.resource is None:
+      return 0.0
+    bottom = self.resource.get_item(HEAD_REFERENCE_SHAFT).tip_bottom()
+    return 0.0 if bottom is None else -bottom.z
+
+  def _record_master_move(self, overhang: float, **kwargs: Any) -> None:
+    """Put the arm, the head's Y and its stop disc where a master command leaves them.
+
+    `xs`/`xd` and `yh` place channel A1, whose X is the arm's less `x_offset`. `ze` is the tip
+    bottom the command ends at, so the stop disc ends `overhang` above it.
+    """
+    c = self.configuration
+    arm = self.arm
+    if arm is not None and c.x_offset is not None:
+      x = int(kwargs["xs"]) / 10 * (-1 if str(kwargs.get("xd", 0)) == "1" else 1)
+      arm.update_location_by_reference_point(round(x + c.x_offset, 2))
+    self.update_location_by_reference_point(
+      y=int(kwargs["yh"]) / 10, z=round(int(kwargs["ze"]) / 10 + overhang, 2)
+    )
+
+  def _answer_liquid_command(self, command: str, **kwargs: Any) -> None:
+    """What `C0 EA` or `C0 ED` does: the head ends over A1 at `ze`, and the piston moves.
+
+    EA draws the blow-out air `bv`, the volume `af` and the transport air `vt`. ED pushes out `vt`
+    and `df`, `bv` too in a blow-out mode (`da` 1 or 3), everything in an empty (`da` 4), and draws
+    the stop-back volume `ev` back. All in 0.1 uL. The liquid is the layer above's to book.
+    """
+    self._record_master_move(self._get_tip_overhang(), **kwargs)
+    piston = self.device.head96_dispensing_drive_uL
+    if command == "EA":
+      piston += sum(int(kwargs.get(field, 0)) for field in ("bv", "af", "vt")) / 10
+    else:
+      mode = str(kwargs.get("da", 0))
+      pushed = sum(int(kwargs.get(field, 0)) for field in ("vt", "df")) / 10
+      if mode in ("1", "3"):
+        pushed += int(kwargs.get("bv", 0)) / 10
+      piston = 0.0 if mode == "4" else max(piston - pushed, 0.0)
+      piston += int(kwargs.get("ev", 0)) / 10
+    self.device.head96_dispensing_drive_uL = round(piston, 2)
+
   async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
-    if module == self.configuration.module:
+    c = self.configuration
+    if module == "C0":
+      if command in ("EA", "ED"):
+        self._answer_liquid_command(command, **kwargs)
+        return None
+      if command == "EP":
+        # The stop disc ends a tip of the collected type above `ze`, as the channels' pick-up does.
+        tip_length = self.device.defined_tip_lengths.get(int(kwargs["tt"]), 0.0)
+        self._record_master_move(tip_length, **kwargs)
+        return None
+      if command == "ER":
+        self._record_master_move(0.0, **kwargs)
+        return None
+    if module == c.module:
       if command == "ZL":
         return self._answer_clld_search(**kwargs)
       if command == "RH":
-        increments = self.configuration.z_drive_mm_to_increments(self.device.head96_last_lld_z)
+        increments = c.z_drive_mm_to_increments(self.device.head96_last_lld_z)
         return {"rh": increments}, "where the 96-head last detected liquid"
       if command in ("PA", "PB"):
         return self._answer_stroke(command, **kwargs)
+      if command == "RD":
+        # The drive answers twice; the read takes the second.
+        increments = c.dispensing_drive_uL_to_increments(self.device.head96_dispensing_drive_uL)
+        return {"rd": [increments, increments]}, "where the 96-head's piston stands"
     return await super().answer(module, command, **kwargs)
 
 

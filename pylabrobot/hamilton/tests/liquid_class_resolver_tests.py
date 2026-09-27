@@ -8,7 +8,11 @@ from typing import Any, Dict
 import pytest
 
 from pylabrobot.hamilton.liquid_class_resolver import (
+  ASPIRATE_CLASS_ATTRIBUTES,
+  DISPENSE_CLASS_ATTRIBUTES,
+  check_volume_arguments,
   corrected_volumes_for_ops,
+  from_class,
   resolve_hamilton_liquid_classes,
 )
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
@@ -110,3 +114,26 @@ def test_corrected_volumes_respects_disable_and_none_hlc():
 def test_corrected_volumes_length_mismatch_raises():
   with pytest.raises(ValueError, match="hlcs length"):
     corrected_volumes_for_ops([SimpleNamespace(volume=1.0)], [])
+
+
+def test_from_class_takes_what_is_given_else_the_class_else_none():
+  hlc = _hlc()
+  assert from_class("flow_rates", [3.0], 1, [hlc], ASPIRATE_CLASS_ATTRIBUTES) == [3.0]
+  assert from_class("flow_rates", None, 1, [hlc], ASPIRATE_CLASS_ATTRIBUTES) == [1.0]
+  assert from_class("flow_rates", None, 1, [hlc], DISPENSE_CLASS_ATTRIBUTES) == [9.0]
+  assert from_class("flow_rates", None, 1, None, DISPENSE_CLASS_ATTRIBUTES) is None
+  assert from_class("flow_rates", [None], 1, [hlc], ASPIRATE_CLASS_ATTRIBUTES) == [1.0]
+  with pytest.raises(ValueError, match="one entry per container"):
+    from_class("flow_rates", [1.0, 2.0], 1, [hlc], ASPIRATE_CLASS_ATTRIBUTES)
+
+
+def test_check_volume_arguments_wants_one_of_volumes_and_piston_volumes():
+  check_volume_arguments([1.0], None, None, "drawn")
+  check_volume_arguments(None, [1.0], None, "drawn")
+  for volumes, pistons, classes in (
+    ([1.0], [1.0], None),
+    (None, None, None),
+    (None, [1.0], [_hlc()]),
+  ):
+    with pytest.raises(ValueError):
+      check_volume_arguments(volumes, pistons, classes, "drawn")
