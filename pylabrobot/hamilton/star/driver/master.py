@@ -33,6 +33,7 @@ from pylabrobot.hamilton.star.driver.features.head384 import Head384
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPConfiguration
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfiguration
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.hamilton.star.resource_model import (
   ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z,
@@ -86,6 +87,9 @@ def _range(values: Optional[Tuple[float, float]]) -> str:
 
 class STARDriver:
   """Interface for the Hamilton STARDriver."""
+
+  # How a channel or a head senses the liquid: `star.driver.LLDMode.CAPACITIVE`.
+  LLDMode = LLDMode
 
   def _deck_component_name(self, name: str) -> str:
     """Resolve a built-in deck resource without changing its existing name."""
