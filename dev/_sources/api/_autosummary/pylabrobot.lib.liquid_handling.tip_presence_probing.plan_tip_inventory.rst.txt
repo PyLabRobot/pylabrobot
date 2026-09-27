@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.tip\_presence\_probing.plan\_tip\_inventory
+===========================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.tip_presence_probing
+
+.. autofunction:: plan_tip_inventory
