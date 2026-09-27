@@ -57,7 +57,7 @@ from .features.core_grippers import JAW_OPEN_EXTRA
 from .features.head8 import Head8
 from .features.heater_shaker import PrepHamiltonHeaterShaker
 from .features.lights import Lights
-from .features.pipettes import Pipettes, PipettesConfiguration
+from .features.pipettes import HEAD8_CLEARANCE_Y, Pipettes, PipettesConfiguration
 from .features.x_arm import XArm
 from .master import PrepDriver, _ResolvedPrepCommand
 from .prep_commands import (
@@ -106,8 +106,6 @@ SIMULATED_INITIALIZED_POSITIONS = {
 # past the channels', and (y, z) in mm.
 SIMULATED_HEAD8_X_PAST_CHANNELS = 2.70
 SIMULATED_INITIALIZED_HEAD8_YZ = (452.99, 167.5)
-# How far in front of the head's probe 0 the device keeps the rear channel, in mm, as measured.
-SIMULATED_HEAD8_CLEARANCE_Y = 73.0
 
 # Each channel's Y drive frame reads deck Y plus this, rear first, as measured on the device.
 SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
@@ -1209,7 +1207,7 @@ class SimulatedHead8(_Simulated, Head8):
     if path != MPH_OBJECT_PATH or not isinstance(pipettes, SimulatedPipettes):
       return None
     count = self.device.simulated_configuration.num_channels or 0
-    limit = self.device.head8_location()[1] - SIMULATED_HEAD8_CLEARANCE_Y
+    limit = self.device.head8_location()[1] - HEAD8_CLEARANCE_Y
     for channel in range(count):
       if channel > 0:
         limit -= pipettes._min_spacing_between(channel - 1, channel)
