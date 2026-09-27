@@ -77,8 +77,8 @@ nav.navbar .container-fluid {
   white-space: nowrap;
   /* Room reserved after the name, as the existing visualizer reserves it, so the device tools
      do not sit against a short name and jump when a longer one is shown. On a narrow window the
-     room gives way, then the name is cut, before anything is pushed off the bar. */
-  flex: 0 1 316px;
+     room gives way, then the name is cut, before the device tools start to scroll. */
+  flex: 0 1000 316px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -321,11 +321,35 @@ main {
    palette and the metrics are the tool rail's, so a capability button reads as a button of the
    same application as the cursor and the coordinate tools. */
 
+/* Scrolls sideways once the name has given way, so the status and the inspector toggle stay on
+   the bar; the edge that has more beyond it fades out. */
 #navbar-device-tools {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-left: 12px;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#navbar-device-tools::-webkit-scrollbar {
+  display: none;
+}
+#navbar-device-tools.more-left {
+  mask-image: linear-gradient(to right, transparent, #000 32px);
+}
+#navbar-device-tools.more-right {
+  mask-image: linear-gradient(to left, transparent, #000 32px);
+}
+#navbar-device-tools.more-left.more-right {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 32px,
+    #000 calc(100% - 32px),
+    transparent
+  );
 }
 
 /* One bordered group a device, as the existing visualizer's navbar has it: the device's name, a
@@ -337,6 +361,7 @@ main {
   border-radius: 6px;
   background: #f8f9fa;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .dt-label {

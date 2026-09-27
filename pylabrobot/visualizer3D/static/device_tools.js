@@ -521,6 +521,14 @@ export function initDeviceTools({ onSelect }) {
 
   // ------------------------------------------------------------------ the navbar cluster
 
+  /** Fade whichever edge of the scrolling cluster has more groups beyond it. */
+  function markOverflow() {
+    if (!containerEl) return;
+    const { scrollLeft, scrollWidth, clientWidth } = containerEl;
+    containerEl.classList.toggle("more-left", scrollLeft > 1);
+    containerEl.classList.toggle("more-right", scrollLeft + clientWidth < scrollWidth - 1);
+  }
+
   function rebuild() {
     // What was open comes back, by device name: a scene arriving is no reason to close a panel.
     const wasOpen = [...open.values()].map((panel) => [panel.name, panel.kind]);
@@ -584,6 +592,7 @@ export function initDeviceTools({ onSelect }) {
         if (button && !open.has(idOf(device, kind))) toggle(device, kind, button);
       }
     }
+    markOverflow();
   }
 
   /** Whether any of these resources stands under this device. */
@@ -608,5 +617,25 @@ export function initDeviceTools({ onSelect }) {
   // Whatever resizes main - the window, either rail, the side panel - moves it out from under the
   // buttons, and a panel left where it was in main is no longer under its own.
   if (mainEl) new ResizeObserver(layOut).observe(mainEl);
+  if (containerEl) {
+    // Scrolling the cluster moves the buttons, and the panels hang from them.
+    containerEl.addEventListener("scroll", () => {
+      markOverflow();
+      layOut();
+    });
+    // A mouse wheel only scrolls up and down; over the cluster that means sideways.
+    containerEl.addEventListener(
+      "wheel",
+      (event) => {
+        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+        containerEl.scrollLeft += event.deltaY;
+        event.preventDefault();
+      },
+      { passive: false },
+    );
+    new ResizeObserver(markOverflow).observe(containerEl);
+    // A group sliding open or shut changes what there is to scroll, not the cluster's own size.
+    containerEl.addEventListener("transitionend", markOverflow);
+  }
   return { rebuild, refresh };
 }
