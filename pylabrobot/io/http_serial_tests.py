@@ -5,7 +5,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from pylabrobot.io.capture import CaptureReader, start_capture, stop_capture
 from pylabrobot.io.http import HTTPError, HTTPValidator
@@ -58,8 +59,9 @@ class HTTPSerialTests(unittest.IsolatedAsyncioTestCase):
   async def open_transport(self, responses):
     """Open a transport against the in-memory serial peer."""
     peer = SerialPeer(responses)
-    patcher = patch("pylabrobot.io.http_serial.serial.Serial", return_value=peer)
-    factory = patcher.start()
+    factory = Mock(return_value=peer)
+    patcher = patch("pylabrobot.io.http_serial.serial", SimpleNamespace(Serial=factory))
+    patcher.start()
     self.addCleanup(patcher.stop)
     transport = HTTPSerial("Flex", "/dev/test", headers={"Opentrons-Version": "3"})
     await transport.setup()
@@ -166,7 +168,9 @@ class HTTPSerialTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_failure_releases_executor(self):
     transport = HTTPSerial("Flex", "/dev/test")
-    with patch("pylabrobot.io.http_serial.serial.Serial", side_effect=OSError("busy")):
+    with patch(
+      "pylabrobot.io.http_serial.serial", SimpleNamespace(Serial=Mock(side_effect=OSError("busy")))
+    ):
       with self.assertRaisesRegex(OSError, "busy"):
         await transport.setup()
     self.assertIsNone(transport._executor)
@@ -184,7 +188,7 @@ class HTTPSerialTests(unittest.IsolatedAsyncioTestCase):
     ).encode()
     peer = SerialPeer([response(body)])
     flex = Flex(serial_port="/dev/test")
-    with patch("pylabrobot.io.http_serial.serial.Serial", return_value=peer):
+    with patch("pylabrobot.io.http_serial.serial", SimpleNamespace(Serial=Mock(return_value=peer))):
       await flex.connect()
     self.addAsyncCleanup(flex.disconnect)
     self.assertEqual(flex.software_version, "9.1.2")
