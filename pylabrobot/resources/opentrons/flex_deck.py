@@ -89,7 +89,7 @@ class FlexDeck(Deck):
 
   def __init__(
     self,
-    with_trash_bin: bool = True,
+    with_trash_bin: bool = False,
     name: str = "flex_deck",
   ) -> None:
     super().__init__(size_x=_DECK_SIZE_X, size_y=_DECK_SIZE_Y, size_z=0.0, name=name)
@@ -249,7 +249,7 @@ class FlexDeck(Deck):
     return self._slot_holders[slot].resource
 
   def get_trash_area(self) -> Trash:
-    """Return the trash resource (default at A3)."""
+    """Return the configured trash resource."""
     for holder in self._slot_holders.values():
       if isinstance(holder.resource, Trash):
         return holder.resource

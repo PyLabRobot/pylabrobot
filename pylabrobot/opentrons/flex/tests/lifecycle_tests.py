@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, call, patch
 
 from pylabrobot.io.http import HTTP
 from pylabrobot.opentrons import Flex, OpentronsAPI
-from pylabrobot.opentrons.types import CommandInfo, InstrumentInfo, RobotInfo, RunInfo
+from pylabrobot.opentrons.errors import OpentronsError
+from pylabrobot.opentrons.types import CommandInfo, DeckFixture, InstrumentInfo, RobotInfo, RunInfo
+from pylabrobot.resources import Resource
 from pylabrobot.resources.opentrons import FlexDeck
 
 
@@ -17,6 +19,7 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.io = AsyncMock(spec=HTTP)
     self.api = AsyncMock(spec=OpentronsAPI)
     self.api.get_health.return_value = RobotInfo("test-flex", "OT-3 Standard", "9.1.2")
+    self.api.get_deck_configuration.return_value = (DeckFixture("cutoutA3", "trashBinAdapter"),)
     self.api.create_run.return_value = RunInfo("run")
     self.api.get_run.return_value = RunInfo("run", "stopped")
     self.api.get_instruments.return_value = (
@@ -31,6 +34,63 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.flex._api = self.api
     await self.flex.setup()
     self.addAsyncCleanup(self.flex.disconnect)
+
+  async def test_setup_adds_trash_at_device_slot_and_stop_uses_it(self):
+    """An initially empty deck acquires the device's bin, including its discard address."""
+    await self.flex.disconnect()
+    deck = FlexDeck()
+    self.flex.attach_deck(deck)
+    with self.assertRaises(ValueError):
+      deck.get_trash_area()
+    self.api.get_deck_configuration.return_value = (DeckFixture("cutoutB3", "trashBinAdapter"),)
+    await self.flex.setup()
+    self.assertIsNone(deck.get_resource_at_slot("A3"))
+    self.assertEqual(deck.get_slot(deck.get_trash_area()), "B3")
+    head = self.flex.right_pipette
+    assert head is not None
+    self.api.submit_command.reset_mock()
+    with (
+      patch.object(head, "has_tip_on_hardware", AsyncMock(side_effect=[True, False])),
+      patch.object(head, "move_to_safe_z", AsyncMock()),
+    ):
+      await self.flex.stop()
+    move = self.api.submit_command.await_args_list[0]
+    self.assertEqual(move.args[1], "moveToAddressableAreaForDropTip")
+    self.assertEqual(move.args[2]["addressableAreaName"], "movableTrashB3")
+
+  async def test_setup_removes_stale_trash_when_device_has_none(self):
+    """A missing physical bin never falls back to a previously configured location."""
+    await self.flex.disconnect()
+    self.api.get_deck_configuration.return_value = ()
+    await self.flex.setup()
+    with self.assertRaises(ValueError):
+      self.flex.deck.get_trash_area()
+
+  async def test_setup_preserves_labware_in_device_trash_slot(self):
+    """A conflicting resource is rejected before a run or homing command starts."""
+    await self.flex.disconnect()
+    occupied = Resource("plate", 127, 85, 15)
+    self.flex.deck.assign_child_at_slot(occupied, "B3")
+    original_trash = self.flex.deck.get_trash_area()
+    self.api.get_deck_configuration.return_value = (DeckFixture("cutoutB3", "trashBinAdapter"),)
+    self.api.submit_command.reset_mock()
+    self.api.create_run.reset_mock()
+    with self.assertRaisesRegex(OpentronsError, "B3 is occupied"):
+      await self.flex.setup()
+    self.assertIs(self.flex.deck.get_resource_at_slot("B3"), occupied)
+    self.assertIs(self.flex.deck.get_trash_area(), original_trash)
+    self.api.create_run.assert_not_awaited()
+    self.api.submit_command.assert_not_awaited()
+
+  async def test_reconnect_refreshes_device_trash_slot(self):
+    """Reconnecting moves the same trash resource to the updated device configuration."""
+    trash = self.flex.deck.get_trash_area()
+    await self.flex.disconnect()
+    self.api.get_deck_configuration.return_value = (DeckFixture("cutoutD1", "trashBinAdapter"),)
+    await self.flex.setup()
+    self.assertIs(self.flex.deck.get_trash_area(), trash)
+    self.assertEqual(self.flex.deck.get_slot(trash), "D1")
+    self.assertIsNone(self.flex.deck.get_resource_at_slot("A3"))
 
   async def test_repeated_setup_warns_and_preserves_session(self):
     """Repeated setup leaves the existing run and instruments intact without IO."""
