@@ -63,7 +63,7 @@
     <link rel="icon" href="../../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-    <link rel="next" title="QInstruments" href="../../qinstruments/index.html" />
+    <link rel="next" title="Flex over USB" href="usb.html" />
     <link rel="prev" title="Opentrons OT-2" href="../ot2/hello-world.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -647,6 +647,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Opentrons</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../ot2/hello-world.html">Opentrons OT-2</a></li>
 <li class="toctree-l2 current active"><a aria-current="page" class="current reference internal" href="#">Opentrons Flex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usb.html">Flex over USB</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../qinstruments/index.html">QInstruments</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -808,7 +809,7 @@ heads and lower-level operations.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Connection</p></td>
-<td><p>Robot-server HTTP API on port <code class="docutils literal notranslate"><span class="pre">31950</span></code></p></td>
+<td><p>Robot-server HTTP API over Ethernet/Wi-Fi (<code class="docutils literal notranslate"><span class="pre">31950</span></code>) or USB serial</p></td>
 </tr>
 <tr class="row-odd"><td><p>Discovery</p></td>
 <td><p>Local-network mDNS with <code class="docutils literal notranslate"><span class="pre">find_flex_ip()</span></code></p></td>
@@ -941,6 +942,8 @@ their requested position; position above the intended well before an in-place bl
 If more than one is present, use <code class="docutils literal notranslate"><span class="pre">find_flex_ip(name=&quot;My</span> <span class="pre">Flex&quot;)</span></code> with the exact
 advertised robot name. It raises an error for missing or ambiguous results.
 You can also pass a known IP address directly as <code class="docutils literal notranslate"><span class="pre">host</span></code>.</p>
+<p>For <strong>USB</strong>, see <a class="reference internal" href="usb.html"><span class="std std-doc">Flex over USB</span></a>. Pass <code class="docutils literal notranslate"><span class="pre">serial_port</span></code> instead of <code class="docutils literal notranslate"><span class="pre">host</span></code>;
+all remaining examples use the same API.</p>
 <p><code class="docutils literal notranslate"><span class="pre">connect()</span></code> reads robot health without creating a run or homing. Check the
 reported robot before continuing. <code class="docutils literal notranslate"><span class="pre">setup()</span></code> in the next section takes control
 of the robot and homes it.</p>
@@ -1306,11 +1309,11 @@ physical deck at the start of each pass.</p>
       </div>
     </a>
     <a class="right-next"
-       href="../../qinstruments/index.html"
+       href="usb.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">QInstruments</p>
+        <p class="prev-next-title">Flex over USB</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
