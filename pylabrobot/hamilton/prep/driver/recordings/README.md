@@ -31,8 +31,8 @@ an 8-channel head is installed, or whether there is an enclosure.
 
 | file | device | notes |
 |---|---|---|
-| `prep_PRPAA1087_v1_2_2.json` | PRPAA1087, MLPrep Runtime V1.2.2.444 | The default for a simulated device. Identical to what `save_configuration` wrote off PRPAA1087 on 2026-09-14. |
-| `prep_PRPBC1317_v3_0_20.json` | PRPBC1317, MLPrep Runtime V3.0.20.675 | Two channels, an 8-channel head, an enclosure and a heater shaker. Written by `save_configuration` after `discover`, without `setup`: nothing on the device moved. |
+| `prep_PRPAA1087_v1_2_2.json` | PRPAA1087, MLPrep Runtime V1.2.2.444 | Identical to what `save_configuration` wrote off PRPAA1087 on 2026-09-14. |
+| `prep_PRPBC1317_v3_0_20.json` | PRPBC1317, MLPrep Runtime V3.0.20.675 | Two channels, an 8-channel head, an enclosure and a heater shaker. The default for a simulated device. Written by `save_configuration` after `discover`, without `setup`: nothing on the device moved. |
 | `prep_PRPAA1087_v1_2_2_head8.json` | derived from the above | The same, with `head8_installed` set. No device with an 8-channel head has been recorded. Its channel windows are PRPAA1087's, which has no head: on a real device the head rides the same Y rail and leaves both channels less Y reach, by an amount not yet recorded. |
 
 ### What is in one
@@ -67,9 +67,9 @@ answer.
 
 | file | device |
 |---|---|
-| `prep_PRPAA1087_v1_2_2_firmware_tree.json` | PRPAA1087, MLPrep Runtime V1.2.2.444. The default. |
+| `prep_PRPAA1087_v1_2_2_firmware_tree.json` | PRPAA1087, MLPrep Runtime V1.2.2.444. |
 | `prep_PRPBD1394_v3_0_20_firmware_tree.json` | PRPBD1394, MLPrep Runtime V3.0.20.675. |
-| `prep_PRPBC1317_v3_0_20_firmware_tree.json` | PRPBC1317, MLPrep Runtime V3.0.20.675, with an 8-channel head and a heater shaker, and its enums and structs. |
+| `prep_PRPBC1317_v3_0_20_firmware_tree.json` | PRPBC1317, MLPrep Runtime V3.0.20.675, with an 8-channel head and a heater shaker, and its enums and structs. The default. |
 
 ### Enums and structs
 

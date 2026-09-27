@@ -255,7 +255,8 @@ def test_setup_logs_one_summary_of_what_was_found(caplog):
     assert "  Pipettes: 2, v2 aspirate/dispense" in summary
     assert "    channel 0 (rear):" in summary
     assert "    channel 1 (front):" in summary
-    assert "  8-channel head: none" in summary
+    assert "  8-channel head: installed" in summary
+    assert "  heater shaker: installed" in summary
     infos = [r.getMessage() for r in records.records if r.levelno == logging.INFO]
     assert infos == ["tips held at setup: none", summary]
     await p.stop()

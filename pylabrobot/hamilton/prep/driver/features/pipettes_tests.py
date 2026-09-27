@@ -21,6 +21,8 @@ from pylabrobot.hamilton.prep.driver.features.pipettes import (
 from pylabrobot.hamilton.prep.driver.features.pipettes import logger as pipettes_logger
 from pylabrobot.hamilton.prep.driver.master import _ResolvedPrepCommand
 from pylabrobot.hamilton.prep.driver.simulator import (
+  FIRMWARE_TREE_V1_2_2,
+  RECORDING_PREP,
   SIMULATED_X_AXIS_OFFSET,
   SIMULATED_X_SPEED,
   SIMULATED_Y_DRIVE_OFFSETS,
@@ -1436,7 +1438,12 @@ def test_a_channel_without_reported_bounds_keeps_the_default_y_window():
   where the device reports none."""
 
   async def _t():
-    p = PrepSimulationDriver(deck=PrepDeck())
+    # A device without an 8-channel head, whose default windows setup would apply.
+    p = PrepSimulationDriver(
+      deck=PrepDeck(),
+      declared_configuration_json=RECORDING_PREP,
+      firmware_tree_json=FIRMWARE_TREE_V1_2_2,
+    )
     assert p.simulated_pipettes is not None
     p.simulated_pipettes.channels[
       0
@@ -1732,9 +1739,9 @@ def test_initializing_waits_longer_than_the_drivers_default():
 
     p.send_command = record  # type: ignore[method-assign]
     await p.setup(force_initialize=True)
-    assert [t for name, t in waited if "Initialize" in name] == [300.0]
+    assert [t for name, t in waited if name == "PrepInitialize"] == [300.0]
     # Everything else names none, so it waits `default_read_timeout`.
-    assert {t for name, t in waited if "Initialize" not in name} == {None}
+    assert {t for name, t in waited if name != "PrepInitialize"} == {None}
     await p.stop()
 
   _run(_t())
