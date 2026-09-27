@@ -42,6 +42,7 @@ from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources import Container, Coordinate, Tip, Trash
 from pylabrobot.resources.errors import HasTipError, TooLittleLiquidError
+from pylabrobot.resources.hamilton.prep_decks import PrepDeck
 from pylabrobot.resources.n_channel_pipettes import (
   SHAFT_DIAMETER,
   SHAFT_LENGTH,
@@ -518,7 +519,8 @@ class Head8:
     ending height. The head drops the column at once, so every shaft takes part.
 
     Args:
-      destinations: the spot each shaft drops its tip into, or the waste.
+      destinations: the spot each shaft drops its tip into, or the waste. Waste drops use the
+        PrepDeck's `waste_mph` position.
       use_channels: which shafts drop them. The head drops all of them, so this only says so.
       offset: how far the destinations are missed by, in mm.
       z_seek_offset: how far above the destination the tip bottom stops, in mm. A height the drop
@@ -545,9 +547,18 @@ class Head8:
       [s.name.rsplit("_", 1)[-1] for s in destinations],
     )
 
-    loc = ref_spot.get_location_wrt(self._require_deck(), "c", "c", "t")
-    if not is_trash:
-      loc = loc + offset
+    deck = self._require_deck()
+    if is_trash:
+      if not isinstance(deck, PrepDeck):
+        raise RuntimeError("tips are discarded into a PrepDeck's waste")
+      waste = deck.waste_positions.get("waste_mph")
+      if waste is None:
+        raise RuntimeError("the deck has no waste position 'waste_mph'")
+      loc = waste.get_location_wrt(deck, "c", "c", "t")
+      # The waste site locates the tip's end; the drop parameters locate its collar.
+      loc = Coordinate(loc.x, loc.y, loc.z + tip.get_size_z() - tip.collar_height)
+    else:
+      loc = ref_spot.get_location_wrt(deck, "c", "c", "t") + offset
     drop_type = PrepCmd.TipDropType.Stall if is_trash else PrepCmd.TipDropType.FixedHeight
 
     tip_position = PrepCmd.TipDropParameters.for_op(
@@ -616,6 +627,32 @@ class Head8:
         raise RuntimeError(f"the spot channel {ch}'s tip {tip.name} came from is not on the deck")
       spots.append(spot)
     await self.drop_tips(spots, use_channels=channels, **kwargs)
+
+  async def discard_tips(self, use_channels: Optional[Sequence[int]] = None, **kwargs) -> None:
+    """Discard all eight tips into the deck's waste at its MPH position.
+
+    Do nothing when no tips are mounted. A partly loaded head is rejected.
+
+    Args:
+      use_channels: all eight channels, in order. Defaults to all eight channels.
+      kwargs: passed on to `drop_tips`.
+
+    Raises:
+      ValueError: If `use_channels` does not select all eight channels in order.
+      RuntimeError: If there is no deck, only some channels carry tips, or the deck is not a
+        PrepDeck with a waste block and an MPH waste position.
+    """
+    channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
+    self._require_all_channels(channels, "discard_tips")
+    deck = self._require_deck()
+    if all(tip is None for tip in self.get_mounted_tips()):
+      return
+    if not isinstance(deck, PrepDeck):
+      raise RuntimeError("tips are discarded into a PrepDeck's waste block")
+    waste = deck.waste_block
+    if waste is None:
+      raise RuntimeError("tips are discarded into the deck's waste block; this deck has none")
+    await self.drop_tips([waste] * NUM_PROBES, use_channels=channels, **kwargs)
 
   # -- shared LLD / TADM resolution helpers --------------------------------------------------------
 

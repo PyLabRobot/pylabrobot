@@ -28,8 +28,13 @@ from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources import Container, Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import Cor_Axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import TooLittleLiquidError
-from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
+from pylabrobot.resources.hamilton import (
+  PrepDeck,
+  hamilton_96_tiprack_50uL_NTR,
+  hamilton_96_tiprack_1000uL,
+)
 from pylabrobot.resources.tip_tracker import does_tip_tracking, set_tip_tracking
 from pylabrobot.resources.volume_tracker import does_volume_tracking, set_volume_tracking
 
@@ -325,6 +330,112 @@ def test_return_tips_rejects_partial_channel_selection():
   """The ganged head cannot return tips on selected channels only."""
   with pytest.raises(ValueError, match="fully-ganged head"):
     asyncio.run(_make_head8().return_tips(use_channels=[0, 1]))
+
+
+@pytest.mark.parametrize("use_channels", [None, tuple(range(8))])
+@pytest.mark.parametrize("make_rack", [hamilton_96_tiprack_50uL_NTR, hamilton_96_tiprack_1000uL])
+def test_discard_tips_uses_mph_waste_and_releases_all_tips(use_channels, make_rack):
+  """Discard uses the prefixed deck's MPH site and the tip's length, and forwards drop options."""
+
+  async def _run() -> None:
+    deck = PrepDeck(name_prefix="prep")
+    rack = deck[3] = make_rack(name="tips", with_tips=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    tracking = does_tip_tracking()
+    set_tip_tracking(True)
+    try:
+      spots = rack.column(0)
+      await p.head8.pick_up_tips(spots)
+      tips = p.head8._require_mounted_tips()
+      waste = deck.waste_positions["waste_mph"]
+      waste.location = Coordinate(280, 100, 70)
+      captured, _ = _record_send(p)
+
+      await p.head8.discard_tips(
+        use_channels=use_channels,
+        seek_speed=12.0,
+        z_seek_offset=1.0,
+        minimum_traverse_height_end=160.0,
+      )
+
+      (drop,) = [c for c in captured if isinstance(c, PrepCmd.MphDropTips)]
+      position = drop.tip_position
+      assert position.channel == PrepCmd.ChannelIndex.MPHChannel
+      assert position.drop_type == PrepCmd.TipDropType.Stall
+      assert (position.x_position, position.y_position) == (283.0, 103.0)
+      assert position.z_position == pytest.approx(
+        70.0 + tips[0].get_size_z() - tips[0].fitting_depth
+      )
+      assert position.z_seek == pytest.approx(73.0 + tips[0].get_size_z())
+      assert drop.seek_speed == 12.0
+      assert drop.final_z == 160.0
+      assert drop.tip_roll_off_distance == 3.0
+      assert p.head8.get_mounted_tips() == [None] * 8
+      assert all(spot.tip is None for spot in spots)
+      assert all(tip.parent is None for tip in tips)
+
+      captured.clear()
+      await p.head8.discard_tips(use_channels=use_channels)
+      assert captured == []
+    finally:
+      set_tip_tracking(tracking)
+      await p.stop()
+
+  asyncio.run(_run())
+
+
+@pytest.mark.parametrize("use_channels", [[], [0, 1], list(reversed(range(8)))])
+def test_discard_tips_rejects_invalid_channel_selection(use_channels):
+  """Discarding cannot select or reorder individual channels on the ganged head."""
+  with pytest.raises(ValueError, match="fully-ganged head"):
+    asyncio.run(_make_head8().discard_tips(use_channels=use_channels))
+
+
+@pytest.mark.parametrize(
+  "invalid_state, message",
+  [
+    ("partial", "No tips mounted"),
+    ("no_deck", "no deck"),
+    ("wrong_deck", "PrepDeck"),
+    ("no_waste_block", "waste block"),
+    ("no_waste_position", "waste_mph"),
+  ],
+)
+def test_discard_tips_rejects_invalid_state_before_sending(invalid_state, message):
+  """Invalid tip or waste state leaves all mounted tips in place without sending commands."""
+
+  async def _run() -> None:
+    deck, rack, _, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    try:
+      await p.head8.pick_up_tips(rack.column(0))
+      if invalid_state == "partial":
+        p.head8.shaft(7).release_tip()
+      elif invalid_state == "no_deck":
+        p.deck = None  # type: ignore[assignment]
+      elif invalid_state == "wrong_deck":
+        p.deck = Deck(size_x=300, size_y=400, size_z=170)
+      elif invalid_state == "no_waste_block":
+        assert deck.waste_block is not None
+        deck.waste_block.unassign()
+      elif invalid_state == "no_waste_position":
+        deck.waste_positions["waste_mph"].unassign()
+      mounted = p.head8.get_mounted_tips()
+      captured, _ = _record_send(p)
+
+      with pytest.raises(RuntimeError, match=message):
+        await p.head8.discard_tips()
+      assert captured == []
+      assert p.head8.get_mounted_tips() == mounted
+    finally:
+      p.deck = deck
+      await p.stop()
+
+  asyncio.run(_run())
 
 
 def test_head8_partial_channel_aspirate_raises_value_error():
