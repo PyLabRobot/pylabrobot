@@ -5661,6 +5661,11 @@ class Pipettes:
     )
     limit_curve = per_channel("limit_curve_indices", limit_curve_indices, 0)
     mixes = per_channel("pre_mixes", pre_mixes, None)
+    if any(m is not None and m.auto_surface_following for m in mixes):
+      raise ValueError(
+        "a mix's auto_surface_following is resolved by `aspirate`, which knows the surface; "
+        "give this layer a surface_following_distance"
+      )
     mix_volume = [m.volume if m is not None else 0.0 for m in mixes]
     mix_count = [m.repetitions if m is not None else 0 for m in mixes]
     mix_speed = [m.flow_rate if m is not None else 100.0 for m in mixes]
@@ -5848,6 +5853,142 @@ class Pipettes:
     finally:
       await self._record_after_command(use_channels)
 
+  def _get_lld_modes(
+    self,
+    containers: Sequence[Container],
+    lld_mode: Union[LLDMode, Sequence[LLDMode], None],
+    auto_surface_following: bool,
+    surface_following_distances: Optional[Sequence[float]],
+    liquid_heights: Optional[Sequence[Optional[float]]],
+    mixes: Optional[Sequence[Optional[Mix]]],
+    mixes_name: str,
+  ) -> List[LLDMode]:
+    """Each container's LLD mode: CAPACITIVE when None under auto surface following, else OFF.
+
+    Args:
+      containers: per job.
+      lld_mode: one for all, one per job, or None.
+      auto_surface_following: whether the tips follow by what the volume moves.
+      surface_following_distances: per job, or None.
+      liquid_heights: per job, or None.
+      mixes: per job, or None.
+      mixes_name: what the caller calls them, for a list that does not match.
+
+    Raises:
+      ValueError: Auto surface following beside a distance; auto surface following, the call's
+        or a mix's, under OFF without a liquid height.
+      RuntimeError: Auto surface following in a container without height-volume functions.
+    """
+    n = len(containers)
+    if lld_mode is None:
+      lld_mode = LLDMode.CAPACITIVE if auto_surface_following else LLDMode.OFF
+    modes = per_container(
+      "lld_mode", [lld_mode] * n if isinstance(lld_mode, LLDMode) else list(lld_mode), n
+    )
+    assert modes is not None
+    distances = per_container("surface_following_distances", surface_following_distances, n)
+    if auto_surface_following and distances is not None and any(d != 0.0 for d in distances):
+      raise ValueError(
+        "auto_surface_following beside surface_following_distances: give one of them"
+      )
+    heights = per_container("liquid_heights", liquid_heights, n) or [None] * n
+    mixed = per_container(mixes_name, mixes, n) or [None] * n
+    following = [
+      job
+      for job in range(n)
+      if auto_surface_following or (mixed[job] is not None and mixed[job].auto_surface_following)
+    ]
+    bare = [
+      containers[job].name
+      for job in following
+      if modes[job] == LLDMode.OFF and heights[job] is None
+    ]
+    if bare:
+      raise ValueError(
+        f"auto_surface_following under lld_mode OFF needs a liquid_height to follow from: {bare}"
+      )
+    unmodelled = [
+      containers[job].name
+      for job in following
+      if not containers[job].supports_compute_height_volume_functions()
+    ]
+    if unmodelled:
+      raise RuntimeError(
+        f"{unmodelled} have no height-volume functions, so a surface cannot become a volume"
+      )
+    return modes
+
+  @staticmethod
+  def _get_surface_change(container: Container, height: float, volume: float) -> float:
+    """How far `volume` uL added moves a surface `height` mm over the cavity bottom, in mm.
+
+    A negative volume is drawn, and lowers it.
+
+    Raises:
+      ValueError: The surface is outside the container's height-volume data.
+    """
+    try:
+      held = container.compute_volume_from_height(height)
+    except ValueError as error:
+      raise ValueError(
+        f"{container.name}'s surface at {height} mm is outside its height-volume data, so the "
+        "following it takes cannot be worked out"
+      ) from error
+    return round(container.compute_height_from_volume(max(held + volume, 0.0)) - height, 1)
+
+  def _get_auto_followings(
+    self,
+    containers: Sequence[Container],
+    volumes: Sequence[float],
+    heights: Sequence[float],
+    limits: Sequence[float],
+  ) -> List[float]:
+    """How far each tip follows the surface one batch moves, in mm, within its limit.
+
+    Channels in one container move its surface together; never less than 0.
+
+    Args:
+      containers: per channel of the batch.
+      volumes: per channel, in uL; negative is drawn.
+      heights: per channel, the surface over the cavity bottom, in mm.
+      limits: per channel, the travel it has: down to its floor, or up to the container's top.
+    """
+    followings = []
+    for container, height, limit in zip(containers, heights, limits):
+      moved = sum(v for c, v in zip(containers, volumes) if c is container)
+      change = abs(self._get_surface_change(container, height, moved))
+      followings.append(round(max(min(change, limit), 0.0), 1))
+    return followings
+
+  def _get_mix_followings(
+    self,
+    containers: Sequence[Container],
+    mixes: Sequence[Optional[Mix]],
+    heights: Sequence[float],
+    limits: Sequence[float],
+  ) -> List[Optional[Mix]]:
+    """Each mix, its auto surface following made a distance: what one draw lowers the surface.
+
+    Args:
+      containers: per channel of the batch.
+      mixes: per channel, or None.
+      heights: per channel, the surface over the cavity bottom when the mix runs, in mm.
+      limits: per channel, how far down the tip has to go, in mm.
+    """
+    resolved: List[Optional[Mix]] = []
+    for container, mix, height, limit in zip(containers, mixes, heights, limits):
+      if mix is None or not mix.auto_surface_following:
+        resolved.append(mix)
+        continue
+      # One draw on every channel mixing in this container lowers its surface together.
+      drawn = sum(m.volume for c, m in zip(containers, mixes) if c is container and m is not None)
+      drop = -self._get_surface_change(container, height, -drawn)
+      distance = round(max(min(drop, limit), 0.0), 1)
+      resolved.append(
+        dataclasses.replace(mix, surface_following_distance=distance, auto_surface_following=False)
+      )
+    return resolved
+
   async def aspirate(
     self,
     containers: Sequence[Container],
@@ -5855,7 +5996,7 @@ class Pipettes:
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
     liquid_heights: Optional[Sequence[Optional[float]]] = None,
-    lld_mode: Union[LLDMode, Sequence[LLDMode]] = LLDMode.OFF,
+    lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     flow_rates: Optional[Sequence[float]] = None,
     *,
     hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]] = None,
@@ -5871,6 +6012,7 @@ class Pipettes:
     pre_mixes: Optional[Sequence[Optional[Mix]]] = None,
     mix_positions_from_liquid_surface: Optional[Sequence[float]] = None,
     surface_following_distances: Optional[Sequence[float]] = None,
+    auto_surface_following: bool = False,
     second_section_heights: Optional[Sequence[float]] = None,
     second_section_ratios: Optional[Sequence[float]] = None,
     settling_times: Optional[Sequence[float]] = None,
@@ -5913,7 +6055,8 @@ class Pipettes:
       liquid_heights: where each OFF draw goes, above the cavity bottom, in mm. The cavity bottom
         when None. Refused for a container with an LLD mode, whose search finds the surface.
       lld_mode: how the liquid, or under ZTOUCH the floor, is found, one for all or one per
-        container. OFF goes to the surface as given. DUAL refuses.
+        container. OFF goes to the surface as given. DUAL refuses. OFF when None; CAPACITIVE under
+        `auto_surface_following`.
       flow_rates: in uL/s. The class's, else 100.0, when None.
       hamilton_liquid_classes: one per container. Looked up for the channel's tip, water, `jet`
         and `blow_out` when None.
@@ -5930,11 +6073,15 @@ class Pipettes:
         then presses onto the well's floor and draws with suction, as a harvest wants.
       pre_wetting_volumes: drawn and returned first, in uL. The class's over-aspirate volume, else
         0.0, when None.
-      pre_mixes: a `Mix` per container, mixed before the draw, None for no mixing.
+      pre_mixes: a `Mix` per container, mixed before the draw, None for no mixing. Its auto
+        surface following needs a surface, as the call's.
       mix_positions_from_liquid_surface: mixing depth under the surface, in mm, per container. 0.0
         when None.
       surface_following_distances: how far each tip follows the sinking surface, in mm. 0.0 when
         None.
+      auto_surface_following: follow by how far each batch's draw lowers the surface found, or the
+        one at `liquid_heights` under OFF; never below the floor, so nothing under ZTOUCH. Refused
+        beside a distance.
       second_section_heights: height of each container's narrower lower section, in mm. 3.2 when
         None.
       second_section_ratios: that section's bottom to top ratio, in tenths. 618.0 when None.
@@ -5958,11 +6105,13 @@ class Pipettes:
     Raises:
       ValueError: An argument out of range, lists that do not match, both or neither of `volumes`
         and `piston_volumes`, a class beside `piston_volumes`, no class for a channel's tip, a
-        liquid height beside an LLD mode, or a piston or a tip without room for its draws from
-        where it stands.
+        liquid height beside an LLD mode, a piston or a tip without room for its draws from where
+        it stands, or auto surface following beside a distance, under OFF without a liquid height,
+        or over a surface outside the container's height-volume data.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
-        container without height-volume functions under CAPACITIVE or PRESSURE, no liquid found
-        where the channels searched, or no floor met where they touched.
+        container without height-volume functions under CAPACITIVE, PRESSURE or auto surface
+        following, no liquid found where the channels searched, or no floor met where they
+        touched.
       NotImplementedError: DUAL.
       TooLittleVolumeError: A tip without room for what it is to draw.
     """
@@ -5976,10 +6125,15 @@ class Pipettes:
     during = default if minimum_traverse_height_during is None else minimum_traverse_height_during
     end = default if minimum_traverse_height_end is None else minimum_traverse_height_end
 
-    modes = per_container(
-      "lld_mode", [lld_mode] * n if isinstance(lld_mode, self.LLDMode) else list(lld_mode), n
+    modes = self._get_lld_modes(
+      containers,
+      lld_mode,
+      auto_surface_following,
+      surface_following_distances,
+      liquid_heights,
+      pre_mixes,
+      "pre_mixes",
     )
-    assert modes is not None
     if self.LLDMode.DUAL in modes:
       raise NotImplementedError("DUAL is not implemented; use CAPACITIVE or PRESSURE")
     touched = [job for job in range(n) if modes[job] == self.LLDMode.ZTOUCH]
@@ -6171,6 +6325,26 @@ class Pipettes:
         "minimum_traverse_height_start": min(surfaces[job] for job in down) if down else raised_to,
         "lld_modes": [self.LLDMode.OFF] * len(jobs),
       }
+      # The surfaces the tips start from are known only now, after the batch's search.
+      here = [containers[job] for job in jobs]
+      heights_now = [max(round(surfaces[job] - floors[job], 2), 0.0) for job in jobs]
+      immersion = per_container_settings["immersion_depths"] or [0.0] * n
+      mix_depth = per_container_settings["mix_positions_from_liquid_surface"] or [0.0] * n
+      if auto_surface_following:
+        batch_following: Optional[List[float]] = self._get_auto_followings(
+          here,
+          [-liquid[job] for job in jobs],
+          heights_now,
+          [surfaces[job] - immersion[job] - sent_floors[job] for job in jobs],
+        )
+      else:
+        batch_following = None if following is None else [following[job] for job in jobs]
+      batch_mixes = self._get_mix_followings(
+        here,
+        [mixes[job] for job in jobs],
+        heights_now,
+        [surfaces[job] - mix_depth[job] - sent_floors[job] for job in jobs],
+      )
       await self._aspirate_in_one_move(
         batch.channels,
         [
@@ -6180,8 +6354,8 @@ class Pipettes:
         [searches[job] for job in jobs],
         [sent_floors[job] for job in jobs],
         [drawn[job] for job in jobs],
-        pre_mixes=[mixes[job] for job in jobs],
-        surface_following_distances=None if following is None else [following[job] for job in jobs],
+        pre_mixes=batch_mixes,
+        surface_following_distances=batch_following,
         minimum_traverse_height_end=end if last else during,
         **kwargs_to_start_from_current_positions,
         **per_channel_settings,
@@ -6468,6 +6642,11 @@ class Pipettes:
     )
     limit_curve = per_channel("limit_curve_indices", limit_curve_indices, 0)
     mixes = per_channel("post_mixes", post_mixes, None)
+    if any(m is not None and m.auto_surface_following for m in mixes):
+      raise ValueError(
+        "a mix's auto_surface_following is resolved by `dispense`, which knows the surface; "
+        "give this layer a surface_following_distance"
+      )
     mix_volume = [m.volume if m is not None else 0.0 for m in mixes]
     mix_count = [m.repetitions if m is not None else 0 for m in mixes]
     # Idle without a mix; 1.0, as legacy's dispense sends it, so the commands match.
@@ -6642,7 +6821,7 @@ class Pipettes:
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
     liquid_heights: Optional[Sequence[Optional[float]]] = None,
-    lld_mode: Union[LLDMode, Sequence[LLDMode]] = LLDMode.OFF,
+    lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     flow_rates: Optional[Sequence[float]] = None,
     *,
     hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]] = None,
@@ -6659,6 +6838,7 @@ class Pipettes:
     cut_off_speeds: Optional[Sequence[float]] = None,
     stop_back_volumes: Optional[Sequence[float]] = None,
     surface_following_distances: Optional[Sequence[float]] = None,
+    auto_surface_following: bool = False,
     second_section_heights: Optional[Sequence[float]] = None,
     second_section_ratios: Optional[Sequence[float]] = None,
     blow_out_air_volumes: Optional[Sequence[float]] = None,
@@ -6698,7 +6878,8 @@ class Pipettes:
       liquid_heights: where each OFF dispense goes, above the cavity bottom, in mm. The cavity
         bottom when None. Refused for a container with an LLD mode, whose search finds the surface.
       lld_mode: how the liquid, or under ZTOUCH the floor, is found, one for all or one per
-        container. OFF goes to the height given. PRESSURE and DUAL refuse.
+        container. OFF goes to the height given. PRESSURE and DUAL refuse. OFF when None;
+        CAPACITIVE under `auto_surface_following`.
       flow_rates: in uL/s. The class's, else 120.0, when None.
       hamilton_liquid_classes: one per container. Looked up for the channel's tip, water, `jet`
         and `blow_out` when None.
@@ -6719,12 +6900,16 @@ class Pipettes:
       stop_back_volumes: drawn back after each dispense, in uL. The class's, else 0.0, when None.
       surface_following_distances: how far each tip follows the rising surface, in mm. 0.0 when
         None.
+      auto_surface_following: follow by how far each batch's dispense raises the surface found, or
+        the one at `liquid_heights` under OFF; never above the top. Refused beside a distance. An
+        empty container has no surface to find: give OFF and `liquid_heights` there.
       second_section_heights: height of each container's narrower lower section, in mm. 3.2 when
         None.
       second_section_ratios: that section's bottom to top ratio, in tenths. 618.0 when None.
       blow_out_air_volumes: air pushed out after the liquid in a blow-out mode, in uL. The
         class's, else 0.0, when None.
-      post_mixes: a `Mix` per container, mixed after the dispense, None for no mixing.
+      post_mixes: a `Mix` per container, mixed after the dispense, None for no mixing. Its auto
+        surface following needs a surface, as the call's.
       mix_positions_from_liquid_surface: mixing depth under the surface, in mm, per container. 0.0
         when None.
       settling_times: wait after the dispense, in s. The class's, else 0.0, when None.
@@ -6745,11 +6930,13 @@ class Pipettes:
       ValueError: An argument out of range, lists that do not match, both or neither of `volumes`
         and `piston_volumes`, a class beside `piston_volumes`, no class for a channel's tip, a
         liquid height beside an LLD mode, a pressure or dual LLD mode, a piston without the travel
-        for its dispenses, or a container without room for them.
+        for its dispenses, a container without room for them, or auto surface following beside a
+        distance, under OFF without a liquid height, or over a surface outside the container's
+        height-volume data.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
-        container without height-volume functions under CAPACITIVE, no liquid found where the
-        channels searched, a container the search found without the room, or no floor met where
-        they touched.
+        container without height-volume functions under CAPACITIVE or auto surface following, no
+        liquid found where the channels searched, a container the search found without the room,
+        or no floor met where they touched.
     """
     deck = self._driver.deck
     if deck is None:
@@ -6761,10 +6948,15 @@ class Pipettes:
     during = default if minimum_traverse_height_during is None else minimum_traverse_height_during
     end = default if minimum_traverse_height_end is None else minimum_traverse_height_end
 
-    modes = per_container(
-      "lld_mode", [lld_mode] * n if isinstance(lld_mode, self.LLDMode) else list(lld_mode), n
+    modes = self._get_lld_modes(
+      containers,
+      lld_mode,
+      auto_surface_following,
+      surface_following_distances,
+      liquid_heights,
+      post_mixes,
+      "post_mixes",
     )
-    assert modes is not None
     for job, mode in enumerate(modes):
       if mode in (self.LLDMode.PRESSURE, self.LLDMode.DUAL):
         raise ValueError(
@@ -6936,6 +7128,35 @@ class Pipettes:
         "minimum_traverse_height_start": min(surfaces[job] for job in down) if down else raised_to,
         "lld_modes": [self.LLDMode.OFF] * len(jobs),
       }
+      # The surfaces the tips start from are known only now, after the batch's search.
+      here = [containers[job] for job in jobs]
+      heights_now = [max(round(surfaces[job] - floors[job], 2), 0.0) for job in jobs]
+      if auto_surface_following:
+        batch_following: Optional[List[float]] = self._get_auto_followings(
+          here,
+          [liquid[job] for job in jobs],
+          heights_now,
+          [tops[job] - surfaces[job] for job in jobs],
+        )
+      else:
+        batch_following = None if following is None else [following[job] for job in jobs]
+      # Only a post-mix that follows needs where the dispense left the surface.
+      rises = [0.0] * len(jobs)
+      for i, job in enumerate(jobs):
+        mix = mixes[job]
+        if mix is not None and mix.auto_surface_following:
+          given = sum(liquid[j] for j in jobs if containers[j] is containers[job])
+          rises[i] = max(self._get_surface_change(containers[job], heights_now[i], given), 0.0)
+      mix_depth = per_container_settings["mix_positions_from_liquid_surface"] or [0.0] * n
+      # A post-mix runs in the surface the dispense raised.
+      batch_mixes = self._get_mix_followings(
+        here,
+        [mixes[job] for job in jobs],
+        [height + rise for height, rise in zip(heights_now, rises)],
+        [
+          surfaces[job] + rise - mix_depth[job] - sent_floors[job] for rise, job in zip(rises, jobs)
+        ],
+      )
       await self._dispense_in_one_move(
         batch.channels,
         [
@@ -6949,8 +7170,8 @@ class Pipettes:
         blow_outs=[blow_outs[job] for job in jobs],
         empties=[empties[job] for job in jobs],
         side_touch_off_distance=side_touch_off_distance,
-        post_mixes=[mixes[job] for job in jobs],
-        surface_following_distances=None if following is None else [following[job] for job in jobs],
+        post_mixes=batch_mixes,
+        surface_following_distances=batch_following,
         minimum_traverse_height_end=end if last else during,
         **kwargs_to_start_from_current_positions,
         **per_channel_settings,
