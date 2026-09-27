@@ -17,12 +17,30 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
 )
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.stanley.cups import (
   StanleyCup_QUENCHER_FLOWSTATE_TUMBLER,
 )
 
 
 class HamiltonDeckTests(unittest.TestCase):
+  def test_a_turned_deck_places_carriers_as_an_upright_one_does(self):
+    """Fit and overlap are checked along the deck's axes, whichever way the deck stands."""
+    for angle in (0, 90, 37.5):
+      with self.subTest(angle=angle):
+        room = Resource("room", size_x=9000, size_y=9000, size_z=3000)
+        room.location = Coordinate.zero()
+        body = Resource("body", size_x=1200, size_y=800, size_z=900, rotation=Rotation(z=angle))
+        room.assign_child_resource(body, location=Coordinate(4000, 4000, 0))
+        deck = STARLetDeck()
+        body.assign_child_resource(deck, location=Coordinate(50, 50, 0))
+        tips = TIP_CAR_480_A00(name="tip_carrier")
+        deck.assign_child_resource(tips, track=1)
+        deck.assign_child_resource(PLT_CAR_L5AC_A00(name="plate_carrier"), track=7)
+        self.assertEqual(deck.compute_right_track_of_carrier(tips), 6)
+        with self.assertRaisesRegex(ValueError, "occupied"):
+          deck.assign_child_resource(PLT_CAR_L5AC_A00(name="clash"), track=2)
+
   def test_rails_is_deprecated(self):
     """`rails` still places a resource, and says it is deprecated."""
     deck = STARLetDeck()
