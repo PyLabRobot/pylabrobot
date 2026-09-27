@@ -471,8 +471,8 @@ def test_head8_aspirate_clld_sends_mphaspirate_with_lld2():
   asyncio.run(_run())
 
 
-def test_head8_aspirate_pressure_without_p_lld_raises():
-  """lld_mode=PRESSURE with no p_lld is refused and no aspirate is sent."""
+def test_head8_aspirate_pressure_and_dual_are_not_implemented():
+  """Pressure LLD has not detected on the Prep: PRESSURE and DUAL refused before sending."""
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
@@ -482,10 +482,20 @@ def test_head8_aspirate_pressure_without_p_lld_raises():
 
     await p.head8.pick_up_tips(tip_rack.column(0))
     captured, _ = _record_send(p)
-    with pytest.raises(ValueError, match="needs p_lld"):
-      await p.head8.aspirate(
-        wells=src_plate.column(0), volume=10, lld_mode=Pipettes.LLDMode.PRESSURE
-      )
+    for mode in (Pipettes.LLDMode.PRESSURE, Pipettes.LLDMode.DUAL):
+      with pytest.raises(NotImplementedError, match=f"{mode.name} LLD is not supported"):
+        await p.head8.aspirate(
+          wells=src_plate.column(0),
+          volume=10,
+          lld_mode=mode,
+          p_lld=PrepCmd.PLldParameters(
+            default_values=False,
+            sensitivity=1,
+            dispenser_seek_speed=5.0,
+            lld_height_difference=0.0,
+            detect_mode=0,
+          ),
+        )
     assert captured == []
 
     await p.stop()
