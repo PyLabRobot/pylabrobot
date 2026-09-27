@@ -331,7 +331,12 @@ class FlexDeck(Deck):
       )
 
     # Rule 2: Other labware — check against operation Z
-    resource_z = resource.get_absolute_location().z + resource.get_absolute_size_z()
+    resource_z = max(
+      resource.get_location_wrt(self, x=x, y=y, z=z).z
+      for x in ("l", "r")
+      for y in ("f", "b")
+      for z in ("b", "t")
+    )
 
     clearance_z = operation_z if operation_z is not None else _DEFAULT_CLEARANCE_Z
 

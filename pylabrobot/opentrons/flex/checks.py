@@ -25,7 +25,7 @@ def traversal_z(deck: Resource, arc_margin: float = _DEFAULT_ARC_MARGIN) -> floa
   tops = []
   for child in deck.get_all_children():
     try:
-      tops.append(child.get_absolute_location(z="t").z)
+      tops.append(child.get_location_wrt(deck, z="t").z)
     except NoLocationError:
       continue
   computed = (max(tops) if tops else 0.0) + arc_margin

@@ -58,6 +58,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.itemized_resource import ItemizedResource
+from pylabrobot.resources.opentrons import FlexDeck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 
@@ -442,7 +443,7 @@ class _FlexHead:
     complete nozzle array; wells locate the active primary nozzle. Stage
     volumes before motion and commit once the plunger command succeeds.
     """
-    position = target.get_absolute_location(x="c", y="c", z="cavity_bottom")
+    position = target.get_location_wrt(self.flex.deck, x="c", y="c", z="cavity_bottom")
     if not isinstance(target, Well):
       if self.channels == 8:
         position.y += _EIGHT_CHANNEL_Y_SPAN / 2
@@ -1878,11 +1879,11 @@ class FlexHead8(_FlexHead):
     if primary not in channels:
       raise ValueError("The partial layout's primary channel must have a target well")
     anchor = wells[channels.index(primary)]
-    anchor_position = anchor.get_absolute_location(x="c", y="c", z="cavity_bottom")
+    anchor_position = anchor.get_location_wrt(self.flex.deck, x="c", y="c", z="cavity_bottom")
     for channel, well in zip(channels, wells):
       if well.parent is not parent:
         raise ValueError("Partial-column wells must share a parent")
-      position = well.get_absolute_location(x="c", y="c", z="cavity_bottom")
+      position = well.get_location_wrt(self.flex.deck, x="c", y="c", z="cavity_bottom")
       expected_y = anchor_position.y + (primary - channel) * 9
       if not (
         math.isclose(position.x, anchor_position.x, abs_tol=0.01)
@@ -2181,7 +2182,12 @@ class FlexHead8(_FlexHead):
     never sees the run commands this driver posts, so nothing downstream would
     catch an out-of-extents anchor.
     """
-    well_y: float = labware.get_item(well).get_absolute_location(y="c").y
+    deck = labware.parent
+    while deck is not None and not isinstance(deck, FlexDeck):
+      deck = deck.parent
+    if deck is None:
+      raise ValueError("Labware must be assigned to a Flex deck")
+    well_y = labware.get_item(well).get_location_wrt(deck, y="c").y
     mount_y = well_y - _SINGLE_NOZZLE_Y[nozzle]
     return (
       mount_y + _PIPETTE_BODY_BACK_Y >= _ROBOT_FRONT_LIMIT
