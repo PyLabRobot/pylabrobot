@@ -48,6 +48,8 @@ const PLATE_PX = 80;
 const PANEL_DROP = 12;
 const PANEL_GAP = 8;
 const PANEL_EDGE = 8; // closest a panel comes to the edge of the viewport
+// Above this many devices, none opens its panels on its own: they would bury the scene.
+const AUTO_OPEN_MAX_DEVICES = 3;
 
 const KINDS = [
   { kind: "multi", icon: "multi_channel_pipette.png", title: "Multi-channel pipettes" },
@@ -648,10 +650,11 @@ export function initDeviceTools({ onSelect }) {
       if (button) toggle(device, kind, button);
     }
     // A device that has just arrived shows its panels; closed once, they stay closed.
+    const autoOpen = names.length <= AUTO_OPEN_MAX_DEVICES;
     for (const device of devices()) {
       if (shown.has(world.names[device])) continue;
       shown.add(world.names[device]);
-      if (compact && world.names[device] !== selected) continue;
+      if (!autoOpen || (compact && world.names[device] !== selected)) continue;
       for (const { kind } of KINDS) {
         const button = buttonOf.get(idOf(device, kind));
         if (button && !open.has(idOf(device, kind))) toggle(device, kind, button);
