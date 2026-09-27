@@ -4116,8 +4116,8 @@ class Pipettes:
       begin_tip_pick_up_process: where the pick-up begins, in mm. The lowest location plus the
         collar height when None.
       end_tip_pick_up_process: where it ends, in mm. The lowest location when None.
-      minimum_traverse_height_start: how high the channels travel first, in mm.
-        `default_minimum_traverse_height` when None.
+      minimum_traverse_height_start: how high the channels travel first, in mm. As high as the
+        tips allow when None; never below 245.0.
       pickup_method: out of a rack or out of wash liquid. The tip's own when None.
 
     Returns:
@@ -4239,8 +4239,8 @@ class Pipettes:
       begin_tip_pick_up_process: where the pick-up begins, in mm. The spot plus the collar height
         when None.
       end_tip_pick_up_process: where it ends, in mm. The spot when None.
-      minimum_traverse_height_start: how high the channels travel first, in mm.
-        `default_minimum_traverse_height` when None.
+      minimum_traverse_height_start: how high the channels travel first, in mm. As high as the
+        tips allow when None; never below 245.0.
       pickup_method: out of a rack or out of wash liquid. The tip's own when None.
       x_tolerance: how far apart in X two spots may be and still go out in one command, in mm.
         None lets any two share one, as legacy sends them: the firmware works through the columns
@@ -4366,7 +4366,8 @@ class Pipettes:
       drop_method: how to let the tips go.
       begin_tip_deposit_process: where the deposit begins, in mm.
       end_tip_deposit_process: where it ends, in mm.
-      minimum_traverse_height_start: how high the channels travel first, in mm.
+      minimum_traverse_height_start: how high the channels travel first, in mm. As high as the
+        tips allow when None; never below 245.0.
       minimum_traverse_height_end: where the channels are left, in mm.
 
     Returns:
@@ -4508,7 +4509,8 @@ class Pipettes:
         None.
       begin_tip_deposit_process: where the deposit begins, in mm.
       end_tip_deposit_process: where it ends, in mm.
-      minimum_traverse_height_start: how high the channels travel first, in mm.
+      minimum_traverse_height_start: how high the channels travel first, in mm. As high as the
+        tips allow when None; never below 245.0.
       minimum_traverse_height_end: where the channels are left, in mm.
       x_tolerance: how far apart in X two spots may be and still go out in one command, in mm.
         None lets any two share one, as legacy sends them.
