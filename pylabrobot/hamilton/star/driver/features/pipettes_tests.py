@@ -1377,7 +1377,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     c = self.pipettes.configuration
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
     top = wells[0].get_location_wrt(self.deck, "c", "c", "t").z
-    end = c.z_drive_mm_to_increments(round(bottom - 1.0 + 51.9, 2))
+    end = c.z_drive_mm_to_increments(round(bottom - 10.0 + 51.9, 2))
     start = c.z_drive_mm_to_increments(round(top + 51.9, 2))
     self.assertEqual(
       self.sent,
@@ -1392,6 +1392,16 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     )
     self.tool_bottoms.assert_not_awaited()
     self.assertEqual(self.safe_z.await_count, 2)
+
+  async def test_a_floor_search_ends_no_lower_than_the_drive_reaches(self):
+    self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    wells = self._wells("A1")
+    c = self.pipettes.configuration
+    bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    lowest = round(bottom - 3.0 + 51.9, 2)
+    c.z_range = (lowest, c.z_range[1])
+    await self.pipettes.probe_z_heights_using_ztouch(wells)
+    self.assertIn(f"za{c.z_drive_mm_to_increments(lowest):05}", self.sent[0])
 
   async def test_floors_set_off_in_a_cascade_from_the_back(self):
     self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
@@ -1429,7 +1439,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
     wells = self._wells("A1")
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    self.rz = self.pipettes.configuration.z_drive_mm_to_increments(round(bottom - 5.0 + 51.9, 2))
+    self.rz = self.pipettes.configuration.z_drive_mm_to_increments(round(bottom - 10.0 + 51.9, 2))
     self.assertEqual(await self.pipettes.probe_z_heights_using_ztouch(wells), [None])
 
   async def test_an_interrupted_batch_brings_the_channels_up_before_it_propagates(self):
@@ -1446,7 +1456,9 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
     wells = self._wells("A1")
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    at_the_end = self.pipettes.configuration.z_drive_mm_to_increments(round(bottom - 5.0 + 51.9, 2))
+    at_the_end = self.pipettes.configuration.z_drive_mm_to_increments(
+      round(bottom - 10.0 + 51.9, 2)
+    )
     self.rz = [at_the_end, 22300]
     with self.assertRaises(RuntimeError):
       await self.pipettes.probe_z_heights_using_ztouch(wells, n_replicates=2)
@@ -3615,8 +3627,8 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
       Pipettes.LLDMode.ZTOUCH,
     ]
     await self.pipettes.aspirate(self.wells, piston_volumes=[10.0] * 4, lld_mode=modes)
-    # The touch first, then the two liquid searches, each its own way; then one command for all
-    # four, the LLD off everywhere, starting at the lowest height any tip rests at: the floor.
+    # The touch, then the two searches, each its own way; then one command for all four, LLD off,
+    # from the lowest height any tip rests at: 0.2 mm off the floor touched.
     self.assertEqual(
       [c[:4] for c in sent], ["P4ZA", "P4ZH", "P2ZA", "P3ZA", "P2ZL", "P3ZE", "C0RL", "C0AS"]
     )
@@ -3628,7 +3640,7 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     start = self.pipettes.configuration.z_drive_mm_to_increments(round(top + 2.0 + overhang, 2))
     self.assertIn(f"zc{start:05}", sent[4])
     self.assertIn(f"lp{round((top + 2.0) * 10):04}", sent[-1])
-    floor = self._surface_field(self.wells[3], 0.0)
+    floor = f"{int(self._surface_field(self.wells[3], 0.0)) + 2:04}"
     self.assertIn(f"th{floor}te2450", sent[-1])
     # The OFF channel draws at the cavity bottom, the searched ones where they found the liquid.
     self.assertIn(
@@ -3637,16 +3649,16 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
       sent[-1],
     )
 
-  async def test_a_z_touch_draws_from_the_floor(self):
+  async def test_a_z_touch_draws_just_off_the_floor(self):
     sent = self._record_aspirations("P1ZA", "P1ZH")
     with self.assertLogs("pylabrobot.hamilton.star.driver.features.pipettes", level="INFO") as logs:
       await self.pipettes.aspirate(
         self.wells[3:4], piston_volumes=[10.0], lld_mode=Pipettes.LLDMode.ZTOUCH
       )
-    # Approach to the top, the touch, the draw from the floor with zx there and the LLD off; the
-    # empty well gives nothing and the air is an info line, not a warning.
+    # Approach to the top, the touch, the draw 0.2 mm off the floor with zx there and the LLD off;
+    # the empty well gives nothing and the air is an info line, not a warning.
     self.assertEqual([c[:4] for c in sent], ["P1ZA", "P1ZH", "C0AS"])
-    floor = self._surface_field(self.wells[3], 0.0)
+    floor = f"{int(self._surface_field(self.wells[3], 0.0)) + 2:04}"
     self.assertIn(f"th{floor}te2450", sent[-1])
     self.assertIn(f"zl{floor}", sent[-1])
     self.assertIn(f"zx{floor}", sent[-1])
