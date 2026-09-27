@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.tip\_spot\_finding.find\_tip\_spots
+===================================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.tip_spot_finding
+
+.. autofunction:: find_tip_spots
