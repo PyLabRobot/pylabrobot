@@ -784,6 +784,7 @@ class PipetteChannel:
     calibration: Optional[Address] = None,
     clld: Optional[Address] = None,
     zaxis: Optional[Address] = None,
+    tadm: Optional[Address] = None,
     ddrive: Optional[Address] = None,
   ) -> None:
     self.index = index
@@ -796,18 +797,9 @@ class PipetteChannel:
     self.calibration = calibration
     self.clld = clld
     self.zaxis = zaxis
+    self.tadm = tadm
     self.ddrive = ddrive
     self.bounds = bounds  # x_min..z_max from firmware, or None if unavailable
-
-  def _require_ddrive(self) -> Address:
-    """This channel's dispensing drive, `Dispenser.DDrive`.
-
-    Raises:
-      RuntimeError: If the channel has no dispensing drive.
-    """
-    if self.ddrive is None:
-      raise RuntimeError(f"channel {self.index} has no dispensing drive in the firmware tree")
-    return self.ddrive
 
   def __repr__(self) -> str:
     return (
@@ -940,6 +932,48 @@ class PipetteChannel:
       raise RuntimeError(f"channel {self.index} has no CLld object in the firmware tree")
     status = await self._driver.send_command(PrepCmd.PrepCLldGetStatus(dest=self.clld))
     return any(status.detected)
+
+  def _require_tadm(self) -> Address:
+    """This channel's Tadm object.
+
+    Raises:
+      RuntimeError: If the channel has no Tadm object.
+    """
+    if self.tadm is None:
+      raise RuntimeError(f"channel {self.index} has no Tadm object in the firmware tree")
+    return self.tadm
+
+  def _require_ddrive(self) -> Address:
+    """This channel's dispensing drive, `Dispenser.DDrive`.
+
+    Raises:
+      RuntimeError: If the channel has no dispensing drive.
+    """
+    if self.ddrive is None:
+      raise RuntimeError(f"channel {self.index} has no dispensing drive in the firmware tree")
+    return self.ddrive
+
+  async def request_tadm_pressure(self) -> int:
+    """Request this channel's live TADM pressure.
+
+    Returns:
+      The pressure in the sensor's counts, as the device gives it.
+
+    Raises:
+      RuntimeError: If the channel has no Tadm object.
+    """
+    response = await self._driver.send_command(
+      PrepCmd.PrepTadmGetPressure(dest=self._require_tadm())
+    )
+    return int(response.pressure[0])
+
+  async def request_tadm_status(self) -> PrepCmd.PrepTadmGetStatus.Response:
+    """Request this channel's TADM buffer: entries held, its size, its sample rate.
+
+    Raises:
+      RuntimeError: If the channel has no Tadm object.
+    """
+    return await self._driver.send_command(PrepCmd.PrepTadmGetStatus(dest=self._require_tadm()))
 
 
 # =============================================================================
@@ -1337,6 +1371,7 @@ class Pipettes:
         calibration=_drive_addr(drive_map.calibration_addrs, i),
         clld=_drive_addr(drive_map.clld_addrs, i),
         zaxis=_drive_addr(drive_map.zaxis_addrs, i),
+        tadm=_drive_addr(drive_map.tadm_addrs, i),
         ddrive=_drive_addr(drive_map.ddrive_addrs, i),
       )
       for i in range(num_channels)
@@ -2108,6 +2143,27 @@ class Pipettes:
     else:
       for channel in use_channels:
         await self._empty_tip(channel, position, flow_rate, reset_dispensing_drive_after, False)
+
+  # -- total aspiration and dispense monitoring (TADM) ---------------------------------------------
+
+  async def read_tadm_curve(self, channel: int) -> Optional[PrepCmd.TadmReturnParameters]:
+    """Read the TADM data a channel recorded. `Pipettor.RetrieveTadmData`.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      Its entries, error flag and pressures in sensor counts, or None when it holds none.
+
+    Raises:
+      ValueError: If the channel does not exist.
+    """
+    if not 0 <= channel < self.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
+    response = await self._driver.send_command(
+      PrepCmd.PrepRetrieveTadmData(channel=self.channel_enum(channel))
+    )
+    return response.tadm_data if response.tadm_data.entries else None
 
   # -- x position ----------------------------------------------------------------------------------
 
@@ -5953,6 +6009,7 @@ class Pipettes:
     swap_speeds: Optional[List[float]] = None,
     clot_detection_heights: Optional[Sequence[float]] = None,
     transport_air_volumes: Optional[List[float]] = None,
+    limit_curve_indices: Optional[Sequence[int]] = None,
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
@@ -5964,6 +6021,7 @@ class Pipettes:
     z_bottom_search_offset: Optional[List[float]] = None,
     z_air: Optional[List[float]] = None,
     tadm: Optional[PrepCmd.TadmParameters] = None,
+    tadm_storage_level: Optional[Literal["errors_only", "all"]] = None,
     container_segments: Optional[List[List[PrepCmd.SegmentDescriptor]]] = None,
     read_timeout: Optional[float] = None,
     command_version: Optional[Literal["v1", "v2"]] = None,
@@ -6011,6 +6069,8 @@ class Pipettes:
         None; only 0.0 until the check is verified on the device.
       transport_air_volumes: air drawn after the liquid, in uL, per container. The liquid
         class's, else 0.0, when None.
+      limit_curve_indices: TADM limit curve, 0 for none, per container. Only 0 until TADM is
+        verified on the device.
       minimum_traverse_height_start: the height every low channel's tip bottom is raised to before
         the first batch, in mm. Z safety when None.
       minimum_traverse_height_during: each tip bottom's height at the end of every batch but the
@@ -6029,6 +6089,8 @@ class Pipettes:
       z_air: the tip bottom height above each container the tip leaves from, in mm. 2 mm over
         the container's top when None.
       tadm: TADM settings; given, the aspiration is monitored.
+      tadm_storage_level: which TADM curves the channel keeps. None records none; only None until
+        TADM is verified on the device.
       container_segments: each container's cross-sections, sent as they are, per container. None
         builds them from each container's profile.
       read_timeout: how long to wait for the answer, in s. Long enough for the search when an
@@ -6039,7 +6101,8 @@ class Pipettes:
       ValueError: If an argument is out of range, the lists do not match, a channel repeats, there
         are more containers than channels, both or neither of `volumes` and `piston_volumes` are
         given, a class is given with `piston_volumes`, no class is known for a channel's tip, a
-        mode is not an `LLDMode`, a pressure mode is mixed with another or has no `p_lld`.
+        mode is not an `LLDMode`, a pressure mode is mixed with another or has no `p_lld`, or a
+        limit curve or a TADM storage level is given.
       RuntimeError: If a channel used carries no tip, or nothing knows where a container's
         liquid stands: no height given, volume tracking off, no LLD.
       TooLittleLiquidError: If a container holds less than it is asked for.
@@ -6068,6 +6131,7 @@ class Pipettes:
       "blow_out_air_volumes": blow_out_air_volumes,
       "pre_wetting_volumes": pre_wetting_volumes,
       "clot_detection_heights": clot_detection_heights,
+      "limit_curve_indices": limit_curve_indices,
       "z_fluid": z_fluid,
       "minimum_allowed_z_positions_during": minimum_allowed_z_positions_during,
       "z_bottom_search_offset": z_bottom_search_offset,
@@ -6083,6 +6147,10 @@ class Pipettes:
     for name, values in per_container.items():
       if values is not None and len(values) != n:
         raise ValueError(f"{name} length must match containers ({n})")
+    if any(index != 0 for index in limit_curve_indices or []) or tadm_storage_level is not None:
+      raise ValueError(
+        "TADM is not verified on the Prep yet; give limit curve 0 and no storage level"
+      )
     modes = self._get_lld_modes(lld_mode, n)
     offsets = (
       resource_offsets

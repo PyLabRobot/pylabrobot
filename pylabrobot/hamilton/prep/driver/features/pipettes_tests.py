@@ -21,6 +21,7 @@ from pylabrobot.hamilton.prep.driver.features.pipettes import (
 from pylabrobot.hamilton.prep.driver.features.pipettes import logger as pipettes_logger
 from pylabrobot.hamilton.prep.driver.master import _ResolvedPrepCommand
 from pylabrobot.hamilton.prep.driver.simulator import (
+  SIMULATED_TADM_PRESSURES,
   SIMULATED_X_AXIS_OFFSET,
   SIMULATED_X_SPEED,
   SIMULATED_Y_DRIVE_OFFSETS,
@@ -364,6 +365,54 @@ def test_aspirate_refuses_a_clot_check_until_it_is_verified():
     with pytest.raises(ValueError, match="clot detection is not verified"):
       await p.pipettes.aspirate([well], clot_detection_heights=[1.5], **kwargs)
     assert not any(isinstance(c, _ASPIRATE_COMMANDS) for c in sent)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_aspirate_refuses_tadm_until_it_is_verified():
+  """Limit curve 0 sends the monitoring variant as before; a curve or a storage level is refused."""
+
+  async def _t():
+    deck = PrepDeck()
+    tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
+    plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips([tip_rack.get_item("A1")], use_channels=[0])
+    well = plate.get_item("A1")
+    kwargs: Dict[str, Any] = {"piston_volumes": [5.0], "use_channels": [0], "liquid_heights": [5.0]}
+    sent = _record(p)
+    await p.pipettes.aspirate([well], limit_curve_indices=[0], **kwargs)
+    assert any(isinstance(c, PrepCmd.PrepAspirateNoLldMonitoringV2) for c in sent)
+    sent.clear()
+    with pytest.raises(ValueError, match="TADM is not verified"):
+      await p.pipettes.aspirate([well], limit_curve_indices=[1], **kwargs)
+    with pytest.raises(ValueError, match="TADM is not verified"):
+      await p.pipettes.aspirate([well], tadm_storage_level="all", **kwargs)
+    assert not any(isinstance(c, _ASPIRATE_COMMANDS) for c in sent)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_tadm_reads_answer_each_channel():
+  """Each channel reads its own Tadm object; the pipettor's TADM data is read by channel enum."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    pressures = [await ch.request_tadm_pressure() for ch in p.pipettes.channels]
+    assert pressures == list(SIMULATED_TADM_PRESSURES)
+    status = await p.pipettes.channels[1].request_tadm_status()
+    assert (status.entries, status.buffer_size, status.sample_rate) == (0, 20000, 10)
+    sent = _record(p, PrepCmd.PrepRetrieveTadmData)
+    assert await p.pipettes.read_tadm_curve(1) is None
+    assert [c.channel for c in sent] == [PrepCmd.ChannelIndex.FrontChannel]
+    with pytest.raises(ValueError, match="channel must be between"):
+      await p.pipettes.read_tadm_curve(2)
     await p.stop()
 
   _run(_t())
