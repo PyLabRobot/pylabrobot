@@ -1000,6 +1000,13 @@ class SimulatedPipettes(_Simulated, Pipettes):
       isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipDefinitionHeld"
     ):
       return HoiParams().add(self._tip_definition_held(), Struct()), "the channels' mounting shafts"
+    if isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipPresent":
+      head8 = self.device.head8
+      sensor = head8.channels[0].sleeve_sensor if head8 is not None and head8.channels else None
+      if head8 is not None and sensor is not None and request.dest == sensor:
+        # The 8-channel head's sleeve senses what sits on its shafts.
+        present = any(tip is not None for tip in head8.get_mounted_tips())
+        return HoiParams().add(int(present), U32), "the 8-channel head's shafts"
     if isinstance(request, PrepCmd.PrepProbeRequest):
       owner = self._owner(request)
       if owner is None:

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -34,6 +35,7 @@ from pylabrobot.resources.hamilton import (
   PrepDeck,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_1000uL,
+  hamilton_tip_50uL,
 )
 from pylabrobot.resources.tip_tracker import does_tip_tracking, set_tip_tracking
 from pylabrobot.resources.volume_tracker import does_volume_tracking, set_volume_tracking
@@ -317,10 +319,67 @@ def test_return_tips_rejects_invalid_state_before_sending(invalid_state):
       error = HasTipError if invalid_state == "occupied" else RuntimeError
       with pytest.raises(error):
         await p.head8.return_tips()
-      assert captured == []
+      # An empty model asks the sleeve sensor why; nothing moves.
+      assert [c for c in captured if not isinstance(c, PrepCmd.PrepProbeRequest)] == []
       assert p.head8.get_mounted_tips() == mounted
     finally:
       set_tip_tracking(tracking)
+      await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_stop_discards_the_heads_tips_into_its_waste():
+  """Tips the model holds on the head go into waste_mph at stop, not into the next session."""
+
+  async def _run() -> None:
+    deck, tip_rack, _, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    head8 = p.head8
+    await head8.pick_up_tips(tip_rack.column(0))
+    captured, _ = _record_send(p)
+    await p.stop()
+    drops = [c for c in captured if isinstance(c, PrepCmd.MphDropTips)]
+    assert len(drops) == 1
+    waste = deck.waste_positions["waste_mph"].get_location_wrt(deck, "c", "c", "t")
+    assert (drops[0].tip_position.x_position, drops[0].tip_position.y_position) == (
+      pytest.approx(waste.x),
+      pytest.approx(waste.y),
+    )
+    assert head8.get_mounted_tips() == [None] * 8
+
+  asyncio.run(_run())
+
+
+def test_tips_the_sensor_sees_but_the_model_does_not_hold_are_refused_then_discarded():
+  """Sensed but unmodelled tips refuse pick-ups and returns until discard_tips(make_tip=) drops them."""
+
+  async def _run() -> None:
+    deck, tip_rack, _, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    head8 = p.head8
+    sensed = [True] * 8
+    head8.sense_tip_presence = AsyncMock(side_effect=lambda: list(sensed))  # type: ignore[method-assign]
+    await head8._on_setup()
+    try:
+      with pytest.raises(RuntimeError, match="senses tips the model does not hold"):
+        await head8.pick_up_tips(tip_rack.column(0))
+      with pytest.raises(RuntimeError, match="its sensor sees some"):
+        await head8.return_tips()
+      await head8.discard_tips()  # the model holds none: nothing to drop without make_tip
+
+      captured, _ = _record_send(p)
+      await head8.discard_tips(make_tip=hamilton_tip_50uL)
+      assert len([c for c in captured if isinstance(c, PrepCmd.MphDropTips)]) == 1
+      assert head8.get_mounted_tips() == [None] * 8
+      sensed[:] = [False] * 8
+      await head8.pick_up_tips(tip_rack.column(0))
+      assert all(tip is not None for tip in head8.get_mounted_tips())
+    finally:
       await p.stop()
 
   asyncio.run(_run())
