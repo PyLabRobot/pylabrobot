@@ -20,6 +20,7 @@ pylabrobot.resources.corning.axygen.plates
    
       Cor_Axy_24_wellplate_10mL_Vb
       Cor_Axy_96_wellplate_500uL_Ub
+      cor_axy_1_troughplate_rowVb
       cor_axy_24_wellplate_10mL_Vb
       cor_axy_96_wellplate_500uL_Ub
    
