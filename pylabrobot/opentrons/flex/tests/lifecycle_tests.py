@@ -39,7 +39,9 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
     await self.flex.setup()
     self.api.submit_command.reset_mock()
     with self.assertRaises(RuntimeError):
-      await head.position()
+      await head.request_position()
+    with self.assertRaises(RuntimeError):
+      await head.move_to_safe_z()
     with self.assertRaises(RuntimeError):
       await gripper.open_jaw()
     self.api.submit_command.assert_not_awaited()

@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from pylabrobot.opentrons import FlexHead1, FlexHead8, FlexHead96
+from pylabrobot.opentrons.errors import OpentronsProtocolError
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.resources import (
   Resource,
@@ -58,6 +59,31 @@ class FlexTraversalTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.io.submit_command.await_args_list[-3].args[1], "getTipPresence")
     self.assertEqual(sum(t is not None for t in self.head.get_mounted_tips()), 8)
 
+  async def test_move_to_safe_z_without_tips(self):
+    await self.head.move_to_safe_z()
+    self.assert_vertical_retraction()
+
+  async def test_single_channel_move_to_safe_z_without_tips(self):
+    io = make_api(pipettes=[("p1000_single_flex", 1, 1, 1000, "left")])
+    flex = make_flex("offline", api=io)
+    try:
+      await flex.setup()
+      head = flex.left_pipette
+      assert isinstance(head, FlexHead1)
+      await head.move_to_safe_z()
+      self.assertEqual(io.submit_command.await_args_list[-1].args[1], "moveRelative")
+      self.assertEqual(io.submit_command.await_args_list[-1].args[2]["axis"], "z")
+    finally:
+      await flex.disconnect()
+
+  async def test_public_retraction_rejects_nonfinite_position(self):
+    self.io.get_command.return_value.result["position"] = {"x": 14, "y": 74, "z": float("nan")}
+    self.io.submit_command.reset_mock()
+    with self.assertRaisesRegex(OpentronsProtocolError, "Invalid position"):
+      await self.head.move_to_safe_z()
+    self.assertEqual(self.io.submit_command.await_count, 1)
+    self.assertEqual(self.io.submit_command.await_args.args[1], "savePosition")
+
   async def test_aspirate_dispense_and_rack_return_retract(self):
     await self.head.pick_up_tips(self.rack.column(0))
     for well in self.plate.column(0):
@@ -85,7 +111,7 @@ class FlexTraversalTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_failed_retraction_preserves_successful_pickup_state(self):
     with patch.object(
-      self.head, "_retract_to_traversal_height", AsyncMock(side_effect=RuntimeError("lift failed"))
+      self.head, "move_to_safe_z", AsyncMock(side_effect=RuntimeError("lift failed"))
     ):
       with self.assertRaisesRegex(RuntimeError, "lift failed"):
         await self.head.pick_up_tips(self.rack.column(0))
@@ -97,7 +123,7 @@ class FlexTraversalTests(unittest.IsolatedAsyncioTestCase):
     for well in self.plate.column(0):
       well.tracker.set_volume(40)
     with patch.object(
-      self.head, "_retract_to_traversal_height", AsyncMock(side_effect=RuntimeError("lift failed"))
+      self.head, "move_to_safe_z", AsyncMock(side_effect=RuntimeError("lift failed"))
     ):
       with self.assertRaisesRegex(RuntimeError, "lift failed"):
         await self.head.aspirate(self.plate.column(0), volume=20)

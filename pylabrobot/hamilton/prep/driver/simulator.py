@@ -24,6 +24,7 @@ import math
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple, cast, get_type_hints
 
+from pylabrobot.hamilton.liquid_class_resolver import LiquidClassLookup
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.introspection import (
@@ -121,6 +122,11 @@ _PROFILES = (
   (SIMULATED_Y_SPEED, SIMULATED_Y_ACCELERATION),
   (SIMULATED_Z_SPEED, SIMULATED_Z_ACCELERATION),
 )
+
+# Each channel's TADM pressure at rest, in sensor counts (rear, front), as the device read it.
+SIMULATED_TADM_PRESSURES = (-4384, -4350)
+# The TADM buffer's size in entries and its sample rate, as the device reported them.
+SIMULATED_TADM_BUFFER_SIZE, SIMULATED_TADM_SAMPLE_RATE = 20000, 10
 
 # The speed scales the device read, in percent. A simulated device keeps none.
 SIMULATED_SPEED_SCALE = 100
@@ -972,7 +978,24 @@ class SimulatedPipettes(_Simulated, Pipettes):
     return None
 
   def _answer_probes(self, request: TCPCommand, method: str) -> Optional[Tuple[Any, str]]:
-    """What the channels say they hold, and their reads by name."""
+    """What the channels say they hold, their TADM reads, and their reads by name."""
+    if isinstance(request, PrepCmd.PrepRetrieveTadmData):
+      # Pressure is not modelled, so nothing is recorded.
+      data = PrepCmd.TadmReturnParameters(
+        default_values=False, channel=request.channel, entries=0, error=False, data=[]
+      )
+      return PrepCmd.PrepRetrieveTadmData.Response(tadm_data=data), "no pressure modelled"
+    if isinstance(request, (PrepCmd.PrepTadmGetPressure, PrepCmd.PrepTadmGetStatus)):
+      owner = self._owner(request)
+      if owner is None or owner >= len(SIMULATED_TADM_PRESSURES):
+        return None
+      if isinstance(request, PrepCmd.PrepTadmGetPressure):
+        return PrepCmd.PrepTadmGetPressure.Response(
+          pressure=[SIMULATED_TADM_PRESSURES[owner]]
+        ), f"channel {owner}'s pressure at rest"
+      return PrepCmd.PrepTadmGetStatus.Response(
+        entries=0, buffer_size=SIMULATED_TADM_BUFFER_SIZE, sample_rate=SIMULATED_TADM_SAMPLE_RATE
+      ), "no pressure modelled"
     if isinstance(request, PrepCmd.PrepGetTipDefinitionHeld) or (
       isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipDefinitionHeld"
     ):
@@ -1290,6 +1313,7 @@ class PrepSimulationDriver(PrepDriver):
     default_minimum_traverse_height: float = 167.5,
     simulate_motion_time: bool = False,
     motion_time_scale: float = 0.25,
+    liquid_class_lookup: Optional[LiquidClassLookup] = None,
   ):
     """
     Args:
@@ -1306,6 +1330,7 @@ class PrepSimulationDriver(PrepDriver):
         viewer shows each step. Off, every command answers at once.
       motion_time_scale: the share of the device's own time a move takes when it does: a quarter,
         so a step is watched rather than waited for. 1.0 keeps the device's time.
+      liquid_class_lookup: as `PrepDriver`'s.
 
     Raises:
       ValueError: If the declared configuration holds no device.
@@ -1314,6 +1339,7 @@ class PrepSimulationDriver(PrepDriver):
       deck=deck,
       declared_configuration_json=declared_configuration_json or RECORDING_PREP_HEATER_SHAKER,
       io=_SimulatedIO(self),
+      liquid_class_lookup=liquid_class_lookup,
     )
     # Its light stands where a real one would, but nobody is looking at it, so setup does not
     # stand at its ready colour. Built here, so setup keeps it rather than making its own.

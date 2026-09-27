@@ -162,7 +162,9 @@ class FlexGripper:
   # --- robot/*: direct gripper motion and jaw control ---
 
   @instrument_operation
-  async def move_to(self, x: float, y: float, z: float, speed: Optional[float] = None) -> None:
+  async def move_to_position(
+    self, x: float, y: float, z: float, speed: Optional[float] = None
+  ) -> None:
     """Move the gripper to an absolute deck-frame position, in mm.
 
     Uses ``robot/moveTo`` with the extension mount rather than the

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import (
   Any,
   AsyncIterator,
@@ -17,6 +17,8 @@ from typing import (
   Union,
 )
 
+from pylabrobot.hamilton.liquid_class_resolver import LiquidClassLookup
+from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError, parse_hamilton_error_entries
@@ -195,8 +197,8 @@ class ChannelDriveMap:
   The Y axis (``YAxis``) and its drive (``YAxis.YDrive``) are listed for the
   channels that have one; the 8-channel head's channels do not. So are the
   channel's ``Calibration`` object (which starts and stops continuous cLLD
-  detection), its ``CLld`` object (which reports it), its Z axis (``ZAxis``) and its
-  dispensing drive (``Dispenser.DDrive``).
+  detection), its ``CLld`` object (which reports it), its ``Tadm`` object (its TADM pressure
+  and buffer), its Z axis (``ZAxis``) and its dispensing drive (``Dispenser.DDrive``).
   """
 
   sleeve_sensor_addrs: List[Address]
@@ -207,6 +209,7 @@ class ChannelDriveMap:
   calibration_addrs: List[Address] = field(default_factory=list)
   clld_addrs: List[Address] = field(default_factory=list)
   zaxis_addrs: List[Address] = field(default_factory=list)
+  tadm_addrs: List[Address] = field(default_factory=list)
   ddrive_addrs: List[Address] = field(default_factory=list)
 
   @property
@@ -225,6 +228,7 @@ class ChannelDriveMap:
       "calibration_addrs": list(self.calibration_addrs),
       "clld_addrs": list(self.clld_addrs),
       "zaxis_addrs": list(self.zaxis_addrs),
+      "tadm_addrs": list(self.tadm_addrs),
       "ddrive_addrs": list(self.ddrive_addrs),
     }
 
@@ -329,6 +333,7 @@ class PrepDriver:
     port: int = 2000,
     declared_configuration_json: Optional[str] = None,
     io: Optional[HamiltonTCPClient] = None,
+    liquid_class_lookup: Optional[LiquidClassLookup] = None,
   ):
     """
     Args:
@@ -341,6 +346,8 @@ class PrepDriver:
         physical device, discovery cross-checks it against what the device answers; against a
         simulated one, the device answers as it says.
       io: the link to drive the device through, instead of a TCP connection to `host`.
+      liquid_class_lookup: finds the class for `volumes` given without one, with
+        `get_star_liquid_class`'s keywords. `get_star_liquid_class`, the STAR's table, when None.
 
     Raises:
       ValueError: If neither `host` nor `io` is given.
@@ -359,6 +366,7 @@ class PrepDriver:
     self.io: HamiltonTCPClient = io
     self._mlprep_address: Optional[Address] = None
     self.deck = deck
+    self.liquid_class_lookup: LiquidClassLookup = liquid_class_lookup or get_star_liquid_class
     # What the device reports about itself, read by `discover`. None until setup has run.
     self.configuration: Optional[DeviceConfiguration] = None
     # Where each tool the channels are carrying came from, so it goes back there when it is
@@ -889,6 +897,7 @@ class PrepDriver:
     - ``<root>.Channel.ZAxis`` / ``.ZDrive`` → Z axis and Z drive
     - ``<root>.Channel.YAxis`` / ``.YDrive`` → Y axis and Y drive, where the channel has one
     - ``<root>.Channel.Calibration`` / ``.CLld`` → continuous cLLD detection and its status
+    - ``<root>.Channel.Tadm``               → TADM pressure and buffer
     - ``<root>.NodeInformation``            → per-channel firmware strings
 
     Uses ``get_subobject_address`` / ``get_object`` along the known path shape —
@@ -923,6 +932,7 @@ class PrepDriver:
     calibration: List[Address] = []
     clld: List[Address] = []
     zaxis: List[Address] = []
+    tadm: List[Address] = []
     ddrive: List[Address] = []
 
     for ch_root in channel_root_addrs:
@@ -936,7 +946,7 @@ class PrepDriver:
         continue
 
       axes = await intro.find_children_by_name(
-        channel_addr, "Squeeze", "ZAxis", "YAxis", "Calibration", "CLld", "Dispenser"
+        channel_addr, "Squeeze", "ZAxis", "YAxis", "Calibration", "CLld", "Tadm", "Dispenser"
       )
       if (sq_parent := axes.get("Squeeze")) is not None:
         sq = await intro.find_children_by_name(sq_parent, "SDrive")
@@ -956,6 +966,8 @@ class PrepDriver:
         calibration.append(cal)
       if (cl := axes.get("CLld")) is not None:
         clld.append(cl)
+      if (td := axes.get("Tadm")) is not None:
+        tadm.append(td)
       if (dispenser := axes.get("Dispenser")) is not None:
         dd = await intro.find_children_by_name(dispenser, "DDrive")
         if "DDrive" in dd:
@@ -971,6 +983,7 @@ class PrepDriver:
       calibration_addrs=calibration,
       clld_addrs=clld,
       zaxis_addrs=zaxis,
+      tadm_addrs=tadm,
       ddrive_addrs=ddrive,
     )
 
@@ -1226,7 +1239,7 @@ class PrepDriver:
       The height, or None if the device does not answer it.
     """
     result = await self.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=self.mlprep_address))
-    return None if result is None else float(result.value)
+    return None if result is None else round(float(result.value), 2)
 
   async def request_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
     """Firmware object tree. ``print(await prep.request_firmware_tree())`` for a diagnostic dump."""
@@ -1243,7 +1256,10 @@ class PrepDriver:
     )
     if result is None or not result.definitions:
       return ()
-    return tuple(result.definitions)
+    return tuple(
+      replace(tip, volume=round(tip.volume, 2), length=round(tip.length, 2))
+      for tip in result.definitions
+    )
 
   # ----------------------------------------
   # Discovery and initialization

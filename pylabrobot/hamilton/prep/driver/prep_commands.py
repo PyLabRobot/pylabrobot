@@ -3742,6 +3742,52 @@ class PrepCLldGetStatus(PrepStatusRequest["PrepCLldGetStatus.Response"]):
 
 
 @dataclass(frozen=True)
+class PrepTadmGetPressure(PrepStatusRequest["PrepTadmGetPressure.Response"]):
+  """Get a channel's live TADM pressure, in sensor counts (cmd=7, dest=Tadm)."""
+
+  command_id = 7
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  @dataclass(frozen=True)
+  class Response:
+    pressure: I16Array
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepTadmGetPressure.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepTadmGetStatus(PrepStatusRequest["PrepTadmGetStatus.Response"]):
+  """Get a channel's TADM buffer fill, size and sample rate (cmd=8, dest=Tadm)."""
+
+  command_id = 8
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  @dataclass(frozen=True)
+  class Response:
+    entries: U32
+    buffer_size: U32
+    sample_rate: U32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepTadmGetStatus.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
 class PrepCreateTadmLimitCurve(PrepCommand[None]):
   """Create TADM limit curve (cmd=31, dest=Pipettor)."""
 
@@ -3824,21 +3870,25 @@ class PrepGetTadmLimitCurveInfo(PrepCommand[None]):
 
 
 @dataclass(frozen=True)
-class PrepRetrieveTadmData(PrepCommand[None]):
-  """Retrieve TADM data for a channel (cmd=35, dest=Pipettor)."""
+class PrepRetrieveTadmData(PrepStatusRequest["PrepRetrieveTadmData.Response"]):
+  """Retrieve a channel's recorded TADM data (cmd=35, dest=Pipettor)."""
 
   command_id = 35
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
-  channel: U32
+  channel: WEnum
+
+  @dataclass(frozen=True)
+  class Response:
+    tadm_data: Annotated[TadmReturnParameters, Struct()]
 
   def build_parameters(self) -> HoiParams:
     """Encode fields in firmware-defined order."""
-    return HoiParams().add(self.channel, U32)
+    return HoiParams().add(self.channel, WEnum)
 
   @classmethod
-  def parse_response_parameters(cls, data: bytes) -> None:
+  def parse_response_parameters(cls, data: bytes) -> PrepRetrieveTadmData.Response:
     """Decode the declared success response."""
-    return None
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
 
 
 @dataclass(frozen=True)

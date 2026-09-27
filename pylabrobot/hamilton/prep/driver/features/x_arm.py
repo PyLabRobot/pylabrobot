@@ -130,6 +130,16 @@ class XArm:
       self.resource.location.z,
     )
 
+  async def _request_axis_offset(self) -> float:
+    """Read the unrounded frame offset for internal motion calculations."""
+    response = await self._driver.send_command(PrepCmd.PrepGetPositions())
+    if not response or not response.positions:
+      raise RuntimeError("the channels reported no positions")
+    x = float(response.positions[0].position_x)
+    self.update_location_by_reference_point(x)
+    commanded = await self._driver.send_command(PrepCmd.PrepXAxisGetCommandedPosition())
+    return x - float(commanded.value)
+
   async def request_axis_offset(self) -> float:
     """Request how far the reported X is from the X axis's own position.
 
@@ -139,10 +149,7 @@ class XArm:
     Raises:
       RuntimeError: If the channels report no position.
     """
-    x = await self.request_position()
-    if x is None:
-      raise RuntimeError("the channels reported no positions")
-    return x - await self.request_commanded_position()
+    return round(await self._request_axis_offset(), 2)
 
   # -- requests --------------------------------------------------------------
 
@@ -160,7 +167,7 @@ class XArm:
       return None
     x = float(response.positions[0].position_x)
     self.update_location_by_reference_point(x)
-    return x
+    return round(x, 2)
 
   async def _record_where_it_stopped(self) -> None:
     """Read where the arm and the channels on it came to rest, and record it.
@@ -185,7 +192,7 @@ class XArm:
       The commanded position in mm.
     """
     response = await self._driver.send_command(PrepCmd.PrepXAxisGetCommandedPosition())
-    return float(response.value)
+    return round(float(response.value), 2)
 
   async def request_speed(self) -> float:
     """Request the speed the X axis drives at (`XAxis.GetVelocity`).
@@ -193,7 +200,7 @@ class XArm:
     Returns:
       The speed in mm/s.
     """
-    return float((await self._driver.send_command(PrepCmd.PrepXAxisGetVelocity())).value)
+    return round(float((await self._driver.send_command(PrepCmd.PrepXAxisGetVelocity())).value), 2)
 
   # manage speed and acceleration -------------------------------------------------
 
@@ -203,7 +210,9 @@ class XArm:
     Returns:
       The acceleration in mm/s2.
     """
-    return float((await self._driver.send_command(PrepCmd.PrepXAxisGetAcceleration())).value)
+    return round(
+      float((await self._driver.send_command(PrepCmd.PrepXAxisGetAcceleration())).value), 2
+    )
 
   async def _unchecked_fw_set_speed(self, speed: float) -> None:
     """Send `XAxis.SetVelocity` without checks.
@@ -322,7 +331,7 @@ class XArm:
       await pipettes.move_tool_bottom_to_z_positions(
         below, speed=z_speed, acceleration=z_acceleration
       )
-    offset = await self.request_axis_offset()
+    offset = await self._request_axis_offset()
     try:
       async with self._temporary_x_axis_profile(speed=speed, acceleration=acceleration):
         await self._unchecked_fw_move_absolute(x - offset)
@@ -391,7 +400,7 @@ class XArm:
           f"the seek could end at x={end}, outside the channels' range "
           f"[{channel.x_range[0]:.1f}, {channel.x_range[1]:.1f}]"
         )
-    offset = await self.request_axis_offset()
+    offset = await self._request_axis_offset()
     try:
       async with self._temporary_x_axis_profile(speed=speed):
         tripped = await self._unchecked_fw_seek_to_home_flag(
@@ -399,4 +408,4 @@ class XArm:
         )
     finally:
       await self._record_where_it_stopped()
-    return tripped + offset
+    return round(tripped + offset, 2)

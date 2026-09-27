@@ -75,7 +75,7 @@ class TestComputedTraversalPlane(unittest.IsolatedAsyncioTestCase):
     expected = traversal_z(flex.deck)
     self.assertNotAlmostEqual(expected, 120.0, msg="test needs labware whose plane != 120")
 
-    await head.move_to(x=100.0, y=100.0, z=50.0)
+    await head.move_to_position(x=100.0, y=100.0, z=50.0)
 
     move_cmds = _commands_of(api, "moveToCoordinates")
     self.assertEqual(len(move_cmds), 1)
