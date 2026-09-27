@@ -510,7 +510,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       up = up.parent
     check_z_height(resource)
 
-  def update_safe_deck_height_from_tips(self, stop_disc_z_max: float, margin: float = 5.0) -> float:
+  def _update_safe_deck_height_from_tips(
+    self, stop_disc_z_max: float, margin: float = 5.0
+  ) -> float:
     """Set `safe_deck_height` from the longest tip this deck holds, then check what stands on it.
 
     Called only when wanted: the class default holds for the longest tip the device can use. See

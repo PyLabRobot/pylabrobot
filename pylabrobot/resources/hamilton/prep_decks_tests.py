@@ -151,6 +151,6 @@ def test_the_safe_deck_height_follows_the_longest_tip_when_asked(monkeypatch):
   checked: List[Resource] = []
   monkeypatch.setattr(deck, "_check_safe_deck_height", checked.append)
   # Only the teaching needle, as long as a 300 uL tip: 167.5 - 51.9 - 5.
-  assert deck.update_safe_deck_height_from_tips(167.5) == 110.6
+  assert deck._update_safe_deck_height_from_tips(167.5) == 110.6
   assert deck.safe_deck_height == 110.6
   assert checked == list(deck.children)

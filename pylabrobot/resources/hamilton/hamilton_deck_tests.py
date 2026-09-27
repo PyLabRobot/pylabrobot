@@ -34,7 +34,7 @@ class HamiltonDeckTests(unittest.TestCase):
     carrier[0] = hamilton_96_tiprack_1000uL(name="rack")
     deck.assign_child_resource(carrier, track=20)
     # The 1000 uL rack decides: 334.7 - 87.1 - 5.
-    self.assertEqual(deck.update_safe_deck_height_from_tips(334.7), 242.6)
+    self.assertEqual(deck._update_safe_deck_height_from_tips(334.7), 242.6)
     self.assertEqual(deck.safe_deck_height, 242.6)
 
   def test_what_hangs_from_a_carried_tool_is_not_checked(self):
