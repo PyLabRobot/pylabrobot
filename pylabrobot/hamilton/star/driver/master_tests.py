@@ -376,6 +376,18 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
       )
     return [call.args[0] % call.args[1:] for call in warning.call_args_list]
 
+  async def test_channels_left_as_they_are_still_have_their_pistons_read(self):
+    """A device already up with nothing mounted skips the channels' initialization."""
+    star = simulator.STARSimulationDriver(
+      deck=STARDeck(), initialized=True, declared_configuration_json=RECORDING_STAR
+    )
+    with recorded_moves() as moves:
+      await star.setup()
+    self.assertNotIn("DI channels", moves)
+    pipettes = star.pipettes
+    assert pipettes is not None
+    self.assertEqual(pipettes.piston_positions, [0.0] * pipettes.num_channels)
+
   async def test_a_head_told_nowhere_to_eject_ejects_at_the_decks_trash(self):
     """A STAR deck carries a trash for the 96-head, and a head with no eject location of its own is
     initialized over it, centred, as legacy does."""

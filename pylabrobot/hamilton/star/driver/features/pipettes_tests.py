@@ -1674,7 +1674,7 @@ class TestEachTipsWaterClass(unittest.IsolatedAsyncioTestCase):
     log = driver._log_exchange
 
     def recorded(written: str, read: Optional[str]) -> None:
-      if written.startswith("C0AS"):
+      if written.startswith(("C0AS", "C0DS")):
         sent.append(written)
       log(written, read)
 
@@ -1688,7 +1688,7 @@ class TestEachTipsWaterClass(unittest.IsolatedAsyncioTestCase):
     assert found is not None, name
     return [int(value) for value in found.group(1).split()[:2]]
 
-  async def test_300_and_1000_uL_tips_draw_by_their_class(self):
+  async def test_300_and_1000_uL_tips_draw_and_dispense_by_their_class(self):
     from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
     from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL, hamilton_96_tiprack_1000uL
     from pylabrobot.resources.liquid import Liquid
@@ -1719,6 +1719,19 @@ class TestEachTipsWaterClass(unittest.IsolatedAsyncioTestCase):
           ("oa", water.aspiration_over_aspirate_volume),
         ):
           self.assertEqual(self._field(sent[0], name), [round(value * 10)] * 2, name)
+        # The class's dispense transport air is more than its aspiration's: travel for it first.
+        await pipettes.aspirate(wells[:2], piston_volumes=[100.0, 100.0], liquid_heights=[3.0, 3.0])
+        await pipettes.dispense(wells[2:4], volumes)
+        self.assertEqual(self._field(sent[2], "dv"), drawn)
+        for name, value in (
+          ("ds", water.dispense_flow_rate),
+          ("ta", water.dispense_air_transport_volume),
+          ("rv", water.dispense_stop_back_volume),
+          ("ba", water.dispense_blow_out_volume),
+          ("de", water.dispense_swap_speed),
+          ("wt", water.dispense_settling_time),
+        ):
+          self.assertEqual(self._field(sent[2], name), [round(value * 10)] * 2, name)
 
   async def test_a_50_uL_tip_has_no_class_without_blow_out(self):
     from pylabrobot.resources.hamilton import hamilton_96_tiprack_50uL
@@ -1729,6 +1742,8 @@ class TestEachTipsWaterClass(unittest.IsolatedAsyncioTestCase):
     refusal = r"no liquid class is known for channel 0's tip.*blow_out=True, which has one"
     with self.assertRaisesRegex(ValueError, refusal):
       await driver.pipettes.aspirate(wells, [10.0, 10.0], liquid_heights=[3.0, 3.0])
+    with self.assertRaisesRegex(ValueError, refusal):
+      await driver.pipettes.dispense(wells, [10.0, 10.0])
     self.assertEqual(sent, [])
 
 
@@ -3692,3 +3707,409 @@ class TestBlowOutAirBeforeTheSearch(_SimulatedPlateWithWater):
         )
     # The air was in the baseline already: the 50 uL of liquid is what the failure books.
     self.assertAlmostEqual(self.wells[0].tracker.volume, 100.0, delta=2.0)
+
+
+class TestDispenseFirmware(unittest.IsolatedAsyncioTestCase):
+  """`C0 DS` as legacy sends it: every field in the same order, at the same width."""
+
+  async def asyncSetUp(self):
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      for swallowed in ("fmt", "read_timeout", "subsystem", "tip_pattern"):
+        kwargs.pop(swallowed, None)
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_the_raw_dispense_is_legacy_dispense_pip_to_the_character(self):
+    n = 2
+    await self.pipettes._unchecked_fw_dispense(
+      tip_pattern=[True, True],
+      dispensing_mode=[2, 1],
+      x_positions=[1234] * n,
+      y_positions=[2160, 1980],
+      minimum_height=[1000] * n,
+      lld_search_height=[1500] * n,
+      liquid_surface_no_lld=[1200] * n,
+      pull_out_distance_transport_air=[100] * n,
+      immersion_depth=[0] * n,
+      immersion_depth_direction=[0] * n,
+      surface_following_distance=[0] * n,
+      second_section_height=[32] * n,
+      second_section_ratio=[6180] * n,
+      minimum_traverse_height_start=2450,
+      minimum_z_end_position=2450,
+      dispense_volumes=[1000] * n,
+      dispense_speed=[1200] * n,
+      cut_off_speed=[50] * n,
+      stop_back_volume=[0] * n,
+      transport_air_volume=[0] * n,
+      blow_out_air_volume=[0] * n,
+      lld_mode=[0] * n,
+      side_touch_off_distance=0,
+      dispense_position_above_z_touch_off=[0] * n,
+      clld_sensitivity=[1] * n,
+      plld_sensitivity=[1] * n,
+      swap_speed=[100] * n,
+      settling_time=[0] * n,
+      mix_volume=[0] * n,
+      mix_cycles=[0] * n,
+      mix_position_from_liquid_surface=[0] * n,
+      mix_speed=[1000] * n,
+      mix_surface_following_distance=[0] * n,
+      limit_curve_index=[0] * n,
+      tadm_algorithm=False,
+      recording_mode=0,
+    )
+    self.assertEqual(
+      self.sent,
+      [
+        "C0DSdm2 1tmTrue Truexp01234 01234yp2160 1980zx1000 1000lp1500 1500zl1200 1200po0100 0100"
+        "ip0000 0000it0 0fp0000 0000zu0032 0032zr06180 06180th2450te2450dv01000 01000ds1200 1200"
+        "ss0050 0050rv000 000ta000 000ba0000 0000lm0 0dj00zo000 000ll1 1lv1 1de0100 0100wt00 00"
+        "mv00000 00000mc00 00mp000 000ms1000 1000mh0000 0000gi000 000gj0gk0"
+      ],
+    )
+
+
+class TestDispenseInOneMove(unittest.IsolatedAsyncioTestCase):
+  """One `C0 DS` from mm and uL: the fields it fills, the defaults it takes, what it refuses."""
+
+  async def asyncSetUp(self):
+    from pylabrobot.resources.hamilton.tip_creators import hamilton_tip_300uL_filter
+
+    self.pipettes = await simulated_channels()
+    self.tip = hamilton_tip_300uL_filter("tip")
+    self.pipettes.get_mounted_tip = unittest.mock.Mock(return_value=self.tip)  # type: ignore[method-assign]
+    self.fw = unittest.mock.AsyncMock()
+    self.pipettes._unchecked_fw_dispense = self.fw  # type: ignore[method-assign]
+    self.pipettes._record_after_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    self.locations = [Coordinate(300.0, 300.0, 150.0), Coordinate(300.0, 291.0, 150.0)]
+    self.floors = [120.0, 120.0]
+    self.searches = [180.0, 180.0]
+
+  def sent(self) -> Mapping[str, Any]:
+    assert self.fw.await_args is not None
+    return self.fw.await_args.kwargs
+
+  async def test_defaults_are_legacys_and_the_fields_are_tenths(self):
+    await self.pipettes._dispense_in_one_move(
+      [0, 1], self.locations, self.searches, self.floors, [100.0, 50.0]
+    )
+    self.fw.assert_awaited_once()
+    sent = self.sent()
+    traverse = round(self.pipettes.default_minimum_traverse_height * 10)
+    self.assertEqual(sent["tip_pattern"], [True, True, False])
+    self.assertEqual(sent["dispensing_mode"], [2, 2])
+    self.assertEqual(sent["dispense_volumes"], [1000, 500])
+    self.assertEqual(sent["dispense_speed"], [1200, 1200])
+    self.assertEqual((sent["cut_off_speed"], sent["stop_back_volume"]), ([50, 50], [0, 0]))
+    self.assertEqual(sent["liquid_surface_no_lld"], [1500, 1500])
+    self.assertEqual(sent["minimum_height"], [1200, 1200])
+    self.assertEqual(sent["lld_mode"], [0, 0])
+    self.assertEqual(
+      (sent["minimum_traverse_height_start"], sent["minimum_z_end_position"]), (traverse, traverse)
+    )
+    self.assertEqual((sent["swap_speed"], sent["settling_time"]), ([100, 100], [0, 0]))
+    self.assertEqual(sent["side_touch_off_distance"], 0)
+    self.assertEqual((sent["mix_cycles"], sent["mix_speed"]), ([0, 0], [10, 10]))
+    self.assertEqual((sent["tadm_algorithm"], sent["recording_mode"]), (False, 0))
+    self.pipettes._record_after_command.assert_awaited_once()  # type: ignore[attr-defined]
+
+  async def test_jet_blow_out_and_empty_pick_the_firmwares_mode(self):
+    for flags, mode in (
+      ((False, False, False), 2),
+      ((False, True, False), 3),
+      ((True, False, False), 0),
+      ((True, True, False), 1),
+      ((False, False, True), 4),
+    ):
+      jet, blow_out, empty = flags
+      await self.pipettes._dispense_in_one_move(
+        [0],
+        self.locations[:1],
+        self.searches[:1],
+        self.floors[:1],
+        [10.0],
+        jets=[jet],
+        blow_outs=[blow_out],
+        empties=[empty],
+      )
+      self.assertEqual(self.sent()["dispensing_mode"], [mode], flags)
+
+  async def test_pressure_lld_is_for_aspirating(self):
+    with self.assertRaises(ValueError) as refused:
+      await self.pipettes._dispense_in_one_move(
+        [0],
+        self.locations[:1],
+        self.searches[:1],
+        self.floors[:1],
+        [10.0],
+        lld_modes=[Pipettes.LLDMode.PRESSURE],
+      )
+    self.assertIn("pressure LLD is for aspirating", str(refused.exception))
+    self.fw.assert_not_awaited()
+
+  async def test_refusals_come_before_anything_is_sent(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes._dispense_in_one_move(
+        [0, 1], self.locations, self.searches, self.floors, [10.0]
+      )
+    with self.assertRaises(ValueError):
+      await self.pipettes._dispense_in_one_move(
+        [0, 1],
+        self.locations,
+        self.searches,
+        self.floors,
+        [10.0, 10.0],
+        stop_back_volumes=[20.0, 0.0],
+      )
+    self.fw.assert_not_awaited()
+
+
+class TestDispenseInSimulation(_SimulatedPlateWithWater):
+  """`dispense` over wells, the simulator answering the searches and moving the pistons."""
+
+  def _record(self, *also: str) -> List[str]:
+    sent: List[str] = []
+    log = self.driver._log_exchange
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      if written.startswith(("C0DS",) + also):
+        sent.append(written)
+      log(written, read)
+
+    self.driver._log_exchange = recorded  # type: ignore[method-assign]
+    return sent
+
+  def _field(self, well, height: float) -> str:
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    return f"{round((bottom + height) * 10):04}"
+
+  async def test_the_tips_give_and_the_wells_take_in_one_command(self):
+    await self.pipettes.aspirate(self.wells[:2], piston_volumes=[50.0, 20.0])
+    sent = self._record()
+    await self.pipettes.dispense(self.wells[2:4], piston_volumes=[50.0, 20.0])
+    self.assertEqual(len(sent), 1)
+    # At the surface, at the cavity bottom, LLD off, from 245 down and back.
+    self.assertIn("dm2 2", sent[0])
+    self.assertIn(f"zl{self._field(self.wells[2], 0.0)} {self._field(self.wells[3], 0.0)}", sent[0])
+    self.assertIn("th2450te2450", sent[0])
+    self.assertIn("dv00500 00200", sent[0])
+    self.assertEqual([w.tracker.get_used_volume() for w in self.wells], [100.0, 80.0, 100.0, 20.0])
+    tips = [self.pipettes.get_mounted_tip(channel) for channel in (0, 1)]
+    self.assertEqual([tip.tracker.get_used_volume() for tip in tips if tip is not None], [0.0, 0.0])
+    self.assertEqual(self.pipettes.piston_positions[:2], [0.0, 0.0])
+    self.assertEqual((await self.pipettes.dispensing_drives_request_uL_positions())[:2], [0.0, 0.0])
+
+  async def test_a_jet_with_blow_out_takes_the_classs_fields_and_the_pistons_rest(self):
+    from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
+    from pylabrobot.resources.liquid import Liquid
+
+    await self.pipettes.aspirate(self.wells[:1], [50.0], jet=[True], blow_out=[True])
+    tip = self.pipettes.get_mounted_tip(0)
+    assert tip is not None
+    water = get_star_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=False,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      liquid=Liquid.WATER,
+      jet=True,
+      blow_out=True,
+    )
+    assert water is not None
+    sent = self._record()
+    await self.pipettes.dispense(self.wells[3:4], [50.0], jet=[True], blow_out=[True])
+    self.assertIn("dm1", sent[0])
+    self.assertIn(f"dv{round(water.compute_corrected_volume(50.0) * 10):05}", sent[0])
+    self.assertIn(f"ds{round(water.dispense_flow_rate * 10):04}", sent[0])
+    self.assertIn(f"ba{round(water.dispense_blow_out_volume * 10):04}", sent[0])
+    self.assertEqual(self.wells[3].tracker.get_used_volume(), 50.0)
+    # Drawn with the aspiration class's air, pushed out with the dispense class's: the read is
+    # the authority on what is left, and the model agrees with it.
+    read = await self.pipettes.dispensing_drives_request_uL_positions()
+    self.assertEqual(self.pipettes.piston_positions[0], read[0])
+
+  async def test_a_capacitive_dispense_searches_first_and_dispenses_at_the_surface(self):
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[20.0])
+    sent = self._record("P1ZL", "C0RL")
+    await self.pipettes.dispense(
+      self.wells[1:2], piston_volumes=[10.0], lld_mode=Pipettes.LLDMode.CAPACITIVE
+    )
+    self.assertEqual([c[:4] for c in sent], ["P1ZL", "C0RL", "C0DS"])
+    surface = self._field(self.wells[1], self.wells[1].compute_height_from_volume(100.0))
+    self.assertIn(f"th{surface}te2450", sent[-1])
+    self.assertIn(f"zl{surface}", sent[-1])
+    self.assertIn("lm0", sent[-1])
+    # The tracker takes the measured volume, read in tenths of a millimetre, then the 10 given.
+    self.assertAlmostEqual(self.wells[1].tracker.get_used_volume(), 110.0, delta=2.0)
+
+  async def test_a_well_the_search_finds_fuller_than_the_model_is_refused_before_booking(self):
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[100.0])
+    # The model has 100 uL in B1; the search answers 300, leaving room for 60, not 100.
+    full = self.wells[1].compute_height_from_volume(300.0)
+    bottom = self.wells[1].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    self.pipettes._probe_batch_liquid_heights = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value={0: [round(bottom + full, 2)]}
+    )
+    sent = self._record()
+    with self.assertRaises(RuntimeError) as refused:
+      await self.pipettes.dispense(
+        self.wells[1:2], piston_volumes=[100.0], lld_mode=Pipettes.LLDMode.CAPACITIVE
+      )
+    self.assertIn("room for", str(refused.exception))
+    self.assertEqual(sent, [])
+    self.assertAlmostEqual(self.wells[1].tracker.get_used_volume(), 300.0, delta=2.0)
+
+  async def test_pressure_lld_is_refused_for_a_dispense(self):
+    sent = self._record()
+    with self.assertRaises(ValueError) as refused:
+      await self.pipettes.dispense(
+        self.wells[1:2], piston_volumes=[10.0], lld_mode=Pipettes.LLDMode.PRESSURE
+      )
+    self.assertIn("pressure LLD is for aspirating", str(refused.exception))
+    self.assertEqual(sent, [])
+
+  async def test_a_z_touch_dispenses_just_above_the_bottom_it_touched(self):
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[20.0])
+    sent = self._record("P1ZH")
+    await self.pipettes.dispense(
+      self.wells[3:4], piston_volumes=[10.0], lld_mode=Pipettes.LLDMode.ZTOUCH
+    )
+    self.assertEqual([c[:4] for c in sent], ["P1ZH", "C0DS"])
+    # 0.2 mm above the bottom touched, which stays the floor the command may not go below.
+    self.assertIn(f"th{self._field(self.wells[3], 0.2)}te2450", sent[-1])
+    self.assertIn(f"zl{self._field(self.wells[3], 0.2)}", sent[-1])
+    self.assertIn(f"zx{self._field(self.wells[3], 0.0)}", sent[-1])
+    self.assertEqual(self.wells[3].tracker.get_used_volume(), 10.0)
+
+  async def test_a_channel_the_device_does_not_have_is_refused(self):
+    sent = self._record()
+    with self.assertRaises(ValueError):
+      await self.pipettes.dispense(self.wells[:1], piston_volumes=[10.0], use_channels=[9])
+    self.assertEqual(sent, [])
+
+  async def test_a_piston_without_travel_is_refused_before_anything_moves(self):
+    sent = self._record()
+    with self.assertRaises(ValueError) as refused:
+      await self.pipettes.dispense(self.wells[3:4], piston_volumes=[10.0])
+    self.assertIn("holds 0.0 uL of travel", str(refused.exception))
+    self.assertEqual(sent, [])
+
+  async def test_a_well_without_room_is_refused_before_anything_moves(self):
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[20.0])
+    self.wells[3].tracker.set_volume(355.0)
+    sent = self._record()
+    with self.assertRaises(ValueError) as refused:
+      await self.pipettes.dispense(self.wells[3:4], piston_volumes=[10.0])
+    self.assertIn("has room for 5.0 uL", str(refused.exception))
+    self.assertEqual(sent, [])
+    self.assertEqual(self.wells[3].tracker.get_used_volume(), 355.0)
+
+  async def test_a_tip_holding_less_gives_what_it_holds_with_a_warning(self):
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[20.0])
+    tip = self.pipettes.get_mounted_tip(0)
+    assert tip is not None
+    tip.tracker.set_volume(5.0)
+    with self.assertLogs(
+      "pylabrobot.hamilton.star.driver.features.pipettes", level="WARNING"
+    ) as logs:
+      await self.pipettes.dispense(self.wells[3:4], piston_volumes=[10.0])
+    self.assertIn("from a tip holding 5.0 uL; the rest is air", logs.output[0])
+    self.assertEqual(self.wells[3].tracker.get_used_volume(), 5.0)
+    self.assertEqual(tip.tracker.get_used_volume(), 0.0)
+    self.assertEqual(self.pipettes.piston_positions[0], 10.0)
+
+  async def test_an_empty_takes_the_piston_to_rest_and_books_what_the_tip_held(self):
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[50.0])
+    sent = self._record()
+    await self.pipettes.dispense(self.wells[3:4], piston_volumes=[20.0], empty=[True])
+    self.assertIn("dm4", sent[0])
+    self.assertIn("dv00200", sent[0])
+    self.assertEqual(self.pipettes.piston_positions[0], 0.0)
+    self.assertEqual((await self.pipettes.dispensing_drives_request_uL_positions())[0], 0.0)
+    # The tip is emptied whatever was asked: the well takes the 50 the tip held.
+    self.assertEqual(self.wells[3].tracker.get_used_volume(), 50.0)
+    tip = self.pipettes.get_mounted_tip(0)
+    assert tip is not None
+    self.assertEqual(tip.tracker.get_used_volume(), 0.0)
+
+  async def test_the_stop_back_leaves_the_piston_where_the_dispense_did(self):
+    # As a device showed: a 5 uL stop-back after 10 uL moved the piston by the 10 and the air held.
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[50.0])
+    sent = self._record()
+    await self.pipettes.dispense(self.wells[3:4], piston_volumes=[30.0], stop_back_volumes=[5.0])
+    self.assertIn("rv050", sent[0])
+    self.assertEqual(self.pipettes.piston_positions[0], 20.0)
+    self.assertEqual((await self.pipettes.dispensing_drives_request_uL_positions())[0], 20.0)
+
+  async def test_an_empty_draws_its_transport_air_and_the_next_dispense_pushes_it(self):
+    # As a device showed three times: an empty with 5 uL of transport air leaves the piston at 5.
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[50.0])
+    await self.pipettes.dispense(
+      self.wells[3:4], piston_volumes=[20.0], empty=[True], transport_air_volumes=[5.0]
+    )
+    self.assertEqual(self.pipettes.piston_positions[0], 5.0)
+    self.assertEqual((await self.pipettes.dispensing_drives_request_uL_positions())[0], 5.0)
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[20.0])
+    await self.pipettes.dispense(self.wells[3:4], piston_volumes=[10.0])
+    self.assertEqual(self.pipettes.piston_positions[0], 10.0)
+    self.assertEqual((await self.pipettes.dispensing_drives_request_uL_positions())[0], 10.0)
+
+  async def test_the_transport_air_a_tip_holds_goes_out_ahead_of_the_next_dispense(self):
+    # As a device showed: an aspirate's `ta` stays in the tip through later aspirates; a dispense
+    # pushes it out ahead of its liquid, then draws its own `ta`, which the next one pushes out.
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[50.0], transport_air_volumes=[5.0])
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[10.0])
+    self.assertEqual(self.pipettes.piston_positions[0], 65.0)
+    for volume, air, standing in ((20.0, 0.0, 40.0), (10.0, 5.0, 35.0), (10.0, 0.0, 20.0)):
+      await self.pipettes.dispense(
+        self.wells[3:4], piston_volumes=[volume], transport_air_volumes=[air]
+      )
+      self.assertEqual(self.pipettes.piston_positions[0], standing)
+      self.assertEqual((await self.pipettes.dispensing_drives_request_uL_positions())[0], standing)
+
+  async def test_a_piston_without_the_travel_for_the_air_it_holds_is_refused(self):
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[19.0], transport_air_volumes=[5.0])
+    sent = self._record()
+    with self.assertRaisesRegex(ValueError, "holds 24.0 uL of travel for the 25.0 uL"):
+      await self.pipettes.dispense(self.wells[3:4], piston_volumes=[20.0])
+    self.assertEqual(sent, [])
+
+  async def test_a_tip_command_leaves_the_pistons_where_a_device_did(self):
+    # A drop leaves each piston 10 uL up, a pick-up takes it to 0; the old tip's air goes with it.
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[20.0], transport_air_volumes=[5.0])
+    await self.pipettes.drop_tips([self.rack.get_item("A1")], use_channels=[0])
+    self.assertEqual(self.pipettes.piston_positions[0], 35.0)
+    await self.pipettes.pick_up_tips([self.rack.get_item("A2")], use_channels=[0])
+    self.assertEqual(self.pipettes.piston_positions[0], 0.0)
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[20.0])
+    await self.pipettes.dispense(self.wells[3:4], piston_volumes=[20.0])
+    self.assertEqual(self.pipettes.piston_positions[0], 0.0)
+
+  async def test_a_failed_command_books_what_the_pistons_gave(self):
+    await self.pipettes.aspirate(self.wells[:2], piston_volumes=[50.0, 20.0])
+    original = self.driver.send_command
+
+    async def failing_after_channel_0_gave(module: str, command: str, **kwargs: Any):
+      result = await original(module=module, command=command, **kwargs)
+      if command == "DS":
+        # The simulator pushed on both channels; the device stopped before channel 1 did.
+        self.driver.dispensing_drive_uL[1] = 20.0
+        raise STARFirmwareError(errors={}, raw_response="")
+      return result
+
+    self.driver.send_command = failing_after_channel_0_gave  # type: ignore[assignment]
+    with self.assertLogs(
+      "pylabrobot.hamilton.star.driver.features.pipettes", level="WARNING"
+    ) as logs:
+      with self.assertRaises(STARFirmwareError):
+        await self.pipettes.dispense(self.wells[2:4], piston_volumes=[50.0, 20.0])
+    self.assertEqual(len(logs.output), 1)
+    self.assertIn("channel 0 gave 50.0 uL", logs.output[0])
+    self.assertEqual([w.tracker.volume for w in self.wells[2:4]], [100.0, 0.0])
+    tips = [self.pipettes.get_mounted_tip(channel) for channel in (0, 1)]
+    self.assertEqual([tip.tracker.volume for tip in tips if tip is not None], [0.0, 20.0])

@@ -428,6 +428,15 @@ class SimulatedPipettes(_Simulated, Pipettes):
           },
           "what each channel last detected liquid at",
         )
+      if command in ("TP", "TR"):
+        # As a device showed: a pick-up takes the pistons to 0, a drop leaves them 10 uL up; the
+        # old tip's air goes with it.
+        for index, involved in enumerate(kwargs["tm"]):
+          if int(involved):
+            standing = self.device.dispensing_drive_uL.get(index, 0.0)
+            self.device.dispensing_drive_uL[index] = 0.0 if command == "TP" else standing + 10.0
+            self.device.transport_air_uL.pop(index, None)
+        return None
       if command == "AS":
         # The command moves the channels itself: each involved one to its Y and, at the end, its
         # tip bottom to `te`. That is what the model has to show when the driver reads back.
@@ -445,6 +454,32 @@ class SimulatedPipettes(_Simulated, Pipettes):
           self.device.dispensing_drive_uL[index] = round(
             self.device.dispensing_drive_uL.get(index, 0.0) + drawn, 1
           )
+          held = self.device.transport_air_uL.get(index, 0.0)
+          self.device.transport_air_uL[index] = round(held + int(kwargs["ta"][used]) / 10, 1)
+          used += 1
+        return None
+      if command == "DS":
+        end = int(kwargs["te"]) / 10
+        used = 0
+        for index, (involved, y) in enumerate(zip(kwargs["tm"], kwargs["yp"])):
+          if not involved:
+            continue
+          self.update_location_by_reference_point(
+            index, y=int(y) / 10, z=round(end + self._below_stop_disc(index), 2)
+          )
+          # The piston pushes out the transport air the tip holds and the volume; the blow-out air
+          # too in a blow-out mode; everything in an empty.
+          standing = self.device.dispensing_drive_uL.get(index, 0.0)
+          mode = str(kwargs["dm"][used])
+          pushed = self.device.transport_air_uL.get(index, 0.0) + int(kwargs["dv"][used]) / 10
+          if mode in ("1", "3"):
+            pushed += int(kwargs["ba"][used]) / 10
+          left = 0.0 if mode == "4" else max(standing - pushed, 0.0)
+          # Then it draws this command's transport air, after an empty too; the stop-back leaves
+          # the piston where the dispense did.
+          air = int(kwargs["ta"][used]) / 10
+          self.device.transport_air_uL[index] = air
+          self.device.dispensing_drive_uL[index] = round(left + air, 1)
           used += 1
         return None
 
@@ -1594,6 +1629,8 @@ class STARSimulationDriver(STARDriver):
     self.last_lld_heights: Dict[int, float] = {}
     # Where each channel's piston stands, in uL: what its aspirations drew.
     self.dispensing_drive_uL: Dict[int, float] = {}
+    # The transport air each channel's tip holds, in uL: the next dispense pushes it out first.
+    self.transport_air_uL: Dict[int, float] = {}
     # Where the 96-head's stop disc last detected liquid, in mm on the deck; 0.0 until one does.
     self.head96_last_lld_z: float = 0.0
     # Where the 96-head's piston stands, in uL: what its strokes drew.
