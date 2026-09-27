@@ -14,7 +14,7 @@ import itertools
 import logging
 from typing import Tuple
 
-from pylabrobot.hamilton.star.device import STARDevice, STARLet
+from pylabrobot.hamilton.star.device import STARDevice, STARlet
 from pylabrobot.resources import set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
@@ -49,14 +49,14 @@ def star_of(facility: Resource) -> STARDevice:
 
 
 def build_facility(*, bare: bool = False) -> Facility:
-  """A facility with a simulated STARLet standing on a bench, with labware on its deck.
+  """A facility with a simulated STARlet standing on a bench, with labware on its deck.
 
   Args:
-    bare: the STARLet alone at the origin, with nothing else to look at.
+    bare: the STARlet alone at the origin, with nothing else to look at.
   """
   if bare:
     facility = Facility(name="facility", size_x=2000, size_y=1200, size_z=1000)
-    facility.assign_child_resource(STARLet(simulation=True), location=Coordinate(0, 0, 0))
+    facility.assign_child_resource(STARlet(simulation=True), location=Coordinate(0, 0, 0))
     return facility
 
   facility = Facility(name="facility", size_x=2600, size_y=1400, size_z=1000)
@@ -65,7 +65,7 @@ def build_facility(*, bare: bool = False) -> Facility:
   # same, since `star_of` finds it as the facility's first child.
   bench = Resource(name="bench", size_x=900, size_y=600, size_z=880, category="bench")
 
-  star = STARLet(simulation=True)
+  star = STARlet(simulation=True)
   facility.assign_child_resource(star, location=Coordinate(0, 0, bench.get_size_z()))
   facility.assign_child_resource(bench, location=Coordinate(0, 0, 0))
 

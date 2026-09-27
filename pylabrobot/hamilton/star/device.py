@@ -400,7 +400,7 @@ def STAR(
   )
 
 
-def STARLet(
+def STARlet(
   deck: Optional[HamiltonSTARDeck] = None,
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
@@ -437,7 +437,7 @@ def STARLet(
     extension_housing=extension_housing,
     left_side_panel_installed=left_side_panel_installed,
     deck_location=STARLET_DECK_LOCATION,
-    model=STARLet.__name__,
+    model=STARlet.__name__,
   )
 
 
