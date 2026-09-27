@@ -32,6 +32,7 @@ from pylabrobot.hamilton.transport.tcp.session import TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import HamiltonDataType, HcResultEntry
 from pylabrobot.io.socket import Socket
+from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
@@ -57,7 +58,14 @@ from .errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from .features.calibration import Calibration
 from .features.core_grippers import CoreGrippers
 from .features.head8 import Head8
-from .features.heater_shaker import PrepHamiltonHeaterShaker
+from .features.heater_shaker import (
+  HEATER_SHAKER_FROM_SPOT,
+  HEATER_SHAKER_PLATE_XY,
+  HEATER_SHAKER_PLATE_Z,
+  HEATER_SHAKER_SIZE,
+  HEATER_SHAKER_SPOT,
+  PrepHamiltonHeaterShaker,
+)
 from .features.lights import Lights
 from .features.method import MethodLifecycle
 from .features.pipettes import TIP_FITTING_DEPTH, Pipettes, channels_named
@@ -504,6 +512,7 @@ class PrepDriver:
         logger.debug("[PHASE 4] Feature resources")
         self._place_reported_sites()
         await self._create_capability_resources()
+        self._seat_heater_shaker()
 
       if any(tips) and plate_held:
         attached = await self.pipettes.request_attached_tip_information(tips.index(True))
@@ -1593,6 +1602,43 @@ class PrepDriver:
         waste_site.x_position, waste_site.y_position, waste_site.z_position
       )
       logger.debug("%s at waste site %d", name, waste_site.index)
+
+  def _seat_heater_shaker(self) -> None:
+    """Make the spot the heater shaker stands in its plate holder: what it holds sits on the heater shaker.
+
+    The spot keeps its name; it takes the heater shaker's footprint and place, is as tall as where a
+    plate sits on it, and has no clips or pedestal. Whatever it held moves onto the heater shaker.
+    """
+    if self.hs is None or not isinstance(self.deck, PrepDeck):
+      return
+    name = self.get_component_name(HEATER_SHAKER_SPOT)
+    if not self.deck.has_resource(name):
+      return
+    spot = self.deck.get_resource(name)
+    if spot.location is None:
+      return
+    if isinstance(spot, PlateHolder) and spot.get_size_z() == HEATER_SHAKER_PLATE_Z:
+      self.hs.resource = spot
+      return
+    held = list(spot.children)
+    for child in held:
+      spot.unassign_child_resource(child)
+    size_x, size_y = HEATER_SHAKER_SIZE
+    plate_x, plate_y = HEATER_SHAKER_PLATE_XY
+    holder = PlateHolder(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=HEATER_SHAKER_PLATE_Z,
+      pedestal_size_z=0,
+      child_location=Coordinate(plate_x, plate_y, HEATER_SHAKER_PLATE_Z),
+    )
+    location = spot.location + HEATER_SHAKER_FROM_SPOT
+    self.deck.unassign_child_resource(spot)
+    self.deck.assign_child_resource(holder, location=location)
+    for child in held:
+      holder.assign_child_resource(child)
+    self.hs.resource = holder
 
   async def _create_capability_resources(self) -> None:
     """Put the X-arm on the deck where it is, and hang a resource for each pipetting channel from it.

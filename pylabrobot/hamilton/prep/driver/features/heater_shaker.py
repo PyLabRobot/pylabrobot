@@ -11,12 +11,25 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, Tuple
 
+from pylabrobot.resources.carrier import PlateHolder
+from pylabrobot.resources.coordinate import Coordinate
+
 from .. import prep_commands as PrepCmd
 
 if TYPE_CHECKING:
   from ..master import PrepDriver
 
 logger = logging.getLogger(__name__)
+
+# The deck spot it stands in, in place of the spot's clips and pedestal.
+HEATER_SHAKER_SPOT = "spot_0_3"
+# Its footprint, in mm, and where on it a plate's front left corner goes: the flat bottom adapter's.
+HEATER_SHAKER_SIZE = (145.5, 104.0)
+HEATER_SHAKER_PLATE_XY = (9.45, 9.25)
+# Where a plate on it sits: this far above the deck, in mm.
+HEATER_SHAKER_PLATE_Z = 30.5
+# Its front left corner from the spot's.
+HEATER_SHAKER_FROM_SPOT = Coordinate(-9.0, 8.0, 0.0)
 
 Direction = Literal["clockwise", "counter_clockwise"]
 
@@ -62,6 +75,8 @@ class PrepHamiltonHeaterShaker:
     self._driver = driver
     self.configuration = configuration or HeaterShakerConfiguration()
     self.target_temperature: Optional[float] = None
+    # The deck spot it stands in, as the driver models it at setup, or None without a Prep deck.
+    self.resource: Optional[PlateHolder] = None
 
   # ----------------------------------------
   # Checks
