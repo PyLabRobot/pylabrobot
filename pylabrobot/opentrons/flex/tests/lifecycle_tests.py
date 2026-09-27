@@ -47,6 +47,54 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(self.api.mock_calls, [])
       self.assertEqual(self.io.mock_calls, [])
 
+  async def test_stop_discards_tips_reported_only_by_hardware(self):
+    """Tips from an earlier session are discarded before homing and releasing the run."""
+    head = self.flex.right_pipette
+    assert head is not None
+    self.assertTrue(all(tip is None for tip in head.get_mounted_tips()))
+    self.api.submit_command.reset_mock()
+    with (
+      patch.object(head, "has_tip_on_hardware", AsyncMock(side_effect=[True, False])),
+      patch.object(head, "move_to_safe_z", AsyncMock()),
+    ):
+      await self.flex.stop()
+    self.assertEqual(
+      [c.args[1] for c in self.api.submit_command.await_args_list],
+      ["moveToAddressableAreaForDropTip", "dropTipInPlace", "home"],
+    )
+    self.assertIsNone(self.flex.run_id)
+    self.assertFalse(self.flex._connected)
+
+  async def test_stop_skips_empty_or_unknown_heads(self):
+    """Absent or unknown hardware tip state does not trigger an empty discard."""
+    for presence in (False, None):
+      with self.subTest(presence=presence):
+        head = self.flex.right_pipette
+        assert head is not None
+        with (
+          patch.object(head, "has_tip_on_hardware", AsyncMock(return_value=presence)),
+          patch.object(head, "discard_tips", AsyncMock()) as discard,
+        ):
+          await self.flex.stop()
+        discard.assert_not_awaited()
+        await self.flex.setup()
+
+  async def test_stop_keeps_releasing_after_tip_discard_failure(self):
+    """A failed tip drop is logged without preventing run release."""
+    head = self.flex.right_pipette
+    assert head is not None
+    with (
+      patch.object(head, "has_tip_on_hardware", AsyncMock(return_value=True)),
+      patch.object(
+        head, "discard_tips", AsyncMock(side_effect=RuntimeError("drop failed"))
+      ) as discard,
+      self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING"),
+    ):
+      await self.flex.stop()
+    discard.assert_awaited_once_with(self.flex.deck.get_trash_area())
+    self.assertIsNone(self.flex.run_id)
+    self.assertFalse(self.flex._connected)
+
   async def test_stale_instruments_cannot_use_a_replacement_run(self):
     head, gripper = self.flex.right_pipette, self.flex.gripper
     assert head is not None and gripper is not None

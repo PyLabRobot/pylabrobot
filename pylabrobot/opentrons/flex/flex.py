@@ -394,7 +394,11 @@ class Flex:
 
   @serialized
   async def stop(self) -> None:
-    """Park the gantry and release the robot, dropping any mounted tips first."""
+    """Discard mounted tips, park the gantry, and release the robot.
+
+    Check hardware tip presence when no tips are recorded locally, including
+    tips left mounted by an earlier session. Discard requires a configured trash.
+    """
     # Drop any mounted tips to the trash BEFORE parking/disconnecting, so the
     # robot is never left holding tips. A failure here must not block the
     # home/cancel/disconnect that follows.
@@ -405,7 +409,10 @@ class Flex:
     if trash is not None:
       for head in reversed(self._heads):
         try:
-          if any(tip is not None for tip in head.get_mounted_tips()):
+          if (
+            any(tip is not None for tip in head.get_mounted_tips())
+            or await head.has_tip_on_hardware()
+          ):
             await head.discard_tips(trash)
         except Exception:
           logger.warning(
