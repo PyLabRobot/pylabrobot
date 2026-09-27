@@ -1005,7 +1005,8 @@ def test_probe_z_using_ztouch_seeks_the_tip_bottom_and_can_end_at_z_safety():
     shaft.mount_tip(hamilton_tip_300uL(name="tip"))
     assert await p.pipettes.request_held_tip_length() == pytest.approx(51.9)
     here = (await p.pipettes.request_locations())[1].z
-    drive = await p.pipettes.channels[1].request_z_drive_position()
+    drive = await p.pipettes.channels[1]._request_z_drive_position()
+    assert await p.pipettes.channels[1].request_z_drive_position() == round(drive, 2)
     sent = _record(p)
     probe = functools.partial(
       p.pipettes.probe_z_using_ztouch,

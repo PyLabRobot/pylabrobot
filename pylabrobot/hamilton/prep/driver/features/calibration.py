@@ -204,19 +204,19 @@ class Calibration:
       )
 
     return PrepCmd.CalibrationValues(
-      independent_offset_x=float(result.independent_offset_x),
-      mph_offset_x=float(result.mph_offset_x),
+      independent_offset_x=round(float(result.independent_offset_x), 2),
+      mph_offset_x=round(float(result.mph_offset_x), 2),
       channel_values=tuple(
         PrepCmd.ChannelCalibrationValuesInfo(
           index=int(cv.index),
-          y_offset=float(cv.y_offset),
-          z_offset=float(cv.z_offset),
+          y_offset=round(float(cv.y_offset), 2),
+          z_offset=round(float(cv.z_offset), 2),
           squeeze_position=int(cv.squeeze_position),
           z_touchoff=int(cv.z_touchoff),
           pressure_shift=int(cv.pressure_shift),
           pressure_monitoring_shift=int(cv.pressure_monitoring_shift),
-          dispenser_return_distance=float(cv.dispenser_return_distance),
-          z_tip_height=float(cv.z_tip_height),
+          dispenser_return_distance=round(float(cv.dispenser_return_distance), 2),
+          z_tip_height=round(float(cv.z_tip_height), 2),
           core_ii=bool(cv.core_ii),
         )
         for cv in (result.channel_values or [])
@@ -466,7 +466,7 @@ class CalibrationSession:
         ),
         read_timeout=timeout,
       )
-      return float(result.offset)
+      return round(float(result.offset), 2)
 
     return await self._run_with_report(
       f"calibrate_x_axis(channel={channel.name}, site_index={site_index})",
@@ -492,7 +492,7 @@ class CalibrationSession:
         ),
         read_timeout=timeout,
       )
-      return float(result.offset)
+      return round(float(result.offset), 2)
 
     return await self._run_with_report(
       f"calibrate_y_axis(channel={channel.name}, site_index={site_index})",
@@ -518,7 +518,7 @@ class CalibrationSession:
         ),
         read_timeout=timeout,
       )
-      return float(result.offset)
+      return round(float(result.offset), 2)
 
     return await self._run_with_report(
       f"calibrate_z_axis(channel={channel.name}, site_index={site_index})",
