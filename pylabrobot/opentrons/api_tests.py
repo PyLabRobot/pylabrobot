@@ -1,5 +1,7 @@
+import json
 import unittest
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, call
 
@@ -56,6 +58,29 @@ class OpentronsAPITests(unittest.IsolatedAsyncioTestCase):
       (
         DeckFixture("cutoutB3", "trashBinAdapter"),
         DeckFixture("cutoutA1", None),
+      ),
+    )
+    self.io.request.assert_awaited_once_with("GET", "/deck_configuration")
+
+  async def test_deck_configuration_from_robot(self) -> None:
+    """Parse the complete Flex configuration, including its D3 trash bin."""
+    fixture = Path(__file__).parents[1] / "testing/test_data/opentrons_flex_deck_configuration.json"
+    self.io.request.return_value = json.loads(fixture.read_text(encoding="utf-8"))
+    self.assertEqual(
+      await self.api.get_deck_configuration(),
+      (
+        DeckFixture("cutoutA1", "singleLeftSlot"),
+        DeckFixture("cutoutB1", "singleLeftSlot"),
+        DeckFixture("cutoutC1", "singleLeftSlot"),
+        DeckFixture("cutoutD1", "singleLeftSlot"),
+        DeckFixture("cutoutA2", "singleCenterSlot"),
+        DeckFixture("cutoutB2", "singleCenterSlot"),
+        DeckFixture("cutoutC2", "singleCenterSlot"),
+        DeckFixture("cutoutD2", "singleCenterSlot"),
+        DeckFixture("cutoutA3", "singleRightSlot"),
+        DeckFixture("cutoutB3", "singleRightSlot"),
+        DeckFixture("cutoutC3", "singleRightSlot"),
+        DeckFixture("cutoutD3", "trashBinAdapter"),
       ),
     )
     self.io.request.assert_awaited_once_with("GET", "/deck_configuration")

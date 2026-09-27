@@ -182,19 +182,25 @@ class HTTPSerialTests(unittest.IsolatedAsyncioTestCase):
         await transport.setup()
     self.assertIsNone(transport._executor)
 
-  async def test_flex_connect_over_serial_only_reads_health(self):
+  async def test_flex_connect_over_serial_reads_health_and_deck_configuration(self):
     body = json.dumps(
       {"name": "Flex", "robot_model": "OT-3 Standard", "api_version": "9.1.2"}
     ).encode()
-    peer = SerialPeer([response(body)])
+    deck_configuration = (
+      Path(__file__).parents[1] / "testing/test_data/opentrons_flex_deck_configuration.json"
+    ).read_bytes()
+    peer = SerialPeer([response(body), response(deck_configuration)])
     flex = Flex(serial_port="/dev/test")
     with patch("pylabrobot.io.http_serial.serial", SimpleNamespace(Serial=Mock(return_value=peer))):
       await flex.connect()
     self.addAsyncCleanup(flex.disconnect)
     self.assertEqual(flex.software_version, "9.1.2")
     self.assertIsNone(flex.run_id)
-    self.assertEqual(len(peer.requests), 1)
-    self.assertTrue(peer.requests[0].startswith(b"GET /health HTTP/1.1"))
+    self.assertEqual(flex.deck.get_slot(flex.deck.get_trash_area()), "D3")
+    self.assertEqual(
+      [request.split(b"\r\n", 1)[0] for request in peer.requests],
+      [b"GET /health HTTP/1.1", b"GET /deck_configuration HTTP/1.1"],
+    )
 
   def test_flex_rejects_ambiguous_connection(self):
     with self.assertRaises(ValueError):
