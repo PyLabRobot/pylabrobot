@@ -105,6 +105,9 @@ class DeviceConfiguration:
   """Whether the 8-channel head is fitted, from GetPresentChannels."""
   has_enclosure: bool = False
   """Whether MLPrep reports an enclosure."""
+  heater_shaker_installed: bool = False
+  """Whether a heater shaker is fitted: HeaterShakerRoot resolves and MLPrepService reports no
+  errors assembling it."""
 
   # -- how it is set up --
   safe_speeds_enabled: bool = False

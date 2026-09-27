@@ -9,9 +9,11 @@ from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.configuration import read_configuration
 from pylabrobot.hamilton.prep.driver.errors import PrepMethodNotFoundError
 from pylabrobot.hamilton.prep.driver.simulator import (
+  FIRMWARE_TREE_V1_2_2,
   FIRMWARE_TREE_V3_0_20,
   RECORDING_PREP,
   RECORDING_PREP_HEAD8,
+  RECORDING_PREP_HEATER_SHAKER,
 )
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.resources import Coordinate, Resource
@@ -24,7 +26,11 @@ def test_firmware_tree_is_selectable():
   """A method the recorded firmware lacks is refused as that firmware refuses it."""
 
   async def _run() -> None:
-    v1 = PrepSimulationDriver(deck=PrepDeck())
+    v1 = PrepSimulationDriver(
+      deck=PrepDeck(),
+      declared_configuration_json=RECORDING_PREP,
+      firmware_tree_json=FIRMWARE_TREE_V1_2_2,
+    )
     await v1.setup()
     with pytest.raises(PrepMethodNotFoundError, match="IsParked"):
       await v1.is_parked()
@@ -107,7 +113,7 @@ def test_setup_places_the_teaching_needle_and_waste_positions_where_the_device_r
     waste.location = Coordinate(0.0, 0.0, 0.0)
     p = PrepSimulationDriver(deck=deck)
     await p.setup()
-    recorded = read_configuration(RECORDING_PREP)["device"]
+    recorded = read_configuration(RECORDING_PREP_HEATER_SHAKER)["device"]
     site = next(s for s in recorded.deck_sites if (s.length, s.width) == (6.0, 6.0))
     placed = needle.get_location_wrt(deck)
     assert (placed.x, placed.y, needle.location.z) == pytest.approx(

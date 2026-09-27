@@ -7,6 +7,7 @@ from typing import AsyncIterator, Optional
 from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
 from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.prep.driver.features.head8 import Head8
+from pylabrobot.hamilton.prep.driver.features.heater_shaker import PrepHamiltonHeaterShaker
 from pylabrobot.hamilton.prep.driver.features.lights import Lights
 from pylabrobot.hamilton.prep.driver.features.method import MethodLifecycle
 from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
@@ -27,6 +28,10 @@ PREP_SIZE_Z = 575.0
 # Where the deck sits inside the device, from the device's left front bottom corner to the deck's.
 # It also places Prep.glb, so it moves with PREP_FIRST_SLOT_LOCATION.
 PREP_DECK_LOCATION = Coordinate(29.20, 88.02, 50.0)
+
+# The device's model with a heater shaker fitted: Prep.glb's frame opened at the back left, where the
+# heater shaker stands in place of spot_0_3, without that spot's position labels.
+PREP_HEATER_SHAKER_MODEL = "Prep_heater_shaker"
 
 
 class PrepDevice(Resource):
@@ -104,6 +109,8 @@ class PrepDevice(Resource):
       default_minimum_traverse_height=default_minimum_traverse_height,
       use_v1_aspirate_dispense=use_v1_aspirate_dispense,
     )
+    if self.driver.hs is not None:
+      self.model = PREP_HEATER_SHAKER_MODEL
 
   async def stop(self, skip_raise_to_z_safety: bool = False):
     """Put the device down.
@@ -131,6 +138,11 @@ class PrepDevice(Resource):
   def head8(self) -> Optional[Head8]:
     """The 8-channel head, on a device that has one."""
     return self.driver.head8
+
+  @property
+  def heater_shaker(self) -> Optional[PrepHamiltonHeaterShaker]:
+    """The heater shaker, on a device that has one."""
+    return self.driver.hs
 
   @property
   def core_grippers(self) -> Optional[CoreGrippers]:
@@ -211,9 +223,9 @@ def Prep(
     port: the port it answers on.
     declared_configuration_json: path to a declared configuration, passed to the driver this builds.
       Read only when this builds one: a driver given outright brings its own. A simulated device
-      defaults to PRPAA1087's recording.
+      defaults to the recording of a device with an 8-channel head and a heater shaker.
     firmware_tree_json: path to a recorded firmware tree, for a simulated device to have. Defaults to
-      MLPrep Runtime V1.2.2's.
+      that device's (MLPrep Runtime V3.0.20).
     driver: the driver to drive it through, instead of building one.
     name: what to call it.
     size_x: how wide it is, in mm.

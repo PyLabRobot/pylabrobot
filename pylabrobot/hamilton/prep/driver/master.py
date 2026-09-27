@@ -34,6 +34,7 @@ from pylabrobot.hamilton.transport.tcp.session import TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import HamiltonDataType, HcResultEntry
 from pylabrobot.io.socket import Socket
+from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
@@ -59,6 +60,14 @@ from .errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from .features.calibration import Calibration
 from .features.core_grippers import CoreGrippers
 from .features.head8 import Head8
+from .features.heater_shaker import (
+  HEATER_SHAKER_FROM_SPOT,
+  HEATER_SHAKER_PLATE_XY,
+  HEATER_SHAKER_PLATE_Z,
+  HEATER_SHAKER_SIZE,
+  HEATER_SHAKER_SPOT,
+  PrepHamiltonHeaterShaker,
+)
 from .features.lights import Lights
 from .features.method import MethodLifecycle
 from .features.pipettes import TIP_FITTING_DEPTH, Pipettes, channels_named
@@ -66,6 +75,7 @@ from .features.x_arm import XArm
 from .prep_commands import (
   _UNRESOLVED,
   DECK_CONFIGURATION_OBJECT_PATH,
+  HEATER_SHAKER_ROOT_PATH,
   MLPREP_CPU_OBJECT_PATH,
   MLPREP_OBJECT_PATH,
   MLPREP_SERVICE_OBJECT_PATH,
@@ -78,7 +88,12 @@ logger = logging.getLogger(__name__)
 
 # What a declaration and a device have to agree on for the one to stand for the other: what is
 # fitted. Identity and set-up are the device's own.
-_DECLARATION_MUST_MATCH = ("num_channels", "head8_installed", "has_enclosure")
+_DECLARATION_MUST_MATCH = (
+  "num_channels",
+  "head8_installed",
+  "has_enclosure",
+  "heater_shaker_installed",
+)
 
 # The PrepDeck waste position for each channel a waste site names.
 _WASTE_SITE_NAMES = {
@@ -360,6 +375,7 @@ class PrepDriver:
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
     self.lights: Optional[Lights] = None
+    self.hs: Optional[PrepHamiltonHeaterShaker] = None
     # How long to wait for a command's answer, in seconds. A command that takes longer than any
     # this device performs is one it is not going to answer, and a caller waiting on it cannot halt
     # the device or say so. Initializing names its own.
@@ -464,6 +480,11 @@ class PrepDriver:
         if default_minimum_traverse_height is not None:
           self.head8.default_minimum_traverse_height = default_minimum_traverse_height
 
+      if self.configuration is not None and self.configuration.heater_shaker_installed:
+        if self.hs is None:
+          self.hs = PrepHamiltonHeaterShaker(self)
+        await self.hs._on_setup()
+
       # What the device was left holding, and where it was left standing: read before anything moves laterally,
       # then raise what can be raised. The 8-channel head is not raised: no move of its Z alone is known.
       tips = await self.pipettes.sense_tip_presence()
@@ -499,6 +520,7 @@ class PrepDriver:
         logger.debug("[PHASE 4] Feature resources")
         self._place_reported_sites()
         await self._create_capability_resources()
+        self._seat_heater_shaker()
 
       if any(tips) and plate_held:
         attached = await self.pipettes.request_attached_tip_information(tips.index(True))
@@ -662,6 +684,11 @@ class PrepDriver:
         await self.pipettes._on_stop()
       if self.head8 is not None:
         await self.head8._on_stop()
+      if self.hs is not None:
+        try:
+          await self.hs._on_stop()
+        except Exception:
+          logger.warning("could not stop the heater shaker", exc_info=True)
       if self.lights is not None:
         # A colour stands on the device without a host to hold it, so a driver that let go mid-hold
         # would leave the deck lit for good.
@@ -1117,6 +1144,7 @@ class PrepDriver:
       num_channels=num_channels,
       head8_installed=head8_installed,
       has_enclosure=has_enclosure,
+      heater_shaker_installed=await self.request_heater_shaker_installed(),
       safe_speeds_enabled=safe_speeds_enabled,
       deck_bounds=deck_bounds,
       deck_sites=deck_sites,
@@ -1428,6 +1456,11 @@ class PrepDriver:
     if c.head8_installed:
       head8 = "installed" if self.head8 is not None else "none, but the device reports it installed"
     lines.append(f"  8-channel head: {head8}")
+    if c.heater_shaker_installed:
+      hs = "installed" if self.hs is not None else "none, but the device reports it installed"
+      if self.hs is not None and self.hs.configuration.firmware_version:
+        hs += f", firmware {self.hs.configuration.firmware_version}"
+      lines.append(f"  heater shaker: {hs}")
     return "\n".join(lines)
 
   # ----------------------------------------
@@ -1586,6 +1619,43 @@ class PrepDriver:
       )
       logger.debug("%s at waste site %d", name, waste_site.index)
 
+  def _seat_heater_shaker(self) -> None:
+    """Make the spot the heater shaker stands in its plate holder: what it holds sits on the heater shaker.
+
+    The spot keeps its name; it takes the heater shaker's footprint and place, is as tall as where a
+    plate sits on it, and has no clips or pedestal. Whatever it held moves onto the heater shaker.
+    """
+    if self.hs is None or not isinstance(self.deck, PrepDeck):
+      return
+    name = self.get_component_name(HEATER_SHAKER_SPOT)
+    if not self.deck.has_resource(name):
+      return
+    spot = self.deck.get_resource(name)
+    if spot.location is None:
+      return
+    if isinstance(spot, PlateHolder) and spot.get_size_z() == HEATER_SHAKER_PLATE_Z:
+      self.hs.resource = spot
+      return
+    held = list(spot.children)
+    for child in held:
+      spot.unassign_child_resource(child)
+    size_x, size_y = HEATER_SHAKER_SIZE
+    plate_x, plate_y = HEATER_SHAKER_PLATE_XY
+    holder = PlateHolder(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=HEATER_SHAKER_PLATE_Z,
+      pedestal_size_z=0,
+      child_location=Coordinate(plate_x, plate_y, HEATER_SHAKER_PLATE_Z),
+    )
+    location = spot.location + HEATER_SHAKER_FROM_SPOT
+    self.deck.unassign_child_resource(spot)
+    self.deck.assign_child_resource(holder, location=location)
+    for child in held:
+      holder.assign_child_resource(child)
+    self.hs.resource = holder
+
   async def _create_capability_resources(self) -> None:
     """Put the X-arm on the deck where it is, and hang a resource for each pipetting channel from it.
 
@@ -1719,6 +1789,29 @@ class PrepDriver:
     try:
       await self.request_method_by_name(MLPREP_OBJECT_PATH, "SetDeckLight")
     except (RuntimeError, PrepMethodNotFoundError):
+      return False
+    return True
+
+  # ----------------------------------------
+  # Heater shaker
+  # ----------------------------------------
+
+  async def request_heater_shaker_installed(self) -> bool:
+    """Request whether a heater shaker is fitted and assembled.
+
+    True when the firmware has a HeaterShakerRoot and MLPrepService reports no errors assembling it.
+    It is `hs`, built at setup if this answers True.
+    """
+    if await self._resolve_optional(HEATER_SHAKER_ROOT_PATH) is None:
+      return False
+    try:
+      errors = _fragment_values(
+        await self.request_by_name(MLPREP_SERVICE_OBJECT_PATH, "GetHHSAssemblyInstantiationErrors")
+      )
+    except (RuntimeError, PrepMethodNotFoundError):
+      return False
+    if errors:
+      logger.warning("the heater shaker is present but not assembled: %s", errors)
       return False
     return True
 
