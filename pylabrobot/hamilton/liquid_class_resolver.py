@@ -1,4 +1,4 @@
-"""Resolve Hamilton liquid classes and corrected volumes for Prep PIP ops.
+"""Resolve Hamilton liquid classes and corrected volumes for pipetting channels.
 
 Automatic lookup defaults to
 :func:`~pylabrobot.hamilton.star.liquid_classes.get_star_liquid_class`
@@ -7,13 +7,17 @@ Automatic lookup defaults to
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
+from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
+from pylabrobot.resources.container import Container
 from pylabrobot.resources.hamilton import HamiltonTip
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.tip import Tip
 
-_Lookup = Callable[..., Optional[HamiltonLiquidClass]]
+# Finds a class, with `get_star_liquid_class`'s keywords.
+LiquidClassLookup = Callable[..., Optional[HamiltonLiquidClass]]
 
 # What an aspirate argument takes from a class when it is not given.
 ASPIRATE_CLASS_ATTRIBUTES: Dict[str, Callable[[HamiltonLiquidClass], float]] = {
@@ -44,7 +48,7 @@ def resolve_hamilton_liquid_classes(
   jet: Union[bool, List[bool]] = False,
   blow_out: Union[bool, List[bool]] = False,
   is_aspirate: bool = True,
-  lookup: Optional[_Lookup] = None,
+  lookup: Optional[LiquidClassLookup] = None,
 ) -> List[Optional[HamiltonLiquidClass]]:
   """Resolve per-op Hamilton liquid classes.
 
@@ -72,14 +76,7 @@ def resolve_hamilton_liquid_classes(
   if explicit is not None:
     return list(explicit)
 
-  if lookup is None:
-    # Lazy import avoids circular import: star package __init__ may pull in pip_backend,
-    # which imports this module.
-    from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
-
-    fn = get_star_liquid_class
-  else:
-    fn = lookup
+  fn = get_star_liquid_class if lookup is None else lookup
   result: List[Optional[HamiltonLiquidClass]] = []
   for i, op in enumerate(ops):
     tip = op.tip
@@ -156,6 +153,72 @@ def check_volume_arguments(
     )
   if piston_volumes is not None and hamilton_liquid_classes is not None:
     raise ValueError(f"piston_volumes are {how_moved} as given; a liquid class would correct them")
+
+
+def get_volumes_and_classes(
+  containers: Sequence[Container],
+  channel_of: Sequence[int],
+  tips: Sequence[Tip],
+  volumes: Optional[Sequence[float]],
+  piston_volumes: Optional[Sequence[float]],
+  hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]],
+  jets: Sequence[bool],
+  blow_outs: Sequence[bool],
+  lookup: LiquidClassLookup = get_star_liquid_class,
+) -> Tuple[List[float], List[float], Optional[List[HamiltonLiquidClass]]]:
+  """The liquid asked per container, the piston volume that moves it, and the classes used.
+
+  Args:
+    containers: per job.
+    channel_of: the channel of each container, per job.
+    tips: per job, the tip on its channel.
+    volumes: liquid per container, corrected by a class; or None.
+    piston_volumes: piston travel per container, as given, the liquid counting the same; or None.
+    hamilton_liquid_classes: one per container; looked up for the tip, water, `jets` and
+      `blow_outs` when None.
+    jets: per job, for the lookup.
+    blow_outs: per job, for the lookup.
+    lookup: finds a class, with `get_star_liquid_class`'s keywords.
+
+  Returns:
+    The liquid per job, the piston volume per job, rounded to 0.01 uL, and the classes, None
+    with `piston_volumes`.
+
+  Raises:
+    ValueError: Lists not one per container, or no class known for a channel's tip.
+  """
+  n = len(containers)
+  if volumes is None:
+    assert piston_volumes is not None
+    piston = per_container("piston_volumes", piston_volumes, n) or []
+    return list(piston), piston, None
+  liquid = per_container("volumes", volumes, n)
+  assert liquid is not None
+  classes = per_container("hamilton_liquid_classes", hamilton_liquid_classes, n)
+  if classes is None:
+    classes = []
+    for job, tip in enumerate(tips):
+      keys = dict(
+        tip_volume=tip.maximal_volume,
+        is_core=False,
+        is_tip=True,
+        has_filter=tip.has_filter,
+        liquid=Liquid.WATER,
+        jet=jets[job],
+      )
+      found = lookup(**keys, blow_out=blow_outs[job])
+      if found is None:
+        other = not blow_outs[job] and lookup(**keys, blow_out=True) is not None
+        raise ValueError(
+          f"no liquid class is known for channel {channel_of[job]}'s tip on "
+          f"{containers[job].name}: {tip.maximal_volume} uL, "
+          f"{'with' if tip.has_filter else 'without'} filter, water, jet={jets[job]}, "
+          f"blow_out={blow_outs[job]}. Give hamilton_liquid_classes, "
+          f"{'blow_out=True, which has one, ' if other else ''}or piston_volumes"
+        )
+      classes.append(found)
+  piston = [round(hlc.compute_corrected_volume(v), 2) for hlc, v in zip(classes, liquid)]
+  return liquid, piston, classes
 
 
 def from_class(

@@ -13,10 +13,12 @@ from pylabrobot.hamilton.liquid_class_resolver import (
   check_volume_arguments,
   corrected_volumes_for_ops,
   from_class,
+  get_volumes_and_classes,
   resolve_hamilton_liquid_classes,
 )
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
 from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
+from pylabrobot.resources.container import Container
 from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.liquid import Liquid
 
@@ -44,6 +46,17 @@ def _hlc(**overrides: Any) -> HamiltonLiquidClass:
   )
   base.update(overrides)
   return HamiltonLiquidClass(**base)
+
+
+def _tip(maximal_volume: float = 300.0) -> HamiltonTip:
+  return HamiltonTip(
+    name="tip",
+    has_filter=False,
+    size_z=59.9,
+    maximal_volume=maximal_volume,
+    tip_size=TipSize.STANDARD_VOLUME,
+    pickup_method=TipPickupMethod.OUT_OF_RACK,
+  )
 
 
 def test_resolve_explicit_returns_copy():
@@ -137,3 +150,29 @@ def test_check_volume_arguments_wants_one_of_volumes_and_piston_volumes():
   ):
     with pytest.raises(ValueError):
       check_volume_arguments(volumes, pistons, classes, "drawn")
+
+
+def test_get_volumes_and_classes_looks_up_corrects_and_rounds():
+  hlc = _hlc(curve={0.0: 0.0, 100.0: 100.123456})
+  keys: list = []
+
+  def lookup(**kwargs):
+    keys.append(kwargs)
+    return hlc
+
+  well = Container(name="w", size_x=1, size_y=1, size_z=1)
+  liquid, piston, classes = get_volumes_and_classes(
+    [well], [0], [_tip()], [100.0], None, None, [True], [False], lookup=lookup
+  )
+  assert (liquid, piston, classes) == ([100.0], [100.12], [hlc])
+  assert keys[0]["jet"] is True and keys[0]["blow_out"] is False
+  assert keys[0]["liquid"] == Liquid.WATER and keys[0]["tip_volume"] == 300.0
+  assert get_volumes_and_classes([well], [0], [_tip()], None, [5.0], None, [False], [False]) == (
+    [5.0],
+    [5.0],
+    None,
+  )
+  with pytest.raises(ValueError, match="no liquid class is known for channel 1's tip on w"):
+    get_volumes_and_classes(
+      [well], [1], [_tip()], [1.0], None, None, [False], [False], lookup=lambda **kw: None
+    )

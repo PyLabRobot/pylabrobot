@@ -1651,6 +1651,87 @@ class TestBatchProbingInSimulation(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(await self.pipettes.probe_liquid_heights([tube]), [5.0])
 
 
+class TestEachTipsWaterClass(unittest.IsolatedAsyncioTestCase):
+  """`volumes` without a class: the tip's water class, looked up with jet and blow_out False."""
+
+  async def _channels_carrying(self, rack_factory) -> Tuple[STARSimulationDriver, Any, List[str]]:
+    from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+    from pylabrobot.resources.hamilton import PLT_CAR_L5AC_A00, TIP_CAR_480_A00
+
+    deck = STARDeck()
+    tips = TIP_CAR_480_A00(name="tips")
+    tips[1] = rack = rack_factory(name="rack")
+    deck.assign_child_resource(tips, track=22)
+    plates = PLT_CAR_L5AC_A00(name="plates")
+    plates[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
+    deck.assign_child_resource(plates, track=30)
+    driver = STARSimulationDriver(deck=deck, declared_configuration_json=RECORDING_STAR)
+    await driver.setup()
+    self.addAsyncCleanup(driver.stop)
+    assert driver.pipettes is not None
+    await driver.pipettes.pick_up_tips([rack.get_item("A1"), rack.get_item("B1")])
+    sent: List[str] = []
+    log = driver._log_exchange
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      if written.startswith("C0AS"):
+        sent.append(written)
+      log(written, read)
+
+    driver._log_exchange = recorded  # type: ignore[method-assign]
+    return driver, plate, sent
+
+  @staticmethod
+  def _field(command: str, name: str) -> List[int]:
+    """The two channels' values of a field, in the firmware's units."""
+    found = re.search(rf"{name}(\d+(?: \d+)*)&", command)
+    assert found is not None, name
+    return [int(value) for value in found.group(1).split()[:2]]
+
+  async def test_300_and_1000_uL_tips_draw_by_their_class(self):
+    from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
+    from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL, hamilton_96_tiprack_1000uL
+    from pylabrobot.resources.liquid import Liquid
+
+    for rack_factory in (hamilton_96_tiprack_300uL, hamilton_96_tiprack_1000uL):
+      with self.subTest(rack=rack_factory.__name__):
+        driver, plate, sent = await self._channels_carrying(rack_factory)
+        pipettes = driver.pipettes
+        assert pipettes is not None
+        tip = pipettes.get_mounted_tip(0)
+        assert tip is not None
+        water = get_star_liquid_class(
+          tip.maximal_volume, False, True, tip.has_filter, Liquid.WATER, False, False
+        )
+        assert water is not None
+        volumes = [20.0, 100.0]
+        wells = [plate.get_well(name) for name in ("A1", "B1", "C1", "D1")]
+        await pipettes.aspirate(wells[:2], volumes, liquid_heights=[3.0, 3.0])
+        drawn = [round(water.compute_corrected_volume(v) * 10) for v in volumes]
+        self.assertEqual(self._field(sent[0], "av"), drawn)
+        for name, value in (
+          ("as", water.aspiration_flow_rate),
+          ("ta", water.aspiration_air_transport_volume),
+          ("ba", water.aspiration_blow_out_volume),
+          ("de", water.aspiration_swap_speed),
+          ("wt", water.aspiration_settling_time),
+          ("ch", water.aspiration_clot_retract_height),
+          ("oa", water.aspiration_over_aspirate_volume),
+        ):
+          self.assertEqual(self._field(sent[0], name), [round(value * 10)] * 2, name)
+
+  async def test_a_50_uL_tip_has_no_class_without_blow_out(self):
+    from pylabrobot.resources.hamilton import hamilton_96_tiprack_50uL
+
+    driver, plate, sent = await self._channels_carrying(hamilton_96_tiprack_50uL)
+    assert driver.pipettes is not None
+    wells = [plate.get_well("A1"), plate.get_well("B1")]
+    refusal = r"no liquid class is known for channel 0's tip.*blow_out=True, which has one"
+    with self.assertRaisesRegex(ValueError, refusal):
+      await driver.pipettes.aspirate(wells, [10.0, 10.0], liquid_heights=[3.0, 3.0])
+    self.assertEqual(sent, [])
+
+
 class TestBatchPlanning(unittest.IsolatedAsyncioTestCase):
   """A v1 device plans with `pylabrobot.lib.liquid_handling`, from its own minimum channel
   spacing."""
