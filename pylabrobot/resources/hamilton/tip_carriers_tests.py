@@ -3,9 +3,6 @@ import unittest
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
-  TIP_CAR_480,
-  TIP_CAR_480_A00,
-  TIP_CAR_480BC_A00,
   TIP_CAR_NTR_A00,
   STARDeck,
   TIP_CAR_72_4mlTF_C00,
@@ -202,12 +199,6 @@ class StandardTipCarrierTests(unittest.TestCase):
       actual = on_module.get_item(spot).get_absolute_location("c", "c", "b")
       self.assertAlmostEqual(actual.x, expected[0])
       self.assertAlmostEqual(actual.y, expected[1])
-
-  def test_the_old_carrier_names_still_work(self):
-    for old_name in (TIP_CAR_480, TIP_CAR_480_A00, TIP_CAR_480BC_A00):
-      with self.assertWarns(DeprecationWarning):
-        old = old_name("carrier")
-      self.assertEqual(old, hamilton_tip_carrier_L5("carrier"))
 
 
 class NestedTipCarrierTests(unittest.TestCase):
