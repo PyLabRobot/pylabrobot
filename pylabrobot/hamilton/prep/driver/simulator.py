@@ -24,6 +24,7 @@ import math
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple, cast, get_type_hints
 
+from pylabrobot.hamilton.liquid_class_resolver import LiquidClassLookup
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.introspection import (
@@ -1169,6 +1170,7 @@ class PrepSimulationDriver(PrepDriver):
     default_minimum_traverse_height: float = 167.5,
     simulate_motion_time: bool = False,
     motion_time_scale: float = 0.25,
+    liquid_class_lookup: Optional[LiquidClassLookup] = None,
   ):
     """
     Args:
@@ -1185,6 +1187,7 @@ class PrepSimulationDriver(PrepDriver):
         viewer shows each step. Off, every command answers at once.
       motion_time_scale: the share of the device's own time a move takes when it does: a quarter,
         so a step is watched rather than waited for. 1.0 keeps the device's time.
+      liquid_class_lookup: as `PrepDriver`'s.
 
     Raises:
       ValueError: If the declared configuration holds no device.
@@ -1193,6 +1196,7 @@ class PrepSimulationDriver(PrepDriver):
       deck=deck,
       declared_configuration_json=declared_configuration_json or RECORDING_PREP,
       io=_SimulatedIO(self),
+      liquid_class_lookup=liquid_class_lookup,
     )
     # Its light stands where a real one would, but nobody is looking at it, so setup does not
     # stand at its ready colour. Built here, so setup keeps it rather than making its own.

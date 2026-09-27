@@ -17,6 +17,8 @@ from typing import (
   Union,
 )
 
+from pylabrobot.hamilton.liquid_class_resolver import LiquidClassLookup
+from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError, parse_hamilton_error_entries
@@ -316,6 +318,7 @@ class PrepDriver:
     port: int = 2000,
     declared_configuration_json: Optional[str] = None,
     io: Optional[HamiltonTCPClient] = None,
+    liquid_class_lookup: Optional[LiquidClassLookup] = None,
   ):
     """
     Args:
@@ -328,6 +331,8 @@ class PrepDriver:
         physical device, discovery cross-checks it against what the device answers; against a
         simulated one, the device answers as it says.
       io: the link to drive the device through, instead of a TCP connection to `host`.
+      liquid_class_lookup: finds the class for `volumes` given without one, with
+        `get_star_liquid_class`'s keywords. `get_star_liquid_class`, the STAR's table, when None.
 
     Raises:
       ValueError: If neither `host` nor `io` is given.
@@ -346,6 +351,7 @@ class PrepDriver:
     self.io: HamiltonTCPClient = io
     self._mlprep_address: Optional[Address] = None
     self.deck = deck
+    self.liquid_class_lookup: LiquidClassLookup = liquid_class_lookup or get_star_liquid_class
     # What the device reports about itself, read by `discover`. None until setup has run.
     self.configuration: Optional[DeviceConfiguration] = None
     # Where each tool the channels are carrying came from, so it goes back there when it is

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import functools
 import hashlib
 import inspect
@@ -52,11 +53,13 @@ from pylabrobot.resources.errors import (
   TooLittleVolumeError,
 )
 from pylabrobot.resources.hamilton import (
+  HamiltonTip,
   PrepDeck,
   STARLetDeck,
   hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL_NTR,
+  hamilton_96_tiprack_1000uL,
   hamilton_tip_50uL,
   hamilton_tip_300uL,
 )
@@ -305,10 +308,13 @@ def test_aspirate_takes_volumes_by_a_liquid_class_or_piston_volumes_as_given():
     well = plate.get_item("A1")
     await p.pipettes.pick_up_tips([tip_rack.get_item("A1")], use_channels=[0])
     for kwargs, match in (
-      ({}, "one of volumes and piston_volumes"),
-      ({"volumes": [5.0], "piston_volumes": [5.0]}, "one of volumes and piston_volumes"),
-      ({"piston_volumes": [5.0], "hamilton_liquid_classes": [None]}, "no liquid class applies"),
-      ({"volumes": [5.0]}, "no liquid class for"),
+      ({}, "not both and not neither"),
+      ({"volumes": [5.0], "piston_volumes": [5.0]}, "not both and not neither"),
+      (
+        {"piston_volumes": [5.0], "hamilton_liquid_classes": [None]},
+        "a liquid class would correct them",
+      ),
+      ({"volumes": [5.0]}, "no liquid class is known for channel 0"),
     ):
       with pytest.raises(ValueError, match=match):
         await p.pipettes.aspirate([well], use_channels=[0], liquid_heights=[2.0], **kwargs)
@@ -316,6 +322,214 @@ def test_aspirate_takes_volumes_by_a_liquid_class_or_piston_volumes_as_given():
     await p.pipettes.aspirate([well], piston_volumes=[5.0], use_channels=[0], liquid_heights=[2.0])
     entry = next(c for c in sent if isinstance(c, _ASPIRATE_COMMANDS)).aspirate_parameters[0]
     assert entry.common.liquid_volume == pytest.approx(5.0)
+    await p.stop()
+
+  _run(_t())
+
+
+@pytest.mark.parametrize("rack", [hamilton_96_tiprack_300uL_NTR, hamilton_96_tiprack_1000uL])
+def test_aspirate_and_dispense_take_the_tips_water_class(rack):
+  """`volumes` without a class: the tip's water class, jet and blow_out False, as the STAR's."""
+
+  async def _t():
+    deck = PrepDeck()
+    tip_rack = deck[1] = rack(name="tips", with_tips=True)
+    plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips([tip_rack.get_item("A1"), tip_rack.get_item("B1")], [0, 1])
+    tip = p.pipettes.get_mounted_tip(0)
+    assert isinstance(tip, HamiltonTip)
+    water = get_star_liquid_class(
+      tip.maximal_volume, False, True, tip.has_filter, Liquid.WATER, False, False
+    )
+    assert water is not None
+    volumes = [20.0, 100.0]
+    sent = _record(p)
+    await p.pipettes.aspirate(
+      plate["A1:B1"], volumes=volumes, use_channels=[0, 1], liquid_heights=[3.0, 3.0]
+    )
+    (command,) = [c for c in sent if isinstance(c, _ASPIRATE_COMMANDS)]
+    by_channel = {p.pipettes.channel_of(int(e.channel)): e for e in command.aspirate_parameters}
+    for channel, volume in zip((0, 1), volumes):
+      entry = by_channel[channel]
+      assert entry.common.liquid_volume == pytest.approx(
+        water.compute_corrected_volume(volume), abs=0.01
+      )
+      assert entry.common.liquid_speed == pytest.approx(water.aspiration_flow_rate)
+      assert entry.common.transport_air_volume == pytest.approx(
+        water.aspiration_air_transport_volume
+      )
+      assert entry.common.z_liquid_exit_speed == pytest.approx(water.aspiration_swap_speed)
+      assert entry.common.settling_time == pytest.approx(water.aspiration_settling_time)
+      assert entry.aspirate.blowout_volume == pytest.approx(water.aspiration_blow_out_volume)
+      assert entry.aspirate.prewet_volume == pytest.approx(water.aspiration_over_aspirate_volume)
+    sent.clear()
+    await p.pipettes.dispense(plate["C1:D1"], volumes=volumes, use_channels=[0, 1])
+    (command,) = [c for c in sent if hasattr(c, "dispense_parameters")]
+    by_channel = {p.pipettes.channel_of(int(e.channel)): e for e in command.dispense_parameters}
+    for channel, volume in zip((0, 1), volumes):
+      entry = by_channel[channel]
+      assert entry.common.liquid_volume == pytest.approx(
+        water.compute_corrected_volume(volume), abs=0.01
+      )
+      assert entry.common.liquid_speed == pytest.approx(water.dispense_flow_rate)
+      assert entry.common.transport_air_volume == pytest.approx(water.dispense_air_transport_volume)
+      assert entry.common.z_liquid_exit_speed == pytest.approx(water.dispense_swap_speed)
+      assert entry.common.settling_time == pytest.approx(water.dispense_settling_time)
+      assert entry.dispense.stop_back_volume == pytest.approx(water.dispense_stop_back_volume)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_driver_given_its_own_table_looks_up_there_once_per_container():
+  """`liquid_class_lookup` replaces the STAR's table: its keys, one call per container."""
+  fake = HamiltonLiquidClass(
+    curve={0.0: 0.0, 100.0: 150.0},
+    aspiration_flow_rate=11.0,
+    aspiration_mix_flow_rate=12.0,
+    aspiration_air_transport_volume=0.5,
+    aspiration_blow_out_volume=1.5,
+    aspiration_swap_speed=3.0,
+    aspiration_settling_time=0.25,
+    aspiration_over_aspirate_volume=2.5,
+    aspiration_clot_retract_height=0.0,
+    dispense_flow_rate=21.0,
+    dispense_mode=2.0,
+    dispense_mix_flow_rate=22.0,
+    dispense_air_transport_volume=0.5,
+    dispense_blow_out_volume=0.0,
+    dispense_swap_speed=4.0,
+    dispense_settling_time=0.75,
+    dispense_stop_flow_rate=6.0,
+    dispense_stop_back_volume=0.5,
+  )
+  calls: List[Dict[str, Any]] = []
+
+  def lookup(**keys: Any) -> Optional[HamiltonLiquidClass]:
+    calls.append(keys)
+    return fake if keys["tip_volume"] == 400.0 else None
+
+  async def _t():
+    deck = PrepDeck()
+    tip_rack = deck[1] = hamilton_96_tiprack_300uL_NTR(name="tips", with_tips=True)
+    plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+    p = PrepSimulationDriver(deck=deck, liquid_class_lookup=lookup)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips([tip_rack.get_item("A1"), tip_rack.get_item("B1")], [0, 1])
+    sent = _record(p)
+    await p.pipettes.aspirate(
+      plate["A1:B1"],
+      volumes=[20.0, 40.0],
+      use_channels=[0, 1],
+      liquid_heights=[3.0, 3.0],
+      jet=[True, False],
+    )
+    assert [(k["tip_volume"], k["jet"], k["blow_out"], k["liquid"]) for k in calls] == [
+      (400.0, True, False, Liquid.WATER),
+      (400.0, False, False, Liquid.WATER),
+    ]
+    (command,) = [c for c in sent if isinstance(c, _ASPIRATE_COMMANDS)]
+    by_channel = {p.pipettes.channel_of(int(e.channel)): e for e in command.aspirate_parameters}
+    assert [by_channel[ch].common.liquid_volume for ch in (0, 1)] == [30.0, 60.0]
+    entry = by_channel[0]
+    assert entry.common.liquid_speed == pytest.approx(11.0)
+    assert entry.aspirate.prewet_volume == pytest.approx(2.5)
+    assert entry.aspirate.blowout_volume == pytest.approx(1.5)
+    calls.clear()
+    await p.pipettes.dispense(plate["C1:D1"], volumes=[20.0, 40.0], use_channels=[0, 1])
+    assert len(calls) == 2
+    (command,) = [c for c in sent if hasattr(c, "dispense_parameters")]
+    entry = next(
+      e for e in command.dispense_parameters if p.pipettes.channel_of(int(e.channel)) == 0
+    )
+    assert entry.common.liquid_volume == pytest.approx(30.0)
+    assert entry.common.liquid_speed == pytest.approx(21.0)
+    assert entry.dispense.stop_back_volume == pytest.approx(0.5)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_trackers_book_the_liquid_not_the_corrected_piston_volume():
+  """As the STAR: the class corrects what the piston moves; the wells and tips book the liquid."""
+
+  async def _t():
+    set_volume_tracking(True)
+    try:
+      deck = PrepDeck()
+      tip_rack = deck[1] = hamilton_96_tiprack_300uL_NTR(name="tips", with_tips=True)
+      plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+      plate.get_item("A1").tracker.set_volume(200.0)
+      p = PrepSimulationDriver(deck=deck)
+      await p.setup()
+      assert p.pipettes is not None
+      await p.pipettes.pick_up_tips([tip_rack.get_item("A1")], [0])
+      sent = _record(p)
+      await p.pipettes.aspirate([plate.get_item("A1")], volumes=[20.0], use_channels=[0])
+      (command,) = [c for c in sent if isinstance(c, _ASPIRATE_COMMANDS)]
+      assert command.aspirate_parameters[0].common.liquid_volume > 20.5
+      tip = p.pipettes.get_mounted_tip(0)
+      assert tip is not None and tip.tracker.get_used_volume() == pytest.approx(20.0)
+      assert plate.get_item("A1").tracker.get_used_volume() == pytest.approx(180.0)
+      await p.pipettes.dispense([plate.get_item("B1")], volumes=[20.0], use_channels=[0])
+      assert tip.tracker.get_used_volume() == pytest.approx(0.0)
+      assert plate.get_item("B1").tracker.get_used_volume() == pytest.approx(20.0)
+      await p.stop()
+    finally:
+      set_volume_tracking(False)
+
+  _run(_t())
+
+
+def test_a_50_uL_tip_has_a_class_only_with_blow_out():
+  """The STAR's table has 50 uL water classes only with blow-out: without, refused before sending,
+  the refusal naming blow_out=True; with it, `Tip_50ul_Water_DispenseSurface_Empty`."""
+  from pylabrobot.hamilton.star.liquid_classes.mapping import (
+    Tip_50ul_Water_DispenseSurface_Empty as water,
+  )
+
+  async def _t():
+    deck = PrepDeck()
+    tip_rack = deck[1] = hamilton_96_tiprack_50uL_NTR(name="tips", with_tips=True)
+    plate = deck[0] = cor_96_wellplate_360uL_Fb(name="plate")
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.pick_up_tips([tip_rack.get_item("A1"), tip_rack.get_item("B1")], [0, 1])
+    sent = _record(p)
+    refusal = "no liquid class is known for channel 0's tip.*blow_out=True, which has one"
+    with pytest.raises(ValueError, match=refusal):
+      await p.pipettes.aspirate(
+        plate["A1:B1"], volumes=[10.0, 10.0], use_channels=[0, 1], liquid_heights=[3.0, 3.0]
+      )
+    with pytest.raises(ValueError, match=refusal):
+      await p.pipettes.dispense(plate["A1:B1"], volumes=[10.0, 10.0], use_channels=[0, 1])
+    assert not [c for c in sent if isinstance(c, _ASPIRATE_COMMANDS)]
+    assert not [c for c in sent if hasattr(c, "dispense_parameters")]
+    await p.pipettes.aspirate(
+      plate["A1:B1"],
+      volumes=[50.0, 10.0],
+      use_channels=[0, 1],
+      liquid_heights=[3.0, 3.0],
+      blow_out=[True, True],
+    )
+    (command,) = [c for c in sent if isinstance(c, _ASPIRATE_COMMANDS)]
+    by_channel = {p.pipettes.channel_of(int(e.channel)): e for e in command.aspirate_parameters}
+    assert by_channel[0].common.liquid_volume == pytest.approx(54.2)
+    assert by_channel[0].aspirate.blowout_volume == pytest.approx(water.aspiration_blow_out_volume)
+    await p.pipettes.dispense(
+      plate["C1:D1"], volumes=[50.0, 10.0], use_channels=[0, 1], blow_out=[True, True]
+    )
+    (command,) = [c for c in sent if hasattr(c, "dispense_parameters")]
+    by_channel = {p.pipettes.channel_of(int(e.channel)): e for e in command.dispense_parameters}
+    assert by_channel[0].common.liquid_volume == pytest.approx(54.2)
+    assert by_channel[1].common.liquid_volume == pytest.approx(
+      round(water.compute_corrected_volume(10.0), 2)
+    )
     await p.stop()
 
   _run(_t())
@@ -420,6 +634,17 @@ def test_aspirate_refuses_a_clot_check_until_it_is_verified():
         use_channels=[0],
         liquid_heights=[3.0],
         clot_detection_heights=[1.5],
+      )
+    # A class's clot height is taken when none is given, and refused the same.
+    clotting = copy.copy(_WATER_50)
+    clotting.aspiration_clot_retract_height = 1.5
+    with pytest.raises(ValueError, match="clot detection is not verified"):
+      await p.pipettes.aspirate(
+        [well],
+        volumes=[5.0],
+        hamilton_liquid_classes=[clotting],
+        use_channels=[0],
+        liquid_heights=[3.0],
       )
     assert not any(isinstance(c, _ASPIRATE_COMMANDS) for c in sent)
     await p.stop()
@@ -3255,7 +3480,7 @@ _GOLDEN_ASPIRATE_FRAMES: Dict[str, List[str]] = {
     "60.0 6ad183795e5b3311e414ecd3e35eba9e88563e12f859fba06a7c4a9b1217ced6",
   ],
   "class volumes, tracked heights": [
-    "60.0 a1b8039eb9ded58e15417b3c9989536497c747254d2acb0fcd11e331394ec5d8",
+    "60.0 3a7b64219ab9cbdef35f5ca2420a56e77363748646508080bbe86b6cb40d9de8",
   ],
   "50 uL tips, classes given": [
     "60.0 82000cfb56c2f719cc2daaa3fe4f5a3215b77390dbe98202bb80bfdad27d2dd3",
@@ -4748,7 +4973,7 @@ def test_dispense_refuses_before_booking_or_sending():
       await p.pipettes.pick_up_tips([tip_rack.get_item("A1")], use_channels=[0])
       sent = _record(p)
       for kwargs, match in (
-        ({"volumes": [5.0]}, "no liquid class for"),
+        ({"volumes": [5.0]}, "no liquid class is known for channel 0"),
         ({"piston_volumes": [5.0], "flow_rates": [0.0]}, "flow_rates must be above 0"),
         ({"piston_volumes": [5.0], "blow_out_air_volumes": [1.0]}, "blow-out air on aspirate"),
         ({"piston_volumes": [5.0], "swap_speeds": [1.0, 1.0]}, "swap_speeds length"),

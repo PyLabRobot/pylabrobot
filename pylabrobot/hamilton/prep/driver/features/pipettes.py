@@ -45,8 +45,11 @@ from typing import (
 )
 
 from pylabrobot.hamilton.liquid_class_resolver import (
-  corrected_volumes_for_ops,
-  resolve_hamilton_liquid_classes,
+  ASPIRATE_CLASS_ATTRIBUTES,
+  DISPENSE_CLASS_ATTRIBUTES,
+  check_volume_arguments,
+  from_class,
+  get_volumes_and_classes,
 )
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
@@ -5165,31 +5168,18 @@ class Pipettes:
     z_fluid: Optional[List[float]] = None,
     z_air: Optional[List[float]] = None,
     z_minimum: Optional[List[float]] = None,
-    hamilton_liquid_classes: Optional[Sequence[Optional[HamiltonLiquidClass]]] = None,
   ) -> _ChannelContext[_OpT]:
     """Resolve shared per-channel state for aspirate or dispense.
 
-    Validates inputs, resolves HLCs, computes volume corrections, well geometry and
-    z-parameter defaults. Operation-specific defaults
-    (settling_time, flow_rate, etc.) are left to the caller.
+    Validates inputs, well geometry and z-parameter defaults. The ops carry piston volumes;
+    operation-specific defaults (settling_time, flow_rate, etc.) are the caller's.
     """
     if len(ops) != len(use_channels):
       raise ValueError(f"len(ops) must equal len(use_channels): {len(ops)} != {len(use_channels)}")
     if use_channels and max(use_channels) >= self.num_channels:
       raise ValueError(f"use_channels index out of range (valid: 0..{self.num_channels - 1})")
 
-    n = len(ops)
-    if hamilton_liquid_classes is not None and len(hamilton_liquid_classes) != n:
-      raise ValueError(
-        f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
-      )
-    hlcs = resolve_hamilton_liquid_classes(
-      list(hamilton_liquid_classes) if hamilton_liquid_classes is not None else None,
-      list(ops),
-      jet=False,
-      blow_out=False,
-    )
-    volumes = corrected_volumes_for_ops(ops, hlcs)
+    volumes = [float(op.volume) for op in ops]
 
     well_geometry = [
       _absolute_z_from_well(op.resource, self._require_deck(), op.liquid_height, op.offset.z)
@@ -5919,12 +5909,11 @@ class Pipettes:
     drawn: List[float],
     use_channels: List[int],
     resource_offsets: List[Coordinate],
-    by_liquid_class: bool,
     liquid_heights: Optional[List[Optional[float]]],
     lld_mode: Optional[Pipettes.LLDMode],
     flow_rates: Optional[List[Optional[float]]],
     *,
-    hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]],
+    liquid: List[float],
     clld_sensitivity: Optional[int],
     immersion_depths: Optional[List[float]],
     blow_out_air_volumes: Optional[List[Optional[float]]],
@@ -5956,9 +5945,9 @@ class Pipettes:
 
     Args:
       x_position: the batch's X, sent for every channel, in mm.
-      drawn: the volumes, or the piston volumes, per container, in uL.
+      drawn: the piston volumes, per container, in uL.
+      liquid: the liquid each takes, per container, in uL: what is booked.
       resource_offsets: as `aspirate` resolved them.
-      by_liquid_class: whether `drawn` are liquid volumes, corrected by a liquid class.
       z_fluid: the tip bottom height to aspirate at, in mm, per container: the floor touched under
         ZTOUCH, the surface found under CAPACITIVE. From the liquid heights when None.
       minimum_traverse_height_end: the tip bottom height every tip is left at, in mm.
@@ -5970,7 +5959,6 @@ class Pipettes:
     Returns:
       The liquid volume each channel takes, in uL.
     """
-    n = len(containers)
     ops = self._build_transfers(
       containers,
       drawn,
@@ -5982,26 +5970,12 @@ class Pipettes:
       flow_rates=flow_rates,
       blow_out_air_volume=blow_out_air_volumes,
     )
-    classes: List[Optional[HamiltonLiquidClass]] = [None] * n
-    if by_liquid_class:
-      classes = resolve_hamilton_liquid_classes(
-        None if hamilton_liquid_classes is None else list(hamilton_liquid_classes),
-        ops,
-        jet=False,
-        blow_out=False,
-      )
-      for op, hlc in zip(ops, classes):
-        if hlc is None:
-          raise ValueError(
-            f"no liquid class for {op.tip}; give hamilton_liquid_classes, or piston_volumes"
-          )
     ctx = self._resolve_channel_context(
       ops,
       use_channels,
       z_fluid=z_fluid,
       z_air=z_air,
       z_minimum=minimum_allowed_z_positions_during,
-      hamilton_liquid_classes=classes,
     )
     deck = self._require_deck()
     # The firmware reads the profile at the tip's height, counted from z_minimum
@@ -6030,7 +6004,7 @@ class Pipettes:
       )
       for i, op in enumerate(ops)
     ]
-    booked = list(ctx.volumes)
+    booked = list(liquid)
     if not check_only and does_volume_tracking():
       # A draw past what a container holds takes the rest as air, which is how a well is emptied
       # on purpose, so under ZTOUCH that is an info line.
@@ -6038,12 +6012,12 @@ class Pipettes:
       for i, (ch, op) in enumerate(zip(use_channels, ops)):
         if op.resource.tracker.is_disabled:
           continue
-        booked[i] = min(ctx.volumes[i], max(held[id(op.resource)], 0.0))
-        if booked[i] < ctx.volumes[i]:
+        booked[i] = min(liquid[i], max(held[id(op.resource)], 0.0))
+        if booked[i] < liquid[i]:
           (logger.info if floor_touched else logger.warning)(
             "channel %d draws %.1f uL from %s, which holds %.1f uL; the rest is air",
             ch,
-            ctx.volumes[i],
+            liquid[i],
             op.resource.name,
             held[id(op.resource)],
           )
@@ -6077,34 +6051,15 @@ class Pipettes:
         clld_sensitivity=clld_sensitivity,
         immersion_depths=None if immersion_depths is None else list(immersion_depths),
         blow_out_air_volumes=[
-          op.blow_out_air_volume
-          if op.blow_out_air_volume is not None
-          else (hlc.aspiration_blow_out_volume if hlc is not None else 0.0)
-          for op, hlc in zip(ops, classes)
+          op.blow_out_air_volume if op.blow_out_air_volume is not None else 0.0 for op in ops
         ],
-        pre_wetting_volumes=fill_in_defaults(
-          pre_wetting_volumes,
-          [hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in classes],
-        ),
+        pre_wetting_volumes=pre_wetting_volumes,
         pre_mixes=pre_mixes,
         mix_positions_from_liquid_surface=mix_positions_from_liquid_surface,
-        flow_rates=[
-          op.flow_rate
-          if op.flow_rate is not None
-          else (hlc.aspiration_flow_rate if hlc is not None else 100.0)
-          for op, hlc in zip(ops, classes)
-        ],
-        settling_times=fill_in_defaults(
-          settling_times,
-          [hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in classes],
-        ),
-        swap_speeds=fill_in_defaults(
-          swap_speeds, [hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in classes]
-        ),
-        transport_air_volumes=fill_in_defaults(
-          transport_air_volumes,
-          [hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in classes],
-        ),
+        flow_rates=[op.flow_rate if op.flow_rate is not None else 100.0 for op in ops],
+        settling_times=settling_times,
+        swap_speeds=swap_speeds,
+        transport_air_volumes=transport_air_volumes,
         pull_out_distances_transport_air=pull_out_distances_transport_air,
         minimum_traverse_height_end=minimum_traverse_height_end,
         z_air=z_air,
@@ -6123,7 +6078,7 @@ class Pipettes:
       # What each channel took is what its tip now holds, and the well no longer does
       if not check_only:
         finalize_volume_ops(volume_intents, aspirated)
-    return ctx.volumes
+    return liquid
 
   def _check_tips_have_room(self, tips: Sequence[Tip], volumes: Sequence[float]) -> None:
     """Refuse more than a tip has room for.
@@ -6418,6 +6373,8 @@ class Pipettes:
     flow_rates: Optional[Sequence[Optional[float]]] = None,
     *,
     hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]] = None,
+    jet: Optional[Sequence[bool]] = None,
+    blow_out: Optional[Sequence[bool]] = None,
     piston_volumes: Optional[Sequence[float]] = None,
     search_speed: float = 10.0,
     approach_speed: float = 125.0,
@@ -6470,7 +6427,9 @@ class Pipettes:
         container. OFF goes to the height given.
       flow_rates: in uL/s, per container. The liquid class's, else 100.0, when None.
       hamilton_liquid_classes: the class for each container's volume. Looked up for the
-        channel's tip, water, when None.
+        channel's tip, water, `jet` and `blow_out` when None.
+      jet: whether the later dispense is a jet, for the lookup only. False when None.
+      blow_out: whether the later dispense blows out, for the lookup only. False when None.
       piston_volumes: how much each piston draws, in uL, per container, as given, with no liquid
         class. One of this and `volumes`.
       search_speed: of the driver's own search, liquid or floor, in mm/s.
@@ -6495,8 +6454,8 @@ class Pipettes:
         class's, else 1.0, when None.
       swap_speeds: how fast the tip leaves the liquid, in mm/s, per container. The liquid
         class's, else 10.0, when None.
-      clot_detection_heights: how far a clot may hold each tip back, in mm, per container. 0.0 when
-        None; only 0.0 until the check is verified on the device.
+      clot_detection_heights: how far a clot may hold each tip back, in mm, per container. The
+        liquid class's, else 0.0, when None; only 0.0 until the check is verified on the device.
       pull_out_distances_transport_air: rise from the aspirate height before drawing transport
         air, in mm, per container. 10.0 when None; refused beside `z_air`.
       transport_air_volumes: air drawn after the liquid, in uL, per container. The liquid
@@ -6537,11 +6496,7 @@ class Pipettes:
     containers = list(containers)
     n = len(containers)
     use_channels = use_channels if use_channels is not None else list(range(n))
-    drawn = volumes if volumes is not None else piston_volumes
-    if drawn is None or (volumes is not None and piston_volumes is not None):
-      raise ValueError("give one of volumes and piston_volumes")
-    if piston_volumes is not None and hamilton_liquid_classes is not None:
-      raise ValueError("piston_volumes are sent as given; no liquid class applies")
+    check_volume_arguments(volumes, piston_volumes, hamilton_liquid_classes, "drawn")
     if not containers:
       raise ValueError("no containers to aspirate from")
     if n > self.num_channels:
@@ -6549,11 +6504,14 @@ class Pipettes:
     if len(use_channels) != n or len(set(use_channels)) != n:
       raise ValueError(f"use_channels must name one distinct channel per container: {use_channels}")
     per_container: Dict[str, Optional[Sequence[Any]]] = {
-      "volumes" if volumes is not None else "piston_volumes": drawn,
+      "volumes": volumes,
+      "piston_volumes": piston_volumes,
       "resource_offsets": resource_offsets,
       "liquid_heights": liquid_heights,
       "flow_rates": flow_rates,
       "hamilton_liquid_classes": hamilton_liquid_classes,
+      "jet": jet,
+      "blow_out": blow_out,
       "immersion_depths": immersion_depths,
       "blow_out_air_volumes": blow_out_air_volumes,
       "pre_wetting_volumes": pre_wetting_volumes,
@@ -6579,6 +6537,29 @@ class Pipettes:
       raise ValueError(
         "TADM is not verified on the Prep yet; give limit curve 0 and no storage level"
       )
+    liquid, drawn, classes = get_volumes_and_classes(
+      containers,
+      use_channels,
+      self._require_mounted_tips(use_channels),
+      volumes,
+      piston_volumes,
+      hamilton_liquid_classes,
+      [False] * n if jet is None else list(jet),
+      [False] * n if blow_out is None else list(blow_out),
+      lookup=self._driver.liquid_class_lookup,
+    )
+
+    def by_class(name: str, given: Optional[Sequence[Any]]) -> Optional[List[Any]]:
+      """What is given, else what the liquid classes say, else None: the batch's own default."""
+      return from_class(name, given, n, classes, ASPIRATE_CLASS_ATTRIBUTES)
+
+    flow_rates = by_class("flow_rates", flow_rates)
+    blow_out_air_volumes = by_class("blow_out_air_volumes", blow_out_air_volumes)
+    settling_times = by_class("settling_times", settling_times)
+    swap_speeds = by_class("swap_speeds", swap_speeds)
+    transport_air_volumes = by_class("transport_air_volumes", transport_air_volumes)
+    pre_wetting_volumes = by_class("pre_wetting_volumes", pre_wetting_volumes)
+    clot_detection_heights = by_class("clot_detection_heights", clot_detection_heights)
     modes = self._get_lld_modes(lld_mode, n)
     pressure = [m.name for m in modes if m in (self.LLDMode.PRESSURE, self.LLDMode.DUAL)]
     if pressure:
@@ -6686,11 +6667,10 @@ class Pipettes:
         [drawn[job] for job in batch.indices],
         batch.channels,
         [offsets[job] for job in batch.indices],
-        piston_volumes is None,
         pick(liquid_heights, batch),
         batch_modes[0],
         pick(flow_rates, batch),
-        hamilton_liquid_classes=pick(hamilton_liquid_classes, batch),
+        liquid=[liquid[job] for job in batch.indices],
         clld_sensitivity=clld_sensitivity,
         immersion_depths=pick(immersion_depths, batch),
         blow_out_air_volumes=pick(blow_out_air_volumes, batch),
@@ -6733,12 +6713,11 @@ class Pipettes:
     pushed: List[float],
     use_channels: List[int],
     resource_offsets: List[Coordinate],
-    by_liquid_class: bool,
     liquid_heights: Optional[List[Optional[float]]],
     lld_mode: Optional[Pipettes.LLDMode],
     flow_rates: Optional[List[Optional[float]]],
     *,
-    hamilton_liquid_classes: Optional[List[HamiltonLiquidClass]],
+    liquid: List[float],
     immersion_depths: Optional[List[float]],
     minimum_allowed_z_positions_during: Optional[List[float]],
     transport_air_volumes: Optional[List[float]],
@@ -6764,9 +6743,9 @@ class Pipettes:
 
     Args:
       x_position: the batch's X, sent for every channel, in mm.
-      pushed: the volumes, or the piston volumes, per container, in uL.
+      pushed: the piston volumes, per container, in uL.
+      liquid: the liquid each gives, per container, in uL: what is booked.
       resource_offsets: as `dispense` resolved them.
-      by_liquid_class: whether `pushed` are liquid volumes, corrected by a liquid class.
       z_fluid: the tip bottom height to dispense at, in mm, per container: above the floor
         touched under ZTOUCH, the surface found under CAPACITIVE. From the liquid heights when
         None.
@@ -6785,45 +6764,12 @@ class Pipettes:
       flow_rates=flow_rates,
       blow_out_air_volume=blow_out_air_volumes,
     )
-    n = len(ops)
-    classes: List[Optional[HamiltonLiquidClass]] = [None] * n
-    if by_liquid_class:
-      classes = resolve_hamilton_liquid_classes(
-        None if hamilton_liquid_classes is None else list(hamilton_liquid_classes),
-        ops,
-        jet=False,
-        blow_out=False,
-      )
-      for op, hlc in zip(ops, classes):
-        if hlc is None:
-          raise ValueError(
-            f"no liquid class for {op.tip}; give hamilton_liquid_classes, or piston_volumes"
-          )
     ctx = self._resolve_channel_context(
       ops,
       use_channels,
       z_fluid=z_fluid,
       z_air=z_air,
       z_minimum=minimum_allowed_z_positions_during,
-      hamilton_liquid_classes=classes,
-    )
-    settling_times = fill_in_defaults(
-      settling_times, [hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in classes]
-    )
-    transport_air_volumes = fill_in_defaults(
-      transport_air_volumes,
-      [hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in classes],
-    )
-    swap_speeds = fill_in_defaults(
-      swap_speeds, [hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in classes]
-    )
-    stop_back_volumes = fill_in_defaults(
-      stop_back_volumes,
-      [hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in classes],
-    )
-    cut_off_speeds = fill_in_defaults(
-      cut_off_speeds,
-      [hlc.dispense_stop_flow_rate if hlc is not None else 5.0 for hlc in classes],
     )
     deck = self._require_deck()
     locations = [
@@ -6847,12 +6793,7 @@ class Pipettes:
         lld_mode=lld_mode,
         clld_sensitivity=clld_sensitivity,
         immersion_depths=immersion_depths,
-        flow_rates=[
-          op.flow_rate
-          if op.flow_rate is not None
-          else (hlc.dispense_flow_rate if hlc is not None else 120.0)
-          for op, hlc in zip(ops, classes)
-        ],
+        flow_rates=[op.flow_rate if op.flow_rate is not None else 120.0 for op in ops],
         cut_off_speeds=cut_off_speeds,
         stop_back_volumes=stop_back_volumes,
         settling_times=settling_times,
@@ -6868,17 +6809,17 @@ class Pipettes:
 
     await dispense_in_one_move(check_only=True)
     if check_only:
-      return ctx.volumes
-    booked = list(ctx.volumes)
+      return liquid
+    booked = list(liquid)
     if does_volume_tracking():
       for i, (ch, op) in enumerate(zip(use_channels, ops)):
         held = op.tip.tracker.get_used_volume()
-        if not op.tip.tracker.is_disabled and held < ctx.volumes[i]:
+        if not op.tip.tracker.is_disabled and held < liquid[i]:
           booked[i] = max(held, 0.0)
           logger.warning(
             "channel %d dispenses %.1f uL into %s from a tip holding %.1f uL; the rest is air",
             ch,
-            ctx.volumes[i],
+            liquid[i],
             op.resource.name,
             held,
           )
@@ -6905,7 +6846,7 @@ class Pipettes:
     finally:
       # What each channel put down is what the well now holds, and its tip no longer does
       finalize_volume_ops(volume_intents, dispensed)
-    return ctx.volumes
+    return liquid
 
   def _check_containers_have_room(
     self, containers: Sequence[Container], volumes: Sequence[float]
@@ -6942,6 +6883,8 @@ class Pipettes:
     flow_rates: Optional[Sequence[Optional[float]]] = None,
     *,
     hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]] = None,
+    jet: Optional[Sequence[bool]] = None,
+    blow_out: Optional[Sequence[bool]] = None,
     piston_volumes: Optional[Sequence[float]] = None,
     search_speed: float = 10.0,
     approach_speed: float = 125.0,
@@ -6991,7 +6934,10 @@ class Pipettes:
         container: OFF, CAPACITIVE or ZTOUCH. OFF goes to the height given.
       flow_rates: in uL/s, per container. The liquid class's, else 120.0, when None.
       hamilton_liquid_classes: the class for each container's volume. Looked up for the
-        channel's tip, water, when None.
+        channel's tip, water, `jet` and `blow_out` when None.
+      jet: whether each dispense is a jet, for the lookup only: the Prep sends no dispensing mode.
+        False when None.
+      blow_out: whether each dispense blows out, for the lookup only. False when None.
       piston_volumes: how much each piston pushes out, in uL, per container, as given, with no
         liquid class. One of this and `volumes`.
       search_speed: of the driver's own search, liquid or floor, in mm/s.
@@ -7053,11 +6999,7 @@ class Pipettes:
     containers = list(containers)
     n = len(containers)
     use_channels = use_channels if use_channels is not None else list(range(n))
-    pushed = volumes if volumes is not None else piston_volumes
-    if pushed is None or (volumes is not None and piston_volumes is not None):
-      raise ValueError("give one of volumes and piston_volumes")
-    if piston_volumes is not None and hamilton_liquid_classes is not None:
-      raise ValueError("piston_volumes are sent as given; no liquid class applies")
+    check_volume_arguments(volumes, piston_volumes, hamilton_liquid_classes, "pushed out")
     if blow_out_air_volumes is not None and any(v for v in blow_out_air_volumes):
       raise ValueError(
         "the dispense sends out all the tip holds; set blow-out air on aspirate, "
@@ -7070,11 +7012,14 @@ class Pipettes:
     if len(use_channels) != n or len(set(use_channels)) != n:
       raise ValueError(f"use_channels must name one distinct channel per container: {use_channels}")
     per_container: Dict[str, Optional[Sequence[Any]]] = {
-      "volumes" if volumes is not None else "piston_volumes": pushed,
+      "volumes": volumes,
+      "piston_volumes": piston_volumes,
       "resource_offsets": resource_offsets,
       "liquid_heights": liquid_heights,
       "flow_rates": flow_rates,
       "hamilton_liquid_classes": hamilton_liquid_classes,
+      "jet": jet,
+      "blow_out": blow_out,
       "immersion_depths": immersion_depths,
       "minimum_allowed_z_positions_during": minimum_allowed_z_positions_during,
       "transport_air_volumes": transport_air_volumes,
@@ -7103,6 +7048,29 @@ class Pipettes:
       raise ValueError("post-mixing is not verified on the Prep yet; give no post_mixes")
     if any(index != 0 for index in limit_curve_indices or []):
       raise ValueError("TADM is not verified on the Prep yet; give limit curve 0")
+    liquid, pushed, classes = get_volumes_and_classes(
+      containers,
+      use_channels,
+      self._require_mounted_tips(use_channels),
+      volumes,
+      piston_volumes,
+      hamilton_liquid_classes,
+      [False] * n if jet is None else list(jet),
+      [False] * n if blow_out is None else list(blow_out),
+      lookup=self._driver.liquid_class_lookup,
+    )
+
+    def by_class(name: str, given: Optional[Sequence[Any]]) -> Optional[List[Any]]:
+      """What is given, else what the liquid classes say, else None: the batch's own default."""
+      return from_class(name, given, n, classes, DISPENSE_CLASS_ATTRIBUTES)
+
+    flow_rates = by_class("flow_rates", flow_rates)
+    transport_air_volumes = by_class("transport_air_volumes", transport_air_volumes)
+    stop_back_volumes = by_class("stop_back_volumes", stop_back_volumes)
+    settling_times = by_class("settling_times", settling_times)
+    swap_speeds = by_class("swap_speeds", swap_speeds)
+    if cut_off_speeds is None and classes is not None:
+      cut_off_speeds = [hlc.dispense_stop_flow_rate for hlc in classes]
     modes = self._get_lld_modes(lld_mode, n)
     touched = [j for j in range(n) if modes[j] == self.LLDMode.ZTOUCH]
     offsets = (
@@ -7210,11 +7178,10 @@ class Pipettes:
         [pushed[job] for job in batch.indices],
         batch.channels,
         [offsets[job] for job in batch.indices],
-        piston_volumes is None,
         pick(liquid_heights, batch),
         batch_modes[0],
         pick(flow_rates, batch),
-        hamilton_liquid_classes=pick(hamilton_liquid_classes, batch),
+        liquid=[liquid[job] for job in batch.indices],
         immersion_depths=pick(immersion_depths, batch),
         minimum_allowed_z_positions_during=lowest,
         transport_air_volumes=pick(transport_air_volumes, batch),
