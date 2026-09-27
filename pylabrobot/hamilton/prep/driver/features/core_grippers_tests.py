@@ -660,6 +660,22 @@ def test_move_resource_to_xy_position_carries_it_at_the_height_it_is_at_now():
   asyncio.run(_run())
 
 
+def test_the_old_acceleration_scale_x_name_still_works():
+  deck = PrepDeck(with_core_grippers=True)
+  plate = deck[4] = cor_axy_96_wellplate_500uL_Ub("plate")
+  grippers, commands = _make_grippers(deck, stub_pick_and_drop=False)
+
+  async def _run() -> None:
+    await grippers.pick_up_resource(plate)
+    await grippers.move_resource_to_xy_position(100.0, 200.0, x_acceleration_scale=2)
+    assert commands.send_command.await_args.args[0].acceleration_scale_x == 2
+    with pytest.warns(DeprecationWarning, match="x_acceleration_scale"):
+      await grippers.move_resource_to_xy_position(120.0, 200.0, acceleration_scale_x=1)
+    assert commands.send_command.await_args.args[0].acceleration_scale_x == 1
+
+  asyncio.run(_run())
+
+
 def test_request_plate_held_reads_the_pipettors_record():
   """Set by a finished pick-up whatever the jaws closed on, cleared by a drop or a release."""
 
