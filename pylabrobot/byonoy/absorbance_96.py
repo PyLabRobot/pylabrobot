@@ -147,7 +147,9 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
   _ERROR_NAMES = ABS96_ERROR_NAMES
 
   def __init__(self, name: str = "byonoy_absorbance_96") -> None:
-    ByonoyAbsorbanceBaseUnit.__init__(self, name=name)
+    # Drawn with the parking unit's housing, which is the same part, until the detection unit is
+    # modelled on its own.
+    ByonoyAbsorbanceBaseUnit.__init__(self, name=name, model="byonoy_a96a_parking_unit")
     ByonoyDriver.__init__(
       self, pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96"
     )
@@ -327,6 +329,7 @@ def byonoy_sbs_adapter(name: str) -> ResourceHolder:
       y=-(95.48 - 85.48) / 2,
       z=17.0,
     ),
+    model="byonoy_a96a_sbs_adapter",
   )
 
 
@@ -338,7 +341,7 @@ def byonoy_a96a_illumination_unit(name: str) -> Resource:
     size_x=size_x,
     size_y=size_y,
     size_z=42.898,
-    model="Byonoy A96A Illumination Unit",
+    model="byonoy_a96a_illumination_unit",
     preferred_pickup_location=Coordinate(x=size_x / 2, y=size_y / 2, z=29.5),
   )
 
@@ -350,7 +353,7 @@ def byonoy_a96a_detection_unit(name: str) -> ByonoyAbsorbance96:
 
 def byonoy_a96a_parking_unit(name: str) -> ByonoyAbsorbanceBaseUnit:
   """Create a Byonoy A96A detection unit holder (base only, no backend)."""
-  return ByonoyAbsorbanceBaseUnit(name=name)
+  return ByonoyAbsorbanceBaseUnit(name=name, model="byonoy_a96a_parking_unit")
 
 
 def byonoy_a96a(name: str, assign: bool = True) -> Tuple[ByonoyAbsorbance96, Resource]:
