@@ -14,7 +14,7 @@ from pylabrobot.hamilton.star.device import (
   STAR_DECK_LOCATION,
   STAR_SIZE_X,
   STARDevice,
-  STARLet,
+  STARlet,
   STARPlus,
 )
 from pylabrobot.hamilton.star.driver.configuration import (
@@ -26,6 +26,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck
 from pylabrobot.resources.hamilton.hamilton_decks import STAR_NUM_TRACKS, STARLET_NUM_TRACKS
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import serialize
 
 # The device this package ships a recording of, read through the one reader there is: tests need a
@@ -84,7 +85,7 @@ class TestFactories(unittest.IsolatedAsyncioTestCase):
 
   def test_each_factory_builds_its_own_deck(self):
     self.assertEqual(STAR(simulation=True).deck.num_tracks, STAR_NUM_TRACKS)
-    self.assertEqual(STARLet(simulation=True).deck.num_tracks, STARLET_NUM_TRACKS)
+    self.assertEqual(STARlet(simulation=True).deck.num_tracks, STARLET_NUM_TRACKS)
 
   def test_extension_housing_stands_to_the_left(self):
     """The housing is a resource beside the chassis, not something that grows the device.
@@ -158,7 +159,7 @@ class TestComponentNames(unittest.IsolatedAsyncioTestCase):
     cases: Tuple[Tuple[Callable[..., STARDevice], str, Optional[str], bool], ...] = (
       (STAR, "star_a", None, False),
       (STAR, "star_b", RECORDING_STAR_HEAD384, False),
-      (STARLet, "starlet", None, True),
+      (STARlet, "starlet", None, True),
       (STARPlus, "starplus", None, False),
     )
     for index, (factory, name, recording, side_panel) in enumerate(cases):
@@ -212,3 +213,33 @@ class TestComponentNames(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(star.deck.get_trash_area96().name, "custom_deck_trash_core96")
     finally:
       await star.stop()
+
+
+class TestTurnedDevice(unittest.IsolatedAsyncioTestCase):
+  """A device turned in the room sets up as one standing square."""
+
+  async def test_a_turned_device_puts_its_parts_where_an_upright_one_does(self):
+    for factory in (STARlet, STARPlus):
+      for angle in (90, -90, 37.5):
+        with self.subTest(device=factory.__name__, angle=angle):
+          placed = []
+          for rotation in (0, angle):
+            room = Resource(name="room", size_x=9000, size_y=9000, size_z=3000)
+            room.location = Coordinate.zero()
+            device = factory(simulation=True, name="device")
+            device.rotation = Rotation(z=rotation)
+            room.assign_child_resource(device, location=Coordinate(4000, 4000, 0))
+            await device.setup()
+            placed.append(
+              {
+                r.name: (*r.location.vector(), r.get_size_x(), r.get_size_y(), r.get_size_z())
+                for r in device.get_all_children()
+                if r.location
+              }
+            )
+            await device.stop()
+          upright, turned = placed
+          self.assertEqual(turned.keys(), upright.keys())
+          for name, where in upright.items():
+            for got, expected in zip(turned[name], where):
+              self.assertAlmostEqual(got, expected, 3, name)

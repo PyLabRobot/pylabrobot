@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["typing_extensions", "websockets"]
+dependencies = ["typing_extensions", "websockets>=14"]
 
 [project.optional-dependencies]
 serial = ["pyserial"]
@@ -58,8 +58,20 @@ exclude = ["tools*", "docs*"]
 pylabrobot = [
   "visualizer/*",
   "visualizer/img/*",
+  "visualizer3D/static/*",
+  "visualizer3D/static/img/*",
+  "visualizer3D/static/types/*",
+  "visualizer3D/static/vendor/*",
+  "visualizer3D/static/vendor/draco/*",
+  "visualizer3D/static/vendor/lines/*",
   "version.txt",
   "hamilton/star/driver/recordings/*.json",
+  "hamilton/star/resource_model/*.glb",
+  "hamilton/star/resource_model/manifest.json",
+  "hamilton/prep/resource_model/*.glb",
+  "resources/hamilton/resource_model/*.glb",
+  "resources/alpaqua/resource_model/*.glb",
+  "byonoy/resource_model/*.glb",
 ]
 
 [tool.ruff]

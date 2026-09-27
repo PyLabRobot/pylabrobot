@@ -16,3 +16,4 @@ tip presence by pick-up.
     pipette_batch_scheduling
     tip_consolidation
     tip_presence_probing
+    tip_spot_finding

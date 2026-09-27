@@ -25,7 +25,9 @@ from pylabrobot.resources.hamilton import (
   hamilton_tip_10uL,
   hamilton_tip_carrier_L5_ntr_a00,
 )
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_stack import ResourceStack
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.tip_rack import StandingTipRack
 
 
@@ -44,6 +46,27 @@ class StandardTipCarrierTests(unittest.TestCase):
         site_center = site.get_absolute_location("c", "c")
         self.assertAlmostEqual(rack_center.x, site_center.x)
         self.assertAlmostEqual(rack_center.y, site_center.y)
+
+  def test_a_turned_deck_seats_the_rack_as_an_upright_one_does(self):
+    """The rack is centred over its site's opening in the site's own frame."""
+    for carrier_fn, rotation in [(TIP_CAR_480_A00, 0), (TIP_CAR_288_C00, 90)]:
+      with self.subTest(carrier=carrier_fn.__name__):
+        seated = []
+        for angle in (0, 90, 37.5):
+          room = Resource("room", size_x=9000, size_y=9000, size_z=3000)
+          room.location = Coordinate.zero()
+          body = Resource("body", size_x=2000, size_y=800, size_z=900, rotation=Rotation(z=angle))
+          room.assign_child_resource(body, location=Coordinate(4000, 4000, 0))
+          deck = STARDeck()
+          body.assign_child_resource(deck, location=Coordinate(50, 50, 0))
+          carrier = carrier_fn("carrier")
+          deck.assign_child_resource(carrier, track=1)
+          carrier[0] = rack = hamilton_96_tiprack_1000uL(name="rack").rotated(z=rotation)
+          # Also where the next site seats it while it still stands here, as a gripper drop asks.
+          seated.append((rack.location, carrier.sites[1].get_default_child_location(rack)))
+        for location in [where for pair in seated[1:] for where in pair]:
+          for axis in ("x", "y", "z"):
+            self.assertAlmostEqual(getattr(location, axis), getattr(seated[0][0], axis))
 
   def test_tip_spot_positions_on_star_deck(self):
     # positions whose firmware commands match Venus
