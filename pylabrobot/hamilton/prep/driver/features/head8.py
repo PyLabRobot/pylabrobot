@@ -21,6 +21,7 @@ Probes are ordered by Y (highest Y = probe 0 = row A). Pitch = PROBE_PITCH_MM.
 from __future__ import annotations
 
 import logging
+import math
 import struct as _struct
 from typing import (
   TYPE_CHECKING,
@@ -38,8 +39,9 @@ from pylabrobot.hamilton.liquid_class_resolver import get_volumes_and_classes
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
+from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources import Container, Coordinate, Tip, Trash
-from pylabrobot.resources.errors import HasTipError
+from pylabrobot.resources.errors import HasTipError, TooLittleLiquidError
 from pylabrobot.resources.n_channel_pipettes import (
   SHAFT_DIAMETER,
   SHAFT_LENGTH,
@@ -55,6 +57,7 @@ from pylabrobot.resources.resource_state import (
 )
 from pylabrobot.resources.tip_rack import TipSpot, tip_origin
 from pylabrobot.resources.utils import create_ordered_items_2d
+from pylabrobot.resources.volume_tracker import does_volume_tracking
 
 from .. import prep_commands as PrepCmd
 from ..prep_commands import MPH_OBJECT_PATH
@@ -64,6 +67,7 @@ from .pipettes import (
   _absolute_z_from_well,
   _effective_radius,
   _get_container_segments,
+  get_mix_parameters,
 )
 from .pipettes import (
   default_lld_params as _default_lld_params_fn,
@@ -761,6 +765,41 @@ class Head8:
       volume_containers=containers_list,
     )
 
+  def _validate_mix(self, mix: Mix, volume_containers: Sequence[Container]) -> None:
+    """Check a `Mix` against the firmware's mix block, the mounted tips and the liquid present.
+
+    Args:
+      mix: the shared mix, per probe.
+      volume_containers: the container each probe mixes in; a trough repeats for every probe.
+
+    Raises:
+      ValueError: If repetitions, volume or flow rate are out of range, the mix asks for
+        surface following, or the volume exceeds a tip's free room.
+      TooLittleLiquidError: If volume tracking is on and a container holds less than it mixes.
+    """
+    if (
+      isinstance(mix.repetitions, bool)
+      or not isinstance(mix.repetitions, int)
+      or not 1 <= mix.repetitions <= 255
+    ):
+      raise ValueError("Mix repetitions must be an integer from 1 to 255")
+    if not math.isfinite(mix.volume) or mix.volume <= 0:
+      raise ValueError("Mix volume must be finite and positive")
+    if not math.isfinite(mix.flow_rate) or mix.flow_rate <= 0:
+      raise ValueError("Mix flow_rate must be finite and positive")
+    if mix.auto_surface_following or mix.surface_following_distance != 0:
+      raise ValueError("Prep head8 mixing does not support surface following")
+    for tip in self._require_mounted_tips():
+      if mix.volume > tip.maximal_volume - tip.tracker.get_used_volume():
+        raise ValueError("Mix volume exceeds available tip capacity")
+    if not does_volume_tracking():
+      return
+    # a trough gives every probe's mix volume at once
+    for container in {id(c): c for c in volume_containers}.values():
+      needed = mix.volume * sum(c is container for c in volume_containers)
+      if not container.tracker.is_disabled and container.tracker.get_used_volume() < needed:
+        raise TooLittleLiquidError(f"'{container.name}' has too little liquid for the mix")
+
   # -- aspirate: assemble --------------------------------------------------------------------------
 
   def _assemble_aspirate_v2(
@@ -786,6 +825,7 @@ class Head8:
     lld_params: PrepCmd.LldParameters,
     lld_defaults: Pipettes._LldDefaults,
     tadm: PrepCmd.TadmParameters,
+    mix: PrepCmd.MixParameters,
   ) -> Union[
     PrepCmd.AspirateParametersLldAndTadm2,
     PrepCmd.AspirateParametersLldAndMonitoring2,
@@ -813,7 +853,6 @@ class Head8:
     no_lld = PrepCmd.NoLldParameters.for_fixed_z(
       z_fluid=z_fluid, z_air=z_air, z_bottom_search_offset=z_bottom_search_offset
     )
-    mix = PrepCmd.MixParameters.default()
     adc = PrepCmd.AdcParameters.default()
 
     if effective_lld and is_tadm:
@@ -892,6 +931,7 @@ class Head8:
     lld_params: PrepCmd.LldParameters,
     lld_defaults: Pipettes._LldDefaults,
     tadm: PrepCmd.TadmParameters,
+    mix: PrepCmd.MixParameters,
   ) -> Union[
     PrepCmd.AspirateParametersLldAndTadm,
     PrepCmd.AspirateParametersLldAndMonitoring,
@@ -920,7 +960,6 @@ class Head8:
     no_lld = PrepCmd.NoLldParameters.for_fixed_z(
       z_fluid=z_fluid, z_air=z_air, z_bottom_search_offset=z_bottom_search_offset
     )
-    mix = PrepCmd.MixParameters.default()
     adc = PrepCmd.AdcParameters.default()
 
     if effective_lld and is_tadm:
@@ -1196,6 +1235,8 @@ class Head8:
     containers: Sequence[Container],
     *,
     volume: float,
+    pre_mix: Optional[Mix] = None,
+    mix_position_from_liquid_surface: float = 0.0,
     use_channels: Optional[Sequence[int]] = None,
     offset: Coordinate = Coordinate.zero(),
     liquid_height: Optional[float] = None,
@@ -1232,6 +1273,9 @@ class Head8:
       containers: one container wide enough for all eight channels, or eight wells at channel
         pitch in row-A-first order — same resource vocabulary as `Pipettes.aspirate`.
       volume: how much each tip draws, in uL (one piston for the whole head).
+      pre_mix: mix cycles run before the draw, per probe, sent uncorrected. Surface following
+        is refused. Only the draw changes tracked volumes.
+      mix_position_from_liquid_surface: mixing depth under the aspirate height, in mm.
       surface_following_distance: how far the tips follow the sinking surface, in mm. None
         follows each container's profile as it is; 0 does not follow — same meaning as
         `Pipettes.aspirate`'s `surface_following_distances`.
@@ -1242,6 +1286,11 @@ class Head8:
     use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
     self._require_all_channels(use_channels, "aspirate")
     targets = self._resolve_liquid_targets(containers, "aspirate")
+    if pre_mix is not None:
+      self._validate_mix(pre_mix, targets.volume_containers)
+    if not math.isfinite(mix_position_from_liquid_surface) or mix_position_from_liquid_surface < 0:
+      raise ValueError("Mix depth must be finite and non-negative")
+    mix_block = get_mix_parameters([pre_mix], 1, [mix_position_from_liquid_surface])[0]
     tip = self._require_mounted_tip()
 
     traverse_z = self._resolve_traverse_height()
@@ -1352,6 +1401,7 @@ class Head8:
       lld_params=lld_params,
       lld_defaults=lld_defaults,
       tadm=resolved_tadm,
+      mix=mix_block,
     )
 
     cmd_cls = self._ASPIRATE_CMD[(effective_lld, is_tadm, use_v2)]
@@ -1361,6 +1411,10 @@ class Head8:
       resolved_read_timeout = _lld_seek_timeout(
         lld_params, resolved_z_minimum, approach_from_z=end_resolved
       )
+    if pre_mix is not None and read_timeout is None:
+      resolved_read_timeout = max(
+        resolved_read_timeout or 0, self._driver.default_read_timeout
+      ) + pre_mix.repetitions * (2 * pre_mix.volume / pre_mix.flow_rate + 2)
 
     mounted = self._require_mounted_tips()
     volume_intents = [
@@ -1379,7 +1433,7 @@ class Head8:
     try:
       await self._driver.send_command(
         cmd_cls(aspirate_parameters=[param_struct]),  # type: ignore[arg-type]
-        read_timeout=resolved_read_timeout if effective_lld else None,
+        read_timeout=resolved_read_timeout,
       )
       aspirated = all_channels_succeeded(use_channels)
     except ChannelizedError as e:
@@ -1581,3 +1635,46 @@ class Head8:
     finally:
       # What each shaft moved is what the well now holds, and its tip no longer does.
       finalize_volume_ops(volume_intents, dispensed)
+
+  async def mix(
+    self,
+    containers: Sequence[Container],
+    mix: Mix,
+    *,
+    liquid_height: float = 1.0,
+    command_version: Optional[Literal["v1", "v2"]] = None,
+  ) -> None:
+    """Mix in place on all eight probes at a fixed height, with empty tips.
+
+    One zero-volume aspiration carries every cycle; no dispense command follows. No volume
+    correction, prewet or transport air; no LLD or surface following. Tracked volumes stay
+    unchanged; a failure mid-mix leaves the physical volumes uncertain.
+
+    Args:
+      containers: one container wide enough for all eight channels, or eight wells at channel
+        pitch in row-A-first order.
+      mix: the volume per probe, cycles and flow rate.
+      liquid_height: mixing height above the cavity bottom, in mm.
+      command_version: "v1" or "v2"; None picks what the head supports.
+    """
+    targets = self._resolve_liquid_targets(containers, "mix")
+    self._validate_mix(mix, targets.volume_containers)
+    if not math.isfinite(liquid_height) or liquid_height < 0:
+      raise ValueError("liquid_height must be finite and non-negative")
+    if any(tip.tracker.get_used_volume() > 0 for tip in self._require_mounted_tips()):
+      raise ValueError("Mixing requires empty tips")
+    await self.aspirate(
+      containers,
+      volume=0,
+      pre_mix=mix,
+      liquid_height=liquid_height,
+      flow_rate=mix.flow_rate,
+      lld_mode=Pipettes.LLDMode.OFF,
+      surface_following_distance=0,
+      disable_volume_correction=True,
+      prewet_volume=0,
+      blow_out_air_volume=0,
+      transport_air_volume=0,
+      settling_time=0,
+      command_version=command_version,
+    )
