@@ -1396,6 +1396,8 @@ class STARDriver:
         await arm.pipettes.initialize()
       else:
         logger.debug("channels: already up and nothing mounted - skipped")
+        # Initialization reads the pistons; skipped, they are read here, as they stand.
+        await arm.pipettes.dispensing_drives_request_uL_positions()
       # Probing how high the channels reach raises them, so it doubles as the safety raise and
       # runs on every setup rather than only the first.
       reached = await arm.pipettes.probe_z_max()
