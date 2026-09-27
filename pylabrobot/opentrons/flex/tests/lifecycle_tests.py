@@ -32,6 +32,21 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
     await self.flex.setup()
     self.addAsyncCleanup(self.flex.disconnect)
 
+  async def test_repeated_setup_warns_and_preserves_session(self):
+    """Repeated setup leaves the existing run and instruments intact without IO."""
+    run = self.flex._require_run()
+    head, gripper = self.flex.right_pipette, self.flex.gripper
+    self.api.reset_mock()
+    self.io.reset_mock()
+    for skip_home in (False, True):
+      with self.subTest(skip_home=skip_home), self.assertWarnsRegex(UserWarning, "already set up"):
+        await self.flex.setup(skip_home=skip_home)
+      self.assertIs(self.flex._require_run(), run)
+      self.assertIs(self.flex.right_pipette, head)
+      self.assertIs(self.flex.gripper, gripper)
+      self.assertEqual(self.api.mock_calls, [])
+      self.assertEqual(self.io.mock_calls, [])
+
   async def test_stale_instruments_cannot_use_a_replacement_run(self):
     head, gripper = self.flex.right_pipette, self.flex.gripper
     assert head is not None and gripper is not None

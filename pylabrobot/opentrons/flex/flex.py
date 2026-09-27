@@ -1,5 +1,6 @@
 import logging
 import math
+import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
 from urllib.parse import quote
 
@@ -237,10 +238,12 @@ class Flex:
 
     Composed of the steps below so a caller who needs only some of them (talk to
     the robot without moving it, hand it back without homing it) can take them
-    one at a time.
+    one at a time. If a run already exists, warn and keep the current session
+    without reconnecting, homing, or replacing its instruments.
     """
     if self._run is not None:
-      raise RuntimeError("The Flex is already set up")
+      warnings.warn("The Flex is already set up; keeping the current session", stacklevel=2)
+      return
     try:
       await self.connect()
       await self.create_run()
