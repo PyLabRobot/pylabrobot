@@ -57,6 +57,13 @@ metalness = "metalness"
 # "unparseable" is an accepted English variant used by the Opentrons version parser.
 unparseable = "unparseable"
 
+[default.extend-identifiers]
+# Prep firmware interface names, spelled as its firmware trees name them.
+IYAxis = "IYAxis"
+IYDrive = "IYDrive"
+IZAxis = "IZAxis"
+IZDrive = "IZDrive"
+
 [files]
 extend-exclude = [
     "*.ipynb",
