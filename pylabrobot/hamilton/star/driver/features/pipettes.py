@@ -4,6 +4,7 @@ import asyncio
 import dataclasses
 import datetime
 import enum
+import functools
 import logging
 import math
 import re
@@ -40,6 +41,7 @@ from pylabrobot.hamilton.liquid_class_resolver import (
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import (
+  HamiltonNoTipError,
   NoTeachInSignalError,
   STARFirmwareError,
   channels_that_faulted,
@@ -54,6 +56,12 @@ from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import (
   validate_channel_selections,
 )
 from pylabrobot.lib.liquid_handling.tip_consolidation import plan_tip_consolidation
+from pylabrobot.lib.liquid_handling.tip_presence_probing import (
+  probe_tip_inventory as _probe_tip_inventory,
+)
+from pylabrobot.lib.liquid_handling.tip_presence_probing import (
+  probe_tip_presence_via_pickup as _probe_tip_presence_via_pickup,
+)
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
@@ -201,6 +209,10 @@ class PipettesConfiguration:
   """Counted in increments per second squared, unlike the Z drive's."""
   dispensing_drive_current_limit_range: Tuple[int, int] = (0, 7)
   dispensing_drive_volume_range_increments: Tuple[int, int] = (0, 26_666)
+  # `Px DS`, the piston moved where it stands: its target (-45 to 1250 uL) and acceleration.
+  dispensing_drive_position_range_increments: Tuple[int, int] = (-960, 26_666)
+  dispensing_drive_move_acceleration_range_increments: Tuple[int, int] = (5, 600)
+  """Counted in thousands of increments per second squared, unlike `Px DC`'s."""
   # `Px DC`, the standalone air draw: its volume and its mechanical clearance steps.
   blow_out_air_draw_range_increments: Tuple[int, int] = (0, 9_999)
   mechanical_clearance_steps_range: Tuple[int, int] = (0, 999)
@@ -354,6 +366,22 @@ class TADMCurve:
   operation: Literal["aspirate", "dispense", "other"]
   had_error: bool
   pressures: List[int]
+
+
+def _get_channels_that_met_no_tip(error: Exception) -> Optional[List[int]]:
+  """The channels a pick-up's error says met no tip; None when anything failed otherwise.
+
+  A channel over an empty spot answers `08/75`, "No tip picked up", as measured on the device.
+  """
+  if not isinstance(error, STARFirmwareError) or not error.errors:
+    return None
+  faulted = channels_that_faulted(error)
+  if len(faulted) != len(error.errors):
+    return None
+  for cause in error.errors.values():
+    if not isinstance(cause, HamiltonNoTipError) or cause.trace_information != 75:
+      return None
+  return sorted(faulted)
 
 
 class Pipettes:
@@ -1974,6 +2002,176 @@ class Pipettes:
     if shaft is None or not shaft.has_tip():
       return None
     return cast(Tip, shaft.release_tip())
+
+  # -- emptying tips -------------------------------------------------------------------------------
+
+  async def _unchecked_fw_dispensing_drive_move(
+    self,
+    channel: int,
+    distance: int,
+    speed: int,
+    acceleration: int,
+    current_limit: int,
+  ) -> None:
+    """Send the piston move as it is given, in dispensing drive increments. `Px DS`.
+
+    Args:
+      channel: 0-indexed from the back.
+      distance: signed, in increments; positive draws, negative pushes (`ds`, `dt`).
+      speed: in increments/s (`dv`).
+      acceleration: in thousands of increments/s2 (`dr`).
+      current_limit: 0 to 7 (`dw`).
+    """
+    await self._driver.send_command(
+      module=self.channel_id(channel),
+      command="DS",
+      ds=f"{abs(distance):05}",
+      dt="0" if distance >= 0 else "1",
+      dv=f"{speed:05}",
+      dr=f"{acceleration:03}",
+      dw=f"{current_limit}",
+    )
+
+  async def dispensing_drive_move_to_uL_position(
+    self,
+    channel: int,
+    position: float,
+    *,
+    flow_rate: float = 200.0,
+    acceleration: float = 3000.0,
+    current_limit: int = 5,
+  ) -> None:
+    """Move one channel's piston to a position where the tip stands, and read it back. `Px DS`.
+
+    Reads the piston first: the command moves by a distance. A push sends the tip's held
+    transport air out first. The tip's tracker is left alone.
+
+    Args:
+      channel: 0-indexed from the back.
+      position: in uL, 0.0 at rest; -45.0 is the bottom limit.
+      flow_rate: in uL/s.
+      acceleration: in uL/s2.
+      current_limit: 0 to 7.
+
+    Raises:
+      ValueError: A field out of the drive's range, before anything is sent.
+    """
+    self._require_channel(channel)
+    c = self.configuration
+    target = c.dispensing_drive_uL_to_increments(position)
+    dv = c.dispensing_drive_uL_to_increments(flow_rate)
+    dr = round(c.dispensing_drive_uL_to_increments(acceleration) / 1000)
+    for checked, (low, high), name in (
+      (target, c.dispensing_drive_position_range_increments, "position, in increments,"),
+      (dv, c.dispensing_drive_speed_range_increments, "flow_rate, in increments/s,"),
+      (dr, c.dispensing_drive_move_acceleration_range_increments, "acceleration, in increments,"),
+      (current_limit, c.dispensing_drive_current_limit_range, "current_limit"),
+    ):
+      if not low <= checked <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {checked}")
+    standing = await self.dispensing_drive_request_uL_position(channel)
+    moved = round(position - standing, 1)
+    distance = c.dispensing_drive_uL_to_increments(abs(moved))
+    await self._unchecked_fw_dispensing_drive_move(
+      channel, distance if moved >= 0 else -distance, dv, dr, current_limit
+    )
+    if moved < 0:
+      left = round(self._held_transport_air.pop(channel, 0.0) + moved, 1)
+      if left > 0:
+        self._held_transport_air[channel] = left
+    await self.dispensing_drive_request_uL_position(channel)
+
+  async def empty_tip(
+    self,
+    channel: int,
+    position: Optional[float] = None,
+    *,
+    flow_rate: float = 200.0,
+    acceleration: float = 3000.0,
+    current_limit: int = 5,
+    reset_dispensing_drive_after: bool = True,
+  ) -> None:
+    """Push everything out of one channel's tip where it stands, the piston at or below rest.
+
+    The tip's tracker goes to 0; the liquid goes nowhere tracked. Returning to 0 draws the piston
+    back up, so the tip should be out of the liquid.
+
+    Args:
+      channel: 0-indexed from the back.
+      position: where to take the piston, in uL, at most 0.0. The bottom limit, -45.0, when None.
+      flow_rate: in uL/s.
+      acceleration: in uL/s2.
+      current_limit: 0 to 7.
+      reset_dispensing_drive_after: whether the piston returns to 0 afterwards.
+
+    Raises:
+      ValueError: A position above rest, or a field out of the drive's range, before anything is
+        sent.
+    """
+    if position is None:
+      bottom = self.configuration.dispensing_drive_position_range_increments[0]
+      position = self.configuration.dispensing_drive_increments_to_uL(bottom)
+    if position > 0:
+      raise ValueError(
+        f"position must be at most 0.0 uL to empty a tip, is {position}; "
+        "`dispensing_drive_move_to_uL_position` moves the piston anywhere"
+      )
+    targets = [position, 0.0] if reset_dispensing_drive_after else [position]
+    for target in targets:
+      await self.dispensing_drive_move_to_uL_position(
+        channel,
+        target,
+        flow_rate=flow_rate,
+        acceleration=acceleration,
+        current_limit=current_limit,
+      )
+    tip = self.get_mounted_tip(channel)
+    if tip is not None:
+      tip.tracker.set_volume(0.0)
+
+  async def empty_tips(
+    self,
+    use_channels: Optional[List[int]] = None,
+    position: Optional[float] = None,
+    *,
+    flow_rate: float = 200.0,
+    acceleration: float = 3000.0,
+    current_limit: int = 5,
+    reset_dispensing_drive_after: bool = True,
+  ) -> None:
+    """Empty several channels' tips where they stand, the channels in parallel. See `empty_tip`.
+
+    Args:
+      use_channels: 0-indexed from the back. Every channel that senses a tip when None.
+      position: where to take the pistons, in uL, at most 0.0. The bottom limit when None.
+      flow_rate: in uL/s.
+      acceleration: in uL/s2.
+      current_limit: 0 to 7.
+      reset_dispensing_drive_after: whether the pistons return to 0 afterwards.
+
+    Raises:
+      ValueError: A channel the device does not have or named twice, or a field out of range.
+    """
+    if use_channels is None:
+      presence = await self.sense_tip_presence()
+      use_channels = [channel for channel, mounted in enumerate(presence) if mounted]
+    for channel in use_channels:
+      self._require_channel(channel)
+    if len(set(use_channels)) != len(use_channels):
+      raise ValueError(f"use_channels must each be named once, are {use_channels}")
+    await asyncio.gather(
+      *(
+        self.empty_tip(
+          channel,
+          position,
+          flow_rate=flow_rate,
+          acceleration=acceleration,
+          current_limit=current_limit,
+          reset_dispensing_drive_after=reset_dispensing_drive_after,
+        )
+        for channel in use_channels
+      )
+    )
 
   # -- channel initialization ------------------------------------------------
 
@@ -4497,6 +4695,151 @@ class Pipettes:
     for batch in batches:
       await self.pick_up_tips(batch.origin_tip_spots, use_channels=batch.use_channels)
       await self.drop_tips(batch.target_tip_spots, use_channels=batch.use_channels)
+
+  async def _require_ready_to_probe(
+    self, tip_spots: Sequence[TipSpot], use_channels: Sequence[int]
+  ) -> None:
+    """Refuse spots the model holds no tip in, and channels holding one, before anything moves.
+
+    A channel that already holds a tip would read as one that took the spot's: it is refused, not
+    put back into a spot it never came from.
+    """
+    empty = [spot.name for spot in tip_spots if not spot.tracker.has_tip]
+    if empty:
+      raise ValueError(
+        f"the model holds no tip in {empty}; only spots it holds a tip in can be probed"
+      )
+    sensed = await self.sense_tip_presence()
+    holding = [
+      channel
+      for channel in use_channels
+      if self.get_mounted_tip(channel) is not None or sensed[channel]
+    ]
+    if holding:
+      raise HasTipError(f"channels {holding} hold a tip: probe with empty channels")
+
+  async def _require_emptied(self, use_channels: Sequence[int]) -> None:
+    """Refuse to end a probe with a channel still sensing a tip: one the device said met none."""
+    sensed = await self.sense_tip_presence()
+    holding = [channel for channel in use_channels if sensed[channel]]
+    if holding:
+      raise HasTipError(f"channels {holding} still sense a tip after probing")
+
+  async def _pick_up_to_probe(
+    self, tip_spots: List[TipSpot], use_channels: List[int], heights: Dict[str, Optional[float]]
+  ) -> None:
+    """`pick_up_tips` as the probe calls it, at the probe's traverse height."""
+    await self.pick_up_tips(
+      tip_spots,
+      use_channels=use_channels,
+      minimum_traverse_height_start=heights["minimum_traverse_height_start"],
+    )
+
+  async def _drop_to_probe(
+    self, tip_spots: List[TipSpot], use_channels: List[int], heights: Dict[str, Optional[float]]
+  ) -> None:
+    """`drop_tips` as the probe calls it, at the probe's traverse heights."""
+    await self.drop_tips(
+      tip_spots,
+      use_channels=use_channels,
+      minimum_traverse_height_start=heights["minimum_traverse_height_start"],
+      minimum_traverse_height_end=heights["minimum_traverse_height_end"],
+    )
+
+  async def probe_tip_presence_via_pickup(
+    self,
+    tip_spots: List[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> Dict[str, bool]:
+    """Find which spots hold a tip by picking each up and putting it back, as legacy's.
+
+    After a pick-up that fails, a channel that answers `08/75` found no tip; any other error is
+    raised, and so is a channel still sensing a tip at the end. The tips taken go back into their
+    own spots. Only spots the model holds a tip in can be probed; the trackers are left as the
+    pick-up and the drop leave them.
+
+    Args:
+      tip_spots: the spots to probe.
+      use_channels: the channel for each spot, 0-indexed from the back. The first ones when None.
+      minimum_traverse_height_start: the height each pick-up and each drop travels to its spots
+        at, in mm. As high as the tips allow when None; never below 245.0.
+      minimum_traverse_height_end: the height each drop leaves the channels at, in mm. As high as
+        the tips allow when None; never below 245.0.
+
+    Returns:
+      Each spot's name, and whether it held a tip.
+
+    Raises:
+      ValueError: If the counts differ, a channel is given twice, or the model holds no tip in a
+        spot, before anything moves.
+      HasTipError: If a channel to probe with holds a tip, before anything moves, or still senses
+        one at the end.
+    """
+    tip_spots = list(tip_spots)
+    use_channels = list(range(len(tip_spots))) if use_channels is None else list(use_channels)
+    await self._require_ready_to_probe(tip_spots, use_channels)
+    heights = {
+      "minimum_traverse_height_start": minimum_traverse_height_start,
+      "minimum_traverse_height_end": minimum_traverse_height_end,
+    }
+
+    found = await _probe_tip_presence_via_pickup(
+      tip_spots,
+      use_channels,
+      pick_up_tips=functools.partial(self._pick_up_to_probe, heights=heights),
+      drop_tips=functools.partial(self._drop_to_probe, heights=heights),
+      missed_channels=_get_channels_that_met_no_tip,
+    )
+    await self._require_emptied(use_channels)
+    return found
+
+  async def probe_tip_inventory(
+    self,
+    tip_spots: List[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> Dict[str, bool]:
+    """Probe any number of spots in any order, dealt a column at a time as `plan_tip_inventory`.
+
+    As `probe_tip_presence_via_pickup`.
+
+    Args:
+      tip_spots: the spots to probe, in any order; the result keeps it.
+      use_channels: the channels to probe with, 0-indexed from the back. Every channel when None.
+      minimum_traverse_height_start: as `probe_tip_presence_via_pickup`.
+      minimum_traverse_height_end: as `probe_tip_presence_via_pickup`.
+
+    Returns:
+      Each spot's name, and whether it held a tip.
+
+    Raises:
+      ValueError: If a channel is given twice, or the model holds no tip in a spot, before
+        anything moves.
+      HasTipError: If a channel to probe with holds a tip, before anything moves, or still senses
+        one at the end.
+    """
+    tip_spots = list(tip_spots)
+    use_channels = list(range(self.num_channels)) if use_channels is None else list(use_channels)
+    await self._require_ready_to_probe(tip_spots, use_channels)
+    heights = {
+      "minimum_traverse_height_start": minimum_traverse_height_start,
+      "minimum_traverse_height_end": minimum_traverse_height_end,
+    }
+
+    found = await _probe_tip_inventory(
+      tip_spots,
+      use_channels,
+      pick_up_tips=functools.partial(self._pick_up_to_probe, heights=heights),
+      drop_tips=functools.partial(self._drop_to_probe, heights=heights),
+      missed_channels=_get_channels_that_met_no_tip,
+    )
+    await self._require_emptied(use_channels)
+    return found
 
   # ----------------------------------------
   # Pressure monitoring

@@ -512,6 +512,19 @@ class SimulatedPipettes(_Simulated, Pipettes):
         1,
       )
       return None
+    if command == "DS":
+      # The piston moves by the distance, up to draw or down to push; a push sends the tip's
+      # transport air out first.
+      moved = c.dispensing_drive_increments_to_uL(int(kwargs["ds"]))
+      pushing = kwargs["dt"] == "1"
+      self.device.dispensing_drive_uL[channel] = round(
+        self.device.dispensing_drive_uL.get(channel, 0.0) + (-moved if pushing else moved), 1
+      )
+      if pushing:
+        held = self.device.transport_air_uL.pop(channel, 0.0)
+        if held > moved:
+          self.device.transport_air_uL[channel] = round(held - moved, 1)
+      return None
     if command == "RD":
       uL = self.device.dispensing_drive_uL.get(channel, 0.0)
       return (
