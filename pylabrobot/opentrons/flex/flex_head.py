@@ -427,6 +427,28 @@ class _FlexHead:
   def _check_pipetting_clearance(self, target: Container, position: Coordinate) -> None:
     """Validate head-specific clearance before any pipetting motion."""
 
+  def _pipetting_position(
+    self,
+    target: Container,
+    offset: Optional[Coordinate],
+    liquid_height: Optional[float],
+    center_nozzle_array: bool = False,
+  ) -> Coordinate:
+    """Resolve and validate a pipetting destination in the Flex deck frame."""
+    position = target.get_location_wrt(self.flex.deck, x="c", y="c", z="cavity_bottom")
+    if center_nozzle_array:
+      if self.channels == 8:
+        position.y += _EIGHT_CHANNEL_Y_SPAN / 2
+      elif self.channels == 96:
+        position.x -= _NINETY_SIX_HEAD_X_SPAN / 2
+        position.y += _NINETY_SIX_HEAD_Y_SPAN / 2
+    height = _DEFAULT_WELL_BOTTOM_CLEARANCE if liquid_height is None else liquid_height
+    position += Coordinate(z=height) + (offset or Coordinate.zero())
+    if not all(math.isfinite(v) for v in (position.x, position.y, position.z)):
+      raise ValueError("Pipetting coordinates must be finite")
+    self._check_pipetting_clearance(target, position)
+    return position
+
   async def _pipette(
     self,
     verb: str,
@@ -445,18 +467,7 @@ class _FlexHead:
     complete nozzle array; well operations locate the active primary nozzle. Stage
     volumes before motion and commit once the plunger command succeeds.
     """
-    position = target.get_location_wrt(self.flex.deck, x="c", y="c", z="cavity_bottom")
-    if center_nozzle_array:
-      if self.channels == 8:
-        position.y += _EIGHT_CHANNEL_Y_SPAN / 2
-      elif self.channels == 96:
-        position.x -= _NINETY_SIX_HEAD_X_SPAN / 2
-        position.y += _NINETY_SIX_HEAD_Y_SPAN / 2
-    height = _DEFAULT_WELL_BOTTOM_CLEARANCE if liquid_height is None else liquid_height
-    position += Coordinate(z=height) + (offset or Coordinate.zero())
-    if not all(math.isfinite(v) for v in (position.x, position.y, position.z)):
-      raise ValueError("Pipetting coordinates must be finite")
-    self._check_pipetting_clearance(target, position)
+    position = self._pipetting_position(target, offset, liquid_height, center_nozzle_array)
     clearance = max(self.flex.traversal_height, position.z)
     tip_trackers = [tip.tracker for tip in self._channel_tips if tip is not None]
     sources, destinations = (
@@ -1951,6 +1962,82 @@ class FlexHead8(_FlexHead):
     await self._pipette(
       "aspirate", column_wells[0], volume, flow_rate, offset, liquid_height, staged_trackers
     )
+
+  @instrument_operation
+  async def mix(
+    self,
+    target: Union[Plate, Sequence[Well]],
+    volume: float,
+    repetitions: int = 1,
+    *,
+    column: Optional[int] = None,
+    use_channels: Optional[Sequence[int]] = None,
+    liquid_height: Optional[float] = None,
+    offset: Optional[Coordinate] = None,
+    aspirate_flow_rate: Optional[float] = None,
+    dispense_flow_rate: Optional[float] = None,
+    final_push_out: Optional[float] = None,
+  ) -> None:
+    """Mix a plate column in place, positioning and retracting only once.
+
+    ``volume`` is per mounted tip and ``repetitions`` must be a positive integer.
+    Pass ``plate.column(c)`` or a ``Plate`` with a zero-based ``column``.
+    Partial columns use the mounted layout and ``use_channels``, as in aspirate.
+    Tips must start empty. ``liquid_height`` is measured above the cavity floor
+    (default 1 mm); offsets and clearance checks use the deck frame.
+
+    Prime above the plate, then alternate in-place aspiration and dispensing.
+    Intermediate dispenses use zero push-out so the next draw needs no priming.
+    ``final_push_out=None`` leaves the last push-out to the robot's default.
+    Flow rates are in uL/s and default to the pipette's tip-dependent rates.
+    Each successful stroke commits its own volume transfer; a failure leaves
+    the completed strokes tracked and does not attempt further movement.
+    """
+    if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
+      raise ValueError("repetitions must be a positive integer")
+    if not math.isfinite(volume) or volume <= 0:
+      raise ValueError("volume must be finite and positive")
+    for rate in (aspirate_flow_rate, dispense_flow_rate):
+      if rate is not None and (not math.isfinite(rate) or rate <= 0):
+        raise ValueError("flow rates must be finite and positive")
+    if final_push_out is not None and (not math.isfinite(final_push_out) or final_push_out < 0):
+      raise ValueError("final_push_out must be finite and non-negative")
+    self._require_mounted_tip()
+    self._require_use_channels_match_mounted(use_channels)
+    tips = [tip for tip in self._channel_tips if tip is not None]
+    if any(tip.tracker.get_used_volume() > 0 for tip in tips):
+      raise ValueError("Mixing requires empty tips")
+    if any(volume > min(tip.maximal_volume, self.max_volume) for tip in tips):
+      raise ValueError("Mix volume exceeds pipette or tip capacity")
+    if isinstance(target, Plate):
+      if column is None:
+        raise ValueError("Provide column when mixing a Plate")
+      _, wells = self._column_anchor_and_items(target, column)
+    else:
+      if column is not None:
+        raise ValueError("column requires a Plate target")
+      wells = list(target)
+    if not wells:
+      raise ValueError("mix: the target well sequence is empty")
+    anchor, trackers = await self._liquid_column_target(wells, use_channels)
+    position = self._pipetting_position(anchor, offset, liquid_height)
+    clearance = max(self.flex.traversal_height, position.z)
+    tip_trackers = [tip.tracker for tip in tips]
+    for cycle in range(repetitions):
+      with track_liquid_transfer(trackers, tip_trackers, volume):
+        if cycle == 0:
+          await self.move_to(x=position.x, y=position.y, z=clearance, minimum_z_height=clearance)
+          await self.prepare_to_aspirate()
+          current = await self.position()
+          await self.move_relative("z", position.z - current.z)
+        await self.aspirate_in_place(volume, flow_rate=aspirate_flow_rate)
+      with track_liquid_transfer(tip_trackers, trackers, volume):
+        await self.dispense_in_place(
+          volume,
+          flow_rate=dispense_flow_rate,
+          push_out=final_push_out if cycle == repetitions - 1 else 0,
+        )
+    await self._retract_to_traversal_height()
 
   @instrument_operation
   async def dispense(
