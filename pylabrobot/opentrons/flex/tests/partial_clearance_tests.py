@@ -12,6 +12,7 @@ from pylabrobot.resources import (
   no_volume_tracking,
 )
 from pylabrobot.resources.opentrons import flex_96_filtertiprack_50ul
+from pylabrobot.resources.rotation import Rotation
 
 
 class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
@@ -140,3 +141,22 @@ class PartialClearanceTests(unittest.IsolatedAsyncioTestCase):
             self.flex.deck.check_partial_nozzle_clearance("C2", "H1", 4, operation_z=60 + gap)
         else:
           self.flex.deck.check_partial_nozzle_clearance("C2", "H1", 4, operation_z=60 + gap)
+
+  async def test_facility_placement_preserves_partial_motion_and_collision_checks(self):
+    """Offsets must neither move partial tips nor hide an adjacent obstacle."""
+    with no_volume_tracking():
+      await self.head.aspirate(self.plate.column(0)[:4], 1, liquid_height=1)
+    expected = self.api.submit_command.await_args_list[:]
+    facility = Resource("facility", 2400, 1000, 0)
+    facility.assign_child_resource(self.flex.deck, location=Coordinate(-900, 200, -300))
+    facility.rotation = Rotation(z=90)
+    self.api.submit_command.reset_mock()
+    with no_volume_tracking():
+      await self.head.aspirate(self.plate.column(0)[:4], 1, liquid_height=1)
+    self.assertEqual(self.api.submit_command.await_args_list, expected)
+
+    self.flex.deck.assign_child_at_slot(Resource("obstacle", 127, 85, 99), "B2")
+    self.api.submit_command.reset_mock()
+    with no_volume_tracking(), self.assertRaisesRegex(ValueError, "Collision risk.*C2.*B2"):
+      await self.head.aspirate(self.plate.column(0)[:4], 1, liquid_height=1)
+    self.assertEqual(self.api.submit_command.await_args_list, [])

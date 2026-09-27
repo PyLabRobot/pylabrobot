@@ -5,8 +5,9 @@ from unittest.mock import AsyncMock, patch
 
 from pylabrobot.opentrons import FlexHead8
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
-from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb, no_volume_tracking
+from pylabrobot.resources import Coordinate, Resource, cor_96_wellplate_360uL_Fb, no_volume_tracking
 from pylabrobot.resources.opentrons import flex_96_filtertiprack_50ul
+from pylabrobot.resources.rotation import Rotation
 
 
 class PipettingPrimitivesTests(unittest.IsolatedAsyncioTestCase):
@@ -84,3 +85,26 @@ class PipettingPrimitivesTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(ValueError, "material_z_thickness"), no_volume_tracking():
       await self.head.aspirate(self.plate.column(0), 1)
     self.assertEqual(self.api.submit_command.await_args_list, [])
+
+  async def test_facility_placement_does_not_change_robot_commands(self):
+    """Facility translations and rotations must not reach robot motion commands."""
+    with no_volume_tracking():
+      await self.head.aspirate(self.plate.column(0), 1, liquid_height=4)
+    expected = self.api.submit_command.await_args_list[:]
+    facility = Resource("facility", 2400, 1000, 0)
+    facility.assign_child_resource(self.flex.deck, location=Coordinate(-900, 200, 300))
+    for angle in (0, 90):
+      with self.subTest(angle=angle):
+        facility.rotation = Rotation(z=angle)
+        self.api.submit_command.reset_mock()
+        with no_volume_tracking():
+          await self.head.aspirate(self.plate.column(0), 1, liquid_height=4)
+        self.assertEqual(self.api.submit_command.await_args_list, expected)
+
+  async def test_single_nozzle_reach_ignores_facility_translation(self):
+    """The reach envelope is fixed to the deck, including its front row."""
+    expected = self.head.reachable_single_nozzles(self.rack, "H1")
+    self.assertEqual(expected, ("H1",))
+    facility = Resource("facility", 2400, 1000, 0)
+    facility.assign_child_resource(self.flex.deck, location=Coordinate(-900, 1000, 300))
+    self.assertEqual(self.head.reachable_single_nozzles(self.rack, "H1"), expected)
