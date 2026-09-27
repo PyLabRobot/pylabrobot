@@ -1,0 +1,6 @@
+pylabrobot.lib.liquid\_handling.tip\_spot\_finding.Frame
+========================================================
+
+.. currentmodule:: pylabrobot.lib.liquid_handling.tip_spot_finding
+
+.. autodata:: Frame
