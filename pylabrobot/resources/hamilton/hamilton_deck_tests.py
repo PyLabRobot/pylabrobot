@@ -73,6 +73,27 @@ class HamiltonDeckTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "occupied"):
           deck.assign_child_resource(PLT_CAR_L5AC_A00(name="clash"), track=2)
 
+  def test_with_teaching_rack_is_deprecated(self):
+    """`with_teaching_rack` still decides the rack, and says it is deprecated."""
+    for deck_factory in (STARDeck, STARLetDeck, STARPlusDeck):
+      with self.subTest(deck=deck_factory.__name__):
+        self.assertTrue(deck_factory().has_resource("teaching_tip_rack"))
+        self.assertFalse(
+          deck_factory(with_teaching_needle_rack=False).has_resource("teaching_tip_rack")
+        )
+        with self.assertWarns(DeprecationWarning):
+          deck = deck_factory(with_teaching_rack=False)
+        self.assertFalse(deck.has_resource("teaching_tip_rack"))
+
+  def test_a_deck_saved_with_the_old_teaching_rack_key_reads_back(self):
+    saved = STARLetDeck().serialize()
+    self.assertEqual(saved["with_teaching_needle_rack"], False)
+    saved["with_teaching_rack"] = saved.pop("with_teaching_needle_rack")
+    with self.assertWarns(DeprecationWarning):
+      deck = Deck.deserialize(saved)
+    racks = [r for r in deck.get_all_children() if r.name == "teaching_tip_rack"]
+    self.assertEqual([r.model for r in racks], ["hamilton_teaching_needle_rack"])
+
   def test_rails_is_deprecated(self):
     """`rails` still places a resource, and says it is deprecated."""
     deck = STARLetDeck()
@@ -302,7 +323,7 @@ class HamiltonDeckTests(unittest.TestCase):
     tips in its racks, since what a holder holds is state a driver reads off the device."""
     for deck_factory in (STARDeck, STARLetDeck):
       with self.subTest(deck=deck_factory.__name__):
-        deck = deck_factory(with_teaching_rack=False)
+        deck = deck_factory(with_teaching_needle_rack=False)
         mount = deck.get_resource("core_grippers")
         self.assertIsInstance(mount, HamiltonCoreGrippers)
         assert isinstance(mount, HamiltonCoreGrippers)
