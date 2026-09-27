@@ -28,6 +28,7 @@ from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.corning.axygen.plates import Cor_Axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
+from pylabrobot.resources.tip_tracker import does_tip_tracking, set_tip_tracking
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -244,6 +245,83 @@ def test_pick_up_tips_sends_the_move_over_the_spots_then_the_pickup():
     await p.stop()
 
   asyncio.run(_run())
+
+
+@pytest.mark.parametrize("use_channels", [None, tuple(range(8))])
+def test_return_tips_restores_original_column(use_channels):
+  """Return the same tips to a non-first column and forward drop options."""
+
+  async def _run() -> None:
+    deck, tip_rack, _, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    tracking = does_tip_tracking()
+    set_tip_tracking(True)
+    try:
+      spots = tip_rack.column(3)
+      tips = [spot.tip for spot in spots]
+      await p.head8.pick_up_tips(spots)
+      assert all(spot.tip is None for spot in spots)
+      captured, _ = _record_send(p)
+
+      await p.head8.return_tips(
+        use_channels=use_channels, seek_speed=12.0, minimum_traverse_height_end=110.0
+      )
+
+      (drop,) = [c for c in captured if isinstance(c, PrepCmd.MphDropTips)]
+      assert drop.seek_speed == 12.0
+      assert drop.final_z == 110.0
+      assert all(spot.tip is tip for spot, tip in zip(spots, tips))
+      assert p.head8.get_mounted_tips() == [None] * 8
+    finally:
+      set_tip_tracking(tracking)
+      await p.stop()
+
+  asyncio.run(_run())
+
+
+@pytest.mark.parametrize("invalid_state", ["empty", "partial", "missing_origin", "occupied"])
+def test_return_tips_rejects_invalid_state_before_sending(invalid_state):
+  """Validate all eight tips and their destinations before sending a command."""
+  from pylabrobot.resources.errors import HasTipError
+
+  async def _run() -> None:
+    deck, tip_rack, _, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    tracking = does_tip_tracking()
+    set_tip_tracking(True)
+    try:
+      spots = tip_rack.column(0)
+      if invalid_state != "empty":
+        await p.head8.pick_up_tips(spots)
+      if invalid_state == "partial":
+        p.head8.shaft(7).release_tip()
+      elif invalid_state == "missing_origin":
+        tip_rack.unassign()
+      elif invalid_state == "occupied":
+        spots[7].assign_tip(tip_rack.column(1)[7].tip_for_pickup())
+      mounted = p.head8.get_mounted_tips()
+      captured, _ = _record_send(p)
+
+      error = HasTipError if invalid_state == "occupied" else RuntimeError
+      with pytest.raises(error):
+        await p.head8.return_tips()
+      assert captured == []
+      assert p.head8.get_mounted_tips() == mounted
+    finally:
+      set_tip_tracking(tracking)
+      await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_return_tips_rejects_partial_channel_selection():
+  """The ganged head cannot return tips on selected channels only."""
+  with pytest.raises(ValueError, match="fully-ganged head"):
+    asyncio.run(_make_head8().return_tips(use_channels=[0, 1]))
 
 
 def test_head8_partial_channel_aspirate_raises_value_error():
