@@ -3,6 +3,7 @@ import unittest
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
+  TIP_CAR_480,
   TIP_CAR_480_A00,
   TIP_CAR_480BC_A00,
   TIP_CAR_NTR_A00,
@@ -23,6 +24,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_mfx_resourceholder_ntr,
   hamilton_mfx_tiprackholder_standard,
   hamilton_tip_10uL,
+  hamilton_tip_carrier_L5,
   hamilton_tip_carrier_L5_ntr_a00,
 )
 from pylabrobot.resources.resource import Resource
@@ -34,7 +36,7 @@ from pylabrobot.resources.tip_rack import StandingTipRack
 class StandardTipCarrierTests(unittest.TestCase):
   def test_rack_is_centered_over_the_opening(self):
     for carrier_fn, rotation, opening in [
-      (TIP_CAR_480_A00, 0, (114.5, 74.0)),
+      (hamilton_tip_carrier_L5, 0, (114.5, 74.0)),
       (TIP_CAR_288_C00, 90, (74.0, 114.5)),
     ]:
       with self.subTest(carrier=carrier_fn.__name__):
@@ -49,7 +51,7 @@ class StandardTipCarrierTests(unittest.TestCase):
 
   def test_a_turned_deck_seats_the_rack_as_an_upright_one_does(self):
     """The rack is centred over its site's opening in the site's own frame."""
-    for carrier_fn, rotation in [(TIP_CAR_480_A00, 0), (TIP_CAR_288_C00, 90)]:
+    for carrier_fn, rotation in [(hamilton_tip_carrier_L5, 0), (TIP_CAR_288_C00, 90)]:
       with self.subTest(carrier=carrier_fn.__name__):
         seated = []
         for angle in (0, 90, 37.5):
@@ -71,7 +73,12 @@ class StandardTipCarrierTests(unittest.TestCase):
   def test_tip_spot_positions_on_star_deck(self):
     # positions whose firmware commands match Venus
     for carrier_fn, rotation, a1, h12 in [
-      (TIP_CAR_480_A00, 0, Coordinate(117.9, 145.8, 216.45), Coordinate(216.9, 82.8, 216.45)),
+      (
+        hamilton_tip_carrier_L5,
+        0,
+        Coordinate(117.9, 145.8, 216.45),
+        Coordinate(216.9, 82.8, 216.45),
+      ),
       (TIP_CAR_288_C00, 90, Coordinate(113.5, 111.0, 216.2), Coordinate(176.5, 210.0, 216.2)),
     ]:
       with self.subTest(carrier=carrier_fn.__name__):
@@ -122,7 +129,7 @@ class StandardTipCarrierTests(unittest.TestCase):
     ]:
       with self.subTest(rack=rack_fn.__name__):
         deck = STARDeck()
-        carrier = TIP_CAR_480BC_A00("carrier")
+        carrier = hamilton_tip_carrier_L5("carrier")
         carrier[0] = rack = rack_fn("rack", make_tip=hamilton_tip_10uL)
         deck.assign_child_resource(carrier, track=22)
         for spot, expected in (
@@ -146,14 +153,13 @@ class StandardTipCarrierTests(unittest.TestCase):
 
   def test_a_solid_coreii_rack_has_the_spots_of_a_framed_rack_at_its_top(self):
     from pylabrobot.resources.hamilton import (
-      TIP_CAR_480_A00,
       hamilton_96_tiprack_300uL,
       hamilton_96_tiprack_raised_core_i,
       hamilton_96_tiprack_raised_core_ii,
       hamilton_tip_300uL,
     )
 
-    carrier = TIP_CAR_480_A00("tip_carrier")
+    carrier = hamilton_tip_carrier_L5("tip_carrier")
     carrier[0] = framed = hamilton_96_tiprack_300uL("framed")
     carrier[1] = solid = hamilton_96_tiprack_raised_core_ii("solid", make_tip=hamilton_tip_300uL)
     carrier[2] = corei = hamilton_96_tiprack_raised_core_i("corei", make_tip=hamilton_tip_300uL)
@@ -173,13 +179,12 @@ class StandardTipCarrierTests(unittest.TestCase):
   def test_standard_tiprack_sinks_into_the_mfx_tiprackholder_as_into_a_tip_carrier(self):
     """The rack's skirt drops into the module, so its spots stand where a tip carrier puts them."""
     from pylabrobot.resources.hamilton import (
-      TIP_CAR_480_A00,
       hamilton_96_tiprack_1000uL_filter,
       hamilton_mfx_tiprackholder_standard,
     )
 
     deck = STARDeck()
-    carrier = TIP_CAR_480_A00("tip_carrier")
+    carrier = hamilton_tip_carrier_L5("tip_carrier")
     carrier[0] = on_carrier = hamilton_96_tiprack_1000uL_filter("on_carrier")
     deck.assign_child_resource(carrier, track=1)
     module = hamilton_mfx_tiprackholder_standard("module")
@@ -197,6 +202,12 @@ class StandardTipCarrierTests(unittest.TestCase):
       actual = on_module.get_item(spot).get_absolute_location("c", "c", "b")
       self.assertAlmostEqual(actual.x, expected[0])
       self.assertAlmostEqual(actual.y, expected[1])
+
+  def test_the_old_carrier_names_still_work(self):
+    for old_name in (TIP_CAR_480, TIP_CAR_480_A00, TIP_CAR_480BC_A00):
+      with self.assertWarns(DeprecationWarning):
+        old = old_name("carrier")
+      self.assertEqual(old, hamilton_tip_carrier_L5("carrier"))
 
 
 class NestedTipCarrierTests(unittest.TestCase):
