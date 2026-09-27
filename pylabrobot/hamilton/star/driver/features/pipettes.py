@@ -714,17 +714,17 @@ class Pipettes:
     channel.assign_child_resource(
       shaft,
       location=Coordinate(
-        (channel.get_absolute_size_x() - shaft.get_absolute_size_x()) / 2,
-        (channel.get_absolute_size_y() - shaft.get_absolute_size_y()) / 2,
-        -shaft.get_absolute_size_z(),
+        (channel.get_size_x() - shaft.get_size_x()) / 2,
+        (channel.get_size_y() - shaft.get_size_y()) / 2,
+        -shaft.get_size_z(),
       ),
     )
     # Stated on a plain `Resource`, which does not declare the field: a channel is not yet the
     # `NChannelPipette` that would, and that carries its own reference point as a `Coordinate`.
     channel.reference_point = Coordinate(  # type: ignore[attr-defined]
-      channel.get_absolute_size_x() / 2,
-      channel.get_absolute_size_y() / 2,
-      -shaft.get_absolute_size_z(),
+      channel.get_size_x() / 2,
+      channel.get_size_y() / 2,
+      -shaft.get_size_z(),
     )
 
   # -- what the model has on each channel --------------------------------------------------------

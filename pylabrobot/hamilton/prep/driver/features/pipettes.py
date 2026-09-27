@@ -1597,15 +1597,15 @@ class Pipettes:
     channel.assign_child_resource(
       shaft,
       location=Coordinate(
-        (channel.get_absolute_size_x() - shaft.get_absolute_size_x()) / 2,
-        (channel.get_absolute_size_y() - shaft.get_absolute_size_y()) / 2,
-        -shaft.get_absolute_size_z(),
+        (channel.get_size_x() - shaft.get_size_x()) / 2,
+        (channel.get_size_y() - shaft.get_size_y()) / 2,
+        -shaft.get_size_z(),
       ),
     )
     channel.reference_point = Coordinate(  # type: ignore[attr-defined]
-      channel.get_absolute_size_x() / 2,
-      channel.get_absolute_size_y() / 2,
-      -shaft.get_absolute_size_z(),
+      channel.get_size_x() / 2,
+      channel.get_size_y() / 2,
+      -shaft.get_size_z(),
     )
 
   def _record_positions(self, positions: List[Coordinate]) -> None:

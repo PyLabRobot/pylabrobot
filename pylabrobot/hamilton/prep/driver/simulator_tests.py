@@ -16,6 +16,7 @@ from pylabrobot.hamilton.prep.driver.simulator import (
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
 
 
@@ -143,6 +144,35 @@ def test_prep_factory_builds_a_simulated_device():
     await prep.setup()
     assert prep.pipettes is not None
     await prep.stop()
+
+  asyncio.run(_run())
+
+
+def test_a_turned_prep_puts_its_parts_where_an_upright_one_does():
+  """A Prep turned in the room sets up as one standing square."""
+
+  async def _placed(rotation: float):
+    room = Resource(name="room", size_x=9000, size_y=9000, size_z=3000)
+    room.location = Coordinate.zero()
+    prep = Prep(simulation=True, name="prep")
+    prep.rotation = Rotation(z=rotation)
+    room.assign_child_resource(prep, location=Coordinate(4000, 4000, 0))
+    await prep.setup()
+    placed = {
+      r.name: (*r.location.vector(), r.get_size_x(), r.get_size_y(), r.get_size_z())
+      for r in prep.get_all_children()
+      if r.location
+    }
+    await prep.stop()
+    return placed
+
+  async def _run() -> None:
+    upright = await _placed(0)
+    for angle in (90, -90, 37.5):
+      turned = await _placed(angle)
+      assert turned.keys() == upright.keys()
+      for name, where in upright.items():
+        assert turned[name] == pytest.approx(where, abs=1e-3), (angle, name)
 
   asyncio.run(_run())
 

@@ -319,7 +319,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     if device is None:
       y = self.get_absolute_size_y() - size_y
     else:
-      back_of_device = (device.get_absolute_size_y() - self.location.y) if self.location else 0.0
+      back_of_device = (device.get_size_y() - self.location.y) if self.location else 0.0
       y = back_of_device - ARM_BACK_FROM_DEVICE_BACK - size_y
     self.assign_child_resource(x_arm, location=Coordinate(x - reference_point_from_left, y, arm_z))
     return x_arm
@@ -410,7 +410,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     frame = FRAME_BY_NUM_TRACKS.get(self.num_tracks)
     tray = Resource(
       name=name,
-      size_x=self.get_absolute_size_x() - from_first_carrier_x - left,
+      size_x=self.get_size_x() - from_first_carrier_x - left,
       size_y=front_ahead_y - back_ahead_y,
       size_z=size_z,
       category="autoload_loading_tray",

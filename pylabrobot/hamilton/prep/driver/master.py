@@ -1543,7 +1543,7 @@ class PrepDriver:
     c = self.configuration
     spot = self.deck.teaching_needle_spot
     if spot is not None:
-      footprint = (spot.get_absolute_size_x(), spot.get_absolute_size_y())
+      footprint = (spot.get_size_x(), spot.get_size_y())
       site = next((s for s in c.deck_sites if (s.length, s.width) == footprint), None)
       if site is not None and spot.location is not None and spot.parent is not None:
         parent = spot.parent.get_location_wrt(self.deck)

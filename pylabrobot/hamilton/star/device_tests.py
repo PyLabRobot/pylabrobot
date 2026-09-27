@@ -26,6 +26,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck
 from pylabrobot.resources.hamilton.hamilton_decks import STAR_NUM_TRACKS, STARLET_NUM_TRACKS
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import serialize
 
 # The device this package ships a recording of, read through the one reader there is: tests need a
@@ -212,3 +213,33 @@ class TestComponentNames(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(star.deck.get_trash_area96().name, "custom_deck_trash_core96")
     finally:
       await star.stop()
+
+
+class TestTurnedDevice(unittest.IsolatedAsyncioTestCase):
+  """A device turned in the room sets up as one standing square."""
+
+  async def test_a_turned_device_puts_its_parts_where_an_upright_one_does(self):
+    for factory in (STARLet, STARPlus):
+      for angle in (90, -90, 37.5):
+        with self.subTest(device=factory.__name__, angle=angle):
+          placed = []
+          for rotation in (0, angle):
+            room = Resource(name="room", size_x=9000, size_y=9000, size_z=3000)
+            room.location = Coordinate.zero()
+            device = factory(simulation=True, name="device")
+            device.rotation = Rotation(z=rotation)
+            room.assign_child_resource(device, location=Coordinate(4000, 4000, 0))
+            await device.setup()
+            placed.append(
+              {
+                r.name: (*r.location.vector(), r.get_size_x(), r.get_size_y(), r.get_size_z())
+                for r in device.get_all_children()
+                if r.location
+              }
+            )
+            await device.stop()
+          upright, turned = placed
+          self.assertEqual(turned.keys(), upright.keys())
+          for name, where in upright.items():
+            for got, expected in zip(turned[name], where):
+              self.assertAlmostEqual(got, expected, 3, name)
