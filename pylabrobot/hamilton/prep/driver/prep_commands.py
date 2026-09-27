@@ -51,6 +51,10 @@ DECK_CONFIGURATION_OBJECT_PATH = "MLPrepRoot.MLPrepCalibration.DeckConfiguration
 MLPREP_CPU_OBJECT_PATH = "MLPrepRoot.MLPrepCpu"
 MODULE_INFORMATION_OBJECT_PATH = "MLPrepRoot.PipettorRoot.ModuleInformation"
 CHANNEL_XYZ_COORDINATOR_OBJECT_PATH = "MLPrepRoot.ChannelCoordinator.ChannelXYZCoordinator"
+HEATER_SHAKER_ROOT_PATH = "MLPrepRoot.HeaterShakerRoot"
+HEATER_SHAKER_CPU_OBJECT_PATH = "MLPrepRoot.HeaterShakerRoot.HeaterShakerCpu"
+HEATER_OBJECT_PATH = "MLPrepRoot.HeaterShakerRoot.Heater"
+SHAKER_OBJECT_PATH = "MLPrepRoot.HeaterShakerRoot.Shaker"
 
 # =============================================================================
 # Enums (mirrored from Prep protocol spec)
@@ -5457,5 +5461,363 @@ class PrepGetChannelHardwareConfiguration(
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> PrepGetChannelHardwareConfiguration.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+# -----------------------------------------------------------------------------
+# Heater shaker commands (HeaterShakerRoot)
+# -----------------------------------------------------------------------------
+
+
+class ShakeDirection(IntEnum):
+  """IShakerPlate.ShakeDirection."""
+
+  Forward = 0
+  Reverse = 1
+
+
+class ShakerStatus(IntEnum):
+  """IShakerPlate.ShakerStatus."""
+
+  InactiveShaking = 0
+  ContinuousShaking = 1
+  PeriodicShaking = 2
+
+
+class ShakingTimeStatus(IntEnum):
+  """IShakerPlate.TimeStatus."""
+
+  Inactive = 0
+  Active = 1
+  Expired = 2
+  Indefinite = 3
+
+
+# -- HeaterShakerCpu -------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PrepHHSGetFirmwareVersion(PrepStatusRequest["PrepHHSGetFirmwareVersion.Response"]):
+  """Version (cmd=5, dest=HeaterShakerCpu)."""
+
+  command_id = 5
+  firmware_path = HEATER_SHAKER_CPU_OBJECT_PATH
+
+  @dataclass(frozen=True)
+  class Response:
+    firmware_version: Str
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepHHSGetFirmwareVersion.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+# -- Heater ----------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PrepHHSGetHeaterStatus(PrepStatusRequest["PrepHHSGetHeaterStatus.Response"]):
+  """GetHeaterStatus (cmd=1, dest=Heater)."""
+
+  command_id = 1
+  firmware_path = HEATER_OBJECT_PATH
+
+  @dataclass(frozen=True)
+  class Response:
+    heating: PaddedBool
+    current_temperature: F32
+    target_temperature: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepHHSGetHeaterStatus.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepHHSGetTemperatureRange(PrepStatusRequest["PrepHHSGetTemperatureRange.Response"]):
+  """GetTemperatureRange (cmd=2, dest=Heater)."""
+
+  command_id = 2
+  firmware_path = HEATER_OBJECT_PATH
+
+  @dataclass(frozen=True)
+  class Response:
+    minimum_temperature: F32
+    maximum_temperature: F32
+    maximum_supervision_tolerance: F32
+    maximum_security_tolerance: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepHHSGetTemperatureRange.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepHHSStartHeating(PrepCommand[None]):
+  """StartHeating (cmd=3, dest=Heater)."""
+
+  command_id = 3
+  firmware_path = HEATER_OBJECT_PATH
+  target_temperature: F32
+  wait_for_temperature_to_be_reached: PaddedBool
+  supervision_timeout: U32
+  supervision_tolerance: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.target_temperature, F32)
+      .add(self.wait_for_temperature_to_be_reached, PaddedBool)
+      .add(self.supervision_timeout, U32)
+      .add(self.supervision_tolerance, F32)
+    )
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepHHSStopHeating(PrepCommand[None]):
+  """StopHeating (cmd=4, dest=Heater)."""
+
+  command_id = 4
+  firmware_path = HEATER_OBJECT_PATH
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+# -- Shaker ----------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PrepHHSGetSpeedRange(PrepStatusRequest["PrepHHSGetSpeedRange.Response"]):
+  """SpeedRange (cmd=1, dest=Shaker)."""
+
+  command_id = 1
+  firmware_path = SHAKER_OBJECT_PATH
+
+  @dataclass(frozen=True)
+  class Response:
+    minimum_velocity: F32
+    maximum_velocity: F32
+    minimum_acceleration: F32
+    maximum_acceleration: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepHHSGetSpeedRange.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepHHSEnableShaking(PrepCommand[None]):
+  """EnableShaking, continuous (cmd=2, dest=Shaker)."""
+
+  command_id = 2
+  firmware_path = SHAKER_OBJECT_PATH
+  shaking_speed: F32
+  shaking_time: U32
+  leave_locked: PaddedBool
+  direction: WEnum
+  acceleration: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.shaking_speed, F32)
+      .add(self.shaking_time, U32)
+      .add(self.leave_locked, PaddedBool)
+      .add(self.direction, WEnum)
+      .add(self.acceleration, F32)
+    )
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepHHSEnablePeriodicShaking(PrepCommand[None]):
+  """EnableShaking, periodic (cmd=3, dest=Shaker): on for `shaking_on_time` of each period."""
+
+  command_id = 3
+  firmware_path = SHAKER_OBJECT_PATH
+  shaking_speed: F32
+  shaking_period: U16
+  shaking_on_time: U16
+  shaking_time: U32
+  leave_locked: PaddedBool
+  direction: WEnum
+  acceleration: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.shaking_speed, F32)
+      .add(self.shaking_period, U16)
+      .add(self.shaking_on_time, U16)
+      .add(self.shaking_time, U32)
+      .add(self.leave_locked, PaddedBool)
+      .add(self.direction, WEnum)
+      .add(self.acceleration, F32)
+    )
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepHHSDisableShaking(PrepCommand[None]):
+  """DisableShaking (cmd=4, dest=Shaker)."""
+
+  command_id = 4
+  firmware_path = SHAKER_OBJECT_PATH
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepHHSGetShakingStatus(PrepStatusRequest["PrepHHSGetShakingStatus.Response"]):
+  """GetShakingStatus (cmd=5, dest=Shaker)."""
+
+  command_id = 5
+  firmware_path = SHAKER_OBJECT_PATH
+
+  @dataclass(frozen=True)
+  class Response:
+    shaker_status: WEnum
+    current_speed: F32
+    target_speed: F32
+    remaining_shaking_time: U32
+    remaining_shaking_time_status: WEnum
+    shaking_period: U16
+    shaking_active_time: U16
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepHHSGetShakingStatus.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepHHSInitialize(PrepCommand[None]):
+  """Initialize (cmd=6, dest=Shaker)."""
+
+  command_id = 6
+  firmware_path = SHAKER_OBJECT_PATH
+  smart: PaddedBool
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.smart, PaddedBool)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepHHSGetIsInitialized(PrepStatusRequest["PrepHHSGetIsInitialized.Response"]):
+  """IsInitialized (cmd=7, dest=Shaker)."""
+
+  command_id = 7
+  firmware_path = SHAKER_OBJECT_PATH
+
+  @dataclass(frozen=True)
+  class Response:
+    is_initialized: PaddedBool
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepHHSGetIsInitialized.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepHHSSetPlateLockState(PrepCommand[None]):
+  """SetPlateLockState (cmd=9, dest=Shaker)."""
+
+  command_id = 9
+  firmware_path = SHAKER_OBJECT_PATH
+  locked: PaddedBool
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.locked, PaddedBool)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepHHSGetPlateLockState(PrepStatusRequest["PrepHHSGetPlateLockState.Response"]):
+  """GetPlateLockState (cmd=10, dest=Shaker)."""
+
+  command_id = 10
+  firmware_path = SHAKER_OBJECT_PATH
+
+  @dataclass(frozen=True)
+  class Response:
+    locked: PaddedBool
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepHHSGetPlateLockState.Response:
     """Decode the declared success response."""
     return parse_into_struct(HoiParamsParser(data), cls.Response)
