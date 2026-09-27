@@ -767,6 +767,33 @@ class Head8:
 
   # -- shared LLD / TADM resolution helpers --------------------------------------------------------
 
+  @staticmethod
+  def _get_lld_mode(
+    lld_mode: Optional[Pipettes.LLDMode],
+    auto_surface_following: bool,
+    surface_following_distance: float,
+    liquid_height: Optional[float],
+    z_fluid: Optional[float],
+  ) -> Optional[Pipettes.LLDMode]:
+    """The mode a call runs with: CAPACITIVE when None under auto surface following.
+
+    Raises:
+      ValueError: Auto surface following beside a distance, or under OFF without a liquid height.
+    """
+    if not auto_surface_following:
+      return lld_mode
+    if surface_following_distance != 0.0:
+      raise ValueError(
+        "auto_surface_following beside a surface_following_distance: give one of them"
+      )
+    if lld_mode is None:
+      return Pipettes.LLDMode.CAPACITIVE
+    if lld_mode == Pipettes.LLDMode.OFF and liquid_height is None and z_fluid is None:
+      raise ValueError(
+        "auto_surface_following under lld_mode OFF needs a liquid_height to follow from"
+      )
+    return lld_mode
+
   def _resolve_effective_lld(
     self,
     lld_mode: Optional[Pipettes.LLDMode],
@@ -1405,7 +1432,8 @@ class Head8:
     c_lld: Optional[PrepCmd.CLldParameters] = None,
     tadm: Optional[PrepCmd.TadmParameters] = None,
     container_segments: Optional[List[PrepCmd.SegmentDescriptor]] = None,
-    surface_following_distance: Optional[float] = None,
+    surface_following_distance: float = 0.0,
+    auto_surface_following: bool = False,
     hamilton_liquid_classes: Optional[
       Union[HamiltonLiquidClass, List[Optional[HamiltonLiquidClass]]]
     ] = None,
@@ -1424,11 +1452,13 @@ class Head8:
       pre_mix: mix cycles run before the draw, per probe, sent uncorrected. Surface following
         is refused. Only the draw changes tracked volumes.
       mix_position_from_liquid_surface: mixing depth under the aspirate height, in mm.
-      surface_following_distance: how far the tips follow the sinking surface, in mm. None
-        follows each container's profile as it is; 0 does not follow — same meaning as
-        `Pipettes.aspirate`'s `surface_following_distances`.
+      surface_following_distance: how far the tips follow the sinking surface, in mm; 0 does not
+        follow.
+      auto_surface_following: follow each container's profile as it is, from the surface the
+        search finds or `liquid_height` under OFF. Refused beside a distance.
+      lld_mode: CAPACITIVE under `auto_surface_following` when None.
       container_segments: cross-sections sent as given. None builds them from the container
-        profile and `surface_following_distance`.
+        profile and `surface_following_distance`, or as it is under `auto_surface_following`.
     """
     del offset  # geometry uses container absolute locations
     use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
@@ -1441,6 +1471,11 @@ class Head8:
     mix_block = get_mix_parameters([pre_mix], 1, [mix_position_from_liquid_surface])[0]
     tip = self._require_mounted_tip()
 
+    lld_mode = self._get_lld_mode(
+      lld_mode, auto_surface_following, surface_following_distance, liquid_height, z_fluid
+    )
+    # None follows the profile as it is, which is what the firmware's own following does
+    following = None if auto_surface_following else surface_following_distance
     traverse_z = self._resolve_traverse_height()
     end_resolved = (
       z_final if z_final is not None else traverse_z - (tip.get_size_z() - tip.fitting_depth)
@@ -1469,7 +1504,7 @@ class Head8:
         targets.ref_resource,
         liquid_height=resolved_z_fluid - cavity_bottom_z,
         piston_volume=corrected,
-        surface_following_distance=surface_following_distance,
+        surface_following_distance=following,
         profile_start=resolved_z_minimum - cavity_bottom_z,
       )
     resolved_z_bottom_search_offset = (
@@ -1515,9 +1550,7 @@ class Head8:
     )
 
     # Without segments the firmware follows tube_radius, and 0 does not follow
-    tube_radius = (
-      0.0 if surface_following_distance == 0 else _effective_radius(targets.ref_resource)
-    )
+    tube_radius = 0.0 if following == 0 else _effective_radius(targets.ref_resource)
     effective_lld = self._resolve_effective_lld(lld_mode, lld)
     is_tadm = tadm is not None
     use_v2 = self._resolve_command_version(command_version)
@@ -1618,7 +1651,8 @@ class Head8:
     lld: Optional[PrepCmd.LldParameters] = None,
     c_lld: Optional[PrepCmd.CLldParameters] = None,
     container_segments: Optional[List[PrepCmd.SegmentDescriptor]] = None,
-    surface_following_distance: Optional[float] = None,
+    surface_following_distance: float = 0.0,
+    auto_surface_following: bool = False,
     hamilton_liquid_classes: Optional[
       Union[HamiltonLiquidClass, List[Optional[HamiltonLiquidClass]]]
     ] = None,
@@ -1634,10 +1668,13 @@ class Head8:
       containers: one container wide enough for all eight channels, or eight wells at channel
         pitch in row-A-first order — same resource vocabulary as `Pipettes.dispense`.
       volume: how much each tip pushes, in uL (one piston for the whole head).
-      surface_following_distance: how far the tips follow the rising surface, in mm. None
-        follows each container's profile as it is; 0 does not follow.
+      surface_following_distance: how far the tips follow the rising surface, in mm; 0 does not
+        follow.
+      auto_surface_following: follow each container's profile as it is, from the surface the
+        search finds or `liquid_height` under OFF. Refused beside a distance.
+      lld_mode: CAPACITIVE under `auto_surface_following` when None.
       container_segments: cross-sections sent as given. None builds them from the container
-        profile and `surface_following_distance`.
+        profile and `surface_following_distance`, or as it is under `auto_surface_following`.
     """
     del offset
     del blow_out_air_volume  # dispense blowout not on Prep dispense wire path today
@@ -1646,6 +1683,11 @@ class Head8:
     targets = self._resolve_liquid_targets(containers, "dispense")
     tip = self._require_mounted_tip()
 
+    lld_mode = self._get_lld_mode(
+      lld_mode, auto_surface_following, surface_following_distance, liquid_height, z_fluid
+    )
+    # None follows the profile as it is, which is what the firmware's own following does
+    following = None if auto_surface_following else surface_following_distance
     traverse_z = self._resolve_traverse_height()
     end_resolved = (
       z_final if z_final is not None else traverse_z - (tip.get_size_z() - tip.fitting_depth)
@@ -1672,9 +1714,10 @@ class Head8:
     else:
       ref_segments = _get_container_segments(
         targets.ref_resource,
-        liquid_height=resolved_z_fluid - cavity_bottom_z,
+        # A surface raised by d from h is the one a draw of the same volume lowers from h + d.
+        liquid_height=resolved_z_fluid - cavity_bottom_z + (following or 0.0),
         piston_volume=corrected,
-        surface_following_distance=surface_following_distance,
+        surface_following_distance=following,
         profile_start=resolved_z_minimum - cavity_bottom_z,
       )
     resolved_z_bottom_search_offset = (
@@ -1717,9 +1760,7 @@ class Head8:
       round(resolved_flow, 3),
     )
 
-    tube_radius = (
-      0.0 if surface_following_distance == 0 else _effective_radius(targets.ref_resource)
-    )
+    tube_radius = 0.0 if following == 0 else _effective_radius(targets.ref_resource)
     _DISPENSE_ALLOWED_LLD = frozenset({Pipettes.LLDMode.CAPACITIVE})
     effective_lld = self._resolve_effective_lld(lld_mode, lld, allowed_modes=_DISPENSE_ALLOWED_LLD)
     use_v2 = self._resolve_command_version(command_version)

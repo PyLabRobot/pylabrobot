@@ -10,7 +10,7 @@ Covers core logic that must survive refactors:
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Dict, List
 
 import pytest
 
@@ -524,6 +524,9 @@ def test_head8_aspirate_container_segments_start_at_z_minimum():
       volume=10,
       disable_volume_correction=True,
       z_minimum=cavity_bottom_z + 1.5,
+      liquid_height=3.0,
+      lld_mode=Pipettes.LLDMode.OFF,
+      auto_surface_following=True,
     )
 
     asp = [c for c in captured if isinstance(c, PrepCmd.MphAspirateNoLldMonitoring2)]
@@ -862,6 +865,68 @@ def test_head8_surface_following_distance_scales_or_disables_following():
     params = asp[0].aspirate_parameters[0]
     assert params.container_description == []
     assert params.common.tube_radius == 0.0
+
+
+def test_head8_follows_nothing_unless_asked_and_auto_searches_capacitive():
+  """By default no profile and tube_radius 0; auto searches CAPACITIVE and sends the profile."""
+
+  async def _run() -> None:
+    deck, tip_rack, src_plate, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    captured, _ = _record_send(p)
+    await p.head8.pick_up_tips(tip_rack.column(0))
+    wells = src_plate.column(0)
+
+    await p.head8.aspirate(containers=wells, volume=10, disable_volume_correction=True)
+    asp = [c for c in captured if isinstance(c, PrepCmd.MphAspirateNoLldMonitoring2)]
+    params = asp[0].aspirate_parameters[0]
+    assert params.container_description == []
+    assert params.common.tube_radius == 0.0
+
+    await p.head8.aspirate(
+      containers=wells, volume=10, disable_volume_correction=True, auto_surface_following=True
+    )
+    lld = [c for c in captured if isinstance(c, PrepCmd.MphAspirateWithLld2)]
+    assert len(lld) == 1
+    assert lld[0].aspirate_parameters[0].container_description != []
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_head8_auto_surface_following_refused_beside_a_distance_or_without_a_surface():
+  """Auto beside a distance, or under OFF without a liquid height, is refused before sending."""
+
+  async def _run() -> None:
+    deck, tip_rack, src_plate, dst_plate = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    await p.head8.pick_up_tips(tip_rack.column(0))
+    captured, _ = _record_send(p)
+    refused: List[Dict[str, Any]] = [
+      {"surface_following_distance": 1.0},
+      {"lld_mode": Pipettes.LLDMode.OFF},
+    ]
+    for kwargs in refused:
+      for call, wells in (
+        (p.head8.aspirate, src_plate.column(0)),
+        (p.head8.dispense, dst_plate.column(0)),
+      ):
+        with pytest.raises(ValueError, match="auto_surface_following"):
+          await call(
+            containers=wells,
+            volume=10,
+            disable_volume_correction=True,
+            auto_surface_following=True,
+            **kwargs,
+          )
+    assert captured == []
+    await p.stop()
+
+  asyncio.run(_run())
 
 
 # ---------------------------------------------------------------------------
