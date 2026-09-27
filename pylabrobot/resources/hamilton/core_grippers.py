@@ -148,11 +148,11 @@ def hamilton_core_gripper_1000ul_at_waste(
   )
   mount.assign_child_resource(
     hamilton_core_gripper_tool(name=f"{name}_front"),
-    location=Coordinate(x=-18.0, y=5.25, z=-2.0),
+    location=Coordinate(x=4.5, y=5.25, z=-2.0),
   )
   mount.assign_child_resource(
     hamilton_core_gripper_tool(name=f"{name}_back"),
-    location=Coordinate(x=-18.0, y=31.25, z=-2.0),
+    location=Coordinate(x=4.5, y=31.25, z=-2.0),
   )
   return mount
 
