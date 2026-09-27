@@ -64,6 +64,7 @@ from ..prep_commands import MPH_OBJECT_PATH
 from .pipettes import (
   PipetteChannel,
   Pipettes,
+  PipettesConfiguration,
   _absolute_z_from_well,
   _effective_radius,
   _get_container_segments,
@@ -111,14 +112,17 @@ class _Head8LiquidTargets(NamedTuple):
   volume_containers: List[Container]
 
 
-def head8_pipette(name: str = "head8") -> NChannelPipette:
+def head8_pipette(
+  name: str = "head8", size_z: float = PipettesConfiguration.channel_size_z
+) -> NChannelPipette:
   """The 8MPH as a resource: one column of eight tip mounting shafts, probe 0 at the back.
 
-  Only its channels are modelled, the grid the device reports, not the body around them: the
-  resource spans the shafts and nothing more. A tip a probe carries is its shaft's child.
+  As tall as a channel, its shafts hanging below it as a channel's does. Only the probes' grid is
+  modelled, not the body around it. A tip a probe carries is its shaft's child.
 
   Args:
     name: what to call it.
+    size_z: how tall it is above its shafts, in mm.
 
   Returns:
     The pipette.
@@ -128,9 +132,9 @@ def head8_pipette(name: str = "head8") -> NChannelPipette:
     name=name,
     size_x=SHAFT_DIAMETER,
     size_y=span_y + SHAFT_DIAMETER,
-    size_z=SHAFT_LENGTH,
+    size_z=size_z,
     # Where a tip is picked up: the axis of probe 0's shaft, at its end.
-    reference_point=Coordinate(SHAFT_DIAMETER / 2, span_y + SHAFT_DIAMETER / 2, 0),
+    reference_point=Coordinate(SHAFT_DIAMETER / 2, span_y + SHAFT_DIAMETER / 2, -SHAFT_LENGTH),
     ordered_items=create_ordered_items_2d(
       TipMountingShaft,
       name_prefix=name,
@@ -138,7 +142,7 @@ def head8_pipette(name: str = "head8") -> NChannelPipette:
       num_items_y=NUM_PROBES,
       dx=0,
       dy=0,
-      dz=0,
+      dz=-SHAFT_LENGTH,
       item_dx=PROBE_PITCH_MM,
       item_dy=PROBE_PITCH_MM,
       tip_pickup_mode="core",
@@ -175,7 +179,8 @@ class Head8:
     self.channels: List[PipetteChannel] = []  # built by discover
     self._supports_v2_pipetting: Optional[bool] = None
     # The head's probes, each a shaft carrying the tip it has picked up.
-    self.resource: NChannelPipette = head8_pipette()
+    name = "head8" if driver is None else driver.get_component_name("head8")
+    self.resource: NChannelPipette = head8_pipette(name=name)
 
   @property
   def deck(self) -> Optional["Deck"]:
@@ -331,6 +336,82 @@ class Head8:
 
   # -- xyz position --------------------------------------------------------------------------------
 
+  def _mounted_length(self) -> float:
+    """How far below the end of probe 0's shaft the tip on it reaches, in mm; 0 with no tip."""
+    tip = self.resource.get_item(0).tip
+    return float(tip.get_size_z() - tip.fitting_depth) if isinstance(tip, Tip) else 0.0
+
+  def get_reference_point_location(self) -> Optional[Coordinate]:
+    """Where the model has probe 0, in mm on the deck: Z at the bottom of what it carries.
+
+    The inverse of `update_location_by_reference_point`. None when nothing models the head yet.
+    """
+    head, deck = self.resource, self.deck
+    if head.location is None or head.parent is None or deck is None:
+      return None
+    return (
+      head.location
+      + head.parent.get_location_wrt(deck)
+      + head.reference_point
+      - Coordinate(0, 0, self._mounted_length())
+    )
+
+  def update_location_by_reference_point(
+    self, x: Optional[float] = None, y: Optional[float] = None, z: Optional[float] = None
+  ) -> None:
+    """Record where the head is on the resource that models it, a child of the arm's.
+
+    As `Pipettes.update_location_by_reference_point` does for a channel. Positions are in the deck's
+    frame, a resource is located in its parent's, so the arm's position is taken out first. Does
+    nothing when nothing models the head.
+
+    Args:
+      x: where probe 0 is, in mm on the deck. Left as it was on the arm when None.
+      y: where probe 0 is, in mm on the deck. Left as it was when None.
+      z: where the bottom of what probe 0 carries is, in mm on the deck. Left as it was when None.
+    """
+    head, deck = self.resource, self.deck
+    if head.location is None or head.parent is None or deck is None:
+      return
+    here, on_the_arm, anchor = (
+      head.location,
+      head.parent.get_location_wrt(deck),
+      head.reference_point,
+    )
+    shaft_z = None if z is None else z + self._mounted_length()
+    head.location = Coordinate(
+      here.x if x is None else x - on_the_arm.x - anchor.x,
+      here.y if y is None else y - on_the_arm.y - anchor.y,
+      here.z if shaft_z is None else shaft_z - on_the_arm.z - anchor.z,
+    )
+
+  def _record_target(self, x: float, y: float, z: float) -> None:
+    """Record where a command sends the head, as it is sent: the read in its `finally` has the last word.
+
+    Args:
+      x: where probe 0 is sent, in mm on the deck.
+      y: where probe 0 is sent, in mm on the deck.
+      z: where the bottom of what probe 0 carries is sent, in mm on the deck.
+    """
+    arm, at = self._driver.x_arm, self.get_reference_point_location()
+    if arm is not None and arm.resource is not None and at is not None:
+      # The head sits a fixed distance along the arm, so the arm moves as far as the head does.
+      arm.update_location_by_reference_point(
+        arm.resource.get_location_wrt(self._require_deck()).x
+        + arm.configuration.reference_point_from_left
+        + x
+        - at.x
+      )
+    self.update_location_by_reference_point(y=y, z=z)
+
+  async def _record_where_it_stopped(self) -> None:
+    """Read where the head, the arm and the channels came to rest, and record it. For a `finally`.
+
+    One read answers for all of them. Its own failure is logged and swallowed by the arm's read.
+    """
+    if self._driver.x_arm is not None:
+      await self._driver.x_arm._record_where_it_stopped()
+
   async def move_to_position(
     self,
     x: float,
@@ -355,14 +436,18 @@ class Head8:
     self._check_reachable("x", x)
     self._check_reachable("y", y)
     self._check_reachable("z", z)
-    if via_lane:
-      await self._driver.send_command(
-        PrepCmd.MphMoveToPositionViaLane(x_position=x, y_position=y, z_position=z)
-      )
-    else:
-      await self._driver.send_command(
-        PrepCmd.MphMoveToPosition(x_position=x, y_position=y, z_position=z)
-      )
+    self._record_target(x, y, z)
+    try:
+      if via_lane:
+        await self._driver.send_command(
+          PrepCmd.MphMoveToPositionViaLane(x_position=x, y_position=y, z_position=z)
+        )
+      else:
+        await self._driver.send_command(
+          PrepCmd.MphMoveToPosition(x_position=x, y_position=y, z_position=z)
+        )
+    finally:
+      await self._record_where_it_stopped()
 
   # ----------------------------------------
   # Tips and liquid handling
@@ -478,6 +563,7 @@ class Head8:
     )
 
     picked_up = {ch: False for ch in use_channels}
+    self._record_target(loc.x, loc.y, resolved_end)
     try:
       await self._driver.send_command(
         PrepCmd.MphPickupTips(
@@ -501,6 +587,8 @@ class Head8:
       for ch, taken in zip(use_channels, tips):
         if picked_up[ch]:
           self.shaft(ch).mount_tip(taken)
+      # Read once the tips are on the model: Z is reported at their bottom.
+      await self._record_where_it_stopped()
 
   async def drop_tips(
     self,
@@ -571,6 +659,8 @@ class Head8:
         raise HasTipError(f"{spot.name} already holds a tip")
 
     dropped = {ch: False for ch in use_channels}
+    # The drop ends with the shaft at the final height, the tips still on the model until it answers.
+    self._record_target(loc.x, loc.y, resolved_end - self._mounted_length())
     try:
       await self._driver.send_command(
         PrepCmd.MphDropTips(
@@ -593,6 +683,7 @@ class Head8:
         released = self.shaft(ch).release_tip()
         if isinstance(destination, TipSpot) and destination.tracks_tips:
           destination.assign_tip(cast(Tip, released))
+      await self._record_where_it_stopped()
 
   async def return_tips(self, use_channels: Optional[Sequence[int]] = None, **kwargs) -> None:
     """Return all eight tips to the spots they were picked up from.
@@ -1430,6 +1521,7 @@ class Head8:
     queue_volume_transfers(volume_intents)
 
     aspirated = {ch: False for ch in use_channels}
+    self._record_target(targets.ref_x, targets.ref_y, end_resolved)
     try:
       await self._driver.send_command(
         cmd_cls(aspirate_parameters=[param_struct]),  # type: ignore[arg-type]
@@ -1443,6 +1535,7 @@ class Head8:
     finally:
       # What each shaft moved is what its tip now holds, and the well no longer does.
       finalize_volume_ops(volume_intents, aspirated)
+      await self._record_where_it_stopped()
 
   async def dispense(
     self,
@@ -1622,6 +1715,7 @@ class Head8:
     queue_volume_transfers(volume_intents)
 
     dispensed = {ch: False for ch in use_channels}
+    self._record_target(targets.ref_x, targets.ref_y, end_resolved)
     try:
       await self._driver.send_command(
         cmd_cls(dispense_parameters=[param_struct]),  # type: ignore[arg-type]
@@ -1635,6 +1729,7 @@ class Head8:
     finally:
       # What each shaft moved is what the well now holds, and its tip no longer does.
       finalize_volume_ops(volume_intents, dispensed)
+      await self._record_where_it_stopped()
 
   async def mix(
     self,

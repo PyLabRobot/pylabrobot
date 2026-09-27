@@ -52,6 +52,7 @@ from pylabrobot.resources.hamilton.tip_creators import (
   hamilton_tip_1000uL,
   hamilton_tip_1000uL_filter,
 )
+from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 from pylabrobot.resources.resource import Resource
 
 from . import prep_commands as PrepCmd
@@ -473,6 +474,8 @@ class PrepDriver:
       if self.pipettes.head8_installed:
         if self.head8 is None:
           self.head8 = Head8(self, use_v1_aspirate_dispense=use_v1_aspirate_dispense)
+        elif use_v1_aspirate_dispense:
+          self.head8._use_v1_aspirate_dispense = True
         await self.head8._on_setup()
         # One height governs the arm: the head rides the channels' gantry, so it travels at what
         # they travel at rather than at a second number that happens to match.
@@ -504,8 +507,8 @@ class PrepDriver:
         logger.warning("not everything is at Z safety after setup: %s", "; ".join(low))
       if self.head8 is not None:
         # TODO: the head is left where it stands, and every lateral move travels it there. No move
-        # of its Z alone is known, and the device reports neither its position nor its bounds, so
-        # nothing here can tell that it is low or lift it. `MoveZUpToSafe` takes ChannelIndex values
+        # of its Z alone is known, so nothing here can lift it, though GetPositions reports where
+        # it is (its `MPHChannel` entry). `MoveZUpToSafe` takes ChannelIndex values
         # and the MPH has one (3): try it on a device with a head fitted, and if it answers, raise
         # the head in `Pipettes.move_to_xy_positions` and `XArm.move_to_x_position` as the channels
         # are raised.
@@ -1664,7 +1667,7 @@ class PrepDriver:
     """
     if not isinstance(self.deck, PrepDeck) or self.x_arm is None or self.pipettes is None:
       return
-    positions = await self.pipettes.request_locations()
+    positions, head_at = await self.pipettes._unchecked_fw_request_positions_and_head()
     if not positions:
       logger.warning("the channels reported no positions, so the arm and channels are not modelled")
       return
@@ -1710,8 +1713,15 @@ class PrepDriver:
         )
       self.pipettes.add_tip_mounting_shaft(resource)
       self.pipettes.resources.append(resource)
+    # The 8-channel head rides the arm too, where the same read reports it; one there is reused.
+    if self.head8 is not None and head_at is not None:
+      head = next((c for c in arm.resource.children if c.name == self.head8.resource.name), None)
+      if isinstance(head, NChannelPipette):
+        self.head8.resource = head
+      elif head is None:
+        arm.resource.assign_child_resource(self.head8.resource, location=Coordinate.zero())
     # Seat each where it was read, now that there is something to record it on.
-    self.pipettes._record_positions(positions)
+    self.pipettes._record_positions(positions, head=head_at)
 
   # ----------------------------------------
   # CoRe grippers
@@ -1736,7 +1746,11 @@ class PrepDriver:
   # ----------------------------------------
 
   async def park_device(self) -> None:
-    await self.send_command(PrepCmd.PrepPark())
+    try:
+      await self.send_command(PrepCmd.PrepPark())
+    finally:
+      if self.x_arm is not None:
+        await self.x_arm._record_where_it_stopped()
 
   async def spread(self) -> None:
     await self.send_command(PrepCmd.PrepSpread())

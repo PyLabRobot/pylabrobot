@@ -54,6 +54,7 @@ from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration
 from .errors import PREP_ERROR_CODES
 from .features.core_grippers import JAW_OPEN_EXTRA
+from .features.head8 import Head8
 from .features.heater_shaker import PrepHamiltonHeaterShaker
 from .features.lights import Lights
 from .features.pipettes import Pipettes, PipettesConfiguration
@@ -100,6 +101,13 @@ SIMULATED_INITIALIZED_POSITIONS = {
   0: (289.489, 365.0148, 167.499),
   1: (289.489, 345.0123, 167.4954),
 }
+
+# Where a device with the 8-channel head reported the head's probe 0 after initializing: X this far
+# past the channels', and (y, z) in mm.
+SIMULATED_HEAD8_X_PAST_CHANNELS = 2.70
+SIMULATED_INITIALIZED_HEAD8_YZ = (452.99, 167.5)
+# How far in front of the head's probe 0 the device keeps the rear channel, in mm, as measured.
+SIMULATED_HEAD8_CLEARANCE_Y = 73.0
 
 # Each channel's Y drive frame reads deck Y plus this, rear first, as measured on the device.
 SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
@@ -783,6 +791,17 @@ class SimulatedPipettes(_Simulated, Pipettes):
             position_z=z,
           )
         )
+      if self.device.head8 is not None:
+        x, y, z = self.device.head8_location()
+        positions.append(
+          PrepCmd.ChannelXYZPositionParameters(
+            default_values=False,
+            channel=PrepCmd.ChannelIndex.MPHChannel,
+            position_x=x,
+            position_y=y,
+            position_z=z,
+          )
+        )
       return PrepCmd.PrepGetPositions.Response(
         positions=positions
       ), "where the model has the channels"
@@ -1178,6 +1197,30 @@ class SimulatedHeaterShaker(_Simulated, PrepHamiltonHeaterShaker):
     return None
 
 
+class SimulatedHead8(_Simulated, Head8):
+  """The 8-channel head, answering for itself.
+
+  The driver records where each command sends the head. The channels share its X, so the device
+  keeps them in front of it, and so does this.
+  """
+
+  async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
+    pipettes = self.device.pipettes
+    if path != MPH_OBJECT_PATH or not isinstance(pipettes, SimulatedPipettes):
+      return None
+    count = self.device.simulated_configuration.num_channels or 0
+    limit = self.device.head8_location()[1] - SIMULATED_HEAD8_CLEARANCE_Y
+    for channel in range(count):
+      if channel > 0:
+        limit -= pipettes._min_spacing_between(channel - 1, channel)
+      y = pipettes._modelled_location(channel)[1]
+      if y > limit:
+        pipettes._move(channel, None, limit, None)
+        y = limit
+      limit = y
+    return None  # moved the model; the device answers the command itself
+
+
 class _SimulatedSession(TCPSession):
   """A session whose other end is the simulator: requests are built as for TCP, and answered with
   frames the real decoder reads."""
@@ -1371,6 +1414,8 @@ class PrepSimulationDriver(PrepDriver):
       self.pipettes = SimulatedPipettes(self)
     if configuration.heater_shaker_installed:
       self.hs = SimulatedHeaterShaker(self)
+    if configuration.head8_installed:
+      self.head8 = SimulatedHead8(self)
 
   def describe_link(self) -> str:
     return "simulation (no link)"
@@ -1393,6 +1438,17 @@ class PrepSimulationDriver(PrepDriver):
       return default
     return arm.resource.get_location_wrt(self.deck).x + arm.configuration.reference_point_from_left
 
+  def head8_location(self) -> Tuple[float, float, float]:
+    """Where the model has the head's probe 0, as (x, y, z) in mm on the deck.
+
+    Where the device reported it after initializing while nothing models it.
+    """
+    at = None if self.head8 is None else self.head8.get_reference_point_location()
+    if at is not None:
+      return at.x, at.y, at.z
+    x = self.modelled_x(default=SIMULATED_INITIALIZED_POSITIONS[0][0])
+    return (x + SIMULATED_HEAD8_X_PAST_CHANNELS, *SIMULATED_INITIALIZED_HEAD8_YZ)
+
   async def _answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
     """What the device would answer, asked of the feature the command is about.
 
@@ -1402,7 +1458,7 @@ class PrepSimulationDriver(PrepDriver):
     """
     before = self._where_everything_is() if self.simulate_motion_time else None
     answered = None
-    for feature in (self.pipettes, self.x_arm, self.hs):
+    for feature in (self.head8, self.pipettes, self.x_arm, self.hs):
       if isinstance(feature, _Simulated):
         answered = await feature.answer(request, path, method)
         if answered is not None:

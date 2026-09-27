@@ -1684,13 +1684,25 @@ class Pipettes:
       -shaft.get_size_z(),
     )
 
-  def _record_positions(self, positions: List[Coordinate]) -> None:
-    """Record reported positions on the arm and the channels: X on the arm, Y and Z on each channel."""
+  def _record_positions(
+    self, positions: List[Coordinate], head: Optional[Coordinate] = None
+  ) -> None:
+    """Record reported positions on the arm, the channels and the 8-channel head.
+
+    X on the arm, Y and Z on each channel. The head rides the arm, so it is recorded after it.
+
+    Args:
+      positions: one per channel, 0-indexed from the back.
+      head: where the 8-channel head's probe 0 is, or None when the device reported no head.
+    """
     arm = None if self._driver is None else self._driver.x_arm
     if positions and arm is not None:
       arm.update_location_by_reference_point(positions[0].x)
     for channel, position in enumerate(positions):
       self.update_location_by_reference_point(channel, y=position.y, z=position.z)
+    head8 = None if self._driver is None else self._driver.head8
+    if head is not None and head8 is not None:
+      head8.update_location_by_reference_point(x=head.x, y=head.y, z=head.z)
 
   # -- channel initialization ----------------------------------------------------------------------
 
@@ -1851,6 +1863,44 @@ class Pipettes:
         }
     return by_channel
 
+  async def _unchecked_fw_request_positions_and_head(
+    self,
+  ) -> Tuple[List[Coordinate], Optional[Coordinate]]:
+    """Read where every channel and the 8-channel head are, without recording it.
+
+    One GetPositions answers for both: the head is its `MPHChannel` entry. Z is the bottom of the tip
+    on a channel carrying one, and the end of its shaft otherwise.
+
+    Returns:
+      One Coordinate per channel, ordered by channel index (0=rearmost), and where the head's probe 0
+      is, or None when the device reported no head. Empty and None when it did not answer.
+    """
+    try:
+      resp_obj = await self._driver.send_command(PrepCmd.PrepGetPositions())
+    except (HoiError, ChannelizedError):
+      return [], None
+    if not isinstance(resp_obj, PrepCmd.PrepGetPositions.Response):
+      return [], None
+    resp = resp_obj
+    if not resp.positions:
+      return [], None
+
+    _CHANNEL_ENUM_TO_IDX = {int(v): k for k, v in enumerate(self.channel_order)}
+    indexed: list[tuple[int, Coordinate]] = []
+    head: Optional[Coordinate] = None
+    for p in resp.positions:
+      # To 0.01 mm, as the bounds are: what the device answers is float32.
+      at = Coordinate(x=round(p.position_x, 2), y=round(p.position_y, 2), z=round(p.position_z, 2))
+      if int(p.channel) == PrepCmd.ChannelIndex.MPHChannel:
+        head = at
+        continue
+      ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
+      if ch_idx is not None:
+        indexed.append((ch_idx, at))
+
+    indexed.sort(key=lambda pair: pair[0])
+    return [coord for _, coord in indexed], head
+
   async def request_locations(self) -> list[Coordinate]:
     """Request the current XYZ positions of all pipettor channels.
 
@@ -1863,9 +1913,9 @@ class Pipettes:
     Returns:
       List of Coordinate, one per channel.
     """
-    positions = await self._unchecked_fw_request_positions()
+    positions, head = await self._unchecked_fw_request_positions_and_head()
     # The device is the authority on where the channels are, so what it answers is recorded.
-    self._record_positions(positions)
+    self._record_positions(positions, head=head)
     return positions
 
   async def _unchecked_fw_request_positions(self) -> list[Coordinate]:
@@ -1879,33 +1929,8 @@ class Pipettes:
       One Coordinate per channel, ordered by channel index (0=rearmost). Empty when the device did not
       answer with positions.
     """
-    try:
-      resp_obj = await self._driver.send_command(PrepCmd.PrepGetPositions())
-    except (HoiError, ChannelizedError):
-      return []
-    if not isinstance(resp_obj, PrepCmd.PrepGetPositions.Response):
-      return []
-    resp = resp_obj
-    if not resp.positions:
-      return []
-
-    _CHANNEL_ENUM_TO_IDX = {int(v): k for k, v in enumerate(self.channel_order)}
-    indexed: list[tuple[int, Coordinate]] = []
-    for p in resp.positions:
-      ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
-      if ch_idx is not None:
-        # To 0.01 mm, as the bounds are: what the device answers is float32.
-        indexed.append(
-          (
-            ch_idx,
-            Coordinate(
-              x=round(p.position_x, 2), y=round(p.position_y, 2), z=round(p.position_z, 2)
-            ),
-          )
-        )
-
-    indexed.sort(key=lambda pair: pair[0])
-    return [coord for _, coord in indexed]
+    positions, _ = await self._unchecked_fw_request_positions_and_head()
+    return positions
 
   def _check_reachable(self, channel: int, axis: Literal["x", "y", "z"], value: float) -> None:
     """Raise unless a channel reaches a position along one axis.
