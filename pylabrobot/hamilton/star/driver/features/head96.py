@@ -966,17 +966,6 @@ class Head96(Head):
     }[lld_sensor]:
       raise RuntimeError(f"no tip on the channels that feed lld_sensor={lld_sensor!r}")
 
-  async def _overhang_that_probes(self) -> float:
-    """How far below the stop disc the head probes: the tips' overhang, to 0.1 mm.
-
-    Raises:
-      RuntimeError: If the head reports no tips.
-    """
-    if not await self.request_tip_presence():
-      raise RuntimeError("the head reports no tips, so there is no overhang to measure")
-    reference = await self.request_z_position()
-    return round(reference - (await self.request_location()).z, 1)
-
   def _found_nothing(self, error: STARFirmwareError) -> bool:
     """Whether a firmware error says only that a search reached its end without detecting.
 
