@@ -332,7 +332,7 @@ def test_probe_resource_exists_ztouches_the_front_tool_over_its_centre(surface, 
   assert seek.kwargs["allow_without_tip"] is True
   # Travelled at Z safety, and the probe is the one to leave the channels there, not 2 mm up.
   assert seek.kwargs["post_detection_distance"] == 0.0
-  assert seek.kwargs["move_channels_to_safe_pos_after"] is True
+  assert seek.kwargs["move_to_safe_z_position_after"] is True
   assert commands.move_to_safe_z.await_count == 1
 
 

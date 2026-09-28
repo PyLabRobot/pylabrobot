@@ -20,6 +20,7 @@ import functools
 import logging
 import math
 import struct as _struct
+import warnings
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field, replace
 from typing import (
@@ -252,6 +253,20 @@ def channels_named(channels: Sequence[int]) -> str:
   if len(named) == 1:
     return f"channel {named[0]}"
   return f"channels {', '.join(named[:-1])} and {named[-1]}"
+
+
+def _get_move_to_safe_z_position_after(
+  move_to_safe_z_position_after: bool, move_channels_to_safe_pos_after: Optional[bool]
+) -> bool:
+  """`move_to_safe_z_position_after`, or the deprecated `move_channels_to_safe_pos_after`."""
+  if move_channels_to_safe_pos_after is None:
+    return move_to_safe_z_position_after
+  warnings.warn(
+    "`move_channels_to_safe_pos_after` is deprecated, use `move_to_safe_z_position_after`.",
+    DeprecationWarning,
+    stacklevel=3,
+  )
+  return move_channels_to_safe_pos_after
 
 
 def resolve_command_version(
@@ -3399,7 +3414,8 @@ class Pipettes:
     detect_mode: Optional[int] = None,
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
-    move_channels_to_safe_pos_after: bool = False,
+    move_to_safe_z_position_after: bool = False,
+    move_channels_to_safe_pos_after: Optional[bool] = None,
   ) -> Optional[float]:
     """Lower a channel where it stands until its cLLD triggers.
 
@@ -3416,7 +3432,8 @@ class Pipettes:
       post_detection_distance: how far above the liquid the tip rests afterwards, in mm. The seek
         leaves the tip where it stopped, about 0.1 mm past the surface, when this is 0. A seek
         that detects nothing raises the tip back to the start.
-      move_channels_to_safe_pos_after: whether to raise every channel to Z safety instead.
+      move_to_safe_z_position_after: whether to raise every channel to Z safety instead.
+      move_channels_to_safe_pos_after: deprecated, use `move_to_safe_z_position_after`.
 
     Returns:
       Detected height in mm, rounded to 0.01 mm, or None.
@@ -3426,6 +3443,9 @@ class Pipettes:
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False, the channel
         reports no position, or its Z range is unknown.
     """
+    move_to_safe_z_position_after = _get_move_to_safe_z_position_after(
+      move_to_safe_z_position_after, move_channels_to_safe_pos_after
+    )
     # Tip: required unless allow_without_tip
     if not allow_without_tip:
       tips = await self.sense_tip_presence()
@@ -3507,7 +3527,7 @@ class Pipettes:
       (r for r in results if int(r.channel) == int(self.channel_enum(channel_idx))), None
     )
     surface = None if result is None or not result.detected else round(float(result.position), 2)
-    if move_channels_to_safe_pos_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
     elif surface is None:
       await self.move_tool_bottom_to_z_position(channel_idx, search_start_position)
@@ -3763,7 +3783,7 @@ class Pipettes:
       searches = []
       for i, (channel, job) in enumerate(jobs):
         # The drive frame is the tip bottom plus an offset, read where the channel now stands
-        offset = await self.channels[channel].request_z_drive_position() - here[channel].z
+        offset = await self.channels[channel]._request_z_drive_position() - here[channel].z
         start = round(here[channel].z, 2)
         searches.append((channel, start, ends[job], offset, parallel and i > 0))
       try:
@@ -4169,7 +4189,8 @@ class Pipettes:
     tip_len: Optional[float] = None,
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
-    move_channels_to_safe_pos_after: bool = False,
+    move_to_safe_z_position_after: bool = False,
+    move_channels_to_safe_pos_after: Optional[bool] = None,
   ) -> Optional[float]:
     """Lower a channel where it stands until it meets resistance, with its Z axis's obstacle seek.
 
@@ -4197,7 +4218,8 @@ class Pipettes:
       allow_without_tip: whether to probe without a mounted tip. False requires one.
       post_detection_distance: how far above what it met the channel rests afterwards, in mm. The
         seek itself lands back at the start first, as the firmware returns it there.
-      move_channels_to_safe_pos_after: whether to raise every channel to Z safety instead.
+      move_to_safe_z_position_after: whether to raise every channel to Z safety instead.
+      move_channels_to_safe_pos_after: deprecated, use `move_to_safe_z_position_after`.
 
     Returns:
       Height where the channel met the obstacle in mm, rounded to 0.01 mm, or None.
@@ -4207,6 +4229,9 @@ class Pipettes:
       RuntimeError: If the channel holds no tip and `allow_without_tip` is False, the channel
         reports no position, its Z range is unknown, or it has no Z axis.
     """
+    move_to_safe_z_position_after = _get_move_to_safe_z_position_after(
+      move_to_safe_z_position_after, move_channels_to_safe_pos_after
+    )
     # Tip: required unless allow_without_tip; how far it reaches below the stop disc
     tips = await self.sense_tip_presence()
     has_tip = 0 <= channel_idx < len(tips) and tips[channel_idx]
@@ -4293,7 +4318,7 @@ class Pipettes:
         )
       else:
         surface = round(met, 2)
-    if move_channels_to_safe_pos_after:
+    if move_to_safe_z_position_after:
       await self.move_to_safe_z()
     elif surface is not None and post_detection_distance:
       await self.move_tool_bottom_to_z_position(channel_idx, surface + post_detection_distance)

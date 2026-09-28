@@ -1399,7 +1399,7 @@ def test_probe_z_using_ztouch_seeks_the_tip_bottom_and_can_end_at_z_safety():
       search_end_position=70.0,  # above the spot below it, so the seek touches nothing
     )
     assert await probe() is None
-    assert await probe(tip_len=70.0, move_channels_to_safe_pos_after=True) is None
+    assert await probe(tip_len=70.0, move_to_safe_z_position_after=True) is None
     seeks = [c for c in sent if isinstance(c, PrepCmd.PrepZAxisSeekObstacle)]
     stop_disc_offset = drive - (here + 51.9)
     assert seeks[0].start_position == pytest.approx(100.0 + 51.9 + stop_disc_offset)
@@ -1407,6 +1407,31 @@ def test_probe_z_using_ztouch_seeks_the_tip_bottom_and_can_end_at_z_safety():
     assert _index(sent[sent.index(seeks[1]) :], PrepCmd.PrepMoveZUpToSafe) > 0
     with pytest.raises(ValueError, match="tip_len must be between 20 and 120"):
       await probe(tip_len=10.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probes_take_move_channels_to_safe_pos_after_deprecated():
+  """The old flag name still raises the channels to Z safety, with a DeprecationWarning."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None and p.x_arm is not None
+    await p.x_arm.move_to_x_position(100.0)
+    await p.pipettes.move_to_y_positions({0: 300.0, 1: 100.0})
+    sent = _record(p)
+    with pytest.warns(DeprecationWarning, match="move_to_safe_z_position_after"):
+      await p.pipettes.probe_z_using_ztouch(
+        1,
+        search_start_position=160.0,
+        search_end_position=100.0,
+        allow_without_tip=True,
+        move_channels_to_safe_pos_after=True,
+      )
+    seek = _index(sent, PrepCmd.PrepZAxisSeekObstacle)
+    assert _index(sent[seek:], PrepCmd.PrepMoveZUpToSafe) > 0
     await p.stop()
 
   _run(_t())
