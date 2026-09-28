@@ -145,6 +145,7 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
   """
 
   _ERROR_NAMES = ABS96_ERROR_NAMES
+  _DD_IGNORE_ERRORS_IN_CALIBRATION = 0x800E
 
   def __init__(self, name: str = "byonoy_absorbance_96") -> None:
     # Drawn with the parking unit's housing, which is the same part, until the detection unit is
@@ -164,6 +165,61 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
       self.name,
       self.available_wavelengths,
     )
+
+  async def request_ignore_errors_in_calibration(self) -> bool:
+    """Read the firmware's experimental calibration-error override.
+
+    Field 0x800E is ``state.ignore_errors_in_calibration`` on A96A firmware
+    2024-10-23. This internal field is not a stable vendor API.
+    """
+    payload = Writer().u16(self._DD_IGNORE_ERRORS_IN_CALIBRATION).u8(0).finish()
+    response = await self.send_command(report_id=0x0200, payload=payload, routing_info=b"\x80\x40")
+    assert response is not None
+    r = Reader(response[2:])
+    field_index, flags = r.u16(), r.u8()
+    if field_index != self._DD_IGNORE_ERRORS_IN_CALIBRATION or flags & 0x0F != 0x01:
+      raise RuntimeError("Unexpected field or type for ignore_errors_in_calibration.")
+    value = r.u32()
+    if value not in (0, 1):
+      raise RuntimeError(f"Unexpected ignore_errors_in_calibration value: {value}.")
+    return bool(value)
+
+  async def set_ignore_errors_in_calibration(self, enabled: bool) -> None:
+    """Set and verify the firmware's experimental calibration-error override.
+
+    Diagnostic use only: suppressing an error does not establish a valid calibration.
+    The field address is specific to A96A firmware 2024-10-23. Save the original
+    value with :meth:`request_ignore_errors_in_calibration` and restore it in a
+    ``finally`` block. Setup does not enable this override automatically.
+    """
+    if not isinstance(enabled, bool):
+      raise TypeError("enabled must be a bool.")
+    if self._in_flight_trigger is not None:
+      raise RuntimeError("Cannot change calibration-error override during a measurement.")
+    payload = Writer().u16(self._DD_IGNORE_ERRORS_IN_CALIBRATION).u8(0).u32(int(enabled)).finish()
+    command = self._assemble_command(0x0210, payload, routing_info=b"\x00\x40")
+    async with self._io_lock:
+      await self.io.write(command)
+      deadline = time.monotonic() + 10
+      while True:
+        if time.monotonic() >= deadline:
+          raise TimeoutError("Timed out waiting for calibration-error override acknowledgement.")
+        response = await self.io.read(64, timeout=30)
+        if len(response) < 6:
+          continue
+        r = Reader(response)
+        if r.u16() != 0x0020 or r.u16() != 0x0210:
+          continue
+        code = r.u16()
+        if code != 0:
+          raise RuntimeError(f"Firmware rejected calibration-error override: 0x{code:04x}.")
+        break
+    if await self.request_ignore_errors_in_calibration() != enabled:
+      raise RuntimeError("Calibration-error override readback does not match requested value.")
+    if enabled:
+      logger.warning(
+        "[%s] calibration-error override enabled; calibration may be invalid", self.name
+      )
 
   async def request_available_absorbance_wavelengths(self) -> List[float]:
     response = await self.send_command(
