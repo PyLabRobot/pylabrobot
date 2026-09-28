@@ -108,6 +108,18 @@ class TestFactories(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(fitted(STAR(simulation=True)))
     self.assertFalse(fitted(STAR(simulation=True, extension_housing=False)))
 
+  def test_default_names_and_left_side_accessors(self):
+    star = STAR(simulation=True)
+    self.assertEqual(star.name, "STAR")
+    self.assertEqual(STARlet(simulation=True).name, "STARlet")
+    self.assertEqual(STARPlus(simulation=True).name, "STARplus")
+    self.assertIs(star.left_extension_housing, star.get_resource("STAR_left_extension_housing"))
+    self.assertIsNone(star.left_side_panel)
+
+    paneled = STAR(simulation=True, extension_housing=False, left_side_panel_installed=True)
+    self.assertIs(paneled.left_side_panel, paneled.get_resource("STAR_left_side_panel"))
+    self.assertIsNone(paneled.left_extension_housing)
+
 
 class TestCapabilities(unittest.IsolatedAsyncioTestCase):
   """The device reads its features through the driver, which builds only what discovery

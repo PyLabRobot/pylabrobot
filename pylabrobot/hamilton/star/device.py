@@ -271,6 +271,16 @@ class STARDevice(Resource):
   # Read through: the optional ones do not exist until discovery says what is fitted.
 
   @property
+  def left_side_panel(self) -> Optional[Resource]:
+    """The chassis's left side panel, on a device it is declared installed on."""
+    return next((c for c in self.children if c.category == "left_side_panel"), None)
+
+  @property
+  def left_extension_housing(self) -> Optional[Resource]:
+    """The left extension housing, on a device it is fitted to."""
+    return next((c for c in self.children if c.category == "left_extension_housing"), None)
+
+  @property
   def left_x_arm(self) -> Optional[XArm]:
     """The left X-arm, on a device that has one."""
     return self.driver.left_x_arm
@@ -374,7 +384,7 @@ def STAR(
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
   driver: Optional[STARDriver] = None,
-  name: str = "Hamilton STAR",
+  name: str = "STAR",
   size_x: float = STAR_SIZE_X,
   size_y: float = MANUAL_SIZE_Y,
   size_z: float = SIZE_Z,
@@ -415,7 +425,7 @@ def STARlet(
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
   driver: Optional[STARDriver] = None,
-  name: str = "Hamilton STARlet",
+  name: str = "STARlet",
   size_x: float = STARLET_SIZE_X,
   size_y: float = MANUAL_SIZE_Y,
   size_z: float = SIZE_Z,
@@ -456,7 +466,7 @@ def STARPlus(
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
   driver: Optional[STARDriver] = None,
-  name: str = "Hamilton STARplus",
+  name: str = "STARplus",
   size_x: float = STARPLUS_SIZE_X,
   size_y: float = MANUAL_SIZE_Y,
   size_z: float = SIZE_Z,
