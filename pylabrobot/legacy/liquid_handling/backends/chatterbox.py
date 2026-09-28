@@ -1,5 +1,6 @@
 from typing import List, Optional, Union
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
@@ -46,11 +47,14 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
     self._num_arms = 1
     self._head96_installed = True
 
-  async def setup(self):
-    await super().setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    self._validate_lifespan_context()
     print("Setting up the liquid handler.")
+    stack.push_shielded_async_callback(self._print_stop_message)
 
-  async def stop(self):
+  async def _print_stop_message(self) -> None:
+    """Print this chatterbox's native lifespan cleanup message."""
     print("Stopping the liquid handler.")
 
   def serialize(self) -> dict:

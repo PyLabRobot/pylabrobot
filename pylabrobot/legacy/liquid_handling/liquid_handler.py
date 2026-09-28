@@ -24,6 +24,7 @@ from typing import (
   cast,
 )
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.events import ResourceReference, evented_operation, resource_reference
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.strictness import (
@@ -401,23 +402,60 @@ class LiquidHandler(Resource, Machine):
   def _resource_pickup(self, value: Optional[ResourcePickup]) -> None:
     self._resource_pickups[0] = value
 
-  async def setup(self, **backend_kwargs):
+  def _get_backend_capabilities(self) -> Optional[Tuple[int, Optional[bool]]]:
+    """Return backend capabilities, or ``None`` when setup must discover them."""
+
+    try:
+      return self.backend.num_channels, self.backend.head96_installed
+    except RuntimeError:
+      return None
+
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    **backend_kwargs: Any,
+  ) -> None:
     """Prepare the robot for use."""
 
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
+    capabilities = self._get_backend_capabilities()
+    expected_head_channels = (
+      set(range(capabilities[0])) if capabilities is not None else set(range(len(self.head)))
+    )
+    if self.head and (
+      any(type(channel) is not int for channel in self.head)
+      or set(self.head) != expected_head_channels
+    ):
+      raise ValueError("head channels do not match the configured backend")
+    if self.head96:
+      if capabilities is not None and capabilities[1] is not True:
+        raise ValueError("head96 requires an installed 96-channel head")
+      if any(type(channel) is not int for channel in self.head96) or set(self.head96) != set(
+        range(96)
+      ):
+        raise ValueError("head96 channels do not match the configured backend")
+
     self.backend.set_deck(self.deck)
     self.backend.set_heads(head=self.head, head96=self.head96)
-    await super().setup(**backend_kwargs)
+    await super()._enter_lifespan(stack, **backend_kwargs)
 
-    self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
+    capabilities = self._get_backend_capabilities()
+    if capabilities is None:
+      raise RuntimeError("backend capabilities remain unavailable after setup")
+    if self.head and set(self.head) != set(range(capabilities[0])):
+      raise ValueError("head channels do not match the configured backend")
+    if self.head96 and capabilities[1] is not True:
+      raise ValueError("head96 requires an installed 96-channel head")
 
-    self.head96 = (
-      {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
-      if self.backend.head96_installed
-      else {}
-    )
+    if not self.head:
+      self.head = {
+        channel: TipTracker(thing=f"Channel {channel}") for channel in range(capabilities[0])
+      }
+
+    if capabilities[1] and not self.head96:
+      self.head96 = {channel: TipTracker(thing=f"Channel {channel}") for channel in range(96)}
 
     self.backend.set_heads(head=self.head, head96=self.head96 or None)
 
@@ -453,23 +491,78 @@ class LiquidHandler(Resource, Machine):
       "arm_state": arm_state,
     }
 
+  @staticmethod
+  def _normalize_tracker_state(
+    state: Mapping[Union[int, str], Dict[str, Any]],
+    *,
+    expected_channels: int,
+    name: str,
+  ) -> Dict[int, Dict[str, Any]]:
+    """Normalize serialized channel keys and require the configured channel shape."""
+
+    normalized: Dict[int, Dict[str, Any]] = {}
+    for raw_channel, tracker_state in state.items():
+      if type(raw_channel) is int:
+        channel = raw_channel
+      elif isinstance(raw_channel, str) and raw_channel.isdecimal():
+        channel = int(raw_channel)
+      else:
+        raise ValueError(f"{name} contains invalid channel key {raw_channel!r}")
+      if channel in normalized:
+        raise ValueError(f"{name} contains duplicate channel {channel}")
+      normalized[channel] = tracker_state
+
+    expected = set(range(expected_channels))
+    if set(normalized) != expected:
+      if expected_channels == 0:
+        raise ValueError(f"{name} channels must be empty")
+      raise ValueError(f"{name} channels must exactly match 0 through {expected_channels - 1}")
+    return normalized
+
   def load_state(self, state: Dict[str, Any]):
     """Load the liquid handler state from a file. Use :meth:`~Resource.load_all_state` to load the
     state of the liquid handler and all children (the deck)."""
 
+    capabilities = self._get_backend_capabilities()
+    raw_head_state = state["head_state"]
+    head_state: Dict[int, Dict[str, Any]] = {}
+    if raw_head_state or self.head:
+      head_state = self._normalize_tracker_state(
+        raw_head_state,
+        expected_channels=capabilities[0] if capabilities is not None else len(raw_head_state),
+        name="head_state",
+      )
+    raw_head96_state = state.get("head96_state", {})
+    head96_state: Dict[int, Dict[str, Any]] = {}
+    if raw_head96_state:
+      if capabilities is not None and capabilities[1] is not True:
+        raise ValueError("head96_state requires an installed 96-channel head")
+      head96_state = self._normalize_tracker_state(
+        raw_head96_state,
+        expected_channels=96,
+        name="head96_state",
+      )
+
+    expected_head_channels = set(
+      range(capabilities[0] if capabilities is not None else len(raw_head_state))
+    )
+    if self.head and set(self.head) != expected_head_channels:
+      raise ValueError("head channels do not match the configured backend")
+    expected_head96_channels = set(range(96))
+    if head96_state and self.head96 and set(self.head96) != expected_head96_channels:
+      raise ValueError("head96 channels do not match the configured backend")
+
     super().load_state(state)
-    head_state = state["head_state"]
-    if head_state and self.head == {}:
-      # we haven't connected with a backend yet, so we don't know the number of channels.
-      # Let's assume that the state accurately describes the number of channels.
-      self.head = {c: TipTracker(thing=f"Channel {c}") for c in head_state}
+    if head_state and not self.head:
+      self.head = {
+        channel: TipTracker(thing=f"Channel {channel}") for channel in range(len(head_state))
+      }
     for channel, tracker_state in head_state.items():
       self.head[channel].load_state(tracker_state)
 
-    head96_state = state.get("head96_state", {})
     if head96_state:
-      if self.head96 == {}:
-        self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in head96_state}
+      if not self.head96:
+        self.head96 = {channel: TipTracker(thing=f"Channel {channel}") for channel in range(96)}
       for channel, tracker_state in head96_state.items():
         self.head96[channel].load_state(tracker_state)
 
@@ -2758,13 +2851,19 @@ class LiquidHandler(Resource, Machine):
     else:
       default_offset = Coordinate.zero()
 
-    return cls(
+    liquid_handler = cls(
       deck=deck,
       backend=backend,
       default_offset_head96=default_offset,
       name=data.get("name"),
       metadata=data.get("metadata"),
     )
+    rotation_data = data.get("rotation")
+    if rotation_data is not None:
+      rotation = deserialize(rotation_data, allow_marshal=allow_marshal)
+      assert isinstance(rotation, Rotation)
+      liquid_handler.rotation = rotation
+    return liquid_handler
 
   @classmethod
   def load(cls, path: str) -> LiquidHandler:

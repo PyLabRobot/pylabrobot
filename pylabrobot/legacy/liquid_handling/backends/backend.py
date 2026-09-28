@@ -66,6 +66,14 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     self._head = head
     self._head96 = head96
 
+  def _validate_lifespan_context(self) -> None:
+    """Require the deck and channel trackers published by LiquidHandler."""
+
+    if self._deck is None:
+      raise RuntimeError("Deck not set")
+    if self._head is None:
+      raise RuntimeError("Head not set")
+
   @property
   def deck(self) -> Deck:
     assert self._deck is not None, "Deck not set"
@@ -79,10 +87,6 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   @property
   def head96(self) -> Optional[Dict[int, TipTracker]]:
     return self._head96
-
-  async def setup(self):
-    """Set up the robot. This method should be called before any other method is called."""
-    assert self._deck is not None, "Deck not set"
 
   @property
   @abstractmethod

@@ -1,13 +1,15 @@
 import itertools
+import json
 import tempfile
 import unittest
 import unittest.mock
-from typing import Any, List, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 from unittest.mock import PropertyMock
 
 import pytest
 
-from pylabrobot.events import EventBus, PLREvent, use_event_bus
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.events import EventBus, PLREvent, get_event_bus, use_event_bus
 from pylabrobot.legacy.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.legacy.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
@@ -15,6 +17,7 @@ from pylabrobot.legacy.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
+from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.lib.liquid_handling.channel_positioning import (
   get_tight_single_resource_liquid_op_offsets,
 )
@@ -61,6 +64,7 @@ from pylabrobot.resources.volume_tracker import (
 )
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import serialize
+from pylabrobot.testing import AnyioTestBase
 
 from .liquid_handler import LiquidHandler
 from .standard import (
@@ -85,6 +89,37 @@ def _create_mock_backend(num_channels: int = 8):
   mock.can_pick_up_tip.return_value = True
   mock.get_channel_spacings.side_effect = lambda channels: [9.0] * len(channels)
   return mock
+
+
+class StateChatterboxBackend(LiquidHandlerChatterboxBackend):
+  def __init__(
+    self,
+    *,
+    num_channels: int = 8,
+    head96_installed: bool = True,
+    num_arms: int = 1,
+  ) -> None:
+    super().__init__(num_channels=num_channels)
+    self._head96_installed = head96_installed
+    self._num_arms = num_arms
+
+
+class EventObservingChatterboxBackend(StateChatterboxBackend):
+  def __init__(self) -> None:
+    super().__init__()
+    self.observed_event_bus: Optional[EventBus] = None
+
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    **backend_kwargs: Any,
+  ) -> None:
+    self.observed_event_bus = get_event_bus()
+    await super()._enter_lifespan(stack, **backend_kwargs)
+
+
+def json_state(liquid_handler: LiquidHandler) -> Dict[str, Any]:
+  return cast(Dict[str, Any], json.loads(json.dumps(liquid_handler.serialize_state())))
 
 
 def _make_asp(
@@ -495,17 +530,120 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         lid.rotation.z = 0
 
   def test_serialize(self):
-    # Use a real backend for serialization test since mocks can't be deserialized
-    backend = LiquidHandlerChatterboxBackend(num_channels=8)
-    lh = LiquidHandler(backend, deck=STARLetDeck())
+    backend = LiquidHandlerChatterboxBackend(num_channels=4)
+    deck = Deck(size_x=100, size_y=200, size_z=30, name="named_deck")
+    metadata = {"owner": "lab", "configuration": {"mode": "characterization"}}
+    lh = LiquidHandler(
+      backend,
+      deck=deck,
+      default_offset_head96=Coordinate(1, 2, 3),
+      name="named_liquid_handler",
+      metadata=metadata,
+    )
+    lh.rotate(z=90)
 
     serialized = lh.serialize()
+    self.assertEqual(serialized["name"], "named_liquid_handler")
+    self.assertEqual(serialized["category"], "liquid_handler")
+    self.assertEqual(serialized["metadata"], metadata)
+    self.assertEqual(serialized["rotation"], {"type": "Rotation", "x": 0, "y": 0, "z": 90})
+    self.assertEqual(
+      serialized["backend"],
+      {"type": "LiquidHandlerChatterboxBackend", "num_channels": 4},
+    )
+    self.assertEqual(
+      serialized["default_offset_head96"],
+      {"type": "Coordinate", "x": 1, "y": 2, "z": 3},
+    )
+    self.assertEqual(serialized["children"][0]["name"], "named_deck")
     deserialized = LiquidHandler.deserialize(serialized)
 
-    self.assertEqual(deserialized.deck, lh.deck)
+    self.assertEqual(deserialized.name, "named_liquid_handler")
+    self.assertEqual(deserialized.deck.name, "named_deck")
+    self.assertEqual(deserialized.deck.get_size_x(), 100)
+    self.assertEqual(deserialized.deck.get_size_y(), 200)
+    self.assertEqual(deserialized.deck.get_size_z(), 30)
+    self.assertEqual(deserialized.metadata, metadata)
     self.assertEqual(
-      deserialized.backend.__class__.__name__,
-      lh.backend.__class__.__name__,
+      (deserialized.rotation.x, deserialized.rotation.y, deserialized.rotation.z),
+      (0, 0, 90),
+    )
+    self.assertEqual(deserialized.backend.num_channels, 4)
+    self.assertIsInstance(deserialized.backend, LiquidHandlerChatterboxBackend)
+    self.assertEqual(deserialized.default_offset_head96, Coordinate(1, 2, 3))
+
+  def test_deserialize_without_default_offset_head96(self):
+    lh = LiquidHandler(LiquidHandlerChatterboxBackend(num_channels=4), deck=STARLetDeck())
+    serialized = lh.serialize()
+    serialized.pop("default_offset_head96")
+
+    deserialized = LiquidHandler.deserialize(serialized)
+
+    self.assertEqual(deserialized.default_offset_head96, Coordinate.zero())
+
+  def test_copy_unentered_handler_with_empty_head_state(self):
+    lh = LiquidHandler(LiquidHandlerChatterboxBackend(num_channels=4), deck=STARLetDeck())
+
+    copied = lh.copy()
+
+    self.assertEqual(copied, lh)
+    self.assertEqual(copied.head, {})
+    self.assertEqual(copied.head96, {})
+
+
+class TestLiquidHandlerEventBusContext(AnyioTestBase):
+  async def test_scoped_entry_preserves_event_bus_context(self) -> None:
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+    backend = EventObservingChatterboxBackend()
+    lh = LiquidHandler(backend=backend, deck=STARLetDeck())
+
+    with use_event_bus(event_bus):
+      async with lh:
+        assert backend.observed_event_bus is event_bus
+
+    assert [event.name for event in events] == [
+      "machine.setup.started",
+      "machine.setup.completed",
+      "machine.stop.started",
+      "machine.stop.completed",
+    ]
+
+
+class TestLiquidHandlerSetupBridge(AnyioTestBase):
+  _anyio_backends = ["asyncio"]
+
+  async def test_setup_stop_matches_scoped_lifecycle(
+    self, capsys: pytest.CaptureFixture[str]
+  ) -> None:
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+    backend = StateChatterboxBackend(num_channels=4)
+    lh = LiquidHandler(backend=backend, deck=STARLetDeck())
+    lh.head = {channel: TipTracker(thing=f"Channel {channel}") for channel in range(4)}
+    lh.head96 = {channel: TipTracker(thing=f"Channel {channel}") for channel in range(96)}
+    head = lh.head.copy()
+    head96 = lh.head96.copy()
+
+    with use_event_bus(event_bus):
+      with pytest.warns(DeprecationWarning, match="async with device"):
+        await lh.setup()
+      assert all(lh.head[channel] is tracker for channel, tracker in head.items())
+      assert all(lh.head96[channel] is tracker for channel, tracker in head96.items())
+      await lh.stop()
+
+    assert all(lh.head[channel] is tracker for channel, tracker in head.items())
+    assert all(lh.head96[channel] is tracker for channel, tracker in head96.items())
+    assert [event.name for event in events] == [
+      "machine.setup.started",
+      "machine.setup.completed",
+      "machine.stop.started",
+      "machine.stop.completed",
+    ]
+    assert capsys.readouterr().out == (
+      "Setting up the liquid handler.\nStopping the liquid handler.\n"
     )
 
 
@@ -521,7 +659,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
   async def test_consolidate_tip_inventory(self):
     """Execute library-planned transfers through the normal tracked tip operations."""
@@ -1247,7 +1387,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.backend = _create_mock_backend(num_channels=16)
     self.backend.pick_up_tips = custom_pick_up_tips
     self.lh = LiquidHandler(self.backend, deck=self.deck)
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
     with no_tip_tracking():
       set_strictness(Strictness.IGNORE)
@@ -1379,7 +1521,9 @@ class TestCoveredTipRacks(unittest.IsolatedAsyncioTestCase):
     self.stack.assign_child_resource(self.bottom)
     self.stack.assign_child_resource(self.top)
     self.deck.assign_child_resource(self.stack, location=Coordinate(100, 100, 0))
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
   async def test_only_the_top_rack_of_a_stack_can_be_picked_up_from(self):
     with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
@@ -1414,7 +1558,9 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     self.single_well_plate = nest_1_troughplate_195000uL_Vb(name="single_well_plate")
     self.deck.assign_child_resource(self.single_well_plate, location=Coordinate(300, 100, 0))
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
     set_volume_tracking(enabled=True)
 
   async def asyncTearDown(self):
@@ -1542,55 +1688,55 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     await self.lh.return_tips96()
 
 
-class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
+class TestLiquidHandlerSerializeState(AnyioTestBase):
   """Tests for LiquidHandler.serialize_state() and load_state()."""
 
-  async def asyncSetUp(self):
-    self.backend = _create_mock_backend(num_channels=8)
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    **kwargs: Any,
+  ) -> None:
+    self.backend = StateChatterboxBackend()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
     self.plate = cor_96_wellplate_360uL_Fb(name="plate")
-    self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    self.deck.assign_child_resource(self.tip_rack, location=Coordinate.zero())
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh.lifespan())
 
   async def test_serialize_state_after_setup(self):
     state = self.lh.serialize_state()
-    self.assertIn("head_state", state)
-    self.assertIn("head96_state", state)
-    self.assertIn("arm_state", state)
+    assert "head_state" in state
+    assert "head96_state" in state
+    assert "arm_state" in state
 
     # 8 channels, all without tips
-    self.assertEqual(len(state["head_state"]), 8)
+    assert len(state["head_state"]) == 8
     for channel_state in state["head_state"].values():
-      self.assertIsNone(channel_state["tip"])
+      assert channel_state["tip"] is None
 
     # 96 channels for head96
-    self.assertEqual(len(state["head96_state"]), 96)
+    assert len(state["head96_state"]) == 96
 
     # 1 arm, no resource picked up
-    self.assertEqual(state["arm_state"], {0: None})
+    assert state["arm_state"] == {0: None}
 
   async def test_serialize_state_no_head96(self):
-    backend = _create_mock_backend(num_channels=8)
-    type(backend).head96_installed = PropertyMock(return_value=False)
+    backend = StateChatterboxBackend(head96_installed=False)
     deck = STARLetDeck()
     lh = LiquidHandler(backend=backend, deck=deck)
-    await lh.setup()
-
-    state = lh.serialize_state()
-    self.assertIsNone(state["head96_state"])
+    async with lh.lifespan():
+      state = lh.serialize_state()
+      assert state["head96_state"] is None
 
   async def test_serialize_state_no_arms(self):
-    backend = _create_mock_backend(num_channels=8)
-    type(backend).num_arms = PropertyMock(return_value=0)
+    backend = StateChatterboxBackend(num_arms=0)
     deck = STARLetDeck()
     lh = LiquidHandler(backend=backend, deck=deck)
-    await lh.setup()
-
-    state = lh.serialize_state()
-    self.assertIsNone(state["arm_state"])
+    async with lh.lifespan():
+      state = lh.serialize_state()
+      assert state["arm_state"] is None
 
   async def test_serialize_state_with_resource_pickup(self):
     resource = self.plate
@@ -1604,14 +1750,14 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
 
     state = self.lh.serialize_state()
     arm_state = state["arm_state"]
-    self.assertIsNotNone(arm_state[0])
+    assert arm_state[0] is not None
 
     serialized_pickup = arm_state[0]
-    self.assertEqual(serialized_pickup["type"], "ResourcePickup")
-    self.assertEqual(serialized_pickup["pickup_distance_from_top"], 5.0)
-    self.assertEqual(serialized_pickup["direction"], "FRONT")
-    self.assertIn("resource", serialized_pickup)
-    self.assertEqual(serialized_pickup["resource"]["name"], "plate")
+    assert serialized_pickup["type"] == "ResourcePickup"
+    assert serialized_pickup["pickup_distance_from_top"] == 5.0
+    assert serialized_pickup["direction"] == "FRONT"
+    assert "resource" in serialized_pickup
+    assert serialized_pickup["resource"]["name"] == "plate"
 
   async def test_serialize_state_arm_none_after_drop(self):
     self.lh._resource_pickup = ResourcePickup(
@@ -1620,22 +1766,180 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
       pickup_distance_from_top=5.0,
       direction=GripDirection.LEFT,
     )
-    self.assertIsNotNone(self.lh.serialize_state()["arm_state"][0])
+    assert self.lh.serialize_state()["arm_state"][0] is not None
 
     self.lh._resource_pickup = None
-    self.assertEqual(self.lh.serialize_state()["arm_state"], {0: None})
+    assert self.lh.serialize_state()["arm_state"] == {0: None}
 
   async def test_load_state_head(self):
     state = self.lh.serialize_state()
     # Modify a tracker, load old state, verify it's restored
     self.lh.head[0]._tip = hamilton_96_tiprack_300uL_filter(name="tmp").get_item("A1").get_tip()
     self.lh.load_state(state)
-    self.assertIsNone(self.lh.head[0]._tip)
+    assert self.lh.head[0]._tip is None
 
   async def test_load_state_backward_compatible(self):
     # Old state format without head96_state or arm_state
     old_state = {"head_state": {c: self.lh.head[c].serialize() for c in self.lh.head}}
     self.lh.load_state(old_state)  # should not raise
+
+  async def test_load_state_normalizes_json_channel_keys(self) -> None:
+    state = json_state(self.lh)
+    self.lh.load_state(state)
+
+    assert set(self.lh.head) == set(range(8))
+    assert set(self.lh.head96) == set(range(96))
+
+  @pytest.mark.parametrize("invalid_key", ["channel-0", "-1", True])
+  async def test_load_state_rejects_invalid_channel_key(self, invalid_key: object) -> None:
+    state = json_state(self.lh)
+    channel_state = state["head_state"].pop("0")
+    state["head_state"][invalid_key] = channel_state
+
+    with pytest.raises(ValueError, match="head_state"):
+      self.lh.load_state(state)
+
+  async def test_load_state_rejects_missing_channel_before_mutation(self) -> None:
+    state = json_state(self.lh)
+    state["head_state"].pop("7")
+    known_tip = self.tip_rack.get_item("A1").get_tip()
+    self.lh.head[0].add_tip(known_tip)
+
+    with pytest.raises(ValueError, match="head_state"):
+      self.lh.load_state(state)
+
+    assert self.lh.head[0].get_tip() is known_tip
+
+  async def test_load_state_rejects_extra_channel_before_mutation(self) -> None:
+    state = json_state(self.lh)
+    state["head_state"]["8"] = state["head_state"]["7"]
+    known_tip = self.tip_rack.get_item("A1").get_tip()
+    self.lh.head[0].add_tip(known_tip)
+
+    with pytest.raises(ValueError, match="head_state"):
+      self.lh.load_state(state)
+
+    assert self.lh.head[0].get_tip() is known_tip
+
+  async def test_load_state_rejects_duplicate_channel_before_mutation(self) -> None:
+    state = json_state(self.lh)
+    state["head_state"][0] = state["head_state"]["0"]
+    known_tip = self.tip_rack.get_item("A1").get_tip()
+    self.lh.head[0].add_tip(known_tip)
+
+    with pytest.raises(ValueError, match="head_state"):
+      self.lh.load_state(state)
+
+    assert self.lh.head[0].get_tip() is known_tip
+
+  async def test_load_state_rejects_empty_head_state_for_populated_target_before_mutation(
+    self,
+  ) -> None:
+    state = json_state(self.lh)
+    state["head_state"] = {}
+    state["rotation"]["x"] = 90
+    self.lh.head[0].add_tip(self.tip_rack.get_item("A1").get_tip())
+    self.lh.head96[0].add_tip(self.tip_rack.get_item("A2").get_tip())
+    rotation_before = self.lh.rotation
+    head_before = {channel: tracker.serialize() for channel, tracker in self.lh.head.items()}
+    head96_before = {channel: tracker.serialize() for channel, tracker in self.lh.head96.items()}
+
+    with pytest.raises(ValueError, match="head_state"):
+      self.lh.load_state(state)
+
+    assert self.lh.rotation == rotation_before
+    assert {
+      channel: tracker.serialize() for channel, tracker in self.lh.head.items()
+    } == head_before
+    assert {
+      channel: tracker.serialize() for channel, tracker in self.lh.head96.items()
+    } == head96_before
+
+  async def test_load_state_rejects_head96_state_when_not_installed(self) -> None:
+    state = json_state(self.lh)
+    lh = LiquidHandler(
+      backend=StateChatterboxBackend(head96_installed=False),
+      deck=STARLetDeck(),
+    )
+
+    with pytest.raises(ValueError, match="head96_state"):
+      lh.load_state(state)
+
+  async def test_load_state_rejects_missing_head96_channel_before_mutation(self) -> None:
+    state = json_state(self.lh)
+    state["head96_state"].pop("95")
+    known_tip = self.tip_rack.get_item("A1").get_tip()
+    self.lh.head[0].add_tip(known_tip)
+
+    with pytest.raises(ValueError, match="head96_state"):
+      self.lh.load_state(state)
+
+    assert self.lh.head[0].get_tip() is known_tip
+
+  async def test_load_state_rejects_incompatible_live_head_before_mutation(self) -> None:
+    state = json_state(self.lh)
+    state["rotation"]["x"] = 90
+    self.lh.head.pop(7)
+    self.lh.head[0].add_tip(self.tip_rack.get_item("A1").get_tip())
+    self.lh.head96[0].add_tip(self.tip_rack.get_item("A2").get_tip())
+    rotation_before = self.lh.rotation
+    head_before = {channel: tracker.serialize() for channel, tracker in self.lh.head.items()}
+    head96_before = {channel: tracker.serialize() for channel, tracker in self.lh.head96.items()}
+
+    with pytest.raises(ValueError, match="head"):
+      self.lh.load_state(state)
+
+    assert self.lh.rotation == rotation_before
+    assert {
+      channel: tracker.serialize() for channel, tracker in self.lh.head.items()
+    } == head_before
+    assert {
+      channel: tracker.serialize() for channel, tracker in self.lh.head96.items()
+    } == head96_before
+
+  async def test_load_state_rejects_incompatible_live_head96_before_mutation(self) -> None:
+    state = json_state(self.lh)
+    state["rotation"]["x"] = 90
+    self.lh.head96.pop(95)
+    self.lh.head[0].add_tip(self.tip_rack.get_item("A1").get_tip())
+    self.lh.head96[0].add_tip(self.tip_rack.get_item("A2").get_tip())
+    rotation_before = self.lh.rotation
+    head_before = {channel: tracker.serialize() for channel, tracker in self.lh.head.items()}
+    head96_before = {channel: tracker.serialize() for channel, tracker in self.lh.head96.items()}
+
+    with pytest.raises(ValueError, match="head96"):
+      self.lh.load_state(state)
+
+    assert {
+      channel: tracker.serialize() for channel, tracker in self.lh.head.items()
+    } == head_before
+    assert {
+      channel: tracker.serialize() for channel, tracker in self.lh.head96.items()
+    } == head96_before
+    assert self.lh.rotation == rotation_before
+
+  async def test_restored_tip_emits_future_state_update_after_entry(self) -> None:
+    source = LiquidHandler(
+      backend=StateChatterboxBackend(num_channels=2, head96_installed=False),
+      deck=STARLetDeck(),
+    )
+    source.head = {channel: TipTracker(thing=f"Channel {channel}") for channel in range(2)}
+    source.head[0].add_tip(self.tip_rack.get_item("A1").get_tip())
+    source.head[0].get_tip().tracker.set_volume(3)
+
+    target = LiquidHandler(
+      backend=StateChatterboxBackend(num_channels=2, head96_installed=False),
+      deck=STARLetDeck(),
+    )
+    updates: List[Dict[str, Any]] = []
+    target.register_state_update_callback(updates.append)
+    target.load_state(source.serialize_state())
+    assert updates == []
+
+    async with target:
+      target.head[0].get_tip().tracker.set_volume(4)
+
+    assert len(updates) == 1
 
 
 class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
@@ -1662,7 +1966,9 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
 
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
   async def test_aspirate_2_channels_avoids_no_go_zone(self):
     """2 channels on a trough with a center divider should be placed in separate compartments."""
