@@ -405,11 +405,15 @@ class PrepDriver:
     skip_device_initialization: bool = False,
     default_minimum_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
+    enable_safe_speeds: bool = False,
   ):
     """Connect, discover the device, initialize MLPrep, construct peers.
 
     A device that reports itself initialized is left as it was found, so what the channels hold is read and
     logged, and they are raised to Z safety, before anything can move laterally.
+
+    MLPrep's X speed scale, which every X move inside a firmware command runs at, is set to the X-arm's
+    `default_speed`; each setup finds the device back at its own.
 
     Args:
       skip_device_initialization: do not run the device's own initialization procedure on a device that reports
@@ -417,6 +421,8 @@ class PrepDriver:
         refuse them.
       default_minimum_traverse_height: the height the pipettes and the 8-channel head travel at when a command
         names none, in mm. Replaces what the device reports.
+      enable_safe_speeds: MLPrep's safe speeds, switched to this when the device reports otherwise. Each
+        setup finds the device back on its own setting, so it is set every time.
 
     Raises:
       RuntimeError: If the device records a plate gripped and has to initialize, and the person at it
@@ -453,6 +459,11 @@ class PrepDriver:
           await self._initialize_instrument(smart=smart, force_initialize=True)
         else:
           await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
+
+      assert self.configuration is not None
+      if self.configuration.safe_speeds_enabled != enable_safe_speeds:
+        await self._set_safe_speeds_enabled(enable_safe_speeds)
+        self.configuration.safe_speeds_enabled = enable_safe_speeds
 
       # 3. Each feature brings itself up.
       logger.debug("[PHASE 3] Feature initialization")
@@ -518,6 +529,10 @@ class PrepDriver:
         self.core_grippers = CoreGrippers(self)
       if self.x_arm is None:
         self.x_arm = XArm(self)
+      # Every X move inside a firmware command runs at MLPrep's X speed scale: the arm's default speed.
+      x_scale = self.x_arm.configuration.speed_to_scale_percent(self.x_arm.default_speed)
+      if await self.request_x_speed_scale() != x_scale:
+        await self.set_x_speed_scale(x_scale)
       # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
       if self.deck is not None:
         logger.debug("[PHASE 4] Feature resources")

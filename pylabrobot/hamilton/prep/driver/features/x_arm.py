@@ -101,9 +101,9 @@ class XArm:
     # The arm on the deck, when the driver was given one. Setup puts it there; reads and moves keep it
     # in step. Without a deck it stays None and nothing is modelled.
     self.resource: Optional[Resource] = None
-    # Speed (mm/s) and acceleration (mm/s2) `move_to_x_position` uses when none is given: PyLabRobot's
-    # defaults are 80 percent of the X axis profile read on PRPAA1087 (V1.2.2), 400 mm/s and 2250 mm/s2.
-    self.default_speed: float = 320.0
+    # Speed (mm/s) and acceleration (mm/s2) `move_to_x_position` uses when none is given: 60 and 80
+    # percent of the X axis profile read on a V1.2.2 Prep, 400 mm/s and 2250 mm/s2.
+    self.default_speed: float = 240.0
     self.default_acceleration: float = 1800.0
     # Speed (mm/s) `probe_home_flag` seeks at when none is given: what it was run with on PRPAA1087.
     self.default_probe_speed: float = 100.0

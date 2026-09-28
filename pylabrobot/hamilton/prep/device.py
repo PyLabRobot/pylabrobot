@@ -92,6 +92,7 @@ class PrepDevice(Resource):
     skip_device_initialization: bool = False,
     default_minimum_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
+    enable_safe_speeds: bool = False,
   ):
     """Bring the device up.
 
@@ -101,6 +102,7 @@ class PrepDevice(Resource):
       skip_device_initialization: as `PrepDriver.setup` takes it.
       default_minimum_traverse_height: as `PrepDriver.setup` takes it.
       use_v1_aspirate_dispense: as `PrepDriver.setup` takes it.
+      enable_safe_speeds: as `PrepDriver.setup` takes it.
     """
     await self.driver.setup(
       smart=smart,
@@ -108,6 +110,7 @@ class PrepDevice(Resource):
       skip_device_initialization=skip_device_initialization,
       default_minimum_traverse_height=default_minimum_traverse_height,
       use_v1_aspirate_dispense=use_v1_aspirate_dispense,
+      enable_safe_speeds=enable_safe_speeds,
     )
     if self.driver.hs is not None:
       self.model = PREP_HEATER_SHAKER_MODEL
