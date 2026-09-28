@@ -68,7 +68,7 @@ class StandardTipCarrierTests(unittest.TestCase):
             self.assertAlmostEqual(getattr(location, axis), getattr(seated[0][0], axis))
 
   def test_tip_spot_positions_on_star_deck(self):
-    # positions whose firmware commands match Venus
+    # channel pick-up positions, as the firmware commands them
     for carrier_fn, rotation, a1, h12 in [
       (
         hamilton_tip_carrier_L5,

@@ -290,14 +290,36 @@ class HamiltonDeckTests(unittest.TestCase):
     )
 
   def test_core_gripper_holder_on_the_waste_block_as_probed(self):
-    # Probed on a STAR: the holder's top is at 220.0 and it is 19.5 mm tall, so it stands at 200.5.
-    # Its centre is the x the channels take the tools at.
+    # Probed on a STAR: holder top 220.0, 19.5 mm tall, tool (collar) tops 235.0. Its centre is the
+    # x the channels take the tools at; they take the collars at y 107.0 and 125.0.
     for deck, x in ((STARDeck(), 1337.5), (STARLetDeck(), 797.5)):
       with self.subTest(deck=type(deck).__name__):
         holder = deck.get_resource("core_grippers")
+        assert isinstance(holder, HamiltonCoreGrippers)
         self.assertAlmostEqual(holder.get_location_wrt(deck, x="c").x, x)
         self.assertAlmostEqual(holder.get_location_wrt(deck).z, 200.5)
         self.assertAlmostEqual(holder.get_location_wrt(deck, z="t").z, 220.0)
+        front, back = holder.front_tool, holder.back_tool
+        for tool in (front, back):
+          self.assertAlmostEqual(tool.get_location_wrt(deck, z="t").z, 235.0)
+        # the collar is 4.25 mm from the side of the tool its pins face
+        self.assertAlmostEqual(front.get_location_wrt(deck).y, 107.0 - 4.25)
+        # the back tool is turned 180 degrees, so its own front faces the back of the deck
+        self.assertAlmostEqual(back.get_location_wrt(deck, y="f").y, 125.0 + 4.25)
+
+  def test_two_decks_stand_in_one_tree(self):
+    """A deck names what it owns after itself, so two of them stand in one tree."""
+    lab = Resource(name="lab", size_x=4000, size_y=2000, size_z=1000)
+    first = STARLetDeck(name="left_deck")
+    second = STARLetDeck(name="right_deck")
+    lab.assign_child_resource(first, location=Coordinate.zero())
+    lab.assign_child_resource(second, location=Coordinate(2000, 0, 0))
+
+    names = [r.name for r in lab.get_all_children()]
+    self.assertEqual(len(names), len(set(names)))
+    for deck in (first, second):
+      for name in ("waste_block", "trash", "trash_core96", "teaching_tip_rack", "core_grippers"):
+        self.assertTrue(deck.has_resource(f"{deck.name}_{name}"), name)
 
   def test_core_gripper_tools_stand_where_the_channels_take_them(self):
     """Both holders are centred on the x the channels take the tools at, and so are their tools."""

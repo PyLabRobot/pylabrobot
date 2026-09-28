@@ -350,9 +350,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     do not duplicate it.
 
     Args:
-      name: where the carrier-handling wheel is, in mm, on this deck. The wheel is the point the
+      name: what to call it.
+      x: where the carrier-handling wheel is, in mm, on this deck. The wheel is the point the
         drive reports, so the sled is placed around it.
-      x: where the wheel is, in mm, on this deck.
       reference_point_from_left: how far the point the drive reports - the carrier-handling
         wheel - sits from the sled's left edge, in mm.
 
