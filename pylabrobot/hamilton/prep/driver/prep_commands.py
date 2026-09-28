@@ -47,6 +47,7 @@ MLPREP_OBJECT_PATH = "MLPrepRoot.MLPrep"
 PIPETTOR_OBJECT_PATH = "MLPrepRoot.PipettorRoot.Pipettor"
 MPH_OBJECT_PATH = "MLPrepRoot.MphRoot.MPH"
 MLPREP_SERVICE_OBJECT_PATH = "MLPrepRoot.MLPrepService"
+MLPREP_DEBUG_OBJECT_PATH = "MLPrepRoot.MLPrepService.MLPrepDebug"
 DECK_CONFIGURATION_OBJECT_PATH = "MLPrepRoot.MLPrepCalibration.DeckConfiguration"
 MLPREP_CPU_OBJECT_PATH = "MLPrepRoot.MLPrepCpu"
 MODULE_INFORMATION_OBJECT_PATH = "MLPrepRoot.PipettorRoot.ModuleInformation"
@@ -4941,6 +4942,36 @@ class PrepSetSafeSpeedsEnabled(PrepCommand[None]):
   def build_parameters(self) -> HoiParams:
     """Encode fields in firmware-defined order."""
     return HoiParams().add(self.value, PaddedBool)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepOverrideDoorState(PrepCommand[None]):
+  """OverrideDoorState(overrideEnable, enclosurePresent, doorOpen) (dest=MLPrepDebug).
+
+  The id differs between firmware versions, so the caller reads it by name and passes it in.
+  """
+
+  firmware_path = None
+  dest: Address
+  command_id: int  # type: ignore[misc]
+  interface_id: int = 1  # type: ignore[misc]
+  override_enable: PaddedBool = False
+  enclosure_present: PaddedBool = False
+  door_open: PaddedBool = False
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.override_enable, PaddedBool)
+      .add(self.enclosure_present, PaddedBool)
+      .add(self.door_open, PaddedBool)
+    )
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> None:
