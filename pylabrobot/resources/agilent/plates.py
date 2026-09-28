@@ -144,6 +144,7 @@ def agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
     ),
   )
 
+
 def agilent_1_troughplate_86mL_Vb(name: str) -> Plate:
   """Agilent 1 Troughplate 86mL V bottom
   Part Number: 201254-100
@@ -162,7 +163,7 @@ def agilent_1_troughplate_86mL_Vb(name: str) -> Plate:
       num_items_y=1,  # from spec
       dx=9.3,  # measured
       dy=6.21,  # measured
-      dz=19.05-17.91,  # measured
+      dz=19.05 - 17.91,  # measured
       item_dx=0,  # from spec
       item_dy=0,  # from spec
       size_x=106.22,  # from spec
@@ -173,6 +174,7 @@ def agilent_1_troughplate_86mL_Vb(name: str) -> Plate:
       material_z_thickness=1.15,
     ),
   )
+
 
 # --------------------------------------------------------------------------- #
 # Deprecated function names (backward compatibility)
