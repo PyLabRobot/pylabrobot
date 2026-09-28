@@ -1,7 +1,9 @@
-import asyncio
 import logging
 from typing import Literal, Optional, Tuple
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger(__name__)
@@ -132,7 +134,7 @@ class CurioxHT2000Error(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class CurioxHT2000:
+class CurioxHT2000(HasLifespan):
   """Curiox Laminar Wash HT2000 system.
 
   A benchtop Laminar Wash station for Curiox DropArray plates. Commands are
@@ -178,6 +180,9 @@ class CurioxHT2000:
     set_settle: float = 2.0,
     poll_interval: float = 3.0,
   ) -> None:
+    super().__init__()
+    self.timeout = timeout
+    self._command_lock = anyio.Lock()
     self.wash_start_settle = wash_start_settle
     self.prime_settle = prime_settle
     self.mode_switch_settle = mode_switch_settle
@@ -190,24 +195,21 @@ class CurioxHT2000:
       bytesize=8,
       parity="N",
       stopbits=1,
-      timeout=timeout,
       write_timeout=timeout,
     )
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport and verify that the instrument responds."""
+    await super()._enter_lifespan(stack)
     logger.warning(
       "CurioxHT2000 has NOT been tested against hardware in PyLabRobot. "
       "Please make a PR to remove this message if you have verified it on your hardware."
     )
-    await self.io.setup()
+    await stack.enter_async_context(self.io.lifespan())
     status, _mode, error = await self.ping()
     if status == "error":
       raise CurioxHT2000Error(title="HT2000 reported an error on connect", message=error)
     logger.info("[HT2000 %s] connected: status=%s", self.io.port, status)
-
-  async def stop(self) -> None:
-    """Close the serial connection."""
-    await self.io.stop()
 
   # === Frame layer ===
 
@@ -225,8 +227,9 @@ class CurioxHT2000:
     """Read exactly ``length`` bytes, or raise if the device falls short."""
     buf = bytearray()
     while len(buf) < length:
-      chunk = await self.io.read(length - len(buf))
-      if not chunk:
+      try:
+        chunk = await self.io.read(length - len(buf))
+      except anyio.EndOfStream:
         break
       buf += chunk
     if len(buf) != length:
@@ -235,6 +238,25 @@ class CurioxHT2000:
         message=f"expected {length} bytes, got {len(buf)}",
       )
     return bytes(buf)
+
+  async def _transact(self, payload: str, reply_length: int) -> bytes:
+    """Serialize a write and finitely reconcile its fixed-length reply."""
+    async with self._command_lock:
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        try:
+          with anyio.fail_after(self.timeout) as timeout_scope:
+            await self._send_command(payload)
+            reply = await self._read_exact(reply_length)
+        except TimeoutError:
+          if timeout_scope.cancelled_caught:
+            raise CurioxHT2000Error(
+              title="No acknowledgement from HT2000",
+              message=f"timed out waiting for {reply_length} bytes",
+            ) from None
+          raise
+      await anyio.lowlevel.checkpoint()
+    return reply
 
   @staticmethod
   def _decode_status(digit: int) -> HT2000Status:
@@ -246,8 +268,7 @@ class CurioxHT2000:
 
   async def _send_and_ack(self, payload: str) -> None:
     """Send a command and consume its acknowledgement, raising on an error status."""
-    await self._send_command(payload)
-    reply = await self._read_exact(ACK_REPLY_LENGTH)
+    reply = await self._transact(payload, ACK_REPLY_LENGTH)
     status = self._decode_status(reply[ACK_STATUS_OFFSET])
     if status == "error":
       raise CurioxHT2000Error(title=f"Command {payload} was rejected")
@@ -256,8 +277,7 @@ class CurioxHT2000:
 
   async def ping(self) -> tuple:
     """Poll status. Returns ``(status, mode, error)``; error is a code string or None."""
-    await self._send_command(Command.PING)
-    reply = await self._read_exact(PING_REPLY_LENGTH)
+    reply = await self._transact(Command.PING, PING_REPLY_LENGTH)
     mode = self._decode_mode(reply[8])
     status = self._decode_status(reply[PING_STATUS_OFFSET])
     error = None
@@ -268,8 +288,7 @@ class CurioxHT2000:
 
   async def enquire_report(self) -> StatusReport:
     """Read the full status report (mode, status, tray state)."""
-    await self._send_command(Command.ENQUIRE_REPORT)
-    reply = await self._read_exact(REPORT_REPLY_LENGTH)
+    reply = await self._transact(Command.ENQUIRE_REPORT, REPORT_REPLY_LENGTH)
     mode = self._decode_mode(reply[8])
     status = self._decode_status(reply[REPORT_STATUS_OFFSET])
     error = None
@@ -332,7 +351,7 @@ class CurioxHT2000:
     if mode not in PRIME_COMMANDS:
       raise ValueError(f"mode must be one of {sorted(PRIME_COMMANDS)}")
     await self._send_and_ack(PRIME_COMMANDS[mode])
-    await asyncio.sleep(self.prime_settle)
+    await anyio.sleep(self.prime_settle)
     logger.info("[HT2000 %s] primed (%s)", self.io.port, mode)
 
   async def _set_wash_parameters(
@@ -381,14 +400,17 @@ class CurioxHT2000:
     _status, mode, _error = await self.ping()
     if mode == "service":
       await self._send_and_ack(Command.SWITCH_MODE)
-      await asyncio.sleep(self.mode_switch_settle)
+      await anyio.sleep(self.mode_switch_settle)
 
     await self._set_wash_parameters(wash_number, initial_volume, flow_rate, channel)
-    await asyncio.sleep(self.set_settle)
-    await self._send_and_ack(Command.STANDARD_WASH)
-    await asyncio.sleep(self.wash_start_settle)
-    logger.info("[HT2000 %s] washing (n=%d)", self.io.port, wash_number)
-    await self._wait_for_wash(max_operation_duration)
+    await anyio.sleep(self.set_settle)
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      await self._send_and_ack(Command.STANDARD_WASH)
+      await anyio.sleep(self.wash_start_settle)
+      logger.info("[HT2000 %s] washing (n=%d)", self.io.port, wash_number)
+      await self._wait_for_wash(max_operation_duration)
+    await anyio.lowlevel.checkpoint()
 
   async def _wait_for_wash(self, max_operation_duration: float) -> None:
     """Poll the report until the wash cycle completes, or raise on error/timeout.
@@ -397,23 +419,26 @@ class CurioxHT2000:
     tray out, plate loaded) and then for it to return to ready, which marks the
     end of the cycle.
     """
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + max_operation_duration
     started = False
-    while loop.time() < deadline:
-      report = await self.enquire_report()
-      if report.status == "stopped":
-        raise CurioxHT2000Error(title="HT2000 stopped during wash")
-      if not report.tray_loaded:
-        raise CurioxHT2000Error(title="No plate on the tray")
-      if report.status == "error":
-        raise CurioxHT2000Error(title="HT2000 error during wash", message=report.error)
-      running = (
-        report.mode == "operation" and report.status == "busy" and report.tray_position == "out"
-      )
-      if running:
-        started = True
-      elif started and report.status == "ready":
-        return
-      await asyncio.sleep(self.poll_interval)
-    raise CurioxHT2000Error(title="Timed out waiting for the wash to complete")
+    try:
+      with anyio.fail_after(max_operation_duration) as timeout_scope:
+        while True:
+          report = await self.enquire_report()
+          if report.status == "stopped":
+            raise CurioxHT2000Error(title="HT2000 stopped during wash")
+          if not report.tray_loaded:
+            raise CurioxHT2000Error(title="No plate on the tray")
+          if report.status == "error":
+            raise CurioxHT2000Error(title="HT2000 error during wash", message=report.error)
+          running = (
+            report.mode == "operation" and report.status == "busy" and report.tray_position == "out"
+          )
+          if running:
+            started = True
+          elif started and report.status == "ready":
+            return
+          await anyio.sleep(self.poll_interval)
+    except TimeoutError:
+      if timeout_scope.cancelled_caught:
+        raise CurioxHT2000Error(title="Timed out waiting for the wash to complete") from None
+      raise

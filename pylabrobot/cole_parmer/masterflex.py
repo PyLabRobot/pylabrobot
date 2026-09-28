@@ -1,5 +1,6 @@
 import logging
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 try:
@@ -13,7 +14,7 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 
-class Masterflex:
+class Masterflex(HasLifespan):
   """Serial driver for Cole Parmer Masterflex L/S pumps.
 
   tested on:
@@ -50,15 +51,13 @@ class Masterflex:
       human_readable_device_name="Masterflex Pump",
     )
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport and initialize pump communications."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
     await self.io.write(b"\x05")  # Enquiry; ready to send.
     await self.io.write(b"\x05P02\r")
     logger.info("[Masterflex %s] connected", self.com_port)
-
-  async def stop(self):
-    await self.io.stop()
-    logger.info("[Masterflex %s] disconnected", self.com_port)
 
   async def send_command(self, command: str) -> bytes:
     command = "\x02P02" + command + "\x0d"

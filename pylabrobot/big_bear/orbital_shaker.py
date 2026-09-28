@@ -1,7 +1,11 @@
-import asyncio
 import logging
-from typing import Literal, Optional
+from contextlib import asynccontextmanager
+from functools import partial
+from typing import AsyncIterator, Dict, Literal, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan, attempt_in_order
 from pylabrobot.io.serial import Serial
 
 Sequence = Literal["CW", "CCW"]
@@ -34,7 +38,7 @@ class BigBearError(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class BigBearOrbitalShaker:
+class BigBearOrbitalShaker(HasLifespan):
   """BigBear orbital shaker.
 
   A daisy-chained orbital shaker: a single serial line drives up to 16 shaker
@@ -80,8 +84,10 @@ class BigBearOrbitalShaker:
   ):
     if not MIN_SHAKERS <= num_shakers <= MAX_SHAKERS:
       raise ValueError(f"num_shakers must be {MIN_SHAKERS}..{MAX_SHAKERS}")
+    super().__init__()
     self.num_shakers = num_shakers
     self.command_delay = command_delay
+    self.timeout = timeout
     self.daisy_chain_settle = daisy_chain_settle
     self.stop_settle = stop_settle
     self.io = Serial(
@@ -91,25 +97,34 @@ class BigBearOrbitalShaker:
       bytesize=8,
       parity="N",
       stopbits=1,
-      timeout=timeout,
     )
+    self._shaking_transition_lock = anyio.Lock()
+    self._shaking_active: Dict[int, bool] = {
+      device_id: False for device_id in range(1, num_shakers + 1)
+    }
+    self._shaking_state_unknown: Dict[int, bool] = {
+      device_id: False for device_id in range(1, num_shakers + 1)
+    }
+    self._shaking_scope_tokens: Dict[int, object] = {}
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport and bring up the daisy chain for one session."""
+    await super()._enter_lifespan(stack)
     logger.warning(
       "BigBearOrbitalShaker has NOT been tested against hardware in PyLabRobot. "
       "Please make a PR to remove this message if you have verified it on your hardware."
     )
-    await self.io.setup()
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._stop_all_for_exit)
     await self._enter_daisy_chain()
     await self._check_num_shakers()
     logger.info("[BigBear %s] connected: num_shakers=%d", self.io.port, self.num_shakers)
 
-  async def stop(self) -> None:
-    """Stop all shakers and close the serial connection."""
-    try:
-      await self.stop_all()
-    finally:
-      await self.io.stop()
+  async def _stop_all_for_exit(self) -> None:
+    """Stop every configured nest, attempting all even after an earlier failure."""
+    await attempt_in_order(
+      *(partial(self._force_stop_nest, device_id) for device_id in range(1, self.num_shakers + 1))
+    )
 
   # === Command layer ===
 
@@ -121,11 +136,15 @@ class BigBearOrbitalShaker:
     if not 1 <= device_id <= self.num_shakers:
       raise ValueError(f"device_id must be 1..{self.num_shakers}")
 
-  async def _send(self, command: str) -> None:
-    """Write a command and its terminator, then pace the bus."""
+  async def _write(self, command: str) -> None:
+    """Write a command and its terminator."""
     await self.io.write((command + CR).encode("ascii"))
     logger.debug("[BigBear] send: %s", command)
-    await asyncio.sleep(self.command_delay)
+
+  async def _send(self, command: str) -> None:
+    """Write a command and its terminator, then pace the bus."""
+    await self._write(command)
+    await anyio.sleep(self.command_delay)
 
   async def _read_reply(self, timeout: Optional[float] = None) -> str:
     """Read one CR-terminated reply, skipping empty lines.
@@ -133,15 +152,10 @@ class BigBearOrbitalShaker:
     Returns the trimmed reply, or "" if the device sends nothing within the
     serial read timeout.
     """
-    original = self.io.get_read_timeout()
-    if timeout is not None:
-      self.io.set_read_timeout(timeout)
-    try:
-      buf = bytearray()
+    buf = bytearray()
+    with anyio.move_on_after(self.timeout if timeout is None else timeout):
       while True:
         char = await self.io.read(1)
-        if char == b"":  # read timed out
-          break
         if char == b"\r":
           if buf:
             break
@@ -149,9 +163,6 @@ class BigBearOrbitalShaker:
         if char == b"\n":
           continue
         buf += char
-    finally:
-      if timeout is not None:
-        self.io.set_read_timeout(original)
     reply = buf.decode("ascii", errors="replace").strip()
     logger.debug("[BigBear] recv: %s", reply)
     return reply
@@ -206,27 +217,142 @@ class BigBearOrbitalShaker:
       device_id: nest to address (1..num_shakers).
     """
     self._validate_device_id(device_id)
+    async with self._shaking_transition_lock:
+      if device_id in self._shaking_scope_tokens:
+        raise RuntimeError(f"Cannot start shaking on nest {device_id} while its scope is active")
+      await self._start_shaking_transition(
+        rpm, acceleration=acceleration, sequence=sequence, device_id=device_id
+      )
+
+  async def _start_shaking_transition(
+    self,
+    rpm: int,
+    acceleration: int,
+    sequence: Sequence,
+    device_id: int,
+    rollback_on_failure: bool = False,
+  ) -> None:
+    """Start one nest while its caller holds the command-transition lock."""
     await self._set_acceleration(device_id, acceleration)
     await self._set_speed(device_id, rpm)
     await self._set_sequence(device_id, sequence)
-    await self._send(self._address(device_id) + "G")
-    if await self._poll(device_id) == ERROR_REPLY:
-      raise BigBearError(title="Starting the shaker failed", message=f"nest {device_id}")
+    address = self._address(device_id)
+    started = False
+    try:
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self._write(address + "G")
+        started = True
+        self._shaking_active[device_id] = True
+        self._shaking_state_unknown[device_id] = True
+      await anyio.sleep(self.command_delay)
+      if await self._poll(device_id) == ERROR_REPLY:
+        raise BigBearError(title="Starting the shaker failed", message=f"nest {device_id}")
+    except anyio.get_cancelled_exc_class():
+      if started:
+        with anyio.CancelScope(shield=True):
+          await self._stop_scoped_shaking(device_id)
+      raise
+    except BaseException:
+      if started and rollback_on_failure:
+        with anyio.CancelScope(shield=True):
+          await self._stop_scoped_shaking(device_id)
+      raise
+    self._shaking_active[device_id] = True
+    self._shaking_state_unknown[device_id] = False
     logger.info("[BigBear %s] nest %d shaking at %d rpm", self.io.port, device_id, rpm)
 
   async def stop_shaking(self, device_id: int = 1) -> None:
     """Stop shaking on a single nest."""
     self._validate_device_id(device_id)
+    async with self._shaking_transition_lock:
+      if device_id in self._shaking_scope_tokens:
+        raise RuntimeError(f"Cannot stop shaking on nest {device_id} while its scope is active")
+      await self._stop_scoped_shaking(device_id)
+    logger.info("[BigBear %s] nest %d stopped", self.io.port, device_id)
+
+  async def _stop_scoped_shaking(self, device_id: int) -> None:
+    """Stop one tracked nest and retain retryable state if cleanup fails."""
+    try:
+      await self._stop_nest(device_id)
+    except BaseException:
+      self._shaking_active[device_id] = True
+      self._shaking_state_unknown[device_id] = True
+      raise
+    self._shaking_active[device_id] = False
+    self._shaking_state_unknown[device_id] = False
+
+  async def _stop_nest(self, device_id: int) -> None:
+    """Stop one nest and validate its status response."""
     await self._send(self._address(device_id) + "S")
     if await self._poll(device_id, read_timeout=self.stop_settle) == ERROR_REPLY:
       raise BigBearError(title="Stopping the shaker failed", message=f"nest {device_id}")
-    logger.info("[BigBear %s] nest %d stopped", self.io.port, device_id)
 
   async def stop_all(self) -> None:
     """Stop shaking on every nest on the chain."""
-    for device_id in range(1, self.num_shakers + 1):
-      await self._send(self._address(device_id) + "S")
-      await self._poll(device_id, read_timeout=self.stop_settle)
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_tokens:
+        raise RuntimeError("Cannot stop all nests while a shaking scope is active")
+      for device_id in range(1, self.num_shakers + 1):
+        await self._send(self._address(device_id) + "S")
+        reply = await self._poll(device_id, read_timeout=self.stop_settle)
+        failed = reply == ERROR_REPLY
+        self._shaking_active[device_id] = failed
+        self._shaking_state_unknown[device_id] = failed
+
+  @asynccontextmanager
+  async def shaking(
+    self,
+    rpm: int,
+    acceleration: int = 1,
+    sequence: Sequence = "CW",
+    device_id: int = 1,
+  ) -> AsyncIterator[None]:
+    """Temporarily shake one nest and stop only that nest on scope exit."""
+    self._validate_device_id(device_id)
+    token = object()
+    async with self._shaking_transition_lock:
+      if not self.is_active:
+        raise RuntimeError("Shaking scopes require an active BigBearOrbitalShaker lifespan")
+      if device_id in self._shaking_scope_tokens:
+        raise RuntimeError(f"Shaking on nest {device_id} is already scoped")
+      if self._shaking_active[device_id] or self._shaking_state_unknown[device_id]:
+        raise RuntimeError(f"Shaking on nest {device_id} is already active")
+      await self._start_shaking_transition(
+        rpm,
+        acceleration=acceleration,
+        sequence=sequence,
+        device_id=device_id,
+        rollback_on_failure=True,
+      )
+      self._shaking_scope_tokens[device_id] = token
+
+    try:
+      await anyio.lowlevel.checkpoint()
+      yield
+    finally:
+      with anyio.CancelScope(shield=True):
+        async with self._shaking_transition_lock:
+          if self._shaking_scope_tokens.get(device_id) is token:
+            try:
+              await self._stop_scoped_shaking(device_id)
+            finally:
+              self._shaking_scope_tokens.pop(device_id, None)
+
+  async def _force_stop_nest(self, device_id: int) -> None:
+    """Stop one nest for parent cleanup, bypassing public scope guards."""
+    async with self._shaking_transition_lock:
+      try:
+        await self._stop_nest(device_id)
+      except BaseException:
+        self._shaking_active[device_id] = True
+        self._shaking_state_unknown[device_id] = True
+        raise
+      else:
+        self._shaking_active[device_id] = False
+        self._shaking_state_unknown[device_id] = False
+      finally:
+        self._shaking_scope_tokens.pop(device_id, None)
 
   async def find_home(self, device_id: int = 1) -> None:
     """Home a single nest."""
@@ -258,7 +384,7 @@ class BigBearOrbitalShaker:
 
   async def _enter_daisy_chain(self) -> None:
     await self._send("U")
-    await asyncio.sleep(self.daisy_chain_settle)
+    await anyio.sleep(self.daisy_chain_settle)
     await self._read_reply()
 
   async def _check_num_shakers(self) -> None:
