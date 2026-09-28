@@ -1,8 +1,9 @@
-import asyncio
 import logging
-import time
 from typing import Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class SartoriusError(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class SartoriusEntris2:
+class SartoriusEntris2(HasLifespan):
   """Sartorius Entris II balance.
 
   Interface spec: https://www.sartorius.hr/media/dypfvdsn/entris-ii-technical-note-en-sartorius.pdf
@@ -72,6 +73,7 @@ class SartoriusEntris2:
     pid: int = 0x6001,
     tare_settle_s: float = 2.0,
   ):
+    super().__init__()
     self.tare_settle_s = tare_settle_s
     self.serial_number: Optional[str] = None
     self.io = Serial(
@@ -83,15 +85,16 @@ class SartoriusEntris2:
       bytesize=8,
       parity="O",
       stopbits=1,
-      timeout=15,
     )
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport and initialize the balance."""
+    await super()._enter_lifespan(stack)
     logger.warning(
       "SartoriusEntris2 has NOT been tested against hardware in PyLabRobot. "
       "Please make a PR to remove this message if you have verified it on your hardware."
     )
-    await self.io.setup()
+    await stack.enter_async_context(self.io.lifespan())
     # Bring online: send <ESC>P up to twice, tolerating errors.
     for _ in range(2):
       try:
@@ -101,9 +104,6 @@ class SartoriusEntris2:
         continue
     self.serial_number = await self.send_command("x2_")
     logger.info("[Sartorius %s] connected: serial_number=%s", self.io.port, self.serial_number)
-
-  async def stop(self) -> None:
-    await self.io.stop()
 
   # === Command layer ===
 
@@ -121,23 +121,29 @@ class SartoriusEntris2:
         parseable line).
     """
 
+    await anyio.lowlevel.checkpoint()
     await self.io.reset_input_buffer()
-    frame = self._frame(token)
-    logger.debug("[Sartorius] send: %s", frame)
-    await self.io.write(frame)
+    with anyio.CancelScope(shield=True):
+      frame = self._frame(token)
+      logger.debug("[Sartorius] send: %s", frame)
+      await self.io.write(frame)
+
+      if not read_reply:
+        raw_response = b""
+      else:
+        try:
+          with anyio.fail_after(timeout):
+            raw_response = b""
+            while raw_response == b"":
+              raw_response = await self.io.readline()
+              await anyio.lowlevel.checkpoint()
+        except TimeoutError:
+          raise TimeoutError("Timeout while waiting for response from scale.") from None
+    await anyio.lowlevel.checkpoint()
 
     if not read_reply:
       return ""
 
-    raw_response = b""
-    timeout_time = time.time() + timeout
-    while True:
-      raw_response = await self.io.readline()
-      await asyncio.sleep(0.001)
-      if time.time() > timeout_time:
-        raise TimeoutError("Timeout while waiting for response from scale.")
-      if raw_response != b"":
-        break
     logger.debug("[Sartorius] recv: %s", raw_response)
     response = raw_response.decode("ascii", errors="replace").strip()
     if not response:
@@ -182,13 +188,13 @@ class SartoriusEntris2:
   async def tare(self) -> None:
     """Tare the balance (<ESC>T)."""
     await self.send_command("T", read_reply=False)
-    await asyncio.sleep(self.tare_settle_s)
+    await anyio.sleep(self.tare_settle_s)
     logger.info("[Sartorius %s] tared", self.serial_number)
 
   async def zero(self) -> None:
     """Zero the balance (<Esc>V, Key ZERO)."""
     await self.send_command("V", read_reply=False)
-    await asyncio.sleep(self.tare_settle_s)
+    await anyio.sleep(self.tare_settle_s)
     logger.info("[Sartorius %s] zeroed", self.serial_number)
 
   async def get_model(self) -> str:

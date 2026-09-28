@@ -2,28 +2,22 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Sequence
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.command_line import CommandLineTransport
 
 from .errors import MicronicError
 
 
-class Scanner(ABC):
+class Scanner(HasLifespan, ABC):
   """Abstract scanner that writes a rack image to disk on demand."""
 
   image_extension: str
-
-  async def setup(self) -> None:
-    """Prepare the scanner for image acquisition."""
-
-  async def stop(self) -> None:
-    """Release scanner acquisition resources."""
 
   @abstractmethod
   async def acquire(self, output_path: Path, timeout: float) -> dict[str, object]:
@@ -66,6 +60,7 @@ class TwainScanner(Scanner):
     Raises:
       MicronicError: If no TWAIN helper can be resolved.
     """
+    super().__init__()
     if command_line is None:
       resolved = twain_scanner_path or _resolve_twain_scanner_path()
       if resolved is None:
@@ -81,17 +76,14 @@ class TwainScanner(Scanner):
     self.twain_scanner_path = command_line.executable
     self.twain_source = twain_source
 
-  async def setup(self) -> None:
-    """Resolve and prepare the TWAIN helper executable."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Enter the TWAIN helper transport lifespan."""
+    await super()._enter_lifespan(stack)
     try:
-      await self.command_line.setup()
+      await stack.enter_async_context(self.command_line.lifespan())
     except FileNotFoundError as exc:
       raise MicronicError(str(exc)) from exc
     self.twain_scanner_path = self.command_line.executable
-
-  async def stop(self) -> None:
-    """Stop the TWAIN helper transport."""
-    await self.command_line.stop()
 
   async def acquire(self, output_path: Path, timeout: float) -> dict[str, object]:
     """Acquire a BMP image through the configured TWAIN helper.
@@ -136,6 +128,7 @@ class SaneScanner(Scanner):
     Raises:
       MicronicError: If ``scanimage`` cannot be resolved.
     """
+    super().__init__()
     if command_line is None:
       resolved = scanimage_path or shutil.which("scanimage")
       if resolved is None:
@@ -148,17 +141,14 @@ class SaneScanner(Scanner):
     self.scanimage_path = command_line.executable
     self.sane_device = sane_device
 
-  async def setup(self) -> None:
-    """Resolve and prepare the ``scanimage`` executable."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Enter the SANE command-line transport lifespan."""
+    await super()._enter_lifespan(stack)
     try:
-      await self.command_line.setup()
+      await stack.enter_async_context(self.command_line.lifespan())
     except FileNotFoundError as exc:
       raise MicronicError(str(exc)) from exc
     self.scanimage_path = self.command_line.executable
-
-  async def stop(self) -> None:
-    """Stop the SANE command-line transport."""
-    await self.command_line.stop()
 
   async def acquire(self, output_path: Path, timeout: float) -> dict[str, object]:
     """Acquire a TIFF image through ``scanimage``.
@@ -209,7 +199,7 @@ async def _run_scan_command(
     completed = await command_line.run(arguments, timeout=timeout + 15)
   except FileNotFoundError as exc:
     raise MicronicError(f"Scan command was not found: {command_line.executable}") from exc
-  except asyncio.TimeoutError as exc:
+  except TimeoutError as exc:
     raise MicronicError(
       f"Scan command timed out after {timeout:g} seconds: {command_line.executable}"
     ) from exc

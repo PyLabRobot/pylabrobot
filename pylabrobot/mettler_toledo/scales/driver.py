@@ -2,13 +2,14 @@
 
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
-import asyncio
 import logging
 import shlex
-import time
 from dataclasses import dataclass, field
 from typing import List, Literal, Optional, Set, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
@@ -31,7 +32,7 @@ class MettlerToledoResponse:
   data: List[str] = field(default_factory=list)
 
 
-class MTSICSDriver:
+class MTSICSDriver(HasLifespan):
   """Driver for Mettler Toledo scales using the MT-SICS protocol.
 
   MT-SICS (Mettler Toledo Standard Interface Command Set) is the serial communication
@@ -63,6 +64,8 @@ class MTSICSDriver:
       vid: USB vendor ID (default 0x0403 = FTDI).
       pid: USB product ID (default 0x6001 = FT232R).
     """
+    super().__init__()
+    self._command_lock = anyio.Lock()
     self._supported_commands: Set[str] = set()
 
     self.io = Serial(
@@ -74,9 +77,12 @@ class MTSICSDriver:
       timeout=1,
     )
 
-  async def setup(self) -> None:
-    """Connect to the scale, reset to clean state, discover identity and supported commands."""
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own Serial throughout discovery and disconnect cleanup."""
+    await super()._enter_lifespan(stack)
+    self._supported_commands.clear()
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._reset_for_exit, shield_timeout=65)
 
     # Reset device to clean state (spec Section 2.2)
     # reset() clears the input buffer and sends @, which returns the serial number
@@ -132,8 +138,8 @@ class MTSICSDriver:
     if "M21" in self._supported_commands:
       await self.set_host_unit_grams()
 
-  async def stop(self) -> None:
-    """Reset the device to a clean state and close the serial connection.
+  async def _reset_for_exit(self) -> None:
+    """Reset the device to a clean state while Serial is still open.
 
     Sends @ to cancel any pending commands before disconnecting. If the
     serial port is already broken (e.g. kernel crash), the reset is skipped
@@ -146,7 +152,7 @@ class MTSICSDriver:
         "[%s] Could not reset device before disconnecting", self.io.human_readable_device_name
       )
     logger.info("[%s] Disconnected from %s", self.io.human_readable_device_name, self.io.port)
-    await self.io.stop()
+    self._supported_commands.clear()
 
   # === Device discovery ===
 
@@ -283,20 +289,29 @@ class MTSICSDriver:
         message=f"MT-SICS command '{cmd}' is not supported by this device.",
       )
 
+    async with self._command_lock:
+      await anyio.lowlevel.checkpoint()
+      # A dispatched command owns its finite response even if its caller is cancelled.
+      with anyio.CancelScope(shield=True):
+        responses = await self._send_command_transaction(command, timeout)
+      await anyio.lowlevel.checkpoint()
+      return responses
+
+  async def _send_command_transaction(
+    self, command: str, timeout: int
+  ) -> List[MettlerToledoResponse]:
+    """Write and consume every reply within one serialized transaction."""
     logger.log(LOG_LEVEL_IO, "[%s] Sent command: %s", self.io.human_readable_device_name, command)
     await self.io.write(command.encode() + b"\r\n")
 
-    try:
+    with anyio.fail_after(timeout):
       responses: List[MettlerToledoResponse] = []
-      timeout_time = time.time() + timeout
       while True:
         while True:
           raw_response = await self.io.readline()
           if raw_response != b"":
             break
-          if time.time() > timeout_time:
-            raise TimeoutError("Timeout while waiting for response from scale.")
-          await asyncio.sleep(0.001)
+          await anyio.lowlevel.checkpoint()
 
         logger.log(
           LOG_LEVEL_IO,
@@ -320,23 +335,6 @@ class MTSICSDriver:
 
       return responses
 
-    except (KeyboardInterrupt, asyncio.CancelledError):
-      # Cancel pending commands without resetting device state (zero/tare).
-      # Use C (cancel all) if available; otherwise just flush the buffer.
-      # Never send @ here - it clears zero/tare which the user wants to keep.
-      if "C" in self._supported_commands:
-        logger.warning(
-          "[%s] Command interrupted, sending C to cancel pending commands",
-          self.io.human_readable_device_name,
-        )
-        await self.io.write(b"C\r\n")
-      logger.warning(
-        "[%s] Command interrupted, flushing serial buffer",
-        self.io.human_readable_device_name,
-      )
-      await self.io.reset_input_buffer()
-      raise
-
   # === Public API ===
   # Organized by function: cancel, identity, zero, tare, weight, measurement,
   # configuration (read), display, configuration (write).
@@ -351,8 +349,14 @@ class MTSICSDriver:
 
     Returns the serial number from the I4-style response.
     """
-    await self.io.reset_input_buffer()
-    responses = await self.send_command("@")
+    # The buffer belongs to the whole transaction: clearing it during another
+    # request would discard that request's still-pending response.
+    async with self._command_lock:
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self.io.reset_input_buffer()
+        responses = await self._send_command_transaction("@", 60)
+      await anyio.lowlevel.checkpoint()
     # @ responds with I4-style: I4 A "<SNR>"
     self._validate_response(responses[0], 3, "@")
     return responses[0].data[0]
