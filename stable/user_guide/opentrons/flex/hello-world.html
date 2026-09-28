@@ -1062,14 +1062,14 @@ unless the well geometry and clearance are appropriate for your tips.</p>
 </section>
 <section id="optional-probe-for-liquid">
 <h3>Optional: probe for liquid<a class="headerlink" href="#optional-probe-for-liquid" title="Link to this heading">#</a></h3>
-<p>With the full column mounted, <code class="docutils literal notranslate"><span class="pre">try_liquid_probe()</span></code> reports the detected liquid
-Z position in mm, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when none is detected. <code class="docutils literal notranslate"><span class="pre">liquid_probe()</span></code> instead raises
+<p>With the full column mounted, <code class="docutils literal notranslate"><span class="pre">try_probe_liquid_heights()</span></code> reports the detected liquid
+Z position in mm, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when none is detected. <code class="docutils literal notranslate"><span class="pre">probe_liquid_heights()</span></code> instead raises
 when no liquid is found. This is an active probe motion, not a cached volume
 reading. The reported Z position is not automatically a well-relative
 <code class="docutils literal notranslate"><span class="pre">liquid_height</span></code>; do not substitute it directly into aspiration parameters.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">liquid_z</span> <span class="o">=</span> <span class="k">await</span> <span class="n">head</span><span class="o">.</span><span class="n">try_liquid_probe</span><span class="p">(</span><span class="n">plate</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">liquid_z</span> <span class="o">=</span> <span class="k">await</span> <span class="n">head</span><span class="o">.</span><span class="n">try_probe_liquid_heights</span><span class="p">(</span><span class="n">plate</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"detected liquid Z:"</span><span class="p">,</span> <span class="n">liquid_z</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -1252,7 +1252,7 @@ method signatures. These operations require a protocol tailored to your deck:</p
 <td><p><code class="docutils literal notranslate"><span class="pre">aspirate_in_place</span></code>, <code class="docutils literal notranslate"><span class="pre">dispense_in_place</span></code>, <code class="docutils literal notranslate"><span class="pre">air_gap_in_place</span></code>, and <code class="docutils literal notranslate"><span class="pre">blow_out</span></code> act at the current position. Position the head deliberately; they do not target a well for you.</p></td>
 </tr>
 <tr class="row-even"><td><p>Position and motion</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">position</span></code>, <code class="docutils literal notranslate"><span class="pre">move_to</span></code>, <code class="docutils literal notranslate"><span class="pre">move_to_well</span></code>, <code class="docutils literal notranslate"><span class="pre">move_relative</span></code>, and <code class="docutils literal notranslate"><span class="pre">move_to_addressable_area</span></code>; follow the method’s frame and clearance rules.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">request_position</span></code>, <code class="docutils literal notranslate"><span class="pre">move_to_position</span></code>, <code class="docutils literal notranslate"><span class="pre">move_to_well</span></code>, <code class="docutils literal notranslate"><span class="pre">move_relative</span></code>, and <code class="docutils literal notranslate"><span class="pre">move_to_addressable_area</span></code>; follow the method’s frame and clearance rules.</p></td>
 </tr>
 <tr class="row-odd"><td><p>Pipette configuration</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">configure_for_volume</span></code> and <code class="docutils literal notranslate"><span class="pre">prepare_to_aspirate</span></code>; support and hardware validation depend on the operation and robot software.</p></td>

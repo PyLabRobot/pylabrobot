@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.StandingTipRack.rotate\_to
+=========================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: StandingTipRack.rotate_to

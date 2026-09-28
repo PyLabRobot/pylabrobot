@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.StandingTipRack.unassign\_child\_resource
+========================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: StandingTipRack.unassign_child_resource

@@ -31,15 +31,16 @@ pylabrobot.opentrons.flex.flex\_head.FlexHead96
       ~FlexHead96.dispense_in_place
       ~FlexHead96.drop_tips
       ~FlexHead96.get_mounted_tips
-      ~FlexHead96.get_tip_presence
       ~FlexHead96.has_tip_on_hardware
       ~FlexHead96.move_relative
-      ~FlexHead96.move_to
       ~FlexHead96.move_to_addressable_area
+      ~FlexHead96.move_to_position
+      ~FlexHead96.move_to_safe_z
       ~FlexHead96.move_to_well
       ~FlexHead96.pick_up_tips
-      ~FlexHead96.position
       ~FlexHead96.prepare_to_aspirate
+      ~FlexHead96.request_position
+      ~FlexHead96.request_tip_presence
       ~FlexHead96.touch_tip
       ~FlexHead96.unsafe_blow_out_in_place
       ~FlexHead96.unsafe_drop_tip_in_place

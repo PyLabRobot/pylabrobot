@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.StandingTipRack.load\_all\_state
+===============================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: StandingTipRack.load_all_state

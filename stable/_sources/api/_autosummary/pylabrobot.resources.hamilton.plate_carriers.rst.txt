@@ -47,6 +47,7 @@ pylabrobot.resources.hamilton.plate\_carriers
       PLT_CAR_P3MD
       PLT_CAR_P3MD_A00
       PLT_CAR_P3MD_A01
+      hamilton_plate_carrier_L5_ac
    
    
 

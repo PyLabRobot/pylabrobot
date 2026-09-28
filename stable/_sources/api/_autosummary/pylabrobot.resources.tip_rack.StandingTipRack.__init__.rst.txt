@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.StandingTipRack.\_\_init\_\_
+===========================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: StandingTipRack.__init__

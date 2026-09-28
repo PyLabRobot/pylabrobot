@@ -636,7 +636,7 @@ exclusive access to the port; close the Opentrons App first.</p>
 <td><p>End the control session, handing the robot back to its own touchscreen.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.Flex.connect.html#pylabrobot.opentrons.flex.Flex.connect" title="pylabrobot.opentrons.flex.Flex.connect"><code class="xref py py-obj docutils literal notranslate"><span class="pre">connect</span></code></a>()</p></td>
-<td><p>Open the link and confirm the robot answers.</p></td>
+<td><p>Open the link and load the robot's trash location.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.Flex.create_run.html#pylabrobot.opentrons.flex.Flex.create_run" title="pylabrobot.opentrons.flex.Flex.create_run"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_run</span></code></a>()</p></td>
 <td><p>Start a control session.</p></td>
@@ -690,7 +690,7 @@ exclusive access to the port; close the Opentrons App first.</p>
 <td><p>Bring the robot fully up, PyLabRobot's usual one-call lifecycle entry.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.Flex.stop.html#pylabrobot.opentrons.flex.Flex.stop" title="pylabrobot.opentrons.flex.Flex.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
-<td><p>Park the gantry and release the robot, dropping any mounted tips first.</p></td>
+<td><p>Discard mounted tips, park the gantry, and release the robot.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.Flex.sync_tips_to_robot.html#pylabrobot.opentrons.flex.Flex.sync_tips_to_robot" title="pylabrobot.opentrons.flex.Flex.sync_tips_to_robot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_tips_to_robot</span></code></a>(tip_rack)</p></td>
 <td><p>Make the robot's tip-rack model agree with PyLabRobot's.</p></td>

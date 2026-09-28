@@ -673,7 +673,7 @@
 <tbody>
 <tr class="row-even"><td><p>‘TIP_CAR_480_A00’<br>Part no.: 182085<br><a class="reference external" href="https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182085">manufacturer website</a> <br>Carrier for 5x 96 tip (10μl, 50μl, 300μl, 1000μl) racks or 5x 24 tip (5ml) racks (6T)</p></td>
 <td><p><img alt="" src="../../_images/TIP_CAR_480_A00_182085.jpg" /></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">TIP_CAR_480_A00</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_tip_carrier_L5</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>‘TIP_CAR_288_C00’<br>Part no.: 182060<br><a class="reference external" href="https://www.hamiltoncompany.com/other-robotics/182060">manufacturer website</a> <br>Carrier for 3x 96 tip (10μl, 50μl, 300μl, 1000μl) racks or 3x 24 tip (5ml) racks (4T)</p></td>
 <td><p><img alt="" src="../../_images/TIP_CAR_288_C00.jpg.avif" /></p></td>
@@ -699,7 +699,7 @@
 <tbody>
 <tr class="row-even"><td><p>‘PLT_CAR_L5AC_A00’<br>Part no.: 182090<br><a class="reference external" href="https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182090">manufacturer website</a> <br>Carrier for 5x 96 Deep Well Plates or for 5x 384 tip racks (e.g.384HEAD_384TIPS_50μl) (6T)</p></td>
 <td><p><img alt="" src="../../_images/PLT_CAR_L5AC_A00_182090.jpg" /></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">PLT_CAR_L5AC_A00</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hamilton_plate_carrier_L5_ac</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>‘PLT_CAR_L5MD_A00’<br>Part no.: 182365/02<br><a class="reference external" href="https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365">manufacturer website</a> <br>Carries five ANSI/SLAS footprint MTPs in landscape orientation. Occupies six tracks.</p></td>
 <td><p><img alt="" src="../../_images/182365-Plate-Carrier.webp" /></p></td>
@@ -938,7 +938,7 @@
 </section>
 <section id="teaching-needles">
 <h3>Teaching needles<a class="headerlink" href="#teaching-needles" title="Link to this heading">#</a></h3>
-<p>Closed-tip steel probes for labware teaching, not liquid handling. They are modelled as zero-capacity tools (<code class="docutils literal notranslate"><span class="pre">nominal_volume=0</span></code>, <code class="docutils literal notranslate"><span class="pre">maximal_volume=0</span></code>) so any attempted aspirate raises. The integrated <code class="docutils literal notranslate"><span class="pre">teaching_tip_rack</span></code> on every STAR and STARlet deck is built from <code class="docutils literal notranslate"><span class="pre">hamilton_teaching_needle_300uL</span></code>.</p>
+<p>Closed-tip steel probes for labware teaching, not liquid handling. They are modelled as zero-capacity tools (<code class="docutils literal notranslate"><span class="pre">nominal_volume=0</span></code>, <code class="docutils literal notranslate"><span class="pre">maximal_volume=0</span></code>) so any attempted aspirate raises. The integrated teaching needle rack on every STAR and STARlet deck - <code class="docutils literal notranslate"><span class="pre">deck.get_resource(deck.get_component_name(&quot;teaching_tip_rack&quot;))</span></code> - is built from <code class="docutils literal notranslate"><span class="pre">hamilton_teaching_needle_300uL</span></code>.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Description</p></th>

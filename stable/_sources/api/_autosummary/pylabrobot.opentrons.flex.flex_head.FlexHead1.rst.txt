@@ -31,18 +31,19 @@ pylabrobot.opentrons.flex.flex\_head.FlexHead1
       ~FlexHead1.dispense_in_place
       ~FlexHead1.drop_tips
       ~FlexHead1.get_mounted_tips
-      ~FlexHead1.get_tip_presence
       ~FlexHead1.has_tip_on_hardware
-      ~FlexHead1.liquid_probe
       ~FlexHead1.move_relative
-      ~FlexHead1.move_to
       ~FlexHead1.move_to_addressable_area
+      ~FlexHead1.move_to_position
+      ~FlexHead1.move_to_safe_z
       ~FlexHead1.move_to_well
       ~FlexHead1.pick_up_tips
-      ~FlexHead1.position
       ~FlexHead1.prepare_to_aspirate
+      ~FlexHead1.probe_liquid_heights
+      ~FlexHead1.request_position
+      ~FlexHead1.request_tip_presence
       ~FlexHead1.touch_tip
-      ~FlexHead1.try_liquid_probe
+      ~FlexHead1.try_probe_liquid_heights
       ~FlexHead1.unsafe_blow_out_in_place
       ~FlexHead1.unsafe_drop_tip_in_place
       ~FlexHead1.verify_tip_presence

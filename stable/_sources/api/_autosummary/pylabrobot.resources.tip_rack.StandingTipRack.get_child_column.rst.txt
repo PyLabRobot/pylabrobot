@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.StandingTipRack.get\_child\_column
+=================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: StandingTipRack.get_child_column

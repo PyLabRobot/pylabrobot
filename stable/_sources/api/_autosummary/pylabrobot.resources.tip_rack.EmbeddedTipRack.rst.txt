@@ -1,0 +1,114 @@
+﻿:orphan:
+
+
+pylabrobot.resources.tip\_rack.EmbeddedTipRack
+==============================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. autoclass:: EmbeddedTipRack
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~EmbeddedTipRack.frame_height
+      ~EmbeddedTipRack.item_dx
+      ~EmbeddedTipRack.item_dy
+      ~EmbeddedTipRack.items
+      ~EmbeddedTipRack.lid
+      ~EmbeddedTipRack.location
+      ~EmbeddedTipRack.name
+      ~EmbeddedTipRack.num_items
+      ~EmbeddedTipRack.num_items_x
+      ~EmbeddedTipRack.num_items_y
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~EmbeddedTipRack.__init__
+      ~EmbeddedTipRack.assign_child_by_anchor
+      ~EmbeddedTipRack.assign_child_resource
+      ~EmbeddedTipRack.at
+      ~EmbeddedTipRack.center
+      ~EmbeddedTipRack.centers
+      ~EmbeddedTipRack.check_can_drop_resource_here
+      ~EmbeddedTipRack.column
+      ~EmbeddedTipRack.copy
+      ~EmbeddedTipRack.deregister_did_assign_resource_callback
+      ~EmbeddedTipRack.deregister_did_unassign_resource_callback
+      ~EmbeddedTipRack.deregister_state_update_callback
+      ~EmbeddedTipRack.deregister_will_assign_resource_callback
+      ~EmbeddedTipRack.deregister_will_unassign_resource_callback
+      ~EmbeddedTipRack.deserialize
+      ~EmbeddedTipRack.disable_tip_trackers
+      ~EmbeddedTipRack.disable_tip_tracking
+      ~EmbeddedTipRack.empty
+      ~EmbeddedTipRack.enable_tip_trackers
+      ~EmbeddedTipRack.enable_tip_tracking
+      ~EmbeddedTipRack.fill
+      ~EmbeddedTipRack.find_resource
+      ~EmbeddedTipRack.find_resources
+      ~EmbeddedTipRack.get_absolute_location
+      ~EmbeddedTipRack.get_absolute_rotation
+      ~EmbeddedTipRack.get_absolute_size_x
+      ~EmbeddedTipRack.get_absolute_size_y
+      ~EmbeddedTipRack.get_absolute_size_z
+      ~EmbeddedTipRack.get_all_children
+      ~EmbeddedTipRack.get_all_items
+      ~EmbeddedTipRack.get_all_tips
+      ~EmbeddedTipRack.get_anchor
+      ~EmbeddedTipRack.get_child_column
+      ~EmbeddedTipRack.get_child_identifier
+      ~EmbeddedTipRack.get_child_row
+      ~EmbeddedTipRack.get_highest_known_point
+      ~EmbeddedTipRack.get_item
+      ~EmbeddedTipRack.get_items
+      ~EmbeddedTipRack.get_lid_location
+      ~EmbeddedTipRack.get_location_wrt
+      ~EmbeddedTipRack.get_resource
+      ~EmbeddedTipRack.get_root
+      ~EmbeddedTipRack.get_size_x
+      ~EmbeddedTipRack.get_size_y
+      ~EmbeddedTipRack.get_size_z
+      ~EmbeddedTipRack.get_tip
+      ~EmbeddedTipRack.get_tips
+      ~EmbeddedTipRack.has_lid
+      ~EmbeddedTipRack.has_resource
+      ~EmbeddedTipRack.index_of_item
+      ~EmbeddedTipRack.is_in_subtree_of
+      ~EmbeddedTipRack.load_all_state
+      ~EmbeddedTipRack.load_from_json_file
+      ~EmbeddedTipRack.load_state
+      ~EmbeddedTipRack.load_state_from_file
+      ~EmbeddedTipRack.named
+      ~EmbeddedTipRack.register_did_assign_resource_callback
+      ~EmbeddedTipRack.register_did_unassign_resource_callback
+      ~EmbeddedTipRack.register_state_update_callback
+      ~EmbeddedTipRack.register_will_assign_resource_callback
+      ~EmbeddedTipRack.register_will_unassign_resource_callback
+      ~EmbeddedTipRack.rotate
+      ~EmbeddedTipRack.rotate_to
+      ~EmbeddedTipRack.rotated
+      ~EmbeddedTipRack.row
+      ~EmbeddedTipRack.save
+      ~EmbeddedTipRack.save_state_to_file
+      ~EmbeddedTipRack.serialize
+      ~EmbeddedTipRack.serialize_all_state
+      ~EmbeddedTipRack.serialize_state
+      ~EmbeddedTipRack.set_tip_state
+      ~EmbeddedTipRack.summary
+      ~EmbeddedTipRack.traverse
+      ~EmbeddedTipRack.unassign
+      ~EmbeddedTipRack.unassign_child_resource
+   
+   
