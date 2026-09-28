@@ -818,6 +818,32 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     )
 
     self.assertIs(driver.find_smallest_site_for_plate(plate), tall)
+    assert plate.lid is not None
+    # The lid's top is its location plus 5 mm: 15 mm fits the 16 mm slot, 17 mm needs 18 mm.
+    plate.lid.location = Coordinate(0, 0, 10)
+    self.assertIs(driver.find_smallest_site_for_plate(plate), short)
+    plate.lid.location = Coordinate(0, 0, 12)
+    self.assertIs(driver.find_smallest_site_for_plate(plate), tall)
+    plate.lid.unassign()
+    self.assertIs(driver.find_smallest_site_for_plate(plate), short)
+
+  def test_site_selection_rejects_lid_extending_below_plate_bottom(self):
+    slot = PlateHolder(name="slot", size_x=127.76, size_y=85.48, size_z=16, pedestal_size_z=0)
+    rack = PlateCarrier(name="height_rack", size_x=130, size_y=90, size_z=100)
+    rack.assign_child_resource(slot, location=Coordinate.zero(), spot=0)
+    plate = Plate(name="lidded", size_x=127.76, size_y=85.48, size_z=14, ordered_items={})
+    # The lid spans -2 to 3 mm, so the assembly spans 16 mm with its top at 14 mm. Either height
+    # fits the slot, but the plate's bottom rests on the slot floor, which the lid would pass.
+    plate.assign_child_resource(
+      Lid(name="lid", size_x=127.76, size_y=85.48, size_z=5, nesting_z_height=2),
+      location=Coordinate(0, 0, -2),
+    )
+    driver = HighResSampleStorage(
+      host="10.253.253.253", name="height_store", racks={1: rack}, model="SteriStore"
+    )
+
+    with self.assertRaisesRegex(ValueError, "extends 2 mm below the plate's bottom"):
+      driver.find_smallest_site_for_plate(plate)
 
   async def test_fetch_by_name_moves_plate_resource_to_nest(self):
     self.socket.captures["pick 1 1 1"] = ["ACK! pick 1 1 1 40", "OK! pick 1 1 1 40"]

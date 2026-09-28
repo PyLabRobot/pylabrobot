@@ -12,7 +12,12 @@ import pytest
 pytest.importorskip("pylibftdi")
 
 from pylabrobot.agilent.biotek.plate_reader_base import BioTekPlateReaderDriver
-from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
+from pylabrobot.resources import (
+  CellVis_24_wellplate_3600uL_Fb,
+  CellVis_96_wellplate_350uL_Fb,
+  Lid,
+  cor_96_wellplate_360uL_Fb,
+)
 
 
 def _byte_iter(s: str) -> Iterator[bytes]:
@@ -48,6 +53,69 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     )
     self._time_patcher.start()
     self.addCleanup(self._time_patcher.stop)
+
+  async def test_set_plate_resends_height_after_lid_changes(self):
+    # A 14.2 mm body; the Corning lid (8.9 mm, nesting 7.6 mm) raises the top to 15.5 mm and the
+    # replacement lid (5 mm, nesting 2 mm) to 17.2 mm.
+    plate = cor_96_wellplate_360uL_Fb("plate", with_lid=True)
+    lid = plate.lid
+    assert lid is not None
+    lid.unassign()
+    with unittest.mock.patch.object(
+      self.backend, "send_command", new_callable=unittest.mock.AsyncMock
+    ) as send:
+      await self.backend.set_plate(plate)
+      await self.backend.set_plate(plate)
+      plate.lid = lid
+      await self.backend.set_plate(plate)
+      lid.unassign()
+      await self.backend.set_plate(plate)
+      plate.lid = Lid("replacement", 127.76, 85.48, 5, nesting_z_height=2)
+      await self.backend.set_plate(plate)
+    self.assertEqual(
+      [call.args[1][-5:-1] for call in send.await_args_list], ["1420", "1550", "1420", "1720"]
+    )
+
+  async def test_set_plate_sends_seated_lid_top_not_occupied_span(self):
+    # The lid (20 mm, nesting 16 mm) seats at 14.2 - 16 = -1.8 mm, spanning -1.8 to 18.2 mm around
+    # the plate's bottom: 20 mm in total, with its top 18.2 mm above the bottom.
+    plate = cor_96_wellplate_360uL_Fb("plate")
+    plate.lid = Lid("deep_lid", 127.76, 85.48, 20, nesting_z_height=16)
+    with unittest.mock.patch.object(
+      self.backend, "send_command", new_callable=unittest.mock.AsyncMock
+    ) as send:
+      await self.backend.set_plate(plate)
+    self.assertEqual([call.args[1][-5:-1] for call in send.await_args_list], ["1820"])
+
+  async def test_set_plate_retries_failed_configuration(self):
+    with unittest.mock.patch.object(
+      self.backend, "send_command", new_callable=unittest.mock.AsyncMock
+    ) as send:
+      send.side_effect = [TimeoutError(), None]
+      with self.assertRaises(TimeoutError):
+        await self.backend.set_plate(self.plate)
+      await self.backend.set_plate(self.plate)
+      await self.backend.set_plate(self.plate)
+    self.assertEqual(send.await_count, 2)
+
+  async def test_set_plate_resends_previous_geometry_after_failed_change(self):
+    plate = cor_96_wellplate_360uL_Fb("plate", with_lid=True)
+    lid = plate.lid
+    assert lid is not None
+    with unittest.mock.patch.object(
+      self.backend, "send_command", new_callable=unittest.mock.AsyncMock
+    ) as send:
+      send.side_effect = [None, TimeoutError(), None]
+      await self.backend.set_plate(plate)
+      lid.unassign()
+      with self.assertRaises(TimeoutError):
+        await self.backend.set_plate(plate)
+      # The failed command may still have reached the firmware.
+      plate.lid = lid
+      await self.backend.set_plate(plate)
+    self.assertEqual(
+      [call.args[1][-5:-1] for call in send.await_args_list], ["1550", "1420", "1550"]
+    )
 
   async def test_setup(self):
     self.backend.io.read.side_effect = _byte_iter("\x061650200  Version 1.04   0000\x03")

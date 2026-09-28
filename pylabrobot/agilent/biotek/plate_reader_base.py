@@ -81,6 +81,7 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
     self._version: Optional[str] = None
 
     self._plate: Optional[Plate] = None
+    self._plate_definition: Optional[str] = None
     self._shaking = False
     self._slow_mode: Optional[bool] = None
 
@@ -248,6 +249,7 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
   def clear_plate(self) -> None:
     """Forget the plate geometry the firmware last had loaded (e.g. after closing the tray)."""
     self._plate = None
+    self._plate_definition = None
 
   async def open(self, slow: bool = False):
     """Drive the loading tray out.
@@ -339,9 +341,6 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
     return result
 
   async def set_plate(self, plate: Plate):
-    if plate is self._plate:
-      return
-
     rows = plate.num_items_y
     columns = plate.num_items_x
 
@@ -376,8 +375,13 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
       "\x03"
     )
 
+    if plate is self._plate and cmd == self._plate_definition:
+      return
+    # Until this command succeeds, the firmware may hold either the old or the new geometry.
+    self.clear_plate()
     resp = await self.send_command("y", cmd, timeout=1)
     self._plate = plate
+    self._plate_definition = cmd
     return resp
 
   def _get_min_max_row_col_tuples(
