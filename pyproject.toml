@@ -51,27 +51,27 @@ Homepage = "https://github.com/pylabrobot/pylabrobot"
 version = {file = "pylabrobot/version.txt"}
 
 [tool.setuptools.packages.find]
-namespaces = false
-exclude = ["tools*", "docs*"]
+namespaces = true
+include = ["pylabrobot", "pylabrobot.*"]
+exclude = ["*.__pycache__"]
 
 [tool.setuptools.package-data]
-pylabrobot = [
-  "visualizer/*",
-  "visualizer/img/*",
-  "visualizer3D/static/*",
-  "visualizer3D/static/img/*",
-  "visualizer3D/static/types/*",
-  "visualizer3D/static/vendor/*",
-  "visualizer3D/static/vendor/draco/*",
-  "visualizer3D/static/vendor/lines/*",
-  "version.txt",
-  "hamilton/star/driver/recordings/*.json",
-  "hamilton/star/resource_model/*.glb",
-  "hamilton/star/resource_model/manifest.json",
-  "hamilton/prep/resource_model/*.glb",
-  "resources/hamilton/resource_model/*.glb",
-  "resources/alpaqua/resource_model/*.glb",
-  "byonoy/resource_model/*.glb",
+"*" = [
+  "*.css",
+  "*.csv",
+  "*.glb",
+  "*.html",
+  "*.js",
+  "*.json",
+  "*.md",
+  "*.pdf",
+  "*.png",
+  "*.stl",
+  "*.ts",
+  "*.txt",
+  "*.wasm",
+  "LICENSE",
+  "NOTICE",
 ]
 
 [tool.ruff]
