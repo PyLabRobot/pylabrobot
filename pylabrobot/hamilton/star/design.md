@@ -187,5 +187,5 @@ the Prep's.
 
 8. **The driver's defaults still live in the configurations.** `Head`, `Head384`, `iSWAP`,
    `Autoload` and `XArm` keep them as `*_default` / `*_default_increments` fields, some in
-   increments, and `Pipettes` keeps a few there. `Head96` follows P18; the rest move over one
-   feature at a time.
+   increments, and `Pipettes` keeps a few there. `Head96` and `CoreGrippers` follow P18; the rest
+   move over one feature at a time.
