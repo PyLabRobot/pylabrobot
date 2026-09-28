@@ -3,6 +3,9 @@ import unittest
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import (
   TIP_CAR_288_C00,
+  TIP_CAR_480,
+  TIP_CAR_480_A00,
+  TIP_CAR_480BC_A00,
   TIP_CAR_NTR_A00,
   STARDeck,
   TIP_CAR_72_4mlTF_C00,
@@ -68,7 +71,7 @@ class StandardTipCarrierTests(unittest.TestCase):
             self.assertAlmostEqual(getattr(location, axis), getattr(seated[0][0], axis))
 
   def test_tip_spot_positions_on_star_deck(self):
-    # positions whose firmware commands match Venus
+    # channel pick-up positions, as the firmware commands them
     for carrier_fn, rotation, a1, h12 in [
       (
         hamilton_tip_carrier_L5,
@@ -147,6 +150,12 @@ class StandardTipCarrierTests(unittest.TestCase):
         carrier = carrier_fn("carrier")
         carrier[0] = rack = rack_fn("rack", with_tips=False)
         self.assertEqual(rack.location, Coordinate.zero())
+
+  def test_the_old_carrier_names_still_work(self):
+    for old_name in (TIP_CAR_480, TIP_CAR_480_A00, TIP_CAR_480BC_A00):
+      with self.assertWarns(DeprecationWarning):
+        old = old_name("carrier")
+      self.assertEqual(old, hamilton_tip_carrier_L5("carrier"))
 
   def test_a_solid_coreii_rack_has_the_spots_of_a_framed_rack_at_its_top(self):
     from pylabrobot.resources.hamilton import (

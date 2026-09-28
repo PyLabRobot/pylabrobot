@@ -35,7 +35,7 @@ class HamiltonSTARDeck(HamiltonDeck):
     size_x: Optional[float] = None,
     size_y: Optional[float] = None,
     size_z: Optional[float] = None,
-    name="deck",
+    name: str = "deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
     with_waste_block: bool = True,
@@ -93,7 +93,11 @@ class HamiltonSTARDeck(HamiltonDeck):
 
     if with_waste_block:
       waste_block = Resource(
-        name=self.get_component_name("waste_block"), size_x=30, size_y=445.2, size_z=100
+        name=self.get_component_name("waste_block"),
+        size_x=30,
+        size_y=445.2,
+        size_z=100,
+        category="waste_block",
       )
       self.assign_child_resource(
         waste_block,
@@ -103,15 +107,7 @@ class HamiltonSTARDeck(HamiltonDeck):
       # assign trash area, positioned 25mm to the right of the waste block
       # only run if the waste block is actually assigned.
       if with_trash:
-        if with_waste_block:
-          waste_block_x = (
-            self.get_resource(self.get_component_name("waste_block")).get_location_wrt(self).x
-          )
-        else:
-          # Fallback: anchor to the rightmost rail when no waste block is present.
-          waste_block_x = self.track_to_location(self.num_tracks + 1).x
-
-        trash_x = waste_block_x + 25
+        trash_x = waste_block.get_location_wrt(self).x + 25
 
         self.assign_child_resource(
           resource=Trash(self.get_component_name("trash"), size_x=0, size_y=241.2, size_z=0),
