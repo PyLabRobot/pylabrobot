@@ -56,7 +56,7 @@ from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.resources.carrier import Carrier
 from pylabrobot.resources.container import Container
-from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGripperTool
+from pylabrobot.resources.hamilton.core_gripper_tools import HamiltonCoreGripperTool
 from pylabrobot.resources.hamilton.hamilton_decks import (
   HamiltonDeck,
 )

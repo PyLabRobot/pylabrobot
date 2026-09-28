@@ -1,7 +1,7 @@
+from .core_gripper_tools import HamiltonCoreGripperTool, hamilton_core_gripper_tool
 from .core_grippers import (
   HamiltonCoreGrippers,
-  HamiltonCoreGripperTool,
-  hamilton_core_gripper_tool,
+  prep_core_gripper_holder,
   prep_core_gripper_mount,
 )
 from .hamilton_decks import HamiltonDeck
