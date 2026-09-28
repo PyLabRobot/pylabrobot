@@ -2253,6 +2253,16 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(pipettes.get_mounted_tip(0))
     self.assertIsNone(tip.parent)
 
+  async def test_initialize_leaves_the_channels_at_minimum_traverse_height_end(self):
+    pipettes, _, _ = await channels_over_a_rack()
+    send = unittest.mock.AsyncMock(wraps=pipettes._driver.send_command)
+    with unittest.mock.patch.object(pipettes._driver, "send_command", send):
+      await pipettes.initialize(minimum_traverse_height_end=200.0)
+      with self.assertWarns(DeprecationWarning):
+        await pipettes.initialize(z_position_at_end_of_a_command=210.0)
+    sent = [call.kwargs["te"] for call in send.call_args_list if call.kwargs.get("command") == "DI"]
+    self.assertEqual(sent, ["2000", "2100"])
+
 
 def _answer_pick_ups_as_the_device(pipettes: Pipettes, rack: Any, empty: List[str], other=""):
   """Answer `C0 TP` over the `empty` spots as the device does, `P<n>08/75`, or with `other` in
