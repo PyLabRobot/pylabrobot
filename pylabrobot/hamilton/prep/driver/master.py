@@ -77,6 +77,7 @@ from .prep_commands import (
   DECK_CONFIGURATION_OBJECT_PATH,
   HEATER_SHAKER_ROOT_PATH,
   MLPREP_CPU_OBJECT_PATH,
+  MLPREP_DEBUG_OBJECT_PATH,
   MLPREP_OBJECT_PATH,
   MLPREP_SERVICE_OBJECT_PATH,
   MODULE_INFORMATION_OBJECT_PATH,
@@ -1776,6 +1777,33 @@ class PrepDriver:
 
   async def cancel_power_down(self) -> None:
     await self.send_command(PrepCmd.PrepCancelPowerDown())
+
+  # ----------------------------------------
+  # Door
+  # ----------------------------------------
+
+  async def set_door_state_override(
+    self, *, enabled: bool, enclosure_present: bool, door_open: bool
+  ) -> None:
+    """Override the enclosure and door states the sensors report; stays set until changed.
+
+    Args:
+      enabled: True to report the given states, False to report the sensors again.
+      enclosure_present: the enclosure state to report while enabled.
+      door_open: the door state to report while enabled.
+    """
+    debug = await self.resolve_path(MLPREP_DEBUG_OBJECT_PATH)
+    method = await self.request_method_by_name(debug, "OverrideDoorState")
+    await self.send_command(
+      PrepCmd.PrepOverrideDoorState(
+        dest=debug,
+        command_id=method.method_id,
+        interface_id=method.interface_id,
+        override_enable=enabled,
+        enclosure_present=enclosure_present,
+        door_open=door_open,
+      )
+    )
 
   # ----------------------------------------
   # Deck light

@@ -97,6 +97,32 @@ def test_initializes_once_when_switched_on():
   asyncio.run(_run())
 
 
+def test_set_door_state_override_sends_the_given_state():
+  """The override is built at MLPrepDebug's OverrideDoorState and sent with the given state."""
+
+  async def _run() -> None:
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.set_door_state_override(enabled=True, enclosure_present=True, door_open=False)
+    (command,) = sent
+    assert isinstance(command, PrepCmd.PrepOverrideDoorState)
+    method = await p.request_method_by_name(command.dest, "OverrideDoorState")
+    assert (command.command_id, command.interface_id) == (method.method_id, method.interface_id)
+    state = (command.override_enable, command.enclosure_present, command.door_open)
+    assert state == (True, True, False)
+    await p.stop()
+
+  asyncio.run(_run())
+
+
 @pytest.mark.parametrize("name_prefix", [None, "prep_a"])
 def test_setup_places_the_teaching_needle_and_waste_positions_where_the_device_reports_them(
   name_prefix,
