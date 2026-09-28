@@ -156,16 +156,6 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
     )
     self.available_wavelengths: List[float] = []
 
-  async def setup(self) -> None:
-    await super().setup()
-    await self.initialize_measurements()
-    self.available_wavelengths = await self.request_available_absorbance_wavelengths()
-    logger.info(
-      "[%s] ready, available wavelengths: %s nm",
-      self.name,
-      self.available_wavelengths,
-    )
-
   async def request_ignore_errors_in_calibration(self) -> bool:
     """Read the firmware's experimental calibration-error override.
 
@@ -190,7 +180,7 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
     Diagnostic use only: suppressing an error does not establish a valid calibration.
     The field address is specific to A96A firmware 2024-10-23. Save the original
     value with :meth:`request_ignore_errors_in_calibration` and restore it in a
-    ``finally`` block. Setup does not enable this override automatically.
+    ``finally`` block. Setup only enables this override when explicitly requested.
     """
     if not isinstance(enabled, bool):
       raise TypeError("enabled must be a bool.")
@@ -334,6 +324,36 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
       signal_wl=SIGNAL_WL,
       reference_wl=REFERENCE_WL,
       is_reference=True,
+    )
+
+  async def setup(self, *, ignore_errors_in_calibration: bool = False) -> None:
+    """Connect and initialize absorbance measurements.
+
+    Args:
+      ignore_errors_in_calibration: Temporarily enable the experimental firmware
+        override during calibration. The previous setting is restored even if
+        calibration fails. Defaults to False, which leaves the setting unchanged.
+        This diagnostic option does not establish measurement accuracy and relies
+        on an internal field identified on A96A firmware 2024-10-23.
+    """
+    if not isinstance(ignore_errors_in_calibration, bool):
+      raise TypeError("ignore_errors_in_calibration must be a bool.")
+    await super().setup()
+    original_override = None
+    if ignore_errors_in_calibration:
+      original_override = await self.request_ignore_errors_in_calibration()
+    try:
+      if ignore_errors_in_calibration:
+        await self.set_ignore_errors_in_calibration(True)
+      await self.initialize_measurements()
+    finally:
+      if original_override is not None:
+        await self.set_ignore_errors_in_calibration(original_override)
+    self.available_wavelengths = await self.request_available_absorbance_wavelengths()
+    logger.info(
+      "[%s] ready, available wavelengths: %s nm",
+      self.name,
+      self.available_wavelengths,
     )
 
   async def read_absorbance(
