@@ -33,6 +33,7 @@ from pylabrobot.hamilton.prep.driver.simulator import (
   SIMULATED_X_SPEED,
   SIMULATED_Y_DRIVE_OFFSETS,
   SIMULATED_Z_DRIVE_OFFSETS,
+  _DeviceRefuses,
   _SimulatedIO,
 )
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes as STARPipettes
@@ -43,6 +44,7 @@ from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_clas
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
+from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import ChannelBatch
 from pylabrobot.resources import Container, Coordinate, PetriDish, Resource, Well
@@ -226,6 +228,56 @@ def test_channels_tip_and_volume_trackers_follow_pick_up_aspirate_dispense_and_d
       set_volume_tracking(False)
 
   _run(_t())
+
+
+def _pick_up_refused_by(front_channel: bool):
+  """Pick up with channels 0 and 1; one 0x0F08 entry answers, from the front's node or node 1."""
+
+  async def _t():
+    set_tip_tracking(True)
+    try:
+      deck = PrepDeck()
+      tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
+      p = PrepSimulationDriver(deck=deck)
+      await p.setup()
+      assert p.pipettes is not None
+      front = p.pipettes.channels[1].zdrive
+      assert front is not None
+      node = front.node if front_channel else 0x0001
+      answer = p._answer
+
+      async def refuse_pick_up(request, path, method):
+        if isinstance(request, PrepCmd.PrepPickUpTips):
+          raise _DeviceRefuses(f"0x0001.0x{node:04X}.0x0100:0x01,0x0009,0x0F08")
+        return await answer(request, path, method)
+
+      spots = [tip_rack.get_item("A1"), tip_rack.get_item("B1")]
+      with patch.object(p, "_answer", refuse_pick_up):
+        with pytest.raises(ChannelizedError) as raised:
+          await p.pipettes.pick_up_tips(spots, use_channels=[0, 1])
+      tips = [p.pipettes.get_mounted_tip(ch) for ch in (0, 1)]
+      await p.stop()
+      return raised.value, tips
+    finally:
+      set_tip_tracking(False)
+
+  return asyncio.run(_t())
+
+
+def test_a_pick_up_files_a_failure_under_the_channel_whose_node_answered():
+  """Only the front meets no tip: the rear keeps its tip, and the error names channel 1."""
+  error, (rear, front) = _pick_up_refused_by(front_channel=True)
+  assert rear is not None and front is None
+  assert list(error.errors) == [1]
+  assert isinstance(error.errors[1], NoTipError)
+
+
+def test_a_pick_up_leaves_an_error_from_no_channel_node_where_the_answer_put_it():
+  """An entry from a node no channel has is not re-keyed nor turned into a NoTipError."""
+  error, _ = _pick_up_refused_by(front_channel=False)
+  assert list(error.errors) == [0]
+  assert error.errors[0] is error.kwargs["hoi_exceptions"][0]
+  assert not isinstance(error.errors[0], NoTipError)
 
 
 _ASPIRATE_COMMANDS: Tuple[Any, ...] = tuple(Pipettes._ASPIRATE_CMD.values())

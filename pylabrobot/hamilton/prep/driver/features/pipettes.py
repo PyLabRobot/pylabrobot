@@ -4376,6 +4376,32 @@ class Pipettes:
         soft,
       )
 
+  def _get_pick_up_errors_by_channel(self, error: ChannelizedError) -> Dict[int, Exception]:
+    """Key a pick-up's errors by the channel whose node answered, not by place in the answer.
+
+    Args:
+      error: the ChannelizedError the pick-up raised.
+    """
+    nodes = {c.zdrive.node: i for i, c in enumerate(self.channels) if c.zdrive is not None}
+    entries = error.kwargs.get("hoi_entries") or []
+    raised = list((error.kwargs.get("hoi_exceptions") or {}).values())
+    by_channel: Dict[int, Exception] = {}
+    rekeyed: set[int] = set()
+    for entry, exc in zip(entries, raised):
+      channel = nodes.get(entry.node_id)
+      if channel is None:
+        continue
+      rekeyed.add(id(exc))
+      if entry.result == 0x0F08:  # "A tip is not held": the channel met no tip
+        by_channel.setdefault(channel, NoTipError(f"channel {channel}: {exc}"))
+      else:
+        by_channel.setdefault(channel, exc)
+    # An error from no channel's node stays where the answer put it.
+    for channel, exc in error.errors.items():
+      if id(exc) not in rekeyed:
+        by_channel.setdefault(channel, exc)
+    return by_channel
+
   async def _pick_up_tips_in_one_move(
     self,
     tip_spots: Sequence[TipSpot],
@@ -4524,7 +4550,8 @@ class Pipettes:
       )
       picked_up = all_channels_succeeded(use_channels)
     except ChannelizedError as e:
-      # It can fail on some channels and not others; the device says which
+      # It can fail on some channels and not others; the node of each entry says which
+      e.errors = self._get_pick_up_errors_by_channel(e)
       picked_up = successes_from_failed_channels(use_channels, e.errors)
       raise
     finally:
