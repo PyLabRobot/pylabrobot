@@ -631,7 +631,8 @@ class PrepDriver:
     The device keeps its state, but not the deck light: it is darkened, since a colour stands on
     the device with nobody holding it. Only this driver lets go. Every pipetting channel is moved up to Z safety
     first, and where the channels stopped is read back: a driver that let go with a channel low would leave the
-    next lateral move to crash it. The 8-channel head is not raised: no move of its Z alone is known.
+    next lateral move to crash it. The 8-channel head's tips go into its waste; the head is not raised
+    otherwise: no move of its Z alone is known.
 
     The link closes whether or not that succeeds. Repeatable: a driver that is not set up is left alone.
 
@@ -653,6 +654,14 @@ class PrepDriver:
         except Exception:
           # The link closes either way.
           logger.warning("could not clear what was attached before stopping", exc_info=True)
+      # The model's tips on the 8-channel head go into its waste: nothing else takes them off.
+      if self.head8 is not None and not holding and any(self.head8.get_mounted_tips()):
+        try:
+          await self.head8.discard_tips()
+        except Exception:
+          logger.warning(
+            "could not discard the 8-channel head's tips before stopping", exc_info=True
+          )
       if skip_raise_to_z_safety:
         low = await self.features_below_safe_z()
         logger.warning(

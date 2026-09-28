@@ -25,6 +25,7 @@ import math
 import struct as _struct
 from typing import (
   TYPE_CHECKING,
+  Callable,
   List,
   Literal,
   NamedTuple,
@@ -175,6 +176,8 @@ class Head8:
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
     self.channels: List[PipetteChannel] = []  # built by discover
     self._supports_v2_pipetting: Optional[bool] = None
+    # The sleeve sensor saw tips the model does not hold: a pick-up would press them into the rack.
+    self._unmodelled_tips_sensed: bool = False
     # The head's probes, each a shaft carrying the tip it has picked up.
     self.resource: NChannelPipette = head8_pipette()
 
@@ -188,6 +191,15 @@ class Head8:
     if reported is not None:
       self.default_minimum_traverse_height = reported
     await self.discover()
+    try:
+      self._unmodelled_tips_sensed = await self._get_unmodelled_tips_sensed()
+    except Exception:
+      logger.warning("could not read whether the 8-channel head carries tips", exc_info=True)
+    if self._unmodelled_tips_sensed:
+      logger.warning(
+        "the 8-channel head senses tips the model does not hold: its pick-ups are refused until "
+        "discard_tips(make_tip=...) takes them off"
+      )
     if self._use_v1_aspirate_dispense:
       self._supports_v2_pipetting = False
       logger.debug("MPH V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
@@ -330,6 +342,12 @@ class Head8:
       result = bool(val)
     return [result] * NUM_PROBES
 
+  async def _get_unmodelled_tips_sensed(self) -> bool:
+    """Whether the sleeve sensor sees tips while the model holds none."""
+    if any(tip is not None for tip in self.get_mounted_tips()):
+      return False
+    return any(await self.sense_tip_presence())
+
   # -- xyz position --------------------------------------------------------------------------------
 
   async def move_to_position(
@@ -447,6 +465,14 @@ class Head8:
     for ch in use_channels:
       if self.shaft(ch).has_tip():
         raise RuntimeError(f"Channel {ch} already has a tip")
+    if self._unmodelled_tips_sensed:
+      # Asked again: tips taken off since setup lift the refusal.
+      self._unmodelled_tips_sensed = await self._get_unmodelled_tips_sensed()
+      if self._unmodelled_tips_sensed:
+        raise RuntimeError(
+          "the 8-channel head senses tips the model does not hold, and a pick-up would press them "
+          "into the rack; take them off with discard_tips(make_tip=...)"
+        )
     tips = [s.tip_for_pickup() for s in tip_spots]
     ref_spot = tip_spots[0]
     tip = tips[0]
@@ -620,6 +646,13 @@ class Head8:
     channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
     self._require_all_channels(channels, "return_tips")
     deck = self._require_deck()
+    if all(tip is None for tip in self.get_mounted_tips()):
+      if any(await self.sense_tip_presence()):
+        raise RuntimeError(
+          "the model holds no tips on the 8-channel head, but its sensor sees some: where they "
+          "came from is not known, so discard them with discard_tips(make_tip=...)"
+        )
+      raise RuntimeError("the 8-channel head carries no tips to return")
     spots: List[TipSpot] = []
     for ch, tip in enumerate(self._require_mounted_tips()):
       spot = tip_origin(tip, deck)
@@ -628,23 +661,40 @@ class Head8:
       spots.append(spot)
     await self.drop_tips(spots, use_channels=channels, **kwargs)
 
-  async def discard_tips(self, use_channels: Optional[Sequence[int]] = None, **kwargs) -> None:
+  async def discard_tips(
+    self,
+    use_channels: Optional[Sequence[int]] = None,
+    make_tip: Optional[Callable[[str], Tip]] = None,
+    **kwargs,
+  ) -> None:
     """Discard all eight tips into the deck's waste at its MPH position.
 
     Do nothing when no tips are mounted. A partly loaded head is rejected.
 
     Args:
       use_channels: all eight channels, in order. Defaults to all eight channels.
+      make_tip: builds each shaft's tip when the model holds none but the sleeve sensor sees some,
+        e.g. `hamilton_tip_50uL` after a session that ended with tips on.
       kwargs: passed on to `drop_tips`.
 
     Raises:
-      ValueError: If `use_channels` does not select all eight channels in order.
-      RuntimeError: If there is no deck, only some channels carry tips, or the deck is not a
-        PrepDeck with a waste block and an MPH waste position.
+      ValueError: If `use_channels` does not select all eight channels in order, or `make_tip` is
+        given while the model holds tips.
+      RuntimeError: If there is no deck, only some channels carry tips, the deck is not a PrepDeck
+        with a waste block and an MPH waste position, or `make_tip` is given and no tips are sensed.
     """
     channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
     self._require_all_channels(channels, "discard_tips")
     deck = self._require_deck()
+    if make_tip is not None:
+      if any(tip is not None for tip in self.get_mounted_tips()):
+        raise ValueError("make_tip is for tips the model does not hold, and it holds some")
+      if not isinstance(deck, PrepDeck) or deck.waste_block is None:
+        raise RuntimeError("tips are discarded into a PrepDeck's waste block")
+      if not any(await self.sense_tip_presence()):
+        raise RuntimeError("the 8-channel head senses no tips to discard")
+      for ch in range(NUM_PROBES):
+        self.shaft(ch).mount_tip(make_tip(f"{self.resource.name}_sensed_tip_{ch}"))
     if all(tip is None for tip in self.get_mounted_tips()):
       return
     if not isinstance(deck, PrepDeck):
@@ -653,6 +703,7 @@ class Head8:
     if waste is None:
       raise RuntimeError("tips are discarded into the deck's waste block; this deck has none")
     await self.drop_tips([waste] * NUM_PROBES, use_channels=channels, **kwargs)
+    self._unmodelled_tips_sensed = False
 
   # -- shared LLD / TADM resolution helpers --------------------------------------------------------
 
