@@ -93,3 +93,22 @@ class LabwareConversionTests(unittest.TestCase):
     self.assertEqual(definition["parameters"]["tipLength"], tip.get_size_z())
     self.assertEqual(definition["wells"]["A1"]["depth"], tip.get_size_z())
     self.assertIsInstance(definition["version"], int)
+
+  def test_official_rack_round_trips_through_a_generated_definition(self) -> None:
+    rack = opentrons_96_filtertiprack_20ul("rack")
+    tip = rack.get_item("A1").get_tip()
+
+    definition = build_tip_rack_definition(rack, tip, "generated")
+
+    self.assertEqual(definition["namespace"], "pylabrobot")
+    self.assertEqual(definition["parameters"]["format"], "96Standard")
+    self.assertTrue(definition["parameters"]["isTiprack"])
+    self.assertEqual(len(definition["wells"]), 96)
+    self.assertEqual(definition["ordering"][0][0], "A1")
+    self.assertAlmostEqual(definition["dimensions"]["xDimension"], rack.get_absolute_size_x())
+
+    spot = rack.get_item("A1")
+    assert spot.location is not None
+    well = definition["wells"]["A1"]
+    self.assertAlmostEqual(well["x"], spot.location.x + spot.get_absolute_size_x() / 2)
+    self.assertAlmostEqual(well["y"], spot.location.y + spot.get_absolute_size_y() / 2)
