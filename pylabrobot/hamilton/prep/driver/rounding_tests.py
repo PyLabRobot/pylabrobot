@@ -10,6 +10,7 @@ from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
 from pylabrobot.hamilton.prep.driver.features.pipettes import PipetteChannel, Pipettes
 from pylabrobot.hamilton.prep.driver.features.x_arm import XArm
 from pylabrobot.hamilton.transport.tcp.packets import Address
+from pylabrobot.resources import Container
 from pylabrobot.resources.hamilton import PrepDeck
 
 
@@ -60,8 +61,9 @@ class TestRoundedReadbacks(unittest.IsolatedAsyncioTestCase):
     tip = PrepCmd.TipDefinition(False, 1, 50.12345, 42.45678, 0, True, False, False, "tip")
     self.send.return_value = SimpleNamespace(definitions=[tip], value=tip)
     definitions = await self.driver.request_tip_and_needle_definitions()
-    self.pipettes.sense_tip_presence = AsyncMock(return_value=[True, False])
+    self.pipettes.sense_tip_presence = AsyncMock(return_value=[True, False])  # type: ignore[method-assign]
     attached = await self.pipettes.request_attached_tip_information(0)
+    assert attached is not None
     self.assertEqual(attached, definitions[0])
     self.assertEqual((attached.volume, attached.length, attached.label), (50.12, 42.46, "tip"))
     self.assertEqual((tip.volume, tip.length), (50.12345, 42.45678))
@@ -92,13 +94,17 @@ class TestRoundedReadbacks(unittest.IsolatedAsyncioTestCase):
       SimpleNamespace(value=0.3),
     ]
     self.assertEqual(await self.arm.request_axis_offset(), 0.8)
-    self.pipettes.request_z_position = AsyncMock(return_value=0.1)
-    self.pipettes.request_held_tip_length = AsyncMock(return_value=0.2)
-    self.pipettes.sense_tip_presence = AsyncMock(return_value=[True, False])
+    self.pipettes.request_z_position = AsyncMock(return_value=0.1)  # type: ignore[method-assign]
+    self.pipettes.request_held_tip_length = AsyncMock(return_value=0.2)  # type: ignore[method-assign]
+    self.pipettes.sense_tip_presence = AsyncMock(return_value=[True, False])  # type: ignore[method-assign]
     self.assertEqual(await self.pipettes.request_stop_disc_z_position(0), 0.3)
-    self.pipettes.probe_liquid_heights = AsyncMock(return_value=[1.23])
-    container = SimpleNamespace(
+    self.pipettes.probe_liquid_heights = AsyncMock(return_value=[1.23])  # type: ignore[method-assign]
+    container = Container(
+      name="container",
+      size_x=1,
+      size_y=1,
+      size_z=10,
       compute_volume_from_height=lambda height: height * 1.234,
-      supports_compute_height_volume_functions=lambda: True,
+      compute_height_from_volume=lambda volume: volume / 1.234,
     )
     self.assertEqual(await self.pipettes.probe_liquid_volumes([container]), [1.52])

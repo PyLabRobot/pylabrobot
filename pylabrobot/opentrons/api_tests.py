@@ -87,7 +87,8 @@ class OpentronsAPITests(unittest.IsolatedAsyncioTestCase):
 
   async def test_invalid_deck_configuration_is_rejected(self) -> None:
     """Malformed configuration must not be interpreted as a missing trash bin."""
-    for response in ({}, {"data": {}}, {"data": {"cutoutFixtures": [{}]}}):
+    responses: List[Dict[str, Any]] = [{}, {"data": {}}, {"data": {"cutoutFixtures": [{}]}}]
+    for response in responses:
       with self.subTest(response=response), self.assertRaises(OpentronsProtocolError):
         self.io.request.return_value = response
         await self.api.get_deck_configuration()

@@ -168,8 +168,14 @@ class FlexMixTests(unittest.IsolatedAsyncioTestCase):
     """Invalid mixing parameters are rejected before dispensing or moving."""
     await self.head.aspirate(self.plate.column(1), 20)
     self.api.submit_command.reset_mock()
-    for repetitions, volume in ((0, 20), (True, 20), (1.5, 20), (1, 0), (1, float("nan")), (1, 51)):
-      post_mix = Mix(volume=volume, repetitions=repetitions, flow_rate=25)
+    for post_mix in (
+      Mix(volume=20, repetitions=0, flow_rate=25),
+      Mix(volume=20, repetitions=True, flow_rate=25),
+      Mix(volume=20, repetitions=1.5, flow_rate=25),  # type: ignore[arg-type]
+      Mix(volume=0, repetitions=1, flow_rate=25),
+      Mix(volume=float("nan"), repetitions=1, flow_rate=25),
+      Mix(volume=51, repetitions=1, flow_rate=25),
+    ):
       with self.subTest(post_mix=post_mix), self.assertRaises(ValueError):
         await self.head.dispense(self.plate.column(0), 20, post_mix=post_mix)
       self.api.submit_command.assert_not_awaited()
@@ -245,10 +251,13 @@ class FlexMixTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_invalid_transfer_mix_parameters_prevent_motion(self):
     """Both transfer directions reject invalid mix rates and repetitions before motion."""
-    for method, parameter in ((self.head.aspirate, "pre_mix"), (self.head.dispense, "post_mix")):
+    for parameter in ("pre_mix", "post_mix"):
       for mix in (Mix(20, 0, 25), Mix(20, 1, 0), Mix(20, 1, float("nan"))):
         with self.subTest(parameter=parameter, mix=mix), self.assertRaises(ValueError):
-          await method(self.plate.column(0), 20, **{parameter: mix})
+          if parameter == "pre_mix":
+            await self.head.aspirate(self.plate.column(0), 20, pre_mix=mix)
+          else:
+            await self.head.dispense(self.plate.column(0), 20, post_mix=mix)
         self.api.submit_command.assert_not_awaited()
 
   async def test_insufficient_post_mix_liquid_prevents_dispense(self):

@@ -20,7 +20,7 @@ from pylabrobot.li_cor.odyssey.chatterbox import _tiff
 from pylabrobot.li_cor.odyssey.tagging import build_identity_description, tag_tiff_with_identity
 
 try:
-  from PIL import Image  # type: ignore[import-not-found]
+  from PIL import Image, TiffImagePlugin  # type: ignore[import-not-found]
 
   HAS_PILLOW = True
 except ImportError:
@@ -347,6 +347,7 @@ class TaggingTests(unittest.TestCase):
     raw = _tiff()
     tagged = tag_tiff_with_identity(raw, {"pid": "unit"}, channel=700)
     with Image.open(io.BytesIO(raw)) as original, Image.open(io.BytesIO(tagged)) as image:
+      assert isinstance(image, TiffImagePlugin.TiffImageFile)
       self.assertEqual(image.tobytes(), original.tobytes())
       self.assertEqual(json.loads(image.tag_v2[270]), {"pid": "unit", "channel": 700})
       self.assertEqual(image.tag_v2[305], "PyLabRobot Odyssey")
@@ -367,6 +368,8 @@ class TaggingTests(unittest.TestCase):
     tagged = tag_tiff_with_identity(raw, {"pid": "instrument"}, channel=800)
     self.assertEqual(tagged[8 : len(raw)], raw[8:])
     with Image.open(io.BytesIO(raw)) as original, Image.open(io.BytesIO(tagged)) as result:
+      assert isinstance(original, TiffImagePlugin.TiffImageFile)
+      assert isinstance(result, TiffImagePlugin.TiffImageFile)
       self.assertEqual(result.n_frames, 2)
       for index in range(original.n_frames):
         original.seek(index)
@@ -386,6 +389,7 @@ class TaggingTests(unittest.TestCase):
     self.assertEqual(raw[:4], b"MM\x00*")
     tagged = tag_tiff_with_identity(raw, {"name": "instrument"}, software_tag="PLR")
     with Image.open(io.BytesIO(raw)) as original, Image.open(io.BytesIO(tagged)) as result:
+      assert isinstance(result, TiffImagePlugin.TiffImageFile)
       self.assertEqual(result.tobytes(), original.tobytes())
       self.assertEqual(result.tag_v2[65000], "custom")
       self.assertEqual(result.tag_v2[305], "PLR")

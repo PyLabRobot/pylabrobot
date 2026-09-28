@@ -4335,7 +4335,7 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     # Only the mixing channel's container is read; one draw of 20 uL lowers the risen surface.
     self.assertEqual(_get_fields(sent[-1], "mh")[:2], [round(20.0 / area * 10), 0])
 
-  async def test_a_jet_with_blow_out_takes_the_classs_fields_and_the_pistons_rest(self):
+  async def test_a_jet_with_blow_out_takes_the_liquid_class_fields_and_the_pistons_rest(self):
     from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
     from pylabrobot.resources.liquid import Liquid
 
