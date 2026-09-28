@@ -1189,6 +1189,30 @@ class SimulatedHead384(_SimulatedHead, Head384):
 class SimulatedISWAP(_Simulated, iSWAP):
   """The iSWAP, answering for itself."""
 
+  async def _unchecked_fw_park(self, traverse_height: Optional[float] = None):
+    """Park, and put the model where parking leaves the arm: every drive on its stop."""
+    resp = await super()._unchecked_fw_park(traverse_height)
+    c = self.configuration
+    stops = (
+      c.elbow_predefined_y_positions_increments,
+      c.elbow_predefined_z_positions_increments,
+      c.elbow_drive_predefined_increments,
+      c.wrist_drive_predefined_increments,
+      c.gripper_drive_predefined_increments,
+    )
+    if any(table is None for table in stops):
+      return resp
+    y_stops, z_stops, elbow_stops, wrist_stops, gripper_stops = cast(Tuple[Any, ...], stops)
+    self.update_location_by_reference_point(
+      y=c.y_increments_to_mm(y_stops.parking),
+      z=c.z_increments_to_mm(z_stops.parking) + c.elbow_z_offset_above_finger,
+    )
+    self.elbow_drive_update_angle(c.elbow_drive_increments_to_angle(elbow_stops.parking))
+    self.wrist_drive_update_angle(c.wrist_increments_to_deg(wrist_stops.parking))
+    # Parking closes the jaws, and the gripper's table names that stop its home.
+    self.gripper_update_width(c.gripper_increments_to_mm(gripper_stops.home))
+    return resp
+
   async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
     """Answer a read from the model.
 
