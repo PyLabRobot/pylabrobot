@@ -442,6 +442,49 @@ class TestParked(unittest.IsolatedAsyncioTestCase):
     iswap.update_location_by_reference_point(z=c.z_increments_to_mm(stop - 20) + offset)
     self.assertFalse(await iswap.request_is_parked())
 
+  async def test_a_park_reads_back_every_drive_on_its_parking_stop(self):
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    y_stops = c.elbow_predefined_y_positions_increments
+    z_stops = c.elbow_predefined_z_positions_increments
+    elbow_stops = c.elbow_drive_predefined_increments
+    wrist_stops = c.wrist_drive_predefined_increments
+    gripper_stops = c.gripper_drive_predefined_increments
+    assert (
+      y_stops is not None
+      and z_stops is not None
+      and elbow_stops is not None
+      and wrist_stops is not None
+      and gripper_stops is not None
+    )
+    # Seated off every stop, so only the park can put them back.
+    iswap.update_location_by_reference_point(
+      y=c.y_increments_to_mm(y_stops.parking) - 50.0,
+      z=c.z_increments_to_mm(z_stops.parking) + c.elbow_z_offset_above_finger + 20.0,
+    )
+    iswap.elbow_drive_update_angle(c.elbow_drive_increments_to_angle(elbow_stops.parking) + 30.0)
+    iswap.wrist_drive_update_angle(c.wrist_increments_to_deg(wrist_stops.parking) + 30.0)
+    iswap.gripper_update_width(c.gripper_increments_to_mm(gripper_stops.home) + 5.0)
+
+    await iswap.park()
+
+    joints = await iswap.request_joint_state()
+    self.assertAlmostEqual(joints[iSWAPAxis.Y], c.y_increments_to_mm(y_stops.parking), places=1)
+    self.assertAlmostEqual(
+      joints[iSWAPAxis.Z],
+      c.z_increments_to_mm(z_stops.parking) + c.elbow_z_offset_above_finger,
+      places=1,
+    )
+    self.assertAlmostEqual(
+      joints[iSWAPAxis.ELBOW], c.elbow_drive_increments_to_angle(elbow_stops.parking), places=1
+    )
+    self.assertAlmostEqual(
+      joints[iSWAPAxis.WRIST], c.wrist_increments_to_deg(wrist_stops.parking), places=1
+    )
+    self.assertAlmostEqual(
+      joints[iSWAPAxis.GRIPPER], c.gripper_increments_to_mm(gripper_stops.home), places=1
+    )
+
 
 class TestElbowXMoves(unittest.IsolatedAsyncioTestCase):
   """The elbow has no X drive of its own: the arm carries it, offset from the carriage."""
