@@ -209,6 +209,13 @@ class TipTracker(SerializableMixin):
       tip is None or tip.serialize() == cast(Tip, pending_tip).serialize()
     )
     self._before = _NOTHING_PENDING if same else tip
+    committed_tip = self._tip
+    if committed_tip is not None:
+      tip_state = state.get("tip_state")
+      if tip_state is not None:
+        committed_tip.tracker.load_state(tip_state)
+      if self._callback is not None:
+        committed_tip.tracker.register_callback(self._callback)
 
   def get_tip_origin(self) -> Optional["TipSpot"]:
     """Get the origin of the current tip, if known."""
@@ -222,6 +229,8 @@ class TipTracker(SerializableMixin):
 
   def register_callback(self, callback: TrackerCallback) -> None:
     self._callback = callback
+    if self._tip is not None:
+      self._tip.tracker.register_callback(callback)
 
 
 # One tracker per spot, so what an uncommitted operation remembers outlives any one lookup. Kept

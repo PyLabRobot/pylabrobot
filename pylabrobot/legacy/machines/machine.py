@@ -3,9 +3,10 @@ from __future__ import annotations
 import functools
 import sys
 from abc import ABC
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, Optional, TypeVar
 
-from pylabrobot.events import device_reference, evented_operation, resource_reference
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.events import LifespanEventInfo, device_reference, resource_reference
 from pylabrobot.legacy.machines.backend import MachineBackend
 from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import SerializableMixin
@@ -31,14 +32,6 @@ def _machine_event_context(machine: "Machine") -> dict:
   }
 
 
-def _machine_setup_event_context(self: "Machine", **backend_kwargs: Any) -> dict:
-  return _machine_event_context(self)
-
-
-def _machine_stop_event_context(self: "Machine") -> dict:
-  return _machine_event_context(self)
-
-
 def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
   """Decorator for methods that require the machine to be set up.
 
@@ -60,10 +53,11 @@ def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
   return wrapper
 
 
-class Machine(SerializableMixin, ABC):
+class Machine(SerializableMixin, HasLifespan, ABC):
   """Abstract base class for machine frontends."""
 
   def __init__(self, backend: MachineBackend):
+    HasLifespan.__init__(self)
     self.backend = backend
     self._setup_finished = False
 
@@ -82,20 +76,25 @@ class Machine(SerializableMixin, ABC):
     data_copy["backend"] = backend
     return cls(**data_copy)
 
-  @evented_operation("machine.setup", _machine_setup_event_context)
-  async def setup(self, **backend_kwargs):
-    await self.backend.setup(**backend_kwargs)
-    self._setup_finished = True
+  async def _pre_backend_stop(self) -> None:
+    """Perform frontend safety actions before closing the backend."""
 
-  @need_setup_finished
-  @evented_operation("machine.stop", _machine_stop_event_context)
-  async def stop(self):
-    await self.backend.stop()
+  def _lifespan_event_info(self, **kwargs: Any) -> Optional[LifespanEventInfo]:
+    """Describe the frontend's entry and exit transitions."""
+    return LifespanEventInfo("machine.setup", "machine.stop", _machine_event_context(self))
+
+  def _clear_setup_finished(self) -> None:
+    """Mark the frontend inactive after its backend has exited."""
     self._setup_finished = False
 
-  async def __aenter__(self):
-    await self.setup()
-    return self
-
-  async def __aexit__(self, exc_type, exc_value, traceback):
-    await self.stop()
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    **backend_kwargs: Any,
+  ) -> None:
+    """Enter and own the backend lifespan for this Machine lifespan."""
+    await super()._enter_lifespan(stack)
+    stack.callback(self._clear_setup_finished)
+    await stack.enter_async_context(self.backend.lifespan(**backend_kwargs))
+    stack.push_shielded_async_callback(self._pre_backend_stop)
+    self._setup_finished = True

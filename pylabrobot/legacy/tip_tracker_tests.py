@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from pylabrobot.legacy.tip_tracker import (
@@ -86,3 +87,43 @@ class TestTipTracker(unittest.TestCase):
     tracker.commit()
     with self.assertRaises(NoTipError):
       tracker.get_tip()
+
+  def test_load_state_restores_tip_volume_and_callback(self):
+    tracker = TipTracker("source")
+    tracker.add_tip(self.tip)
+    self.tip.tracker.set_volume(4)
+    state = json.loads(json.dumps(tracker.serialize()))
+    restored = TipTracker("restored")
+    updates: list[str] = []
+    restored.register_callback(lambda: updates.append("volume"))
+
+    restored.load_state(state)
+
+    self.assertEqual(restored.get_tip().tracker.volume, 4)
+    self.assertEqual(restored.get_tip().tracker.pending_volume, 4)
+    self.assertEqual(updates, [])
+    restored.get_tip().tracker.set_volume(2)
+    self.assertEqual(updates, ["volume"])
+
+  def test_load_state_without_tip_state_keeps_empty_volume(self):
+    tracker = TipTracker("source")
+    tracker.add_tip(self.tip)
+    state = tracker.serialize()
+    del state["tip_state"]
+
+    restored = TipTracker("restored")
+    restored.load_state(state)
+
+    self.assertEqual(restored.get_tip().tracker.get_used_volume(), 0)
+
+  def test_callback_registered_after_load_reaches_restored_tip(self):
+    tracker = TipTracker("source")
+    tracker.add_tip(self.tip)
+    restored = TipTracker("restored")
+    restored.load_state(tracker.serialize())
+    updates: list[str] = []
+    restored.register_callback(lambda: updates.append("volume"))
+
+    restored.get_tip().tracker.set_volume(2)
+
+    self.assertEqual(updates, ["volume"])
