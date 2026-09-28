@@ -8,6 +8,7 @@ import functools
 import logging
 import math
 import re
+import warnings
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import (
@@ -2189,10 +2190,11 @@ class Pipettes:
     y_positions: Optional[List[float]] = None,
     begin_of_tip_deposit_process: Optional[float] = None,
     end_of_tip_deposit_process: Optional[float] = None,
-    z_position_at_end_of_a_command: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
     tip_pattern: Optional[List[bool]] = None,
     tip_type: Optional[int] = None,
     discarding_method: Optional[int] = None,
+    z_position_at_end_of_a_command: Optional[float] = None,
   ):
     """Initialize the channels, discarding whatever is mounted on them.
 
@@ -2205,11 +2207,20 @@ class Pipettes:
         them evenly across the Y band the procedure uses.
       begin_of_tip_deposit_process: Z to start the eject from, in mm.
       end_of_tip_deposit_process: Z the eject ends at, in mm.
-      z_position_at_end_of_a_command: Z to leave the channels at, in mm.
+      minimum_traverse_height_end: Z to leave the channels at, in mm.
       tip_pattern: which channels take part. Defaults to all of them.
       tip_type: tip type table index.
       discarding_method: how tips are discarded.
+      z_position_at_end_of_a_command: deprecated, use `minimum_traverse_height_end`.
     """
+    if z_position_at_end_of_a_command is not None:
+      warnings.warn(
+        "`z_position_at_end_of_a_command` is deprecated, use `minimum_traverse_height_end`.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+      if minimum_traverse_height_end is None:
+        minimum_traverse_height_end = z_position_at_end_of_a_command
     c = self.configuration
     if x_position is None:
       if self._driver.configuration is None:
@@ -2223,8 +2234,8 @@ class Pipettes:
       begin_of_tip_deposit_process = c.initialize_begin_of_tip_deposit
     if end_of_tip_deposit_process is None:
       end_of_tip_deposit_process = c.initialize_end_of_tip_deposit
-    if z_position_at_end_of_a_command is None:
-      z_position_at_end_of_a_command = c.initialize_z_position_at_end
+    if minimum_traverse_height_end is None:
+      minimum_traverse_height_end = c.initialize_z_position_at_end
     if tip_type is None:
       tip_type = c.initialize_tip_type
     if discarding_method is None:
@@ -2239,7 +2250,7 @@ class Pipettes:
       yp=[f"{round(y * 10):04}" for y in y_positions],
       tp=f"{round(begin_of_tip_deposit_process * 10):04}",
       tz=f"{round(end_of_tip_deposit_process * 10):04}",
-      te=f"{round(z_position_at_end_of_a_command * 10):04}",
+      te=f"{round(minimum_traverse_height_end * 10):04}",
       tm=[f"{tm:01}" for tm in tip_pattern],
       tt=f"{tip_type:02}",
       ti=discarding_method,
@@ -2249,7 +2260,7 @@ class Pipettes:
       if involved:
         self._release_modelled_tip(channel)
     # The command drives every channel: along Y to its initialization position, and along Z to
-    # `z_position_at_end_of_a_command`. Read both back, or the model has them where they were.
+    # `minimum_traverse_height_end`. Read both back, or the model has them where they were.
     await self._record_where_they_stopped("y")
     await self._record_where_they_stopped("z")
     # Initialization homes the pistons as well: the first read of where they stand comes here.
