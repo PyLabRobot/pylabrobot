@@ -28,6 +28,7 @@ from pylabrobot.hamilton.star.driver.features.autoload import (
   Autoload,
   AutoloadConfiguration,
 )
+from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.star.driver.features.cover import CoverPosition, FrontCover
 from pylabrobot.hamilton.star.driver.features.head import (
   HEAD_REFERENCE_SHAFT,
@@ -1548,6 +1549,244 @@ class SimulatedAutoload(_Simulated, Autoload):
     self.update_location_by_reference_point(deck.track_to_location(track).x)
 
 
+class SimulatedCoreGrippers(_Simulated, CoreGrippers):
+  """The CoRe grippers, recording where each command leaves the arm and the two channels.
+
+  A command is recorded as `SimulatedPipettes._record_tip_command` records a tip command: across
+  at the height it starts from, down to where it works, and up to where it ends, each stop charged
+  the time the drives would take. The reads that follow every command then find the channels there.
+  """
+
+  @property
+  def _simulated_pipettes(self) -> SimulatedPipettes:
+    return cast(SimulatedPipettes, self._pipettes)
+
+  def _tool_overhang(self) -> float:
+    """How far a tool will hang below a channel's stop disc to its grip line once taken, in mm.
+
+    Measured off a tool on the deck, as `SimulatedPipettes._below_stop_disc` measures one on a
+    channel. Nothing when no tool is on the deck to measure.
+    """
+    for resource in self._deck.get_all_children():
+      if isinstance(resource, HamiltonCoreGripperTool):
+        return resource.get_size_z() - resource.fitting_depth - resource.grip_line_height
+    return 0.0
+
+  async def _record_pair(
+    self,
+    pair: Tuple[Optional[int], Optional[int]],
+    x_position: int,
+    back_channel_y: int,
+    front_channel_y: int,
+    z: int,
+    descend_to: Optional[int] = None,
+    overhang: Optional[float] = None,
+  ) -> None:
+    """Record a command that moves the back and front channel, in tenths of a millimetre.
+
+    Nothing is recorded without a pair: a command sent without the tools taken names no channels
+    to put anywhere.
+
+    Args:
+      pair: the back and front channel, 0-indexed.
+      x_position: where the arm ends.
+      back_channel_y: where the back channel ends along Y.
+      front_channel_y: where the front channel ends along Y.
+      z: the height the command ends at, measured at the grip line when tools are carried.
+      descend_to: the lowest point of the stroke. Only the end is recorded when it is None.
+      overhang: how far what the channels carry at the end hangs below the stop disc, in mm. What
+        the front channel carries now when None.
+    """
+    back, front = pair
+    if back is None or front is None:
+      return
+    pipettes = self._simulated_pipettes
+    if overhang is None:
+      overhang = pipettes._below_stop_disc(front)
+    channels = pipettes.num_channels
+    ys = [0] * channels
+    ys[back], ys[front] = back_channel_y, front_channel_y
+    await pipettes._record_tip_command(
+      x_positions=[x_position] * channels,
+      y_positions=ys,
+      tip_pattern=[channel in (back, front) for channel in range(channels)],
+      z=z,
+      overhang=overhang,
+      descend_to=descend_to,
+    )
+
+  @staticmethod
+  def _held_pair_ys(y_position: int, width: int) -> Tuple[int, int]:
+    """The back and front channel's Y either side of a held plate's centre, a jaw width apart.
+
+    Args:
+      y_position: the plate's centre along Y, in tenths of a millimetre.
+      width: how far apart the jaws stand, in tenths of a millimetre.
+    """
+    return y_position + width // 2, y_position - width // 2
+
+  async def _unchecked_fw_pick_up_tools(
+    self,
+    x_position: int,
+    back_channel_y: int,
+    front_channel_y: int,
+    begin_z: int,
+    end_z: int,
+    minimum_traverse_height_start: int,
+    back_channel: int,
+    front_channel: int,
+    tip_type_index: int,
+  ):
+    resp = await super()._unchecked_fw_pick_up_tools(
+      x_position,
+      back_channel_y,
+      front_channel_y,
+      begin_z,
+      end_z,
+      minimum_traverse_height_start,
+      back_channel,
+      front_channel,
+      tip_type_index,
+    )
+    await self._record_pair(
+      (back_channel, front_channel),
+      x_position,
+      back_channel_y,
+      front_channel_y,
+      minimum_traverse_height_start,
+      overhang=self._tool_overhang(),
+      descend_to=end_z,
+    )
+    return resp
+
+  async def _unchecked_fw_drop_tools(
+    self,
+    x_position: int,
+    back_channel_y: int,
+    front_channel_y: int,
+    begin_z: int,
+    end_z: int,
+    minimum_traverse_height_start: int,
+    minimum_traverse_height_end: int,
+  ):
+    resp = await super()._unchecked_fw_drop_tools(
+      x_position,
+      back_channel_y,
+      front_channel_y,
+      begin_z,
+      end_z,
+      minimum_traverse_height_start,
+      minimum_traverse_height_end,
+    )
+    await self._record_pair(
+      (self._back_channel, self._front_channel),
+      x_position,
+      back_channel_y,
+      front_channel_y,
+      minimum_traverse_height_end,
+      overhang=0.0,
+      descend_to=end_z,
+    )
+    return resp
+
+  async def _unchecked_fw_pick_up_resource(
+    self,
+    x_position: int,
+    y_position: int,
+    y_gripping_speed: int,
+    z_position: int,
+    z_speed: int,
+    open_gripper_position: int,
+    plate_width: int,
+    grip_strength: int,
+    minimum_traverse_height_start: int,
+    minimum_z_position_end: int,
+  ):
+    resp = await super()._unchecked_fw_pick_up_resource(
+      x_position,
+      y_position,
+      y_gripping_speed,
+      z_position,
+      z_speed,
+      open_gripper_position,
+      plate_width,
+      grip_strength,
+      minimum_traverse_height_start,
+      minimum_z_position_end,
+    )
+    back_y, front_y = self._held_pair_ys(y_position, plate_width)
+    await self._record_pair(
+      (self._back_channel, self._front_channel),
+      x_position,
+      back_y,
+      front_y,
+      minimum_z_position_end,
+      descend_to=z_position,
+    )
+    return resp
+
+  async def _unchecked_fw_drop_resource(
+    self,
+    x_position: int,
+    y_position: int,
+    z_position: int,
+    press_on_distance: int,
+    z_speed: int,
+    open_gripper_position: int,
+    minimum_traverse_height_start: int,
+    minimum_z_position_end: int,
+    x_acceleration_level: Optional[int] = None,
+  ):
+    resp = await super()._unchecked_fw_drop_resource(
+      x_position,
+      y_position,
+      z_position,
+      press_on_distance,
+      z_speed,
+      open_gripper_position,
+      minimum_traverse_height_start,
+      minimum_z_position_end,
+      x_acceleration_level,
+    )
+    back_y, front_y = self._held_pair_ys(y_position, open_gripper_position)
+    await self._record_pair(
+      (self._back_channel, self._front_channel),
+      x_position,
+      back_y,
+      front_y,
+      minimum_z_position_end,
+      descend_to=z_position,
+    )
+    return resp
+
+  async def _unchecked_fw_move_resource(
+    self,
+    x_position: int,
+    x_acceleration_level: int,
+    y_position: int,
+    z_position: int,
+    z_speed: int,
+    minimum_traverse_height_start: int,
+  ):
+    resp = await super()._unchecked_fw_move_resource(
+      x_position,
+      x_acceleration_level,
+      y_position,
+      z_position,
+      z_speed,
+      minimum_traverse_height_start,
+    )
+    back, front = self._back_channel, self._front_channel
+    if back is None or front is None:
+      return resp
+    # Carried as held: the jaws stay as far apart as the grip left them.
+    pipettes = self._simulated_pipettes
+    width = round((pipettes._modelled_y(back) - pipettes._modelled_y(front)) * 10)
+    back_y, front_y = self._held_pair_ys(y_position, width)
+    await self._record_pair((back, front), x_position, back_y, front_y, z_position)
+    return resp
+
+
 class STARSimulationDriver(STARDriver):
   """A simulated STAR, driven exactly like the real one."""
 
@@ -1671,6 +1910,9 @@ class STARSimulationDriver(STARDriver):
         continue
       if a.pip_installed and c.num_pip_channels > 0:
         arm.pipettes = SimulatedPipettes(self)
+        # Two channels carry the tools, as discovery builds them.
+        if c.num_pip_channels >= 2:
+          arm.core_grippers = SimulatedCoreGrippers(self)
       if a.head96_installed:
         arm.head96 = SimulatedHead96(self)
       if a.head384_installed:

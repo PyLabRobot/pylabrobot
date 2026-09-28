@@ -69,10 +69,14 @@ class TestToolFirmware(unittest.IsolatedAsyncioTestCase):
     assert star.core_grippers is not None
     self.grippers = star.core_grippers
     self.sent: List[str] = []
+    answer = self.grippers._driver.send_command
 
+    # The simulator reads the channels back as it records a command, so those reads are answered.
     async def recorded(module: str, command: str, **kwargs: Any):
-      wire = {k: v for k, v in kwargs.items() if len(k) == 2}
-      self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      if module == "C0" and command.startswith("Z"):
+        wire = {k: v for k, v in kwargs.items() if len(k) == 2}
+        self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      return await answer(module=module, command=command, **kwargs)
 
     self.grippers._driver.send_command = recorded  # type: ignore[assignment]
 
@@ -478,3 +482,46 @@ class TestMounting(unittest.IsolatedAsyncioTestCase):
       await self.grippers.pick_up_tools()
     self.assertFalse(self.grippers.tools_mounted)
     self.assertEqual({tool.name: tool.location for tool in self.holder.children}, self.parked)
+
+
+class TestSimulatedChannelPositions(unittest.IsolatedAsyncioTestCase):
+  """The simulator records where each CoRe gripper command leaves the arm and the two channels."""
+
+  async def asyncSetUp(self):
+    self.star = STAR(simulation=True)
+    await self.star.setup()
+    self.carrier = PLT_CAR_L5AC_A00(name="plate_carrier")
+    self.star.deck.assign_child_resource(self.carrier, track=30)
+    self.carrier[0] = self.plate = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    assert self.star.core_grippers is not None and self.star.pipettes is not None
+    self.grippers = self.star.core_grippers
+    self.pipettes = self.star.pipettes
+
+  def pair(self) -> List[Coordinate]:
+    back, front = self.grippers._back_channel, self.grippers._front_channel
+    assert back is not None and front is not None
+    locations = [self.pipettes.get_reference_point_location(channel) for channel in (back, front)]
+    assert all(location is not None for location in locations)
+    return [location for location in locations if location is not None]
+
+  async def test_the_tools_are_taken_where_the_holder_holds_them(self):
+    holder = self.grippers._holder()
+    await self.grippers.pick_up_tools()
+    back, front = self.pair()
+    at = holder.get_location_wrt(self.star.deck, x="c")
+    self.assertAlmostEqual(back.x, at.x, places=1)
+    self.assertAlmostEqual(back.y, at.y + holder.back_channel_y_center, places=1)
+    self.assertAlmostEqual(front.y, at.y + holder.front_channel_y_center, places=1)
+
+  async def test_a_gripped_plate_hangs_between_the_channels_over_where_it_stood(self):
+    centre = self.plate.get_location_wrt(self.star.deck, "c", "c", "b")
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate)
+    back, front = self.pair()
+    self.assertAlmostEqual(back.x, centre.x, places=1)
+    self.assertAlmostEqual((back.y + front.y) / 2, centre.y, places=1)
+    # Closed to its width less 3 mm, the default squeeze either side.
+    self.assertAlmostEqual(back.y - front.y, self.plate.get_absolute_size_y() - 3.0, places=0)
+    held = self.plate.get_location_wrt(self.star.deck, "c", "c", "b")
+    self.assertAlmostEqual(held.x, centre.x, places=1)
+    self.assertAlmostEqual(held.y, centre.y, places=1)
