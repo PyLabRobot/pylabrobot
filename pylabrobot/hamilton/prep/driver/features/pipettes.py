@@ -1020,6 +1020,10 @@ def _build_pipettor_gantry_move_parameters(
 # How far a Hamilton standard channel tip sits on the stop disc, in mm.
 TIP_FITTING_DEPTH = 8.0
 
+# How far in front of the 8-channel head's probe 0 the device keeps the rear channel, in mm, as
+# measured: the head shares the channels' X, so Y keeps them apart.
+HEAD8_CLEARANCE_Y = 73.0
+
 _CHANNEL_TO_WASTE_NAME = {
   0: "waste_rear",
   1: "waste_front",
@@ -1474,6 +1478,52 @@ class Pipettes:
       ordered = sorted(channels, key=lambda c: rank.get(c, len(rank) + c))
     return tuple(ordered)
 
+  def _get_head8_limit_y(self) -> Optional[float]:
+    """The furthest back the rear channel may stand beside the 8-channel head, in mm on the deck.
+
+    None when there is no head, or nothing models where it is.
+    """
+    head8 = None if self._driver is None else self._driver.head8
+    at = None if head8 is None else head8.get_reference_point_location()
+    return None if at is None else at.y - HEAD8_CLEARANCE_Y
+
+  def _check_head8_clearance(self, ys: Dict[int, float], make_space: bool) -> None:
+    """Refuse a rear channel sent too close to the 8-channel head, unless the head may move back.
+
+    Args:
+      ys: each channel's y after a move, in mm, keyed by channel, 0-indexed from the back.
+      make_space: whether the head may be moved back to make room.
+
+    Raises:
+      ValueError: If the rear channel would stand too close to the head and it may not move.
+    """
+    limit = self._get_head8_limit_y()
+    if make_space or limit is None or 0 not in ys or round(ys[0] * 1000) <= round(limit * 1000):
+      return
+    raise ValueError(
+      f"Channel 0 would be at y={ys[0]:.2f} mm, less than {HEAD8_CLEARANCE_Y} mm in front of the "
+      f"8-channel head's probe 0 at y={limit + HEAD8_CLEARANCE_Y:.2f} mm. Send it to "
+      f"y <= {limit:.2f}; make_space=True moves the head back."
+    )
+
+  async def _make_space_for_head8(self, rear_y: float) -> None:
+    """Send the 8-channel head back just far enough for the rear channel to stand at `rear_y`.
+
+    Along Y only, at its traverse height. Nothing moves when it is already clear.
+
+    Args:
+      rear_y: where the rear channel is going, in mm on the deck.
+    """
+    head8 = None if self._driver is None else self._driver.head8
+    at = None if head8 is None else head8.get_reference_point_location()
+    if head8 is None or at is None or at.y - HEAD8_CLEARANCE_Y >= rear_y:
+      return
+    await head8.move_to_position(
+      at.x,
+      rear_y + HEAD8_CLEARANCE_Y,
+      head8.default_minimum_traverse_height - head8._mounted_length(),
+    )
+
   def _check_y_spacing(
     self,
     ys: Dict[int, float],
@@ -1684,13 +1734,25 @@ class Pipettes:
       -shaft.get_size_z(),
     )
 
-  def _record_positions(self, positions: List[Coordinate]) -> None:
-    """Record reported positions on the arm and the channels: X on the arm, Y and Z on each channel."""
+  def _record_positions(
+    self, positions: List[Coordinate], head: Optional[Coordinate] = None
+  ) -> None:
+    """Record reported positions on the arm, the channels and the 8-channel head.
+
+    X on the arm, Y and Z on each channel. The head rides the arm, so it is recorded after it.
+
+    Args:
+      positions: one per channel, 0-indexed from the back.
+      head: where the 8-channel head's probe 0 is, or None when the device reported no head.
+    """
     arm = None if self._driver is None else self._driver.x_arm
     if positions and arm is not None:
       arm.update_location_by_reference_point(positions[0].x)
     for channel, position in enumerate(positions):
       self.update_location_by_reference_point(channel, y=position.y, z=position.z)
+    head8 = None if self._driver is None else self._driver.head8
+    if head is not None and head8 is not None:
+      head8.update_location_by_reference_point(x=head.x, y=head.y, z=head.z)
 
   # -- channel initialization ----------------------------------------------------------------------
 
@@ -1851,6 +1913,44 @@ class Pipettes:
         }
     return by_channel
 
+  async def _unchecked_fw_request_positions_and_head(
+    self,
+  ) -> Tuple[List[Coordinate], Optional[Coordinate]]:
+    """Read where every channel and the 8-channel head are, without recording it.
+
+    One GetPositions answers for both: the head is its `MPHChannel` entry. Z is the bottom of the tip
+    on a channel carrying one, and the end of its shaft otherwise.
+
+    Returns:
+      One Coordinate per channel, ordered by channel index (0=rearmost), and where the head's probe 0
+      is, or None when the device reported no head. Empty and None when it did not answer.
+    """
+    try:
+      resp_obj = await self._driver.send_command(PrepCmd.PrepGetPositions())
+    except (HoiError, ChannelizedError):
+      return [], None
+    if not isinstance(resp_obj, PrepCmd.PrepGetPositions.Response):
+      return [], None
+    resp = resp_obj
+    if not resp.positions:
+      return [], None
+
+    _CHANNEL_ENUM_TO_IDX = {int(v): k for k, v in enumerate(self.channel_order)}
+    indexed: list[tuple[int, Coordinate]] = []
+    head: Optional[Coordinate] = None
+    for p in resp.positions:
+      # To 0.01 mm, as the bounds are: what the device answers is float32.
+      at = Coordinate(x=round(p.position_x, 2), y=round(p.position_y, 2), z=round(p.position_z, 2))
+      if int(p.channel) == PrepCmd.ChannelIndex.MPHChannel:
+        head = at
+        continue
+      ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
+      if ch_idx is not None:
+        indexed.append((ch_idx, at))
+
+    indexed.sort(key=lambda pair: pair[0])
+    return [coord for _, coord in indexed], head
+
   async def request_locations(self) -> list[Coordinate]:
     """Request the current XYZ positions of all pipettor channels.
 
@@ -1863,9 +1963,9 @@ class Pipettes:
     Returns:
       List of Coordinate, one per channel.
     """
-    positions = await self._unchecked_fw_request_positions()
+    positions, head = await self._unchecked_fw_request_positions_and_head()
     # The device is the authority on where the channels are, so what it answers is recorded.
-    self._record_positions(positions)
+    self._record_positions(positions, head=head)
     return positions
 
   async def _unchecked_fw_request_positions(self) -> list[Coordinate]:
@@ -1879,33 +1979,8 @@ class Pipettes:
       One Coordinate per channel, ordered by channel index (0=rearmost). Empty when the device did not
       answer with positions.
     """
-    try:
-      resp_obj = await self._driver.send_command(PrepCmd.PrepGetPositions())
-    except (HoiError, ChannelizedError):
-      return []
-    if not isinstance(resp_obj, PrepCmd.PrepGetPositions.Response):
-      return []
-    resp = resp_obj
-    if not resp.positions:
-      return []
-
-    _CHANNEL_ENUM_TO_IDX = {int(v): k for k, v in enumerate(self.channel_order)}
-    indexed: list[tuple[int, Coordinate]] = []
-    for p in resp.positions:
-      ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
-      if ch_idx is not None:
-        # To 0.01 mm, as the bounds are: what the device answers is float32.
-        indexed.append(
-          (
-            ch_idx,
-            Coordinate(
-              x=round(p.position_x, 2), y=round(p.position_y, 2), z=round(p.position_z, 2)
-            ),
-          )
-        )
-
-    indexed.sort(key=lambda pair: pair[0])
-    return [coord for _, coord in indexed]
+    positions, _ = await self._unchecked_fw_request_positions_and_head()
+    return positions
 
   def _check_reachable(self, channel: int, axis: Literal["x", "y", "z"], value: float) -> None:
     """Raise unless a channel reaches a position along one axis.
@@ -2339,12 +2414,15 @@ class Pipettes:
       if y != positions[channel].y:
         self._check_reachable(channel, "y", y)
     self._check_y_spacing(targets, named=ys, make_space_available=not make_space)
+    self._check_head8_clearance(targets, make_space)
 
     shoved = [
       channel for channel, y in targets.items() if channel not in ys and y != positions[channel].y
     ]
     if shoved:
       await self.move_to_safe_z(shoved)
+    if make_space and 0 in targets:
+      await self._make_space_for_head8(targets[0])
 
     try:
       await self._unchecked_fw_move_y_absolute(targets, speed)
@@ -2769,6 +2847,7 @@ class Pipettes:
       if final_y[channel] != standing[channel].y:
         self._check_reachable(channel, "y", final_y[channel])
     self._check_y_spacing(final_y, named=channels, make_space_available=not make_space)
+    self._check_head8_clearance(final_y, make_space)
 
     arm = None if self._driver is None else self._driver.x_arm
     x_arm_configuration = arm.configuration if arm is not None else XArmConfiguration()
@@ -2779,6 +2858,9 @@ class Pipettes:
     if x_speed_scale is not None and self._driver is None:
       raise RuntimeError("speed scales are set through the driver, and this has none")
     named_speed = x_speed is not None or x_speed_scale is not None
+    if make_space and 0 in final_y:
+      # Back, away from the channels, so nothing is raised for it first.
+      await self._make_space_for_head8(final_y[0])
 
     restore_x: Optional[int] = None
     try:

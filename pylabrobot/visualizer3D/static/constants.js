@@ -58,8 +58,9 @@ export const MOVING_PARTS = new Set(["x_arm", "arm", "gripper", "head", "channel
 // is measured from its own axis, which is where it visibly is, and eight of them side by side turn
 // one useful line into a thicket over the deck. A head is a different case and keeps its mark: it
 // is measured from channel A1, in a corner of a block a hundred millimetres across, which is not
-// somewhere anyone would read off the shape.
-export const NO_REFERENCE_MARK = new Set(["pipette_channel"]);
+// somewhere anyone would read off the shape. The Prep's 8-channel head is one column on the
+// channels' own X, so its line would lie on theirs.
+export const NO_REFERENCE_MARK = new Set(["pipette_channel", "n_channel_pipette"]);
 
 // Parts a click selects even though they carry something. A click otherwise passes through anything with
 // children to what lies behind it, which is right for a hood or a carrier; a pipetting channel always carries its
