@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.EmbeddedTipRack.find\_resource
+=============================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: EmbeddedTipRack.find_resource

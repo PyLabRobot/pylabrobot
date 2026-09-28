@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.EmbeddedTipRack.get\_lid\_location
+=================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: EmbeddedTipRack.get_lid_location

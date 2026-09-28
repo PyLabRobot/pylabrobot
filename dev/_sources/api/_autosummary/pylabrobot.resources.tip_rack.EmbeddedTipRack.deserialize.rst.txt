@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.EmbeddedTipRack.deserialize
+==========================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: EmbeddedTipRack.deserialize

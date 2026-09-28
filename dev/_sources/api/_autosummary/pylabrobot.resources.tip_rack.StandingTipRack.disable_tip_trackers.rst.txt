@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.StandingTipRack.disable\_tip\_trackers
+=====================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: StandingTipRack.disable_tip_trackers

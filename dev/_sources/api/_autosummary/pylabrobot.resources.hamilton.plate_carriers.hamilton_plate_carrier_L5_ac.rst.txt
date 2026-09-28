@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.plate\_carriers.hamilton\_plate\_carrier\_L5\_ac
+==============================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.plate_carriers
+
+.. autofunction:: hamilton_plate_carrier_L5_ac

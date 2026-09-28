@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck.safe\_deck\_height
+=============================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.hamilton_decks
+
+.. autoattribute:: HamiltonDeck.safe_deck_height

@@ -1,0 +1,114 @@
+﻿:orphan:
+
+
+pylabrobot.resources.tip\_rack.StandingTipRack
+==============================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. autoclass:: StandingTipRack
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~StandingTipRack.frame_height
+      ~StandingTipRack.item_dx
+      ~StandingTipRack.item_dy
+      ~StandingTipRack.items
+      ~StandingTipRack.lid
+      ~StandingTipRack.location
+      ~StandingTipRack.name
+      ~StandingTipRack.num_items
+      ~StandingTipRack.num_items_x
+      ~StandingTipRack.num_items_y
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~StandingTipRack.__init__
+      ~StandingTipRack.assign_child_by_anchor
+      ~StandingTipRack.assign_child_resource
+      ~StandingTipRack.at
+      ~StandingTipRack.center
+      ~StandingTipRack.centers
+      ~StandingTipRack.check_can_drop_resource_here
+      ~StandingTipRack.column
+      ~StandingTipRack.copy
+      ~StandingTipRack.deregister_did_assign_resource_callback
+      ~StandingTipRack.deregister_did_unassign_resource_callback
+      ~StandingTipRack.deregister_state_update_callback
+      ~StandingTipRack.deregister_will_assign_resource_callback
+      ~StandingTipRack.deregister_will_unassign_resource_callback
+      ~StandingTipRack.deserialize
+      ~StandingTipRack.disable_tip_trackers
+      ~StandingTipRack.disable_tip_tracking
+      ~StandingTipRack.empty
+      ~StandingTipRack.enable_tip_trackers
+      ~StandingTipRack.enable_tip_tracking
+      ~StandingTipRack.fill
+      ~StandingTipRack.find_resource
+      ~StandingTipRack.find_resources
+      ~StandingTipRack.get_absolute_location
+      ~StandingTipRack.get_absolute_rotation
+      ~StandingTipRack.get_absolute_size_x
+      ~StandingTipRack.get_absolute_size_y
+      ~StandingTipRack.get_absolute_size_z
+      ~StandingTipRack.get_all_children
+      ~StandingTipRack.get_all_items
+      ~StandingTipRack.get_all_tips
+      ~StandingTipRack.get_anchor
+      ~StandingTipRack.get_child_column
+      ~StandingTipRack.get_child_identifier
+      ~StandingTipRack.get_child_row
+      ~StandingTipRack.get_highest_known_point
+      ~StandingTipRack.get_item
+      ~StandingTipRack.get_items
+      ~StandingTipRack.get_lid_location
+      ~StandingTipRack.get_location_wrt
+      ~StandingTipRack.get_resource
+      ~StandingTipRack.get_root
+      ~StandingTipRack.get_size_x
+      ~StandingTipRack.get_size_y
+      ~StandingTipRack.get_size_z
+      ~StandingTipRack.get_tip
+      ~StandingTipRack.get_tips
+      ~StandingTipRack.has_lid
+      ~StandingTipRack.has_resource
+      ~StandingTipRack.index_of_item
+      ~StandingTipRack.is_in_subtree_of
+      ~StandingTipRack.load_all_state
+      ~StandingTipRack.load_from_json_file
+      ~StandingTipRack.load_state
+      ~StandingTipRack.load_state_from_file
+      ~StandingTipRack.named
+      ~StandingTipRack.register_did_assign_resource_callback
+      ~StandingTipRack.register_did_unassign_resource_callback
+      ~StandingTipRack.register_state_update_callback
+      ~StandingTipRack.register_will_assign_resource_callback
+      ~StandingTipRack.register_will_unassign_resource_callback
+      ~StandingTipRack.rotate
+      ~StandingTipRack.rotate_to
+      ~StandingTipRack.rotated
+      ~StandingTipRack.row
+      ~StandingTipRack.save
+      ~StandingTipRack.save_state_to_file
+      ~StandingTipRack.serialize
+      ~StandingTipRack.serialize_all_state
+      ~StandingTipRack.serialize_state
+      ~StandingTipRack.set_tip_state
+      ~StandingTipRack.summary
+      ~StandingTipRack.traverse
+      ~StandingTipRack.unassign
+      ~StandingTipRack.unassign_child_resource
+   
+   

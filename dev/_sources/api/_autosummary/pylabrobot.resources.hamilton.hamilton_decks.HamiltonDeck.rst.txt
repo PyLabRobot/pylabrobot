@@ -18,6 +18,7 @@ pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck
       ~HamiltonDeck.location
       ~HamiltonDeck.name
       ~HamiltonDeck.num_rails
+      ~HamiltonDeck.safe_deck_height
    
    
 

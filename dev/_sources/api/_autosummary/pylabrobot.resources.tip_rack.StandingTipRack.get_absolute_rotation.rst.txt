@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.StandingTipRack.get\_absolute\_rotation
+======================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: StandingTipRack.get_absolute_rotation

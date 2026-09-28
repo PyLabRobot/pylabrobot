@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.get\_deck\_configuration
+==========================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.get_deck_configuration

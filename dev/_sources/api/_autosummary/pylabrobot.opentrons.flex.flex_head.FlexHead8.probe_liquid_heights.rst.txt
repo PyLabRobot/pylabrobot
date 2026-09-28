@@ -1,0 +1,6 @@
+pylabrobot.opentrons.flex.flex\_head.FlexHead8.probe\_liquid\_heights
+=====================================================================
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. automethod:: FlexHead8.probe_liquid_heights

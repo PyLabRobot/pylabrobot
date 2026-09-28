@@ -36,20 +36,22 @@ pylabrobot.opentrons.flex.flex\_head.FlexHead8
       ~FlexHead8.drop_single_tip
       ~FlexHead8.drop_tips
       ~FlexHead8.get_mounted_tips
-      ~FlexHead8.get_tip_presence
       ~FlexHead8.has_tip_on_hardware
-      ~FlexHead8.liquid_probe
+      ~FlexHead8.mix
       ~FlexHead8.move_relative
-      ~FlexHead8.move_to
       ~FlexHead8.move_to_addressable_area
+      ~FlexHead8.move_to_position
+      ~FlexHead8.move_to_safe_z
       ~FlexHead8.move_to_well
       ~FlexHead8.pick_up_single_tip
       ~FlexHead8.pick_up_tips
-      ~FlexHead8.position
       ~FlexHead8.prepare_to_aspirate
+      ~FlexHead8.probe_liquid_heights
       ~FlexHead8.reachable_single_nozzles
+      ~FlexHead8.request_position
+      ~FlexHead8.request_tip_presence
       ~FlexHead8.touch_tip
-      ~FlexHead8.try_liquid_probe
+      ~FlexHead8.try_probe_liquid_heights
       ~FlexHead8.unsafe_blow_out_in_place
       ~FlexHead8.unsafe_drop_tip_in_place
       ~FlexHead8.verify_tip_presence

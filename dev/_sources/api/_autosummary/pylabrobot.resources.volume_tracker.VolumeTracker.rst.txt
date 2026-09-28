@@ -41,5 +41,7 @@ pylabrobot.resources.volume\_tracker.VolumeTracker
       ~VolumeTracker.serialize
       ~VolumeTracker.set_liquids
       ~VolumeTracker.set_volume
+      ~VolumeTracker.validate_add_liquid
+      ~VolumeTracker.validate_remove_liquid
    
    

@@ -600,7 +600,7 @@ corresponding to <code class="docutils literal notranslate"><span class="pre">pl
 commit/rollback flow and hardware tip-presence verification – the same
 machinery <code class="docutils literal notranslate"><span class="pre">FlexHead8</span></code> uses for its column ops, applied to the whole
 plate/rack instead of one column.</p>
-<p>Liquid probing (<code class="docutils literal notranslate"><span class="pre">liquid_probe</span></code>/<code class="docutils literal notranslate"><span class="pre">try_liquid_probe</span></code>) is not implemented
+<p>Liquid probing (<code class="docutils literal notranslate"><span class="pre">probe_liquid_heights</span></code>/<code class="docutils literal notranslate"><span class="pre">try_probe_liquid_heights</span></code>) is not implemented
 on this head – only the mount heads (<code class="docutils literal notranslate"><span class="pre">FlexHead1</span></code>/<code class="docutils literal notranslate"><span class="pre">FlexHead8</span></code>)
 expose it.</p>
 <p>Coded but <strong>not yet verified on real 96-channel Flex hardware</strong> –
@@ -646,20 +646,20 @@ instance issues it, and this docstring makes no “validated on hardware” clai
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.get_mounted_tips.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.get_mounted_tips" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.get_mounted_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_mounted_tips</span></code></a>()</p></td>
 <td><p>Per-channel tip state (Case-2: no private-attribute peeking by consumers).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.get_tip_presence.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.get_tip_presence" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.get_tip_presence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_tip_presence</span></code></a>()</p></td>
-<td><p>Read this head's tip sensor: &quot;present&quot;, &quot;absent&quot; or &quot;unknown&quot;.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.has_tip_on_hardware.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.has_tip_on_hardware" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.has_tip_on_hardware"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_tip_on_hardware</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.has_tip_on_hardware.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.has_tip_on_hardware" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.has_tip_on_hardware"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_tip_on_hardware</span></code></a>()</p></td>
 <td><p>Query the Flex's hardware tip-presence sensor for THIS head's pipette.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_relative.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.move_relative" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_relative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_relative</span></code></a>(axis, distance)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_relative.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.move_relative" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_relative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_relative</span></code></a>(axis, distance)</p></td>
 <td><p>Jog one axis by <code class="docutils literal notranslate"><span class="pre">distance</span></code> mm from wherever the head is now.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to</span></code></a>([x, y, z, speed, minimum_z_height])</p></td>
-<td><p>Move the head to an absolute deck-frame position, holding any axis left unspecified -- ONE <code class="docutils literal notranslate"><span class="pre">moveToCoordinates</span></code> command.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_addressable_area.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_addressable_area" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_addressable_area"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to_addressable_area</span></code></a>(addressable_area_name)</p></td>
 <td><p>Move to a named fixture on the deck rather than to labware.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_position.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_position" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to_position</span></code></a>([x, y, z, speed, ...])</p></td>
+<td><p>Move the head to an absolute deck-frame position, holding any axis left unspecified -- ONE <code class="docutils literal notranslate"><span class="pre">moveToCoordinates</span></code> command.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_safe_z.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_safe_z" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_safe_z"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to_safe_z</span></code></a>()</p></td>
+<td><p>Raise the tip or nozzle to traversal height; never lower or move laterally.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_well.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_well" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.move_to_well"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to_well</span></code></a>(target[, offset, origin, ...])</p></td>
 <td><p>Move to a well, named rather than measured -- ONE <code class="docutils literal notranslate"><span class="pre">moveToWell</span></code> command.</p></td>
@@ -667,22 +667,25 @@ instance issues it, and this docstring makes no “validated on hardware” clai
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.pick_up_tips.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.pick_up_tips" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.pick_up_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tips</span></code></a>(tip_rack[, offset])</p></td>
 <td><p>Pick up all 96 tips: <code class="docutils literal notranslate"><span class="pre">configureNozzleLayout</span></code> (ALL) then ONE <code class="docutils literal notranslate"><span class="pre">pickUpTip</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.position.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.position" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position</span></code></a>()</p></td>
-<td><p>The head's current deck-frame position -- one <code class="docutils literal notranslate"><span class="pre">savePosition</span></code> query.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.prepare_to_aspirate.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.prepare_to_aspirate" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.prepare_to_aspirate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepare_to_aspirate</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.prepare_to_aspirate.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.prepare_to_aspirate" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.prepare_to_aspirate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepare_to_aspirate</span></code></a>()</p></td>
 <td><p>Move the plunger to where an aspirate starts from (&quot;priming&quot;).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.touch_tip.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.touch_tip" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.touch_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">touch_tip</span></code></a>(plate[, radius, offset])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.request_position.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.request_position" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.request_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_position</span></code></a>()</p></td>
+<td><p>The head's current deck-frame position -- one <code class="docutils literal notranslate"><span class="pre">savePosition</span></code> query.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.request_tip_presence.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.request_tip_presence" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.request_tip_presence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tip_presence</span></code></a>()</p></td>
+<td><p>Read this head's tip sensor: &quot;present&quot;, &quot;absent&quot; or &quot;unknown&quot;.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.touch_tip.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.touch_tip" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.touch_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">touch_tip</span></code></a>(plate[, radius, offset])</p></td>
 <td><p>Touch the mounted tips to their well walls -- one <code class="docutils literal notranslate"><span class="pre">touchTip</span></code> command anchored at &quot;A1&quot;, fanned to all 96 channels.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_blow_out_in_place.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_blow_out_in_place" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_blow_out_in_place"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unsafe_blow_out_in_place</span></code></a>(flow_rate)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_blow_out_in_place.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_blow_out_in_place" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_blow_out_in_place"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unsafe_blow_out_in_place</span></code></a>(flow_rate)</p></td>
 <td><p>Blow out where the head is, skipping the engine's own checks.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_drop_tip_in_place.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_drop_tip_in_place" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_drop_tip_in_place"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unsafe_drop_tip_in_place</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_drop_tip_in_place.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_drop_tip_in_place" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.unsafe_drop_tip_in_place"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unsafe_drop_tip_in_place</span></code></a>()</p></td>
 <td><p>Drop the mounted tip where the head is, skipping the engine's own checks.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.verify_tip_presence.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.verify_tip_presence" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.verify_tip_presence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">verify_tip_presence</span></code></a>(expected_state)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.flex.flex_head.FlexHead96.verify_tip_presence.html#pylabrobot.opentrons.flex.flex_head.FlexHead96.verify_tip_presence" title="pylabrobot.opentrons.flex.flex_head.FlexHead96.verify_tip_presence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">verify_tip_presence</span></code></a>(expected_state)</p></td>
 <td><p>Have the robot fail the command unless its tip sensor reads <code class="docutils literal notranslate"><span class="pre">expected_state</span></code>.</p></td>
 </tr>
 </tbody>

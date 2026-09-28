@@ -592,7 +592,8 @@
 <dd><p>Bring the robot fully up, PyLabRobot’s usual one-call lifecycle entry.</p>
 <p>Composed of the steps below so a caller who needs only some of them (talk to
 the robot without moving it, hand it back without homing it) can take them
-one at a time.</p>
+one at a time. If a run already exists, warn and keep the current session
+without reconnecting, homing, or replacing its instruments.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>skip_home</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p>

@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.EmbeddedTipRack.serialize\_all\_state
+====================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: EmbeddedTipRack.serialize_all_state
