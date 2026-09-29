@@ -67,7 +67,7 @@
     <link rel="prev" title="pylabrobot.byonoy package" href="../pylabrobot.byonoy.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="0.2.2" />
+  <meta name="docsearch:version" content="1.0.0b1" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -757,41 +757,47 @@ tree needs) wins over the driver’s device-name property.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_environment.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_environment" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_environment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_environment</span></code></a>()</p></td>
 <td><p>Read REP_ENVIRONMENT_IN (0x0310): temperature, humidity, acceleration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_status.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_status" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_status</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_ignore_errors_in_calibration.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_ignore_errors_in_calibration" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_ignore_errors_in_calibration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_ignore_errors_in_calibration</span></code></a>()</p></td>
+<td><p>Read the firmware's experimental calibration-error override.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_status.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_status" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_status</span></code></a>()</p></td>
 <td><p>Read REP_STATUS_IN (0x0300): init/slot/error/uptime/measuring/boot.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_supported_reports.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_supported_reports" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_supported_reports"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_supported_reports</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_supported_reports.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_supported_reports" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_supported_reports"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_supported_reports</span></code></a>()</p></td>
 <td><p>Read REP_SUPPORTED_REPORTS_IN (0x0010): list of report IDs the device supports.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_versions.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_versions" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_versions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_versions</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_versions.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_versions" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.request_versions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_versions</span></code></a>()</p></td>
 <td><p>Read REP_VERSIONS_IN (0x0080): system / STM / ESP / bootloader versions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate</span></code></a>([x, y, z, pivot_coordinate])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate</span></code></a>([x, y, z, pivot_coordinate])</p></td>
 <td><p>Rotate counter-clockwise around the parent-coordinate axes by the given degrees.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate_to.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate_to" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate_to</span></code></a>([x, y, z, pivot_coordinate])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate_to.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate_to" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotate_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate_to</span></code></a>([x, y, z, pivot_coordinate])</p></td>
 <td><p>Set the rotation about each axis, where <code class="code docutils literal notranslate"><span class="pre">rotate</span></code> turns by an amount instead.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotated.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotated" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotated</span></code></a>([x, y, z, pivot_coordinate])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotated.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotated" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.rotated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotated</span></code></a>([x, y, z, pivot_coordinate])</p></td>
 <td><p>Return a copy of this resource rotated by the given number of degrees.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(fn[, indent])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(fn[, indent])</p></td>
 <td><p>Save a resource to a JSON file.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save_state_to_file.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save_state_to_file" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save_state_to_file"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_state_to_file</span></code></a>(fn[, indent])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save_state_to_file.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save_state_to_file" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.save_state_to_file"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_state_to_file</span></code></a>(fn[, indent])</p></td>
 <td><p>Save the state of this resource and all children to a JSON file.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.send_command.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.send_command" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.send_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_command</span></code></a>(report_id, payload[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.send_command.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.send_command" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.send_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_command</span></code></a>(report_id, payload[, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_all_state.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_all_state" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_all_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_all_state</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_all_state.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_all_state" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_all_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_all_state</span></code></a>()</p></td>
 <td><p>Serialize the state of this resource and all children.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_state.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_state" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_state</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_state.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_state" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.serialize_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_state</span></code></a>()</p></td>
 <td><p>Serialize the state of this resource only.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.set_ignore_errors_in_calibration.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.set_ignore_errors_in_calibration" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.set_ignore_errors_in_calibration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_ignore_errors_in_calibration</span></code></a>(enabled)</p></td>
+<td><p>Set and verify the firmware's experimental calibration-error override.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.set_led_color.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.set_led_color" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.set_led_color"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_led_color</span></code></a>(color[, effect, low_power, ...])</p></td>
 <td><p>Set the LED bar to a single color via REP_LED_BAR_EFFECTS_OUT (0x0351).</p></td>
@@ -799,8 +805,8 @@ tree needs) wins over the driver’s device-name property.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.set_led_colors.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.set_led_colors" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.set_led_colors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_led_colors</span></code></a>(colors)</p></td>
 <td><p>Set each of the 20 LED bar pixels individually via REP_LED_BAR_COLOURS_OUT (0x0350).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.setup.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.setup" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.setup.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.setup" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>(*[, ignore_errors_in_calibration])</p></td>
+<td><p>Connect and initialize absorbance measurements.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.stop.html#pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.stop" title="pylabrobot.byonoy.absorbance_96.ByonoyAbsorbance96.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
 <td><p></p></td>
