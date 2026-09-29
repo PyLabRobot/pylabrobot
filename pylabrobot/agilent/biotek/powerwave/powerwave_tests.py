@@ -9,6 +9,7 @@ cases the capture does not cover.
 import math
 import struct
 import unittest
+import unittest.mock
 from typing import Optional
 
 from pylabrobot.agilent.biotek.powerwave import PowerWaveX
@@ -17,6 +18,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   KINETIC_FLAGS,
   OVERRANGE,
   ELX_ERRORS,
+  SCAN_WHOLE_STRIP,
   ELX_FATAL_ERRORS,
   SELF_TEST_ERRORS,
   STATUS_LENGTH,
@@ -34,6 +36,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   describe_elx_status,
   encode_assay_wavelengths,
   encode_plate_geometry,
+  encode_scan_request,
   encode_strip_range,
   encode_temperature_setpoint,
   encode_wavelength_table,
@@ -41,12 +44,16 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   parse_device_configuration,
   parse_elx_status,
   parse_plate,
+  parse_scan_block,
+  parse_scan_wavelength_list,
   parse_self_test_report,
   parse_status,
   parse_temperature,
   parse_uint16,
   parse_wavelength_table,
   plate_checksum,
+  scan_block_checksums,
+  scan_wavelengths,
   verify_plate_checksum,
   wells_bounding_box,
 )
@@ -1368,7 +1375,6 @@ class TestUnimplementedCommands(unittest.IsolatedAsyncioTestCase):
   async def test_each_raises_not_implemented_without_touching_the_port(self):
     cases = [
       ("configure_wavelengths", ([550],), "'M'"),
-      ("scan_plate", (), "'&'"),
       ("request_plate_barcode", (), "'s'"),
       ("close_plate_access_door", (), "')'"),
     ]
@@ -1395,7 +1401,6 @@ class TestUnimplementedCommands(unittest.IsolatedAsyncioTestCase):
     source = inspect.getsource(module)
     declared = {
       "CONFIGURE_WAVELENGTHS": "configure_wavelengths",
-      "SCAN_PLATE": "scan_plate",
       "GET_PLATE_BARCODE": "request_plate_barcode",
       "CLOSE_PLATE_ACCESS_DOOR": "close_plate_access_door",
     }
@@ -1404,3 +1409,271 @@ class TestUnimplementedCommands(unittest.IsolatedAsyncioTestCase):
         used = f"Command.{command.name}" in source
         stubbed = declared.get(command.name, "") in source and command.name in declared
         self.assertTrue(used or stubbed, f"{command.name} is neither sent nor declared")
+
+
+class TestScanRequestEncoding(unittest.TestCase):
+  """The 18-byte SCAN PLATE request, page B-14."""
+
+  def test_layout(self):
+    request = encode_scan_request(
+      row=3, column=7, start_wavelength=400, stop_wavelength=600, step=10
+    )
+    self.assertEqual(len(request), 18)
+    self.assertEqual(request, b"0307400600010" + b"0" + b"0" + b"00" + b"0")
+    self.assertEqual(request[0:2], b"03")  # row
+    self.assertEqual(request[2:4], b"07")  # column
+    self.assertEqual(request[4:7], b"400")  # start
+    self.assertEqual(request[7:10], b"600")  # stop
+    self.assertEqual(request[10:13], b"010")  # step
+
+  def test_whole_strip_row_is_zero(self):
+    request = encode_scan_request(
+      row=SCAN_WHOLE_STRIP, column=1, start_wavelength=300, stop_wavelength=800, step=5
+    )
+    self.assertEqual(request[0:2], b"00")
+
+  def test_series_and_calibrate_and_shake(self):
+    request = encode_scan_request(
+      row=1,
+      column=1,
+      start_wavelength=400,
+      stop_wavelength=500,
+      step=50,
+      series="last",
+      calibrate=True,
+      shake_time=15,
+      shake_speed=2,
+    )
+    self.assertEqual(request[13:14], b"3")  # series: last
+    self.assertEqual(request[14:15], b"1")  # calibrate
+    self.assertEqual(request[15:17], b"15")  # shake time
+    self.assertEqual(request[17:18], b"2")  # shake speed
+
+  def test_at_least_two_wavelengths(self):
+    with self.assertRaises(ValueError):
+      encode_scan_request(row=1, column=1, start_wavelength=500, stop_wavelength=500, step=1)
+    with self.assertRaises(ValueError):
+      encode_scan_request(row=1, column=1, start_wavelength=600, stop_wavelength=500, step=1)
+    # step larger than the span would yield a single wavelength
+    with self.assertRaises(ValueError):
+      encode_scan_request(row=1, column=1, start_wavelength=500, stop_wavelength=510, step=20)
+
+  def test_bounds(self):
+    base = dict(row=1, column=1, start_wavelength=400, stop_wavelength=600, step=10)
+    for field, bad in [
+      ("row", 17),
+      ("column", 0),
+      ("column", 25),
+      ("start_wavelength", 199),
+      ("stop_wavelength", 1000),
+      ("step", 0),
+      ("shake_time", 100),
+      ("shake_speed", 4),
+    ]:
+      with self.subTest(field=field, value=bad):
+        with self.assertRaises(ValueError):
+          encode_scan_request(**{**base, field: bad})  # type: ignore[arg-type]
+
+  def test_unknown_series(self):
+    with self.assertRaises(ValueError):
+      encode_scan_request(
+        row=1, column=1, start_wavelength=400, stop_wavelength=600, step=10, series="every"
+      )
+
+  def test_scan_wavelengths(self):
+    self.assertEqual(scan_wavelengths(400, 450, 10), [400, 410, 420, 430, 440, 450])
+    # the stop is included only when the step lands on it
+    self.assertEqual(scan_wavelengths(400, 425, 10), [400, 410, 420])
+
+
+class TestScanResponseParsing(unittest.TestCase):
+  """Scan response sections, page B-14."""
+
+  def test_wavelength_list(self):
+    self.assertEqual(parse_scan_wavelength_list(b"400\r410\r420\r\x1a"), [400, 410, 420])
+
+  def test_empty_wavelength_list(self):
+    # "If no calibration is performed at all, the <^Z> terminator is returned alone"
+    self.assertEqual(parse_scan_wavelength_list(b"\x1a"), [])
+
+  def test_non_numeric_wavelength_list(self):
+    with self.assertRaises(PowerWaveParseError):
+      parse_scan_wavelength_list(b"4X0\r\x1a")
+
+  def test_single_well_block(self):
+    block = b"550,+0201\r\n\x1a"
+    wavelength, readings = parse_scan_block(block, num_wells=1)
+    self.assertEqual(wavelength, 550)
+    self.assertEqual(readings, [0.201])
+
+  def test_strip_block(self):
+    block = b"550" + b"".join(b",+0%03d\r\n" % (100 + i) for i in range(8)) + b"\x1a"
+    wavelength, readings = parse_scan_block(block, num_wells=8)
+    self.assertEqual(wavelength, 550)
+    self.assertEqual(len(readings), 8)
+    self.assertAlmostEqual(readings[0], 0.100)
+    self.assertAlmostEqual(readings[7], 0.107)
+
+  def test_block_tolerates_a_leading_cr(self):
+    self.assertEqual(
+      parse_scan_block(b"\r550,+0201\r\n\x1a", 1), parse_scan_block(b"550,+0201\r\n\x1a", 1)
+    )
+
+  def test_negative_and_overrange(self):
+    _, readings = parse_scan_block(b"550,-0201\r\n\x1a", 1)
+    self.assertEqual(readings, [-0.201])
+    _, readings = parse_scan_block(b"550,*****\r\n\x1a", 1)
+    self.assertTrue(math.isinf(readings[0]))
+
+  def test_wrong_reading_count(self):
+    with self.assertRaises(PowerWaveParseError):
+      parse_scan_block(b"550,+0201\r\n\x1a", num_wells=8)
+
+  def test_missing_wavelength(self):
+    with self.assertRaises(PowerWaveParseError):
+      parse_scan_block(b",+0201\r\n\x1a", 1)
+
+  def test_checksum_candidates(self):
+    block = b"550,+0201\r\n\x1a"
+    without, whole = scan_block_checksums(block)
+    self.assertEqual(without, whole)  # no leading CR, so the two agree
+    without, whole = scan_block_checksums(b"\r" + block)
+    self.assertEqual(without, sum(block) % 256)
+    self.assertEqual(whole, (sum(block) + 13) % 256)
+
+
+class TestScanPlate(unittest.IsolatedAsyncioTestCase):
+  """Driving a spectral scan end to end."""
+
+  def _scan_script(self, wavelengths, num_wells=1, calibrated=b"", first_pass=b""):
+    script = _ACK + _STATUS_OK  # '{' set geometry
+    script += _ACK  # '&' command byte
+    script += _ACK  # the request, acknowledged again after ETX
+    script += _STATUS_OK
+    script += calibrated + b"\x1a"  # calibration section
+    script += first_pass + b"\x1a"  # first pass section
+    script += b"\r"  # data start code
+    for w in wavelengths:
+      block = b"%03d" % w + b"".join(b",+0%03d\r\n" % (100 + i) for i in range(num_wells)) + b"\x1a"
+      script += block + bytes([scan_block_checksums(block)[0]])
+    return script
+
+  async def test_single_well_scan(self):
+    plate = _plate_resource()
+    reader, fake = _reader(self._scan_script([400, 410, 420]), model="PowerWaveX")
+
+    result = await reader.scan_plate(
+      plate, start_wavelength=400, stop_wavelength=420, step=10, well=plate.get_item(0)
+    )
+
+    self.assertEqual(fake.writes[0], b"{")
+    self.assertEqual(fake.writes[2], b"&")
+    self.assertEqual(fake.writes[3][:18], b"010140042001000000")  # A1, 400-420 by 10
+    self.assertEqual(fake.writes[3][18:], b"\x03")  # ETX closes the request
+    self.assertEqual(fake.remaining, b"")
+
+    self.assertEqual(result.wavelengths, [400, 410, 420])
+    self.assertEqual(result.row, 1)
+    self.assertEqual(result.column, 1)
+    self.assertEqual(len(result.data), 3)
+    self.assertEqual(len(result.data[0]), 1)
+
+  async def test_strip_scan_reads_every_row(self):
+    plate = _plate_resource()
+    reader, fake = _reader(self._scan_script([400, 500], num_wells=8), model="PowerWaveX")
+
+    result = await reader.scan_plate(
+      plate, start_wavelength=400, stop_wavelength=500, step=100, column=3
+    )
+
+    self.assertEqual(fake.writes[3][:4], b"0003")  # row "00" means whole strip
+    self.assertIsNone(result.row)
+    self.assertEqual(result.column, 3)
+    self.assertEqual(len(result.data[0]), 8)
+
+  async def test_spectrum_helper(self):
+    plate = _plate_resource()
+    reader, _ = _reader(self._scan_script([400, 410]), model="PowerWaveX")
+    result = await reader.scan_plate(
+      plate, start_wavelength=400, stop_wavelength=410, step=10, well=plate.get_item(0)
+    )
+    self.assertEqual(result.spectrum(), [(400, 0.100), (410, 0.100)])
+
+  async def test_calibrated_wavelengths_are_reported(self):
+    plate = _plate_resource()
+    reader, _ = _reader(self._scan_script([400, 410], calibrated=b"400\r410\r"), model="PowerWaveX")
+    result = await reader.scan_plate(
+      plate, start_wavelength=400, stop_wavelength=410, step=10, well=plate.get_item(0)
+    )
+    self.assertEqual(result.calibrated, [400, 410])
+
+  async def test_calibrate_flag_is_sent(self):
+    plate = _plate_resource()
+    reader, fake = _reader(self._scan_script([400, 410]), model="PowerWaveX")
+    await reader.scan_plate(
+      plate,
+      start_wavelength=400,
+      stop_wavelength=410,
+      step=10,
+      well=plate.get_item(0),
+      calibrate=True,
+    )
+    self.assertEqual(fake.writes[3][14:15], b"1")
+
+  async def test_nak_on_invalid_arguments(self):
+    plate = _plate_resource()
+    # geometry ok, '&' acked, then the request is NAKed
+    reader, _ = _reader(_ACK + _STATUS_OK + _ACK + _NAK, model="PowerWaveX")
+    with self.assertRaises(PowerWaveNakError):
+      await reader.scan_plate(
+        plate, start_wavelength=400, stop_wavelength=410, step=10, well=plate.get_item(0)
+      )
+
+  async def test_checksum_mismatch_raises(self):
+    plate = _plate_resource()
+    script = bytearray(self._scan_script([400, 410]))
+    script[-1] = (script[-1] + 1) % 256
+    reader, _ = _reader(bytes(script), model="PowerWaveX")
+    with self.assertRaises(PowerWaveChecksumError):
+      await reader.scan_plate(
+        plate, start_wavelength=400, stop_wavelength=410, step=10, well=plate.get_item(0)
+      )
+
+  async def test_requires_exactly_one_target(self):
+    plate = _plate_resource()
+    reader, fake = _reader(model="PowerWaveX")
+    for kwargs in ({}, {"well": plate.get_item(0), "column": 1}):
+      with self.subTest(kwargs=sorted(kwargs)):
+        with self.assertRaises(ValueError):
+          await reader.scan_plate(
+            plate, start_wavelength=400, stop_wavelength=410, step=10, **kwargs
+          )
+    self.assertEqual(fake.writes, [])
+
+  async def test_well_must_belong_to_the_plate(self):
+    plate = _plate_resource("a")
+    other = _plate_resource("b")
+    reader, _ = _reader(model="PowerWaveX")
+    with self.assertRaises(ValueError):
+      await reader.scan_plate(
+        plate, start_wavelength=400, stop_wavelength=410, step=10, well=other.get_item(0)
+      )
+
+  async def test_strip_scan_refused_on_384_well_plates(self):
+    from pylabrobot.resources import Plate
+
+    plate = _plate_resource()
+    reader, _ = _reader(model="PowerWaveX")
+    # a 16-row plate cannot use row "00" (page B-14)
+    with unittest.mock.patch.object(Plate, "num_items_y", property(lambda self: 16)):
+      with self.assertRaises(NotImplementedError):
+        await reader.scan_plate(plate, start_wavelength=400, stop_wavelength=410, step=10, column=1)
+
+  async def test_invalid_arguments_are_rejected_before_sending(self):
+    plate = _plate_resource()
+    reader, fake = _reader(model="PowerWaveX")
+    with self.assertRaises(ValueError):
+      await reader.scan_plate(
+        plate, start_wavelength=500, stop_wavelength=500, step=1, well=plate.get_item(0)
+      )
+    self.assertEqual(fake.writes, [])

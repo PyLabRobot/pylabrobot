@@ -14,8 +14,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Literal, Optional, Sequence, cast
+from typing import List, Literal, Optional, Sequence, Tuple, cast
 
 from pylabrobot.agilent.biotek.plate_reader_base import AbsorbanceResult
 from pylabrobot.io.serial import Serial
@@ -23,15 +24,18 @@ from pylabrobot.resources import Coordinate, Plate, PlateHolder, Well
 
 from ._protocol import (
   ACK,
+  CR,
   DLE,
   ETX,
   KINETIC_FLAGS,
   MAX_WAVELENGTH,
   MIN_WAVELENGTH,
   NAK,
+  SCAN_WHOLE_STRIP,
   STATUS_LENGTH,
   SUB,
   Command,
+  PowerWaveChecksumError,
   PowerWaveError,
   PowerWaveNakError,
   PowerWaveParseError,
@@ -40,15 +44,20 @@ from ._protocol import (
   configuration_has_incubator,
   count_overrange,
   encode_plate_geometry,
+  encode_scan_request,
   encode_strip_range,
   encode_temperature_setpoint,
   parse_device_configuration,
   parse_plate,
+  parse_scan_block,
+  parse_scan_wavelength_list,
   parse_self_test_report,
   parse_status,
   parse_temperature,
   parse_uint16,
   parse_wavelength_table,
+  scan_block_checksums,
+  scan_wavelengths,
   verify_plate_checksum,
 )
 
@@ -64,6 +73,36 @@ except ImportError as e:  # pragma: no cover - depends on the environment
 logger = logging.getLogger(__name__)
 
 CarrierPosition = Literal["in", "out"]
+ScanSeries = Literal["single", "first", "next", "last"]
+
+
+@dataclass
+class SpectralScanResult:
+  """One spectral scan of a well or a strip (page B-14).
+
+  Attributes:
+    wavelengths: The wavelengths visited, in nm and in scan order.
+    data: Absorbance indexed ``[wavelength][well]``, in optical density units.
+      A single-well scan has one entry per row; a strip scan has one per plate
+      row. Overrange wells are :data:`~._protocol.OVERRANGE`.
+    column: The 1-based plate column scanned.
+    row: The 1-based plate row, or ``None`` when the whole strip was scanned.
+    calibrated: Wavelengths the instrument calibrated before scanning.
+    temperature: Chamber temperature in degrees C, or ``None``.
+    timestamp: When the scan completed.
+  """
+
+  wavelengths: List[int]
+  data: List[List[float]]
+  column: int
+  row: Optional[int]
+  calibrated: List[int]
+  temperature: Optional[float]
+  timestamp: datetime
+
+  def spectrum(self, well_index: int = 0) -> List[Tuple[int, float]]:
+    """The (wavelength, absorbance) pairs for one well of this scan."""
+    return [(w, self.data[i][well_index]) for i, w in enumerate(self.wavelengths)]
 
 
 class PowerWaveX:
@@ -168,9 +207,10 @@ class PowerWaveX:
       "except the plate read itself has been confirmed on a PowerWaveX w/ Incubator "
       "(firmware R06.20): identification, the wavelength table, temperature, the "
       "minimum kinetic interval, carrier movement, the assay definition, plate "
-      "geometry, strip range and the self-test. Absorbance DATA has not been "
-      "confirmed, because that instrument's optics fail their self-test; the parsing "
-      "rests on traffic captured from it in 2021. "
+      "geometry, strip range and the self-test. Absorbance DATA and spectral "
+      "scanning have NOT been confirmed, because that instrument's optics fail their "
+      "self-test; plate parsing rests on traffic captured from it in 2021, and the "
+      "scan response format on the manual alone. "
       "Please report results at https://discuss.pylabrobot.org."
     )
 
@@ -717,23 +757,163 @@ class PowerWaveX:
       "encode_wavelength_table() if you need to send it yourself."
     )
 
-  async def scan_plate(self, *args, **kwargs) -> None:
-    """Not implemented: spectral scan of the plate (``'&'``, page B-14).
+  async def scan_plate(
+    self,
+    plate: Plate,
+    start_wavelength: int,
+    stop_wavelength: int,
+    step: int,
+    well: Optional[Well] = None,
+    column: Optional[int] = None,
+    calibrate: bool = False,
+    shake_time: int = 0,
+    shake_speed: int = 0,
+    series: ScanSeries = "single",
+  ) -> SpectralScanResult:
+    """Spectrally scan one well, or one whole strip (``'&'``, page B-14).
 
-    Sweeps the monochromator over a wavelength range at 1 nm increments, and
-    returns a response format quite unlike READ PLATE's. Supporting it properly
-    means a second parser and a result type that is a spectrum per well rather
-    than one value.
+    The monochromator sweeps from ``start_wavelength`` to ``stop_wavelength`` in
+    ``step`` increments, reading the selected well or column at each. This is a
+    different operation from :meth:`read_absorbance`, which reads the whole plate
+    at up to six fixed wavelengths.
 
-    Note that this is distinct from ``read_type="scan"`` in the assay definition,
-    which selects *well* scanning, and which no read method drives either.
+    Args:
+      plate: The plate loaded in the carrier.
+      start_wavelength: First wavelength in nm, 200 to 999.
+      stop_wavelength: Last wavelength in nm, above the start.
+      step: Increment in nm. At least two wavelengths must be scanned, so this
+        cannot exceed the span.
+      well: The single well to scan. Give exactly one of ``well`` or ``column``.
+      column: The 1-based column to scan in full, all rows at once.
+      calibrate: Calibrate every wavelength first. Without it the instrument
+        still calibrates any wavelength not scanned since power-up, and any with
+        a previous error. Recommended when absolute accuracy matters.
+      shake_time: Seconds to shake before scanning, 0 to 99.
+      shake_speed: 0 slow, 1 medium, 2 fast, 3 cycle.
+      series: Use ``"first"``, ``"next"`` and ``"last"`` to scan adjacent strips
+        efficiently. They must be contiguous and go left to right, because the
+        first pass for the next strip is collected during the current one.
+
+    Returns:
+      A :class:`SpectralScanResult` whose ``data`` is indexed
+      ``[wavelength][well]``.
 
     Raises:
-      NotImplementedError: Always.
+      ValueError: If neither or both of ``well`` and ``column`` are given, or any
+        argument is out of range. The instrument NAKs invalid arguments, so these
+        are checked before sending.
+      NotImplementedError: For a whole-strip scan of a plate that is not 8 rows;
+        the manual warns against row "00" on 384-well plates.
+
+    Note:
+      Scanning a whole strip takes two passes, because even-row detectors sit one
+      column to the left. The driver handles the first pass transparently.
+
+      The geometry command must precede a scan on any plate that is not the
+      standard 96-well, which :meth:`set_plate_geometry` does here.
     """
-    raise NotImplementedError(
-      "SCAN PLATE ('&', page B-14) is not implemented. Spectral scanning returns a "
-      "different response format from READ PLATE and needs its own parser."
+    if (well is None) == (column is None):
+      raise ValueError("Give exactly one of well or column")
+
+    if well is not None:
+      if well.parent is not plate:
+        raise ValueError("The well must belong to the specified plate")
+      row_index, column_index = well.get_row(), well.get_column()
+      row, target_column = row_index + 1, column_index + 1
+      num_wells = 1
+    else:
+      assert column is not None
+      if plate.num_items_y != 8:
+        raise NotImplementedError(
+          "Scanning a whole strip is only supported on 8-row plates. The manual warns "
+          'against row "00" on 384-well plates (page B-14); scan wells individually.'
+        )
+      row, target_column = SCAN_WHOLE_STRIP, column
+      num_wells = plate.num_items_y
+
+    request = encode_scan_request(
+      row=row,
+      column=target_column,
+      start_wavelength=start_wavelength,
+      stop_wavelength=stop_wavelength,
+      step=step,
+      series=series,
+      calibrate=calibrate,
+      shake_time=shake_time,
+      shake_speed=shake_speed,
+    )
+    expected = scan_wavelengths(start_wavelength, stop_wavelength, step)
+
+    logger.info(
+      "[PowerWaveX %s] spectral scan: %s, %d-%d nm in %d nm steps, %d wavelengths",
+      self.port,
+      f"well row {row} column {target_column}" if row else f"strip {target_column}",
+      start_wavelength,
+      stop_wavelength,
+      step,
+      len(expected),
+    )
+
+    await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
+
+    await self._send_command(Command.SCAN_PLATE)
+    await self.io.write(request + ETX)
+
+    # The request is acknowledged a second time, after ETX (page B-14).
+    acknowledgement = await self.io.read(1)
+    if acknowledgement == NAK:
+      raise PowerWaveNakError("Instrument rejected the scan request: invalid arguments")
+    if acknowledgement != ACK:
+      raise PowerWaveError(f"Expected ACK or NAK after the scan request, got {acknowledgement!r}")
+
+    await self._read_status()
+
+    # Two wavelength lists precede the data. Both terminators are always sent,
+    # even when the list is empty.
+    calibrated = parse_scan_wavelength_list(await self._read_until(SUB))
+    first_pass = parse_scan_wavelength_list(await self._read_until(SUB))
+    logger.debug(
+      "[PowerWaveX %s] scan calibrated %s, first pass %s", self.port, calibrated, first_pass
+    )
+
+    # A single CR marks the start of the data, before the per-wavelength blocks.
+    start_code = await self._read_exactly(1)
+    if start_code != CR:
+      raise PowerWaveParseError(f"Expected CR data start code, got {start_code!r}")
+
+    wavelengths: List[int] = []
+    data: List[List[float]] = []
+    for index in range(len(expected)):
+      block = await self._read_until(SUB)
+      checksum = (await self._read_exactly(1))[0]
+
+      candidates = scan_block_checksums(block)
+      if checksum not in candidates:
+        raise PowerWaveChecksumError(
+          f"Scan block {index + 1} checksum mismatch: computed {candidates}, "
+          f"instrument sent {checksum}"
+        )
+
+      wavelength, readings = parse_scan_block(block, num_wells)
+      wavelengths.append(wavelength)
+      data.append(readings)
+
+    if wavelengths != expected:
+      logger.warning(
+        "[PowerWaveX %s] scan returned wavelengths %s, expected %s",
+        self.port,
+        wavelengths,
+        expected,
+      )
+
+    return SpectralScanResult(
+      wavelengths=wavelengths,
+      data=data,
+      column=target_column,
+      row=row if row != SCAN_WHOLE_STRIP else None,
+      calibrated=calibrated,
+      temperature=await self._try_read_temperature(),
+      timestamp=datetime.now(),
     )
 
   async def request_plate_barcode(self) -> str:

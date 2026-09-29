@@ -84,6 +84,7 @@ BioTek PowerWaveX
   :recursive:
 
     PowerWaveX
+    SpectralScanResult
     PowerWaveError
     PowerWaveNakError
     PowerWaveStatusError

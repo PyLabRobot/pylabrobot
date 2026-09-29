@@ -905,3 +905,175 @@ def parse_elx_status(response: bytes) -> str:
   if code.startswith("A"):
     raise PowerWaveFatalError(code, description)
   raise PowerWaveStatusError(code, description)
+
+
+# --------------------------------------------------------------------------------------
+# Spectral scan (page B-14)
+# --------------------------------------------------------------------------------------
+
+#: Byte 14 of the scan request. A series lets several adjacent strips share one
+#: calibration and one first pass, but they must be scanned left to right.
+SCAN_SERIES_OPTIONS: Dict[str, int] = {"single": 0, "first": 1, "next": 2, "last": 3}
+
+SCAN_REQUEST_LENGTH = 18
+MAX_SCAN_STEP = 799
+SCAN_WHOLE_STRIP = 0  # row "00" scans the entire column
+
+
+def scan_wavelengths(start: int, stop: int, step: int) -> List[int]:
+  """The wavelengths a scan will visit, from start through stop in step increments."""
+  return list(range(start, stop + 1, step))
+
+
+def encode_scan_request(
+  row: int,
+  column: int,
+  start_wavelength: int,
+  stop_wavelength: int,
+  step: int,
+  series: str = "single",
+  calibrate: bool = False,
+  shake_time: int = 0,
+  shake_speed: int = 0,
+) -> bytes:
+  """Build the 18-byte SCAN PLATE request (page B-14).
+
+  The caller sends this after the ``'&'`` command byte and follows it with ``ETX``.
+
+  Args:
+    row: Plate row from 1, or :data:`SCAN_WHOLE_STRIP` (0) to scan the entire
+      column. The manual warns against 0 on a 384-well plate.
+    column: Plate column, from 1.
+    start_wavelength: First wavelength in nm, 200 to 999.
+    stop_wavelength: Last wavelength in nm, greater than the start.
+    step: Increment in nm, 1 to 799 and no larger than the span.
+    series: ``"single"``, ``"first"``, ``"next"`` or ``"last"``. A series shares
+      one calibration and pipelines the two-pass reads across adjacent strips.
+    calibrate: Calibrate every wavelength before scanning. Without it the
+      instrument still calibrates any wavelength not yet scanned since power-up,
+      and any with a previous error.
+    shake_time: Seconds to shake first, 0 to 99.
+    shake_speed: 0 slow, 1 medium, 2 fast, 3 cycle through the speeds.
+
+  Returns:
+    Exactly 18 ASCII bytes.
+  """
+  if series not in SCAN_SERIES_OPTIONS:
+    raise ValueError(f"series must be one of {sorted(SCAN_SERIES_OPTIONS)}, got {series!r}")
+  if not 0 <= row <= 16:
+    raise ValueError(f"row must be 0 (whole strip) or 1-16, got {row}")
+  if not 1 <= column <= 24:
+    raise ValueError(f"column must be 1-24, got {column}")
+
+  for name, value in (("start_wavelength", start_wavelength), ("stop_wavelength", stop_wavelength)):
+    if not MIN_WAVELENGTH <= value <= MAX_WAVELENGTH:
+      raise ValueError(f"{name} must be {MIN_WAVELENGTH}-{MAX_WAVELENGTH} nm, got {value}")
+
+  if start_wavelength >= stop_wavelength:
+    raise ValueError(
+      f"start_wavelength {start_wavelength} must be below stop_wavelength {stop_wavelength}; "
+      "at least two wavelengths must be scanned (page B-15)"
+    )
+  span = stop_wavelength - start_wavelength
+  if not 1 <= step <= MAX_SCAN_STEP:
+    raise ValueError(f"step must be 1-{MAX_SCAN_STEP} nm, got {step}")
+  if step > span:
+    raise ValueError(
+      f"step {step} exceeds the span {span}; at least two wavelengths must be scanned"
+    )
+
+  if not 0 <= shake_time <= 99:
+    raise ValueError(f"shake_time must be 0-99 seconds, got {shake_time}")
+  if not 0 <= shake_speed <= 3:
+    raise ValueError(f"shake_speed must be 0-3, got {shake_speed}")
+
+  request = (
+    f"{row:02d}"
+    f"{column:02d}"
+    f"{start_wavelength:03d}"
+    f"{stop_wavelength:03d}"
+    f"{step:03d}"
+    f"{SCAN_SERIES_OPTIONS[series]:d}"
+    f"{1 if calibrate else 0:d}"
+    f"{shake_time:02d}"
+    f"{shake_speed:d}"
+  ).encode("ascii")
+
+  if len(request) != SCAN_REQUEST_LENGTH:
+    raise AssertionError(f"Scan request must be {SCAN_REQUEST_LENGTH} bytes, built {len(request)}")
+  return request
+
+
+def parse_scan_wavelength_list(section: bytes) -> List[int]:
+  """Parse a scan's calibration or first-pass wavelength list (page B-14).
+
+  Both sections are a run of three ASCII digits followed by ``CR``, closed by
+  ``^Z``. Either may be empty: the manual notes the terminator is returned alone
+  when no calibration was performed, and that the first-pass terminator is always
+  sent even when no first pass was needed.
+  """
+  body = section[:-1] if section.endswith(SUB) else section
+  wavelengths = []
+  for field in body.split(CR):
+    field = field.strip()
+    if len(field) == 0:
+      continue
+    try:
+      wavelengths.append(int(field))
+    except ValueError:
+      raise PowerWaveParseError(f"Non-numeric wavelength in scan section: {field!r}") from None
+  return wavelengths
+
+
+def scan_block_checksums(block: bytes) -> Tuple[int, int]:
+  """Candidate checksums for one scan data block (page B-15).
+
+  The manual says the checksum runs from the first byte after the data start code
+  through the ``^Z``, but it documents a single ``CR`` start code before the whole
+  series of blocks rather than one per block, so whether a leading ``CR`` belongs
+  to the sum is ambiguous for blocks after the first. READ PLATE's equivalent rule
+  is verified against captured traffic; this one is not, so both readings are
+  offered and the caller accepts either.
+
+  Returns:
+    ``(without_leading_cr, whole_block)``, equal when the block has no leading CR.
+  """
+  stripped = block[1:] if block.startswith(CR) else block
+  return sum(stripped) % 256, sum(block) % 256
+
+
+def parse_scan_block(block: bytes, num_wells: int) -> Tuple[int, List[float]]:
+  """Parse one wavelength's scan data block (page B-14).
+
+  A block is the wavelength as three ASCII digits, then one reading per well, then
+  ``^Z``. Readings use the same encoding as a plate read: a sign and four digits
+  with no decimal point, or ``*****`` when overrange.
+
+  Args:
+    block: The block through and including ``^Z``, with any leading ``CR``.
+    num_wells: 1 for a single well, or the plate's row count for a whole strip.
+
+  Returns:
+    The wavelength in nm, and one absorbance per well.
+  """
+  body = block[1:] if block.startswith(CR) else block
+
+  match = re.match(rb"\s*(\d{3})", body)
+  if match is None:
+    raise PowerWaveParseError(f"Scan block does not start with a wavelength: {body[:16]!r}")
+  wavelength = int(match.group(1))
+
+  readings: List[float] = []
+  for reading in _READING_RE.finditer(body[match.end() :]):
+    if reading.group("overrange") is not None:
+      readings.append(OVERRANGE)
+    else:
+      magnitude = int(reading.group("magnitude")) / 1000
+      readings.append(magnitude if reading.group("sign") == b"+" else -magnitude)
+
+  if len(readings) != num_wells:
+    raise PowerWaveParseError(
+      f"Expected {num_wells} readings at {wavelength} nm, parsed {len(readings)}"
+    )
+
+  return wavelength, readings

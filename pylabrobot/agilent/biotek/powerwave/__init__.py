@@ -7,4 +7,4 @@ from ._protocol import (
   PowerWaveSelfTestError,
   PowerWaveStatusError,
 )
-from .powerwave import PowerWaveX
+from .powerwave import PowerWaveX, SpectralScanResult
