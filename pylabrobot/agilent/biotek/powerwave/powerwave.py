@@ -31,11 +31,11 @@ from ._protocol import (
   MAX_WAVELENGTH,
   MIN_WAVELENGTH,
   NAK,
+  SCAN_SECONDS_PER_WAVELENGTH,
   SCAN_WHOLE_STRIP,
   STATUS_LENGTH,
   SUB,
   Command,
-  PowerWaveChecksumError,
   PowerWaveError,
   PowerWaveNakError,
   PowerWaveParseError,
@@ -49,16 +49,16 @@ from ._protocol import (
   encode_temperature_setpoint,
   parse_device_configuration,
   parse_plate,
-  parse_scan_block,
+  parse_scan_data,
   parse_scan_wavelength_list,
   parse_self_test_report,
   parse_status,
   parse_temperature,
   parse_uint16,
   parse_wavelength_table,
-  scan_block_checksums,
   scan_wavelengths,
   verify_plate_checksum,
+  verify_scan_checksum,
 )
 
 try:
@@ -133,6 +133,11 @@ class PowerWaveX:
   #: accepted assay definition table.
   _ASSAY_SETTLE_SECONDS = 1.0
 
+  #: How long the line must stay quiet for :meth:`_drain_input` to call it clear,
+  #: and the total time it will spend draining.
+  _DRAIN_QUIET_SECONDS = 1.5
+  _DRAIN_LIMIT_SECONDS = 20.0
+
   def __init__(
     self,
     name: str,
@@ -203,23 +208,25 @@ class PowerWaveX:
     as :attr:`model` and :attr:`wavelength_table`.
     """
     logger.warning(
-      "This PowerWaveX driver is only partly verified against hardware. Everything "
-      "except the plate read itself has been confirmed on a PowerWaveX w/ Incubator "
-      "(firmware R06.20): identification, the wavelength table, temperature, the "
-      "minimum kinetic interval, carrier movement, the assay definition, plate "
-      "geometry, strip range and the self-test. Absorbance DATA and spectral "
-      "scanning have NOT been confirmed, because that instrument's optics fail their "
-      "self-test; plate parsing rests on traffic captured from it in 2021, and the "
-      "scan response format on the manual alone. "
+      "This PowerWaveX driver is verified against one instrument: a PowerWaveX w/ "
+      "Incubator (firmware R06.20) passing its self-test. Identification, the "
+      "wavelength table, temperature, the minimum kinetic interval, carrier movement, "
+      "the assay definition, plate geometry, strip range, endpoint reads, kinetic "
+      "reads and spectral scans have all been exercised on it end to end. What has "
+      "NOT been checked is absolute photometric accuracy: every verification read was "
+      "taken on an empty carrier, which returns 0.000 OD everywhere by construction, "
+      "so the numbers have never been compared against a known standard. "
       "Please report results at https://discuss.pylabrobot.org."
     )
 
     await self.io.setup()
     self._connected = True
 
-    # The instrument may have left bytes queued from a previous session.
-    await self.io.reset_input_buffer()
-    await self.io.reset_output_buffer()
+    # A previous session may have died mid-operation, leaving the instrument part
+    # way through a response. Flushing once is not enough: bytes already on the
+    # wire arrive after the flush and would be read as the reply to the first
+    # command. Drain until the line has been quiet for a moment.
+    await self._drain_input()
 
     self._model = await self.request_model()
     self._wavelength_table = await self.request_wavelength_table()
@@ -524,7 +531,7 @@ class PowerWaveX:
     interval: int,
     count: int,
     shake_speed: int = 1,
-    total_read_time: int = 9999,
+    total_read_time: Optional[int] = None,
   ) -> List[AbsorbanceResult]:
     """Read the plate repeatedly at a fixed interval (page B-10).
 
@@ -543,8 +550,9 @@ class PowerWaveX:
       count: Number of reads, 2 to 9999.
       shake_speed: 0 slow, 1 medium, 2 fast, 3 variable. Shaking runs between
         reads.
-      total_read_time: Bytes 166-167 of the assay table. The manual says minutes,
-        but a bench test showed 9999 producing a run of roughly 9999 *seconds*.
+      total_read_time: Not supported; pass ``None``. Running a kinetic series by
+        total time means the instrument ignores ``count``, so the driver cannot
+        know how many blocks to expect. See :data:`._protocol.KINETIC_FLAGS`.
 
     Returns:
       One :class:`AbsorbanceResult` per wavelength per cycle, ordered by cycle
@@ -562,6 +570,13 @@ class PowerWaveX:
 
     num_strips = last_strip - first_strip + 1
 
+    if total_read_time is not None:
+      raise NotImplementedError(
+        "total_read_time is not supported: setting the total kinetic time makes the "
+        "instrument ignore count and keep cycling, so the driver cannot tell when the "
+        "run ends. Use count and interval instead."
+      )
+
     await self.push_assay_definition(
       wavelengths,
       read_type="kinetic",
@@ -569,7 +584,6 @@ class PowerWaveX:
       kinetic_interval=interval,
       kinetic_read_count=count,
       shake_speed=shake_speed,
-      total_kinetic_read_time=total_read_time,
     )
     await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
     if num_strips != plate.num_items_x:
@@ -618,6 +632,9 @@ class PowerWaveX:
           )
         )
       logger.info("[PowerWaveX %s] kinetic cycle %d/%d", self.port, cycle + 1, count)
+
+    # One marker closes the whole run, however many cycles it produced.
+    await self._consume_end_of_data()
 
     return results
 
@@ -876,27 +893,20 @@ class PowerWaveX:
       "[PowerWaveX %s] scan calibrated %s, first pass %s", self.port, calibrated, first_pass
     )
 
-    # A single CR marks the start of the data, before the per-wavelength blocks.
+    # A single CR marks the start of the data, then one line per wavelength, then
+    # one ^Z and one checksum byte for the whole series.
     start_code = await self._read_exactly(1)
     if start_code != CR:
       raise PowerWaveParseError(f"Expected CR data start code, got {start_code!r}")
 
-    wavelengths: List[int] = []
-    data: List[List[float]] = []
-    for index in range(len(expected)):
-      block = await self._read_until(SUB)
-      checksum = (await self._read_exactly(1))[0]
+    # Every wavelength is measured before any data is sent, so the whole section
+    # must arrive inside one deadline. Scanning is slower than a plate read.
+    timeout = self.timeout + SCAN_SECONDS_PER_WAVELENGTH * len(expected)
+    section = await self._read_until(SUB, timeout=timeout)
+    checksum = (await self._read_exactly(1, timeout=timeout))[0]
+    verify_scan_checksum(section, checksum)
 
-      candidates = scan_block_checksums(block)
-      if checksum not in candidates:
-        raise PowerWaveChecksumError(
-          f"Scan block {index + 1} checksum mismatch: computed {candidates}, "
-          f"instrument sent {checksum}"
-        )
-
-      wavelength, readings = parse_scan_block(block, num_wells)
-      wavelengths.append(wavelength)
-      data.append(readings)
+    wavelengths, data = parse_scan_data(section, num_wells)
 
     if wavelengths != expected:
       logger.warning(
@@ -996,7 +1006,9 @@ class PowerWaveX:
         necessarily the plate width.
     """
     await self._start_read()
-    return await self._collect_blocks(num_blocks, num_rows, num_columns)
+    blocks = await self._collect_blocks(num_blocks, num_rows, num_columns)
+    await self._consume_end_of_data()
+    return blocks
 
   async def _start_read(self) -> None:
     """Send READ PLATE and consume the status string that precedes the data."""
@@ -1190,14 +1202,94 @@ class PowerWaveX:
     await self.io.write(bytes(command.value))
     logger.debug("[PowerWaveX %s] sent %s", self.port, command.name)
 
-    response = await self.io.read(1)
+    # The io layer reads in one-second slices, so poll until this driver's own
+    # deadline. An instrument that is still finishing a read or a carriage move
+    # takes several seconds to acknowledge the next command; waiting only one
+    # slice made a second read in the same session fail intermittently.
+    deadline = time.monotonic() + self.timeout
+    response = b""
+    while len(response) == 0:
+      if time.monotonic() > deadline:
+        raise TimeoutError(f"No reply to {command.name} within {self.timeout}s")
+      response = await self.io.read(1)
+
     if response == ACK:
       return
     if response == NAK:
       raise PowerWaveNakError(f"Instrument rejected {command.name} with NAK")
-    if len(response) == 0:
-      raise TimeoutError(f"No reply to {command.name} within {self.io.get_read_timeout()}s")
     raise PowerWaveError(f"Expected ACK or NAK after {command.name}, got {response!r}")
+
+  async def _drain_input(self) -> None:
+    """Discard anything the instrument is still sending, until the line goes quiet.
+
+    A session that was interrupted mid-response - a crashed script, an abandoned
+    plate read - leaves the rest of that response in flight. Those bytes would
+    otherwise be read as the reply to the next command, which surfaces as an
+    unexpected byte in place of an ACK.
+    """
+    await self.io.reset_input_buffer()
+    await self.io.reset_output_buffer()
+
+    # A non-positive quiet window means "flush only", which is how the tests opt
+    # out: their scripted transport answers a read before any command is sent,
+    # whereas a real instrument stays silent until it is asked something.
+    if self._DRAIN_QUIET_SECONDS <= 0:
+      return
+
+    discarded = bytearray()
+    deadline = time.monotonic() + self._DRAIN_LIMIT_SECONDS
+    quiet_until = time.monotonic() + self._DRAIN_QUIET_SECONDS
+
+    while time.monotonic() < quiet_until and time.monotonic() < deadline:
+      chunk = await self.io.read(64)
+      if len(chunk) > 0:
+        discarded.extend(chunk)
+        quiet_until = time.monotonic() + self._DRAIN_QUIET_SECONDS
+
+    if len(discarded) > 0:
+      logger.warning(
+        "[PowerWaveX %s] discarded %d stale bytes left by a previous session: %r",
+        self.port,
+        len(discarded),
+        bytes(discarded[:64]),
+      )
+
+  async def _consume_end_of_data(self) -> None:
+    """Consume the ``^Z`` that closes a whole READ PLATE response.
+
+    The manual documents a ``^Z`` terminator and a checksum per data block and
+    stops there. A PowerWaveX w/ Incubator (firmware R06.20) also sends one extra
+    ``^Z`` after the last block's checksum - once per READ PLATE command, however
+    many blocks or kinetic cycles it produced. Verified directly: a one-wavelength
+    endpoint read ends ``^Z r ^Z``, and a three-cycle kinetic read sends three
+    blocks and a single trailing ``^Z``.
+
+    It does not follow the checksum promptly: the instrument returns the carriage
+    home first, which measured 7.3 s after a one-wavelength read and 7.7 s after a
+    two-wavelength one. So it waits out the driver's full response timeout rather
+    than a short window. Firmware that does not send it is tolerated: this only
+    warns, at the cost of one such wait per read.
+
+    Leaving it queued makes it the reply to the next command, which is how a
+    second read in one session failed with an unexpected ``^Z`` in place of an
+    ACK.
+    """
+    try:
+      trailer = await self._read_exactly(1)
+    except TimeoutError:
+      logger.warning(
+        "[PowerWaveX %s] no ^Z end-of-data marker after the last data block; "
+        "this firmware may not send one",
+        self.port,
+      )
+      return
+
+    if trailer != SUB:
+      logger.warning(
+        "[PowerWaveX %s] expected a ^Z end-of-data marker after the last data block, got %r",
+        self.port,
+        trailer,
+      )
 
   async def _read_exactly(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
     """Read exactly ``num_bytes``, or raise TimeoutError."""

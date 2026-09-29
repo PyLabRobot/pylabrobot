@@ -322,11 +322,16 @@ FLAG_SHAKE_EVERY_READ = 0x20
 FLAG_SHAKE_CONTINUOUS = 0x40
 FLAG_USE_TOTAL_KINETIC_TIME = 0x80
 
-#: Byte 31 as used by the kinetic runs that were verified on real hardware in 2021:
-#: shake, shake before every read, continuous shake, and use the total kinetic time.
-KINETIC_FLAGS = (
-  FLAG_SHAKE | FLAG_SHAKE_EVERY_READ | FLAG_SHAKE_CONTINUOUS | FLAG_USE_TOTAL_KINETIC_TIME
-)
+#: Byte 31 for a kinetic run governed by its read count: shake, shake before every
+#: read, continuous shake.
+#:
+#: :data:`FLAG_USE_TOTAL_KINETIC_TIME` is deliberately absent. The 2021 bench runs
+#: set it, but it makes the instrument run for ``total_kinetic_read_time`` and
+#: ignore ``kinetic_read_count`` entirely: a PowerWaveX w/ Incubator (firmware
+#: R06.20) asked for 3 cycles kept sending a 4th, leaving the caller reading into a
+#: run that had hours left. With the bit cleared the same request sends exactly
+#: three blocks and the closing ``^Z``. Verified directly.
+KINETIC_FLAGS = FLAG_SHAKE | FLAG_SHAKE_EVERY_READ | FLAG_SHAKE_CONTINUOUS
 
 
 def build_assay_definition(
@@ -919,6 +924,13 @@ SCAN_REQUEST_LENGTH = 18
 MAX_SCAN_STEP = 799
 SCAN_WHOLE_STRIP = 0  # row "00" scans the entire column
 
+#: Seconds to allow per scanned wavelength, on top of the driver's base timeout.
+#: The instrument measures every wavelength before sending any data, so the whole
+#: section arrives inside one deadline. Measured at roughly 1 s per wavelength on
+#: a PowerWaveX w/ Incubator (firmware R06.20); this leaves generous headroom for
+#: calibration passes and strip scans, which measure twice.
+SCAN_SECONDS_PER_WAVELENGTH = 6.0
+
 
 def scan_wavelengths(start: int, stop: int, step: int) -> List[int]:
   """The wavelengths a scan will visit, from start through stop in step increments."""
@@ -1025,55 +1037,101 @@ def parse_scan_wavelength_list(section: bytes) -> List[int]:
   return wavelengths
 
 
-def scan_block_checksums(block: bytes) -> Tuple[int, int]:
-  """Candidate checksums for one scan data block (page B-15).
+def scan_checksum(section: bytes) -> int:
+  """Checksum of a scan's data section (page B-15).
 
-  The manual says the checksum runs from the first byte after the data start code
-  through the ``^Z``, but it documents a single ``CR`` start code before the whole
-  series of blocks rather than one per block, so whether a leading ``CR`` belongs
-  to the sum is ambiguous for blocks after the first. READ PLATE's equivalent rule
-  is verified against captured traffic; this one is not, so both readings are
-  offered and the caller accepts either.
+  The sum runs from the first byte after the ``CR`` data start code through and
+  including the ``^Z`` terminator, mod 256 - the same rule as READ PLATE. There
+  is one checksum for the whole scan, not one per wavelength.
 
-  Returns:
-    ``(without_leading_cr, whole_block)``, equal when the block has no leading CR.
-  """
-  stripped = block[1:] if block.startswith(CR) else block
-  return sum(stripped) % 256, sum(block) % 256
-
-
-def parse_scan_block(block: bytes, num_wells: int) -> Tuple[int, List[float]]:
-  """Parse one wavelength's scan data block (page B-14).
-
-  A block is the wavelength as three ASCII digits, then one reading per well, then
-  ``^Z``. Readings use the same encoding as a plate read: a sign and four digits
-  with no decimal point, or ``*****`` when overrange.
+  Verified against a PowerWaveX w/ Incubator (firmware R06.20): a single-well
+  400-440 nm scan in 10 nm steps closed with ``^Z`` and checksum 238, and an
+  eight-row strip scan of 400-420 nm with checksum 70.
 
   Args:
-    block: The block through and including ``^Z``, with any leading ``CR``.
-    num_wells: 1 for a single well, or the plate's row count for a whole strip.
-
-  Returns:
-    The wavelength in nm, and one absorbance per well.
+    section: The data section through and including ``^Z``, with or without the
+      leading ``CR`` start code.
   """
-  body = block[1:] if block.startswith(CR) else block
+  body = section[1:] if section.startswith(CR) else section
+  return sum(body) % 256
 
-  match = re.match(rb"\s*(\d{3})", body)
-  if match is None:
-    raise PowerWaveParseError(f"Scan block does not start with a wavelength: {body[:16]!r}")
-  wavelength = int(match.group(1))
 
-  readings: List[float] = []
-  for reading in _READING_RE.finditer(body[match.end() :]):
-    if reading.group("overrange") is not None:
-      readings.append(OVERRANGE)
-    else:
-      magnitude = int(reading.group("magnitude")) / 1000
-      readings.append(magnitude if reading.group("sign") == b"+" else -magnitude)
+def verify_scan_checksum(section: bytes, checksum: int) -> None:
+  """Check a scan data section against its transmitted checksum byte (page B-15).
 
-  if len(readings) != num_wells:
-    raise PowerWaveParseError(
-      f"Expected {num_wells} readings at {wavelength} nm, parsed {len(readings)}"
+  Raises:
+    PowerWaveChecksumError: If the checksum does not match.
+  """
+  expected = scan_checksum(section)
+  if expected != checksum:
+    raise PowerWaveChecksumError(
+      f"Scan data checksum mismatch: computed {expected}, instrument sent {checksum}"
     )
 
-  return wavelength, readings
+
+def parse_scan_data(section: bytes, num_wells: int) -> Tuple[List[int], List[List[float]]]:
+  """Parse a scan's whole data section (page B-14).
+
+  The manual describes the data as a series of blocks, which reads as though each
+  wavelength were terminated by its own ``^Z`` and checksum. It is not. The
+  instrument sends one ``CR LF``-terminated line per wavelength - the wavelength
+  as three ASCII digits, then one comma-prefixed reading per well - and closes
+  the entire series with a single ``^Z`` and a single checksum byte::
+
+      <CR>400,+0000<CR><LF>410,+0000<CR><LF>...<^Z><checksum>
+
+  Readings use the same encoding as a plate read: a sign and four digits with no
+  decimal point, or ``*****`` when overrange. Verified against a PowerWaveX w/
+  Incubator (firmware R06.20).
+
+  Args:
+    section: The data section through and including ``^Z``, with or without the
+      leading ``CR`` start code.
+    num_wells: Readings expected per wavelength: 1 for a single well, or the
+      plate's row count for a whole strip.
+
+  Returns:
+    The wavelengths in nm, and the readings for each, indexed
+    ``[wavelength][well]``.
+
+  Raises:
+    PowerWaveParseError: If a line is malformed, or any wavelength does not carry
+      exactly ``num_wells`` readings.
+  """
+  body = section[1:] if section.startswith(CR) else section
+  if body.endswith(SUB):
+    body = body[:-1]
+
+  wavelengths: List[int] = []
+  data: List[List[float]] = []
+
+  for line in body.split(CR + LF):
+    line = line.strip(CR + LF)
+    if len(line) == 0:
+      continue
+
+    match = re.match(rb"(\d{3})", line)
+    if match is None:
+      raise PowerWaveParseError(f"Scan line does not start with a wavelength: {line[:16]!r}")
+
+    readings: List[float] = []
+    for reading in _READING_RE.finditer(line[match.end() :]):
+      if reading.group("overrange") is not None:
+        readings.append(OVERRANGE)
+      else:
+        magnitude = int(reading.group("magnitude")) / 1000
+        readings.append(magnitude if reading.group("sign") == b"+" else -magnitude)
+
+    wavelength = int(match.group(1))
+    if len(readings) != num_wells:
+      raise PowerWaveParseError(
+        f"Expected {num_wells} readings at {wavelength} nm, parsed {len(readings)} from {line!r}"
+      )
+
+    wavelengths.append(wavelength)
+    data.append(readings)
+
+  if len(wavelengths) == 0:
+    raise PowerWaveParseError(f"Scan data section holds no wavelengths: {section[:32]!r}")
+
+  return wavelengths, data

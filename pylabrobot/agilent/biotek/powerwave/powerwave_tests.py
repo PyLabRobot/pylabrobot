@@ -15,6 +15,7 @@ from typing import Optional
 from pylabrobot.agilent.biotek.powerwave import PowerWaveX
 from pylabrobot.agilent.biotek.powerwave._protocol import (
   ASSAY_DEFINITION_LENGTH,
+  FLAG_USE_TOTAL_KINETIC_TIME,
   KINETIC_FLAGS,
   OVERRANGE,
   ELX_ERRORS,
@@ -44,7 +45,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   parse_device_configuration,
   parse_elx_status,
   parse_plate,
-  parse_scan_block,
+  parse_scan_data,
   parse_scan_wavelength_list,
   parse_self_test_report,
   parse_status,
@@ -52,7 +53,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   parse_uint16,
   parse_wavelength_table,
   plate_checksum,
-  scan_block_checksums,
+  scan_checksum,
   scan_wavelengths,
   verify_plate_checksum,
   wells_bounding_box,
@@ -316,7 +317,9 @@ class TestAssayDefinition(unittest.TestCase):
     built = build_assay_definition(
       wavelengths,
       read_type="kinetic",
-      flags=KINETIC_FLAGS,
+      # The 2021 run set the total-time bit, which the driver no longer sends; pin
+      # it explicitly so this stays a byte-for-byte check of that capture.
+      flags=KINETIC_FLAGS | FLAG_USE_TOTAL_KINETIC_TIME,
       kinetic_interval=60,
       kinetic_read_count=9999,
       shake_time=5,
@@ -326,8 +329,11 @@ class TestAssayDefinition(unittest.TestCase):
     self.assertEqual(built, bytes(expected))
 
   def test_kinetic_flags_value(self):
-    # 0xF0: shake, shake before every read, continuous shake, use total kinetic time.
-    self.assertEqual(KINETIC_FLAGS, 0xF0)
+    # 0x70: shake, shake before every read, continuous shake. The total-time bit is
+    # excluded on purpose: with it set the instrument ignores the read count and
+    # keeps cycling past the blocks the driver is waiting for.
+    self.assertEqual(KINETIC_FLAGS, 0x70)
+    self.assertEqual(KINETIC_FLAGS & FLAG_USE_TOTAL_KINETIC_TIME, 0)
 
   def test_wavelength_encoding_pads_to_eighteen_bytes(self):
     self.assertEqual(encode_assay_wavelengths([550]), b"550000000000000000")
@@ -535,6 +541,25 @@ class _FakeSerial:
     return bytes(self._inbox)
 
 
+class _FakeSerialWithStaleBytes(_FakeSerial):
+  """A fake line holding stale bytes now and its scripted replies until asked.
+
+  A real instrument stays silent until it is given a command, but it may still be
+  flushing the tail of a response its last caller never read. Modelling both is
+  what makes the stale-byte drain in ``setup()`` testable, since the plain
+  :class:`_FakeSerial` answers a read before anything has been written.
+  """
+
+  def __init__(self, stale: bytes, script: bytes) -> None:
+    super().__init__(stale)
+    self._pending = bytearray(script)
+
+  async def write(self, data: bytes) -> None:
+    await super().write(data)
+    self._inbox.extend(self._pending)
+    self._pending.clear()
+
+
 _ACK = b"\x06"
 _NAK = b"\x15"
 _STATUS_OK = b"\x1e000\x03"
@@ -549,6 +574,9 @@ def _reader(script: bytes = b"", *, timeout: float = 0.2, model: Optional[str] =
   reader.io = fake  # type: ignore[assignment]
   # No real line to settle, so skip the post-assay-definition NAK flush delay.
   reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+  # The scripted transport answers a read before any command is written, so the
+  # stale-byte drain in setup() would eat the script. Flush only.
+  reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
   if model is not None:
     reader._model = model
   return reader, fake
@@ -769,7 +797,8 @@ def _read_script(
   'V' -> ACK + status. '{' -> ACK + status, despite the manual documenting no
     status string for it. '%' -> ACK + status, when needed. 'S' -> ACK + status,
     then per wavelength a plate data block terminated by ^Z and followed by a raw
-    checksum byte (page B-9).
+    checksum byte (page B-9), and a single ^Z end-of-data marker closing the whole
+    response.
   """
   script = _ACK + _STATUS_OK  # SET ASSAY DEFINITION
   script += _ACK + _STATUS_OK  # SET PLATE GEOMETRY
@@ -777,6 +806,7 @@ def _read_script(
     script += _ACK + _STATUS_OK  # SET STRIP RANGE
   script += _ACK + _STATUS_OK  # READ PLATE
   script += (_CAPTURED_PLATE + bytes([checksum])) * num_blocks
+  script += b"\x1a"  # one end-of-data marker for the whole read
   return script
 
 
@@ -917,7 +947,7 @@ class TestReadAbsorbance(unittest.IsolatedAsyncioTestCase):
     saturated = _CAPTURED_PLATE.replace(b",+0201,", b",*****,", 1)
     checksum = plate_checksum(saturated)
     # 'V', '{' and 'S', each ACK + status, then the block.
-    script = (_ACK + _STATUS_OK) * 3 + saturated + bytes([checksum])
+    script = (_ACK + _STATUS_OK) * 3 + saturated + bytes([checksum]) + b"\x1a"
     reader, _ = _reader(script, model="PowerWaveX")
     reader._wavelength_table = [620]
 
@@ -1025,6 +1055,85 @@ class TestPlateGeometryAndStripRange(unittest.IsolatedAsyncioTestCase):
           await reader.set_strip_range(first, last)
 
 
+class TestStaleByteDrain(unittest.IsolatedAsyncioTestCase):
+  """setup() discards what a crashed previous session left in flight."""
+
+  async def test_stale_bytes_are_discarded_before_the_first_command(self):
+    # A session killed part way through a plate read leaves the tail of that
+    # response on the wire; it would otherwise be read as the reply to '}'.
+    fake = _FakeSerialWithStaleBytes(
+      stale=b"\x1a",
+      script=_ACK + _CAPTURED_CONFIG + _ACK + _CAPTURED_TABLE + _STATUS_OK,
+    )
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=0.2)
+    reader.io = fake  # type: ignore[assignment]
+    reader._DRAIN_QUIET_SECONDS = 0.05  # type: ignore[misc]
+
+    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
+      await reader.setup()
+
+    self.assertIn("discarded 1 stale bytes", "\n".join(logs.output))
+    self.assertEqual(reader.model, "PowerWaveX w/ Incubator")
+    self.assertEqual(fake.remaining, b"")
+
+  async def test_a_quiet_line_is_not_waited_on_twice(self):
+    reader, _ = _reader(_ACK + _CAPTURED_CONFIG + _ACK + _CAPTURED_TABLE + _STATUS_OK)
+    await reader.setup()  # _DRAIN_QUIET_SECONDS is 0 in the fixture: flush only
+    self.assertEqual(reader.model, "PowerWaveX w/ Incubator")
+
+
+class TestEndOfDataMarker(unittest.IsolatedAsyncioTestCase):
+  """The ^Z that closes a whole READ PLATE response.
+
+  Undocumented, and verified on a PowerWaveX w/ Incubator (firmware R06.20): a
+  one-wavelength endpoint read ends ``^Z <checksum> ^Z``, and a three-cycle
+  kinetic read sends three blocks and a single trailing ^Z. Leaving it queued made
+  it the reply to the next command.
+  """
+
+  async def test_two_reads_in_one_session(self):
+    plate = _plate_resource()
+    reader, fake = _reader(_read_script() * 2, model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    for _ in range(2):
+      result = (await reader.read_absorbance(plate, plate.get_all_items(), 620))[0]
+      self.assertEqual(len(result.data), 8)
+
+    self.assertEqual(fake.remaining, b"")
+
+  async def test_marker_is_consumed_not_left_queued(self):
+    plate = _plate_resource()
+    reader, fake = _reader(_read_script(), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    self.assertEqual(fake.remaining, b"")
+
+  async def test_missing_marker_only_warns(self):
+    plate = _plate_resource()
+    self.assertEqual(_read_script()[-1:], b"\x1a")
+    reader, _ = _reader(_read_script()[:-1], model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
+      result = (await reader.read_absorbance(plate, plate.get_all_items(), 620))[0]
+
+    self.assertIn("no ^Z end-of-data marker", "\n".join(logs.output))
+    self.assertEqual(len(result.data), 8)  # the data itself still parses
+
+  async def test_unexpected_trailing_byte_warns(self):
+    plate = _plate_resource()
+    reader, _ = _reader(_read_script()[:-1] + b"Z", model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    self.assertIn("expected a ^Z end-of-data marker", "\n".join(logs.output))
+
+
 class TestReadWithStripRange(unittest.IsolatedAsyncioTestCase):
   """Reading a subset of wells, which the strip range makes possible."""
 
@@ -1039,7 +1148,7 @@ class TestReadWithStripRange(unittest.IsolatedAsyncioTestCase):
     plate = _plate_resource()
     block = self._two_column_block()
     script = (_ACK + _STATUS_OK) * 4  # 'V', '{', '%', 'S'
-    script += block + bytes([plate_checksum(block)])
+    script += block + bytes([plate_checksum(block)]) + b"\x1a"
     reader, fake = _reader(script, model="PowerWaveX")
     reader._wavelength_table = [620]
 
@@ -1076,7 +1185,7 @@ class TestReadWithStripRange(unittest.IsolatedAsyncioTestCase):
     plate = _plate_resource()
     block = self._two_column_block()
     script = (_ACK + _STATUS_OK) * 4  # 'V', '{', '%', 'S'
-    script += block + bytes([plate_checksum(block)])
+    script += block + bytes([plate_checksum(block)]) + b"\x1a"
     reader, fake = _reader(script, model="PowerWaveX")
     reader._wavelength_table = [620]
 
@@ -1186,6 +1295,7 @@ class TestKineticRead(unittest.IsolatedAsyncioTestCase):
     script += _ACK + struct.pack("<H", minimum) + _STATUS_OK
     script += _ACK + _STATUS_OK
     script += (_CAPTURED_PLATE + bytes([_CAPTURED_PLATE_CHECKSUM])) * (cycles * wavelengths)
+    script += b"\x1a"  # one end-of-data marker closes the whole run, not each cycle
     return script
 
   async def test_command_sequence_and_result_count(self):
@@ -1206,6 +1316,30 @@ class TestKineticRead(unittest.IsolatedAsyncioTestCase):
     # One result per wavelength per cycle, ordered by cycle then wavelength.
     self.assertEqual(len(results), 6)
     self.assertEqual([r.wavelength for r in results], [600, 630, 600, 630, 600, 630])
+
+  async def test_total_read_time_is_rejected(self):
+    # Accepting it would promise a count-driven run the instrument will not give:
+    # with the total-time bit set it keeps cycling past the blocks we wait for.
+    plate = _plate_resource()
+    reader, fake = _reader(model="PowerWaveX")
+    reader._wavelength_table = [600]
+
+    with self.assertRaises(NotImplementedError):
+      await reader.read_absorbance_kinetic(
+        plate, plate.get_all_items(), [600], interval=60, count=2, total_read_time=9999
+      )
+
+    self.assertEqual(fake.writes, [])  # nothing was sent
+
+  async def test_assay_table_does_not_set_the_total_time_bit(self):
+    plate = _plate_resource()
+    reader, fake = _reader(self._kinetic_script(cycles=2, wavelengths=1), model="PowerWaveX")
+    reader._wavelength_table = [600]
+
+    await reader.read_absorbance_kinetic(plate, plate.get_all_items(), [600], interval=60, count=2)
+
+    self.assertEqual(fake.writes[1][30] & FLAG_USE_TOTAL_KINETIC_TIME, 0)
+    self.assertEqual(fake.remaining, b"")
 
   async def test_assay_table_is_kinetic(self):
     plate = _plate_resource()
@@ -1271,6 +1405,7 @@ class TestKineticRead(unittest.IsolatedAsyncioTestCase):
     script += _ACK + struct.pack("<H", 60) + _STATUS_OK  # '$'
     script += _ACK + _STATUS_OK  # 'S'
     script += (block + bytes([plate_checksum(block)])) * 2
+    script += b"\x1a"  # end-of-data marker
     reader, fake = _reader(script, model="PowerWaveX")
     reader._wavelength_table = [600]
 
@@ -1500,46 +1635,70 @@ class TestScanResponseParsing(unittest.TestCase):
     with self.assertRaises(PowerWaveParseError):
       parse_scan_wavelength_list(b"4X0\r\x1a")
 
-  def test_single_well_block(self):
-    block = b"550,+0201\r\n\x1a"
-    wavelength, readings = parse_scan_block(block, num_wells=1)
-    self.assertEqual(wavelength, 550)
-    self.assertEqual(readings, [0.201])
+  #: A single-well 400-440 nm scan in 10 nm steps, captured verbatim from a
+  #: PowerWaveX w/ Incubator (firmware R06.20) with an empty carrier. The whole
+  #: series carries one ^Z and one checksum byte, not one per wavelength.
+  CAPTURED_SINGLE_WELL = b"\r400,+0000\r\n410,+0000\r\n420,+0000\r\n430,+0000\r\n440,+0000\r\n\x1a"
 
-  def test_strip_block(self):
-    block = b"550" + b"".join(b",+0%03d\r\n" % (100 + i) for i in range(8)) + b"\x1a"
-    wavelength, readings = parse_scan_block(block, num_wells=8)
-    self.assertEqual(wavelength, 550)
-    self.assertEqual(len(readings), 8)
-    self.assertAlmostEqual(readings[0], 0.100)
-    self.assertAlmostEqual(readings[7], 0.107)
+  #: The same instrument's whole-strip scan of column 1, 400-420 nm by 10 nm.
+  CAPTURED_STRIP = (
+    b"\r400,+0000,+0000,+0000,+0000,+0000,+0000,+0000,+0000\r\n"
+    b"410,+0000,+0000,+0000,+0000,+0000,+0000,+0000,+0000\r\n"
+    b"420,+0000,+0000,+0000,+0000,+0000,+0000,+0000,+0000\r\n\x1a"
+  )
 
-  def test_block_tolerates_a_leading_cr(self):
+  def test_captured_single_well_scan(self):
+    wavelengths, data = parse_scan_data(self.CAPTURED_SINGLE_WELL, num_wells=1)
+    self.assertEqual(wavelengths, [400, 410, 420, 430, 440])
+    self.assertEqual(data, [[0.0]] * 5)
+    self.assertEqual(scan_checksum(self.CAPTURED_SINGLE_WELL), 238)  # observed byte
+
+  def test_captured_strip_scan(self):
+    wavelengths, data = parse_scan_data(self.CAPTURED_STRIP, num_wells=8)
+    self.assertEqual(wavelengths, [400, 410, 420])
+    self.assertEqual(data, [[0.0] * 8] * 3)
+    self.assertEqual(scan_checksum(self.CAPTURED_STRIP), 70)  # observed byte
+
+  def test_single_well_section(self):
+    wavelengths, data = parse_scan_data(b"550,+0201\r\n\x1a", num_wells=1)
+    self.assertEqual(wavelengths, [550])
+    self.assertEqual(data, [[0.201]])
+
+  def test_strip_section(self):
+    section = b"550" + b"".join(b",+0%03d" % (100 + i) for i in range(8)) + b"\r\n\x1a"
+    wavelengths, data = parse_scan_data(section, num_wells=8)
+    self.assertEqual(wavelengths, [550])
+    self.assertEqual(len(data[0]), 8)
+    self.assertAlmostEqual(data[0][0], 0.100)
+    self.assertAlmostEqual(data[0][7], 0.107)
+
+  def test_section_tolerates_a_leading_cr(self):
     self.assertEqual(
-      parse_scan_block(b"\r550,+0201\r\n\x1a", 1), parse_scan_block(b"550,+0201\r\n\x1a", 1)
+      parse_scan_data(b"\r550,+0201\r\n\x1a", 1), parse_scan_data(b"550,+0201\r\n\x1a", 1)
     )
 
   def test_negative_and_overrange(self):
-    _, readings = parse_scan_block(b"550,-0201\r\n\x1a", 1)
-    self.assertEqual(readings, [-0.201])
-    _, readings = parse_scan_block(b"550,*****\r\n\x1a", 1)
-    self.assertTrue(math.isinf(readings[0]))
+    _, data = parse_scan_data(b"550,-0201\r\n\x1a", 1)
+    self.assertEqual(data, [[-0.201]])
+    _, data = parse_scan_data(b"550,*****\r\n\x1a", 1)
+    self.assertTrue(math.isinf(data[0][0]))
 
   def test_wrong_reading_count(self):
     with self.assertRaises(PowerWaveParseError):
-      parse_scan_block(b"550,+0201\r\n\x1a", num_wells=8)
+      parse_scan_data(b"550,+0201\r\n\x1a", num_wells=8)
 
   def test_missing_wavelength(self):
     with self.assertRaises(PowerWaveParseError):
-      parse_scan_block(b",+0201\r\n\x1a", 1)
+      parse_scan_data(b",+0201\r\n\x1a", 1)
 
-  def test_checksum_candidates(self):
-    block = b"550,+0201\r\n\x1a"
-    without, whole = scan_block_checksums(block)
-    self.assertEqual(without, whole)  # no leading CR, so the two agree
-    without, whole = scan_block_checksums(b"\r" + block)
-    self.assertEqual(without, sum(block) % 256)
-    self.assertEqual(whole, (sum(block) + 13) % 256)
+  def test_empty_section(self):
+    with self.assertRaises(PowerWaveParseError):
+      parse_scan_data(b"\r\x1a", 1)
+
+  def test_checksum_ignores_the_start_code(self):
+    section = b"550,+0201\r\n\x1a"
+    self.assertEqual(scan_checksum(section), sum(section) % 256)
+    self.assertEqual(scan_checksum(b"\r" + section), sum(section) % 256)
 
 
 class TestScanPlate(unittest.IsolatedAsyncioTestCase):
@@ -1552,10 +1711,13 @@ class TestScanPlate(unittest.IsolatedAsyncioTestCase):
     script += _STATUS_OK
     script += calibrated + b"\x1a"  # calibration section
     script += first_pass + b"\x1a"  # first pass section
-    script += b"\r"  # data start code
+    # One CR start code, one CR LF-terminated line per wavelength, then a single
+    # ^Z and a single checksum byte for the whole series.
+    section = b""
     for w in wavelengths:
-      block = b"%03d" % w + b"".join(b",+0%03d\r\n" % (100 + i) for i in range(num_wells)) + b"\x1a"
-      script += block + bytes([scan_block_checksums(block)[0]])
+      section += b"%03d" % w + b"".join(b",+0%03d" % (100 + i) for i in range(num_wells)) + b"\r\n"
+    section += b"\x1a"
+    script += b"\r" + section + bytes([scan_checksum(section)])
     return script
 
   async def test_single_well_scan(self):
