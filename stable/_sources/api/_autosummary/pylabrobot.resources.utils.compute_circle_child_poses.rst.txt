@@ -1,0 +1,6 @@
+pylabrobot.resources.utils.compute\_circle\_child\_poses
+========================================================
+
+.. currentmodule:: pylabrobot.resources.utils
+
+.. autofunction:: compute_circle_child_poses

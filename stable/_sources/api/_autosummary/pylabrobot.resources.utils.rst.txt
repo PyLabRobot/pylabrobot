@@ -18,6 +18,7 @@ pylabrobot.resources.utils
    .. autosummary::
       :toctree:
    
+      compute_circle_child_poses
       create_equally_spaced_2d
       create_equally_spaced_x
       create_equally_spaced_y
