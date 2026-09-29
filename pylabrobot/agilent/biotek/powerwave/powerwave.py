@@ -34,12 +34,16 @@ from ._protocol import (
   PowerWaveError,
   PowerWaveNakError,
   PowerWaveParseError,
+  PowerWaveSelfTestError,
   build_assay_definition,
   configuration_has_incubator,
   count_overrange,
+  encode_plate_geometry,
+  encode_strip_range,
   encode_temperature_setpoint,
   parse_device_configuration,
   parse_plate,
+  parse_self_test_report,
   parse_status,
   parse_temperature,
   parse_uint16,
@@ -121,6 +125,7 @@ class PowerWaveX:
     self._temperature_setpoint: Optional[int] = None
     self._assay_defined = False
     self._assay_wavelengths: List[int] = []
+    self._strip_range: Optional[tuple[int, int]] = None
 
     self.io = Serial(
       human_readable_device_name="Agilent BioTek PowerWaveX",
@@ -158,11 +163,14 @@ class PowerWaveX:
     as :attr:`model` and :attr:`wavelength_table`.
     """
     logger.warning(
-      "This PowerWaveX driver is only partly verified against hardware. Identification, "
-      "the wavelength table, temperature, the minimum kinetic interval and carrier "
-      "movement have been confirmed on a PowerWaveX w/ Incubator (firmware R06.20). "
-      "Absorbance reading has NOT been confirmed on an instrument, only against "
-      "captured traffic. Please report results at https://discuss.pylabrobot.org."
+      "This PowerWaveX driver is only partly verified against hardware. Everything "
+      "except the plate read itself has been confirmed on a PowerWaveX w/ Incubator "
+      "(firmware R06.20): identification, the wavelength table, temperature, the "
+      "minimum kinetic interval, carrier movement, the assay definition, plate "
+      "geometry, strip range and the self-test. Absorbance DATA has not been "
+      "confirmed, because that instrument's optics fail their self-test; the parsing "
+      "rests on traffic captured from it in 2021. "
+      "Please report results at https://discuss.pylabrobot.org."
     )
 
     await self.io.setup()
@@ -403,7 +411,7 @@ class PowerWaveX:
     Returns:
       One :class:`AbsorbanceResult` per requested wavelength, in the order asked.
     """
-    self._require_full_plate(plate, wells)
+    first_strip, last_strip = self._strip_range_for(plate, wells)
 
     low, high = self.abs_wavelength_range
     for wavelength in wavelengths:
@@ -420,23 +428,32 @@ class PowerWaveX:
         self._wavelength_table,
       )
 
+    num_strips = last_strip - first_strip + 1
     logger.info(
-      "[PowerWaveX %s] read_absorbance: plate=%s, wavelengths=%s nm, wells=%d",
+      "[PowerWaveX %s] read_absorbance: plate=%s, wavelengths=%s nm, wells=%d, strips %d-%d",
       self.port,
       plate.name,
       list(wavelengths),
       len(wells),
+      first_strip,
+      last_strip,
     )
 
+    # Order matters (pages B-12, B-13): the assay definition resets the strip range,
+    # and so does the geometry command, so both must follow it in this order.
     await self.push_assay_definition(wavelengths, read_type="endpoint")
-    blocks = await self._read_plate(len(wavelengths), plate)
+    await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
+    if num_strips != plate.num_items_x:
+      await self.set_strip_range(first_strip, last_strip)
+
+    blocks = await self._read_plate(len(wavelengths), plate.num_items_y, num_strips)
 
     temperature = await self._try_read_temperature()
     timestamp = datetime.now()
 
     results = []
     for wavelength, block in zip(wavelengths, blocks):
-      data: List[List[Optional[float]]] = [[value for value in row] for row in block]
+      data = self._place_strips(block, plate, first_strip)
       overrange = count_overrange(block)
       if overrange > 0:
         logger.warning(
@@ -457,6 +474,111 @@ class PowerWaveX:
       )
 
     return results
+
+  async def set_plate_geometry(self, num_rows: int, num_columns: int) -> None:
+    """Select the microplate geometry (``'{'``, page B-12).
+
+    Must be sent *after* the assay definition table, which is why
+    :meth:`read_absorbances` sequences it that way. Sending it resets the strip
+    range to the full plate, so any strip range must follow it.
+
+    The manual recommends issuing this even for 96-well plates, which are the
+    default.
+
+    Args:
+      num_rows: 8 for a 96-well plate, 16 for a 384-well plate.
+      num_columns: 12 for a 96-well plate, 24 for a 384-well plate.
+
+    Raises:
+      NotImplementedError: For any layout the instrument has no code for.
+      PowerWaveStatusError: If the instrument rejects the geometry. A 96-well
+        PowerWaveX answers ``0A0`` to a 384-well request.
+
+    Note:
+      The manual documents only an ACK for this command, with no status string.
+      That is wrong: a PowerWaveX w/ Incubator (firmware R06.20) sends a full
+      status string after the geometry byte, verified directly. Not consuming it
+      leaves five bytes queued and desynchronises every later command.
+    """
+    payload = encode_plate_geometry(num_rows, num_columns)
+
+    await self._send_command(Command.SET_PLATE_GEOMETRY)
+    await self.io.write(payload)
+    await self._read_status()
+
+    self._strip_range = (1, num_columns)
+    logger.debug("[PowerWaveX %s] plate geometry set to %dx%d", self.port, num_rows, num_columns)
+
+  async def set_strip_range(self, first_strip: int, last_strip: int) -> None:
+    """Restrict the read to a contiguous range of plate columns (``'%'``, page B-13).
+
+    Strips are numbered plate columns, from 1. The instrument cannot skip strips
+    and cannot select rows, so every row of the chosen columns is always read.
+
+    The range reverts to the full plate whenever a new assay definition table is
+    loaded, and whenever SET PLATE GEOMETRY is sent, so this must be the last of
+    the three.
+
+    Args:
+      first_strip: First column to read, from 1.
+      last_strip: Last column to read, inclusive.
+
+    Note:
+      The instrument does not range-check these itself; it answered ``000`` to a
+      first strip of 0 when tested. The bounds are enforced here instead.
+    """
+    payload = encode_strip_range(first_strip, last_strip)
+
+    await self._send_command(Command.SET_STRIP_RANGE)
+    await self.io.write(payload)
+    await self._read_status()
+
+    self._strip_range = (first_strip, last_strip)
+    logger.debug("[PowerWaveX %s] strip range set to %d-%d", self.port, first_strip, last_strip)
+
+  async def self_test(self, timeout: float = 180, raise_on_failure: bool = True) -> str:
+    """Run the instrument self-test and return its report (``'*'``, page B-16).
+
+    This is the documented remedy for status ``080``, and the only way to learn
+    *why* an instrument is refusing to read. It recalibrates gains and should be
+    run after any change to the wavelength table.
+
+    Args:
+      timeout: Seconds to allow. The test moves every axis and is slow.
+      raise_on_failure: Whether to raise when the report declares a failure.
+
+    Returns:
+      The full ASCII report, including the per-wavelength Air and Dark counts and
+      the incubator zone results.
+
+    Raises:
+      PowerWaveSelfTestError: If the report declares a failure and
+        ``raise_on_failure`` is set.
+
+    Note:
+      The status string that closes this response reports whether the *command*
+      ran, not whether the test passed. A failing instrument still answers
+      ``"000"``, so the verdict is taken from the report body instead.
+    """
+    await self._send_command(Command.SELF_TEST)
+
+    frame = await self._read_until(ETX, timeout=timeout)
+    if len(frame) < STATUS_LENGTH:
+      raise PowerWaveParseError(f"Truncated self-test response: {frame!r}")
+
+    report = frame[:-STATUS_LENGTH].decode("latin-1")
+    parse_status(frame[-STATUS_LENGTH:])
+
+    code = parse_self_test_report(report)
+    if code is None:
+      logger.info("[PowerWaveX %s] self-test passed", self.port)
+      return report
+
+    error = PowerWaveSelfTestError(code, report)
+    logger.error("[PowerWaveX %s] %s", self.port, error)
+    if raise_on_failure:
+      raise error
+    return report
 
   async def push_assay_definition(
     self,
@@ -493,12 +615,20 @@ class PowerWaveX:
       "[PowerWaveX %s] assay defined: %s, %s nm", self.port, read_type, list(wavelengths)
     )
 
-  async def _read_plate(self, num_blocks: int, plate: Plate) -> List[List[List[float]]]:
+  async def _read_plate(
+    self, num_blocks: int, num_rows: int, num_columns: int
+  ) -> List[List[List[float]]]:
     """Run READ PLATE and collect one parsed data block per wavelength (page B-9).
 
     The response is an ACK, a status string, then for each wavelength a ``CR``
     start code, the rows, a ``^Z`` terminator and a raw checksum byte. A trailing
     status string is sent only if the read failed, so none is consumed here.
+
+    Args:
+      num_blocks: One per wavelength in the loaded assay definition.
+      num_rows: Rows in the loaded plate geometry.
+      num_columns: Columns actually read, which is the strip range and not
+        necessarily the plate width.
     """
     if not self._assay_defined:
       raise PowerWaveError(
@@ -514,7 +644,7 @@ class PowerWaveX:
       frame = await self._read_until(SUB)
       checksum = await self._read_exactly(1)
       verify_plate_checksum(frame, checksum[0])
-      blocks.append(parse_plate(frame, plate.num_items_y, plate.num_items_x))
+      blocks.append(parse_plate(frame, num_rows, num_columns))
       logger.debug(
         "[PowerWaveX %s] block %d/%d parsed, checksum %d verified",
         self.port,
@@ -525,23 +655,58 @@ class PowerWaveX:
 
     return blocks
 
-  def _require_full_plate(self, plate: Plate, wells: List[Well]) -> None:
-    """Reject the cases that need commands this driver does not yet send."""
-    if (plate.num_items_y, plate.num_items_x) != (8, 12):
-      raise NotImplementedError(
-        f"{plate.name} is {plate.num_items_y}x{plate.num_items_x}. Only 8x12 plates are "
-        "supported until SET PLATE GEOMETRY ('{', page B-12) is implemented."
-      )
+  def _strip_range_for(self, plate: Plate, wells: List[Well]) -> tuple[int, int]:
+    """Work out the strip range covering ``wells``, validating the selection.
+
+    The instrument reads whole columns only, so a selection that does not fill
+    every row of its columns is widened to the enclosing strips. Those extra
+    wells are measured and reported rather than discarded.
+
+    Returns:
+      The inclusive, 1-based ``(first_strip, last_strip)`` to read.
+    """
+    if len(wells) == 0:
+      raise ValueError("No wells to read")
 
     parents = set(well.parent for well in wells)
     if len(parents) != 1 or parents.pop() is not plate:
       raise ValueError("All wells must belong to the specified plate")
 
-    if len(wells) != plate.num_items:
-      raise NotImplementedError(
-        f"Reading a subset of wells ({len(wells)} of {plate.num_items}) needs SET STRIP "
-        "RANGE ('%', page B-13), which is not implemented yet. Pass plate.get_all_items()."
+    # Validates the geometry early, before anything is sent.
+    encode_plate_geometry(plate.num_items_y, plate.num_items_x)
+
+    columns = [well.get_column() for well in wells]
+    first_strip, last_strip = min(columns) + 1, max(columns) + 1
+
+    covered = (last_strip - first_strip + 1) * plate.num_items_y
+    if covered != len(wells):
+      logger.info(
+        "[PowerWaveX %s] the selection of %d wells is not a whole block of columns; "
+        "reading strips %d-%d (%d wells) and reporting all of them, since the instrument "
+        "cannot select rows (page B-13)",
+        self.port,
+        len(wells),
+        first_strip,
+        last_strip,
+        covered,
       )
+
+    return first_strip, last_strip
+
+  def _place_strips(
+    self, block: List[List[float]], plate: Plate, first_strip: int
+  ) -> List[List[Optional[float]]]:
+    """Position a strip-range data block within a full-plate grid.
+
+    Columns outside the strip range were never measured and stay ``None``.
+    """
+    data: List[List[Optional[float]]] = [
+      [None] * plate.num_items_x for _ in range(plate.num_items_y)
+    ]
+    for row_index, row in enumerate(block):
+      for offset, value in enumerate(row):
+        data[row_index][first_strip - 1 + offset] = value
+    return data
 
   async def _try_read_temperature(self) -> Optional[float]:
     """Read the chamber temperature for a result, returning None if unavailable."""

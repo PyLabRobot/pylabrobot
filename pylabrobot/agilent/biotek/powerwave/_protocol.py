@@ -530,3 +530,124 @@ def wells_bounding_box(
   rows = [row for row, _ in well_indices]
   columns = [column for _, column in well_indices]
   return (min(rows), min(columns), max(rows), max(columns))
+
+
+# --------------------------------------------------------------------------------------
+# Plate geometry and strip range (pages B-12, B-13)
+# --------------------------------------------------------------------------------------
+
+#: SET PLATE GEOMETRY data byte, keyed by (rows, columns).
+PLATE_GEOMETRIES: Dict[Tuple[int, int], int] = {
+  (8, 12): 2,  # 96 wells
+  (16, 24): 3,  # 384 wells
+}
+
+MAX_STRIP = 24
+
+
+def encode_plate_geometry(num_rows: int, num_columns: int) -> bytes:
+  """Encode the SET PLATE GEOMETRY data byte (page B-12).
+
+  Raises:
+    NotImplementedError: If the instrument has no geometry code for this layout.
+      Only 96-well (8x12) and 384-well (16x24) are defined.
+  """
+  try:
+    return bytes([PLATE_GEOMETRIES[(num_rows, num_columns)]])
+  except KeyError:
+    raise NotImplementedError(
+      f"The PowerWave supports 8x12 and 16x24 plates only (page B-12), not {num_rows}x{num_columns}"
+    ) from None
+
+
+def encode_strip_range(first_strip: int, last_strip: int) -> bytes:
+  """Encode the two SET STRIP RANGE data bytes (page B-13).
+
+  Strips are plate columns, numbered from 1. The range is inclusive and must be
+  contiguous: the instrument cannot skip strips, and cannot select rows at all.
+  """
+  if not 1 <= first_strip <= MAX_STRIP:
+    raise ValueError(f"first_strip must be 1-{MAX_STRIP}, got {first_strip}")
+  if not 1 <= last_strip <= MAX_STRIP:
+    raise ValueError(f"last_strip must be 1-{MAX_STRIP}, got {last_strip}")
+  if first_strip > last_strip:
+    raise ValueError(f"first_strip {first_strip} is after last_strip {last_strip}")
+  return bytes([first_strip, last_strip])
+
+
+# --------------------------------------------------------------------------------------
+# Self-test report (page B-16, error codes pages B-22 onward)
+# --------------------------------------------------------------------------------------
+
+#: Self-test error codes, in Rev D2 numbering. Rev C1 numbers several of these
+#: differently (its 0202 is the monochromator and it has an 0203), so a code read
+#: from a PowerWaveX must be looked up here and not in the older manual.
+SELF_TEST_ERRORS: Dict[str, str] = {
+  "0200": "Plate carrier did not find the home sensor",
+  "0201": "Order sorting filter wheel did not find the home sensor",
+  "0202": "Robot lid lift did not find the home sensor",
+  "0204": "Y axis could not find the optosensor",
+  "0300": "Carrier failed to find light beam",
+  "0301": "Order sorting filter wheel did not find home",
+  "0303": "Monochromator did not find home",
+  "0400": "Track carrier failed position verify",
+  "0401": "Order sorting filter wheel failed position verify",
+  "0402": "Robot lid lift failed position verify",
+  "0403": "Wavelength select (monochromator) failed",
+  "0404": "Y axis failed position verify",
+  "0500": "Saturation error",
+  "0601": "LAMBDA #1 gain out of range",
+  "0602": "LAMBDA #2 gain out of range",
+  "0603": "LAMBDA #3 gain out of range",
+  "0604": "LAMBDA #4 gain out of range",
+  "0605": "LAMBDA #5 gain out of range",
+  "0606": "LAMBDA #6 gain out of range",
+  "0700": "Reader failed noise test",
+  "0800": "Reader failed offset test",
+  "0900": "Read time dark value out of range",
+  "1000": "Configuration data is missing",
+  "1100": "Failed configuration checksum test",
+  "1200": "Calibration data missing",
+  "1300": "Motor not correctly homed",
+  "1400": "Assay incubation error",
+  "1500": "Assay incubation error",
+  "1600": "Computer control assay definition error",
+  "1700": "Kinetic interval too short for selected options",
+  "1800": "Too many kinetic intervals programmed",
+  "1900": "Memory allocation failure",
+}
+
+_SELF_TEST_FAIL_RE = re.compile(r"\*\*\*\s*SYSTEM TEST FAIL\s*\*\*\*")
+_SELF_TEST_ERROR_RE = re.compile(r"ERROR\s*\((\d{4})\)")
+
+
+class PowerWaveSelfTestError(PowerWaveError):
+  """The self-test report declared a failure (page B-16)."""
+
+  def __init__(self, code: Optional[str], report: str) -> None:
+    description = SELF_TEST_ERRORS.get(code or "", "Unknown self-test error")
+    super().__init__(
+      f"Self-test failed with error {code or '(no code)'}: {description}. "
+      "The instrument cannot read plates until this is resolved."
+    )
+    self.code = code
+    self.description = description
+    self.report = report
+
+
+def parse_self_test_report(report: str) -> Optional[str]:
+  """Return the error code from a self-test report, or ``None`` if it passed.
+
+  The self-test's *status string* reports whether the command ran, not whether
+  the test passed: a failing instrument still answers ``"000"``. The verdict
+  appears only in the ASCII report body, which this instrument prints in the
+  older Rev C1 layout even though its error codes follow Rev D2.
+
+  Returns:
+    The four-digit error code, ``None`` if the report shows no failure, or the
+    empty string if it declares a failure without naming a code.
+  """
+  if _SELF_TEST_FAIL_RE.search(report) is None:
+    return None
+  match = _SELF_TEST_ERROR_RE.search(report)
+  return match.group(1) if match is not None else ""

@@ -3,6 +3,7 @@ from ._protocol import (
   PowerWaveError,
   PowerWaveNakError,
   PowerWaveParseError,
+  PowerWaveSelfTestError,
   PowerWaveStatusError,
 )
 from .powerwave import PowerWaveX

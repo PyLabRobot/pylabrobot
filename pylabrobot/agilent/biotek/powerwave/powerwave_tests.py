@@ -16,20 +16,26 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   ASSAY_DEFINITION_LENGTH,
   KINETIC_FLAGS,
   OVERRANGE,
+  SELF_TEST_ERRORS,
+  STATUS_LENGTH,
   Command,
   PowerWaveChecksumError,
   PowerWaveError,
   PowerWaveNakError,
   PowerWaveParseError,
+  PowerWaveSelfTestError,
   PowerWaveStatusError,
   build_assay_definition,
   configuration_has_incubator,
   count_overrange,
   encode_assay_wavelengths,
+  encode_plate_geometry,
+  encode_strip_range,
   encode_temperature_setpoint,
   encode_wavelength_table,
   parse_device_configuration,
   parse_plate,
+  parse_self_test_report,
   parse_status,
   parse_temperature,
   parse_uint16,
@@ -740,13 +746,22 @@ def _plate_resource(name: str = "plate"):
   return cellvis_96_wellplate_350uL_Fb(name=name)
 
 
-def _read_script(num_blocks: int = 1, checksum: int = _CAPTURED_PLATE_CHECKSUM) -> bytes:
-  """Bytes the instrument sends for a push-assay-then-read sequence.
+def _read_script(
+  num_blocks: int = 1,
+  checksum: int = _CAPTURED_PLATE_CHECKSUM,
+  strip_range: bool = False,
+) -> bytes:
+  """Bytes the instrument sends for a push-assay, set-geometry, read sequence.
 
-  'V' -> ACK + status, then 'S' -> ACK + status, then per wavelength a plate data
-  block terminated by ^Z and followed by a raw checksum byte (page B-9).
+  'V' -> ACK + status. '{' -> ACK + status, despite the manual documenting no
+    status string for it. '%' -> ACK + status, when needed. 'S' -> ACK + status,
+    then per wavelength a plate data block terminated by ^Z and followed by a raw
+    checksum byte (page B-9).
   """
   script = _ACK + _STATUS_OK  # SET ASSAY DEFINITION
+  script += _ACK + _STATUS_OK  # SET PLATE GEOMETRY
+  if strip_range:
+    script += _ACK + _STATUS_OK  # SET STRIP RANGE
   script += _ACK + _STATUS_OK  # READ PLATE
   script += (_CAPTURED_PLATE + bytes([checksum])) * num_blocks
   return script
@@ -762,11 +777,15 @@ class TestReadAbsorbance(unittest.IsolatedAsyncioTestCase):
 
     results = await reader.read_absorbance(plate, plate.get_all_items(), 620)
 
-    # 'V' then the 170-byte table, then 'S'. No temperature read: no incubator.
+    # 'V' + table, then '{' + geometry, then 'S'. No strip range: the whole plate
+    # is wanted. No temperature read: this model has no incubator.
     self.assertEqual(fake.writes[0], b"V")
     self.assertEqual(len(fake.writes[1]), 170)
-    self.assertEqual(fake.writes[2], b"S")
-    self.assertEqual(len(fake.writes), 3)
+    self.assertEqual(fake.writes[2], b"{")
+    self.assertEqual(fake.writes[3], b"\x02")  # 2 = 96 wells, page B-12
+    self.assertEqual(fake.writes[4], b"S")
+    self.assertEqual(len(fake.writes), 5)
+    self.assertEqual(fake.remaining, b"")
     self.assertEqual(fake.remaining, b"")
 
     self.assertEqual(len(results), 1)
@@ -850,17 +869,16 @@ class TestReadAbsorbance(unittest.IsolatedAsyncioTestCase):
           await reader.read_absorbance(plate, plate.get_all_items(), bad)
     self.assertEqual(fake.writes, [])
 
-  async def test_well_subset_raises_not_implemented(self):
+  async def test_no_wells_raises(self):
     plate = _plate_resource()
     reader, fake = _reader(model="PowerWaveX")
     reader._wavelength_table = [620]
 
-    with self.assertRaises(NotImplementedError) as ctx:
-      await reader.read_absorbance(plate, plate.get_all_items()[:12], 620)
-    self.assertIn("SET STRIP RANGE", str(ctx.exception))
+    with self.assertRaises(ValueError):
+      await reader.read_absorbance(plate, [], 620)
     self.assertEqual(fake.writes, [])
 
-  async def test_non_96_well_plate_raises_not_implemented(self):
+  async def test_unsupported_geometry_raises_before_anything_is_sent(self):
     from pylabrobot.resources import cellvis_24_wellplate_3600uL_Fb
 
     plate = cellvis_24_wellplate_3600uL_Fb(name="plate24")
@@ -869,7 +887,7 @@ class TestReadAbsorbance(unittest.IsolatedAsyncioTestCase):
 
     with self.assertRaises(NotImplementedError) as ctx:
       await reader.read_absorbance(plate, plate.get_all_items(), 620)
-    self.assertIn("SET PLATE GEOMETRY", str(ctx.exception))
+    self.assertIn("8x12 and 16x24", str(ctx.exception))
     self.assertEqual(fake.writes, [])
 
   async def test_wells_from_another_plate_raises(self):
@@ -885,7 +903,8 @@ class TestReadAbsorbance(unittest.IsolatedAsyncioTestCase):
     plate = _plate_resource()
     saturated = _CAPTURED_PLATE.replace(b",+0201,", b",*****,", 1)
     checksum = plate_checksum(saturated)
-    script = _ACK + _STATUS_OK + _ACK + _STATUS_OK + saturated + bytes([checksum])
+    # 'V', '{' and 'S', each ACK + status, then the block.
+    script = (_ACK + _STATUS_OK) * 3 + saturated + bytes([checksum])
     reader, _ = _reader(script, model="PowerWaveX")
     reader._wavelength_table = [620]
 
@@ -918,11 +937,10 @@ class TestAssayDefinitionPush(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(reader._assay_defined)
 
   async def test_read_plate_without_an_assay_raises(self):
-    plate = _plate_resource()
     reader, fake = _reader(model="PowerWaveX")
 
     with self.assertRaises(PowerWaveError) as ctx:
-      await reader._read_plate(1, plate)
+      await reader._read_plate(1, 8, 12)
     self.assertIn("No assay definition", str(ctx.exception))
     self.assertEqual(fake.writes, [])
 
@@ -934,3 +952,213 @@ class TestAssayDefinitionPush(unittest.IsolatedAsyncioTestCase):
     await reader.halt()
 
     self.assertFalse(reader._assay_defined)
+
+
+class TestPlateGeometryAndStripRange(unittest.IsolatedAsyncioTestCase):
+  """SET PLATE GEOMETRY and SET STRIP RANGE, pages B-12 and B-13."""
+
+  async def test_geometry_96_well(self):
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
+    await reader.set_plate_geometry(8, 12)
+    self.assertEqual(fake.writes, [b"{", b"\x02"])
+    self.assertEqual(fake.remaining, b"")
+
+  async def test_geometry_384_well(self):
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
+    await reader.set_plate_geometry(16, 24)
+    self.assertEqual(fake.writes, [b"{", b"\x03"])
+
+  async def test_geometry_consumes_a_status_string(self):
+    """The manual documents no status string for '{', but the instrument sends one.
+
+    Verified against a PowerWaveX w/ Incubator. Leaving it unread desynchronises
+    every subsequent command.
+    """
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
+    await reader.set_plate_geometry(8, 12)
+    self.assertEqual(fake.remaining, b"")
+
+  async def test_geometry_rejection_raises(self):
+    """A 96-well instrument answers 0A0 to a 384-well geometry request."""
+    reader, _ = _reader(_ACK + b"\x1e0A0\x03", model="PowerWaveX")
+    with self.assertRaises(PowerWaveStatusError) as ctx:
+      await reader.set_plate_geometry(16, 24)
+    self.assertEqual(ctx.exception.code, "0A0")
+
+  async def test_geometry_resets_the_tracked_strip_range(self):
+    reader, _ = _reader(_ACK + _STATUS_OK + _ACK + _STATUS_OK, model="PowerWaveX")
+    await reader.set_strip_range(3, 5)
+    self.assertEqual(reader._strip_range, (3, 5))
+    await reader.set_plate_geometry(8, 12)
+    self.assertEqual(reader._strip_range, (1, 12))
+
+  async def test_unsupported_geometry_raises(self):
+    reader, fake = _reader(model="PowerWaveX")
+    with self.assertRaises(NotImplementedError):
+      await reader.set_plate_geometry(4, 6)
+    self.assertEqual(fake.writes, [])
+
+  async def test_strip_range(self):
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
+    await reader.set_strip_range(3, 7)
+    self.assertEqual(fake.writes, [b"%", b"\x03\x07"])
+    self.assertEqual(fake.remaining, b"")
+
+  async def test_strip_range_bounds(self):
+    reader, _ = _reader(model="PowerWaveX")
+    for first, last in ((0, 5), (1, 25), (7, 3)):
+      with self.subTest(first=first, last=last):
+        with self.assertRaises(ValueError):
+          await reader.set_strip_range(first, last)
+
+
+class TestReadWithStripRange(unittest.IsolatedAsyncioTestCase):
+  """Reading a subset of wells, which the strip range makes possible."""
+
+  def _two_column_block(self, num_rows: int = 8, num_columns: int = 2) -> bytes:
+    """A synthetic plate block sized to a strip range, +0.100 in every well."""
+    rows = b"".join(
+      b"".join(b",+0100" for _ in range(num_columns)) + b"\r\n" for _ in range(num_rows)
+    )
+    return b"\r" + rows + b"\x1a"
+
+  async def test_column_subset_sends_strip_range(self):
+    plate = _plate_resource()
+    block = self._two_column_block()
+    script = (_ACK + _STATUS_OK) * 4  # 'V', '{', '%', 'S'
+    script += block + bytes([plate_checksum(block)])
+    reader, fake = _reader(script, model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    # Columns 3 and 4, every row: exactly what a strip range can express.
+    wells = [w for w in plate.get_all_items() if w.get_column() in (2, 3)]
+    self.assertEqual(len(wells), 16)
+
+    results = await reader.read_absorbance(plate, wells, 620)
+
+    self.assertEqual(fake.writes[2], b"{")
+    self.assertEqual(fake.writes[4], b"%")
+    self.assertEqual(fake.writes[5], b"\x03\x04")  # strips 3-4, 1-based
+    self.assertEqual(fake.writes[6], b"S")
+    self.assertEqual(fake.remaining, b"")
+
+    data = results[0].data
+    # Only the read columns carry values; the rest were never measured.
+    self.assertEqual(data[0][2], 0.100)
+    self.assertEqual(data[7][3], 0.100)
+    self.assertIsNone(data[0][0])
+    self.assertIsNone(data[0][11])
+
+  async def test_full_plate_sends_no_strip_range(self):
+    plate = _plate_resource()
+    reader, fake = _reader(_read_script(), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    self.assertNotIn(b"%", fake.writes)
+
+  async def test_partial_column_selection_is_widened_to_whole_strips(self):
+    """The instrument cannot select rows, so a ragged selection reads whole columns."""
+    plate = _plate_resource()
+    block = self._two_column_block()
+    script = (_ACK + _STATUS_OK) * 4  # 'V', '{', '%', 'S'
+    script += block + bytes([plate_checksum(block)])
+    reader, fake = _reader(script, model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    # A1, A2 and B1 only: three wells spanning two columns.
+    wells = [plate.get_item(0), plate.get_item(1), plate.get_item(12)]
+
+    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="INFO") as logs:
+      results = await reader.read_absorbance(plate, wells, 620)
+
+    self.assertIn("not a whole block of columns", "\n".join(logs.output))
+    self.assertEqual(fake.writes[5], b"\x01\x02")  # widened to strips 1-2
+    # The extra wells were measured, so they are reported rather than discarded.
+    self.assertEqual(results[0].data[7][0], 0.100)
+
+
+class TestSelfTest(unittest.IsolatedAsyncioTestCase):
+  """SELF-TEST, page B-16. Fixtures are captured from a real instrument."""
+
+  # Captured: the tail of a failing self-test report, followed by its status string.
+  _FAILING_TAIL = (
+    b"Lambda: 550  Gain:  0.00  Resets: 0\r\n"
+    b"Air:            0      0      0      0      0      0      0      0      0\r\n"
+    b"\r\n*** SYSTEM TEST FAIL *** ERROR (0201) DETECTED   \x1e000\x03"
+  )
+  _PASSING_TAIL = b"Lambda: 550  Gain:  1.23  Resets: 0\r\nNoise Max:  4\r\n\x1e000\x03"
+
+  async def test_failing_self_test_raises_with_the_decoded_code(self):
+    reader, fake = _reader(_ACK + self._FAILING_TAIL, model="PowerWaveX w/ Incubator")
+
+    with self.assertRaises(PowerWaveSelfTestError) as ctx:
+      await reader.self_test()
+
+    self.assertEqual(fake.writes, [b"*"])
+    self.assertEqual(ctx.exception.code, "0201")
+    self.assertEqual(
+      ctx.exception.description, "Order sorting filter wheel did not find the home sensor"
+    )
+    self.assertIn("Lambda: 550", ctx.exception.report)
+
+  async def test_failure_can_be_returned_instead_of_raised(self):
+    reader, _ = _reader(_ACK + self._FAILING_TAIL, model="PowerWaveX")
+    report = await reader.self_test(raise_on_failure=False)
+    self.assertIn("SYSTEM TEST FAIL", report)
+
+  async def test_passing_self_test_returns_the_report(self):
+    reader, _ = _reader(_ACK + self._PASSING_TAIL, model="PowerWaveX")
+    report = await reader.self_test()
+    self.assertIn("Gain:  1.23", report)
+    self.assertNotIn("\x1e", report)  # the status string is not part of the report
+
+  async def test_status_string_alone_does_not_indicate_success(self):
+    """A failing instrument still answers status "000"; only the body says FAIL."""
+    self.assertEqual(parse_status(self._FAILING_TAIL[-STATUS_LENGTH:]), "000")
+
+
+class TestSelfTestReportParsing(unittest.TestCase):
+  """Pure parsing of self-test report bodies."""
+
+  def test_failure_with_code(self):
+    self.assertEqual(
+      parse_self_test_report("*** SYSTEM TEST FAIL *** ERROR (0201) DETECTED"), "0201"
+    )
+
+  def test_failure_without_a_code(self):
+    self.assertEqual(parse_self_test_report("*** SYSTEM TEST FAIL ***"), "")
+
+  def test_pass_returns_none(self):
+    self.assertIsNone(parse_self_test_report("Lambda: 550  Gain: 1.20\nNoise Max: 3"))
+
+  def test_error_text_without_a_fail_banner_is_not_a_failure(self):
+    self.assertIsNone(parse_self_test_report("see ERROR (0201) in the manual"))
+
+  def test_d2_error_codes(self):
+    self.assertEqual(
+      SELF_TEST_ERRORS["0201"], "Order sorting filter wheel did not find the home sensor"
+    )
+    # Rev C1 calls 0202 the monochromator; D2, which applies to the PowerWaveX,
+    # calls it the robot lid lift and has no 0203 at all.
+    self.assertEqual(SELF_TEST_ERRORS["0202"], "Robot lid lift did not find the home sensor")
+    self.assertNotIn("0203", SELF_TEST_ERRORS)
+
+
+class TestGeometryAndStripEncoding(unittest.TestCase):
+  """Pure encoders for pages B-12 and B-13."""
+
+  def test_geometry_codes(self):
+    self.assertEqual(encode_plate_geometry(8, 12), b"\x02")
+    self.assertEqual(encode_plate_geometry(16, 24), b"\x03")
+
+  def test_unsupported_geometry(self):
+    for rows, columns in ((4, 6), (8, 13), (32, 48)):
+      with self.subTest(rows=rows, columns=columns):
+        with self.assertRaises(NotImplementedError):
+          encode_plate_geometry(rows, columns)
+
+  def test_strip_range_encoding(self):
+    self.assertEqual(encode_strip_range(1, 12), b"\x01\x0c")
+    self.assertEqual(encode_strip_range(24, 24), b"\x18\x18")
