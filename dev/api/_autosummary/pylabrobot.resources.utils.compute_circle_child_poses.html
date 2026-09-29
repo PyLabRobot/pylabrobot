@@ -7,7 +7,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.resources.utils &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.resources.utils.compute_circle_child_poses &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -48,7 +48,7 @@
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../_static/plr_devices.js?v=ba1a2da2"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.utils';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.utils.compute_circle_child_poses';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.22.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -59,12 +59,12 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/graphviz.js?v=0710df9f"></script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.resources.utils.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.resources.utils.compute_circle_child_poses.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.resources.utils.compute_circle_child_poses" href="pylabrobot.resources.utils.compute_circle_child_poses.html" />
-    <link rel="prev" title="pylabrobot.resources.volume_tracker.VolumeTracker.validate_remove_liquid" href="pylabrobot.resources.volume_tracker.VolumeTracker.validate_remove_liquid.html" />
+    <link rel="next" title="pylabrobot.resources.utils.create_equally_spaced_x" href="pylabrobot.resources.utils.create_equally_spaced_x.html" />
+    <link rel="prev" title="pylabrobot.resources.utils" href="pylabrobot.resources.utils.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="1.0.0b1" />
@@ -564,7 +564,10 @@
     
     <li class="breadcrumb-item"><a href="../pylabrobot.resources.html" class="nav-link">pylabrobot.resources package</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources.utils</span></li>
+    
+    <li class="breadcrumb-item"><a href="pylabrobot.resources.utils.html" class="nav-link">pylabrobot.resources.utils</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources.utils.compute_circle_child_poses</span></li>
   </ul>
 </nav>
 </div>
@@ -581,44 +584,33 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="module-pylabrobot.resources.utils">
-<span id="pylabrobot-resources-utils"></span><h1>pylabrobot.resources.utils<a class="headerlink" href="#module-pylabrobot.resources.utils" title="Link to this heading">#</a></h1>
-<p class="rubric">Functions</p>
-<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.utils.compute_circle_child_poses.html#pylabrobot.resources.utils.compute_circle_child_poses" title="pylabrobot.resources.utils.compute_circle_child_poses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute_circle_child_poses</span></code></a>(n, radius[, z, ...])</p></td>
-<td><p>Compute n poses evenly spaced on a circle, relative to the circle's front left bottom.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.utils.create_equally_spaced_2d.html#pylabrobot.resources.utils.create_equally_spaced_2d" title="pylabrobot.resources.utils.create_equally_spaced_2d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_equally_spaced_2d</span></code></a>(klass, num_items_x, ...)</p></td>
-<td><p>Make equally spaced resources in a 2D grid.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.utils.create_equally_spaced_x.html#pylabrobot.resources.utils.create_equally_spaced_x" title="pylabrobot.resources.utils.create_equally_spaced_x"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_equally_spaced_x</span></code></a>(klass, num_items_x, ...)</p></td>
-<td><p>Make equally spaced resources over the x-axis.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.utils.create_equally_spaced_y.html#pylabrobot.resources.utils.create_equally_spaced_y" title="pylabrobot.resources.utils.create_equally_spaced_y"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_equally_spaced_y</span></code></a>(klass, num_items_y, ...)</p></td>
-<td><p>Make equally spaced resources over the y-axis.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.utils.create_ordered_items_2d.html#pylabrobot.resources.utils.create_ordered_items_2d" title="pylabrobot.resources.utils.create_ordered_items_2d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_ordered_items_2d</span></code></a>(klass, num_items_x, ...)</p></td>
-<td><p>Make ordered resources in a 2D grid, with the keys being the identifiers in transposed MS-Excel style.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.utils.label_to_row_index.html#pylabrobot.resources.utils.label_to_row_index" title="pylabrobot.resources.utils.label_to_row_index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">label_to_row_index</span></code></a>(label)</p></td>
-<td><p>Convert a letter label to a 0-based row index.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.utils.query.html#pylabrobot.resources.utils.query" title="pylabrobot.resources.utils.query"><code class="xref py py-obj docutils literal notranslate"><span class="pre">query</span></code></a>(root, type_, name, x, y, z)</p></td>
-<td><p>Query resources based on their attributes.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.utils.row_index_to_label.html#pylabrobot.resources.utils.row_index_to_label" title="pylabrobot.resources.utils.row_index_to_label"><code class="xref py py-obj docutils literal notranslate"><span class="pre">row_index_to_label</span></code></a>(index)</p></td>
-<td><p>Convert a 0-based row index to a letter label.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.utils.sort_by_xy_and_chunk_by_x.html#pylabrobot.resources.utils.sort_by_xy_and_chunk_by_x" title="pylabrobot.resources.utils.sort_by_xy_and_chunk_by_x"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sort_by_xy_and_chunk_by_x</span></code></a>(resources, ...[, ...])</p></td>
-<td><p>Sort resources spatially and partition them into chunks for channel processing.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.utils.split_identifier.html#pylabrobot.resources.utils.split_identifier" title="pylabrobot.resources.utils.split_identifier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_identifier</span></code></a>(identifier)</p></td>
-<td><p>Split a well identifier into its row-letter and column-number parts.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
+  <section id="pylabrobot-resources-utils-compute-circle-child-poses">
+<h1>pylabrobot.resources.utils.compute_circle_child_poses<a class="headerlink" href="#pylabrobot-resources-utils-compute-circle-child-poses" title="Link to this heading">#</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="pylabrobot.resources.utils.compute_circle_child_poses">
+<span class="sig-prename descclassname"><span class="pre">pylabrobot.resources.utils.</span></span><span class="sig-name descname"><span class="pre">compute_circle_child_poses</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">radius</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">orientation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'outwards'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'inwards'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'outwards'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.14)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><span class="pre">Coordinate</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pylabrobot.resources.utils.compute_circle_child_poses" title="Link to this definition">#</a></dt>
+<dd><p>Compute n poses evenly spaced on a circle, relative to the circle’s front left bottom.</p>
+<p>The circle’s center is at (radius, radius, z); the first point is at +x, then counterclockwise.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of poses.</p></li>
+<li><p><strong>radius</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – circle radius in mm.</p></li>
+<li><p><strong>z</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – height of all poses in mm.</p></li>
+<li><p><strong>orientation</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'outwards'</em><em>, </em><em>'inwards'</em><em>] </em><em>| </em><em>None</em>) – which way rotation_z turns a resource’s front, away from or towards the center.
+None leaves every front facing -y (rotation_z 0).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>(position, rotation_z) per pose</em> – rotation_z in degrees turns a resource’s front to face
+<code class="code docutils literal notranslate"><span class="pre">orientation</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><em>List</em></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.14)"><em>Tuple</em></a>[<a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><em>Coordinate</em></a>, <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)">float</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 
@@ -632,20 +624,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.resources.volume_tracker.VolumeTracker.validate_remove_liquid.html"
+       href="pylabrobot.resources.utils.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.resources.volume_tracker.VolumeTracker.validate_remove_liquid</p>
+        <p class="prev-next-title">pylabrobot.resources.utils</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.resources.utils.compute_circle_child_poses.html"
+       href="pylabrobot.resources.utils.create_equally_spaced_x.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.resources.utils.compute_circle_child_poses</p>
+        <p class="prev-next-title">pylabrobot.resources.utils.create_equally_spaced_x</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -661,10 +653,22 @@
 
 
   <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.resources.utils.compute_circle_child_poses"><code class="docutils literal notranslate"><span class="pre">compute_circle_child_poses()</span></code></a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.resources.utils.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.resources.utils.compute_circle_child_poses.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -679,7 +683,7 @@
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.resources.utils.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.resources.utils.compute_circle_child_poses.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
