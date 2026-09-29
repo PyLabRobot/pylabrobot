@@ -4,6 +4,7 @@
 :maxdepth: 1
 
 benchcel/hello-world
+biotek/powerwave/hello-world
 plateloc/hello-world
 vspin/index
 ```

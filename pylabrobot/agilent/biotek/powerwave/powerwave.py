@@ -25,6 +25,7 @@ from ._protocol import (
   ACK,
   DLE,
   ETX,
+  KINETIC_FLAGS,
   MAX_WAVELENGTH,
   MIN_WAVELENGTH,
   NAK,
@@ -475,6 +476,111 @@ class PowerWaveX:
 
     return results
 
+  async def read_absorbance_kinetic(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelengths: Sequence[int],
+    interval: int,
+    count: int,
+    shake_speed: int = 1,
+    total_read_time: int = 9999,
+  ) -> List[AbsorbanceResult]:
+    """Read the plate repeatedly at a fixed interval (page B-10).
+
+    The instrument runs the whole series itself once READ PLATE is sent, emitting
+    one data block per wavelength per cycle. This call therefore blocks for
+    roughly ``interval * count`` seconds.
+
+    Args:
+      plate: The plate loaded in the carrier.
+      wells: The wells to read; widened to whole columns as for
+        :meth:`read_absorbances`.
+      wavelengths: One to six wavelengths in nm.
+      interval: Seconds between reads. Must be at least
+        :meth:`request_minimum_kinetic_interval`, which depends on the assay and
+        the baud rate; a warning is logged if it is shorter.
+      count: Number of reads, 2 to 9999.
+      shake_speed: 0 slow, 1 medium, 2 fast, 3 variable. Shaking runs between
+        reads.
+      total_read_time: Bytes 166-167 of the assay table. The manual says minutes,
+        but a bench test showed 9999 producing a run of roughly 9999 *seconds*.
+
+    Returns:
+      One :class:`AbsorbanceResult` per wavelength per cycle, ordered by cycle
+      then wavelength, each timestamped when its cycle began.
+
+    Note:
+      Use :meth:`halt` to abort a run in progress.
+    """
+    first_strip, last_strip = self._strip_range_for(plate, wells)
+
+    low, high = self.abs_wavelength_range
+    for wavelength in wavelengths:
+      if not low <= wavelength <= high:
+        raise ValueError(f"Wavelength must be within {low}-{high} nm, got {wavelength}")
+
+    num_strips = last_strip - first_strip + 1
+
+    await self.push_assay_definition(
+      wavelengths,
+      read_type="kinetic",
+      flags=KINETIC_FLAGS,
+      kinetic_interval=interval,
+      kinetic_read_count=count,
+      shake_speed=shake_speed,
+      total_kinetic_read_time=total_read_time,
+    )
+    await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
+    if num_strips != plate.num_items_x:
+      await self.set_strip_range(first_strip, last_strip)
+
+    # Only meaningful once the assay is loaded: it depends on the assay, the strip
+    # range and the baud rate (page B-13).
+    minimum = await self.request_minimum_kinetic_interval()
+    if interval < minimum:
+      logger.warning(
+        "[PowerWaveX %s] requested interval %ds is below the instrument's minimum of %ds "
+        "for this assay; cycles will run late",
+        self.port,
+        interval,
+        minimum,
+      )
+
+    logger.info(
+      "[PowerWaveX %s] kinetic read: %s nm, %d cycles every %ds, about %d minutes",
+      self.port,
+      list(wavelengths),
+      count,
+      interval,
+      round(interval * count / 60),
+    )
+
+    await self._start_read()
+
+    # Each cycle arrives an interval apart, so the per-block deadline has to cover
+    # the wait as well as the transfer.
+    block_timeout = interval + self.timeout
+
+    results: List[AbsorbanceResult] = []
+    for cycle in range(count):
+      timestamp = datetime.now()
+      blocks = await self._collect_blocks(
+        len(wavelengths), plate.num_items_y, num_strips, timeout=block_timeout
+      )
+      for wavelength, block in zip(wavelengths, blocks):
+        results.append(
+          AbsorbanceResult(
+            data=self._place_strips(block, plate, first_strip),
+            wavelength=wavelength,
+            temperature=None,
+            timestamp=timestamp,
+          )
+        )
+      logger.info("[PowerWaveX %s] kinetic cycle %d/%d", self.port, cycle + 1, count)
+
+    return results
+
   async def set_plate_geometry(self, num_rows: int, num_columns: int) -> None:
     """Select the microplate geometry (``'{'``, page B-12).
 
@@ -630,6 +736,11 @@ class PowerWaveX:
       num_columns: Columns actually read, which is the strip range and not
         necessarily the plate width.
     """
+    await self._start_read()
+    return await self._collect_blocks(num_blocks, num_rows, num_columns)
+
+  async def _start_read(self) -> None:
+    """Send READ PLATE and consume the status string that precedes the data."""
     if not self._assay_defined:
       raise PowerWaveError(
         "No assay definition has been pushed. Call push_assay_definition() first, or use "
@@ -639,10 +750,24 @@ class PowerWaveX:
     await self._send_command(Command.READ_PLATE)
     await self._read_status()
 
+  async def _collect_blocks(
+    self,
+    num_blocks: int,
+    num_rows: int,
+    num_columns: int,
+    timeout: Optional[float] = None,
+  ) -> List[List[List[float]]]:
+    """Read and verify ``num_blocks`` consecutive plate data blocks.
+
+    Each block is a ``CR`` start code, the rows, a ``^Z`` terminator and a raw
+    checksum byte. The checksum byte must be consumed here: leaving it in the
+    stream makes it the first byte of the next block, which is how the original
+    2021 kinetic loop ended up slicing frames by hand.
+    """
     blocks = []
     for index in range(num_blocks):
-      frame = await self._read_until(SUB)
-      checksum = await self._read_exactly(1)
+      frame = await self._read_until(SUB, timeout=timeout)
+      checksum = await self._read_exactly(1, timeout=timeout)
       verify_plate_checksum(frame, checksum[0])
       blocks.append(parse_plate(frame, num_rows, num_columns))
       logger.debug(

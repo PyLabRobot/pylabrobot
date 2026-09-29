@@ -1162,3 +1162,110 @@ class TestGeometryAndStripEncoding(unittest.TestCase):
   def test_strip_range_encoding(self):
     self.assertEqual(encode_strip_range(1, 12), b"\x01\x0c")
     self.assertEqual(encode_strip_range(24, 24), b"\x18\x18")
+
+
+class TestKineticRead(unittest.IsolatedAsyncioTestCase):
+  """Kinetic reads, pages B-10 and B-13."""
+
+  def _kinetic_script(self, cycles: int, wavelengths: int, minimum: int = 60) -> bytes:
+    # 'V', '{' then '$' (ACK + 2 bytes + status), then 'S', then the blocks.
+    script = (_ACK + _STATUS_OK) * 2
+    script += _ACK + struct.pack("<H", minimum) + _STATUS_OK
+    script += _ACK + _STATUS_OK
+    script += (_CAPTURED_PLATE + bytes([_CAPTURED_PLATE_CHECKSUM])) * (cycles * wavelengths)
+    return script
+
+  async def test_command_sequence_and_result_count(self):
+    plate = _plate_resource()
+    reader, fake = _reader(self._kinetic_script(cycles=3, wavelengths=2), model="PowerWaveX")
+    reader._wavelength_table = [600, 630]
+
+    results = await reader.read_absorbance_kinetic(
+      plate, plate.get_all_items(), [600, 630], interval=60, count=3
+    )
+
+    self.assertEqual(fake.writes[0], b"V")
+    self.assertEqual(fake.writes[2], b"{")
+    self.assertEqual(fake.writes[4], b"$")  # minimum kinetic interval
+    self.assertEqual(fake.writes[5], b"S")
+    self.assertEqual(fake.remaining, b"")
+
+    # One result per wavelength per cycle, ordered by cycle then wavelength.
+    self.assertEqual(len(results), 6)
+    self.assertEqual([r.wavelength for r in results], [600, 630, 600, 630, 600, 630])
+
+  async def test_assay_table_is_kinetic(self):
+    plate = _plate_resource()
+    reader, fake = _reader(self._kinetic_script(cycles=2, wavelengths=1), model="PowerWaveX")
+    reader._wavelength_table = [600]
+
+    await reader.read_absorbance_kinetic(
+      plate, plate.get_all_items(), [600], interval=60, count=2, shake_speed=2
+    )
+
+    table = fake.writes[1]
+    self.assertEqual(table[55], 2)  # byte 56: read type kinetic
+    self.assertEqual(table[30], KINETIC_FLAGS)  # byte 31: shake and timing flags
+    self.assertEqual(table[59:61], struct.pack("<H", 60))  # bytes 60-61: interval
+    self.assertEqual(table[61:63], struct.pack("<H", 2))  # bytes 62-63: read count
+    self.assertEqual(table[164], 2)  # byte 165: shake speed
+
+  async def test_cycles_are_timestamped_in_order(self):
+    plate = _plate_resource()
+    reader, _ = _reader(self._kinetic_script(cycles=3, wavelengths=1), model="PowerWaveX")
+    reader._wavelength_table = [600]
+
+    results = await reader.read_absorbance_kinetic(
+      plate, plate.get_all_items(), [600], interval=60, count=3
+    )
+
+    stamps = [r.timestamp for r in results]
+    self.assertEqual(stamps, sorted(stamps))
+
+  async def test_interval_below_the_instrument_minimum_warns(self):
+    plate = _plate_resource()
+    reader, _ = _reader(
+      self._kinetic_script(cycles=2, wavelengths=1, minimum=60), model="PowerWaveX"
+    )
+    reader._wavelength_table = [600]
+
+    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
+      await reader.read_absorbance_kinetic(
+        plate, plate.get_all_items(), [600], interval=20, count=2
+      )
+
+    self.assertIn("below the instrument's minimum", "\n".join(logs.output))
+
+  async def test_read_count_bounds(self):
+    plate = _plate_resource()
+    reader, fake = _reader(model="PowerWaveX")
+    reader._wavelength_table = [600]
+
+    for count in (1, 10000):
+      with self.subTest(count=count):
+        with self.assertRaises(ValueError):
+          await reader.read_absorbance_kinetic(
+            plate, plate.get_all_items(), [600], interval=60, count=count
+          )
+    self.assertEqual(fake.writes, [])
+
+  async def test_kinetic_honours_a_strip_range(self):
+    plate = _plate_resource()
+    rows = b"".join(b",+0100" * 2 + b"\r\n" for _ in range(8))
+    block = b"\r" + rows + b"\x1a"
+    script = (_ACK + _STATUS_OK) * 2  # 'V', '{'
+    script += _ACK + _STATUS_OK  # '%'
+    script += _ACK + struct.pack("<H", 60) + _STATUS_OK  # '$'
+    script += _ACK + _STATUS_OK  # 'S'
+    script += (block + bytes([plate_checksum(block)])) * 2
+    reader, fake = _reader(script, model="PowerWaveX")
+    reader._wavelength_table = [600]
+
+    wells = [w for w in plate.get_all_items() if w.get_column() in (0, 1)]
+    results = await reader.read_absorbance_kinetic(plate, wells, [600], interval=60, count=2)
+
+    self.assertIn(b"%", fake.writes)
+    self.assertEqual(len(results), 2)
+    self.assertEqual(results[0].data[0][0], 0.100)
+    self.assertIsNone(results[0].data[0][11])
+    self.assertEqual(fake.remaining, b"")
