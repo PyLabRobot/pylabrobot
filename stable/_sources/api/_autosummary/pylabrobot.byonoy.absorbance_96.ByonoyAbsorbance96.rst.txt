@@ -77,6 +77,7 @@ pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbance96
       ~ByonoyAbsorbance96.request_available_absorbance_wavelengths
       ~ByonoyAbsorbance96.request_device_info
       ~ByonoyAbsorbance96.request_environment
+      ~ByonoyAbsorbance96.request_ignore_errors_in_calibration
       ~ByonoyAbsorbance96.request_status
       ~ByonoyAbsorbance96.request_supported_reports
       ~ByonoyAbsorbance96.request_versions
@@ -89,6 +90,7 @@ pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbance96
       ~ByonoyAbsorbance96.serialize
       ~ByonoyAbsorbance96.serialize_all_state
       ~ByonoyAbsorbance96.serialize_state
+      ~ByonoyAbsorbance96.set_ignore_errors_in_calibration
       ~ByonoyAbsorbance96.set_led_color
       ~ByonoyAbsorbance96.set_led_colors
       ~ByonoyAbsorbance96.setup
