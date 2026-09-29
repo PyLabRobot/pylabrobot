@@ -70,6 +70,7 @@ def _test_plate() -> Plate:
       bottom_type=WellBottomType.FLAT,
       material_z_thickness=0.17,
       max_volume=350.0,
+      name_prefix="test_plate",
     ),
   )
 

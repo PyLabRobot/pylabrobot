@@ -4,4 +4,5 @@
 :maxdepth: 1
 
 lid-valet/hello-world
+sample-storage/index
 ```

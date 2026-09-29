@@ -75,6 +75,7 @@ def cor_96_wellplate_360uL_Fb(name: str, with_lid: bool = False) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       max_volume=360,
       height_volume_data=_cor_96_wellplate_360uL_Fb_height_volume_data,
+      name_prefix=name,
     ),
   )
 
@@ -134,6 +135,7 @@ def cor_96_wellplate_2mL_Vb(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       compute_volume_from_height=_compute_volume_from_height_Cor_96_wellplate_2mL_Vb,
       compute_height_from_volume=_compute_height_from_volume_Cor_96_wellplate_2mL_Vb,
+      name_prefix=name,
     ),
   )
 

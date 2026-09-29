@@ -62,6 +62,7 @@ def btx_96_wellplate_125uL_Fb_2mm(name: str) -> Plate:
       dz=4.0,  # measured manually
       item_dx=9.0,
       item_dy=9.0,
+      name_prefix=name,
       **well_kwargs,
     ),
   )

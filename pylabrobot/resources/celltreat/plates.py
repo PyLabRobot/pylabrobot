@@ -68,6 +68,7 @@ def celltreat_6_wellplate_16300uL_Fb(name: str, lid: Optional[Lid] = None) -> Pl
       dz=3,  # manually calibrated
       item_dx=39.04,  # from plate specs/drawing
       item_dy=39.04,  # from plate specs/drawing
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -100,6 +101,7 @@ def celltreat_12_troughplate_15mL_Vb(name: str) -> Plate:
       item_dx=9.0,  # standard
       item_dy=9.0,  # standard
       cross_section_type=CrossSectionType.RECTANGLE,
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -146,6 +148,7 @@ def celltreat_24_wellplate_3300uL_Fb(name: str, with_lid: bool = False) -> Plate
       dz=20.2 - 17.2 - 2.3,  # from spec
       item_dx=19.2,  # from spec
       item_dy=19.2,  # from spec
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -202,6 +205,7 @@ def celltreat_96_wellplate_350uL_Ub(name: str, with_lid: bool = False) -> Plate:
       dz=1.92,  # calibrated manually
       item_dx=8.99,
       item_dy=8.99,
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -259,6 +263,7 @@ def celltreat_96_wellplate_350uL_Fb(name: str) -> Plate:
       dz=4.05,  # calibrated manually
       item_dx=9,
       item_dy=9,
+      name_prefix=name,
       **well_kwargs,
     ),
   )

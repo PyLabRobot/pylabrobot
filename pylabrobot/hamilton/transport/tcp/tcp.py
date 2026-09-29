@@ -1,13 +1,50 @@
-"""Hamilton TCP Handler base class for TCP-based instruments (Nimbus, Prep, etc.)."""
+"""Hamilton TCP client for TCP-based instruments (Nimbus, Prep, etc.).
+
+Use :attr:`HamiltonTCPClient.introspection` as the **only** supported entry for
+Interface-0 discovery and type work.
+
+Connection lifecycle
+--------------------
+Connecting is always caller-driven. :meth:`HamiltonTCPClient.setup` performs the
+init handshake (during which the device assigns the client id that identifies the
+session), registers the client, and discovers the root and global objects. There
+is no automatic reconnection: if the connection drops, recovery is
+``await client.stop()`` followed by ``await client.setup()``.
+
+That is deliberate. Re-establishing the session cannot tell the caller whether an
+in-flight command completed, and it does not stop instrument motion, so continuity
+across a reconnect must never be assumed. Reconnecting silently would only hide
+when that happened. :attr:`HamiltonTCPClient.is_connected` is available for callers
+that want to implement their own policy.
+
+Concurrency
+-----------
+One command is in flight at a time. Concurrent callers are serialized on a single
+lock spanning write-through-terminal-response, so commands never interleave on the
+socket. The instrument's own concurrency semantics over TCP are not yet
+established; until they are, this is deliberately conservative and there is no
+per-object or read/write parallelism (contrast ``pylabrobot.hamilton.star.lock``,
+where the module topology is known well enough to overlap commands).
+
+Responses must echo the request sequence and reverse its HARP addresses. A
+timeout or cancellation without an observed terminal response leaves execution
+uncertain and prevents further commands until stop() and setup(). A fresh
+connection does not establish whether the instrument finished the old command.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional, Union
+from typing import ClassVar, Dict, Optional, Sequence, Tuple, TypeVar, Union, cast
 
-from pylabrobot.hamilton.transport.tcp.commands import HamiltonCommand
+from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
+from pylabrobot.hamilton.transport.tcp.events import EventSubscription, OverflowPolicy
+from pylabrobot.hamilton.transport.tcp.introspection import (
+  HamiltonIntrospection,
+  ObjectRegistry,
+)
 from pylabrobot.hamilton.transport.tcp.messages import (
   CommandResponse,
   InitMessage,
@@ -17,397 +54,223 @@ from pylabrobot.hamilton.transport.tcp.messages import (
 )
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import (
-  Hoi2Action,
   HoiRequestId,
   RegistrationActionCode,
   RegistrationOptionType,
 )
+from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class HamiltonError:
-  """Hamilton error response."""
-
-  error_code: int
-  error_message: str
-  interface_id: int
-  action_id: int
+ResultT = TypeVar("ResultT")
 
 
-class ErrorParser:
-  """Parse Hamilton error responses."""
+@dataclass(frozen=True)
+class ConnectionInfo:
+  """An immutable snapshot of connection identity and state, without socket access."""
 
-  @staticmethod
-  def parse_error(data: bytes) -> HamiltonError:
-    """Parse error response from Hamilton instrument."""
-    # Error responses have a specific format
-    # This is a simplified implementation - real errors may vary
-    if len(data) < 8:
-      raise ValueError("Error response too short")
-
-    # Parse error structure (simplified)
-    error_code = Reader(data).u32()
-    error_message = data[4:].decode("utf-8", errors="replace")
-
-    return HamiltonError(
-      error_code=error_code, error_message=error_message, interface_id=0, action_id=0
-    )
+  host: str
+  port: int
+  client_address: Optional[Address]
+  state: SessionState
 
 
-class HamiltonTCPHandler:
-  """Base driver for all Hamilton TCP instruments.
+class HamiltonTCPClient:
+  """Standalone transport + discovery/introspection client for Hamilton TCP devices."""
 
-  Hamilton TCP instruments include the Nimbus and the Prep, using Hoi and Harp.
-  STAR and Vantage use the other Hamilton protocol that works over USB.
-
-  This class provides:
-  - Connection management via Socket (wrapped with state tracking)
-  - Protocol 7 initialization
-  - Protocol 3 registration
-  - Generic command execution
-  - Object discovery via introspection
-
-  Hamilton uses strict request-response protocol (no unsolicited messages),
-  so we use simple direct read/write instead of complex routing.
-  """
+  _ERROR_CODES: ClassVar[Dict[Tuple[int, int, int, int, int], str]] = {}
 
   def __init__(
     self,
     host: str,
     port: int,
-    read_timeout: float = 30.0,
+    read_timeout: float = 300.0,
     write_timeout: float = 30.0,
-    auto_reconnect: bool = True,
-    max_reconnect_attempts: int = 3,
+    connection_timeout: int = 600,
   ):
-    """Initialize Hamilton TCP handler.
+    self._host = host
+    self._port = port
+    self._write_timeout = write_timeout
+    self._connection_timeout = connection_timeout
+    self._read_timeout = read_timeout
+    self._lifecycle_lock = asyncio.Lock()
+    self._session = self._create_session()
 
-    Args:
-      host: Hamilton instrument IP address
-      port: Hamilton instrument port
-      read_timeout: Read timeout in seconds
-      write_timeout: Write timeout in seconds
-      auto_reconnect: Enable automatic reconnection
-      max_reconnect_attempts: Maximum reconnection attempts
-    """
-
-    super().__init__()
-
-    self.io = Socket(
-      human_readable_device_name="Hamilton Liquid Handler",
-      host=host,
-      port=port,
-      read_timeout=read_timeout,
-      write_timeout=write_timeout,
+  def _create_session(self) -> TCPSession:
+    """Create an isolated owner for one connection's I/O and protocol state."""
+    return TCPSession(
+      Socket(
+        human_readable_device_name="Hamilton Liquid Handler",
+        host=self._host,
+        port=self._port,
+        read_timeout=self._read_timeout,
+        write_timeout=self._write_timeout,
+      ),
+      read_timeout=self._read_timeout,
+      error_codes=self._ERROR_CODES,
     )
 
-    # Connection state tracking (wrapping Socket)
-    self._connected = False
-    self._reconnect_attempts = 0
-    self.auto_reconnect = auto_reconnect
-    self.max_reconnect_attempts = max_reconnect_attempts
+  @property
+  def connection_info(self) -> ConnectionInfo:
+    """Return a snapshot that cannot bypass session I/O ownership."""
+    return ConnectionInfo(self._host, self._port, self.client_address, self._session.state)
 
-    # Hamilton-specific state
-    self._client_id: Optional[int] = None
-    self.client_address: Optional[Address] = None
-    self._sequence_numbers: Dict[Address, int] = {}
-    self._discovered_objects: Dict[str, list[Address]] = {}
+  @property
+  def client_address(self) -> Optional[Address]:
+    """Client address assigned to the current session by the instrument."""
+    return self._session.client_address
 
-    # Instrument-specific addresses (set by subclasses)
-    self._instrument_addresses: Dict[str, Address] = {}
+  @property
+  def registry(self) -> ObjectRegistry:
+    """Object path registry for this session."""
+    return self._session.registry
 
-  async def _ensure_connected(self):
-    """Ensure connection is healthy before operations."""
-    if not self._connected:
-      if not self.auto_reconnect:
-        raise ConnectionError(
-          f"{self.io._unique_id} Connection not established and auto-reconnect disabled"
-        )
-      logger.info(f"{self.io._unique_id} Connection not established, attempting to reconnect...")
-      await self._reconnect()
+  @property
+  def global_object_addresses(self) -> Sequence[Address]:
+    """Global object addresses discovered during :meth:`setup` (read-only)."""
+    return tuple(self._session.global_object_addresses)
 
-  async def _reconnect(self):
-    """Attempt to reconnect with exponential backoff."""
-    if not self.auto_reconnect:
-      raise ConnectionError(f"{self.io._unique_id} Auto-reconnect disabled")
+  def get_root_object_addresses(self) -> list[Address]:
+    """Root address from the registry as a single-element list."""
+    addr = self._session.registry.get_root_address()
+    return [addr] if addr is not None else []
 
-    for attempt in range(self.max_reconnect_attempts):
-      try:
-        logger.info(
-          f"{self.io._unique_id} Reconnection attempt {attempt + 1}/{self.max_reconnect_attempts}"
-        )
+  @property
+  def introspection(self) -> HamiltonIntrospection:
+    """Discovery and caches bound to the current connection's lifetime."""
+    self._session.require_active()
+    return self._session.introspection
 
-        # Clean up existing connection
-        try:
-          await self.stop()
-        except Exception:
-          pass
+  def events(self, capacity: int = 64, overflow: OverflowPolicy = "error") -> EventSubscription:
+    """Subscribe to this session's events; overflow raises unless a drop policy is selected."""
+    return self._session.events(capacity, overflow)
 
-        # Wait before reconnecting (exponential backoff)
-        if attempt > 0:
-          wait_time = 1.0 * (2 ** (attempt - 1))  # 1s, 2s, 4s, etc.
-          await asyncio.sleep(wait_time)
+  def _require_connected(self) -> TCPSession:
+    """Capture a usable session for a raw I/O operation."""
+    session = self._session
+    if session.state not in (SessionState.CONNECTING, SessionState.READY, SessionState.WAITING):
+      raise ConnectionError(f"{session._io._unique_id} not connected - call stop() then setup()")
+    return session
 
-        # Attempt to reconnect
-        await self.setup()
-        self._reconnect_attempts = 0
-        logger.info(f"{self.io._unique_id} Reconnection successful")
-        return
-
-      except Exception as e:
-        logger.warning(f"{self.io._unique_id} Reconnection attempt {attempt + 1} failed: {e}")
-
-    # All reconnection attempts failed
-    self._connected = False
-    raise ConnectionError(
-      f"{self.io._unique_id} Failed to reconnect after {self.max_reconnect_attempts} attempts"
-    )
-
-  async def write(self, data: bytes, timeout: Optional[float] = None):
-    """Write data to the socket with connection state tracking.
-
-    Args:
-      data: The data to write.
-      timeout: The timeout for writing to the server in seconds. If `None`, use the default timeout.
-    """
-    await self._ensure_connected()
-
+  async def _write_handshake(self, data: bytes, timeout: Optional[float] = None) -> None:
+    """Write handshake bytes once through the captured session."""
+    session = self._require_connected()
+    if session.reader_task is not None:
+      raise RuntimeError("Use execute() for session transactions")
     try:
-      await self.io.write(data, timeout=timeout)
-      self._connected = True
-    except (ConnectionError, OSError, TimeoutError):
-      self._connected = False
+      await session._io.write(data, timeout=timeout)
+    except asyncio.CancelledError:
+      session.fail(ConnectionError("Hamilton TCP write cancelled"))
+      raise
+    except Exception as exc:
+      session.fail(exc)
       raise
 
-  async def read(self, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
-    """Read data from the socket with connection state tracking.
-
-    Args:
-      num_bytes: Maximum number of bytes to read. Defaults to 128.
-      timeout: The timeout for reading from the server in seconds. If `None`, use the default
-        timeout.
-
-    Returns:
-      The data read from the socket.
-    """
-    await self._ensure_connected()
-
+  async def _read_exact_handshake(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
+    """Read a complete handshake field before the reader starts."""
+    session = self._require_connected()
+    if session.reader_task is not None:
+      raise RuntimeError("The session reader owns the socket")
     try:
-      data = await self.io.read(num_bytes, timeout=timeout)
-      self._connected = True
-      return data
-    except (ConnectionError, OSError, TimeoutError):
-      self._connected = False
-      raise
-
-  async def read_exact(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
-    """Read exactly num_bytes with connection state tracking.
-
-    Args:
-      num_bytes: The exact number of bytes to read.
-      timeout: The timeout for reading from the server in seconds. If `None`, use the default
-        timeout.
-
-    Returns:
-      Exactly num_bytes of data.
-
-    Raises:
-      ConnectionError: If the connection is closed before num_bytes are read.
-    """
-    await self._ensure_connected()
-
-    try:
-      data = await self.io.read_exact(num_bytes, timeout=timeout)
-      self._connected = True
-      return data
-    except (ConnectionError, OSError, TimeoutError):
-      self._connected = False
+      return cast(bytes, await session._io.read_exact(num_bytes, timeout=timeout))
+    except Exception as exc:
+      session.fail(exc)
       raise
 
   @property
   def is_connected(self) -> bool:
-    """Check if the connection is currently established."""
-    return self._connected
+    """Whether this session is usable, including an in-progress handshake."""
+    return self._session.state in (
+      SessionState.CONNECTING,
+      SessionState.READY,
+      SessionState.WAITING,
+    )
 
-  async def _read_one_message(self) -> Union[RegistrationResponse, CommandResponse]:
-    """Read one complete Hamilton packet and parse based on protocol.
+  async def _read_one_message(
+    self, timeout: Optional[float] = None
+  ) -> Optional[Union[RegistrationResponse, CommandResponse]]:
+    """Read a handshake frame before transferring ownership to the reader."""
+    session = self._require_connected()
+    if session.reader_task is not None:
+      raise RuntimeError("The session reader owns the socket")
+    return await session.read_message(timeout=timeout)
 
-    Hamilton packets are length-prefixed:
-    - First 2 bytes: packet size (little-endian)
-    - Next packet_size bytes: packet payload
-
-    The method inspects the IP protocol field and, for Protocol 6 (HARP),
-    also checks the HARP protocol field to dispatch correctly.
-
-    Returns:
-      Union[RegistrationResponse, CommandResponse]: Parsed response
-
-    Raises:
-      ConnectionError: If connection is lost
-      TimeoutError: If no message received within timeout
-      ValueError: If protocol type is unknown
-    """
-
-    # Read packet size (2 bytes, little-endian)
-    size_data = await self.read_exact(2)
-    packet_size = Reader(size_data).u16()
-
-    # Read packet payload
-    payload_data = await self.read_exact(packet_size)
-    complete_data = size_data + payload_data
-
-    # Parse IP packet to get protocol field (byte 2)
-    # Format: [size:2][ip_protocol:1][version:1][options_len:2][options:x][payload:n]
-    ip_protocol = complete_data[2]
-
-    # Dispatch based on IP protocol
-    if ip_protocol == 6:
-      # Protocol 6: HARP wrapper - need to check HARP protocol field
-      # IP header: [size:2][protocol:1][version:1][options_len:2]
-      ip_options_len = int.from_bytes(complete_data[4:6], "little")
-      harp_start = 6 + ip_options_len
-
-      # HARP header: [src:6][dst:6][seq:1][unk:1][harp_protocol:1][action:1]...
-      # HARP protocol is at offset 14 within HARP packet
-      harp_protocol_offset = harp_start + 14
-      harp_protocol = complete_data[harp_protocol_offset]
-
-      if harp_protocol == 2:
-        # HARP Protocol 2: HOI2
-        return CommandResponse.from_bytes(complete_data)
-      if harp_protocol == 3:
-        # HARP Protocol 3: Registration2
-        return RegistrationResponse.from_bytes(complete_data)
-      logger.warning(f"Unknown HARP protocol: {harp_protocol}, attempting CommandResponse parse")
-      return CommandResponse.from_bytes(complete_data)
-
-    logger.warning(f"Unknown IP protocol: {ip_protocol}, attempting CommandResponse parse")
-    return CommandResponse.from_bytes(complete_data)
-
-  async def setup(self):
-    """Initialize Hamilton connection and discover objects.
-
-    Hamilton uses strict request-response protocol:
-    1. Establish TCP connection
-    2. Protocol 7 initialization (get client ID)
-    3. Protocol 3 registration
-    4. Discover objects via Protocol 3 introspection
-    """
-
-    # Step 1: Establish TCP connection
-    await self.io.setup()
-
-    # Set connection state after successful connection
-    self._connected = True
-    self._reconnect_attempts = 0
-
-    # Step 2: Initialize connection (Protocol 7)
-    await self._initialize_connection()
-
-    # Step 3: Register client (Protocol 3)
-    await self._register_client()
-
-    # Step 4: Discover root objects
-    await self._discover_root()
-
-    logger.info(f"Hamilton handler setup complete. Client ID: {self._client_id}")
+  async def setup(self) -> None:
+    """Establish a fresh session, cleaning up any incomplete handshake on failure."""
+    async with self._lifecycle_lock:
+      if self._session.state is not SessionState.CLOSED:
+        raise RuntimeError(
+          f"{self._session._io._unique_id} already set up - call stop() before setting up again"
+        )
+      session = self._create_session()
+      self._session = session
+      session.state = SessionState.CONNECTING
+      try:
+        await session._io.setup()
+        await self._initialize_connection()
+        await self._register_client()
+        await self._discover_root()
+        await self._discover_globals()
+        session.start_reader()
+        root_addr = self._session.registry.get_root_address()
+        if root_addr is not None:
+          root_info = await self.introspection.get_object(root_addr)
+          root_info.children = {}
+          self._session.registry.register(root_info.name, root_info)
+      except BaseException:
+        await session.stop()
+        raise
+      logger.info(
+        "Hamilton TCP client setup complete. Client ID: %s, globals: %d",
+        self._session.client_id,
+        len(self._session.global_object_addresses),
+      )
 
   async def _initialize_connection(self):
-    """Initialize connection using Protocol 7 (ConnectionPacket).
-
-    Note: Protocol 7 doesn't have sequence numbers, so we send the packet
-    and read the response directly (blocking) rather than using the
-    normal routing mechanism.
-    """
     logger.info("Initializing Hamilton connection...")
 
-    # Build Protocol 7 ConnectionPacket using new InitMessage
-    packet = InitMessage(timeout=30).build()
+    packet = InitMessage(timeout=self._connection_timeout).build()
+    await self._write_handshake(packet)
 
-    logger.info("[INIT] Sending Protocol 7 initialization packet:")
-    logger.info(f"[INIT]   Length: {len(packet)} bytes")
-    logger.info(f"[INIT]   Hex: {packet.hex(' ')}")
-
-    # Send packet
-    await self.write(packet)
-
-    # Read response directly (blocking - safe because this is first communication)
-    # Read packet size (2 bytes, little-endian)
-    size_data = await self.read_exact(2)
+    size_data = await self._read_exact_handshake(2)
     packet_size = Reader(size_data).u16()
-
-    # Read packet payload
-    payload_data = await self.read_exact(packet_size)
+    payload_data = await self._read_exact_handshake(packet_size)
     response_bytes = size_data + payload_data
-
-    logger.info("[INIT] Received response:")
-    logger.info(f"[INIT]   Length: {len(response_bytes)} bytes")
-    logger.info(f"[INIT]   Hex: {response_bytes.hex(' ')}")
-
-    # Parse response using InitResponse
     response = InitResponse.from_bytes(response_bytes)
 
-    self._client_id = response.client_id
-    # Controller module is 2, node is client_id, object 65535 for general addressing
-    self.client_address = Address(2, response.client_id, 65535)
-
-    logger.info(f"[INIT] Client ID: {self._client_id}, Address: {self.client_address}")
+    self._session.client_id = response.client_id
+    self._session.client_address = Address(2, response.client_id, 65535)
 
   async def _register_client(self):
-    """Register client using Protocol 3."""
     logger.info("Registering Hamilton client...")
-
-    # Registration service address (DLL uses 0:0:65534, Piglet comment confirms)
     registration_service = Address(0, 0, 65534)
 
-    # Step 1: Initial registration (action_code=0)
     reg_msg = RegistrationMessage(
       dest=registration_service, action_code=RegistrationActionCode.REGISTRATION_REQUEST
     )
 
-    # Ensure client is initialized
-    if self.client_address is None or self._client_id is None:
+    if self.client_address is None or self._session.client_id is None:
       raise RuntimeError("Client not initialized - call _initialize_connection() first")
 
-    # Build and send registration packet
     seq = self._allocate_sequence_number(registration_service)
     packet = reg_msg.build(
       src=self.client_address,
-      req_addr=Address(2, self._client_id, 65535),  # C# DLL: 2:{client_id}:65535
-      res_addr=Address(0, 0, 0),  # C# DLL: 0:0:0
+      req_addr=Address(2, self._session.client_id, 65535),
+      res_addr=Address(0, 0, 0),
       seq=seq,
-      harp_action_code=3,  # COMMAND_REQUEST
-      harp_response_required=False,  # DLL uses 0x03 (no response flag)
+      harp_action_code=3,
+      harp_response_required=False,
     )
 
-    logger.info("[REGISTER] Sending registration packet:")
-    logger.info(f"[REGISTER]   Length: {len(packet)} bytes, Seq: {seq}")
-    logger.info(f"[REGISTER]   Hex: {packet.hex(' ')}")
-    logger.info(f"[REGISTER]   Src: {self.client_address}, Dst: {registration_service}")
-
-    # Send registration packet
-    await self.write(packet)
-
-    # Read response
-    response = await self._read_one_message()
-
-    logger.info("[REGISTER] Received response:")
-    logger.info(f"[REGISTER]   Length: {len(response.raw_bytes)} bytes")
-    logger.debug(f"[REGISTER]   Hex: {response.raw_bytes.hex(' ')}")
-
-    logger.info("[REGISTER] Registration complete")
+    await self._write_handshake(packet)
+    await self._read_one_message()
 
   async def _discover_root(self):
-    """Discover root objects via Protocol 3 HARP_PROTOCOL_REQUEST"""
     logger.info("Discovering Hamilton root objects...")
 
     registration_service = Address(0, 0, 65534)
-
-    # Request root objects (request_id=1)
     root_msg = RegistrationMessage(
       dest=registration_service, action_code=RegistrationActionCode.HARP_PROTOCOL_REQUEST
     )
@@ -417,8 +280,7 @@ class HamiltonTCPHandler:
       request_id=HoiRequestId.ROOT_OBJECT_OBJECT_ID,
     )
 
-    # Ensure client is initialized
-    if self.client_address is None or self._client_id is None:
+    if self.client_address is None or self._session.client_id is None:
       raise RuntimeError("Client not initialized - call _initialize_connection() first")
 
     seq = self._allocate_sequence_number(registration_service)
@@ -427,44 +289,58 @@ class HamiltonTCPHandler:
       req_addr=Address(0, 0, 0),
       res_addr=Address(0, 0, 0),
       seq=seq,
-      harp_action_code=3,  # COMMAND_REQUEST
-      harp_response_required=True,  # Request with response
+      harp_action_code=3,
+      harp_response_required=True,
     )
 
-    logger.info("[DISCOVER_ROOT] Sending root object discovery:")
-    logger.info(f"[DISCOVER_ROOT]   Length: {len(packet)} bytes, Seq: {seq}")
-    logger.info(f"[DISCOVER_ROOT]   Hex: {packet.hex(' ')}")
-
-    # Send request
-    await self.write(packet)
-
-    # Read response
+    await self._write_handshake(packet)
     response = await self._read_one_message()
-    assert isinstance(response, RegistrationResponse)
+    if not isinstance(response, RegistrationResponse):
+      raise RuntimeError(
+        f"Expected a RegistrationResponse during root discovery, got {type(response).__name__}"
+      )
 
-    logger.debug(f"[DISCOVER_ROOT] Received response: {len(response.raw_bytes)} bytes")
-
-    # Parse registration response to extract root object IDs
     root_objects = self._parse_registration_response(response)
-    logger.info(f"[DISCOVER_ROOT] Found {len(root_objects)} root objects")
+    if len(root_objects) != 1:
+      raise RuntimeError(
+        f"Expected exactly one root object from discovery, got {len(root_objects)}: {root_objects}"
+      )
+    self._session.registry.set_root_address(root_objects[0])
 
-    # Store discovered root objects
-    self._discovered_objects["root"] = root_objects
+  async def _discover_globals(self) -> None:
+    logger.info("Discovering Hamilton global objects...")
+    registration_service = Address(0, 0, 65534)
+    global_msg = RegistrationMessage(
+      dest=registration_service, action_code=RegistrationActionCode.HARP_PROTOCOL_REQUEST
+    )
+    global_msg.add_registration_option(
+      RegistrationOptionType.HARP_PROTOCOL_REQUEST,
+      protocol=2,
+      request_id=HoiRequestId.GLOBAL_OBJECT_ADDRESS,
+    )
 
-    logger.info(f"Discovery complete: {len(root_objects)} root objects")
+    if self.client_address is None or self._session.client_id is None:
+      raise RuntimeError("Client not initialized - call _initialize_connection() first")
+
+    seq = self._allocate_sequence_number(registration_service)
+    packet = global_msg.build(
+      src=self.client_address,
+      req_addr=Address(0, 0, 0),
+      res_addr=Address(0, 0, 0),
+      seq=seq,
+      harp_action_code=3,
+      harp_response_required=True,
+    )
+
+    await self._write_handshake(packet)
+    response = await self._read_one_message()
+    if not isinstance(response, RegistrationResponse):
+      raise RuntimeError(
+        f"Expected a RegistrationResponse during global discovery, got {type(response).__name__}"
+      )
+    self._session.global_object_addresses.extend(self._parse_registration_response(response))
 
   def _parse_registration_response(self, response: RegistrationResponse) -> list[Address]:
-    """Parse registration response options to extract object addresses.
-
-    From Piglet: Option type 6 (HARP_PROTOCOL_RESPONSE) contains object IDs
-    as a packed list of u16 values.
-
-    Args:
-      response: Parsed RegistrationResponse
-
-    Returns:
-      List of discovered object addresses
-    """
     objects: list[Address] = []
     options_data = response.registration.options
 
@@ -472,113 +348,73 @@ class HamiltonTCPHandler:
       logger.debug("No options in registration response (no objects found)")
       return objects
 
-    # Parse options: [option_id:1][length:1][data:x]
     reader = Reader(options_data)
-
     while reader.has_remaining():
       option_id = reader.u8()
       length = reader.u8()
 
       if option_id == RegistrationOptionType.HARP_PROTOCOL_RESPONSE:
         if length > 0:
-          # Skip padding u16
           _ = reader.u16()
-
-          # Read object IDs (u16 each)
           num_objects = (length - 2) // 2
           for _ in range(num_objects):
             object_id = reader.u16()
-            # Objects are at Address(1, 1, object_id)
             objects.append(Address(1, 1, object_id))
       else:
         logger.warning(f"Unknown registration option ID: {option_id}, skipping {length} bytes")
-        # Skip unknown option data
         reader.raw_bytes(length)
 
     return objects
 
   def _allocate_sequence_number(self, dest_address: Address) -> int:
-    """Allocate next sequence number for destination.
+    """Allocate a sequence from the current session during the handshake."""
+    return self._session.allocate_sequence(dest_address)
 
-    Args:
-      dest_address: Destination object address
+  async def execute(
+    self,
+    command: TCPCommand[ResultT],
+    *,
+    read_timeout: Optional[float] = None,
+  ) -> ResultT:
+    """Execute once and return the typed result, raising structured firmware errors.
 
-    Returns:
-      Next sequence number for this destination
+    The request defines its operation's action. Errors preserve the wire payload
+    and use offline descriptions; execution never issues diagnostic queries.
     """
-    current = self._sequence_numbers.get(dest_address, 0)
-    next_seq = (current + 1) % 256  # Wrap at 8 bits (1 byte)
-    self._sequence_numbers[dest_address] = next_seq
-    return next_seq
+    session = self._session
+    return await session.execute(command, read_timeout=read_timeout)
 
-  async def send_command(self, command: HamiltonCommand, timeout: float = 10.0) -> Optional[dict]:
-    """Send Hamilton command and wait for response.
+  async def exchange(
+    self,
+    command: TCPCommand[object],
+    *,
+    read_timeout: Optional[float] = None,
+  ) -> CommandResponse:
+    """Return the full terminal response, including firmware exception frames.
 
-    Sets source_address if not already set by caller (for testing).
-    Uses handler's client_address assigned during Protocol 7 initialization.
-
-    Args:
-      command: Hamilton command to execute
-      timeout: Maximum time to wait for response
-
-    Returns:
-      Parsed response dictionary, or None if command has no information to extract
-
-    Raises:
-      TimeoutError: If no response received within timeout
-      HamiltonError: If command returned an error
+    This is the raw protocol API. The caller owns decoding and firmware error
+    handling. Transport failures always raise; requests are never retried.
     """
-    # Set source address with smart fallback
-    if command.source_address is None:
-      if self.client_address is None:
-        raise RuntimeError("Handler not initialized - call setup() first to assign client_address")
-      command.source_address = self.client_address
+    session = self._session
+    return await session.exchange(command, read_timeout=read_timeout)
 
-    # Allocate sequence number for this command
-    command.sequence_number = self._allocate_sequence_number(command.dest_address)
+  async def resolve_path(self, path: str) -> Address:
+    """Resolve dot-path to Address (delegates to introspection)."""
+    return await self.introspection.resolve_path(path)
 
-    # Build command message
-    message = command.build()
+  async def resolve_target(
+    self,
+    target: Union[Address, str],
+    aliases: Optional[Dict[str, str]] = None,
+  ) -> Address:
+    """Resolve Address | alias | dot-path to Address."""
+    if isinstance(target, Address):
+      return target
+    resolved = aliases.get(target, target) if aliases is not None else target
+    return await self.resolve_path(resolved)
 
-    # Log command parameters for debugging
-    log_params = command.get_log_params()
-    logger.info(f"{command.__class__.__name__} parameters:")
-    for key, value in log_params.items():
-      # Format arrays nicely if very long
-      if isinstance(value, list) and len(value) > 8:
-        logger.info(f"  {key}: {value[:4]}... ({len(value)} items)")
-      else:
-        logger.info(f"  {key}: {value}")
-
-    # Send command
-    await self.write(message)
-
-    # Read response, honoring the per-call timeout when provided.
-    if timeout is None:
-      response_message = await self._read_one_message()
-    else:
-      response_message = await asyncio.wait_for(self._read_one_message(), timeout)
-    assert isinstance(response_message, CommandResponse)
-
-    # Check for error actions
-    action = Hoi2Action(response_message.hoi.action_code)
-    if action in (
-      Hoi2Action.STATUS_EXCEPTION,
-      Hoi2Action.COMMAND_EXCEPTION,
-      Hoi2Action.INVALID_ACTION_RESPONSE,
-    ):
-      error_message = f"Error response (action={action:#x}): {response_message.hoi.params.hex()}"
-      logger.error(f"Hamilton error {action}: {error_message}")
-      raise RuntimeError(f"Hamilton error {action}: {error_message}")
-
-    return command.interpret_response(response_message)
-
-  async def stop(self):
-    """Stop the handler and close connection."""
-    try:
-      await self.io.stop()
-    except Exception as e:
-      logger.warning(f"Error during stop: {e}")
-    finally:
-      self._connected = False
-    logger.info("Hamilton handler stopped")
+  async def stop(self) -> None:
+    """Finish the current session before permitting setup to replace it."""
+    async with self._lifecycle_lock:
+      await self._session.stop()
+      logger.info("Hamilton TCP client stopped")

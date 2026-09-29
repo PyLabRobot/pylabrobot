@@ -1,5 +1,6 @@
 import inspect
 import logging
+import re
 import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
@@ -45,6 +46,28 @@ except ImportError as e:
 _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
 
 logger = logging.getLogger(__name__)
+
+
+def _opentrons_version_components(version: str) -> Tuple[int, int, int]:
+  """Parse the numeric release components from an Opentrons server version.
+
+  Raises:
+    ValueError: If the version does not start with major, minor, and patch numbers.
+  """
+  match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version)
+  if match is None:
+    raise ValueError(
+      f"Opentrons server version must start with major, minor, and patch numbers: {version!r}."
+    )
+  major, minor, patch = match.groups()
+  return int(major), int(minor), int(patch)
+
+
+def _fixed_trash_is_addressable(api_version: str) -> bool:
+  """Return whether fixed trash uses the addressable-area commands."""
+  return _opentrons_version_components(api_version) >= _opentrons_version_components(
+    _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
+  )
 
 
 class _IOLogger:
@@ -224,7 +247,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
         "format": "96Standard",
         "isTiprack": True,
         # should we get the tip length from calibration on the robot? /calibration/tip_length
-        "tipLength": tip.total_tip_length,
+        "tipLength": tip.get_size_z(),
         "tipOverlap": tip.fitting_depth,
         "loadName": self.get_ot_name(tip_rack.name),
         "isMagneticModuleCompatible": False,  # do we really care? If yes, store.
@@ -358,7 +381,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if tip_rack.name not in self._tip_racks:
       await self._assign_tip_rack(tip_rack, op.tip)
 
-    offset_z += op.tip.total_tip_length
+    offset_z += op.tip.get_size_z()
 
     self._ot.lh.pick_up_tip(
       labware_id=self.get_ot_name(tip_rack.name),
@@ -377,9 +400,8 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     pipette_id = self._get_drop_pipette(ops)
     op = ops[0]
 
-    use_fixed_trash = (
-      cast(str, self.ot_api_version) >= _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
-      and op.resource.name == "trash"
+    use_fixed_trash = op.resource.name == "trash" and _fixed_trash_is_addressable(
+      cast(str, self.ot_api_version)
     )
     if use_fixed_trash:
       labware_id = "fixedTrash"
@@ -658,7 +680,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       res = self._ot.lh.save_position(pipette_id=pipette_id)
       pos = res["data"]["result"]["position"]
       current = Coordinate(pos["x"], pos["y"], pos["z"])
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
       raise RuntimeError("Failed to query current pipette position") from exc
 
     return pipette_id, current

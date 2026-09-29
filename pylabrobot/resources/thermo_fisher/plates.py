@@ -1,5 +1,6 @@
 """Thermo Fisher Scientific  Inc. (and all its brand) plates"""
 
+import logging
 import math
 
 from pylabrobot.resources.height_volume_functions import (
@@ -14,6 +15,8 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 from pylabrobot.utils.interpolation import interpolate_1d
+
+logger = logging.getLogger(__name__)
 
 # Please conform with the 'manufacturer-first, then brands' naming principle:
 
@@ -115,6 +118,7 @@ def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate
       cross_section_type=CrossSectionType.RECTANGLE,
       compute_volume_from_height=(_compute_volume_from_height_Thermo_TS_96_wellplate_1200ul_Rb),
       compute_height_from_volume=(_compute_height_from_volume_Thermo_TS_96_wellplate_1200ul_Rb),
+      name_prefix=name,
     ),
   )
 
@@ -213,6 +217,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
       compute_height_from_volume=(
         _compute_height_from_volume_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate
       ),
+      name_prefix=name,
     ),
   )
 
@@ -252,6 +257,7 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       compute_height_from_volume=lambda liquid_volume: (
         liquid_volume / (math.pi * ((well_diameter / 2) ** 2))
       ),
+      name_prefix=name,
     ),
   )
 
@@ -345,6 +351,7 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
       compute_height_from_volume=(
         _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp
       ),
+      name_prefix=name,
     ),
   )
 
@@ -353,7 +360,17 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
   """Thermo Fisher Scientific cat. no.: 4309849, 4326270, 4343814 (with barcode), 4343370 (w/o barcode).
 
   https://documents.thermofisher.com/TFS-Assets/LSG/manuals/cms_042831.pdf
+
+  The wells sit flush with the plate's own base: section A-A of drawing 4310286 dimensions 9.70
+  from the underside to the top face, and the 0.61 below the wells is the wall at their bottom, not
+  a standoff. So `dz` is zero because it was drawn that way, not because nobody measured it - and
+  on a holder with a pedestal this plate comes to rest on its wells rather than on its skirt.
   """
+  logger.info(
+    "%s is one of the few skirted plates whose wells sit flush with its own base, so on a holder "
+    "with a pedestal it comes to rest on its wells rather than on its skirt.",
+    name,
+  )
   diameter = 3.17
   return Plate(
     name=name,
@@ -378,6 +395,7 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
       bottom_type=WellBottomType.V,
       material_z_thickness=0.61,
       cross_section_type=CrossSectionType.CIRCLE,
+      name_prefix=name,
     ),
   )
 
@@ -417,6 +435,7 @@ def thermo_nunc_1_troughplate_90000uL_Fb_omnitray(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       # compute_volume_from_height=None,
       # compute_height_from_volume=None,
+      name_prefix=name,
     ),
   )
 
@@ -453,6 +472,7 @@ def Thermo_TS_Nunc_96_wellplate_300uL_Fb(name: str, with_lid: bool = False) -> P
       size_z=12.1,  # from spec
       bottom_type=WellBottomType.FLAT,  # flat bottom wells
       material_z_thickness=2.2,  # from spec
+      name_prefix=name,
     ),
   )
 
@@ -500,5 +520,6 @@ def thermo_TS_nalgene_1_troughplate_300mL_Fb(name: str) -> Plate:
       bottom_type=WellBottomType.FLAT,  # from spec
       cross_section_type=CrossSectionType.RECTANGLE,  # rectangle wells
       material_z_thickness=1.15,  # measured.
+      name_prefix=name,
     ),
   )

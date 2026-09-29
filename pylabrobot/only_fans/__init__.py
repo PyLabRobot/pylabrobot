@@ -6,4 +6,4 @@ warnings.warn(
   stacklevel=2,
 )
 
-from pylabrobot.legacy.only_fans import *  # noqa: F401,F403,E402
+from pylabrobot.legacy.only_fans import *  # noqa: E402

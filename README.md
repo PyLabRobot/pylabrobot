@@ -6,7 +6,8 @@
 <a href="https://docs.pylabrobot.org"><strong>Docs</strong></a> |
 <a href="https://discuss.pylabrobot.org"><strong>Forum</strong></a> |
 <a href="https://docs.pylabrobot.org/stable/user_guide/getting-started/installation.html"><strong>Installation</strong></a> |
-<a href="https://docs.pylabrobot.org/stable/user_guide/index.html"><strong>Getting started</strong></a>
+<a href="https://docs.pylabrobot.org/stable/user_guide/index.html"><strong>Getting started</strong></a> |
+  <a href="https://docs.pylabrobot.org/dev/user_guide/machines.html"><strong>Supported Machines</strong></a>
 </div>
 
 ## What is PyLabRobot?
@@ -127,14 +128,12 @@ await p.run_for_duration(speed=100, duration=30)
 Taking a measurement from a Mettler Toledo scale:
 
 ```python
-from pylabrobot.scales import Scale
-from pylabrobot.scales.mettler_toledo import MettlerToledoWXS205SDU
+from pylabrobot.mettler_toledo import MTSICSDriver
 
-backend = MettlerToledoWXS205SDU(port="/dev/cu.usbserial-110")
-scale = Scale(backend=backend, size_x=0, size_y=0, size_z=0)
+scale = MTSICSDriver(port="/dev/cu.usbserial-110")
 await scale.setup()
 
-weight = await scale.get_weight()
+weight = await scale.read_weight()
 ```
 
 ### Heater shakers ([docs](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/heating_shaking/heating_shaking.html))
@@ -225,6 +224,6 @@ If you use PyLabRobot in your research, please cite the following:
 
 ---
 
-**Disclaimer:** PyLabRobot is not officially endorsed or supported by any robot manufacturer. If you use a firmware driver such as the STAR driver provided here, you do so at your own risk. Usage of a firmware driver such as STAR may invalidate your warranty. Please contact us with any questions.
+**Disclaimer:** PyLabRobot is officially endorsed and supported by an increasing number of robot manufacturers (https://docs.pylabrobot.org/stable/#supported-by), but not all. If you use a firmware driver, such as the STAR driver provided here, you do so at your own risk. Whether it affects your warranty is between you and your vendor. Please contact us with any questions.
 
 _Developed for the Sculpting Evolution Group at the MIT Media Lab_

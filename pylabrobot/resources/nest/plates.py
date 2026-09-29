@@ -48,6 +48,7 @@ def nest_1_troughplate_195000uL_Vb(name: str) -> Plate:
       dz=3.55,  # from datasheet
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -96,6 +97,7 @@ def nest_1_troughplate_185000uL_Vb(name: str) -> Plate:
       dz=3.55,  # from datasheet
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -142,6 +144,7 @@ def nest_8_troughplate_22000uL_Vb(name: str) -> Plate:
       dz=3.55,  # from datasheet
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -186,6 +189,7 @@ def nest_12_troughplate_15000uL_Vb(name: str) -> Plate:
       dz=3.55,  # from datasheet
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -218,5 +222,6 @@ def NEST_96_wellplate_2200uL_Ub(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       bottom_type=WellBottomType.U,
       max_volume=2200,  # from spec (2.2 mL)
+      name_prefix=name,
     ),
   )

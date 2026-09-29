@@ -84,7 +84,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
         f"{op.tip.__class__.__name__:<{LiquidHandlerChatterboxBackend._tip_type_length}} "
         f"{op.tip.maximal_volume:<{LiquidHandlerChatterboxBackend._max_volume_length}} "
         f"{op.tip.fitting_depth:<{LiquidHandlerChatterboxBackend._fitting_depth_length}} "
-        f"{op.tip.total_tip_length:<{LiquidHandlerChatterboxBackend._tip_length_length}} "
+        f"{op.tip.get_size_z():<{LiquidHandlerChatterboxBackend._tip_length_length}} "
         # f"{str(op.tip.pickup_method)[-20:]:<{ChatterboxBackend._pickup_method_length}} "
         f"{'Yes' if op.tip.has_filter else 'No':<{LiquidHandlerChatterboxBackend._filter_length}}"
       )
@@ -114,7 +114,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
         f"{op.tip.__class__.__name__:<{LiquidHandlerChatterboxBackend._tip_type_length}} "
         f"{op.tip.maximal_volume:<{LiquidHandlerChatterboxBackend._max_volume_length}} "
         f"{op.tip.fitting_depth:<{LiquidHandlerChatterboxBackend._fitting_depth_length}} "
-        f"{op.tip.total_tip_length:<{LiquidHandlerChatterboxBackend._tip_length_length}} "
+        f"{op.tip.get_size_z():<{LiquidHandlerChatterboxBackend._tip_length_length}} "
         # f"{str(op.tip.pickup_method)[-20:]:<{ChatterboxBackend._pickup_method_length}} "
         f"{'Yes' if op.tip.has_filter else 'No':<{LiquidHandlerChatterboxBackend._filter_length}}"
       )

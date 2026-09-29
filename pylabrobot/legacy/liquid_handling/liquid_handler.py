@@ -12,8 +12,8 @@ from typing import (
   Any,
   Awaitable,
   Callable,
+  Collection,
   Dict,
-  Generator,
   List,
   Literal,
   Mapping,
@@ -26,9 +26,6 @@ from typing import (
 )
 
 from pylabrobot.events import ResourceReference, evented_operation, resource_reference
-from pylabrobot.legacy.liquid_handling.channel_positioning import (
-  compute_channel_offsets,
-)
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.strictness import (
   Strictness,
@@ -37,6 +34,14 @@ from pylabrobot.legacy.liquid_handling.strictness import (
 from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading import PlateReader
 from pylabrobot.legacy.tilting.tilter import Tilter
+from pylabrobot.legacy.tip_tracker import TipTracker
+from pylabrobot.lib.liquid_handling.channel_positioning import (
+  compute_channel_offsets,
+)
+from pylabrobot.lib.liquid_handling.tip_consolidation import plan_tip_consolidation
+from pylabrobot.lib.liquid_handling.tip_presence_probing import (
+  probe_tip_presence_via_pickup as _probe_tip_presence_via_pickup,
+)
 from pylabrobot.resources import (
   Container,
   Coordinate,
@@ -52,7 +57,6 @@ from pylabrobot.resources import (
   Tip,
   TipRack,
   TipSpot,
-  TipTracker,
   Trash,
   Well,
   does_tip_tracking,
@@ -91,10 +95,15 @@ TipPresenceProbingMethod = Callable[
 
 
 def _resource_pickup_event_context(
-  liquid_handler: "LiquidHandler", resource: Resource, **_: Any
+  self: "LiquidHandler",
+  resource: Resource,
+  offset: Coordinate = Coordinate.zero(),
+  pickup_distance_from_top: Optional[float] = None,
+  direction: GripDirection = GripDirection.FRONT,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
   context = {
-    "device": resource_reference(liquid_handler),
+    "device": resource_reference(self),
     "resources": [resource_reference(resource)],
   }
   if resource.parent is not None:
@@ -102,7 +111,7 @@ def _resource_pickup_event_context(
   return context
 
 
-def _picked_resource_event_context(liquid_handler: "LiquidHandler", **_: Any) -> Dict[str, Any]:
+def _picked_resource_event_context(liquid_handler: "LiquidHandler") -> Dict[str, Any]:
   pickup = liquid_handler._resource_pickup
   return {
     "device": resource_reference(liquid_handler),
@@ -111,16 +120,28 @@ def _picked_resource_event_context(liquid_handler: "LiquidHandler", **_: Any) ->
 
 
 def _resource_drop_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
-  **_: Any,
+  offset: Coordinate = Coordinate.zero(),
+  direction: GripDirection = GripDirection.FRONT,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
-  context = _picked_resource_event_context(liquid_handler)
+  context = _picked_resource_event_context(self)
   if isinstance(destination, Resource):
     context["destination"] = resource_reference(destination)
   else:
     context["destination"] = repr(destination)
   return context
+
+
+def _resource_move_event_context(
+  self: "LiquidHandler",
+  to: Coordinate,
+  offset: Coordinate = Coordinate.zero(),
+  direction: Optional[GripDirection] = None,
+  **backend_kwargs: Any,
+) -> Dict[str, Any]:
+  return _picked_resource_event_context(self)
 
 
 def _liquid_operation_plate(resource: Container) -> Resource:
@@ -144,16 +165,22 @@ def _safe_event_volume(value: Any) -> Any:
 
 
 def _liquid_operation_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   resources: Sequence[Container],
   vols: Sequence[Any],
   use_channels: Optional[List[int]] = None,
-  **_: Any,
+  flow_rates: Optional[List[Optional[float]]] = None,
+  offsets: Optional[List[Coordinate]] = None,
+  liquid_height: Optional[List[Optional[float]]] = None,
+  blow_out_air_volume: Optional[List[Optional[float]]] = None,
+  spread: Literal["wide", "tight", "custom"] = "wide",
+  mix: Optional[List[Mix]] = None,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
   """Describe requested liquid operations using their directly operated containers."""
 
   resource_list = list(resources)
-  channels = use_channels or liquid_handler._default_use_channels or list(range(len(resource_list)))
+  channels = use_channels or self._default_use_channels or list(range(len(resource_list)))
   operation_resources = resource_list
   if len(operation_resources) == 1 and len(channels) > 1:
     operation_resources = operation_resources * len(channels)
@@ -182,7 +209,7 @@ def _liquid_operation_event_context(
     )
 
   return {
-    "device": resource_reference(liquid_handler),
+    "device": resource_reference(self),
     "resources": unique_operation_resources,
     "liquid_operations": liquid_operations,
   }
@@ -220,18 +247,53 @@ def _tip_operation_event_context(
   }
 
 
-def _tip_rack_operation_event_context(
-  liquid_handler: "LiquidHandler",
-  tip_rack: Optional[TipRack] = None,
-  resource: Optional[Union[TipRack, Trash]] = None,
-  **_: Any,
+def _tip_pickup_event_context(
+  self: "LiquidHandler",
+  tip_spots: List[TipSpot],
+  use_channels: Optional[List[int]] = None,
+  offsets: Optional[List[Coordinate]] = None,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
-  """Describe a 96-head operation by its directly operated rack or trash resource."""
+  return _tip_operation_event_context(self, tip_spots, use_channels)
 
-  operation_resource = tip_rack if tip_rack is not None else resource
+
+def _tip_drop_event_context(
+  self: "LiquidHandler",
+  tip_spots: Sequence[Union[TipSpot, Trash]],
+  use_channels: Optional[List[int]] = None,
+  offsets: Optional[List[Coordinate]] = None,
+  allow_nonzero_volume: bool = False,
+  **backend_kwargs: Any,
+) -> Dict[str, Any]:
+  return _tip_operation_event_context(self, tip_spots, use_channels)
+
+
+def _tip_rack_pickup_event_context(
+  self: "LiquidHandler",
+  tip_rack: TipRack,
+  offset: Coordinate = Coordinate.zero(),
+  **backend_kwargs: Any,
+) -> Dict[str, Any]:
+  """Describe a 96-head pickup by its directly operated tip rack."""
+
   return {
-    "device": resource_reference(liquid_handler),
-    "resources": [] if operation_resource is None else [resource_reference(operation_resource)],
+    "device": resource_reference(self),
+    "resources": [resource_reference(tip_rack)],
+  }
+
+
+def _tip_rack_drop_event_context(
+  self: "LiquidHandler",
+  resource: Union[TipRack, Trash],
+  offset: Coordinate = Coordinate.zero(),
+  allow_nonzero_volume: bool = False,
+  **backend_kwargs: Any,
+) -> Dict[str, Any]:
+  """Describe a 96-head drop by its directly operated rack or trash resource."""
+
+  return {
+    "device": resource_reference(self),
+    "resources": [resource_reference(resource)],
   }
 
 
@@ -265,6 +327,15 @@ def _check_no_lid(resource: Resource, action: str) -> None:
     f"Cannot {action} {resource.name!r}: its enclosing resource {lidded.name!r} has a lid. "
     "Remove the lid first."
   )
+
+
+def _check_tip_racks_available(resources: Sequence[TipSpot], action: str) -> None:
+  """Raise if a lid or another tip rack sits on a rack behind ``resources``, checking each rack once.
+  ``action`` is a verb phrase for the error."""
+  racks = {id(r.parent): r.parent for r in resources if isinstance(r.parent, TipRack)}
+  for rack in racks.values():
+    if not rack._available_for_tip_handling:
+      raise ValueError(f"Cannot {action} {rack.name!r}: something is stacked on top of it.")
 
 
 class LiquidHandler(Resource, Machine):
@@ -584,7 +655,7 @@ class LiquidHandler(Resource, Machine):
       return None
     return self._resource_pickup.resource
 
-  @evented_operation("liquid_handler.tip_pickup", _tip_operation_event_context)
+  @evented_operation("liquid_handler.tip_pickup", _tip_pickup_event_context)
   @need_setup_finished
   async def pick_up_tips(
     self,
@@ -647,6 +718,7 @@ class LiquidHandler(Resource, Machine):
     not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, TipSpot)]
     if len(not_tip_spots) > 0:
       raise TypeError(f"Resources must be `TipSpot`s, got {not_tip_spots}")
+    _check_tip_racks_available(tip_spots, "pick up tips from")
 
     # fix arguments
     use_channels = use_channels or self._default_use_channels or list(range(len(tip_spots)))
@@ -734,7 +806,7 @@ class LiquidHandler(Resource, Machine):
     """
     return [tracker.get_tip() if tracker.has_tip else None for tracker in self.head.values()]
 
-  @evented_operation("liquid_handler.tip_drop", _tip_operation_event_context)
+  @evented_operation("liquid_handler.tip_drop", _tip_drop_event_context)
   @need_setup_finished
   async def drop_tips(
     self,
@@ -797,6 +869,7 @@ class LiquidHandler(Resource, Machine):
     not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, (TipSpot, Trash))]
     if len(not_tip_spots) > 0:
       raise TypeError(f"Resources must be `TipSpot`s or Trash, got {not_tip_spots}")
+    _check_tip_racks_available([ts for ts in tip_spots if isinstance(ts, TipSpot)], "drop tips to")
 
     # fix arguments
     use_channels = use_channels or self._default_use_channels or list(range(len(tip_spots)))
@@ -1180,13 +1253,6 @@ class LiquidHandler(Resource, Machine):
       )
     ]
 
-    # queue the operations on the resource (source) and mounted tips (destination) trackers
-    for op in aspirations:
-      if does_volume_tracking():
-        if not op.resource.tracker.is_disabled:
-          op.resource.tracker.remove_liquid(op.volume)
-        op.tip.tracker.add_liquid(volume=op.volume)
-
     extras = self._check_args(
       self.backend.aspirate,
       backend_kwargs,
@@ -1196,9 +1262,15 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # actually aspirate the liquid
+    # actually aspirate the liquid. The trackers are queued inside the try, so a tracker that
+    # refuses an operation rolls every channel back below, just like a backend error.
     error: Optional[Exception] = None
     try:
+      for op in aspirations:
+        if does_volume_tracking():
+          if not op.resource.tracker.is_disabled:
+            op.resource.tracker.remove_liquid(op.volume)
+          op.tip.tracker.add_liquid(volume=op.volume)
       await self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
     except Exception as e:
       error = e
@@ -1381,13 +1453,6 @@ class LiquidHandler(Resource, Machine):
       )
     ]
 
-    # queue the operations on the resource (source) and mounted tips (destination) trackers
-    for op in dispenses:
-      if does_volume_tracking():
-        if not op.resource.tracker.is_disabled:
-          op.resource.tracker.add_liquid(volume=op.volume)
-        op.tip.tracker.remove_liquid(op.volume)
-
     # fix the backend kwargs
     extras = self._check_args(
       self.backend.dispense,
@@ -1398,9 +1463,15 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # actually dispense the liquid
+    # actually dispense the liquid. The trackers are queued inside the try, so a tracker that
+    # refuses an operation rolls every channel back below, just like a backend error.
     error: Optional[Exception] = None
     try:
+      for op in dispenses:
+        if does_volume_tracking():
+          if not op.resource.tracker.is_disabled:
+            op.resource.tracker.add_liquid(volume=op.volume)
+          op.tip.tracker.remove_liquid(op.volume)
       await self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
     except Exception as e:
       error = e
@@ -1599,7 +1670,7 @@ class LiquidHandler(Resource, Machine):
       else:
         await self.return_tips(use_channels=channels)
 
-  @evented_operation("liquid_handler.tip_pickup_96", _tip_rack_operation_event_context)
+  @evented_operation("liquid_handler.tip_pickup_96", _tip_rack_pickup_event_context)
   async def pick_up_tips96(
     self,
     tip_rack: TipRack,
@@ -1632,6 +1703,7 @@ class LiquidHandler(Resource, Machine):
       raise TypeError(f"Resource must be a TipRack, got {tip_rack}")
     if not tip_rack.num_items == 96:
       raise ValueError("Tip rack must have 96 tips")
+    _check_tip_racks_available(tip_rack.get_all_items()[:1], "pick up tips from")
 
     extras = self._check_args(
       self.backend.pick_up_tips96, backend_kwargs, default={"pickup"}, strictness=get_strictness()
@@ -1669,7 +1741,7 @@ class LiquidHandler(Resource, Machine):
           tip_spot.tracker.commit()
         self.head96[i].commit()
 
-  @evented_operation("liquid_handler.tip_drop_96", _tip_rack_operation_event_context)
+  @evented_operation("liquid_handler.tip_drop_96", _tip_rack_drop_event_context)
   async def drop_tips96(
     self,
     resource: Union[TipRack, Trash],
@@ -1711,6 +1783,8 @@ class LiquidHandler(Resource, Machine):
       raise TypeError(f"Resource must be a TipRack or Trash, got {resource}")
     if isinstance(resource, TipRack) and not resource.num_items == 96:
       raise ValueError("Tip rack must have 96 tips")
+    if isinstance(resource, TipRack):
+      _check_tip_racks_available(resource.get_all_items()[:1], "drop tips to")
 
     extras = self._check_args(
       self.backend.drop_tips96, backend_kwargs, default={"drop"}, strictness=get_strictness()
@@ -2250,7 +2324,7 @@ class LiquidHandler(Resource, Machine):
 
     self._state_updated()
 
-  @evented_operation("liquid_handler.resource_move", _picked_resource_event_context)
+  @evented_operation("liquid_handler.resource_move", _resource_move_event_context)
   async def move_picked_up_resource(
     self,
     to: Coordinate,
@@ -2752,6 +2826,9 @@ class LiquidHandler(Resource, Machine):
   ) -> Dict[str, bool]:
     """Probe tip presence by attempting pickup on each TipSpot.
 
+    Runs `pylabrobot.lib.liquid_handling.tip_presence_probing.probe_tip_presence_via_pickup` with
+    this handler's pick-up and drop: a channel a `ChannelizedError` names found no tip.
+
     Args:
       tip_spots: TipSpots to probe.
       use_channels: Channels to use (must match tip_spots length).
@@ -2775,54 +2852,32 @@ class LiquidHandler(Resource, Machine):
         f"Length mismatch: received {len(use_channels)} channels for "
         f"{len(tip_spots)} tip spots. One channel must be assigned per tip spot."
       )
+    if not tip_spots:
+      return {}
 
-    presence_flags = [True] * len(tip_spots)
     z_height = tip_spots[0].get_location_wrt(self.deck, z="top").z + 5
 
-    # Step 1: Cluster tip spots by x-coordinate
-    clusters_by_x: Dict[float, List[Tuple[TipSpot, int, int]]] = {}
-    for idx, tip_spot in enumerate(tip_spots):
-      assert tip_spot.location is not None, "TipSpot location must be at a location"
-      x = tip_spot.location.x
-      clusters_by_x.setdefault(x, []).append((tip_spot, use_channels[idx], idx))
+    async def pick_up(spots: List[TipSpot], channels: List[int]) -> None:
+      await self.pick_up_tips(
+        spots,
+        use_channels=channels,
+        minimum_traverse_height_at_beginning_of_a_command=z_height,
+        z_position_at_end_of_a_command=z_height,
+      )
 
-    sorted_clusters = [clusters_by_x[x] for x in sorted(clusters_by_x)]
-
-    # Step 2: Probe each cluster
-    for cluster in sorted_clusters:
-      tip_subset, channel_subset, index_subset = zip(*cluster)
-
+    async def drop(spots: List[TipSpot], channels: List[int]) -> None:
       try:
-        await self.pick_up_tips(
-          list(tip_subset),
-          use_channels=list(channel_subset),
-          minimum_traverse_height_at_beginning_of_a_command=z_height,
-          z_position_at_end_of_a_command=z_height,
-        )
-      except ChannelizedError as e:
-        for ch in e.errors:
-          if ch in channel_subset:
-            failed_local_idx = channel_subset.index(ch)
-            presence_flags[index_subset[failed_local_idx]] = False
-          else:
-            raise
+        await self.drop_tips(spots, use_channels=channels, z_position_at_end_of_a_command=z_height)
+      except Exception as e:
+        assert spots[0].location is not None, "TipSpot location must be at a location"
+        print(f"Warning: drop_tips failed for cluster at x={spots[0].location.x}: {e}")
 
-      # Step 3: Drop tips immediately after probing
-      if any(presence_flags[index] for index in index_subset):
-        spots = [ts for ts, _, i in cluster if presence_flags[i]]
-        use_channels = [uc for _, uc, i in cluster if presence_flags[i]]
-        try:
-          await self.drop_tips(
-            spots,
-            use_channels=use_channels,
-            # minimum_traverse_height_at_beginning_of_a_command=z_height,
-            z_position_at_end_of_a_command=z_height,
-          )
-        except Exception as e:
-          assert cluster[0][0].location is not None, "TipSpot location must be at a location"
-          print(f"Warning: drop_tips failed for cluster at x={cluster[0][0].location.x}: {e}")
+    def missed(error: Exception) -> Optional[Collection[int]]:
+      return list(error.errors) if isinstance(error, ChannelizedError) else None
 
-    return {ts.name: flag for ts, flag in zip(tip_spots, presence_flags)}
+    return await _probe_tip_presence_via_pickup(
+      tip_spots, use_channels, pick_up_tips=pick_up, drop_tips=drop, missed_channels=missed
+    )
 
   async def probe_tip_inventory(
     self,
@@ -2872,174 +2927,20 @@ class LiquidHandler(Resource, Machine):
 
   async def consolidate_tip_inventory(
     self, tip_racks: List[TipRack], use_channels: Optional[List[int]] = None
-  ):
-    """
-    Consolidate partial tip racks on the deck by redistributing tips.
-
-    This function identifies partially-filled tip racks (excluding any in
-    `ignore_tiprack_list`) in the 'tip_inventory`, the subset of the deck tree
-    that is of type TipRack, and consolidates their tips into as few tip racks
-    as possible, grouped by tip model.
-    Tips are moved efficiently to minimize pipetting steps, avoiding redundant
-    visits to the same drop columns.
+  ) -> None:
+    """Consolidate partially filled tip racks by redistributing tips of the same model.
 
     Args:
-      tip_racks: List of TipRack objects to consolidate.
-      use_channels: Optional list of channels to use for consolidation. If not
-        provided, the first 8 available channels will be used.
+      tip_racks: Tip racks to consolidate. Full and empty racks are ignored.
+      use_channels: Channels to use. If omitted, compatible channels are selected
+        for each tip model. Each transfer uses at most eight channels.
     """
-
-    def merge_sublists(lists: List[List[TipSpot]], max_len: int) -> List[List[TipSpot]]:
-      """Merge adjacent sublists if combined length <= max_len, without splitting sublists."""
-      merged: List[List[TipSpot]] = []
-      buffer: List[TipSpot] = []
-
-      for sublist in lists:
-        if len(sublist) == 0:
-          continue  # skip empty sublists
-
-        if len(buffer) + len(sublist) <= max_len:
-          buffer.extend(sublist)
-        else:
-          if buffer:
-            merged.append(buffer)
-          buffer = sublist  # start new buffer
-
-      if len(buffer) > 0:
-        merged.append(buffer)
-
-      return merged
-
-    def divide_list_into_chunks(
-      list_l: List[TipSpot], chunk_size: int
-    ) -> Generator[List[TipSpot], None, None]:
-      """Divides a list into smaller chunks of a specified size.
-
-      Parameters:
-        - list_l: The list to be divided into chunks.
-        - chunk_size: The size of each chunk.
-
-      Returns:
-        A generator that yields chunks of the list.
-      """
-      for i in range(0, len(list_l), chunk_size):
-        yield list_l[i : i + chunk_size]
-
-    clusters_by_model: Dict[int, List[Tuple[TipRack, int]]] = {}
-
-    for idx, tip_rack in enumerate(tip_racks):
-      # Only consider partially-filled tip_racks
-      tip_status = [tip_spot.tracker.has_tip for tip_spot in tip_rack.get_all_items()]
-
-      if not (any(tip_status) and not all(tip_status)):
-        continue  # ignore non-partially-filled tip_racks
-
-      tipspots_w_tips = [
-        tip_spot for has_tip, tip_spot in zip(tip_status, tip_rack.get_all_items()) if has_tip
-      ]
-
-      # Identify model by hashed unique physical characteristics
-      current_model = hash(tipspots_w_tips[0].tracker.get_tip())
-      if not all(
-        hash(tip_spot.tracker.get_tip()) == current_model for tip_spot in tipspots_w_tips[1:]
-      ):
-        raise ValueError(
-          f"Tip rack {tip_rack.name} has mixed tip models, cannot consolidate: "
-          f"{[tip_spot.tracker.get_tip() for tip_spot in tipspots_w_tips]}"
-        )
-
-      num_empty_tipspots = len(tip_status) - len(tipspots_w_tips)
-      clusters_by_model.setdefault(current_model, []).append((tip_rack, num_empty_tipspots))
-
-    # Sort partially-filled tipracks from most to least empty
-    for model, rack_list in clusters_by_model.items():
-      rack_list.sort(key=lambda x: x[1])
-
-    # Consolidate one tip model at a time across all tip_racks of that model
-    for model, rack_list in clusters_by_model.items():
-      print(f"Consolidating: - {', '.join([rack.name for rack, _ in rack_list])}")
-
-      all_tip_spots_list = [
-        tip_spot for tip_rack, _ in rack_list for tip_spot in tip_rack.get_all_items()
-      ]
-
-      # 1: Record current tip state
-      current_tip_presence_list = [tip_spot.has_tip() for tip_spot in all_tip_spots_list]
-
-      # 2: Generate target/consolidated tip state
-      total_length = len(all_tip_spots_list)
-      num_tips_per_model = sum(current_tip_presence_list)
-
-      target_tip_presence_list = [i < num_tips_per_model for i in range(total_length)]
-
-      # 3: Calculate tip_spots involved in tip movement
-      tip_movement_list = [
-        c - t for c, t in zip(current_tip_presence_list, target_tip_presence_list)
-      ]
-
-      tip_origin_indices = [i for i, v in enumerate(tip_movement_list) if v == 1]
-      all_origin_tip_spots = [all_tip_spots_list[idx] for idx in tip_origin_indices]
-
-      tip_target_indices = [i for i, v in enumerate(tip_movement_list) if v == -1]
-      all_target_tip_spots = [all_tip_spots_list[idx] for idx in tip_target_indices]
-
-      # Only continue if tip_racks are not already consolidated
-      if len(all_target_tip_spots) == 0:
-        print("Tips already optimally consolidated!")
-        continue
-
-      # 4: Cluster target tip_spots by BOTH parent tip_rack & x-coordinate
-      def key_for_tip_spot(tip_spot: TipSpot) -> Tuple[str, float]:
-        """Key function to sort tip spots by parent name and x-coordinate."""
-        assert tip_spot.parent is not None and tip_spot.location is not None
-        return (tip_spot.parent.name, round(tip_spot.location.x, 3))
-
-      sorted_tip_spots = sorted(all_target_tip_spots, key=key_for_tip_spot)
-
-      target_tip_clusters_by_parent_x: Dict[Tuple[str, float], List[TipSpot]] = {}
-
-      for tip_spot in sorted_tip_spots:
-        key = key_for_tip_spot(tip_spot)
-        if key not in target_tip_clusters_by_parent_x:
-          target_tip_clusters_by_parent_x[key] = []
-        target_tip_clusters_by_parent_x[key].append(tip_spot)
-
-      current_tip_model = all_origin_tip_spots[0].tracker.get_tip()
-
-      # Ensure there are channels that can pick up the tip model
-      if use_channels is None:
-        num_channels_available = len(
-          [
-            c
-            for c in range(self.backend.num_channels)
-            if self.backend.can_pick_up_tip(c, current_tip_model)
-          ]
-        )
-        use_channels = list(range(num_channels_available))
-      num_channels_available = len(use_channels)
-
-      # 5: Optimize speed
-      if num_channels_available == 0:
-        raise ValueError(f"No channel capable of handling tips on deck: {current_tip_model}")
-
-      # by aggregating drop columns i.e. same drop column should not be visited twice!
-      if num_channels_available >= 8:  # physical constraint of tip_rack's having 8 rows
-        merged_target_tip_clusters = merge_sublists(
-          list(target_tip_clusters_by_parent_x.values()), max_len=8
-        )
-      else:  # by chunking drop tip_spots list into size of available channels
-        merged_target_tip_clusters = list(
-          divide_list_into_chunks(all_target_tip_spots, chunk_size=num_channels_available)
-        )
-
-      len_transfers = len(merged_target_tip_clusters)
-
-      # 6: Execute tip movement/consolidation
-      for idx, target_tip_spots in enumerate(merged_target_tip_clusters):
-        print(f"   - tip transfer cycle: {idx + 1} / {len_transfers}")
-
-        origin_tip_spots = [all_origin_tip_spots.pop(0) for _ in range(len(target_tip_spots))]
-
-        these_channels = use_channels[: len(target_tip_spots)]
-        await self.pick_up_tips(origin_tip_spots, use_channels=these_channels)
-        await self.drop_tips(target_tip_spots, use_channels=these_channels)
+    batches = plan_tip_consolidation(
+      tip_racks,
+      num_channels=self.backend.num_channels,
+      can_pick_up_tip=self.backend.can_pick_up_tip,
+      use_channels=use_channels,
+    )
+    for batch in batches:
+      await self.pick_up_tips(batch.origin_tip_spots, use_channels=batch.use_channels)
+      await self.drop_tips(batch.target_tip_spots, use_channels=batch.use_channels)

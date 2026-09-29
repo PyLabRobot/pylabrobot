@@ -4,11 +4,14 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from io import IOBase
-from typing import Iterator, Optional, cast
+from typing import Collection, Iterator, Optional, cast
 
 from pylabrobot.events import emit_event
+from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
+_SERIAL_IMPORT_ERROR: Optional[ImportError] = None
 try:
   import serial
   import serial.tools.list_ports
@@ -18,10 +21,30 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
-
 logger = logging.getLogger(__name__)
+
+
+def find_serial_ports(vid_pid_pairs: Collection[tuple[int, int]]) -> list[str]:
+  """Return serial ports matching any of the supplied USB VID/PID pairs.
+
+  Args:
+    vid_pid_pairs: USB vendor/product identifier pairs to match.
+
+  Raises:
+    RuntimeError: If pyserial is not installed.
+  """
+  if not HAS_SERIAL:
+    raise RuntimeError(
+      "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+      f"Import error: {_SERIAL_IMPORT_ERROR}"
+    )
+
+  identifiers = set(vid_pid_pairs)
+  return [
+    str(port.device)
+    for port in serial.tools.list_ports.comports()
+    if (port.vid, port.pid) in identifiers
+  ]
 
 
 @dataclass

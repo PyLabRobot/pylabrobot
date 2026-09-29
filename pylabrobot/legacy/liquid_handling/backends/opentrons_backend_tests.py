@@ -7,8 +7,8 @@ pytest.importorskip("ot_api")
 
 from pylabrobot.legacy.liquid_handling import LiquidHandler
 from pylabrobot.legacy.liquid_handling.backends.opentrons_backend import (
-  _OT_DECK_IS_ADDRESSABLE_AREA_VERSION,
   OpentronsOT2Backend,
+  _fixed_trash_is_addressable,
 )
 from pylabrobot.legacy.liquid_handling.errors import NoChannelError
 from pylabrobot.legacy.liquid_handling.standard import (
@@ -18,7 +18,11 @@ from pylabrobot.legacy.liquid_handling.standard import (
 )
 from pylabrobot.resources import Coordinate, Tip, no_volume_tracking
 from pylabrobot.resources.celltreat import celltreat_96_wellplate_350uL_Fb
-from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
+from pylabrobot.resources.opentrons import (
+  OTDeck,
+  opentrons_96_filtertiprack_20ul,
+  opentrons_96_tiprack_300ul,
+)
 from pylabrobot.resources.well import Well
 
 
@@ -34,6 +38,25 @@ def _mock_health_get():
   return {
     "api_version": "7.0.1",
   }
+
+
+@pytest.mark.parametrize(
+  ("version", "expected"),
+  (
+    ("7.0.1", False),
+    ("7.1.0", True),
+    ("9.1.0-alpha.12", True),
+    ("9.1.0.dev12", True),
+    ("26.6.0", True),
+  ),
+)
+def test_fixed_trash_is_addressable(version: str, expected: bool) -> None:
+  assert _fixed_trash_is_addressable(version) is expected
+
+
+def test_fixed_trash_rejects_invalid_server_version() -> None:
+  with pytest.raises(ValueError, match="must start with major, minor, and patch numbers"):
+    _fixed_trash_is_addressable("development")
 
 
 class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
@@ -147,6 +170,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(offset_z, offset_z)
 
     mock_drop_tip.side_effect = assert_parameters
+    self.backend.ot_api_version = "development"
 
     await self.test_tip_pick_up()
     await self.lh.drop_tips(self.tip_rack["A1"])
@@ -233,7 +257,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     area (move_to_addressable_area_for_drop_tip + drop_tip_in_place), not drop_tip."""
     mock_define.side_effect = _mock_define
     mock_add.side_effect = _mock_add
-    self.backend.ot_api_version = _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
+    self.backend.ot_api_version = "26.6.0"
 
     await self.lh.pick_up_tips(self.tip_rack["A1"])
     await self.lh.discard_tips()
@@ -264,17 +288,19 @@ class OpentronsSharedHelperTests(unittest.TestCase):
     self.tip_spot = self.tip_rack.get_item("A1")
     self.tip_20 = Tip(
       has_filter=True,
-      total_tip_length=39.2,
       maximal_volume=20,
       fitting_depth=8.25,
       name="test_tip_20",
+      diameter=self.tip_spot.get_tip().get_size_x(),
+      size_z=39.2,
     )
     self.tip_300 = Tip(
       has_filter=False,
-      total_tip_length=51.0,
       maximal_volume=300,
       fitting_depth=8.0,
       name="test_tip_300",
+      diameter=opentrons_96_tiprack_300ul("tip_rack_300").get_tip("A1").get_size_x(),
+      size_z=51.0,
     )
 
   # -- _get_pickup_pipette --

@@ -51,7 +51,8 @@ class VolumeTracker(SerializableMixin):
     self.volume = initial_volume or 0
     self.pending_volume = initial_volume or 0
 
-    self._callback: Optional[VolumeTrackerCallback] = None
+    # Everyone who wants to hear of a change: the thing tracked, and the spot a tip rests in.
+    self._callbacks: List[VolumeTrackerCallback] = []
 
   @property
   def is_disabled(self) -> bool:
@@ -70,8 +71,8 @@ class VolumeTracker(SerializableMixin):
     self.volume = volume
     self.pending_volume = volume
 
-    if self._callback is not None:
-      self._callback()
+    for callback in self._callbacks:
+      callback()
 
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]) -> None:
     """Set the liquids in the container.
@@ -87,32 +88,6 @@ class VolumeTracker(SerializableMixin):
     )
     self.set_volume(sum(volume for _, volume in liquids))
 
-  def remove_liquid(self, volume: float) -> None:
-    """Remove liquid from the container."""
-
-    if (volume - self.get_used_volume()) > 1e-6:
-      raise TooLittleLiquidError(
-        f"Not enough liquid in container: {volume}uL > {self.get_used_volume()}uL."
-      )
-
-    self.pending_volume -= volume
-
-    if self._callback is not None:
-      self._callback()
-
-  def add_liquid(self, volume: float) -> None:
-    """Add liquid to the container."""
-
-    if (volume - self.get_free_volume()) > 1e-6:
-      raise TooLittleVolumeError(
-        f"Not enough space in container: {volume}uL > {self.get_free_volume()}uL."
-      )
-
-    self.pending_volume += volume
-
-    if self._callback is not None:
-      self._callback()
-
   def get_used_volume(self) -> float:
     """Get the used volume of the container. Note that this includes pending operations."""
     return self.pending_volume
@@ -120,6 +95,36 @@ class VolumeTracker(SerializableMixin):
   def get_free_volume(self) -> float:
     """Get the free volume of the container. Note that this includes pending operations."""
     return self.max_volume - self.get_used_volume()
+
+  def validate_remove_liquid(self, volume: float) -> None:
+    """Check available liquid without changing volumes or notifying callbacks."""
+    if (volume - self.get_used_volume()) > 1e-6:
+      raise TooLittleLiquidError(
+        f"Not enough liquid in container: {volume}uL > {self.get_used_volume()}uL."
+      )
+
+  def remove_liquid(self, volume: float) -> None:
+    """Remove liquid from the container."""
+    self.validate_remove_liquid(volume)
+    self.pending_volume -= volume
+
+    for callback in self._callbacks:
+      callback()
+
+  def validate_add_liquid(self, volume: float) -> None:
+    """Check available capacity without changing volumes or notifying callbacks."""
+    if (volume - self.get_free_volume()) > 1e-6:
+      raise TooLittleVolumeError(
+        f"Not enough space in container: {volume}uL > {self.get_free_volume()}uL."
+      )
+
+  def add_liquid(self, volume: float) -> None:
+    """Add liquid to the container."""
+    self.validate_add_liquid(volume)
+    self.pending_volume += volume
+
+    for callback in self._callbacks:
+      callback()
 
   def get_liquids(self, top_volume: float) -> List[Tuple[Optional[Liquid], float]]:
     """Get the liquids in the top `top_volume` uL.
@@ -145,14 +150,17 @@ class VolumeTracker(SerializableMixin):
       raise RuntimeError(f"Volume tracker {self.thing} is disabled. Call `enable()`.")
     self.volume = self.pending_volume
 
-    if self._callback is not None:
-      self._callback()
+    for callback in self._callbacks:
+      callback()
 
   def rollback(self) -> None:
     """Rollback the pending operations."""
     if self.is_disabled:
       raise RuntimeError("Volume tracker is disabled. Call `enable()`.")
     self.pending_volume = self.volume
+
+    for callback in self._callbacks:
+      callback()
 
   def serialize(self) -> dict:
     """Serialize the volume tracker."""
@@ -171,4 +179,6 @@ class VolumeTracker(SerializableMixin):
     self.max_volume = state["max_volume"]
 
   def register_callback(self, callback: VolumeTrackerCallback) -> None:
-    self._callback = callback
+    """Call `callback` on every change; one already registered is not added again."""
+    if callback not in self._callbacks:
+      self._callbacks.append(callback)

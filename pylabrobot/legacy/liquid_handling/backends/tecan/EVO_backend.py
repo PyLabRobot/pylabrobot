@@ -693,7 +693,7 @@ class EVOBackend(TecanLiquidHandler):
       if not isinstance(par, (TecanPlate, TecanTipRack)):
         raise ValueError(f"Operation is not supported by resource {par}.")
       # TODO: calculate defaults when z-attribs are not specified
-      tip_length = int(ops[i].tip.total_tip_length * 10)
+      tip_length = int(ops[i].tip.get_size_z() * 10)
       # z travel seems to only be used for aspiration and dispense right now
       if isinstance(op, (SingleChannelAspiration, SingleChannelDispense)):
         z_positions["travel"][channel] = round(self._z_traversal_height * 10)

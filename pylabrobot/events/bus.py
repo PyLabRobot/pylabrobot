@@ -19,6 +19,7 @@ from typing import (
   Any,
   Awaitable,
   Callable,
+  Coroutine,
   Dict,
   Iterator,
   List,
@@ -309,14 +310,21 @@ def event_operation(
 
 def evented_operation(
   name: str, context_factory: OperationContextFactory
-) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
+) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Coroutine[Any, Any, Any]]]:
   """Decorate an async frontend call with correlated lifecycle events.
 
   The wrapper is a no-op when no listener is installed, preserving normal PLR performance and
   behaviour. Nested resource and transport events inherit the generated operation context.
+
+  This helper deliberately forwards the decorated method's original ``*args`` and ``**kwargs``
+  directly to ``context_factory``. Use it only when the event context is a simple projection of
+  invocation arguments and pre-operation resource state, and keep the factory's calling signature
+  aligned with the decorated method. For context that depends on validation, normalization,
+  derived values, hardware responses, or final state, construct an :func:`event_operation`
+  explicitly inside the method instead.
   """
 
-  def decorator(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+  def decorator(func: Callable[..., Awaitable[Any]]) -> Callable[..., Coroutine[Any, Any, Any]]:
     @wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
       if not is_event_bus_active():

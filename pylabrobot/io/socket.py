@@ -16,6 +16,27 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def _cancel_and_wait(task: asyncio.Task[None]) -> None:
+  """Cancel and join a task without replacing the error that triggered cleanup.
+
+  A further cancellation of the caller is propagated after the task finishes.
+  Waiting for completion separately from reading the exception distinguishes
+  caller cancellation from the task's expected cancellation during cleanup.
+  """
+  task.cancel()
+  caller_cancelled = False
+  while not task.done():
+    try:
+      await asyncio.wait({task})
+    except asyncio.CancelledError:
+      caller_cancelled = True
+      task.cancel()
+  if not task.cancelled():
+    task.exception()
+  if caller_cancelled:
+    raise asyncio.CancelledError()
+
+
 @dataclass
 class SocketCommand(Command):
   data: str
@@ -123,15 +144,24 @@ class Socket(IOBase):
           data=data.hex(),
         )
       )
+      drain_task = asyncio.create_task(self._writer.drain())
       try:
-        await asyncio.wait_for(self._writer.drain(), timeout=timeout)
-        return
+        if timeout <= 0:
+          raise asyncio.TimeoutError()
+        # Keep caller cancellation distinct from completion of the drain task.
+        # wait_for() can swallow cancellation when its inner task has finished.
+        done, _ = await asyncio.wait({drain_task}, timeout=timeout)
+        if not done:
+          raise asyncio.TimeoutError()
+        drain_task.result()
       except asyncio.TimeoutError as exc:
         logger.error("write timeout: %r", exc)
         raise TimeoutError(f"Timeout while writing to socket after {timeout} seconds") from exc
       except (ConnectionResetError, OSError) as e:
         logger.error("write error: %r", e)
         raise
+      finally:
+        await _cancel_and_wait(drain_task)
 
   async def read(self, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
     """Wrapper around StreamReader.read with lock and io logging.

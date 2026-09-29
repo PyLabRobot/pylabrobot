@@ -1,9 +1,6 @@
-# Hamilton STAR
+# Hamilton STAR and STARlet
 
 ```{device-card} hamilton-star
-```
-
-```{device-card} hamilton-starlet
 ```
 
 ```{toctree}

@@ -1,14 +1,20 @@
 # Supported Machines
 
-Every machine PyLabRobot supports, and how complete each driver is. Some are still work in
+Every machine PyLabRobot supports, and its current support level. Some are still work in
 progress (WIP) — if you have one of those, or a machine that is not listed at all, get in touch on
 the [forum](https://discuss.pylabrobot.org).
+
+Have access to hardware? See {doc}`needs-testing` for devices awaiting verification and how to
+report what works or fails.
 
 ```{device-table}
 ```
 
-An asterisk after a device name marks a note about the models that entry covers; hover it to read
-the note.
+Some registry entries cover several hardware models. Click one of those device rows to reveal its
+models, or select **Show models** to display all model sub-rows. Each model has its own support
+status. Model names are always included in search; when a text search leaves 10 or fewer devices,
+matching model sub-rows appear automatically. An asterisk after a device name marks an additional
+note; hover it to read the note.
 
 ## Reading the table
 
@@ -23,9 +29,10 @@ PyLabRobot does not solve that. **Type** is the one label that names what a mach
 filterable, so a machine you think of as a shaker is still findable by someone who thinks of it as
 a heater.
 
-**Support** is how complete the PyLabRobot integration is:
+**Support** is how complete the PyLabRobot integration is for the listed device or model. A shared
+driver does not establish support for every model it can communicate with.
 
-- **WIP** — work in progress.
+- **WIP** — work in progress, including models awaiting initial hardware verification.
 - **Basic** — core functionality is available, integrated into `pylabrobot:main`.
 - **Mostly** — most capabilities are available, but some known commands are still missing.
 - **Full** — comprehensive support (≥90% of capabilities), with documentation.

@@ -11,18 +11,25 @@ Append an object to `docs/_static/devices.json`:
 
 ```json
 {
-  "id": "curiox-ht2000",
-  "vendor": "Curiox",
-  "name": "HT2000",
-  "kind": "plate washer",
-  "capabilities": ["plate washing"],
-  "status": "mostly",
-  "api": "pylabrobot.curiox.CurioxHT2000",
+  "id": "cole-parmer-masterflex",
+  "vendor": "Cole Parmer",
+  "name": "Masterflex L/S",
+  "models": [
+    {"name": "07522-20", "status": "full"},
+    {"name": "07522-30", "status": "full"},
+    {"name": "07551-20", "status": "full"},
+    {"name": "07551-30", "status": "full"},
+    {"name": "07575-30", "status": "full"},
+    {"name": "07575-40", "status": "full"}
+  ],
+  "kind": "pump",
+  "capabilities": ["pumping"],
+  "status": "full",
+  "api": "pylabrobot.cole_parmer.Masterflex",
   "api_version": "v1",
-  "code_slug": "curiox",
-  "doc_slug": "curiox/curiox-ht2000/hello-world",
+  "code_slug": "cole_parmer",
   "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-  "oem": "https://curiox.com/"
+  "oem": "https://corporate.avantorsciences.com/us/en/bioprocess-solutions/fluid-management/masterflex-peristaltic-pumps/ls-series"
 }
 ```
 
@@ -30,9 +37,11 @@ Append an object to `docs/_static/devices.json`:
 |---|---|---|
 | `id` | yes | Unique kebab-case identifier. Used by `device-card` and as the HTML anchor (`#device-<id>`). |
 | `vendor` | yes | Manufacturer, as users would search for it. |
-| `name` | yes | Model name, without the vendor. |
+| `name` | yes | Display name for the device or device family, without the vendor. |
+| `models` | no | Model objects when one entry covers several models. `name` is required; `status` may be `wip`, `basic`, `mostly`, or `full` and defaults to the device status when omitted. Models render as searchable sub-rows with their support status beneath the device. |
 | `kind` | yes | Device type, e.g. `plate reader`, `sealer`, `arm`. Must be one of `KINDS` in `docs/_exts/plr_devices/data.py`. |
 | `status` | yes | One of `wip`, `basic`, `mostly`, `full`. See {doc}`/user_guide/machines` for what each level means. |
+| `needs_hardware_testing` | no | Boolean, default `false`. Set `true` when hardware testing is needed, based on the device's docs, driver warnings, or reports. Each model can also set this boolean; omitted model flags inherit the device flag. |
 | `capabilities` | no | Core functions, e.g. `["heating", "shaking"]`. Must come from `CAPABILITIES` in `docs/_exts/plr_devices/data.py`. These drive the badges and the capability filter. |
 | `api` | no | Import path of the driver class, e.g. `pylabrobot.curiox.CurioxHT2000`. |
 | `api_version` | no | `v1`, or `v0` for drivers still under `pylabrobot.legacy`. |
@@ -40,7 +49,7 @@ Append an object to `docs/_static/devices.json`:
 | `code_slug` | no | The driver's module or package, relative to `pylabrobot/`. Builds the **code** link to the source on GitHub; verified at build time. |
 | `manager` | no | Forum profile of whoever looks after this driver, e.g. `https://discuss.pylabrobot.org/u/rickwierenga`. Shown as their handle, and who to ask about the device. |
 | `oem` | no | Manufacturer product page. |
-| `notes` | no | One line about which models the entry covers, or what is missing. |
+| `notes` | no | One line of additional context about the entry, such as functionality that is missing. Use `models` for the hardware models an entry covers. |
 
 The registry is validated when the docs build starts: unknown fields, duplicate ids and unknown
 statuses fail the build, as do `doc_slug` and `code_slug` values that do not point at a real page
@@ -84,7 +93,11 @@ python -m pytest docs/_exts/plr_devices/registry_tests.py
 
 ## Rendering a table
 
-A bare `device-table` renders every device, with a search box and filter chips:
+A bare `device-table` renders every device, with a search box, a **Show models** toggle and filter
+chips. Models render as sub-rows beneath their device. A device row can reveal its own models, and
+the toggle reveals them all. Each model's support badge is aligned beneath the device support
+column. Models are initially hidden, but a text search
+always matches them and automatically reveals matching model rows when 10 or fewer devices remain:
 
 ````md
 ```{device-table}
@@ -105,11 +118,36 @@ Options narrow it down:
 `filters` take `false` to hide the search box or the chips, which is useful for a short,
 pre-filtered list on a vendor page.
 
+The {doc}`/user_guide/needs-testing` page uses:
+
+````md
+```{device-table}
+:needs-hardware-testing:
+```
+````
+
+This includes devices that need hardware testing and families with at least one model that needs
+it. Only flagged models appear in this table; other tables and cards keep the complete model list.
+An explicit model flag overrides the device default. For example, a family can have
+`"needs_hardware_testing": true` with `"needs_hardware_testing": false` on its tested model.
+A family whose models are all explicitly `false` is excluded. An omitted or `false` flag means
+there is no testing request recorded, not a claim that all firmware or operations are verified.
+
+Use existing docs, code warnings, or linked hardware reports to set the flag; do not infer it from
+`wip` or any other support level. A device or model awaiting initial hardware verification has
+`status: "wip"`, even if its shared driver works on other models. After reviewing a hardware report,
+update only the tested model or device, preserve flags for untested siblings, and link the evidence
+in the device guide. Follow
+the reporting and follow-up process on {doc}`/user_guide/needs-testing`.
+
 ## Rendering a card
 
 `device-card` renders one device. It works anywhere MyST is parsed, including markdown cells in the
 notebooks under `docs/user_guide` — put one at the top of a machine's hello-world notebook so the
-page carries the same vendor, support level, capabilities and links as the table.
+page carries the same vendor, models, support level, capabilities and links as the table.
+Models appear in a scrollable table with a colored support badge for each model. The table's
+height is capped so long model lists keep the card compact. When a model has
+no explicit status, its badge uses the device's support level.
 
 ````md
 ```{device-card} curiox-ht2000

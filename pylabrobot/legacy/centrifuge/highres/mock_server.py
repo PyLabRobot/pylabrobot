@@ -456,7 +456,7 @@ class MicroSpinMockServer:
       writer.write(f"ERROR! {cmd_line} {cmd_id}\r\n".encode("ascii"))
     except asyncio.CancelledError:
       raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
       logger.exception("[mock] handler crashed for %r", cmd_line)
       writer.write(f"Error: internal mock crash: {exc}\r\n".encode("ascii"))
       writer.write(f"ERROR! {cmd_line} {cmd_id}\r\n".encode("ascii"))

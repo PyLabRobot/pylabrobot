@@ -154,7 +154,7 @@ class PlateAdapter(Resource):
 
     # Calculate adjustment to place center of H1_plate on top of center of H1_adapter
     plate_x_adjustment = self.dx - plate_dx + self.adapter_hole_size_x / 2 - well_size_x / 2
-    plate_y_adjustment = self.dy - plate_dy + self.adapter_hole_size_x / 2 - well_size_y / 2
+    plate_y_adjustment = self.dy - plate_dy + self.adapter_hole_size_y / 2 - well_size_y / 2
     # basic plate_z_adjustment ability
     plate_z_adjustment = self.dz + self.plate_z_offset
     # TODO: create more sophisticated plate_z_adjustment based on

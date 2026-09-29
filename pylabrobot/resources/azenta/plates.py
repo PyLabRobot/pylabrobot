@@ -57,6 +57,7 @@ def azenta_96_wellplate_200uL_Vb_4titudeframestar(name: str) -> Plate:
       compute_volume_from_height=(
         _compute_volume_from_height_Azenta4titudeFrameStar_96_wellplate_200ul_Vb
       ),
+      name_prefix=name,
     ),
   )
 
