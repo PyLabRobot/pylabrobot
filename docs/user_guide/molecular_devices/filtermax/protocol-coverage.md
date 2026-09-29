@@ -62,6 +62,14 @@ overruns an interval, the next read starts immediately without changing its nomi
 
 ## Measurement setup
 
+The {download}`example slide catalog <filtermax_example_slides.xml>` is a SoftMax XML export
+containing definitions for excitation slides 1 and 2 and emission slide 1. The
+[hello-world guide](hello-world.ipynb) shows how to load it with
+`FilterSlideCatalog.from_softmax_xml()`, resolve a wavelength to a slide and position, and pass
+the catalog to `FilterMaxF5(filter_slide_catalog=...)`. For absorbance, excitation slide 2 has
+260 nm at position 1 and 450 nm at position 4. Use a catalog that matches the physical filters
+installed in the reader; the example is not a universal FilterMax configuration.
+
 The live-optimized Costar 96-well clear landscape geometry was sent as:
 
 ```text
