@@ -528,6 +528,8 @@ def _reader(script: bytes = b"", *, timeout: float = 0.2, model: Optional[str] =
   reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=timeout)
   fake = _FakeSerial(script)
   reader.io = fake  # type: ignore[assignment]
+  # No real line to settle, so skip the post-assay-definition NAK flush delay.
+  reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
   if model is not None:
     reader._model = model
   return reader, fake
@@ -729,3 +731,206 @@ class TestStatusFraming(unittest.IsolatedAsyncioTestCase):
       await reader.open()
     self.assertIn("discarding 1 unexpected bytes", "\n".join(logs.output))
     self.assertEqual(reader.carrier_position, "out")
+
+
+def _plate_resource(name: str = "plate"):
+  """A standard 8x12 plate for read tests."""
+  from pylabrobot.resources import cellvis_96_wellplate_350uL_Fb
+
+  return cellvis_96_wellplate_350uL_Fb(name=name)
+
+
+def _read_script(num_blocks: int = 1, checksum: int = _CAPTURED_PLATE_CHECKSUM) -> bytes:
+  """Bytes the instrument sends for a push-assay-then-read sequence.
+
+  'V' -> ACK + status, then 'S' -> ACK + status, then per wavelength a plate data
+  block terminated by ^Z and followed by a raw checksum byte (page B-9).
+  """
+  script = _ACK + _STATUS_OK  # SET ASSAY DEFINITION
+  script += _ACK + _STATUS_OK  # READ PLATE
+  script += (_CAPTURED_PLATE + bytes([checksum])) * num_blocks
+  return script
+
+
+class TestReadAbsorbance(unittest.IsolatedAsyncioTestCase):
+  """READ PLATE, page B-9, exercised against a captured plate data block."""
+
+  async def test_single_wavelength_command_sequence(self):
+    plate = _plate_resource()
+    reader, fake = _reader(_read_script(), model="PowerWaveX")
+    reader._wavelength_table = [550, 620, 665, 520, 450, 595]
+
+    results = await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    # 'V' then the 170-byte table, then 'S'. No temperature read: no incubator.
+    self.assertEqual(fake.writes[0], b"V")
+    self.assertEqual(len(fake.writes[1]), 170)
+    self.assertEqual(fake.writes[2], b"S")
+    self.assertEqual(len(fake.writes), 3)
+    self.assertEqual(fake.remaining, b"")
+
+    self.assertEqual(len(results), 1)
+    self.assertEqual(results[0].wavelength, 620)
+    self.assertIsNone(results[0].temperature)
+
+  async def test_parsed_values_match_the_captured_plate(self):
+    plate = _plate_resource()
+    reader, _ = _reader(_read_script(), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    result = (await reader.read_absorbance(plate, plate.get_all_items(), 620))[0]
+
+    self.assertEqual(len(result.data), 8)
+    self.assertEqual(len(result.data[0]), 12)
+    self.assertAlmostEqual(result.data[0][0], 0.201)  # A1
+    self.assertAlmostEqual(result.data[7][11], 0.281)  # H12
+
+  async def test_assay_table_carries_the_requested_wavelength(self):
+    plate = _plate_resource()
+    reader, fake = _reader(_read_script(), model="PowerWaveX")
+    reader._wavelength_table = [630]
+
+    await reader.read_absorbance(plate, plate.get_all_items(), 630)
+
+    table = fake.writes[1]
+    self.assertEqual(table[66:84], b"630000000000000000")  # bytes 67-84
+    self.assertEqual(table[55], 0)  # byte 56: endpoint
+
+  async def test_six_wavelengths_in_one_pass(self):
+    plate = _plate_resource()
+    wavelengths = [350, 550, 600, 630, 700, 990]
+    reader, fake = _reader(_read_script(num_blocks=6), model="PowerWaveX")
+    reader._wavelength_table = wavelengths
+
+    results = await reader.read_absorbances(plate, plate.get_all_items(), wavelengths)
+
+    self.assertEqual([r.wavelength for r in results], wavelengths)
+    # One READ PLATE for all six blocks, not six reads.
+    self.assertEqual(fake.writes.count(b"S"), 1)
+    self.assertEqual(fake.remaining, b"")
+
+  async def test_temperature_is_attached_when_an_incubator_is_present(self):
+    plate = _plate_resource()
+    script = _read_script() + _ACK + struct.pack("<H", 371) + _STATUS_OK
+    reader, fake = _reader(script, model="PowerWaveX w/ Incubator")
+    reader._wavelength_table = [620]
+
+    result = (await reader.read_absorbance(plate, plate.get_all_items(), 620))[0]
+
+    self.assertAlmostEqual(result.temperature, 37.1)
+    self.assertIn(b"]", fake.writes)
+
+  async def test_checksum_mismatch_raises(self):
+    plate = _plate_resource()
+    reader, _ = _reader(_read_script(checksum=_CAPTURED_PLATE_CHECKSUM + 1), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveChecksumError):
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+  async def test_uncalibrated_wavelength_warns_but_reads(self):
+    plate = _plate_resource()
+    reader, _ = _reader(_read_script(), model="PowerWaveX")
+    reader._wavelength_table = [550, 620]
+
+    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
+      results = await reader.read_absorbance(plate, plate.get_all_items(), 700)
+
+    self.assertIn("not in the calibrated wavelength table", "\n".join(logs.output))
+    self.assertEqual(results[0].wavelength, 700)
+
+  async def test_out_of_range_wavelength_raises(self):
+    plate = _plate_resource()
+    reader, fake = _reader(model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    for bad in (199, 1000):
+      with self.subTest(wavelength=bad):
+        with self.assertRaises(ValueError):
+          await reader.read_absorbance(plate, plate.get_all_items(), bad)
+    self.assertEqual(fake.writes, [])
+
+  async def test_well_subset_raises_not_implemented(self):
+    plate = _plate_resource()
+    reader, fake = _reader(model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(NotImplementedError) as ctx:
+      await reader.read_absorbance(plate, plate.get_all_items()[:12], 620)
+    self.assertIn("SET STRIP RANGE", str(ctx.exception))
+    self.assertEqual(fake.writes, [])
+
+  async def test_non_96_well_plate_raises_not_implemented(self):
+    from pylabrobot.resources import cellvis_24_wellplate_3600uL_Fb
+
+    plate = cellvis_24_wellplate_3600uL_Fb(name="plate24")
+    reader, fake = _reader(model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(NotImplementedError) as ctx:
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+    self.assertIn("SET PLATE GEOMETRY", str(ctx.exception))
+    self.assertEqual(fake.writes, [])
+
+  async def test_wells_from_another_plate_raises(self):
+    plate = _plate_resource("a")
+    other = _plate_resource("b")
+    reader, _ = _reader(model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(ValueError):
+      await reader.read_absorbance(plate, other.get_all_items(), 620)
+
+  async def test_overrange_wells_warn(self):
+    plate = _plate_resource()
+    saturated = _CAPTURED_PLATE.replace(b",+0201,", b",*****,", 1)
+    checksum = plate_checksum(saturated)
+    script = _ACK + _STATUS_OK + _ACK + _STATUS_OK + saturated + bytes([checksum])
+    reader, _ = _reader(script, model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
+      result = (await reader.read_absorbance(plate, plate.get_all_items(), 620))[0]
+
+    self.assertIn("1 of 96 wells overrange", "\n".join(logs.output))
+    self.assertTrue(math.isinf(result.data[0][0]))
+
+  async def test_read_status_error_propagates(self):
+    plate = _plate_resource()
+    # The assay definition is rejected: "error in assay, scan, or table definition".
+    reader, _ = _reader(_ACK + b"\x1e090\x03", model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveStatusError):
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+
+class TestAssayDefinitionPush(unittest.IsolatedAsyncioTestCase):
+  """SET ASSAY DEFINITION over the wire, page B-10."""
+
+  async def test_push_flushes_the_stray_nak(self):
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
+
+    await reader.push_assay_definition([550])
+
+    self.assertEqual(fake.writes[0], b"V")
+    self.assertEqual(len(fake.writes[1]), 170)
+    self.assertTrue(reader._assay_defined)
+
+  async def test_read_plate_without_an_assay_raises(self):
+    plate = _plate_resource()
+    reader, fake = _reader(model="PowerWaveX")
+
+    with self.assertRaises(PowerWaveError) as ctx:
+      await reader._read_plate(1, plate)
+    self.assertIn("No assay definition", str(ctx.exception))
+    self.assertEqual(fake.writes, [])
+
+  async def test_halt_clears_the_assay(self):
+    reader, _ = _reader(_ACK + _STATUS_OK + b"\x10", model="PowerWaveX")
+    await reader.push_assay_definition([550])
+    self.assertTrue(reader._assay_defined)
+
+    await reader.halt()
+
+    self.assertFalse(reader._assay_defined)

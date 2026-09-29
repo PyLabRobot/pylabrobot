@@ -11,30 +11,40 @@ only ones the two generations share.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
-from typing import List, Literal, Optional, cast
+from datetime import datetime
+from typing import List, Literal, Optional, Sequence, cast
 
+from pylabrobot.agilent.biotek.plate_reader_base import AbsorbanceResult
 from pylabrobot.io.serial import Serial
-from pylabrobot.resources import Coordinate, PlateHolder
+from pylabrobot.resources import Coordinate, Plate, PlateHolder, Well
 
 from ._protocol import (
   ACK,
   DLE,
   ETX,
+  MAX_WAVELENGTH,
+  MIN_WAVELENGTH,
   NAK,
   STATUS_LENGTH,
+  SUB,
   Command,
   PowerWaveError,
   PowerWaveNakError,
   PowerWaveParseError,
+  build_assay_definition,
   configuration_has_incubator,
+  count_overrange,
   encode_temperature_setpoint,
   parse_device_configuration,
+  parse_plate,
   parse_status,
   parse_temperature,
   parse_uint16,
   parse_wavelength_table,
+  verify_plate_checksum,
 )
 
 try:
@@ -54,8 +64,9 @@ CarrierPosition = Literal["in", "out"]
 class PowerWaveX:
   """Agilent BioTek PowerWaveX microplate spectrophotometer.
 
-  Absorbance-only reader with an optional incubator and a filter wheel holding up
-  to six fixed wavelengths. Reads are driven over RS-232 at 9600 baud, 8 data
+  Absorbance reader with an optional incubator. Wavelengths are selected by a
+  monochromator anywhere in 200-999 nm at 1 nm increments, and up to six can be
+  read in a single pass of the plate. Driven over RS-232 at 9600 baud, 8 data
   bits, no parity, two stop bits.
 
   Example:
@@ -64,6 +75,8 @@ class PowerWaveX:
     >>> await reader.open()
     ... # load a plate
     >>> await reader.close()
+    >>> results = await reader.read_absorbance(plate, plate.get_all_items(), 630)
+    >>> results[0].data[0][0]  # A1, in OD
   """
 
   #: Serial line settings fixed by the instrument (page B-5).
@@ -71,6 +84,10 @@ class PowerWaveX:
   BYTESIZE = 8
   PARITY = "N"
   STOPBITS = 2
+
+  #: Seconds to settle either side of flushing the stray NAK that follows an
+  #: accepted assay definition table.
+  _ASSAY_SETTLE_SECONDS = 1.0
 
   def __init__(
     self,
@@ -102,6 +119,8 @@ class PowerWaveX:
     self._wavelength_table: Optional[List[int]] = None
     self._carrier_position: Optional[CarrierPosition] = None
     self._temperature_setpoint: Optional[int] = None
+    self._assay_defined = False
+    self._assay_wavelengths: List[int] = []
 
     self.io = Serial(
       human_readable_device_name="Agilent BioTek PowerWaveX",
@@ -134,16 +153,16 @@ class PowerWaveX:
   async def setup(self) -> None:
     """Open the serial connection and identify the instrument.
 
-    Reads the instrument configuration (page B-19) and the installed filter
-    wavelengths (page B-11), both of which are then available without further
-    traffic as :attr:`model` and :attr:`wavelength_table`.
+    Reads the instrument configuration (page B-19) and the calibrated wavelength
+    table (page B-11), both of which are then available without further traffic
+    as :attr:`model` and :attr:`wavelength_table`.
     """
     logger.warning(
       "This PowerWaveX driver is only partly verified against hardware. Identification, "
       "the wavelength table, temperature, the minimum kinetic interval and carrier "
       "movement have been confirmed on a PowerWaveX w/ Incubator (firmware R06.20). "
-      "Plate reading is NOT yet implemented or verified. "
-      "Please report results at https://discuss.pylabrobot.org."
+      "Absorbance reading has NOT been confirmed on an instrument, only against "
+      "captured traffic. Please report results at https://discuss.pylabrobot.org."
     )
 
     await self.io.setup()
@@ -157,7 +176,7 @@ class PowerWaveX:
     self._wavelength_table = await self.request_wavelength_table()
 
     logger.info(
-      "[PowerWaveX %s] connected: model=%s, filters=%s",
+      "[PowerWaveX %s] connected: model=%s, calibrated wavelengths=%s",
       self.port,
       self._model,
       self._wavelength_table,
@@ -193,7 +212,11 @@ class PowerWaveX:
 
   @property
   def wavelength_table(self) -> List[int]:
-    """The filter wavelengths installed, in filter wheel order, read at :meth:`setup`."""
+    """The calibrated wavelengths in nm, read at :meth:`setup` (page B-11).
+
+    A calibration set, not a constraint: the monochromator reads any wavelength in
+    :attr:`abs_wavelength_range`, though gains are calibrated only for these.
+    """
     if self._wavelength_table is None:
       raise RuntimeError("Wavelength table unknown. Did you call setup()?")
     return list(self._wavelength_table)
@@ -207,6 +230,15 @@ class PowerWaveX:
   def supports_cooling(self) -> bool:
     """The PowerWave incubator heats only; it cannot cool below ambient."""
     return False
+
+  @property
+  def abs_wavelength_range(self) -> tuple[int, int]:
+    """Readable absorbance wavelengths in nm (page 1-1).
+
+    340 models cannot go below 340 nm; this driver does not detect that, since the
+    instrument configuration word does not distinguish it for every variant.
+    """
+    return (MIN_WAVELENGTH, MAX_WAVELENGTH)
 
   @property
   def temperature_range(self) -> tuple[float, float]:
@@ -314,7 +346,212 @@ class PowerWaveX:
 
     # The abort leaves the carrier presented outside (page B-12).
     self._carrier_position = "out"
+    self._assay_defined = False
     logger.info("[PowerWaveX %s] halted, carrier out", self.port)
+
+  # ------------------------------------------------------------------------------------
+  # Absorbance reads
+  # ------------------------------------------------------------------------------------
+
+  async def read_absorbance(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelength: int,
+  ) -> List[AbsorbanceResult]:
+    """Read absorbance at one wavelength.
+
+    Args:
+      plate: The plate loaded in the carrier. Must be 8x12; see the note below.
+      wells: The wells to read. Must currently be every well of ``plate``.
+      wavelength: Wavelength in nm, 200 to 999. The monochromator selects it at
+        1 nm increments (page 1-1), so any value in range is readable regardless
+        of the stored wavelength table.
+
+    Returns:
+      A single-element list, for consistency with the other BioTek readers.
+
+    Raises:
+      NotImplementedError: If ``wells`` is a subset of the plate, or the plate is
+        not 8x12. Both need commands this driver does not yet send: SET STRIP
+        RANGE (``'%'``, page B-13) and SET PLATE GEOMETRY (``'{'``, page B-12).
+
+    Note:
+      The carrier is not moved. Call :meth:`close` first if the plate is still
+      presented outside.
+    """
+    return await self.read_absorbances(plate, wells, [wavelength])
+
+  async def read_absorbances(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelengths: Sequence[int],
+  ) -> List[AbsorbanceResult]:
+    """Read absorbance at up to six wavelengths in a single pass of the plate.
+
+    The instrument's assay definition table holds up to six wavelengths and
+    returns one data block per wavelength from one READ PLATE command (page B-9),
+    so this is substantially faster than calling :meth:`read_absorbance` in a
+    loop.
+
+    Args:
+      plate: The plate loaded in the carrier.
+      wells: The wells to read. Must currently be every well of ``plate``.
+      wavelengths: One to six wavelengths in nm, 200 to 999.
+
+    Returns:
+      One :class:`AbsorbanceResult` per requested wavelength, in the order asked.
+    """
+    self._require_full_plate(plate, wells)
+
+    low, high = self.abs_wavelength_range
+    for wavelength in wavelengths:
+      if not low <= wavelength <= high:
+        raise ValueError(f"Wavelength must be within {low}-{high} nm, got {wavelength}")
+
+    uncalibrated = [w for w in wavelengths if w not in (self._wavelength_table or [])]
+    if len(uncalibrated) > 0:
+      logger.warning(
+        "[PowerWaveX %s] %s nm not in the calibrated wavelength table %s. The read will "
+        "still work, but gains are calibrated only for the stored table (page B-8).",
+        self.port,
+        uncalibrated,
+        self._wavelength_table,
+      )
+
+    logger.info(
+      "[PowerWaveX %s] read_absorbance: plate=%s, wavelengths=%s nm, wells=%d",
+      self.port,
+      plate.name,
+      list(wavelengths),
+      len(wells),
+    )
+
+    await self.push_assay_definition(wavelengths, read_type="endpoint")
+    blocks = await self._read_plate(len(wavelengths), plate)
+
+    temperature = await self._try_read_temperature()
+    timestamp = datetime.now()
+
+    results = []
+    for wavelength, block in zip(wavelengths, blocks):
+      data: List[List[Optional[float]]] = [[value for value in row] for row in block]
+      overrange = count_overrange(block)
+      if overrange > 0:
+        logger.warning(
+          "[PowerWaveX %s] %d of %d wells overrange at %d nm; readings above 3.000 OD are "
+          "outside the instrument's specified range (page 1-1)",
+          self.port,
+          overrange,
+          plate.num_items,
+          wavelength,
+        )
+      results.append(
+        AbsorbanceResult(
+          data=data,
+          wavelength=wavelength,
+          temperature=temperature,
+          timestamp=timestamp,
+        )
+      )
+
+    return results
+
+  async def push_assay_definition(
+    self,
+    wavelengths: Sequence[int],
+    read_type: str = "endpoint",
+    **kwargs,
+  ) -> None:
+    """Download a 170-byte assay definition table (``'V'``, page B-10).
+
+    Args:
+      wavelengths: One to six wavelengths in nm.
+      read_type: ``"endpoint"``, ``"kinetic"`` or ``"scan"``.
+      kwargs: Remaining assay fields, passed to
+        :func:`._protocol.build_assay_definition`.
+    """
+    table = build_assay_definition(wavelengths, read_type=read_type, **kwargs)
+
+    await self._send_command(Command.SET_ASSAY_DEFINITION)
+    await self.io.write(table)
+    await self._read_status()
+
+    self._assay_wavelengths = list(wavelengths)
+    self._assay_defined = True
+
+    # The instrument emits a stray NAK shortly after accepting the table, with no
+    # command outstanding. Observed repeatedly on a PowerWaveX w/ Incubator in 2021.
+    # Settle, then discard it so it cannot be mistaken for the next reply.
+    await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
+    await self.io.reset_input_buffer()
+    await self.io.reset_output_buffer()
+    await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
+
+    logger.debug(
+      "[PowerWaveX %s] assay defined: %s, %s nm", self.port, read_type, list(wavelengths)
+    )
+
+  async def _read_plate(self, num_blocks: int, plate: Plate) -> List[List[List[float]]]:
+    """Run READ PLATE and collect one parsed data block per wavelength (page B-9).
+
+    The response is an ACK, a status string, then for each wavelength a ``CR``
+    start code, the rows, a ``^Z`` terminator and a raw checksum byte. A trailing
+    status string is sent only if the read failed, so none is consumed here.
+    """
+    if not self._assay_defined:
+      raise PowerWaveError(
+        "No assay definition has been pushed. Call push_assay_definition() first, or use "
+        "read_absorbance() which does it for you."
+      )
+
+    await self._send_command(Command.READ_PLATE)
+    await self._read_status()
+
+    blocks = []
+    for index in range(num_blocks):
+      frame = await self._read_until(SUB)
+      checksum = await self._read_exactly(1)
+      verify_plate_checksum(frame, checksum[0])
+      blocks.append(parse_plate(frame, plate.num_items_y, plate.num_items_x))
+      logger.debug(
+        "[PowerWaveX %s] block %d/%d parsed, checksum %d verified",
+        self.port,
+        index + 1,
+        num_blocks,
+        checksum[0],
+      )
+
+    return blocks
+
+  def _require_full_plate(self, plate: Plate, wells: List[Well]) -> None:
+    """Reject the cases that need commands this driver does not yet send."""
+    if (plate.num_items_y, plate.num_items_x) != (8, 12):
+      raise NotImplementedError(
+        f"{plate.name} is {plate.num_items_y}x{plate.num_items_x}. Only 8x12 plates are "
+        "supported until SET PLATE GEOMETRY ('{', page B-12) is implemented."
+      )
+
+    parents = set(well.parent for well in wells)
+    if len(parents) != 1 or parents.pop() is not plate:
+      raise ValueError("All wells must belong to the specified plate")
+
+    if len(wells) != plate.num_items:
+      raise NotImplementedError(
+        f"Reading a subset of wells ({len(wells)} of {plate.num_items}) needs SET STRIP "
+        "RANGE ('%', page B-13), which is not implemented yet. Pass plate.get_all_items()."
+      )
+
+  async def _try_read_temperature(self) -> Optional[float]:
+    """Read the chamber temperature for a result, returning None if unavailable."""
+    if not self.supports_heating:
+      return None
+    try:
+      return await self.request_current_temperature()
+    except (PowerWaveError, TimeoutError) as e:
+      logger.debug("[PowerWaveX %s] temperature unavailable for result: %s", self.port, e)
+      return None
 
   # ------------------------------------------------------------------------------------
   # Incubator

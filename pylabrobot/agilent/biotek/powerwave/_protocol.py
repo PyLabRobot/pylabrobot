@@ -192,7 +192,7 @@ def configuration_has_incubator(model: str) -> bool:
 # Wavelength table (page B-11)
 # --------------------------------------------------------------------------------------
 
-MAX_WAVELENGTHS = 6  # the filter wheel holds at most six positions
+MAX_WAVELENGTHS = 6  # at most six wavelengths per assay definition (page B-10)
 WAVELENGTH_TABLE_LENGTH = 4 * MAX_WAVELENGTHS  # "550,620,665,520,450,595," - note trailing comma
 
 MIN_WAVELENGTH = 200
@@ -202,7 +202,13 @@ MAX_WAVELENGTH = 999
 def parse_wavelength_table(payload: bytes) -> List[int]:
   """Parse the 24-byte wavelength setup table (page B-11).
 
-  Unpopulated filter positions are reported as ``000`` and omitted from the result.
+  This is a *calibration* table, not a list of installed filters. The PowerWaveX
+  selects wavelengths with a monochromator and can read anywhere in 200-999 nm at
+  1 nm increments (page 1-1). The table holds the up-to-six wavelengths whose
+  gains were calibrated by the last self-test; reads at other wavelengths work,
+  but "performance may be compromised slightly" (page B-8).
+
+  Unused entries are reported as ``000`` and omitted from the result.
   """
   if len(payload) != WAVELENGTH_TABLE_LENGTH:
     raise PowerWaveParseError(
@@ -223,7 +229,8 @@ def encode_wavelength_table(wavelengths: Sequence[int]) -> bytes:
 
   Six slots are always transmitted; unused slots are ``"000"``. The caller is
   responsible for sending ``ETX`` after the final comma, and for running a
-  self-test afterwards to recalibrate gains.
+  self-test afterwards to recalibrate gains. The table is stored in non-volatile
+  memory, so it only needs writing when the calibrated set should change.
   """
   _validate_wavelengths(wavelengths, allow_empty=True)
   padded = list(wavelengths) + [0] * (MAX_WAVELENGTHS - len(wavelengths))
@@ -330,7 +337,8 @@ def build_assay_definition(
   fields are zero-filled as the manual recommends.
 
   Args:
-    wavelengths: Up to six wavelengths in nm to read. Unused slots become ``"000"``.
+    wavelengths: Up to six wavelengths in nm to read, selected by the
+      monochromator. Unused slots become ``"000"``.
     read_type: One of ``"endpoint"``, ``"kinetic"`` or ``"scan"`` (byte 56).
       ``"scan"`` means *well* scanning; spectral scanning is the separate ``'&'``
       SCAN PLATE command.
