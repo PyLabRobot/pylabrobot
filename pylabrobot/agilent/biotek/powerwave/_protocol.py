@@ -110,21 +110,34 @@ STATUS_LENGTH = 5  # RS + 3 + ETX
 
 
 def parse_status(response: bytes) -> str:
-  """Validate a status string and return its three-character code.
+  """Validate a status string and return its code.
+
+  The instrument has two status formats, both five bytes (page B-21):
+
+  * ``RS`` + three characters + ``ETX``, whose middle digit is the fault code.
+  * An ELx status: four hexadecimal characters + ``ETX``, with no ``RS``.
+
+  Both are accepted here, since which one arrives depends on the instrument's
+  status mode rather than on the command sent.
 
   Args:
-    response: The raw five-byte status string, ``RS`` + three characters + ``ETX``.
+    response: The raw five-byte status string.
 
   Returns:
-    The three-character status code, which is ``"000"`` on success.
+    The status code: ``"000"`` in the first format, ``"0000"`` in the second.
 
   Raises:
     PowerWaveParseError: If the response is not a well-formed status string.
-    PowerWaveStatusError: If the instrument reported an error.
+    PowerWaveFatalError: For an ELx ``A``-prefixed error, which needs a power cycle.
+    PowerWaveStatusError: If the instrument reported any other error.
   """
+  if is_elx_status(response):
+    return parse_elx_status(response)
+
   if len(response) != STATUS_LENGTH or not response.startswith(RS) or not response.endswith(ETX):
     raise PowerWaveParseError(
-      f"Malformed status string (expected RS + 3 bytes + ETX, page B-21): {response!r}"
+      f"Malformed status string (expected RS + 3 bytes + ETX, or four hex digits + ETX, "
+      f"page B-21): {response!r}"
     )
 
   code = response[1:-1].decode("ascii", errors="replace")
@@ -651,3 +664,244 @@ def parse_self_test_report(report: str) -> Optional[str]:
     return None
   match = _SELF_TEST_ERROR_RE.search(report)
   return match.group(1) if match is not None else ""
+
+
+# --------------------------------------------------------------------------------------
+# ELx status codes (page B-21 onward)
+# --------------------------------------------------------------------------------------
+#
+# The instrument has a second status format alongside the RS + S1S2S3 + ETX one:
+# four ASCII hexadecimal characters followed by ETX, with no RS. The codes below
+# are templates. The manual's convention is that a placeholder in angle brackets
+# is "indicated by an ASCII digit replacing the last '0' character in the status
+# code", and one in curly braces replaces the next-to-last '0'. So NO SENSOR ERR
+# "0200" with motor 1 arrives as "0201", which is the order sorting filter wheel
+# fault the self-test section spells out as ERROR 0201.
+
+#: Fatal ELx errors. The manual states these "require recycling of instrument power".
+ELX_FATAL_ERRORS: Dict[str, str] = {
+  "A100": "Task control block not available",
+  "A200": "Read already in progress",
+  "A300": "<device> not available",
+  "A400": "Failed code checksum test on powerup",
+  "A500": "Data reduction steps alloc/free error <assay num>",
+  "A600": "Data flash write timed out",
+  "A700": "Data flash readback did not match write {test}<chip>",
+  "A800": "Code flash write timed out",
+  "A900": "Memory allocation heap corrupted",
+  "AA00": "<device> A/D converter never saw ready transition",
+}
+
+#: Non-fatal ELx errors.
+ELX_ERRORS: Dict[str, str] = {
+  "0000": "No errors detected",
+  "0100": "Read function aborted",
+  "0200": "<motor> did not find opto-sensor transition",
+  "0300": "<motor> did not find saturation transition",
+  "0400": "<motor> failed positional verify",
+  "0500": "A/D signal saturated <test type>",
+  "0600": "<filter> gain out of range",
+  "0700": "Reader {channel} failed noise test",
+  "0800": "Reader {channel} failed offset test",
+  "0900": "Read-time {channel}<filter> dark out of range",
+  "0A00": "Read-time {channel}<filter> air/blank out of range",
+  "0B00": "Invalid <assay number>",
+  "0C00": "Printer timed out",
+  "0D00": "Failed calibration checksum test",
+  "0E00": "Wavelength not found in table <read filter>",
+  "0F00": "{channel}<filter> signal out of range",
+  "1000": "Necessary configuration data missing",
+  "1100": "Failed configuration checksum test",
+  "1200": "Necessary calibration data missing",
+  "1300": "<motor> not homed successfully",
+  "1500": "Incubator failure {error code}<zone(s)>",
+  "1600": "Computer control assay definition error",
+  "1700": "Kinetic interval too short for selected options",
+  "1800": "Too many kinetic intervals",
+  "1900": "Memory allocation failed",
+  "1A00": "Store curve failure",
+  "1B00": "Get curve failure",
+  "1C00": "A/D calibration standby transition not detected",
+  "1D00": "Results data error",
+  "1E00": "Error in clock communications",
+  "1F00": "Bandpass overlap in filterset",
+  "2000": "No valid barcode detected",
+  "2100": "Invalid parameter value selected",
+  "2200": "PMT test signal too high <test type>",
+  "2300": "Lamp control failure <test type>",
+  "2400": "Test sensor position incorrect <motor>",
+  "2500": "Motor went by flash location too soon",
+  "2600": "Physical limit exceeded for area scan request",
+  "2700": "<assay> method does not match first panel assay",
+  "2800": "<motor> timer not available",
+  "2900": "Voltage reference failed <test type>",
+  "2A00": "<motor> did not find middle sensor",
+}
+
+#: Digit substitutions, page B-23. Keyed by the placeholder name the templates use.
+ELX_MOTORS: Dict[str, str] = {
+  "0": "carrier X axis",
+  "1": "filter wheel",
+  "2": "robotic door",
+  "3": "monochromator",
+  "4": "carrier Y axis",
+}
+
+ELX_TEST_TYPES: Dict[str, str] = {
+  "1": "5V power failed",
+  "2": "24V power failed",
+}
+
+ELX_AD_DEVICES: Dict[str, str] = {
+  "1": "absorbance measurement",
+  "2": "fluorescence measurement",
+  "3": "incubation measurement",
+  "4": "voltage reference",
+}
+
+ELX_INCUBATOR_FAULTS: Dict[str, str] = {
+  "0": "range error",
+  "1": "thermistor error",
+  "2": "A/D error",
+}
+
+ELX_DATA_FLASH_FAULTS: Dict[str, str] = {
+  "0": "readback error",
+  "1": "copy error",
+}
+
+#: Which substitution table applies to the last digit of each templated code.
+_ELX_LAST_DIGIT_TABLES: Dict[str, Dict[str, str]] = {
+  "0200": ELX_MOTORS,
+  "0300": ELX_MOTORS,
+  "0400": ELX_MOTORS,
+  "0500": ELX_TEST_TYPES,
+  "1300": ELX_MOTORS,
+  "2200": ELX_TEST_TYPES,
+  "2300": ELX_TEST_TYPES,
+  "2400": ELX_MOTORS,
+  "2800": ELX_MOTORS,
+  "2900": ELX_TEST_TYPES,
+  "2A00": ELX_MOTORS,
+  "A300": ELX_AD_DEVICES,
+  "AA00": ELX_AD_DEVICES,
+}
+
+#: Which substitution table applies to the next-to-last digit.
+_ELX_SECOND_DIGIT_TABLES: Dict[str, Dict[str, str]] = {
+  "1500": ELX_INCUBATOR_FAULTS,
+  "A700": ELX_DATA_FLASH_FAULTS,
+}
+
+ELX_STATUS_LENGTH = 5  # four hexadecimal characters + ETX
+
+
+class PowerWaveFatalError(PowerWaveError):
+  """A fatal ELx error. The manual requires an instrument power cycle to clear it."""
+
+  def __init__(self, code: str, message: str) -> None:
+    super().__init__(f"PowerWave fatal error {code}: {message}. Power-cycle the instrument.")
+    self.code = code
+    self.message = message
+
+
+def describe_elx_status(code: str) -> Optional[str]:
+  """Describe an ELx status code, expanding any templated digits (page B-21).
+
+  The last digit fills the description's angle-bracket placeholder and the
+  next-to-last fills the curly-brace one, so ``"0201"`` expands NO SENSOR ERR's
+  ``<motor>`` to the filter wheel. Note that a digit of ``0`` is meaningful, not
+  absent: motor ``0`` is the carrier X axis.
+
+  Args:
+    code: Four hexadecimal characters, for example ``"0201"``.
+
+  Returns:
+    A human-readable description, or ``None`` if the code is not documented.
+  """
+  code = code.upper()
+
+  # Where D2's self-test appendix spells a code out, its wording is specific to
+  # this instrument ("order sorting filter wheel" rather than "filter wheel").
+  spelled_out = SELF_TEST_ERRORS.get(code)
+  if spelled_out is not None:
+    return spelled_out
+
+  table = {**ELX_ERRORS, **ELX_FATAL_ERRORS}
+
+  exact_base = table.get(code)
+  if exact_base is not None and "<" not in exact_base and "{" not in exact_base:
+    return exact_base
+
+  base = code[:2] + "00"
+  description = table.get(base)
+  if description is None:
+    return table.get(code)
+
+  last, second = code[3], code[2]
+
+  if base == "1500":
+    # Zones are a bit field in the lowest digit, one bit per zone.
+    zones = [str(z + 1) for z in range(4) if int(last, 16) & (1 << z)]
+    fault = ELX_INCUBATOR_FAULTS.get(second, f"fault {second}")
+    where = f"zone(s) {', '.join(zones)}" if zones else "no zone reported"
+    return f"Incubator failure: {fault}, {where}"
+
+  named_last = _substitution(_ELX_LAST_DIGIT_TABLES.get(base), last, "device")
+  named_second = _substitution(_ELX_SECOND_DIGIT_TABLES.get(base), second, "detail")
+
+  # Substitute with a leading space so that adjacent placeholders, as in
+  # "{test}<chip>", do not run together; the whitespace is normalised after.
+  expanded = re.sub(r"<[^>]*>", " " + named_last, description)
+  expanded = re.sub(r"\{[^}]*\}", " " + named_second, expanded)
+  expanded = " ".join(expanded.split())
+
+  if len(expanded) == 0:
+    return description
+  # A description that led with a placeholder now starts lower-case.
+  return expanded[0].upper() + expanded[1:]
+
+
+def _substitution(table: Optional[Dict[str, str]], digit: str, noun: str) -> str:
+  """Expand one templated digit.
+
+  A digit of ``0`` is meaningful where the table defines it, as motor ``0`` is the
+  carrier X axis. Where it is not defined it means the detail does not apply, so
+  the placeholder is dropped rather than rendered as "device 0".
+  """
+  if table is not None and digit in table:
+    return table[digit]
+  if digit == "0":
+    return ""
+  return f"{noun} {digit}"
+
+
+def is_elx_status(response: bytes) -> bool:
+  """Whether a five-byte reply is an ELx status string rather than an RS one."""
+  return (
+    len(response) == ELX_STATUS_LENGTH
+    and response.endswith(ETX)
+    and not response.startswith(RS)
+    and all(c in b"0123456789ABCDEFabcdef" for c in response[:4])
+  )
+
+
+def parse_elx_status(response: bytes) -> str:
+  """Validate an ELx status string and return its four-character code.
+
+  Raises:
+    PowerWaveFatalError: For the ``A``-prefixed errors, which need a power cycle.
+    PowerWaveStatusError: For any other non-zero code.
+    PowerWaveParseError: If the response is not a well-formed ELx status string.
+  """
+  if not is_elx_status(response):
+    raise PowerWaveParseError(f"Malformed ELx status string (page B-21): {response!r}")
+
+  code = response[:4].decode("ascii").upper()
+  if code == "0000":
+    return code
+
+  description = describe_elx_status(code) or "Unknown ELx status code"
+  if code.startswith("A"):
+    raise PowerWaveFatalError(code, description)
+  raise PowerWaveStatusError(code, description)

@@ -686,6 +686,85 @@ class PowerWaveX:
       raise error
     return report
 
+  # ------------------------------------------------------------------------------------
+  # Documented but not implemented
+  #
+  # These four Appendix B commands are deliberately unimplemented. They are declared
+  # here so the gap is discoverable from the API rather than by reading the manual,
+  # and so a caller gets a specific explanation instead of AttributeError.
+  # ------------------------------------------------------------------------------------
+
+  async def configure_wavelengths(self, wavelengths: Sequence[int]) -> None:
+    """Not implemented: write the calibration wavelength table (``'M'``, page B-8).
+
+    This rewrites the table in the instrument's **non-volatile memory**, and the
+    manual requires a self-test afterwards to recalibrate gains for the new set.
+    It is only correct after physically changing the optics, so it is left out
+    rather than offered as a routine call.
+
+    The encoder exists and is tested, so wiring this up is small:
+    :func:`._protocol.encode_wavelength_table` builds the 24-byte payload, which
+    is sent after the command byte and followed by ``ETX``, then
+    :meth:`self_test`.
+
+    Raises:
+      NotImplementedError: Always.
+    """
+    raise NotImplementedError(
+      "CONFIGURE WAVELENGTHS ('M', page B-8) is not implemented. It rewrites the "
+      "calibration table in non-volatile memory and requires a self-test afterwards, "
+      "so it is only appropriate after the optics have been changed. See "
+      "encode_wavelength_table() if you need to send it yourself."
+    )
+
+  async def scan_plate(self, *args, **kwargs) -> None:
+    """Not implemented: spectral scan of the plate (``'&'``, page B-14).
+
+    Sweeps the monochromator over a wavelength range at 1 nm increments, and
+    returns a response format quite unlike READ PLATE's. Supporting it properly
+    means a second parser and a result type that is a spectrum per well rather
+    than one value.
+
+    Note that this is distinct from ``read_type="scan"`` in the assay definition,
+    which selects *well* scanning, and which no read method drives either.
+
+    Raises:
+      NotImplementedError: Always.
+    """
+    raise NotImplementedError(
+      "SCAN PLATE ('&', page B-14) is not implemented. Spectral scanning returns a "
+      "different response format from READ PLATE and needs its own parser."
+    )
+
+  async def request_plate_barcode(self) -> str:
+    """Not implemented: read the microplate barcode (``'s'``, page B-19).
+
+    Requires the barcode scanner option. The manual notes the instrument returns
+    a null string if no barcode is found after two passes of the carrier.
+
+    Raises:
+      NotImplementedError: Always.
+    """
+    raise NotImplementedError(
+      "GET PLATE BARCODE ('s', page B-19) is not implemented. It requires the barcode "
+      "scanner option, which was not available to develop against."
+    )
+
+  async def close_plate_access_door(self) -> None:
+    """Not implemented: close the robotic access door (``')'``, page B-20).
+
+    Only meaningful on the robotic-access-door models, whose configuration words
+    are 0x00B0 to 0x00BA, 0x00F2 and 0x00FA. A model without the door NAKs the
+    command, so :attr:`model` tells you whether it could ever apply.
+
+    Raises:
+      NotImplementedError: Always.
+    """
+    raise NotImplementedError(
+      "CLOSE PLATE ACCESS DOOR (')', page B-20) is not implemented. It applies only to "
+      f"robotic-access-door models; this one reports {self._model or 'an unknown model'}."
+    )
+
   async def push_assay_definition(
     self,
     wavelengths: Sequence[int],

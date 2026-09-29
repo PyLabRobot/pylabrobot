@@ -16,11 +16,14 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   ASSAY_DEFINITION_LENGTH,
   KINETIC_FLAGS,
   OVERRANGE,
+  ELX_ERRORS,
+  ELX_FATAL_ERRORS,
   SELF_TEST_ERRORS,
   STATUS_LENGTH,
   Command,
   PowerWaveChecksumError,
   PowerWaveError,
+  PowerWaveFatalError,
   PowerWaveNakError,
   PowerWaveParseError,
   PowerWaveSelfTestError,
@@ -28,12 +31,15 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   build_assay_definition,
   configuration_has_incubator,
   count_overrange,
+  describe_elx_status,
   encode_assay_wavelengths,
   encode_plate_geometry,
   encode_strip_range,
   encode_temperature_setpoint,
   encode_wavelength_table,
+  is_elx_status,
   parse_device_configuration,
+  parse_elx_status,
   parse_plate,
   parse_self_test_report,
   parse_status,
@@ -1269,3 +1275,132 @@ class TestKineticRead(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(results[0].data[0][0], 0.100)
     self.assertIsNone(results[0].data[0][11])
     self.assertEqual(fake.remaining, b"")
+
+
+class TestElxStatusCodes(unittest.TestCase):
+  """The second status format and its error tables, page B-21 onward."""
+
+  def test_format_detection(self):
+    self.assertTrue(is_elx_status(b"0000\x03"))
+    self.assertTrue(is_elx_status(b"A100\x03"))
+    self.assertFalse(is_elx_status(b"\x1e000\x03"))  # the RS format
+    self.assertFalse(is_elx_status(b"00000\x03"))  # too long
+    self.assertFalse(is_elx_status(b"ZZZZ\x03"))  # not hexadecimal
+
+  def test_parse_status_accepts_both_formats(self):
+    self.assertEqual(parse_status(b"\x1e000\x03"), "000")
+    self.assertEqual(parse_status(b"0000\x03"), "0000")
+
+  def test_non_fatal_error_raises_status_error(self):
+    with self.assertRaises(PowerWaveStatusError) as ctx:
+      parse_status(b"2301\x03")
+    self.assertEqual(ctx.exception.code, "2301")
+    self.assertIn("Lamp control failure", ctx.exception.message)
+
+  def test_fatal_error_raises_fatal_error(self):
+    with self.assertRaises(PowerWaveFatalError) as ctx:
+      parse_status(b"A100\x03")
+    self.assertEqual(ctx.exception.code, "A100")
+    self.assertIn("Power-cycle", str(ctx.exception))
+
+  def test_fatal_errors_are_not_mistaken_for_ordinary_ones(self):
+    for code in ELX_FATAL_ERRORS:
+      with self.subTest(code=code):
+        with self.assertRaises(PowerWaveFatalError):
+          parse_status(code.encode() + b"\x03")
+
+  def test_table_sizes_match_the_manual(self):
+    self.assertEqual(len(ELX_FATAL_ERRORS), 10)
+    self.assertEqual(len(ELX_ERRORS), 42)
+
+  def test_templated_motor_digit_expands(self):
+    # <motor> replaces the last digit; 0 is the carrier, not "absent".
+    self.assertEqual(describe_elx_status("0200"), "Plate carrier did not find the home sensor")
+    self.assertEqual(
+      describe_elx_status("0203"), "Monochromator did not find opto-sensor transition"
+    )
+    self.assertEqual(describe_elx_status("2A01"), "Filter wheel did not find middle sensor")
+
+  def test_expansion_agrees_with_the_codes_d2_spells_out(self):
+    """Every ERROR nnnn in D2's self-test appendix must also decode as an ELx code.
+
+    The self-test table is the expanded form of these templates, so a code that
+    decoded to something unrelated would mean the substitution rules are wrong.
+    """
+    for code in SELF_TEST_ERRORS:
+      with self.subTest(code=code):
+        self.assertIsNotNone(describe_elx_status(code))
+
+  def test_test_type_digit_zero_is_dropped(self):
+    # <test type> has no '0' meaning, unlike <motor>, so the placeholder goes.
+    self.assertEqual(describe_elx_status("2300"), "Lamp control failure")
+    self.assertEqual(describe_elx_status("2301"), "Lamp control failure 5V power failed")
+
+  def test_incubator_zones_are_a_bit_field(self):
+    self.assertEqual(describe_elx_status("1501"), "Incubator failure: range error, zone(s) 1")
+    self.assertEqual(describe_elx_status("1512"), "Incubator failure: thermistor error, zone(s) 2")
+    self.assertEqual(
+      describe_elx_status("150F"), "Incubator failure: range error, zone(s) 1, 2, 3, 4"
+    )
+
+  def test_ad_device_digit(self):
+    self.assertEqual(
+      describe_elx_status("AA01"),
+      "Absorbance measurement A/D converter never saw ready transition",
+    )
+
+  def test_unknown_code_returns_none(self):
+    self.assertIsNone(describe_elx_status("9999"))
+
+  def test_unknown_code_still_raises(self):
+    with self.assertRaises(PowerWaveStatusError) as ctx:
+      parse_status(b"9999\x03")
+    self.assertIn("Unknown", ctx.exception.message)
+
+  def test_malformed_elx_rejected(self):
+    with self.assertRaises(PowerWaveParseError):
+      parse_elx_status(b"\x1e000\x03")
+
+
+class TestUnimplementedCommands(unittest.IsolatedAsyncioTestCase):
+  """The four Appendix B commands that are declared but deliberately not sent."""
+
+  async def test_each_raises_not_implemented_without_touching_the_port(self):
+    cases = [
+      ("configure_wavelengths", ([550],), "'M'"),
+      ("scan_plate", (), "'&'"),
+      ("request_plate_barcode", (), "'s'"),
+      ("close_plate_access_door", (), "')'"),
+    ]
+    for name, args, command in cases:
+      with self.subTest(method=name):
+        reader, fake = _reader(model="PowerWaveX")
+        with self.assertRaises(NotImplementedError) as ctx:
+          await getattr(reader, name)(*args)
+        self.assertIn(command, str(ctx.exception))
+        self.assertEqual(fake.writes, [])
+
+  async def test_door_message_names_the_connected_model(self):
+    reader, _ = _reader(model="PowerWaveX w/ Incubator")
+    with self.assertRaises(NotImplementedError) as ctx:
+      await reader.close_plate_access_door()
+    self.assertIn("PowerWaveX w/ Incubator", str(ctx.exception))
+
+  def test_every_documented_command_is_either_used_or_declared(self):
+    """No Appendix B command may be silently missing from the driver."""
+    import inspect
+
+    from pylabrobot.agilent.biotek.powerwave import powerwave as module
+
+    source = inspect.getsource(module)
+    declared = {
+      "CONFIGURE_WAVELENGTHS": "configure_wavelengths",
+      "SCAN_PLATE": "scan_plate",
+      "GET_PLATE_BARCODE": "request_plate_barcode",
+      "CLOSE_PLATE_ACCESS_DOOR": "close_plate_access_door",
+    }
+    for command in Command:
+      with self.subTest(command=command.name):
+        used = f"Command.{command.name}" in source
+        stubbed = declared.get(command.name, "") in source and command.name in declared
+        self.assertTrue(used or stubbed, f"{command.name} is neither sent nor declared")
