@@ -1,0 +1,731 @@
+"""Tests for the PowerWave wire protocol.
+
+The fixtures marked "captured" are real bytes recorded from a PowerWaveX w/
+Incubator over RS-232 in 2021, recovered from the stored outputs of the notebook
+that this driver was ported from. Fixtures marked "synthetic" are hand-built for
+cases the capture does not cover.
+"""
+
+import math
+import struct
+import unittest
+from typing import Optional
+
+from pylabrobot.agilent.biotek.powerwave import PowerWaveX
+from pylabrobot.agilent.biotek.powerwave._protocol import (
+  ASSAY_DEFINITION_LENGTH,
+  KINETIC_FLAGS,
+  OVERRANGE,
+  Command,
+  PowerWaveChecksumError,
+  PowerWaveError,
+  PowerWaveNakError,
+  PowerWaveParseError,
+  PowerWaveStatusError,
+  build_assay_definition,
+  configuration_has_incubator,
+  count_overrange,
+  encode_assay_wavelengths,
+  encode_temperature_setpoint,
+  encode_wavelength_table,
+  parse_device_configuration,
+  parse_plate,
+  parse_status,
+  parse_temperature,
+  parse_uint16,
+  parse_wavelength_table,
+  plate_checksum,
+  verify_plate_checksum,
+  wells_bounding_box,
+)
+
+# Captured: one wavelength's 96-well plate data block, through and including ^Z.
+# The instrument transmitted its checksum byte, 142, immediately after the ^Z.
+_CAPTURED_PLATE = (
+  b"\r,+0201,+0207,+0142,+0171,+0129,+0188,+0162,+0184,+0161,+0126,+0099,+0122\r\n,+0191,+0202,+"
+  b"0219,+0168,+0137,+0156,+0166,+0123,+0144,+0183,+0134,+0145\r\n,+0224,+0214,+0209,+0216,+0218"
+  b",+0175,+0202,+0232,+0175,+0194,+0153,+0176\r\n,+0234,+0246,+0215,+0224,+0224,+0190,+0190,+01"
+  b"89,+0162,+0155,+0164,+0177\r\n,+0279,+0249,+0256,+0250,+0209,+0236,+0186,+0189,+0179,+0172,+"
+  b"0184,+0190\r\n,+0302,+0271,+0238,+0281,+0239,+0242,+0198,+0214,+0220,+0233,+0189,+0225\r\n,+"
+  b"0298,+0218,+0239,+0247,+0264,+0254,+0212,+0275,+0268,+0234,+0237,+0270\r\n,+0282,+0259,+0272"
+  b",+0260,+0308,+0290,+0246,+0300,+0268,+0251,+0239,+0281\r\n\x1a"
+)
+_CAPTURED_PLATE_CHECKSUM = 142
+
+
+class TestStatusStrings(unittest.TestCase):
+  """Status string handling, page B-21."""
+
+  def test_ok(self):
+    # Captured: the routine success response.
+    self.assertEqual(parse_status(b"\x1e000\x03"), "000")
+
+  def test_instrument_failure_raises(self):
+    with self.assertRaises(PowerWaveStatusError) as ctx:
+      parse_status(b"\x1e080\x03")
+    self.assertEqual(ctx.exception.code, "080")
+    self.assertIn("self-test", ctx.exception.message)
+
+  def test_every_documented_error_code_raises(self):
+    for code in ("080", "090", "0A0", "0B0", "0C0", "0E0"):
+      with self.subTest(code=code):
+        with self.assertRaises(PowerWaveStatusError) as ctx:
+          parse_status(b"\x1e" + code.encode() + b"\x03")
+        self.assertEqual(ctx.exception.code, code)
+
+  def test_unknown_code_still_raises(self):
+    with self.assertRaises(PowerWaveStatusError) as ctx:
+      parse_status(b"\x1e0F0\x03")
+    self.assertEqual(ctx.exception.message, "Unknown status code")
+
+  def test_malformed_raises_parse_error(self):
+    for response in (b"", b"\x1e000", b"000\x03", b"\x1e00000\x03", b"\x1e0000"):
+      with self.subTest(response=response):
+        with self.assertRaises(PowerWaveParseError):
+          parse_status(response)
+
+
+class TestInstrumentConfiguration(unittest.TestCase):
+  """Instrument configuration, page B-19."""
+
+  def test_captured_powerwavex_with_incubator(self):
+    # Captured: the instrument sends the 16-bit value least significant byte
+    # first, so 0x003A arrives as b":\x00".
+    self.assertEqual(parse_device_configuration(b":\x00"), "PowerWaveX w/ Incubator")
+
+  def test_plain_powerwavex(self):
+    self.assertEqual(parse_device_configuration(b"\x32\x00"), "PowerWaveX")
+
+  def test_unknown_configuration_raises(self):
+    with self.assertRaises(PowerWaveParseError):
+      parse_device_configuration(b"\xff\xff")
+
+  def test_incubator_detection(self):
+    self.assertTrue(configuration_has_incubator("PowerWaveX w/ Incubator"))
+    self.assertFalse(configuration_has_incubator("PowerWaveX"))
+
+  def test_uint16_is_little_endian(self):
+    # Captured: the minimum kinetic interval read back as 60 seconds.
+    self.assertEqual(parse_uint16(b"<\x00"), 60)
+
+  def test_uint16_wrong_length_raises(self):
+    with self.assertRaises(PowerWaveParseError):
+      parse_uint16(b"\x00")
+
+
+class TestWavelengthTable(unittest.TestCase):
+  """Wavelength setup table, pages B-8 and B-11."""
+
+  def test_captured_filter_wheel(self):
+    # Captured: the six filters installed in the instrument, note the trailing comma.
+    self.assertEqual(
+      parse_wavelength_table(b"550,620,665,520,450,595,"),
+      [550, 620, 665, 520, 450, 595],
+    )
+
+  def test_unpopulated_positions_are_dropped(self):
+    # Synthetic: the manual specifies "000" for an unused filter position.
+    self.assertEqual(parse_wavelength_table(b"550,620,000,000,000,000,"), [550, 620])
+
+  def test_wrong_length_raises(self):
+    with self.assertRaises(PowerWaveParseError):
+      parse_wavelength_table(b"550,620,")
+
+  def test_non_numeric_raises(self):
+    with self.assertRaises(PowerWaveParseError):
+      parse_wavelength_table(b"55X,620,665,520,450,595,")
+
+  def test_encode_round_trips(self):
+    encoded = encode_wavelength_table([550, 620, 665, 520, 450, 595])
+    self.assertEqual(encoded, b"550,620,665,520,450,595,")
+    self.assertEqual(parse_wavelength_table(encoded), [550, 620, 665, 520, 450, 595])
+
+  def test_encode_pads_unused_positions(self):
+    self.assertEqual(encode_wavelength_table([550]), b"550,000,000,000,000,000,")
+
+  def test_encode_rejects_too_many(self):
+    with self.assertRaises(ValueError):
+      encode_wavelength_table([550, 620, 665, 520, 450, 595, 700])
+
+  def test_encode_rejects_out_of_range(self):
+    for bad in (199, 1000):
+      with self.subTest(wavelength=bad):
+        with self.assertRaises(ValueError):
+          encode_wavelength_table([bad])
+
+  def test_encode_rejects_non_integer(self):
+    with self.assertRaises(TypeError):
+      encode_wavelength_table([550.0])  # type: ignore[list-item]
+
+
+class TestTemperature(unittest.TestCase):
+  """Incubator temperature, pages B-17 and B-18."""
+
+  def test_tenths_of_a_degree(self):
+    self.assertAlmostEqual(parse_temperature(struct.pack("<H", 371)), 37.1)
+
+  def test_zero_means_no_incubator(self):
+    with self.assertRaises(PowerWaveError):
+      parse_temperature(b"\x00\x00")
+
+  def test_captured_setpoint_encoding(self):
+    # Captured: setting 37 degrees C wrote a single 0x25 byte, not a 16-bit value.
+    self.assertEqual(encode_temperature_setpoint(37), b"%")
+
+  def test_zero_setpoint_is_allowed_and_turns_heaters_off(self):
+    self.assertEqual(encode_temperature_setpoint(0), b"\x00")
+
+  def test_out_of_range_raises(self):
+    for bad in (21, 51, -1):
+      with self.subTest(temperature=bad):
+        with self.assertRaises(ValueError):
+          encode_temperature_setpoint(bad)
+
+  def test_non_integer_raises(self):
+    with self.assertRaises(TypeError):
+      encode_temperature_setpoint(37.5)  # type: ignore[arg-type]
+
+
+class TestAssayDefinition(unittest.TestCase):
+  """SET ASSAY DEFINITION table, page B-10."""
+
+  def test_length_is_exactly_170(self):
+    table = build_assay_definition([550])
+    self.assertEqual(len(table), ASSAY_DEFINITION_LENGTH)
+
+  def test_documented_byte_offsets(self):
+    table = build_assay_definition(
+      [550, 620],
+      read_type="kinetic",
+      flags=KINETIC_FLAGS,
+      kinetic_interval=60,
+      kinetic_read_count=48,
+      shake_time=5,
+      shake_speed=1,
+      total_kinetic_read_time=9999,
+    )
+    # The manual numbers bytes from 1, so byte N is table[N - 1].
+    self.assertEqual(table[0], 0)  # 1: don't care
+    self.assertEqual(table[1:7], b"ABCDEF")  # 2-7: assay name
+    self.assertEqual(table[7:30], bytes(23))  # 8-30: don't care
+    self.assertEqual(table[30], KINETIC_FLAGS)  # 31: flags
+    self.assertEqual(table[31], 31)  # 32: scans per well
+    self.assertEqual(table[49:55], b"000000")  # 50-55: fixed
+    self.assertEqual(table[55], 2)  # 56: read type kinetic
+    self.assertEqual(table[59:61], struct.pack("<H", 60))  # 60-61: interval
+    self.assertEqual(table[61:63], struct.pack("<H", 48))  # 62-63: read count
+    self.assertEqual(table[66:84], b"550620000000000000")  # 67-84: wavelengths
+    self.assertEqual(table[162:164], struct.pack("<H", 5))  # 163-164: shake time
+    self.assertEqual(table[164], 1)  # 165: shake speed
+    self.assertEqual(table[165:167], struct.pack("<H", 9999))  # 166-167: total time
+    self.assertEqual(table[167], 0)  # 168: delay before first read
+    self.assertEqual(table[168:170], struct.pack("<H", 2))  # 169-170: delay
+
+  def test_read_type_byte(self):
+    for read_type, expected in (("endpoint", 0), ("kinetic", 2), ("scan", 3)):
+      with self.subTest(read_type=read_type):
+        self.assertEqual(build_assay_definition([550], read_type=read_type)[55], expected)
+
+  def test_unknown_read_type_raises(self):
+    with self.assertRaises(ValueError):
+      build_assay_definition([550], read_type="spectral")
+
+  def test_matches_the_verified_2021_endpoint_table(self):
+    """Byte-for-byte equality with the construction verified on real hardware in 2021.
+
+    Reproduced verbatim from the source notebook so that any future refactor of
+    :func:`build_assay_definition` cannot silently change the wire format.
+    """
+    wavelengths = [350, 550, 600, 630, 700, 990]
+    command_wavelengths = bytearray()
+    for this_wavelength in wavelengths:
+      command_wavelengths += bytearray(str(this_wavelength).encode("utf-8"))
+    for _ in range(6 - len(wavelengths)):
+      command_wavelengths += bytearray(str("000").encode("utf-8"))
+    expected = (
+      bytearray([0])
+      + bytearray(b"ABCDEF")
+      + bytearray([0] * ((30 - 8) + 1))
+      + bytearray([0])
+      + bytearray([31])
+      + bytearray([0] * (49 - 33 + 1))
+      + bytearray(b"000000")
+      + bytearray([0])
+      + bytearray([0] * (59 - 57 + 1))
+      + bytearray(struct.pack("<H", 5))
+      + bytearray(struct.pack("<H", 2))
+      + bytearray([0] * (66 - 64 + 1))
+      + command_wavelengths
+      + bytearray([0] * (162 - 85 + 1))
+      + bytearray(struct.pack("<H", 3))
+      + bytearray([1])
+      + bytearray(struct.pack("<H", 1))
+      + bytearray([0])
+      + bytearray(struct.pack("<H", 2))
+    )
+    self.assertEqual(build_assay_definition(wavelengths, read_type="endpoint"), bytes(expected))
+
+  def test_matches_the_verified_2021_kinetic_table(self):
+    """Byte-for-byte equality with the kinetic construction verified in 2021."""
+    wavelengths = [600, 630]
+    command_wavelengths = bytearray()
+    for this_wavelength in wavelengths:
+      command_wavelengths += bytearray(str(this_wavelength).encode("utf-8"))
+    for _ in range(6 - len(wavelengths)):
+      command_wavelengths += bytearray(str("000").encode("utf-8"))
+    expected = (
+      bytearray([0])
+      + bytearray(b"ABCDEF")
+      + bytearray([0] * ((30 - 8) + 1))
+      + bytearray([240])
+      + bytearray([31])
+      + bytearray([0] * (49 - 33 + 1))
+      + bytearray(b"000000")
+      + bytearray([2])
+      + bytearray([0] * (59 - 57 + 1))
+      + bytearray(struct.pack("<H", 60))
+      + bytearray(struct.pack("<H", 9999))
+      + bytearray([0] * (66 - 64 + 1))
+      + command_wavelengths
+      + bytearray([0] * (162 - 85 + 1))
+      + bytearray(struct.pack("<H", 5))
+      + bytearray([1])
+      + bytearray(struct.pack("<H", 9999))
+      + bytearray([0])
+      + bytearray(struct.pack("<H", 2))
+    )
+    built = build_assay_definition(
+      wavelengths,
+      read_type="kinetic",
+      flags=KINETIC_FLAGS,
+      kinetic_interval=60,
+      kinetic_read_count=9999,
+      shake_time=5,
+      shake_speed=1,
+      total_kinetic_read_time=9999,
+    )
+    self.assertEqual(built, bytes(expected))
+
+  def test_kinetic_flags_value(self):
+    # 0xF0: shake, shake before every read, continuous shake, use total kinetic time.
+    self.assertEqual(KINETIC_FLAGS, 0xF0)
+
+  def test_wavelength_encoding_pads_to_eighteen_bytes(self):
+    self.assertEqual(encode_assay_wavelengths([550]), b"550000000000000000")
+    self.assertEqual(len(encode_assay_wavelengths([550, 620, 665])), 18)
+
+  def test_requires_at_least_one_wavelength(self):
+    with self.assertRaises(ValueError):
+      build_assay_definition([])
+
+  def test_validation_bounds(self):
+    cases = {
+      "scans_per_well": (0, 32, 30),  # must be odd, 1-31
+      "kinetic_interval": (-1, 10000),
+      "kinetic_read_count": (1, 10000),
+      "shake_time": (-1, 1000),
+      "shake_speed": (-1, 4),
+      "total_kinetic_read_time": (0, 10000),
+      "delay": (-1, 1000),
+    }
+    for field, bad_values in cases.items():
+      for bad in bad_values:
+        with self.subTest(field=field, value=bad):
+          with self.assertRaises(ValueError):
+            build_assay_definition([550], **{field: bad})  # type: ignore[arg-type]
+
+  def test_assay_name_must_be_six_bytes(self):
+    with self.assertRaises(ValueError):
+      build_assay_definition([550], assay_name=b"SHORT")
+
+
+class TestPlateChecksum(unittest.TestCase):
+  """Plate data checksum, page B-9."""
+
+  def test_captured_plate_checksum(self):
+    self.assertEqual(plate_checksum(_CAPTURED_PLATE), _CAPTURED_PLATE_CHECKSUM)
+
+  def test_verify_accepts_matching_checksum(self):
+    verify_plate_checksum(_CAPTURED_PLATE, _CAPTURED_PLATE_CHECKSUM)
+
+  def test_verify_rejects_mismatch(self):
+    with self.assertRaises(PowerWaveChecksumError):
+      verify_plate_checksum(_CAPTURED_PLATE, _CAPTURED_PLATE_CHECKSUM + 1)
+
+  def test_leading_bytes_before_the_start_code_are_excluded(self):
+    """A preceding block's checksum byte arrives ahead of the CR start code.
+
+    The manual says the checksum starts after the data start code, so a leading
+    byte must not change the result.
+    """
+    self.assertEqual(plate_checksum(b"\x8e" + _CAPTURED_PLATE), _CAPTURED_PLATE_CHECKSUM)
+
+  def test_missing_start_code_raises(self):
+    with self.assertRaises(PowerWaveParseError):
+      plate_checksum(b",+0201,+0207\x1a")
+
+
+class TestPlateParsing(unittest.TestCase):
+  """Plate data parsing, page B-9."""
+
+  def test_captured_plate_shape(self):
+    data = parse_plate(_CAPTURED_PLATE)
+    self.assertEqual(len(data), 8)
+    self.assertTrue(all(len(row) == 12 for row in data))
+
+  def test_captured_plate_values(self):
+    data = parse_plate(_CAPTURED_PLATE)
+    # "+0201" is +0.201 OD: the instrument omits the decimal point.
+    self.assertEqual(
+      data[0],
+      [0.201, 0.207, 0.142, 0.171, 0.129, 0.188, 0.162, 0.184, 0.161, 0.126, 0.099, 0.122],
+    )
+    self.assertEqual(
+      data[7],
+      [0.282, 0.259, 0.272, 0.260, 0.308, 0.290, 0.246, 0.300, 0.268, 0.251, 0.239, 0.281],
+    )
+
+  def test_binary_checksum_prefix_does_not_break_parsing(self):
+    """Regression: 330 of 332 captured frames begin with a non-UTF-8 checksum byte.
+
+    Decoding the frame as UTF-8 before parsing raises UnicodeDecodeError on
+    those, so the parser must work on bytes.
+    """
+    prefixed = b"\x8e" + _CAPTURED_PLATE
+    with self.assertRaises(UnicodeDecodeError):
+      prefixed.decode("utf-8")
+    self.assertEqual(parse_plate(prefixed), parse_plate(_CAPTURED_PLATE))
+
+  def test_negative_readings(self):
+    # Synthetic: the sign character is significant.
+    frame = _CAPTURED_PLATE.replace(b",+0201,", b",-0201,", 1)
+    self.assertEqual(parse_plate(frame)[0][0], -0.201)
+
+  def test_overrange_wells(self):
+    # Synthetic: the capture has no saturated wells, so substitute one.
+    frame = _CAPTURED_PLATE.replace(b",+0201,", b",*****,", 1)
+    data = parse_plate(frame)
+    self.assertTrue(math.isinf(data[0][0]))
+    self.assertEqual(data[0][0], OVERRANGE)
+    self.assertEqual(count_overrange(data), 1)
+
+  def test_wrong_reading_count_raises(self):
+    truncated = _CAPTURED_PLATE.replace(b",+0122\r\n", b"\r\n", 1)
+    with self.assertRaises(PowerWaveParseError):
+      parse_plate(truncated)
+
+  def test_non_default_plate_geometry(self):
+    # Synthetic: 24-well plates are 4x6.
+    readings = b"".join(b",+0100" for _ in range(24))
+    frame = b"\r" + readings + b"\r\n\x1a"
+    data = parse_plate(frame, num_rows=4, num_columns=6)
+    self.assertEqual(len(data), 4)
+    self.assertEqual(len(data[0]), 6)
+
+  def test_count_overrange_on_clean_plate(self):
+    self.assertEqual(count_overrange(parse_plate(_CAPTURED_PLATE)), 0)
+
+
+class TestStripRangeHelpers(unittest.TestCase):
+  """Strip range derivation, page B-13."""
+
+  def test_bounding_box(self):
+    self.assertEqual(wells_bounding_box([(0, 0), (2, 5), (1, 3)]), (0, 0, 2, 5))
+
+  def test_single_well(self):
+    self.assertEqual(wells_bounding_box([(3, 7)]), (3, 7, 3, 7))
+
+  def test_empty_selection(self):
+    self.assertIsNone(wells_bounding_box([]))
+
+
+class TestCommandBytes(unittest.TestCase):
+  """The command bytes must match the ASCII characters the manual names."""
+
+  def test_command_bytes_are_the_documented_characters(self):
+    expected = {
+      "STORE_PLATE_CARRIER": b"A",
+      "PRESENT_PLATE_CARRIER": b"J",
+      "CONFIGURE_WAVELENGTHS": b"M",
+      "READ_PLATE": b"S",
+      "SET_ASSAY_DEFINITION": b"V",
+      "GET_WAVELENGTH_TABLE": b"W",
+      "HALT": b"X",
+      "SET_PLATE_GEOMETRY": b"{",
+      "SET_STRIP_RANGE": b"%",
+      "GET_MINIMUM_KINETIC_INTERVAL": b"$",
+      "SCAN_PLATE": b"&",
+      "SELF_TEST": b"*",
+      "SET_TEMPERATURE": b"[",
+      "GET_TEMPERATURE": b"]",
+      "GET_PLATE_BARCODE": b"s",
+      "GET_INSTRUMENT_CONFIGURATION": b"}",
+      "CLOSE_PLATE_ACCESS_DOOR": b")",
+    }
+    for name, char in expected.items():
+      with self.subTest(command=name):
+        self.assertEqual(Command[name].value, char)
+
+  def test_all_documented_commands_are_present(self):
+    self.assertEqual(len(Command), 17)
+
+
+if __name__ == "__main__":
+  unittest.main()
+
+
+class _FakeSerial:
+  """A scripted stand-in for :class:`pylabrobot.io.serial.Serial`.
+
+  Serves ``script`` to reads and records every write, so tests can assert on
+  command sequencing as well as on parsed results.
+  """
+
+  def __init__(self, script: bytes = b"") -> None:
+    self._inbox = bytearray(script)
+    self.writes: list = []
+    self.port = "/dev/ttyUSB0"
+    self.setup_called = False
+    self.stop_called = False
+
+  async def setup(self) -> None:
+    self.setup_called = True
+
+  async def stop(self) -> None:
+    self.stop_called = True
+
+  async def write(self, data: bytes) -> None:
+    self.writes.append(bytes(data))
+
+  async def read(self, num_bytes: int = 1) -> bytes:
+    chunk = bytes(self._inbox[:num_bytes])
+    del self._inbox[:num_bytes]
+    return chunk
+
+  async def reset_input_buffer(self) -> None:
+    pass
+
+  async def reset_output_buffer(self) -> None:
+    pass
+
+  def get_read_timeout(self) -> float:
+    return 1.0
+
+  @property
+  def remaining(self) -> bytes:
+    return bytes(self._inbox)
+
+
+_ACK = b"\x06"
+_NAK = b"\x15"
+_STATUS_OK = b"\x1e000\x03"
+_CAPTURED_CONFIG = b":\x00"  # PowerWaveX w/ Incubator, low byte first
+_CAPTURED_TABLE = b"550,620,665,520,450,595,"
+
+
+def _reader(script: bytes = b"", *, timeout: float = 0.2, model: Optional[str] = None):
+  """Build a PowerWaveX wired to a scripted fake transport."""
+  reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=timeout)
+  fake = _FakeSerial(script)
+  reader.io = fake  # type: ignore[assignment]
+  if model is not None:
+    reader._model = model
+  return reader, fake
+
+
+class TestLifecycle(unittest.IsolatedAsyncioTestCase):
+  """setup() and stop()."""
+
+  async def test_setup_identifies_instrument(self):
+    # '}' -> ACK + 2 config bytes and no status string (page B-19),
+    # then 'W' -> ACK + 24 table bytes + status string (page B-11).
+    script = _ACK + _CAPTURED_CONFIG + _ACK + _CAPTURED_TABLE + _STATUS_OK
+    reader, fake = _reader(script)
+
+    await reader.setup()
+
+    self.assertTrue(fake.setup_called)
+    self.assertEqual(fake.writes, [b"}", b"W"])
+    self.assertEqual(reader.model, "PowerWaveX w/ Incubator")
+    self.assertEqual(reader.wavelength_table, [550, 620, 665, 520, 450, 595])
+    self.assertTrue(reader.connected)
+    self.assertTrue(reader.supports_heating)
+    self.assertFalse(reader.supports_cooling)
+    self.assertEqual(fake.remaining, b"")
+
+  async def test_stop_closes_and_forgets_carrier_position(self):
+    reader, fake = _reader(_ACK + _STATUS_OK)
+    await reader.open()
+    self.assertEqual(reader.carrier_position, "out")
+
+    await reader.stop()
+
+    self.assertTrue(fake.stop_called)
+    self.assertFalse(reader.connected)
+    self.assertIsNone(reader.carrier_position)
+
+  async def test_properties_raise_before_setup(self):
+    reader, _ = _reader()
+    with self.assertRaises(RuntimeError):
+      _ = reader.model
+    with self.assertRaises(RuntimeError):
+      _ = reader.wavelength_table
+
+  async def test_temperature_range(self):
+    reader, _ = _reader()
+    self.assertEqual(reader.temperature_range, (22.0, 50.0))
+
+
+class TestPlateCarrier(unittest.IsolatedAsyncioTestCase):
+  """Carrier movement, page B-7."""
+
+  async def test_open_sends_J(self):
+    reader, fake = _reader(_ACK + _STATUS_OK)
+    await reader.open()
+    self.assertEqual(fake.writes, [b"J"])
+    self.assertEqual(reader.carrier_position, "out")
+
+  async def test_close_sends_A(self):
+    reader, fake = _reader(_ACK + _STATUS_OK)
+    await reader.close()
+    self.assertEqual(fake.writes, [b"A"])
+    self.assertEqual(reader.carrier_position, "in")
+
+  async def test_open_is_idempotent(self):
+    reader, fake = _reader(_ACK + _STATUS_OK)
+    await reader.open()
+    await reader.open()  # no bytes left in the script, so this must not talk
+    self.assertEqual(fake.writes, [b"J"])
+
+  async def test_close_is_idempotent(self):
+    reader, fake = _reader(_ACK + _STATUS_OK)
+    await reader.close()
+    await reader.close()
+    self.assertEqual(fake.writes, [b"A"])
+
+  async def test_open_then_close_round_trip(self):
+    reader, fake = _reader(_ACK + _STATUS_OK + _ACK + _STATUS_OK)
+    await reader.open()
+    await reader.close()
+    self.assertEqual(fake.writes, [b"J", b"A"])
+    self.assertEqual(reader.carrier_position, "in")
+
+  async def test_status_error_propagates(self):
+    reader, _ = _reader(_ACK + b"\x1e090\x03")
+    with self.assertRaises(PowerWaveStatusError) as ctx:
+      await reader.open()
+    self.assertEqual(ctx.exception.code, "090")
+
+  async def test_nak_raises(self):
+    reader, _ = _reader(_NAK)
+    with self.assertRaises(PowerWaveNakError):
+      await reader.open()
+
+  async def test_unexpected_reply_raises(self):
+    reader, _ = _reader(b"Z")
+    with self.assertRaises(PowerWaveError):
+      await reader.open()
+
+  async def test_silence_raises_timeout(self):
+    reader, _ = _reader(b"")
+    with self.assertRaises(TimeoutError):
+      await reader.open()
+
+
+class TestHalt(unittest.IsolatedAsyncioTestCase):
+  """HALT, page B-12: no ACK, no status string, a single DLE when done."""
+
+  async def test_halt_waits_for_dle(self):
+    reader, fake = _reader(b"\x10")
+    await reader.halt()
+    self.assertEqual(fake.writes, [b"X"])
+
+  async def test_halt_leaves_carrier_outside(self):
+    reader, _ = _reader(_ACK + _STATUS_OK + b"\x10")
+    await reader.close()
+    self.assertEqual(reader.carrier_position, "in")
+    await reader.halt()
+    self.assertEqual(reader.carrier_position, "out")
+
+  async def test_halt_without_dle_times_out(self):
+    reader, _ = _reader(b"")
+    with self.assertRaises(TimeoutError):
+      await reader.halt()
+
+
+class TestIncubator(unittest.IsolatedAsyncioTestCase):
+  """Incubator control, pages B-17 and B-18."""
+
+  async def test_read_temperature(self):
+    reader, fake = _reader(
+      _ACK + struct.pack("<H", 371) + _STATUS_OK, model="PowerWaveX w/ Incubator"
+    )
+    self.assertAlmostEqual(await reader.request_current_temperature(), 37.1)
+    self.assertEqual(fake.writes, [b"]"])
+
+  async def test_read_temperature_without_incubator_raises(self):
+    # 0x0000 means no incubator or an incubator error; the status string follows.
+    reader, _ = _reader(_ACK + b"\x00\x00" + b"\x1e0C0\x03", model="PowerWaveX")
+    with self.assertRaises(PowerWaveError):
+      await reader.request_current_temperature()
+
+  async def test_set_temperature_writes_single_byte(self):
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX w/ Incubator")
+    await reader.set_temperature(37)
+    self.assertEqual(fake.writes, [b"[", b"%"])
+    self.assertEqual(reader.temperature_setpoint, 37)
+
+  async def test_set_temperature_is_idempotent(self):
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX w/ Incubator")
+    await reader.set_temperature(37)
+    await reader.set_temperature(37)
+    self.assertEqual(fake.writes, [b"[", b"%"])
+
+  async def test_stop_heating_sets_zero(self):
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX w/ Incubator")
+    await reader.stop_heating()
+    self.assertEqual(fake.writes, [b"[", b"\x00"])
+    self.assertEqual(reader.temperature_setpoint, 0)
+
+  async def test_set_temperature_out_of_range_raises(self):
+    reader, fake = _reader(model="PowerWaveX w/ Incubator")
+    with self.assertRaises(ValueError):
+      await reader.set_temperature(60)
+    self.assertEqual(fake.writes, [])
+
+  async def test_set_temperature_without_incubator_raises(self):
+    reader, fake = _reader(model="PowerWaveX")
+    self.assertFalse(reader.supports_heating)
+    with self.assertRaises(NotImplementedError):
+      await reader.set_temperature(37)
+    self.assertEqual(fake.writes, [])
+
+  async def test_setpoint_unknown_before_written(self):
+    reader, _ = _reader()
+    self.assertIsNone(reader.temperature_setpoint)
+
+
+class TestMinimumKineticInterval(unittest.IsolatedAsyncioTestCase):
+  """GET MINIMUM KINETIC INTERVAL, page B-13."""
+
+  async def test_captured_interval(self):
+    # Captured: 60 seconds, as b"<\x00" low byte first.
+    reader, fake = _reader(_ACK + b"<\x00" + _STATUS_OK)
+    self.assertEqual(await reader.request_minimum_kinetic_interval(), 60)
+    self.assertEqual(fake.writes, [b"$"])
+
+
+class TestStatusFraming(unittest.IsolatedAsyncioTestCase):
+  """Status string framing robustness."""
+
+  async def test_stale_bytes_before_status_are_discarded(self):
+    """A plate data checksum left unread by a previous command precedes the status.
+
+    Captured traffic shows these stray bytes routinely, so the driver skips them
+    with a warning rather than failing to parse.
+    """
+    reader, _ = _reader(_ACK + b"\x8e" + _STATUS_OK)
+    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
+      await reader.open()
+    self.assertIn("discarding 1 unexpected bytes", "\n".join(logs.output))
+    self.assertEqual(reader.carrier_position, "out")
