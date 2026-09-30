@@ -20,21 +20,21 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 | - | - | - |
 | 'PLT_CAR_L5AC_A00'<br>Part no.: 182090<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182090) <br>Carrier for 5x 96 Deep Well Plates or for 5x 384 tip racks (e.g.384HEAD_384TIPS_50μl) (6T) | ![](img/hamilton/PLT_CAR_L5AC_A00_182090.jpg) | `hamilton_plate_carrier_L5_ac` |
 | 'PLT_CAR_L5MD_A00'<br>Part no.: 182365/02<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Carries five ANSI/SLAS footprint MTPs in landscape orientation. Occupies six tracks.| ![](img/hamilton/182365-Plate-Carrier.webp) | `PLT_CAR_L5MD_A00` |
-| 'PLT_CAR_L5PCR'<br>Part no.: 182070<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/182070) · [archived datasheet](datasheets/hamilton/182070.pdf)<br>Carries five 96-well PCR plates in landscape orientation using 188182 adapters. Occupies six tracks. | ![](img/hamilton/PLT_CAR_L5PCR.jpg) | `PLT_CAR_L5PCR` |
+| 'PLT_CAR_L5PCR'<br>Part no.: 182070<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/182070) · [archived datasheet](datasheets/hamilton/182070.pdf)<br>Carries five 96-well PCR plates in landscape orientation using 182531 inserts. Occupies six tracks. | ![](img/hamilton/PLT_CAR_L5PCR.jpg) | `PLT_CAR_L5PCR` |
 | 'PLT_CAR_P3AC'<br>Part no.: 182365/03<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Hamilton Deepwell Plate Carrier for 3 Plates (Portrait, 6 tracks wide)| ![](img/hamilton/PLT_CAR_P3AC.jpg) | `PLT_CAR_P3AC` |
 | 'PLT_CAR_L5_DWP'<br>Part no.:  93522-01/03<br>manufacturer website? <br>Hamilton Plate Carrier for 5 Plates (Landscape, 6 tracks wide). Plastic tabs. | ![](img/hamilton/PLT_CAR_L5_DWP.jpg) | `PLT_CAR_L5_DWP` |
 
-#### 182070 PCR carrier with 188182 adapters
+#### 182070 PCR carrier with 182531 inserts
 
 `PLT_CAR_L5PCR` has five empty adapter sites by default. Pass `with_adapters=True` to
-mount five separate `Hamilton_96_adapter_188182` instances, named `{name}_adapter_0`
+mount five separate `Hamilton_96_adapter_182531` instances, named `{name}_adapter_0`
 through `{name}_adapter_4`. Assign PCR plates to those adapters:
 
 ```python
 from pylabrobot.resources import (
   PLT_CAR_L5PCR,
   Eppendorf_96_wellplate_250ul_Vb,
-  Hamilton_96_adapter_188182,
+  Hamilton_96_adapter_182531,
   PlateAdapter,
   STARLetDeck,
 )
@@ -50,24 +50,45 @@ adapter.assign_child_resource(plate)
 
 # Alternatively, populate only the sites you need on an empty carrier.
 bare_carrier = PLT_CAR_L5PCR("bare_pcr")
-bare_carrier[0] = Hamilton_96_adapter_188182("single_adapter")
+bare_carrier[0] = Hamilton_96_adapter_182531("single_adapter")
 ```
 
-The measured bare support height is **105.59 mm** above the carrier's rail datum.
-The first adapter's **H1 hole center** is measured at **17.22 mm** from the carrier's
-left edge and **20.50 mm** from its front edge. H1 is the front-left hole in the
-unrotated adapter. Its center is 4.70/5.90 mm from the adapter's left/front edges,
-so the adapter origin is **12.52/14.60 mm** from the carrier edges.
-The confirmed **75 mm** adapter length and measured **20.3 mm** clear gap give a
-**95.3 mm** pitch: adapter front offsets are 14.60, 109.90, 205.20, 300.50, and 395.80 mm.
-Each site represents the adapter's 110 × 75 mm footprint at the support surface, with
-no additional placement offset or sinking. On a STARlet, track placement adds the
-deck's 100 mm Z datum, putting the adapter bottoms at Z = 205.59 mm.
+Geometry comes from Hamilton's [VENUS template](datasheets/hamilton/PLT_CAR_L5PCR_A00.tml)
+and its accompanying [3D model](datasheets/hamilton/PLT_CAR_L5PCR_A00.x).
+The template specifies a **135 × 497 × 130 mm** carrier envelope and **96 mm** site
+pitch. Its 130 mm height and clearance describe the envelope, not the insert support
+surface. The 75 mm inserts have **21 mm** clear gaps.
 
-The carrier's 135 × 497 mm footprint is inherited from the existing definition;
-the datasheet supplies no dimensions. The 188182 adapter's geometry is reused,
-including its existing estimates for plate seating; these carrier measurements do
-not calibrate the height of a plate seated in the adapter.
+The insert locations are derived from the model's five `182531_RNO` meshes. Coordinates
+are referenced to the main body's left/front edges and the rail underside, excluding
+the projecting front latch. In the model's stored axes, the reference is lateral
+X = -67, longitudinal Z = -244, and vertical Y = -12 mm. Subtracting these from the
+first insert's minimum coordinates (-55, -229.4, 93.7 mm, respectively) gives:
+
+| Site | Insert X (mm) | Insert Y (mm) | Support Z (mm) |
+| - | -: | -: | -: |
+| 0 | 12.00 | 14.60 | 105.70 |
+| 1 | 12.00 | 110.60 | 105.70 |
+| 2 | 12.00 | 206.60 | 105.70 |
+| 3 | 12.00 | 302.60 | 105.70 |
+| 4 | 12.00 | 398.60 | 105.70 |
+
+Each site is a 110 × 75 mm support plane with no additional offset or sinking.
+Each insert is **15 mm** high, with H1 at **5.5/6.0 mm** from its left/front edges
+and a **9 × 9 mm** hole grid. The first H1 center is therefore **17.5/20.6 mm**
+from the carrier body edges. STARlet track placement adds a 100 mm Z datum, giving
+insert bottoms at Z = **205.7 mm** and tops at Z = **220.7 mm**.
+
+The template also declares 127 × 86 mm **plate** sites at X = 5, Y = 9.5 + 96i,
+Z = 109.2 mm. These are separate VENUS plate-placement references, not insert-base
+coordinates, and are not added to the insert locations above. VENUS site IDs run
+5 through 1 from front to back; PyLabRobot indices run 0 through 4.
+
+The insert model gives an approximately **7.732 mm** top opening and **13.049 mm**
+cavity depth, with the cavity bottom **1.951 mm** above the insert base. The adapter's
+`dz` uses this modeled bottom. Automatic plate placement aligns the plate origin to
+that reference; it does not calculate how a particular plate contacts the tapered
+cavities. Supply an explicit plate location when its seating height differs.
 
 ### MFX carriers
 
@@ -114,6 +135,7 @@ Sometimes called "reagent carriers" in Hamilton jargon.
 
 | Description | Image | PLR definition |
 | - | - | - |
+| 'Hamilton_96_adapter_182531'<br>Part no.: 182531<br>PCR insert for the [182070 carrier](https://www.hamiltoncompany.com/other-robotics/182070). 110 × 75 × 15 mm, with a 12 × 8 hole grid at 9 mm spacing. Geometry and image derived from the [Hamilton 3D model](datasheets/hamilton/PLT_CAR_L5PCR_A00.x). | ![](img/hamilton/Hamilton_96_adapter_182531.jpg) | `Hamilton_96_adapter_182531` |
 | 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | ![](img/hamilton/hamilton_96_adapter_188182.png) | `Hamilton_96_adapter_188182` |
 
 ## Consumables
