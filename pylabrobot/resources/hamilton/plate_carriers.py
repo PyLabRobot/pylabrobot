@@ -258,25 +258,77 @@ def PLT_CAR_L5MD_A00(name: str) -> PlateCarrier:
 def PLT_CAR_L5PCR(name: str, *, with_adapters: bool = False) -> PlateCarrier:
   """Hamilton 182070 carrier for five 96-well PCR plates in landscape orientation (6 tracks).
 
-  The 135 x 497 x 130 mm envelope and 96 mm site pitch come from Hamilton's
-  ``PLT_CAR_L5PCR_A00.tml``. Sites locate the bottom of ``Hamilton_96_adapter_182531``
-  inserts, using the accompanying .x mesh geometry: X = 12, first Y = 14.6, Z = 105.7.
-  The local origin is at the main body's left/front edges and the rail underside.
-  In the mesh's stored axes, these references are X = -67, longitudinal Z = -244,
-  and vertical Y = -12 mm. The main body excludes the projecting front latch.
-
-  The template's plate-site origins (X = 5, first Y = 9.5, Z = 109.2) describe a
-  different reference from the insert bases and are not added to these site locations.
-  The 130 mm envelope includes the template's clearance; it is not the support height.
-
   https://www.hamiltoncompany.com/other-robotics/182070
-  Archived sources: ``docs/resources/library/datasheets/hamilton/`` (182070.pdf and
-  PLT_CAR_L5PCR_A00.tml/.x).
 
   Args:
     name: The carrier name.
     with_adapters: Mount five independent 182531 inserts. Defaults to empty sites.
   """
+  # Usage:
+  # PLT_CAR_L5PCR has five empty adapter sites by default. Pass with_adapters=True to
+  # mount five separate Hamilton_96_adapter_182531 instances, named {name}_adapter_0
+  # through {name}_adapter_4. Assign PCR plates to those adapters:
+  #
+  # from pylabrobot.resources import (
+  #   PLT_CAR_L5PCR,
+  #   Eppendorf_96_wellplate_250ul_Vb,
+  #   Hamilton_96_adapter_182531,
+  #   PlateAdapter,
+  #   STARLetDeck,
+  # )
+  #
+  # deck = STARLetDeck()
+  # carrier = PLT_CAR_L5PCR("pcr", with_adapters=True)
+  # deck.assign_child_resource(carrier, track=1)
+  #
+  # adapter = carrier[0].resource
+  # assert isinstance(adapter, PlateAdapter)
+  # plate = Eppendorf_96_wellplate_250ul_Vb("pcr_plate")
+  # adapter.assign_child_resource(plate)
+  #
+  # Alternatively, populate only the sites you need on an empty carrier.
+  # bare_carrier = PLT_CAR_L5PCR("bare_pcr")
+  # bare_carrier[0] = Hamilton_96_adapter_182531("single_adapter")
+  #
+  # Geometry:
+  # Hamilton's VENUS template and accompanying 3D model are archived at:
+  # docs/resources/library/datasheets/hamilton/PLT_CAR_L5PCR_A00.tml
+  # docs/resources/library/datasheets/hamilton/PLT_CAR_L5PCR_A00.x
+  # The carrier datasheet is archived in the same directory as 182070.pdf.
+  # The template specifies a 135 x 497 x 130 mm carrier envelope and 96 mm site
+  # pitch. Its 130 mm height and clearance describe the envelope, not the insert
+  # support surface. The 75 mm inserts have 21 mm clear gaps.
+  #
+  # Insert locations are derived from the model's five 182531_RNO meshes. Coordinates
+  # are referenced to the main body's left/front edges and the rail underside,
+  # excluding the projecting front latch. In the model's stored axes, the reference
+  # is lateral X = -67, longitudinal Z = -244, and vertical Y = -12 mm. Subtracting
+  # these from the first insert's minimum coordinates (-55, -229.4, 93.7 mm,
+  # respectively) gives these carrier-relative locations:
+  #
+  # Site | Insert X (mm) | Insert Y (mm) | Support Z (mm)
+  #    0 |         12.00 |         14.60 |         105.70
+  #    1 |         12.00 |        110.60 |         105.70
+  #    2 |         12.00 |        206.60 |         105.70
+  #    3 |         12.00 |        302.60 |         105.70
+  #    4 |         12.00 |        398.60 |         105.70
+  #
+  # Each site is a 110 x 75 mm support plane with no additional offset or sinking.
+  # Each insert is 15 mm high, with H1 at 5.5/6.0 mm from its left/front edges and a
+  # 9 x 9 mm hole grid. The first H1 center is therefore 17.5/20.6 mm from the carrier
+  # body edges. STARlet track placement adds a 100 mm Z datum, giving insert bottoms
+  # at Z = 205.7 mm and tops at Z = 220.7 mm.
+  #
+  # The template also declares 127 x 86 mm plate sites at X = 5, Y = 9.5 + 96i,
+  # Z = 109.2 mm. These are separate VENUS plate-placement references, not insert-base
+  # coordinates, and are not added to the insert locations above. VENUS site IDs run
+  # 5 through 1 from front to back; PyLabRobot indices run 0 through 4.
+  #
+  # The insert model gives an approximately 7.732 mm top opening and 13.049 mm cavity
+  # depth, with the cavity bottom 1.951 mm above the insert base. The adapter's dz uses
+  # this modeled bottom. Automatic plate placement aligns the plate origin to that
+  # reference; it does not calculate how a particular plate contacts the tapered
+  # cavities. Supply an explicit plate location when its seating height differs.
   support_height = 105.7  # from .x: insert base 93.7 minus rail underside -12.0
   adapter_x = 12.0  # from .x: insert edge -55.0 minus body left edge -67.0
   first_adapter_y = 14.6  # from .x: insert edge -229.4 minus body front edge -244.0
