@@ -1,5 +1,6 @@
 """A simple JSON serializer."""
 
+import datetime
 import enum
 import inspect
 import marshal
@@ -43,6 +44,8 @@ def serialize(obj: Any) -> JSON:
     return [serialize(item) for item in obj]
   if isinstance(obj, dict):
     return {k: serialize(v) for k, v in obj.items()}
+  if isinstance(obj, datetime.date):
+    return obj.isoformat()
   if isinstance(obj, enum.Enum):
     return obj.name
   if inspect.isfunction(obj):

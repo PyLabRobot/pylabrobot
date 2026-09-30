@@ -1,0 +1,120 @@
+{
+  "device": {
+    "serial_number": "PRPAA1087",
+    "firmware_version": "MLPrep Runtime V1.2.2.444 99020-02 Rev G",
+    "num_channels": 2,
+    "has_enclosure": false,
+    "safe_speeds_enabled": false,
+    "deck_bounds": {
+      "min_x": 0.0,
+      "max_x": 299.0,
+      "min_y": -9.0,
+      "max_y": 385.0,
+      "min_z": 18.030000686645508,
+      "max_z": 167.5
+    },
+    "deck_sites": [
+      {
+        "id": 0,
+        "left_bottom_front_x": -2.2300000190734863,
+        "left_bottom_front_y": 390.0,
+        "left_bottom_front_z": 0.0,
+        "length": 310.0,
+        "width": 100.0,
+        "height": 167.0
+      },
+      {
+        "id": 1,
+        "left_bottom_front_x": 270.0,
+        "left_bottom_front_y": -3.0,
+        "left_bottom_front_z": 0.0,
+        "length": 100.0,
+        "width": 400.0,
+        "height": 73.0
+      },
+      {
+        "id": 2,
+        "left_bottom_front_x": 284.760009765625,
+        "left_bottom_front_y": 214.2899932861328,
+        "left_bottom_front_z": 0.0,
+        "length": 6.0,
+        "width": 6.0,
+        "height": 85.0
+      }
+    ],
+    "waste_sites": [
+      {
+        "index": 1,
+        "x_position": 287.0,
+        "y_position": 10.0,
+        "z_position": 68.4000015258789,
+        "z_seek": 85.0
+      },
+      {
+        "index": 2,
+        "x_position": 287.0,
+        "y_position": 30.0,
+        "z_position": 68.4000015258789,
+        "z_seek": 85.0
+      },
+      {
+        "index": 3,
+        "x_position": 287.0,
+        "y_position": 112.0,
+        "z_position": 68.4000015258789,
+        "z_seek": 85.0
+      }
+    ],
+    "head8_installed": false
+  },
+  "pipettes": {
+    "use_v1_aspirate_dispense": false,
+    "supports_v2_pipetting": true,
+    "v2_pipetting_command_ids": [
+      38,
+      39,
+      40,
+      41,
+      42,
+      43
+    ],
+    "x_reference_anchor": "c",
+    "y_reference_anchor": "c",
+    "z_reference_anchor": "b",
+    "channel_width": 8.9826,
+    "channel_size_z": 140.0,
+    "channel_model": "hamilton_star_pipette_channel",
+    "channels": [
+      {
+        "firmware_version": "Channel1ml Runtime V1.4.9.249 98228-02 Rev K",
+        "x_range": [
+          0.19299888610839844,
+          299.1929931640625
+        ],
+        "y_range": [
+          0.0,
+          385.0
+        ],
+        "z_range": [
+          18.030000686645508,
+          167.5
+        ]
+      },
+      {
+        "firmware_version": "Channel1ml Runtime V1.4.9.249 98228-02 Rev K",
+        "x_range": [
+          0.19299888610839844,
+          299.1929931640625
+        ],
+        "y_range": [
+          -9.0,
+          376.0
+        ],
+        "z_range": [
+          18.030000686645508,
+          167.5
+        ]
+      }
+    ]
+  }
+}

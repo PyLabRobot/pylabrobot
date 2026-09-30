@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 from pylabrobot.resources.resource import Resource
 
@@ -26,6 +26,7 @@ class TecanResource(Resource):
     off_y: float = 0,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
       name=name,
@@ -34,6 +35,7 @@ class TecanResource(Resource):
       size_z=size_z,
       category=category,
       model=model,
+      metadata=metadata,
     )
 
     self.off_x = off_x

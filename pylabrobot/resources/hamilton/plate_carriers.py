@@ -1,3 +1,5 @@
+import warnings
+
 from pylabrobot.resources.carrier import (
   Coordinate,
   PlateCarrier,
@@ -100,9 +102,11 @@ def PLT_CAR_L5AC(name: str) -> PlateCarrier:
   )
 
 
-def PLT_CAR_L5AC_A00(name: str) -> PlateCarrier:
-  """Carrier for 5 deep well 96 Well PCR Plates
-  Hamilton cat. no.: 182090
+def hamilton_plate_carrier_L5_ac(name: str) -> PlateCarrier:
+  """Hamilton cat. no.: 182090
+  Hamilton name: 'PLT_CAR_L5AC_A00'.
+  Carrier for 5 deep well 96 well PCR plates, landscape.
+  6 track(T) wide.
   """
   return PlateCarrier(
     name=name,
@@ -123,7 +127,7 @@ def PLT_CAR_L5AC_A00(name: str) -> PlateCarrier:
       name_prefix=name,
       pedestal_size_z=-4.74,
     ),
-    model="PLT_CAR_L5AC_A00",
+    model=hamilton_plate_carrier_L5_ac.__name__,
   )
 
 
@@ -475,6 +479,7 @@ def PLT_CAR_L5AC_P_A00(name: str) -> PlateCarrier:
       resource_size_x=126.8,
       resource_size_y=85.8,
       name_prefix=name,
+      pedestal_size_z=-4.74,
     ),
     model="PLT_CAR_L5AC_P_A00",
   )
@@ -687,3 +692,16 @@ def PLT_CAR_L5_DWP(name: str) -> PlateCarrier:
     ),
     model="PLT_CAR_L5_DWP",
   )
+
+
+# Deprecated names for backwards compatibility
+
+
+def PLT_CAR_L5AC_A00(name: str) -> PlateCarrier:
+  """Deprecated alias for `hamilton_plate_carrier_L5_ac`."""
+  warnings.warn(
+    "PLT_CAR_L5AC_A00 is deprecated. Use 'hamilton_plate_carrier_L5_ac' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_plate_carrier_L5_ac(name)

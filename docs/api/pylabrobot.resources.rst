@@ -10,14 +10,19 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
   :nosignatures:
   :recursive:
 
+    barcode.Barcode
     Carrier
     Container
     Coordinate
     Deck
+    tip_rack.EmbeddedTipRack
+    head_tool.HeadTool
     ItemizedResource
     utils.create_equally_spaced_2d
     Lid
+    LinkBody
     Liquid
+    MechanicalGripper
     PetriDish
     Plate
     PlateCarrier
@@ -26,9 +31,12 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     ResourceHolder
     ResourceStack
     Rotation
+    tip_rack.StandingTipRack
     tip.Tip
     TipCarrier
     TipRack
+    tip_rack.TipSpot
+    Trash
     Trough
     Tube
     TubeCarrier

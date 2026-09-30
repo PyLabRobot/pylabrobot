@@ -26,3 +26,17 @@ jobs:
         run: make lint
       - name: Check formatting
         run: make format-check
+
+  lint-js:
+    name: JavaScript linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      - name: Set up Biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: 2.5.13
+      - name: Lint and check formatting of the 3D viewer's JavaScript and CSS
+        run: make lint-js

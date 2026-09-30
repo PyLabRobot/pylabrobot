@@ -79,6 +79,7 @@ def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       # compute_volume_from_height=_compute_volume_from_height_Greiner_384_wellplate_28ul_Fb,
       # compute_height_from_volume=_compute_height_from_volume_Greiner_384_wellplate_28ul_Fb,
+      name_prefix=name,
     ),
   )
 
@@ -116,5 +117,6 @@ def greiner_96_wellplate_200uL_Vb(name: str, with_lid: bool = False) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       bottom_type=WellBottomType.V,
       max_volume=200,  # from spec (0.2 mL)
+      name_prefix=name,
     ),
   )

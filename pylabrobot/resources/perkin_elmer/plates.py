@@ -38,6 +38,7 @@ def PerkinElmer_96_wellplate_400ul_Fb(name: str) -> Plate:
       dz=2.88,  # caliper
       item_dx=9,
       item_dy=9,
+      name_prefix=name,
       **well_kwargs,
     ),
   )
