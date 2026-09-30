@@ -103,6 +103,23 @@ class TestPerDriveCommands(unittest.IsolatedAsyncioTestCase):
       ["X0XIlw7", "X0XPla05000lr3lw7", "X0XPla04875lr3lw7", "X0XO"],
     )
 
+  async def test_a_firmware_5_drive_takes_a_two_digit_current_limit(self):
+    """From X0 firmware 5.0 the limiter is `lw##`, 00..15."""
+    left = dataclasses.replace(
+      cast(XArmConfiguration, RECORDED_DEVICE.left_arm), firmware_version="5.0S 2012"
+    )
+    device = dataclasses.replace(RECORDED_DEVICE, left_arm=left)
+    driver = STARSimulationDriver(
+      deck=STARDeck(), declared_configuration_json=declaring(device=device)
+    )
+    await driver.setup()
+    arm = cast(XArm, driver.left_x_arm)
+    sent = record(arm)
+    await XArm.initialize(arm)
+    await XArm.move_to_x_position(arm, 500.0, current_limit=15)
+    self.assertEqual(sent, ["X0XIlw07", "X0XPla05000lr3lw15"])
+    self.assertEqual(arm.configuration.current_limit_range, (0, 15))
+
   async def test_right_drive(self):
     driver = await _both_arms()
     arm = cast(XArm, driver.right_x_arm)

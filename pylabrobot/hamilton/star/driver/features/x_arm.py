@@ -20,10 +20,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# The command set splits at firmware 5.0: the ranges and encodings below were recorded from an arm
-# below it, which is the generation this driver has been driven against. A 5.0 or higher arm takes
-# a wider current limiter, written in two digits rather than one, and has moves this one does not.
-RECORDED_FIRMWARE_BELOW_MAJOR = 5
+# From X0 firmware 5.0 the current limiter is two digits, 00..15; below it, one digit, 0..7.
+TWO_DIGIT_CURRENT_LIMIT_FIRMWARE_MAJOR = 5
 
 
 @dataclass
@@ -77,6 +75,7 @@ class XArmConfiguration:
   acceleration_level_default: int = 4
   current_limit_range: Tuple[int, int] = (0, 7)
   current_limit_default: int = 7
+  current_limit_digits: int = 1
 
   def with_device_facts_of(self, other: "XArmConfiguration") -> "XArmConfiguration":
     """This configuration, with the device facts of another in place of its own.
@@ -98,6 +97,7 @@ class XArmConfiguration:
       acceleration_level_default=other.acceleration_level_default,
       current_limit_range=other.current_limit_range,
       current_limit_default=other.current_limit_default,
+      current_limit_digits=other.current_limit_digits,
     )
 
   # -- conversions: the wire counts in steps, the driver speaks mm ---------------------------
@@ -320,14 +320,9 @@ class XArm:
     version, _ = await self.request_firmware_version()
     self.configuration.firmware_version = version
     major = version.split(".", 1)[0]
-    if major.isdigit() and int(major) >= RECORDED_FIRMWARE_BELOW_MAJOR:
-      logger.warning(
-        "this X-arm reports firmware %s; the ranges and encodings here were recorded from an arm "
-        "below %d.0, so its current limiter and the moves it accepts may differ. Set them on "
-        "XArmConfiguration to correct it.",
-        version,
-        RECORDED_FIRMWARE_BELOW_MAJOR,
-      )
+    if major.isdigit() and int(major) >= TWO_DIGIT_CURRENT_LIMIT_FIRMWARE_MAJOR:
+      self.configuration.current_limit_range = (0, 15)
+      self.configuration.current_limit_digits = 2
 
   def narrow_travel_for_left_side_panel(self) -> None:
     """Take the left side panel out of this arm's travel, if one is fitted.
@@ -374,7 +369,9 @@ class XArm:
     if not low <= current_limit <= high:
       raise ValueError(f"current_limit must be between {low} and {high}, is {current_limit}")
 
-    parameters: Dict[str, Any] = {f"{self.parameter_prefix}w": f"{current_limit:01}"}
+    parameters: Dict[str, Any] = {
+      f"{self.parameter_prefix}w": f"{current_limit:0{c.current_limit_digits}}"
+    }
     return await self._driver.send_command(
       module="X0", command="XI" if self.side == "left" else "SI", **parameters
     )
@@ -523,7 +520,7 @@ class XArm:
       parameters: Dict[str, Any] = {
         f"{p}a": f"{c.x_mm_to_increments(x):05}",
         f"{p}r": f"{acceleration_level:01}",
-        f"{p}w": f"{current_limit:01}",
+        f"{p}w": f"{current_limit:0{c.current_limit_digits}}",
       }
       resp = await self._driver.send_command(
         module="X0", command="XP" if self.side == "left" else "SP", **parameters
