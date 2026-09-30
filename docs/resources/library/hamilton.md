@@ -20,8 +20,54 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 | - | - | - |
 | 'PLT_CAR_L5AC_A00'<br>Part no.: 182090<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182090) <br>Carrier for 5x 96 Deep Well Plates or for 5x 384 tip racks (e.g.384HEAD_384TIPS_50μl) (6T) | ![](img/hamilton/PLT_CAR_L5AC_A00_182090.jpg) | `hamilton_plate_carrier_L5_ac` |
 | 'PLT_CAR_L5MD_A00'<br>Part no.: 182365/02<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Carries five ANSI/SLAS footprint MTPs in landscape orientation. Occupies six tracks.| ![](img/hamilton/182365-Plate-Carrier.webp) | `PLT_CAR_L5MD_A00` |
+| 'PLT_CAR_L5PCR'<br>Part no.: 182070<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/182070) · [archived datasheet](datasheets/hamilton/182070.pdf)<br>Carries five 96-well PCR plates in landscape orientation using 188182 adapters. Occupies six tracks. | ![](img/hamilton/PLT_CAR_L5PCR.jpg) | `PLT_CAR_L5PCR` |
 | 'PLT_CAR_P3AC'<br>Part no.: 182365/03<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Hamilton Deepwell Plate Carrier for 3 Plates (Portrait, 6 tracks wide)| ![](img/hamilton/PLT_CAR_P3AC.jpg) | `PLT_CAR_P3AC` |
 | 'PLT_CAR_L5_DWP'<br>Part no.:  93522-01/03<br>manufacturer website? <br>Hamilton Plate Carrier for 5 Plates (Landscape, 6 tracks wide). Plastic tabs. | ![](img/hamilton/PLT_CAR_L5_DWP.jpg) | `PLT_CAR_L5_DWP` |
+
+#### 182070 PCR carrier with 188182 adapters
+
+`PLT_CAR_L5PCR` has five empty adapter sites by default. Pass `with_adapters=True` to
+mount five separate `Hamilton_96_adapter_188182` instances, named `{name}_adapter_0`
+through `{name}_adapter_4`. Assign PCR plates to those adapters:
+
+```python
+from pylabrobot.resources import (
+  PLT_CAR_L5PCR,
+  Eppendorf_96_wellplate_250ul_Vb,
+  Hamilton_96_adapter_188182,
+  PlateAdapter,
+  STARLetDeck,
+)
+
+deck = STARLetDeck()
+carrier = PLT_CAR_L5PCR("pcr", with_adapters=True)
+deck.assign_child_resource(carrier, track=1)
+
+adapter = carrier[0].resource
+assert isinstance(adapter, PlateAdapter)
+plate = Eppendorf_96_wellplate_250ul_Vb("pcr_plate")
+adapter.assign_child_resource(plate)
+
+# Alternatively, populate only the sites you need on an empty carrier.
+bare_carrier = PLT_CAR_L5PCR("bare_pcr")
+bare_carrier[0] = Hamilton_96_adapter_188182("single_adapter")
+```
+
+The measured bare support height is **105.59 mm** above the carrier's rail datum.
+The first adapter's **H1 hole center** is measured at **17.22 mm** from the carrier's
+left edge and **20.50 mm** from its front edge. H1 is the front-left hole in the
+unrotated adapter. Its center is 4.70/5.90 mm from the adapter's left/front edges,
+so the adapter origin is **12.52/14.60 mm** from the carrier edges.
+The confirmed **75 mm** adapter length and measured **20.3 mm** clear gap give a
+**95.3 mm** pitch: adapter front offsets are 14.60, 109.90, 205.20, 300.50, and 395.80 mm.
+Each site represents the adapter's 110 × 75 mm footprint at the support surface, with
+no additional placement offset or sinking. On a STARlet, track placement adds the
+deck's 100 mm Z datum, putting the adapter bottoms at Z = 205.59 mm.
+
+The carrier's 135 × 497 mm footprint is inherited from the existing definition;
+the datasheet supplies no dimensions. The 188182 adapter's geometry is reused,
+including its existing estimates for plate seating; these carrier measurements do
+not calibrate the height of a plate seated in the adapter.
 
 ### MFX carriers
 

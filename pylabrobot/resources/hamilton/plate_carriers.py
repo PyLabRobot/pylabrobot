@@ -6,6 +6,7 @@ from pylabrobot.resources.carrier import (
   PlateHolder,
   create_homogeneous_resources,
 )
+from pylabrobot.resources.hamilton.plate_adapters import Hamilton_96_adapter_188182
 
 
 def PLT_CAR_L4_HHS_ALT_A00(name: str) -> PlateCarrier:
@@ -254,28 +255,52 @@ def PLT_CAR_L5MD_A00(name: str) -> PlateCarrier:
   )
 
 
-def PLT_CAR_L5PCR(name: str) -> PlateCarrier:
-  """ """
-  return PlateCarrier(
+def PLT_CAR_L5PCR(name: str, *, with_adapters: bool = False) -> PlateCarrier:
+  """Hamilton 182070 carrier for five 96-well PCR plates in landscape orientation (6 tracks).
+
+  Sites locate the bottom of a ``Hamilton_96_adapter_188182``. The bare support surface is
+  105.59 mm above the carrier's rail datum. The first H1 hole center is measured at
+  17.22/20.50 mm from the carrier's left/front edges. Subtracting the adapter's H1 center
+  offsets gives an adapter origin of 12.52/14.60 mm. The 95.3 mm pitch is the adapter's
+  75 mm length plus a measured 20.3 mm gap.
+  The carrier's 135 x 497 mm footprint is inherited geometry, not specified by the datasheet.
+
+  https://www.hamiltoncompany.com/other-robotics/182070
+  Archived datasheet: ``docs/resources/library/datasheets/hamilton/182070.pdf``.
+
+  Args:
+    name: The carrier name.
+    with_adapters: Mount five independent 188182 adapters. Defaults to empty sites.
+  """
+  support_height = 105.59  # measured from the rail datum to the bare support surface
+  # H1 center offsets within Hamilton_96_adapter_188182 are dx/dy plus half the hole size.
+  adapter_x = 17.22 - (1.0 + 7.4 / 2)  # measured carrier-to-H1 center minus adapter offset
+  first_adapter_y = 20.50 - (2.2 + 7.4 / 2)  # measured carrier-to-H1 center minus adapter offset
+  adapter_length = 75.0  # from Hamilton_96_adapter_188182
+  adapter_gap = 20.3  # measured clear gap between adjacent adapters
+  carrier = PlateCarrier(
     name=name,
-    size_x=135.0,
-    size_y=497.0,
-    size_z=130.0,
+    size_x=135.0,  # inherited carrier footprint
+    size_y=497.0,  # inherited carrier footprint
+    size_z=support_height,
     sites=create_homogeneous_resources(
       klass=PlateHolder,
       locations=[
-        Coordinate(4.0, 8.5, 107.5),
-        Coordinate(4.0, 104.5, 107.5),
-        Coordinate(4.0, 200.5, 107.5),
-        Coordinate(4.0, 296.5, 107.5),
-        Coordinate(4.0, 392.5, 107.5),
+        Coordinate(adapter_x, first_adapter_y + i * (adapter_length + adapter_gap), support_height)
+        for i in range(5)  # number of positions from spec
       ],
-      resource_size_x=127.0,
-      resource_size_y=86.0,
+      resource_size_x=110.0,  # adapter footprint from Hamilton_96_adapter_188182
+      resource_size_y=adapter_length,
+      resource_size_z=0.0,  # sites represent the adapter support plane
       name_prefix=name,
+      pedestal_size_z=0.0,  # adapters rest on the support plane without sinking
     ),
     model="PLT_CAR_L5PCR",
   )
+  if with_adapters:
+    for i in carrier.sites:
+      carrier[i] = Hamilton_96_adapter_188182(f"{name}_adapter_{i}")
+  return carrier
 
 
 def PLT_CAR_L5PCR_A00(name: str) -> PlateCarrier:
