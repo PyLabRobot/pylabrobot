@@ -111,6 +111,8 @@ them in step. A driver given no deck models nothing and still drives.
 file. Against a simulated device it stands in for the device; against a physical one it is
 cross-checked against what answers, on what is fitted and how much of it, and setup refuses if they
 disagree. Values that come from a drive's documentation rather than from a device stay in the code.
+The ones the firmware version decides are listed in the class's `firmware_variable` and written in
+a `firmware_variable` block beside the fields: shown, never read back, and checked against the code.
 
 **P14. The simulator overrides only what would reach the wire.** One subclass per feature, each
 implementing `answer` from the model; everything above it - discovery, the initialization order,

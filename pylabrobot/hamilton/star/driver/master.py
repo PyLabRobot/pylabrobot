@@ -86,6 +86,19 @@ def _range(values: Optional[Tuple[float, float]]) -> str:
   return "unresolved" if values is None else f"{values[0]} to {values[1]} mm"
 
 
+def _serialize_configuration(configuration: Any) -> Dict[str, Any]:
+  """A configuration's fields, and the values its firmware version decides."""
+  saved = cast(Dict[str, Any], serialize(dataclasses.asdict(configuration)))
+  for field in dataclasses.fields(configuration):
+    value = getattr(configuration, field.name)
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+      saved[field.name] = _serialize_configuration(value)
+  names = getattr(configuration, "firmware_variable", ())
+  if names:
+    saved["firmware_variable"] = serialize({name: getattr(configuration, name) for name in names})
+  return saved
+
+
 class STARDriver:
   """Interface for the Hamilton STARDriver."""
 
@@ -1543,12 +1556,12 @@ class STARDriver:
       raise RuntimeError("nothing has been read off this device; call `setup` first")
 
     saved: Dict[str, Any] = {
-      "device": serialize(dataclasses.asdict(self.configuration)),
+      "device": _serialize_configuration(self.configuration),
       "arms": {},
     }
     for arm in self.arms:
       carried = {
-        name: serialize(dataclasses.asdict(feature.configuration))
+        name: _serialize_configuration(feature.configuration)
         for name, feature in (
           ("pipettes", arm.pipettes),
           ("head96", arm.head96),
@@ -1560,7 +1573,7 @@ class STARDriver:
       if carried:
         saved["arms"][arm.side] = carried
     if self.autoload is not None:
-      saved["autoload"] = serialize(dataclasses.asdict(self.autoload.configuration))
+      saved["autoload"] = _serialize_configuration(self.autoload.configuration)
     return saved
 
   def save_configuration(self, path: str, indent: Optional[int] = 2) -> None:

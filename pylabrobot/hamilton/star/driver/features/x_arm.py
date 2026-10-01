@@ -4,7 +4,7 @@ import dataclasses
 import datetime
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, Literal, Optional, Tuple, cast
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.resources.coordinate import Coordinate
@@ -71,6 +71,8 @@ class XArmConfiguration:
   acceleration_level_range: Tuple[int, int] = (1, 5)  # index into five curves, not a rate
   acceleration_level_default: int = 4
   current_limit_default: int = 7
+
+  firmware_variable: ClassVar[Tuple[str, ...]] = ("current_limit_range", "current_limit_digits")
 
   @property
   def current_limit_digits(self) -> int:

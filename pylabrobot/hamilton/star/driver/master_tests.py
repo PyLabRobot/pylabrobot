@@ -193,7 +193,7 @@ def keys_no_field_reads(saved: dict, configuration: object) -> List[str]:
     Every key with no field to read it into, as a dotted path from `saved`.
   """
   fields = {field.name: field for field in dataclasses.fields(configuration)}  # type: ignore[arg-type]
-  dropped = [key for key in saved if key not in fields]
+  dropped = [key for key in saved if key not in fields and key != "firmware_variable"]
   for key, value in saved.items():
     nested = getattr(configuration, key, None)
     if key in fields and isinstance(value, dict) and dataclasses.is_dataclass(nested):
@@ -201,9 +201,34 @@ def keys_no_field_reads(saved: dict, configuration: object) -> List[str]:
   return dropped
 
 
+def firmware_variable_mismatches(saved: dict, configuration: object) -> List[str]:
+  """Every `firmware_variable` value a saved configuration holds that the code does not give.
+
+  Args:
+    saved: the configuration as JSON holds it.
+    configuration: what reading it back built.
+
+  Returns:
+    Every mismatched or missing name, as a dotted path from `saved`.
+  """
+  names = getattr(configuration, "firmware_variable", ())
+  block = saved.get("firmware_variable", {})
+  wrong = [
+    f"firmware_variable.{name}"
+    for name in sorted(set(names) | set(block))
+    if name not in names or block.get(name) != serialize(getattr(configuration, name))
+  ]
+  for key, value in saved.items():
+    nested = getattr(configuration, key, None)
+    if isinstance(value, dict) and dataclasses.is_dataclass(nested):
+      wrong += [f"{key}.{inner}" for inner in firmware_variable_mismatches(value, nested)]
+  return wrong
+
+
 class TestRecordings(unittest.TestCase):
-  """What ships under recordings/ is read back whole: no key a configuration no longer has, and no
-  window left empty for a head to be built on."""
+  """What ships under recordings/ is read back whole: no key a configuration no longer has, every
+  `firmware_variable` value what the code gives, and no window left empty for a head to be built
+  on."""
 
   def test_every_key_is_a_field(self):
     for path in sorted(pathlib.Path(RECORDING_STAR).parent.glob("*.json")):
@@ -220,6 +245,7 @@ class TestRecordings(unittest.TestCase):
       for where, value, configuration in sections:
         with self.subTest(recording=path.name, section=where):
           self.assertEqual(keys_no_field_reads(value, configuration), [])
+          self.assertEqual(firmware_variable_mismatches(value, configuration), [])
 
   def test_every_head_has_a_z_range(self):
     for path in sorted(pathlib.Path(RECORDING_STAR).parent.glob("*.json")):
@@ -251,6 +277,14 @@ class TestDeclaredConfiguration(unittest.IsolatedAsyncioTestCase):
     )
     with self.assertRaisesRegex(ValueError, "autoload_installed"):
       await star.setup()
+
+  async def test_a_saved_arm_carries_its_firmware_variable_values(self):
+    star = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    await star.setup()
+    self.assertEqual(
+      star._saved_configuration()["device"]["left_arm"]["firmware_variable"],
+      {"current_limit_range": [0, 7], "current_limit_digits": 1},
+    )
 
 
 class TestRepeatedSetup(unittest.IsolatedAsyncioTestCase):
