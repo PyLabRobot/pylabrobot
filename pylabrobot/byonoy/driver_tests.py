@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.byonoy.driver import (
   _GENERIC_ERROR_NAMES,
@@ -10,8 +11,35 @@ from pylabrobot.byonoy.driver import (
   Abs96StatusError,
   ByonoyDevice,
   ByonoyDriver,
+  ByonoySlotState,
   encode_well_bitmask,
 )
+from pylabrobot.io.binary import Writer
+
+
+class StatusTests(unittest.IsolatedAsyncioTestCase):
+  """Verify status decoding with mocked device responses."""
+
+  async def test_firmware_slot_codes_are_translated_to_public_states(self) -> None:
+    """Translate firmware slot codes without disturbing adjacent status fields."""
+    for code, expected in (
+      (0, ByonoySlotState.EMPTY),
+      (1, ByonoySlotState.OCCUPIED),
+      (2, ByonoySlotState.UNDETERMINED),
+      (3, ByonoySlotState.UNKNOWN),
+      (255, ByonoySlotState.UNKNOWN),
+    ):
+      with self.subTest(code=code):
+        response = Writer().u16(0x0300).u8(0).u8(code).u8(1).u32(232).u8(0).u8(1).finish()
+        driver = ByonoyDriver.__new__(ByonoyDriver)
+        with patch.object(driver, "send_command", new=AsyncMock(return_value=response)):
+          status = await driver.request_status()
+        self.assertEqual(status.slot_state, expected)
+        self.assertFalse(status.is_initialized)
+        self.assertEqual(status.error_code, 1)
+        self.assertEqual(status.uptime_s, 232)
+        self.assertFalse(status.is_measuring)
+        self.assertTrue(status.boot_completed)
 
 
 class EncodeWellBitmaskTests(unittest.TestCase):

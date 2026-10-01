@@ -243,9 +243,16 @@ class ByonoyDriver(metaclass=ABCMeta):
     )
     assert response is not None
     r = Reader(response[2:])
+    is_initialized = r.u8() != 0
+    # The HID slot_status codes differ from the SDK's public slot-state enum.
+    slot_state = {
+      0: ByonoySlotState.EMPTY,
+      1: ByonoySlotState.OCCUPIED,
+      2: ByonoySlotState.UNDETERMINED,
+    }.get(r.u8(), ByonoySlotState.UNKNOWN)
     return ByonoyStatus(
-      is_initialized=r.u8() != 0,
-      slot_state=ByonoySlotState(r.u8()),
+      is_initialized=is_initialized,
+      slot_state=slot_state,
       error_code=r.u8(),
       uptime_s=r.u32(),
       is_measuring=r.u8() != 0,
