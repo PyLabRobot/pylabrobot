@@ -69,7 +69,7 @@ Sometimes called "reagent carriers" in Hamilton jargon.
 
 | Description | Image | PLR definition |
 | - | - | - |
-| 'Hamilton_96_adapter_182531'<br>Part no.: 182531<br>PCR insert for the [182070 carrier](https://www.hamiltoncompany.com/other-robotics/182070). 110 × 75 × 15 mm, with a 12 × 8 hole grid at 9 mm spacing. Geometry and image derived from the [Hamilton 3D model](datasheets/hamilton/PLT_CAR_L5PCR_A00.x). | ![](img/hamilton/Hamilton_96_adapter_182531.jpg) | `Hamilton_96_adapter_182531` |
+| 'Hamilton_96_adapter_182531'<br>Part no.: 182531<br>PCR insert for the [182070 carrier](https://www.hamiltoncompany.com/other-robotics/182070). 110 × 75 × 15 mm, with a 12 × 8 hole grid at 9 mm spacing. Geometry and image derived from Hamilton's 3D model. | ![](img/hamilton/Hamilton_96_adapter_182531.jpg) | `Hamilton_96_adapter_182531` |
 | 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | ![](img/hamilton/hamilton_96_adapter_188182.png) | `Hamilton_96_adapter_188182` |
 
 ## Consumables

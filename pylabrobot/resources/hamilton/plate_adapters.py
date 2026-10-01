@@ -6,8 +6,7 @@ from pylabrobot.resources.plate_adapter import PlateAdapter
 def Hamilton_96_adapter_182531(name: str) -> PlateAdapter:
   """Hamilton 182531 PCR insert for the 182070 landscape carrier.
 
-  Geometry is derived from the five ``182531_RNO`` meshes in Hamilton's
-  ``PLT_CAR_L5PCR_A00.x``, archived under ``docs/resources/library/datasheets/hamilton/``.
+  Geometry is derived from the five ``182531_RNO`` meshes in Hamilton's 3D model.
   The 12 x 8 hole grid has 9 mm spacing; H1 is 5.5/6.0 mm from the left/front edges.
   The mesh's top opening diameter is approximately 7.732 mm, and its cavity bottom
   is 1.951 mm above the insert base, giving a 13.049 mm cavity depth.

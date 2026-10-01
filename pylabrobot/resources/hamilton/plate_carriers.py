@@ -291,16 +291,14 @@ def PLT_CAR_L5PCR(name: str, *, with_adapters: bool = False) -> PlateCarrier:
   # bare_carrier[0] = Hamilton_96_adapter_182531("single_adapter")
   #
   # Geometry:
-  # Hamilton's VENUS template and accompanying 3D model are archived at:
-  # docs/resources/library/datasheets/hamilton/PLT_CAR_L5PCR_A00.tml
-  # docs/resources/library/datasheets/hamilton/PLT_CAR_L5PCR_A00.x
-  # The carrier datasheet is archived in the same directory as 182070.pdf.
-  # The template specifies a 135 x 497 x 130 mm carrier envelope and 96 mm site
-  # pitch. Its 130 mm height and clearance describe the envelope, not the insert
+  # The carrier datasheet is archived at:
+  # docs/resources/library/datasheets/hamilton/182070.pdf
+  # Hamilton's VENUS template specifies a 135 x 497 x 130 mm carrier envelope and
+  # 96 mm site pitch. Its 130 mm height and clearance describe the envelope, not the insert
   # support surface. The 75 mm inserts have 21 mm clear gaps.
   #
-  # Insert locations are derived from the model's five 182531_RNO meshes. Coordinates
-  # are referenced to the main body's left/front edges and the rail underside,
+  # Insert locations are derived from the five 182531_RNO meshes in Hamilton's 3D model.
+  # Coordinates are referenced to the main body's left/front edges and the rail underside,
   # excluding the projecting front latch. In the model's stored axes, the reference
   # is lateral X = -67, longitudinal Z = -244, and vertical Y = -12 mm. Subtracting
   # these from the first insert's minimum coordinates (-55, -229.4, 93.7 mm,
