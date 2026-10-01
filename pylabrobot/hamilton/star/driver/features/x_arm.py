@@ -20,9 +20,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# From X0 firmware 5.0 the current limiter is two digits, 00..15; below it, one digit, 0..7.
-TWO_DIGIT_CURRENT_LIMIT_FIRMWARE_MAJOR = 5
-
 
 @dataclass
 class XArmConfiguration:
@@ -73,9 +70,16 @@ class XArmConfiguration:
   x_range_increments: Tuple[int, int] = (0, 30_000)  # what the move accepts; x_range is narrower
   acceleration_level_range: Tuple[int, int] = (1, 5)  # index into five curves, not a rate
   acceleration_level_default: int = 4
-  current_limit_range: Tuple[int, int] = (0, 7)
   current_limit_default: int = 7
-  current_limit_digits: int = 1
+
+  @property
+  def current_limit_digits(self) -> int:
+    major = (self.firmware_version or "").split(".", 1)[0]
+    return 2 if major.isdigit() and int(major) >= 5 else 1
+
+  @property
+  def current_limit_range(self) -> Tuple[int, int]:
+    return (0, 15) if self.current_limit_digits == 2 else (0, 7)
 
   def with_device_facts_of(self, other: "XArmConfiguration") -> "XArmConfiguration":
     """This configuration, with the device facts of another in place of its own.
@@ -95,9 +99,7 @@ class XArmConfiguration:
       x_range_increments=other.x_range_increments,
       acceleration_level_range=other.acceleration_level_range,
       acceleration_level_default=other.acceleration_level_default,
-      current_limit_range=other.current_limit_range,
       current_limit_default=other.current_limit_default,
-      current_limit_digits=other.current_limit_digits,
     )
 
   # -- conversions: the wire counts in steps, the driver speaks mm ---------------------------
@@ -319,10 +321,6 @@ class XArm:
     """Read what this arm is. Read-only: nothing moves."""
     version, _ = await self.request_firmware_version()
     self.configuration.firmware_version = version
-    major = version.split(".", 1)[0]
-    if major.isdigit() and int(major) >= TWO_DIGIT_CURRENT_LIMIT_FIRMWARE_MAJOR:
-      self.configuration.current_limit_range = (0, 15)
-      self.configuration.current_limit_digits = 2
 
   def narrow_travel_for_left_side_panel(self) -> None:
     """Take the left side panel out of this arm's travel, if one is fitted.

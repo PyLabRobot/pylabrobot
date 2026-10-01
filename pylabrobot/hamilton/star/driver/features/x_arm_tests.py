@@ -326,11 +326,11 @@ class TestConfiguringAnArm(unittest.IsolatedAsyncioTestCase):
   async def test_what_is_written_is_where_the_device_holds_it(self):
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    corrected = dataclasses.replace(arm.configuration, current_limit_range=(0, 15))
+    corrected = dataclasses.replace(arm.configuration, current_limit_default=3)
 
     arm.configuration = corrected
 
-    self.assertEqual(arm.configuration.current_limit_range, (0, 15))
+    self.assertEqual(arm.configuration.current_limit_default, 3)
     self.assertIs(cast(DeviceConfiguration, driver.configuration).left_arm, corrected)
 
   async def test_the_constructor_takes_one_too(self):
@@ -367,14 +367,11 @@ class TestConfiguringAnArm(unittest.IsolatedAsyncioTestCase):
     """What a physical device's discovery does with a configured arm. It rebuilds one from the
     reply, then takes the device facts off the arm as it was configured: those are what no device
     answers, so a re-read must not put them back to what this generation documents."""
-    configured = dataclasses.replace(
-      BARE_X_ARM, current_limit_range=(0, 15), current_limit_default=15
-    )
+    configured = dataclasses.replace(BARE_X_ARM, current_limit_default=15)
     answered = dataclasses.replace(BARE_X_ARM, width=354.0, x_range=(95.0, 1340.2))
 
     kept = answered.with_device_facts_of(configured)
 
-    self.assertEqual(kept.current_limit_range, (0, 15))
     self.assertEqual(kept.current_limit_default, 15)
     self.assertEqual(kept.width, 354.0)
     self.assertEqual(kept.x_range, (95.0, 1340.2))
