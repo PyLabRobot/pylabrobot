@@ -37,9 +37,9 @@ hand one its configuration before setup and re-running setup does not throw it a
 
 **P3. Every feature has a `.configuration` dataclass, and it holds facts only.** Three kinds, in
 this order: what the device answered about itself, per-machine calibration, and the device facts of
-that generation of drive - encoder resolutions, the ranges each drive accepts, and the firmware's
-own defaults. What the driver chooses to send is not a fact about the device and does not go here
-(P18). `DeviceConfiguration` in `driver/configuration.py` is the same thing for the device.
+that generation of drive - encoder resolutions and the ranges each drive accepts. A default is not a
+fact and does not go here, not even the firmware's own (P18). `DeviceConfiguration` in
+`driver/configuration.py` is the same thing for the device.
 
 **P4. The wire counts in increments; this driver speaks mm, degrees, uL and seconds.** Every
 conversion is a method on the configuration - `x_increments_to_mm` / `x_mm_to_increments` - so the
@@ -130,7 +130,8 @@ that a constant already holds are referenced by name rather than repeated.
 **P18. The driver's defaults are public `default_*` attributes on the feature.** Declared on the
 class with a type, in standard units, round, and slightly below the firmware's own default. A
 caller tunes one device by assigning on the instance, or every device by assigning on the class.
-Named `default_<quantity>[_<condition>]`: `default_y_speed`, `default_z_speed`.
+Named `default_<quantity>[_<condition>]`: `default_y_speed`, `default_z_speed`. Never on the
+configuration.
 
 **P19. A probe names its speeds for what they do.** `search_speed` is the speed it searches at;
 `approach_speed` is the speed to where the search starts, where the command has one. Never a bare
@@ -185,7 +186,7 @@ the Prep's.
    the oldest of the configurations and reads like the document it was transcribed from rather than
    like the rest of them.
 
-8. **The driver's defaults still live in the configurations.** `Head`, `Head384`, `iSWAP`,
-   `Autoload` and `XArm` keep them as `*_default` / `*_default_increments` fields, some in
-   increments, and `Pipettes` keeps a few there. `Head96` and `CoreGrippers` follow P18; the rest
-   move over one feature at a time.
+8. **The driver's defaults still live in the configurations.** `Head`, `Head384`, `iSWAP` and
+   `Autoload` keep them as `*_default` / `*_default_increments` fields, some in increments, and
+   `Pipettes` keeps a few there. `Head96`, `CoreGrippers` and `XArm` follow P18; the rest move over
+   one feature at a time.
