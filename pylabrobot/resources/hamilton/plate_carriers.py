@@ -261,8 +261,6 @@ def PLT_CAR_L5PCR(name: str, *, with_adapters: bool = False) -> PlateCarrier:
   https://www.hamiltoncompany.com/other-robotics/182070
 
   Geometry:
-  The carrier datasheet is archived at:
-  docs/resources/library/datasheets/hamilton/182070.pdf
   Hamilton's VENUS template specifies a 135 x 497 x 130 mm carrier envelope and
   96 mm site pitch. Its 130 mm height and clearance describe the envelope, not the insert
   support surface. The 75 mm inserts have 21 mm clear gaps.
