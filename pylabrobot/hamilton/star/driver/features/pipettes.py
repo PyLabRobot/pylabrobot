@@ -1303,16 +1303,16 @@ class Pipettes:
   async def move_to_x_position(
     self,
     x: float,
-    acceleration_level: int = 3,
-    current_limit: int = 7,
+    acceleration_level: Optional[int] = None,
+    current_limit: Optional[int] = None,
     settle_reads: int = 20,
   ):
     """Move the channels along X. The whole arm travels, with everything else it carries.
 
     Args:
       x: where to go, in mm.
-      acceleration_level: how hard to accelerate, 1 to 4.
-      current_limit: the motor current limit, 1 to 7.
+      acceleration_level: how hard to accelerate. Defaults to the X-arm that holds the pipettes.
+      current_limit: the motor current limit. Defaults to the X-arm that holds the pipettes.
       settle_reads: how many reads to take before calling the arm stopped.
 
     Raises:
