@@ -1650,6 +1650,25 @@
     "oem": "https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico"
   },
   {
+    "id": "molecular-devices-filtermax-f5",
+    "vendor": "Molecular Devices",
+    "name": "FilterMax F5",
+    "kind": "plate reader",
+    "capabilities": [
+      "absorbance",
+      "heating",
+      "luminescence",
+      "shaking"
+    ],
+    "status": "basic",
+    "api": "pylabrobot.molecular_devices.filtermax.FilterMaxF5",
+    "api_version": "v1",
+    "code_slug": "molecular_devices/filtermax",
+    "doc_slug": "molecular_devices/filtermax/hello-world",
+    "notes": "Directly validated for controls, absorbance, luminescence, kinetics, shaking, cancellation recovery, and well scans; fluorescence, FP, and TRF await an excitation slide with those filters.",
+    "oem": "https://www.moleculardevices.com/sites/default/files/en/assets/user-guide/br/filtermax-user-guide-5016208e.pdf"
+  },
+  {
     "id": "molecular-devices-spectramax-384plus",
     "vendor": "Molecular Devices",
     "name": "SpectraMax 384 Plus",
