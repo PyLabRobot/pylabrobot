@@ -17,6 +17,9 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   ASSAY_DEFINITION_LENGTH,
   FLAG_USE_TOTAL_KINETIC_TIME,
   KINETIC_FLAGS,
+  MAX_WAVELENGTH,
+  MIN_WAVELENGTH,
+  ORDER_SORTING_FILTER_BANDS,
   OVERRANGE,
   ELX_ERRORS,
   SCAN_WHOLE_STRIP,
@@ -1761,6 +1764,31 @@ class TestScanRequestEncoding(unittest.TestCase):
     self.assertEqual(scan_wavelengths(400, 450, 10), [400, 410, 420, 430, 440, 450])
     # the stop is included only when the step lands on it
     self.assertEqual(scan_wavelengths(400, 425, 10), [400, 410, 420])
+
+
+class TestOrderSortingFilterBands(unittest.TestCase):
+  """The recorded order-sorting filter bands, page-less and unverified.
+
+  Nothing selects these, so the only thing worth testing is that the table itself
+  is coherent and still says what the far-UV findings rely on.
+  """
+
+  def test_bands_are_contiguous_and_cover_the_whole_range(self):
+    edges = sorted(ORDER_SORTING_FILTER_BANDS)
+    self.assertEqual(edges[0][0], MIN_WAVELENGTH)
+    self.assertEqual(edges[-1][1], MAX_WAVELENGTH)
+    for (_, upper), (lower, _) in zip(edges, edges[1:]):
+      self.assertEqual(lower, upper + 1)  # no gap, no overlap
+
+  def test_the_far_uv_probes_share_one_band(self):
+    # The claim abs_wavelength_range makes: the wheel cannot explain why 205 nm
+    # abandons a read while 215 nm does not.
+    bands = {
+      next(band for band in ORDER_SORTING_FILTER_BANDS if band[0] <= wl <= band[1])
+      for wl in (200, 205, 215)
+    }
+    self.assertEqual(len(bands), 1)
+    self.assertEqual(ORDER_SORTING_FILTER_BANDS[bands.pop()], "open (no filter)")
 
 
 class TestScanResponseParsing(unittest.TestCase):

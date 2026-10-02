@@ -332,6 +332,10 @@ class PowerWaveX:
       reported ``[205]`` alone, 200 and 210 being already done. Nothing below
       200 nm has been probed.
 
+      The order-sorting filter wheel is not the cause: 200, 205 and 215 nm share a
+      single band, so it sits in the same position whether the read faults or
+      not. See :data:`._protocol.ORDER_SORTING_FILTER_BANDS`.
+
       One scan per power-on is enough. The per-wavelength calibration survives
       both HALT and a full self-test - each was tried, and a following scan
       reported nothing left to calibrate - so it is only lost when the

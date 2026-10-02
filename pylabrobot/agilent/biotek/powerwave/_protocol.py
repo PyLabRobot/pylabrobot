@@ -230,6 +230,34 @@ WAVELENGTH_TABLE_LENGTH = 4 * MAX_WAVELENGTHS  # "550,620,665,520,450,595," - no
 MIN_WAVELENGTH = 200
 MAX_WAVELENGTH = 999
 
+#: Which order-sorting filter the monochromator uses for each wavelength band.
+#:
+#: Nothing here is selectable. The instrument picks the position itself from the
+#: wavelength asked for: no computer-control command chooses it, and the wheel
+#: surfaces over the serial port only as motor 1 in fault codes, such as
+#: :data:`SELF_TEST_ERRORS` ``"0201"`` for a wheel that cannot find home. Note
+#: that ``0F11``, the code a far-UV read latches, is *not* about this wheel - its
+#: ``<filter>`` digit is the assay's wavelength slot, as in ``0E00``.
+#:
+#: Recorded because it is useful for reasoning about faults, which is all it is
+#: good for. These edges come from third-party PowerWave documentation rather than
+#: manual revision D2, and cannot be checked from here: nothing reports the
+#: current position, and a wheel move is far too quick to time over a 9600 baud
+#: line. Treat them as unverified.
+#:
+#: They do settle one question. 200, 205 and 215 nm all fall in the first band, so
+#: the wheel sits in the same position for the far-UV wavelengths that abandon a
+#: read and for the one that reads normally, which rules it out as the cause. See
+#: :attr:`.PowerWaveX.abs_wavelength_range`.
+ORDER_SORTING_FILTER_BANDS: Dict[Tuple[int, int], str] = {
+  (200, 241): "open (no filter)",
+  (242, 369): "filter 1",
+  (370, 459): "filter 2",
+  (460, 569): "filter 3",
+  (570, 634): "filter 4",
+  (635, 999): "filter 5",
+}
+
 
 def parse_wavelength_table(payload: bytes) -> List[int]:
   """Parse the 24-byte wavelength setup table (page B-11).
