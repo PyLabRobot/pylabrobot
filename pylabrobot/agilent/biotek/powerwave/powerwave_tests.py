@@ -2026,6 +2026,32 @@ class TestScanPlate(unittest.IsolatedAsyncioTestCase):
       with self.assertRaises(NotImplementedError):
         await reader.scan_plate(plate, start_wavelength=400, stop_wavelength=410, step=10, column=1)
 
+  async def test_every_invalid_scan_field_is_refused_locally(self):
+    # The instrument accepts impossible fields and then hangs, so these checks
+    # are load-bearing rather than a convenience. Verified against firmware
+    # R06.20, which ACKed row 99 / column 99 / 999-200 nm / step 0 with status 000
+    # and then stopped responding.
+    plate = _plate_resource()
+    reader, fake = _reader(model="PowerWaveX")
+    base = {"start_wavelength": 400, "stop_wavelength": 500, "step": 10}
+
+    bad = [
+      ("row via a bogus column", {"column": 99}),
+      ("column 0", {"column": 0}),
+      ("step 0", {"column": 1, "step": 0}),
+      ("step beyond the span", {"column": 1, "step": 200}),
+      ("start above stop", {"column": 1, "start_wavelength": 600}),
+      ("start equal to stop", {"column": 1, "stop_wavelength": 400}),
+      ("wavelength below the range", {"column": 1, "start_wavelength": 199}),
+      ("wavelength above the range", {"column": 1, "stop_wavelength": 1000}),
+    ]
+    for label, override in bad:
+      with self.subTest(label=label):
+        with self.assertRaises(ValueError):
+          await reader.scan_plate(plate, **{**base, **override})
+
+    self.assertEqual(fake.writes, [])  # nothing reached the instrument
+
   async def test_invalid_arguments_are_rejected_before_sending(self):
     plate = _plate_resource()
     reader, fake = _reader(model="PowerWaveX")

@@ -897,8 +897,16 @@ class PowerWaveX:
 
     Raises:
       ValueError: If neither or both of ``well`` and ``column`` are given, or any
-        argument is out of range. The instrument NAKs invalid arguments, so these
-        are checked before sending.
+        argument is out of range.
+
+        These checks are the only thing standing between a caller and a hung
+        instrument, so do not relax them. The manual implies the instrument
+        rejects a bad request, but a PowerWaveX w/ Incubator (firmware R06.20)
+        does not: sent row 99, column 99, 999 to 200 nm with a step of 0, it
+        answered ACK and status ``000``, accepting every impossible field, and
+        then stopped responding - neither HALT nor any other command brought it
+        back, and it had to be recovered at the front panel. A step of 0 in
+        particular gives the firmware no way to finish sweeping.
       NotImplementedError: For a whole-strip scan of a plate that is not 8 rows;
         the manual warns against row "00" on 384-well plates.
 
