@@ -701,6 +701,32 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
       self.assertGreater(len(seen), 0, "nothing was sampled while the scene was rebuilt")
       self.assertEqual(min(seen), drawn, f"the models went away and came back: {seen}")
 
+  async def test_a_facility_framed_from_far_off_is_drawn(self):
+    """Both cameras had fixed clip planes - 20 m deep - and only the perspective one was refitted
+    when a view was framed. A lab framed whole stands further off than that, so its plan view, the
+    home button and the projection toggle drew nothing at all."""
+    lab = Facility(name="lab", size_x=14_000, size_y=22_000, size_z=3_000)
+    for i in range(4):
+      bench = Resource(name=f"bench_{i}", size_x=8_000, size_y=1_600, size_z=900, category="bench")
+      lab.assign_child_resource(bench, location=Coordinate(3_000, 2_500 + i * 5_000, 0))
+    fs_port, ws_port = free_ports(2)
+    viewer = Viewer3D(lab, open_browser=False, fs_port=fs_port, ws_port=ws_port)
+    await viewer.start()
+    try:
+      async with Browser() as browser:
+        await browser.open(viewer.url)
+        await browser.settle("window.plrViewer && window.plrViewer.resources().includes('bench_3')")
+        await browser.frames()
+        self.assertGreater(await browser.drawn_fraction("#viewport"), 0.02, "the opening plan view")
+        await browser.evaluate("document.getElementById('view-projection').click()")
+        await browser.frames()
+        self.assertGreater(await browser.drawn_fraction("#viewport"), 0.02, "after the toggle")
+        await browser.evaluate("document.getElementById('home-button').click()")
+        await browser.frames()
+        self.assertGreater(await browser.drawn_fraction("#viewport"), 0.02, "after home")
+    finally:
+      await viewer.stop()
+
 
 @unittest.skipUnless(CHROME, "no headless browser to drive")
 class SimulationTests(unittest.IsolatedAsyncioTestCase):
