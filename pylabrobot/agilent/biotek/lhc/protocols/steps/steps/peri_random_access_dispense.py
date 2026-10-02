@@ -14,7 +14,6 @@ from pylabrobot.agilent.biotek.lhc.enums.steps.peri_flow_rate import PERI_FLOW_R
 from pylabrobot.agilent.biotek.lhc.enums.steps.peri_pump import PERI_PUMP_TO_BYTE
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import i8, i16, pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import (
   PreDispense,
   WellVolumeMap,
@@ -30,6 +29,7 @@ from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.peri_dispense import (
   PERI_FLOW_RATES,
   PeriDispense,
 )
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 66
 _TAIL_FIELDS = 3
@@ -150,14 +150,16 @@ class PeriRandomAccessDispense(PeriDispense):
     """
     pump = NO_PUMP if self.peri_pump is None else PERI_PUMP_TO_BYTE[self.peri_pump]
     return pad(
-      u16(self.volume)
-      + u8(PERI_FLOW_RATE_TO_BYTE[self.flow_rate])
-      + i16(self.positioning.x_steps)
-      + i8(self.positioning.y_steps)
-      + i16(self.positioning.z_steps)
-      + u16(self.pre_dispense.wire_volume)
-      + u8(self.pre_dispense.count)
-      + bytes(value for row in self.well_volumes.values for value in row)
-      + u8(pump),
+      Writer()
+      .u16(self.volume)
+      .u8(PERI_FLOW_RATE_TO_BYTE[self.flow_rate])
+      .i16(self.positioning.x_steps)
+      .i8(self.positioning.y_steps)
+      .i16(self.positioning.z_steps)
+      .u16(self.pre_dispense.wire_volume)
+      .u8(self.pre_dispense.count)
+      .raw_bytes(bytes(value for row in self.well_volumes.values for value in row))
+      .u8(pump)
+      .finish(),
       _PAYLOAD_LENGTH,
     )

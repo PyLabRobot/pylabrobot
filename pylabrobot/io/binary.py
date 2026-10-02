@@ -20,6 +20,17 @@ import struct
 from io import BytesIO
 
 
+def pad(data: bytes, length: int) -> bytes:
+  """Append zero bytes to data until it is ``length`` bytes long.
+
+  Raises:
+    ValueError: If the data is already longer than ``length``.
+  """
+  if len(data) > length:
+    raise ValueError(f"data is {len(data)} bytes, expected at most {length}")
+  return data + bytes(length - len(data))
+
+
 class Writer:
   """Raw byte writer.
 

@@ -13,11 +13,11 @@ from pylabrobot.agilent.biotek.lhc.enums.steps.syringe_bottle import (
   SyringeBottle,
 )
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import i8, i16, pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import PreDispense
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.masks import WellMask
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.positioning import Positioning
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 25
 _WIDE_OFFSET_PAYLOAD_LENGTH = 26
@@ -151,23 +151,22 @@ class SyringeDispense(Step):
     Returns:
       The payload.
     """
+    writer = Writer().u8(SYRINGE_TO_BYTE[self.syringe] - 1).u16(self.volume).u8(self.flow_rate)
     if settings.advanced_dispense_offsets:
-      offset_x, length = i16(self.positioning.x_steps), _WIDE_OFFSET_PAYLOAD_LENGTH
+      writer.i16(self.positioning.x_steps)
+      length = _WIDE_OFFSET_PAYLOAD_LENGTH
     else:
-      offset_x, length = i8(self.positioning.x_steps), _PAYLOAD_LENGTH
-    payload = (
-      u8(SYRINGE_TO_BYTE[self.syringe] - 1)
-      + u16(self.volume)
-      + u8(self.flow_rate)
-      + offset_x
-      + i8(self.positioning.y_steps)
-      + i16(self.positioning.z_steps)
-      + u16(self.pump_delay)
-      + u16(self.pre_dispense.wire_volume)
-      + u8(self.pre_dispense.count)
-      + self.columns.to_bytes()
-      + u8(SYRINGE_BOTTLE_TO_BYTE[self.syringe_bottle] - 1)
+      writer.i8(self.positioning.x_steps)
+      length = _PAYLOAD_LENGTH
+    (
+      writer.i8(self.positioning.y_steps)
+      .i16(self.positioning.z_steps)
+      .u16(self.pump_delay)
+      .u16(self.pre_dispense.wire_volume)
+      .u8(self.pre_dispense.count)
+      .raw_bytes(self.columns.to_bytes())
+      .u8(SYRINGE_BOTTLE_TO_BYTE[self.syringe_bottle] - 1)
     )
     if self.selects_rows:
-      payload += self.rows.to_bytes_inverted()
-    return pad(payload, length)
+      writer.raw_bytes(self.rows.to_bytes_inverted())
+    return pad(writer.finish(), length)

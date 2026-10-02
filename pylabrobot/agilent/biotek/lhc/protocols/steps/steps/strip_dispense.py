@@ -8,7 +8,6 @@ from typing import ClassVar
 from pylabrobot.agilent.biotek.lhc.devices.instrument_settings import InstrumentSettings
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import i8, i16, pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import (
   PreDispense,
@@ -16,6 +15,7 @@ from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import (
 )
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.masks import WellMask
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.positioning import Positioning
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 27
 _IN_WASH_PAYLOAD_LENGTH = 20
@@ -146,15 +146,17 @@ class StripDispense(Step):
     """
     pre_dispensing = self.pre_dispense.enabled or self.force_pre_dispense
     payload = (
-      u16(self.volume)
-      + u8(self.flow_rate)
-      + i16(self.positioning.x_steps)
-      + i8(self.positioning.y_steps)
-      + i16(self.positioning.z_steps)
-      + u16(self.pre_dispense.volume if pre_dispensing else 0)
-      + u8(self.pre_dispense.flow_rate if self.in_wash else self.flow_rate)
-      + u8(self.pre_dispense.count)
-      + u16(self.vacuum.wire_volume)
+      Writer()
+      .u16(self.volume)
+      .u8(self.flow_rate)
+      .i16(self.positioning.x_steps)
+      .i8(self.positioning.y_steps)
+      .i16(self.positioning.z_steps)
+      .u16(self.pre_dispense.volume if pre_dispensing else 0)
+      .u8(self.pre_dispense.flow_rate if self.in_wash else self.flow_rate)
+      .u8(self.pre_dispense.count)
+      .u16(self.vacuum.wire_volume)
+      .finish()
     )
     if self.in_wash:
       return pad(payload, _IN_WASH_PAYLOAD_LENGTH)

@@ -10,9 +10,9 @@ from pylabrobot.agilent.biotek.lhc.enums.steps.shake_axis import SHAKE_AXIS_TO_B
 from pylabrobot.agilent.biotek.lhc.enums.steps.shake_intensity import SHAKE_INTENSITY_TO_BYTE
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import Shake, Soak
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 11
 _DEFINITION_FIELDS = 8
@@ -96,10 +96,12 @@ class ShakeSoak(Step):
       The payload.
     """
     return pad(
-      u8(1 if (self.move_carrier_home and self.enabled) else 0)
-      + u16(self.shake.wire_duration if self.enabled else 0)
-      + u8(SHAKE_INTENSITY_TO_BYTE[self.shake.intensity])
-      + u8(SHAKE_AXIS_TO_BYTE[self.shake.axis])
-      + u16(self.soak.wire_duration if self.enabled else 0),
+      Writer()
+      .u8(1 if (self.move_carrier_home and self.enabled) else 0)
+      .u16(self.shake.wire_duration if self.enabled else 0)
+      .u8(SHAKE_INTENSITY_TO_BYTE[self.shake.intensity])
+      .u8(SHAKE_AXIS_TO_BYTE[self.shake.axis])
+      .u16(self.soak.wire_duration if self.enabled else 0)
+      .finish(),
       _PAYLOAD_LENGTH,
     )

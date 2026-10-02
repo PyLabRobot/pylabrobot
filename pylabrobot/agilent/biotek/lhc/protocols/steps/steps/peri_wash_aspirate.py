@@ -9,10 +9,10 @@ from pylabrobot.agilent.biotek.lhc.devices.instrument_settings import Instrument
 from pylabrobot.agilent.biotek.lhc.enums.steps.peri_pump import PERI_PUMP_TO_BYTE, PeriPump
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import i8, i16, pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.masks import WellMask
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.positioning import Positioning
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 22
 _DEFINITION_FIELDS = 9
@@ -109,13 +109,15 @@ class PeriWashAspirate(Step):
     """
     pump = _NO_PUMP if self.peri_pump is None else PERI_PUMP_TO_BYTE[self.peri_pump]
     return pad(
-      u16(self.volume)
-      + u8(self.flow_rate)
-      + i16(self.positioning.x_steps)
-      + i8(self.positioning.y_steps)
-      + i16(self.positioning.z_steps)
-      + self.columns.to_bytes()
-      + self.rows.to_bytes_inverted()
-      + u8(pump),
+      Writer()
+      .u16(self.volume)
+      .u8(self.flow_rate)
+      .i16(self.positioning.x_steps)
+      .i8(self.positioning.y_steps)
+      .i16(self.positioning.z_steps)
+      .raw_bytes(self.columns.to_bytes())
+      .raw_bytes(self.rows.to_bytes_inverted())
+      .u8(pump)
+      .finish(),
       _PAYLOAD_LENGTH,
     )

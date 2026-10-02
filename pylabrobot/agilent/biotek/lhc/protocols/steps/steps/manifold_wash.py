@@ -10,12 +10,12 @@ from pylabrobot.agilent.biotek.lhc.devices.instrument_settings import Instrument
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.enums.steps.wash_format import WASH_FORMAT_TO_BYTE, WashFormat
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import Sectors, WashStages
 from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.manifold_aspirate import ManifoldAspirate
 from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.manifold_dispense import ManifoldDispense
 from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.shake_soak import ShakeSoak
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 101
 _DEFINITION_FIELDS = 9
@@ -148,15 +148,17 @@ class ManifoldWash(Step):
     final_aspirate = dataclasses.replace(self.final_aspirate, in_wash=True)
     shake_soak = dataclasses.replace(self.shake_soak, enabled=self.stages.shake_soak_after_dispense)
     return pad(
-      u8(1 if self.stages.bottom_wash else 0)
-      + u8(1 if self.stages.final_aspirate else 0)
-      + u8(WASH_FORMAT_TO_BYTE[self.wash_format])
-      + u16(self.sectors.value)
-      + u8(self.cycles)
-      + bottom_wash.to_bytes(settings)
-      + final_aspirate.to_bytes(settings)
-      + aspirate.to_bytes(settings)
-      + dispense.to_bytes(settings)
-      + shake_soak.to_bytes(settings),
+      Writer()
+      .u8(1 if self.stages.bottom_wash else 0)
+      .u8(1 if self.stages.final_aspirate else 0)
+      .u8(WASH_FORMAT_TO_BYTE[self.wash_format])
+      .u16(self.sectors.value)
+      .u8(self.cycles)
+      .raw_bytes(bottom_wash.to_bytes(settings))
+      .raw_bytes(final_aspirate.to_bytes(settings))
+      .raw_bytes(aspirate.to_bytes(settings))
+      .raw_bytes(dispense.to_bytes(settings))
+      .raw_bytes(shake_soak.to_bytes(settings))
+      .finish(),
       _PAYLOAD_LENGTH,
     )

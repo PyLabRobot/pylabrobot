@@ -17,11 +17,11 @@ from pylabrobot.agilent.biotek.lhc.enums.steps.peri_flow_rate import (
 from pylabrobot.agilent.biotek.lhc.enums.steps.peri_pump import PERI_PUMP_TO_BYTE, PeriPump
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import i8, i16, pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import PreDispense
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.masks import WellMask
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.positioning import Positioning
+from pylabrobot.io.binary import Writer, pad
 
 PAYLOAD_LENGTH = 23
 DEFINITION_FIELDS = 13
@@ -158,25 +158,23 @@ class PeriDispense(Step):
       The payload.
     """
     pump = NO_PUMP if self.peri_pump is None else PERI_PUMP_TO_BYTE[self.peri_pump]
+    writer = Writer().u16(self.volume).u8(PERI_FLOW_RATE_TO_BYTE[self.flow_rate])
     if settings.advanced_dispense_offsets:
-      offsets = i16(self.positioning.x_steps)
+      writer.i16(self.positioning.x_steps)
     else:
       cassette = (
         NO_CASSETTE_REQUIREMENT
         if self.cassette_type is None
         else CASSETTE_TYPE_TO_BYTE[self.cassette_type]
       )
-      offsets = u8(cassette) + i8(self.positioning.x_steps)
-    return pad(
-      u16(self.volume)
-      + u8(PERI_FLOW_RATE_TO_BYTE[self.flow_rate])
-      + offsets
-      + i8(self.positioning.y_steps)
-      + i16(self.positioning.z_steps)
-      + u16(self.pre_dispense.wire_volume)
-      + u8(self.pre_dispense.count)
-      + self.columns.to_bytes()
-      + self.rows.to_bytes_inverted()
-      + u8(pump),
-      PAYLOAD_LENGTH,
+      writer.u8(cassette).i8(self.positioning.x_steps)
+    (
+      writer.i8(self.positioning.y_steps)
+      .i16(self.positioning.z_steps)
+      .u16(self.pre_dispense.wire_volume)
+      .u8(self.pre_dispense.count)
+      .raw_bytes(self.columns.to_bytes())
+      .raw_bytes(self.rows.to_bytes_inverted())
+      .u8(pump)
     )
+    return pad(writer.finish(), PAYLOAD_LENGTH)

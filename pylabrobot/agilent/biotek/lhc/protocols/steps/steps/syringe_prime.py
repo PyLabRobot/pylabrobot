@@ -13,9 +13,9 @@ from pylabrobot.agilent.biotek.lhc.enums.steps.syringe_bottle import (
   SyringeBottle,
 )
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import Submerge
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 12
 _DEFINITION_FIELDS = 10
@@ -120,13 +120,15 @@ class SyringePrime(Step):
       The payload.
     """
     return pad(
-      u8(SYRINGE_TO_BYTE[self.syringe] - 1)
-      + u16(self.volume)
-      + u8(self.flow_rate)
-      + u8(self.cycles)
-      + u16(self.pump_delay)
-      + u8(1 if self.reserved_flag else 0)
-      + u16(self.submerge.wire_minutes)
-      + u8(SYRINGE_BOTTLE_TO_BYTE[self.syringe_bottle] - 1),
+      Writer()
+      .u8(SYRINGE_TO_BYTE[self.syringe] - 1)
+      .u16(self.volume)
+      .u8(self.flow_rate)
+      .u8(self.cycles)
+      .u16(self.pump_delay)
+      .u8(1 if self.reserved_flag else 0)
+      .u16(self.submerge.wire_minutes)
+      .u8(SYRINGE_BOTTLE_TO_BYTE[self.syringe_bottle] - 1)
+      .finish(),
       _PAYLOAD_LENGTH,
     )

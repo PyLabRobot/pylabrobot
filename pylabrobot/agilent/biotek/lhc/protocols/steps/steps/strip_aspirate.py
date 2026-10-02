@@ -12,11 +12,11 @@ from pylabrobot.agilent.biotek.lhc.enums.steps.secondary_aspirate_pattern import
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.enums.steps.travel_rate import TRAVEL_RATE_TO_BYTE, TravelRate
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import i8, i16, pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import SecondaryAspirate
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.masks import WellMask
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.positioning import Positioning
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 27
 _IN_WASH_PAYLOAD_LENGTH = 20
@@ -116,15 +116,17 @@ class StripAspirate(Step):
       The payload.
     """
     payload = (
-      u16(self.delay)
-      + u8(TRAVEL_RATE_TO_BYTE[self.travel_rate])
-      + i16(self.positioning.x_steps)
-      + i8(self.positioning.y_steps)
-      + i16(self.positioning.z_steps)
-      + u8(SECONDARY_ASPIRATE_PATTERN_TO_BYTE[self.secondary.pattern])
-      + i16(self.secondary.positioning.x_steps)
-      + i8(self.secondary.positioning.y_steps)
-      + i16(self.secondary.positioning.z_steps)
+      Writer()
+      .u16(self.delay)
+      .u8(TRAVEL_RATE_TO_BYTE[self.travel_rate])
+      .i16(self.positioning.x_steps)
+      .i8(self.positioning.y_steps)
+      .i16(self.positioning.z_steps)
+      .u8(SECONDARY_ASPIRATE_PATTERN_TO_BYTE[self.secondary.pattern])
+      .i16(self.secondary.positioning.x_steps)
+      .i8(self.secondary.positioning.y_steps)
+      .i16(self.secondary.positioning.z_steps)
+      .finish()
     )
     if self.in_wash:
       return pad(payload, _IN_WASH_PAYLOAD_LENGTH)

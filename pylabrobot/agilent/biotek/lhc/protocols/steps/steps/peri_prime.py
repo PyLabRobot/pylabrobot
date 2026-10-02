@@ -17,9 +17,9 @@ from pylabrobot.agilent.biotek.lhc.enums.steps.peri_flow_rate import (
 from pylabrobot.agilent.biotek.lhc.enums.steps.peri_pump import PERI_PUMP_TO_BYTE, PeriPump
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import RandomAccess
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 10
 _DEFINITION_FIELDS = 8
@@ -140,11 +140,13 @@ class PeriPrime(Step):
     )
     pump = _NO_PUMP if self.peri_pump is None else PERI_PUMP_TO_BYTE[self.peri_pump]
     return pad(
-      u16(self.volume if self.fixed_volume else 0)
-      + u16(0 if self.fixed_volume else self.duration)
-      + u8(PERI_FLOW_RATE_TO_BYTE[self.flow_rate])
-      + u8(1 if self.home_when_finished else 0)
-      + u8(cassette)
-      + u8(pump),
+      Writer()
+      .u16(self.volume if self.fixed_volume else 0)
+      .u16(0 if self.fixed_volume else self.duration)
+      .u8(PERI_FLOW_RATE_TO_BYTE[self.flow_rate])
+      .u8(1 if self.home_when_finished else 0)
+      .u8(cassette)
+      .u8(pump)
+      .finish(),
       _PAYLOAD_LENGTH,
     )

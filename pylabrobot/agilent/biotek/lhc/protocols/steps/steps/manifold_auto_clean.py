@@ -9,12 +9,12 @@ from pylabrobot.agilent.biotek.lhc.devices.instrument_settings import Instrument
 from pylabrobot.agilent.biotek.lhc.enums.steps.buffer import Buffer
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.durations import (
   format_hours_minutes,
   parse_hours_minutes,
 )
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 7
 _DEFINITION_FIELDS = 3
@@ -75,4 +75,4 @@ class ManifoldAutoClean(Step):
     Returns:
       The payload.
     """
-    return pad(u8(ord(self.buffer)) + u16(self.duration // 60), _PAYLOAD_LENGTH)
+    return pad(Writer().u8(ord(self.buffer)).u16(self.duration // 60).finish(), _PAYLOAD_LENGTH)

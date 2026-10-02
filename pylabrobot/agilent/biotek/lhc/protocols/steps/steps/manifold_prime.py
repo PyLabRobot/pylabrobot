@@ -9,9 +9,9 @@ from pylabrobot.agilent.biotek.lhc.devices.instrument_settings import Instrument
 from pylabrobot.agilent.biotek.lhc.enums.steps.buffer import Buffer
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import Submerge
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 12
 _DEFINITION_FIELDS = 8
@@ -101,10 +101,12 @@ class ManifoldPrime(Step):
     """
     low_flow_volume = self.low_flow_path_volume if self.prime_low_flow_path else 0
     return pad(
-      u8(ord(self.buffer))
-      + u16(self.volume // 1000)
-      + u8(self.flow_rate)
-      + u16(low_flow_volume // 1000)
-      + u16(self.submerge.wire_minutes),
+      Writer()
+      .u8(ord(self.buffer))
+      .u16(self.volume // 1000)
+      .u8(self.flow_rate)
+      .u16(low_flow_volume // 1000)
+      .u16(self.submerge.wire_minutes)
+      .finish(),
       _PAYLOAD_LENGTH,
     )

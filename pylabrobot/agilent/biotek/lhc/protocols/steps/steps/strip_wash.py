@@ -10,13 +10,13 @@ from pylabrobot.agilent.biotek.lhc.devices.instrument_settings import Instrument
 from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.enums.steps.wash_format import WASH_FORMAT_TO_BYTE, WashFormat
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import pad, u8
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import WashStages
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.masks import WellMask
 from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.shake_soak import ShakeSoak
 from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.strip_aspirate import StripAspirate
 from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.strip_dispense import StripDispense
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 108
 _DEFINITION_FIELDS = 10
@@ -148,16 +148,18 @@ class StripWash(Step):
     final_aspirate = dataclasses.replace(self.final_aspirate, in_wash=True)
     shake_soak = dataclasses.replace(self.shake_soak, enabled=self.stages.shake_soak_after_dispense)
     return pad(
-      u8(1 if self.stages.bottom_wash else 0)
-      + u8(1 if self.stages.final_aspirate else 0)
-      + u8(WASH_FORMAT_TO_BYTE[self.wash_format])
-      + u8(self.cycles)
-      + bottom_wash.to_bytes(settings)
-      + final_aspirate.to_bytes(settings)
-      + aspirate.to_bytes(settings)
-      + dispense.to_bytes(settings)
-      + shake_soak.to_bytes(settings)
-      + self.columns.to_bytes()
-      + self.rows.to_bytes(),
+      Writer()
+      .u8(1 if self.stages.bottom_wash else 0)
+      .u8(1 if self.stages.final_aspirate else 0)
+      .u8(WASH_FORMAT_TO_BYTE[self.wash_format])
+      .u8(self.cycles)
+      .raw_bytes(bottom_wash.to_bytes(settings))
+      .raw_bytes(final_aspirate.to_bytes(settings))
+      .raw_bytes(aspirate.to_bytes(settings))
+      .raw_bytes(dispense.to_bytes(settings))
+      .raw_bytes(shake_soak.to_bytes(settings))
+      .raw_bytes(self.columns.to_bytes())
+      .raw_bytes(self.rows.to_bytes())
+      .finish(),
       _PAYLOAD_LENGTH,
     )

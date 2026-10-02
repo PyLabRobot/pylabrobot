@@ -11,12 +11,12 @@ from pylabrobot.agilent.biotek.lhc.enums.steps.step_type import StepType
 from pylabrobot.agilent.biotek.lhc.enums.steps.travel_rate import TRAVEL_RATE_TO_BYTE
 from pylabrobot.agilent.biotek.lhc.enums.steps.wash_format import WASH_FORMAT_TO_BYTE, WashFormat
 from pylabrobot.agilent.biotek.lhc.protocols.steps import definition
-from pylabrobot.agilent.biotek.lhc.protocols.steps.packing import i8, i16, pad, u8, u16
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_interface import Step
 from pylabrobot.agilent.biotek.lhc.protocols.steps.step_parts.groups import PreDispense, WashStages
 from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.manifold_aspirate import ManifoldAspirate
 from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.shake_soak import ShakeSoak
 from pylabrobot.agilent.biotek.lhc.protocols.steps.steps.syringe_dispense import SyringeDispense
+from pylabrobot.io.binary import Writer, pad
 
 _PAYLOAD_LENGTH = 67
 _DEFINITION_FIELDS = 9
@@ -149,18 +149,20 @@ class Wash1536(Step):
     shake_soak = dataclasses.replace(self.shake_soak, enabled=self.stages.shake_soak_after_dispense)
     length = _PAYLOAD_LENGTH + (1 if settings.advanced_dispense_offsets else 0)
     return pad(
-      u8(1 if self.stages.pre_dispense_before else 0)
-      + u8(1 if self.stages.shake_soak_after_dispense else 0)
-      + u8(1 if self.stages.pre_dispense_between else 0)
-      + u8(1 if self.stages.final_aspirate else 0)
-      + u16(self.pre_dispense_before_volume)
-      + u8(self.pre_dispense_before_count)
-      + u8(WASH_FORMAT_TO_BYTE[self.wash_format])
-      + u8(self.cycles)
-      + _aspirate_extract(self.aspirate)
-      + _aspirate_extract(self.final_aspirate)
-      + self.dispense.to_bytes(settings)
-      + shake_soak.to_bytes(settings),
+      Writer()
+      .u8(1 if self.stages.pre_dispense_before else 0)
+      .u8(1 if self.stages.shake_soak_after_dispense else 0)
+      .u8(1 if self.stages.pre_dispense_between else 0)
+      .u8(1 if self.stages.final_aspirate else 0)
+      .u16(self.pre_dispense_before_volume)
+      .u8(self.pre_dispense_before_count)
+      .u8(WASH_FORMAT_TO_BYTE[self.wash_format])
+      .u8(self.cycles)
+      .raw_bytes(_aspirate_extract(self.aspirate))
+      .raw_bytes(_aspirate_extract(self.final_aspirate))
+      .raw_bytes(self.dispense.to_bytes(settings))
+      .raw_bytes(shake_soak.to_bytes(settings))
+      .finish(),
       length,
     )
 
@@ -175,9 +177,11 @@ def _aspirate_extract(aspirate: ManifoldAspirate) -> bytes:
     Its delay, travel rate and offsets, in the order the payload carries them.
   """
   return (
-    u16(aspirate.delay)
-    + u8(TRAVEL_RATE_TO_BYTE[aspirate.travel_rate])
-    + i8(aspirate.positioning.x_steps)
-    + i8(aspirate.positioning.y_steps)
-    + i16(aspirate.positioning.z_steps)
+    Writer()
+    .u16(aspirate.delay)
+    .u8(TRAVEL_RATE_TO_BYTE[aspirate.travel_rate])
+    .i8(aspirate.positioning.x_steps)
+    .i8(aspirate.positioning.y_steps)
+    .i16(aspirate.positioning.z_steps)
+    .finish()
   )
