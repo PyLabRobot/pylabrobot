@@ -1136,6 +1136,18 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
     others = {w.tracker.get_used_volume() for w in self.plate.get_all_items()[1:]}
     self.assertEqual(others, {200.0})
 
+  async def test_the_cut_off_speed_is_the_class_s_unless_given(self):
+    from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
+    from pylabrobot.resources.liquid import Liquid
+
+    jet = get_star_liquid_class(300.0, True, True, True, Liquid.WATER, True, True)
+    assert jet is not None and jet.dispense_stop_flow_rate != 5.0
+    await self.head.aspirate(self.plate, piston_volume=150.0)
+    await self.head.dispense(self.plate, 30.0, jet=True, blow_out=True)
+    self.assertEqual(self.sent[1][1]["cut_off_speed"], round(jet.dispense_stop_flow_rate * 10))
+    await self.head.dispense(self.plate, 30.0, jet=True, blow_out=True, cut_off_speed=4.5)
+    self.assertEqual(self.sent[2][1]["cut_off_speed"], 45)
+
   async def test_no_liquid_under_capacitive_raises_and_the_head_goes_up(self):
     with self.assertRaises(RuntimeError):
       await self.head.aspirate(self.trough, piston_volume=20.0, lld_mode=LLDMode.CAPACITIVE)
