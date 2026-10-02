@@ -41,6 +41,7 @@ from pylabrobot.hamilton.star.liquid_classes.mapping import (
   StandardVolumeFilter_Water_DispenseJet_Empty as _WATER_50,
 )
 from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
+from pylabrobot.hamilton.transport.tcp.commands import HoiEntryError
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
@@ -5405,6 +5406,150 @@ def test_transport_air_height_is_the_pipetting_height_plus_the_pull_out_distance
     draw, push = sent
     assert draw.aspirate_parameters[0].no_lld.z_air == pytest.approx(bottom + 13.0, abs=0.01)
     assert push.dispense_parameters[0].no_lld.z_air == pytest.approx(bottom + 14.0, abs=0.01)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probing_full_spots_picks_each_tip_up_and_puts_it_back():
+  async def _t():
+    p, rack, sent = _probe_setup()
+    set_tip_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      spots = rack["A1:B1"]
+      found = await p.pipettes.probe_tip_presence_via_pickup(spots)
+      assert found == {spot.name: True for spot in spots}
+      assert sent == ["PrepPickUpTips", "PrepDropTips"]
+      assert [spot.tracker.has_tip for spot in spots] == [True, True]
+      assert [p.pipettes.get_mounted_tip(ch) for ch in (0, 1)] == [None, None]
+    finally:
+      set_tip_tracking(False)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_spot_that_gives_no_tip_is_found_by_the_sleeve_sensors_and_the_other_tip_goes_back():
+  """A pick-up that fails on the front channel, as the device answers it; the rear tip goes back."""
+
+  async def _t():
+    p, rack, sent = _probe_setup()
+    set_tip_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      spots = rack["A1:B1"]
+      pick_up = p.pipettes.pick_up_tips
+
+      async def front_misses(tip_spots, use_channels, **heights):
+        await pick_up(tip_spots[:1], use_channels=use_channels[:1], **heights)
+        raise ChannelizedError(errors={1: NoTipError("channel 1 picked up no tip")})
+
+      with patch.object(p.pipettes, "pick_up_tips", front_misses):
+        found = await p.pipettes.probe_tip_presence_via_pickup(spots)
+      assert found == {spots[0].name: True, spots[1].name: False}
+      assert sent == ["PrepPickUpTips", "PrepDropTips"]
+      assert [p.pipettes.get_mounted_tip(ch) for ch in (0, 1)] == [None, None]
+      # The model is the caller's to correct: the missed spot still holds its tip there.
+      assert [spot.tracker.has_tip for spot in spots] == [True, True]
+    finally:
+      set_tip_tracking(False)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_inventory_of_a_column_takes_two_spots_at_a_time():
+  async def _t():
+    p, rack, sent = _probe_setup()
+    set_tip_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      column = rack["A1:H1"]
+      found = await p.pipettes.probe_tip_inventory(column)
+      assert found == {spot.name: True for spot in column}
+      assert sent == ["PrepPickUpTips", "PrepDropTips"] * 4
+      assert all(spot.tracker.has_tip for spot in column)
+    finally:
+      set_tip_tracking(False)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_the_probes_traverse_heights_reach_every_pick_up_and_drop():
+  async def _t():
+    p, rack, _ = _probe_setup()
+    set_tip_tracking(True)
+    try:
+      await p.setup()
+      assert p.pipettes is not None
+      heights = {
+        "minimum_traverse_height_start": 120.0,
+        "minimum_traverse_height_during": 110.0,
+        "minimum_traverse_height_end": 100.0,
+      }
+      calls = []
+      pick_up, drop = p.pipettes.pick_up_tips, p.pipettes.drop_tips
+
+      async def picked(*args, **kwargs):
+        calls.append(("pick up", {k: kwargs.get(k) for k in heights}))
+        return await pick_up(*args, **kwargs)
+
+      async def dropped(*args, **kwargs):
+        calls.append(("drop", {k: kwargs.get(k) for k in heights}))
+        return await drop(*args, **kwargs)
+
+      with (
+        patch.object(p.pipettes, "pick_up_tips", picked),
+        patch.object(p.pipettes, "drop_tips", dropped),
+      ):
+        await p.pipettes.probe_tip_presence_via_pickup(rack["A1:B1"], **heights)
+        await p.pipettes.probe_tip_inventory(rack["A2:D2"], **heights)
+      assert [kind for kind, _ in calls] == ["pick up", "drop"] * 3
+      assert all(given == heights for _, given in calls)
+    finally:
+      set_tip_tracking(False)
+    await p.stop()
+
+  _run(_t())
+
+
+def _entry_error(result: int) -> Exception:
+  entry = HcResultEntry(
+    module_id=1, node_id=0x00EC, object_id=0x100, interface_id=1, action_id=1, result=result
+  )
+  return HoiEntryError(entry, f"0x{result:04X}")
+
+
+def test_a_channel_meets_no_tip_on_0x0f08_or_0x0f0a_and_on_nothing_else():
+  """The front answers an empty spot 0x0F08 (a NoTipError), the rear 0x0F0A; a stall is raised."""
+  from pylabrobot.hamilton.prep.driver.features.pipettes import _channels_that_met_no_tip
+
+  no_tip = NoTipError("channel 1 picked up no tip")
+  assert _channels_that_met_no_tip(ChannelizedError(errors={1: no_tip})) == [1]
+  assert _channels_that_met_no_tip(ChannelizedError(errors={0: _entry_error(0x0F0A)})) == [0]
+  both = ChannelizedError(errors={0: _entry_error(0x0F0A), 1: no_tip})
+  assert _channels_that_met_no_tip(both) == [0, 1]
+  stall = ChannelizedError(errors={0: _entry_error(0x0F03), 1: no_tip})
+  assert _channels_that_met_no_tip(stall) is None
+  assert _channels_that_met_no_tip(RuntimeError("the connection dropped")) is None
+
+
+def test_a_channel_still_sensing_a_tip_after_probing_is_raised():
+  """A channel the device said met no tip, but that holds one, is not left unnoticed."""
+
+  async def _t():
+    p, _, _ = _probe_setup()
+    await p.setup()
+    assert p.pipettes is not None
+    with patch.object(p.pipettes, "sense_tip_presence", AsyncMock(return_value=[True, False])):
+      with pytest.raises(HasTipError, match="channel 0 still senses a tip"):
+        await p.pipettes._require_emptied([0, 1])
+      await p.pipettes._require_emptied([1])
     await p.stop()
 
   _run(_t())
