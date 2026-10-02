@@ -312,19 +312,25 @@ class PowerWaveX:
 
         205 nm, never calibrated   faulted 3 times out of 3
         200 nm, never calibrated   faulted 2 times out of 2
-        200 nm, after a scan       read normally, twice, one from a cold start
+        205 nm, after a scan        read normally
+        200 nm, after a scan        read normally, twice, one from a cold start
         215 nm, never calibrated   read normally
         395 nm, never calibrated   read normally
 
-      So neither the wavelength alone nor the calibration state alone predicts
-      it. What those runs are consistent with is that READ PLATE sets its own
-      gain for a wavelength it has not calibrated, that this attempt fails below
-      somewhere around 210 nm where little light reaches the detector, and that
-      :meth:`scan_plate` - which calibrates every wavelength it sweeps, and
-      manages it even at 200 nm - leaves the wavelength readable afterwards.
-      Scanning a band before reading inside it is therefore worth trying, but
-      that rule rests on the handful of runs above and nothing below 200 nm or
-      between 205 and 215 nm has been probed.
+      The wavelength alone does not predict it and neither does the calibration
+      state alone, but the pair does: READ PLATE sets its own gain for a
+      wavelength it has not calibrated, and that attempt fails below somewhere
+      between 205 and 215 nm where little light reaches the detector.
+      :meth:`scan_plate` calibrates every wavelength it sweeps and manages it
+      even at 200 nm, after which reads there succeed - 205 nm failed three times
+      running uncalibrated and then read normally once a 200-210 nm scan in 5 nm
+      steps had calibrated it.
+
+      So to read below about 215 nm, scan a band covering the wavelength first.
+      A scan's :attr:`SpectralScanResult.calibrated` lists what it had to
+      calibrate, which is a direct read-out of what was missing: that 5 nm scan
+      reported ``[205]`` alone, 200 and 210 being already done. Nothing below
+      200 nm has been probed.
 
       The fault is never reported over the serial port, and the instrument stops
       answering it entirely until an operator acknowledges the fault at the front
