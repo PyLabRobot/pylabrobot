@@ -337,7 +337,17 @@ class PowerWaveX:
     """Read the shortest usable kinetic interval in seconds (page B-13).
 
     Determined by the loaded assay definition, the strip range and the baud rate,
-    so the value changes once an assay has been pushed.
+    so the value changes once an assay has been pushed. Asked before the right
+    assay is loaded it answers for the wrong one, which is why
+    :meth:`read_absorbance_kinetic` queries it itself rather than taking the
+    caller's word for the interval.
+
+    The floor scales with the wavelength count, since the carriage makes a pass
+    per wavelength. Measured on a PowerWaveX w/ Incubator (firmware R06.20) at
+    9600 baud over a full 96-well plate, asked immediately after the assay was
+    pushed: 10 s for one wavelength, 19 s for two, 38 s for four. It reports that
+    floor whatever interval the assay asked for, so a shorter request does not
+    hide it.
     """
     await self._send_command(Command.GET_MINIMUM_KINETIC_INTERVAL)
     payload = await self._read_exactly(2)
