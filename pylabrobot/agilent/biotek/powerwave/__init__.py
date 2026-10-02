@@ -4,6 +4,7 @@ from ._protocol import (
   PowerWaveFatalError,
   PowerWaveNakError,
   PowerWaveParseError,
+  PowerWaveReadAbortedError,
   PowerWaveSelfTestError,
   PowerWaveStatusError,
 )

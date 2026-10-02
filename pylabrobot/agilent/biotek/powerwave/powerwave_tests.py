@@ -29,6 +29,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   PowerWaveFatalError,
   PowerWaveNakError,
   PowerWaveParseError,
+  PowerWaveReadAbortedError,
   PowerWaveSelfTestError,
   PowerWaveStatusError,
   build_assay_definition,
@@ -1082,6 +1083,93 @@ class TestStaleByteDrain(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(reader.model, "PowerWaveX w/ Incubator")
 
 
+class TestAbortedRead(unittest.IsolatedAsyncioTestCase):
+  """A read the instrument abandons part way through.
+
+  It sends DLE where the next block's CR start code belongs - the same byte that
+  acknowledges HALT - and shows the fault on its front panel. Verified on a
+  PowerWaveX w/ Incubator (firmware R06.20) asked to read at 200 nm, which its
+  optics cannot reach: DLE, then 0F11 on the panel, then 080 to every later read.
+  """
+
+  @staticmethod
+  def _script_until_read(blocks=b""):
+    # 'V', '{' then 'S', each ACK + status, followed by whatever the read sends.
+    return (_ACK + _STATUS_OK) * 3 + blocks
+
+  async def test_abort_with_an_elx_status_reports_the_decoded_fault(self):
+    plate = _plate_resource()
+    # 0F11: four hex characters + ETX, no RS, which is the ELx status format.
+    reader, _ = _reader(self._script_until_read(b"\x10" + b"0F11\x03"), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveReadAbortedError) as caught:
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    message = str(caught.exception)
+    self.assertIn("abandoned the read", message)
+    self.assertIn("signal out of range", message)  # describe_elx_status("0F11")
+    self.assertIn("front panel", message)
+    self.assertEqual(caught.exception.code, "0F11")
+
+  async def test_abort_with_an_rs_status_reports_the_code(self):
+    plate = _plate_resource()
+    reader, _ = _reader(self._script_until_read(b"\x10" + b"\x1e080\x03"), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveReadAbortedError) as caught:
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    self.assertEqual(caught.exception.code, "080")
+    self.assertIn("perform self-test", str(caught.exception))
+
+  async def test_abort_with_no_status_still_explains_itself(self):
+    plate = _plate_resource()
+    reader, _ = _reader(self._script_until_read(b"\x10"), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveReadAbortedError) as caught:
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    self.assertIsNone(caught.exception.code)
+    self.assertIn("self_test()", str(caught.exception))
+
+  async def test_abort_part_way_through_counts_the_blocks_received(self):
+    plate = _plate_resource()
+    good = _CAPTURED_PLATE + bytes([_CAPTURED_PLATE_CHECKSUM])
+    reader, _ = _reader(self._script_until_read(good + b"\x10" + b"0F11\x03"), model="PowerWaveX")
+    reader._wavelength_table = [600, 630, 660]
+
+    with self.assertRaises(PowerWaveReadAbortedError) as caught:
+      await reader.read_absorbances(plate, plate.get_all_items(), [600, 630, 660])
+
+    self.assertIn("after 1 of 3 data blocks", str(caught.exception))
+
+  async def test_scan_abort_is_reported_the_same_way(self):
+    plate = _plate_resource()
+    # geometry, '&', the request's second ACK, status, both wavelength lists, then DLE
+    script = _ACK + _STATUS_OK + _ACK + _ACK + _STATUS_OK + b"\x1a" + b"\x1a"
+    script += b"\x10" + b"0F11\x03"
+    reader, _ = _reader(script, model="PowerWaveX")
+
+    with self.assertRaises(PowerWaveReadAbortedError) as caught:
+      await reader.scan_plate(
+        plate, start_wavelength=400, stop_wavelength=420, step=10, well=plate.get_item(0)
+      )
+
+    self.assertIn("signal out of range", str(caught.exception))
+
+  async def test_a_normal_read_is_untouched(self):
+    plate = _plate_resource()
+    reader, fake = _reader(_read_script(), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    result = (await reader.read_absorbance(plate, plate.get_all_items(), 620))[0]
+
+    self.assertEqual(len(result.data), 8)
+    self.assertEqual(fake.remaining, b"")
+
+
 class TestEndOfDataMarker(unittest.IsolatedAsyncioTestCase):
   """The ^Z that closes a whole READ PLATE response.
 
@@ -1710,6 +1798,31 @@ class TestScanResponseParsing(unittest.TestCase):
   def test_empty_section(self):
     with self.assertRaises(PowerWaveParseError):
       parse_scan_data(b"\r\x1a", 1)
+
+  def test_lax_frames_are_rejected(self):
+    # Each of these was accepted before the line structure was validated. The
+    # first reads as 537 nm at -7.450 OD with no comma, terminator or ^Z at all.
+    for blob in (
+      b"\r537-7450\x1e",
+      b"\r838\x1a,26-48533*64",
+      b"\r400,+0000ZZZ\r\n\x1a",
+      b"\r400,,+0000\r\n\x1a",
+    ):
+      with self.subTest(blob=blob):
+        with self.assertRaises(PowerWaveParseError):
+          parse_scan_data(blob, 1)
+
+  def test_an_unterminated_section_is_rejected(self):
+    # _read_until(SUB) always supplies the terminator, so its absence means the
+    # section was truncated.
+    with self.assertRaises(PowerWaveParseError):
+      parse_scan_data(b"\r400,+0000\r\n", 1)
+
+  def test_wavelength_list_requires_three_unsigned_digits(self):
+    for blob in (b"-1\r\x1a", b"+24\r\x1a", b"4599612\r\x1a", b"40\r\x1a"):
+      with self.subTest(blob=blob):
+        with self.assertRaises(PowerWaveParseError):
+          parse_scan_wavelength_list(blob)
 
   def test_checksum_ignores_the_start_code(self):
     section = b"550,+0201\r\n\x1a"

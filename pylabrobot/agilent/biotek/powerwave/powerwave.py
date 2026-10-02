@@ -38,7 +38,10 @@ from ._protocol import (
   Command,
   PowerWaveError,
   PowerWaveNakError,
+  PowerWaveFatalError,
   PowerWaveParseError,
+  PowerWaveReadAbortedError,
+  PowerWaveStatusError,
   PowerWaveSelfTestError,
   build_assay_definition,
   configuration_has_incubator,
@@ -132,6 +135,9 @@ class PowerWaveX:
   #: Seconds to settle either side of flushing the stray NAK that follows an
   #: accepted assay definition table.
   _ASSAY_SETTLE_SECONDS = 1.0
+
+  #: How long to wait for the status string that explains an abandoned read.
+  _ABORT_STATUS_SECONDS = 10.0
 
   #: How long the line must stay quiet for :meth:`_drain_input` to call it clear,
   #: and the total time it will spend draining.
@@ -911,6 +917,8 @@ class PowerWaveX:
     # A single CR marks the start of the data, then one line per wavelength, then
     # one ^Z and one checksum byte for the whole series.
     start_code = await self._read_exactly(1)
+    if start_code == DLE:
+      await self._raise_read_aborted(0, len(expected))
     if start_code != CR:
       raise PowerWaveParseError(f"Expected CR data start code, got {start_code!r}")
 
@@ -1052,7 +1060,10 @@ class PowerWaveX:
     """
     blocks = []
     for index in range(num_blocks):
-      frame = await self._read_until(SUB, timeout=timeout)
+      start = await self._read_exactly(1, timeout=timeout)
+      if start == DLE:
+        await self._raise_read_aborted(index, num_blocks)
+      frame = start + await self._read_until(SUB, timeout=timeout)
       checksum = await self._read_exactly(1, timeout=timeout)
       verify_plate_checksum(frame, checksum[0])
       blocks.append(parse_plate(frame, num_rows, num_columns))
@@ -1268,6 +1279,57 @@ class PowerWaveX:
         len(discarded),
         bytes(discarded[:64]),
       )
+
+  async def _raise_read_aborted(self, done: int, total: int) -> None:
+    """Explain a read or scan the instrument abandoned, then raise.
+
+    A read that faults part way through is not reported inside the data stream.
+    The instrument abandons it and sends ``DLE`` - the byte that acknowledges
+    HALT - where the next block's ``CR`` start code belongs, then shows the fault
+    on its front panel. A status string usually follows on the wire, and
+    :func:`._protocol.parse_status` decodes it, including the four-character ELx
+    codes that carry a real description.
+
+    Verified on a PowerWaveX w/ Incubator (firmware R06.20) asked to read at
+    200 nm, which its optics cannot reach: the read was abandoned after ``DLE``,
+    the panel showed ``0F11`` ("signal out of range"), and every later read
+    answered ``080`` until the fault was cleared at the panel. Without this the
+    caller saw only a timeout waiting for ``^Z``.
+
+    Args:
+      done: Data blocks received before the abort.
+      total: Blocks the command should have produced.
+
+    Raises:
+      PowerWaveReadAbortedError: Always, carrying the reported code when the
+        instrument sent one.
+    """
+    where = f"after {done} of {total} data block{'' if total == 1 else 's'}"
+    try:
+      status = await self._read_exactly(
+        STATUS_LENGTH, timeout=min(self._ABORT_STATUS_SECONDS, self.timeout)
+      )
+    except TimeoutError:
+      status = b""
+
+    if len(status) > 0:
+      try:
+        code = parse_status(status)
+      except (PowerWaveStatusError, PowerWaveFatalError) as reported:
+        raise PowerWaveReadAbortedError(
+          f"The instrument abandoned the read {where}: {reported}. The fault is shown on "
+          f"its front panel and stays latched there until cleared; readings will keep "
+          f"failing with 080 until it is.",
+          code=getattr(reported, "code", None),
+        ) from reported
+      raise PowerWaveReadAbortedError(
+        f"The instrument abandoned the read {where}, then reported status {code}.", code=code
+      )
+
+    raise PowerWaveReadAbortedError(
+      f"The instrument abandoned the read {where} and reported no status. Check its front "
+      f"panel for the fault code and run self_test()."
+    )
 
   async def _consume_end_of_data(self) -> None:
     """Consume the ``^Z`` that closes a whole READ PLATE response.

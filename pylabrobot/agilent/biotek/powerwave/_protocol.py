@@ -91,6 +91,25 @@ class PowerWaveParseError(PowerWaveError):
   """A response could not be parsed."""
 
 
+class PowerWaveReadAbortedError(PowerWaveError):
+  """The instrument abandoned a read or scan part way through.
+
+  It signals this by sending ``DLE`` where the next data block's ``CR`` start
+  code belongs - the same byte that acknowledges HALT - rather than by reporting
+  the fault in the data stream. Any status string that follows carries the
+  reason.
+
+  Attributes:
+    code: The status code reported after the abort, or ``None`` if the instrument
+      sent none. An ELx code here is the one shown on the front panel, and stays
+      latched until it is cleared there.
+  """
+
+  def __init__(self, message: str, code: Optional[str] = None) -> None:
+    super().__init__(message)
+    self.code = code
+
+
 # --------------------------------------------------------------------------------------
 # Status strings (page B-21)
 # --------------------------------------------------------------------------------------
@@ -1030,10 +1049,11 @@ def parse_scan_wavelength_list(section: bytes) -> List[int]:
     field = field.strip()
     if len(field) == 0:
       continue
-    try:
-      wavelengths.append(int(field))
-    except ValueError:
-      raise PowerWaveParseError(f"Non-numeric wavelength in scan section: {field!r}") from None
+    # Exactly three unsigned digits, per the manual. A bare int() would also take
+    # "-1", "+24" and "4599612", none of which are wavelengths.
+    if re.fullmatch(rb"\d{3}", field) is None:
+      raise PowerWaveParseError(f"Wavelength in scan section is not three digits: {field!r}")
+    wavelengths.append(int(field))
   return wavelengths
 
 
@@ -1099,8 +1119,11 @@ def parse_scan_data(section: bytes, num_wells: int) -> Tuple[List[int], List[Lis
       exactly ``num_wells`` readings.
   """
   body = section[1:] if section.startswith(CR) else section
-  if body.endswith(SUB):
-    body = body[:-1]
+  if not body.endswith(SUB):
+    raise PowerWaveParseError(
+      f"Scan data section is not terminated by ^Z, so it is truncated: ...{section[-24:]!r}"
+    )
+  body = body[:-1]
 
   wavelengths: List[int] = []
   data: List[List[float]] = []
@@ -1110,22 +1133,34 @@ def parse_scan_data(section: bytes, num_wells: int) -> Tuple[List[int], List[Lis
     if len(line) == 0:
       continue
 
-    match = re.match(rb"(\d{3})", line)
-    if match is None:
-      raise PowerWaveParseError(f"Scan line does not start with a wavelength: {line[:16]!r}")
+    # Validate the whole line rather than scanning it for anything that looks
+    # like a reading. The checksum is the first guard, but it admits one
+    # corruption in 256, and a lax parse turns those into plausible absorbances:
+    # "537-7450" would otherwise read as 537 nm at -7.450 OD.
+    fields = line.split(b",")
+    if re.fullmatch(rb"\d{3}", fields[0]) is None:
+      raise PowerWaveParseError(
+        f"Scan line does not start with a three-digit wavelength: {line[:24]!r}"
+      )
+    wavelength = int(fields[0])
 
     readings: List[float] = []
-    for reading in _READING_RE.finditer(line[match.end() :]):
+    for field in fields[1:]:
+      reading = _READING_RE.fullmatch(field)
+      if reading is None:
+        raise PowerWaveParseError(
+          f"Malformed reading at {wavelength} nm: {field!r} in {line[:24]!r}"
+        )
       if reading.group("overrange") is not None:
         readings.append(OVERRANGE)
       else:
         magnitude = int(reading.group("magnitude")) / 1000
         readings.append(magnitude if reading.group("sign") == b"+" else -magnitude)
 
-    wavelength = int(match.group(1))
     if len(readings) != num_wells:
       raise PowerWaveParseError(
-        f"Expected {num_wells} readings at {wavelength} nm, parsed {len(readings)} from {line!r}"
+        f"Expected {num_wells} readings at {wavelength} nm, parsed {len(readings)} "
+        f"from {line[:24]!r}"
       )
 
     wavelengths.append(wavelength)
