@@ -326,13 +326,19 @@ class PowerWaveX:
       that rule rests on the handful of runs above and nothing below 200 nm or
       between 205 and 215 nm has been probed.
 
-      The fault reports itself inconsistently, so do not count on diagnosing it
-      from the driver. Of five faults, one sent ``DLE`` immediately, one sent it
-      after 27.7 s, and three sent nothing whatever within 70 to 150 s of
-      listening. Only the first two are explainable from the wire; the rest show
-      the code on the front panel alone. A graceful abort leaves ``080`` latched,
-      which :meth:`self_test` clears without a power cycle; a silent one needs
-      the power cycle.
+      The fault is never reported over the serial port, and the instrument stops
+      answering it entirely until an operator acknowledges the fault at the front
+      panel. It then sends a single ``DLE``, the same byte that completes a HALT,
+      and resumes. Verified by listening across a deliberate fault: status
+      ``000`` at 11 s as the read began, then 99 s of silence, then ``DLE`` at the
+      instant the panel key was pressed.
+
+      This is worth knowing because it looks like several different failures. The
+      ``DLE`` seems to arrive immediately, or late, or never, purely according to
+      whether someone pressed the key while anything was listening. Recovery is
+      always the same and never needs a power cycle: press the panel key, which
+      restores the serial port, then call :meth:`self_test` to clear the ``080``
+      that stays latched until it runs.
     """
     return (MIN_WAVELENGTH, MAX_WAVELENGTH)
 
@@ -963,8 +969,9 @@ class PowerWaveX:
     except TimeoutError as silence:
       raise PowerWaveReadAbortedError(
         f"No scan data arrived: the instrument sent nothing for {timeout:.0f}s after "
-        f"acknowledging the scan. It has abandoned it. Check its front panel for a fault "
-        f"code; if it answers nothing at all it needs a power cycle."
+        f"acknowledging the scan. It has halted and is waiting for the fault to be "
+        f"acknowledged at its front panel. Press the panel key, note the code it shows, "
+        f"then call self_test() to clear the latched 080."
       ) from silence
     if start_code == DLE:
       await self._raise_read_aborted(0, len(expected))
@@ -1114,9 +1121,11 @@ class PowerWaveX:
         raise PowerWaveReadAbortedError(
           f"No data block arrived after {index} of {num_blocks} "
           f"block{'' if num_blocks == 1 else 's'}: the instrument sent nothing for "
-          f"{timeout if timeout is not None else self.timeout:.0f}s. It has abandoned the "
-          f"read. Check its front panel for a fault code; if it answers nothing at all it "
-          f"needs a power cycle, and otherwise run self_test()."
+          f"{timeout if timeout is not None else self.timeout:.0f}s. It has halted and is "
+          f"waiting for the fault to be acknowledged at its front panel, and will not "
+          f"answer the serial port until then. Press the panel key, note the code it "
+          f"shows, then call self_test() to clear the latched 080. No power cycle is "
+          f"needed."
         ) from silence
       if start == DLE:
         await self._raise_read_aborted(index, num_blocks)
@@ -1341,17 +1350,20 @@ class PowerWaveX:
     """Explain a read or scan the instrument abandoned, then raise.
 
     A read that faults part way through is not reported inside the data stream.
-    The instrument abandons it and sends ``DLE`` - the byte that acknowledges
-    HALT - where the next block's ``CR`` start code belongs, then shows the fault
-    on its front panel. A status string usually follows on the wire, and
-    :func:`._protocol.parse_status` decodes it, including the four-character ELx
-    codes that carry a real description.
+    The instrument halts, shows the fault on its front panel, and stops answering
+    the serial port until an operator acknowledges it there; it then sends
+    ``DLE`` - the byte that completes a HALT - where the next block's ``CR`` start
+    code belongs. So this arrives only when someone is at the instrument while a
+    read is outstanding, which is why the same fault can look immediate, late, or
+    silent. Anything that follows is decoded by
+    :func:`._protocol.parse_status`, including the four-character ELx codes that
+    carry a real description.
 
-    Verified on a PowerWaveX w/ Incubator (firmware R06.20) asked to read at
-    200 nm, which its optics cannot reach: the read was abandoned after ``DLE``,
-    the panel showed ``0F11`` ("signal out of range"), and every later read
-    answered ``080`` until the fault was cleared at the panel. Without this the
-    caller saw only a timeout waiting for ``^Z``.
+    Verified on a PowerWaveX w/ Incubator (firmware R06.20) reading an
+    uncalibrated 205 nm: status ``000``, 99 s of silence, then ``DLE`` at the
+    moment the panel key was pressed, with ``0F11`` ("signal out of range") on
+    the display and ``080`` latched until :meth:`self_test` ran. See
+    :attr:`abs_wavelength_range`.
 
     Args:
       done: Data blocks received before the abort.

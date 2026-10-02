@@ -1086,10 +1086,15 @@ class TestStaleByteDrain(unittest.IsolatedAsyncioTestCase):
 class TestAbortedRead(unittest.IsolatedAsyncioTestCase):
   """A read the instrument abandons part way through.
 
-  It sends DLE where the next block's CR start code belongs - the same byte that
-  acknowledges HALT - and shows the fault on its front panel. Verified on a
-  PowerWaveX w/ Incubator (firmware R06.20) asked to read at 200 nm, which its
-  optics cannot reach: DLE, then 0F11 on the panel, then 080 to every later read.
+  It halts, shows the fault on its front panel, and stops answering the serial
+  port until an operator acknowledges it there, at which point it sends DLE - the
+  byte that completes a HALT - where the next block's CR start code belongs.
+  Verified on a PowerWaveX w/ Incubator (firmware R06.20) reading an uncalibrated
+  205 nm: status 000, then 99 s of silence, then DLE at the instant the panel key
+  was pressed, with 0F11 on the display and 080 latched until a self-test ran.
+
+  So both shapes below are the same fault: DLE if someone was at the instrument
+  while the read was outstanding, silence if not.
   """
 
   @staticmethod
@@ -1172,7 +1177,10 @@ class TestAbortedRead(unittest.IsolatedAsyncioTestCase):
 
     message = str(caught.exception)
     self.assertIn("sent nothing", message)
-    self.assertIn("power cycle", message)
+    # Recovery is a panel keypress then a self-test, never a power cycle.
+    self.assertIn("front panel", message)
+    self.assertIn("self_test()", message)
+    self.assertIn("No power cycle is needed", message)
     self.assertIsNone(caught.exception.code)
 
   async def test_a_silent_scan_is_reported_too(self):
