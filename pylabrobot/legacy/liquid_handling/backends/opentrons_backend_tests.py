@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
@@ -13,11 +14,21 @@ from pylabrobot.legacy.liquid_handling.backends.opentrons_backend import (
 from pylabrobot.legacy.liquid_handling.errors import NoChannelError
 from pylabrobot.legacy.liquid_handling.standard import (
   Drop,
+  Mix,
   Pickup,
   SingleChannelAspiration,
 )
-from pylabrobot.resources import Coordinate, Tip, no_volume_tracking
+from pylabrobot.resources import (
+  Coordinate,
+  Tip,
+  does_tip_tracking,
+  does_volume_tracking,
+  no_volume_tracking,
+  set_tip_tracking,
+  set_volume_tracking,
+)
 from pylabrobot.resources.celltreat import celltreat_96_wellplate_350uL_Fb
+from pylabrobot.resources.errors import HasTipError, TooLittleLiquidError, TooLittleVolumeError
 from pylabrobot.resources.opentrons import (
   OTDeck,
   opentrons_96_filtertiprack_20ul,
@@ -267,9 +278,369 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     mock_drop_tip.assert_not_called()
 
 
+class OpentronsFixedHeadTests(unittest.IsolatedAsyncioTestCase):
+  """Tests for supported OT-2 GEN2 eight-channel full-head dispatch."""
+
+  @patch("ot_api.runs.create", return_value="run-id")
+  @patch("ot_api.lh.add_mounted_pipettes")
+  @patch("ot_api.health.get", side_effect=_mock_health_get)
+  async def asyncSetUp(self, _mock_health, mock_pipettes, _mock_create):
+    """Build a full head and a deck with eight confirmed source volumes."""
+    self._previous_volume_tracking = does_volume_tracking()
+    self._previous_tip_tracking = does_tip_tracking()
+    set_volume_tracking(True)
+    set_tip_tracking(True)
+    mock_pipettes.return_value = (
+      {"pipetteId": "fixed-head-id", "name": "p300_multi_gen2"},
+      {"pipetteId": "right-id", "name": "p20_single_gen2"},
+    )
+    self.backend = OpentronsOT2Backend(host="localhost", port=1338, fixed_head_mount="left")
+    self.deck = OTDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    await self.lh.setup(skip_home=True)
+    self.tip_rack = opentrons_96_tiprack_300ul(name="tip_rack")
+    self.deck.assign_child_at_slot(self.tip_rack, slot=1)
+    self.plate = celltreat_96_wellplate_350uL_Fb(name="plate")
+    self.deck.assign_child_at_slot(self.plate, slot=11)
+    for well in self.plate["A1:H1"]:
+      well.tracker.set_volume(100)
+
+  async def asyncTearDown(self):
+    """Restore the caller's tip- and volume-tracking settings."""
+    set_volume_tracking(self._previous_volume_tracking)
+    set_tip_tracking(self._previous_tip_tracking)
+
+  @patch("ot_api.lh.drop_tip")
+  @patch("ot_api.lh.dispense_in_place")
+  @patch("ot_api.lh.aspirate_in_place")
+  @patch("ot_api.lh.move_arm")
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.add", side_effect=_mock_add)
+  @patch("ot_api.labware.define", side_effect=_mock_define)
+  async def test_full_head_uses_one_dispatch_per_primitive(
+    self,
+    _mock_define,
+    _mock_add,
+    mock_pick_up,
+    _mock_move,
+    mock_aspirate,
+    mock_dispense,
+    mock_drop,
+  ):
+    """Transfer eight per-nozzle volumes and return eight tips through one command each."""
+    self.assertEqual(len({spot.get_tip().name for spot in self.tip_rack["A1:H1"]}), 8)
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    await self.lh.aspirate(self.plate["A1:H1"], vols=[20] * 8)
+    self.assertEqual([well.tracker.get_used_volume() for well in self.plate["A1:H1"]], [80] * 8)
+    self.assertEqual(
+      [tracker.get_tip().tracker.get_used_volume() for tracker in self.lh.head.values()], [20] * 8
+    )
+    await self.lh.dispense(self.plate["A2:H2"], vols=[20] * 8)
+    self.assertEqual([well.tracker.get_used_volume() for well in self.plate["A2:H2"]], [20] * 8)
+    await self.lh.return_tips()
+
+    mock_pick_up.assert_called_once()
+    self.assertEqual(
+      mock_pick_up.call_args.kwargs["well_name"], self.backend.get_ot_name("tip_rack_A1")
+    )
+    mock_aspirate.assert_called_once_with(
+      volume=20.0,
+      flow_rate=94,
+      pipette_id="fixed-head-id",
+    )
+    mock_dispense.assert_called_once_with(
+      volume=20.0,
+      flow_rate=94,
+      pipette_id="fixed-head-id",
+    )
+    mock_drop.assert_called_once()
+    self.assertEqual(
+      mock_drop.call_args.kwargs["well_name"], self.backend.get_ot_name("tip_rack_A1")
+    )
+    self.assertTrue(all(not tracker.has_tip for tracker in self.lh.head.values()))
+    self.assertTrue(all(spot.has_tip() for spot in self.tip_rack["A1:H1"]))
+
+  @patch("ot_api.lh.pick_up_tip")
+  async def test_fixed_head_rejects_different_tip_geometry_before_dispatch(self, mock_pick_up):
+    """Distinct tip identities are permitted, but every physical property must agree."""
+    spots = self.tip_rack["A1:H1"]
+    ops = [Pickup(spot, Coordinate.zero(), spot.get_tip()) for spot in spots]
+    original = ops[-1].tip
+    parameters = dict(
+      name="different_tip",
+      diameter=original.get_size_x(),
+      size_z=original.get_size_z(),
+      has_filter=original.has_filter,
+      maximal_volume=original.maximal_volume,
+      fitting_depth=original.fitting_depth,
+      nominal_volume=original.nominal_volume,
+    )
+    for changes in (
+      {"diameter": original.get_size_x() + 1},
+      {"size_z": original.get_size_z() + 1},
+      {"fitting_depth": original.fitting_depth + 1},
+      {"has_filter": not original.has_filter},
+      {"maximal_volume": original.maximal_volume - 1},
+      {"nominal_volume": original.nominal_volume - 1},
+      {"collar_height": 1},
+      {"pick_up_location": Coordinate(z=1)},
+    ):
+      with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, "shared tip geometry"):
+        await self.backend.pick_up_tips(
+          ops[:-1] + [replace(ops[-1], tip=Tip(**{**parameters, **changes}))], list(range(8))
+        )
+    mock_pick_up.assert_not_called()
+
+  @patch("ot_api.lh.pick_up_tip", side_effect=RuntimeError("dispatch failed"))
+  @patch("ot_api.labware.add", side_effect=_mock_add)
+  @patch("ot_api.labware.define", side_effect=_mock_define)
+  async def test_full_head_pickup_failure_rolls_back_all_tip_state(
+    self, _mock_define, _mock_add, mock_pick_up
+  ):
+    """A transport failure commits none of the eight queued tip changes."""
+    with self.assertRaisesRegex(RuntimeError, "dispatch failed"):
+      await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+
+    mock_pick_up.assert_called_once()
+    self.assertTrue(all(not tracker.has_tip for tracker in self.lh.head.values()))
+    self.assertTrue(all(spot.has_tip() for spot in self.tip_rack["A1:H1"]))
+
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.add", side_effect=_mock_add)
+  @patch("ot_api.labware.define", side_effect=_mock_define)
+  async def test_fixed_head_rejects_partial_and_reversed_columns_before_dispatch(
+    self, _mock_define, _mock_add, mock_pick_up
+  ):
+    """Reject partial or reversed nozzle targets without a tip command."""
+    with self.assertRaisesRegex(ValueError, "channels 0 through 7"):
+      await self.lh.pick_up_tips(self.tip_rack["A1:G1"])
+    with self.assertRaisesRegex(ValueError, "ordered A-to-H column"):
+      await self.lh.pick_up_tips(list(reversed(self.tip_rack["A1:H1"])))
+
+    mock_pick_up.assert_not_called()
+
+  @patch("ot_api.lh.aspirate_in_place")
+  @patch("ot_api.lh.move_arm")
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.add", side_effect=_mock_add)
+  @patch("ot_api.labware.define", side_effect=_mock_define)
+  async def test_fixed_head_rejects_mixed_per_nozzle_volumes_before_liquid_dispatch(
+    self, _mock_define, _mock_add, _mock_pick_up, _mock_move, mock_aspirate
+  ):
+    """Unequal volumes reject the complete action and preserve mounted tips."""
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    with self.assertRaisesRegex(ValueError, "one shared volume"):
+      await self.lh.aspirate(self.plate["A1:H1"], vols=[20] * 7 + [21])
+
+    mock_aspirate.assert_not_called()
+    self.assertTrue(all(tracker.has_tip for tracker in self.lh.head.values()))
+
+  @patch("ot_api.runs.create", return_value="run-id")
+  @patch("ot_api.lh.add_mounted_pipettes")
+  async def test_fixed_head_setup_rejects_a_legacy_mounted_model(self, mock_pipettes, _mock_create):
+    """Model discovery must match an explicitly supported GEN2 identity."""
+    mock_pipettes.return_value = (
+      {"pipetteId": "left-id", "name": "p50_multi"},
+      None,
+    )
+    backend = OpentronsOT2Backend("localhost", fixed_head_mount="left")
+    liquid_handler = LiquidHandler(backend=backend, deck=OTDeck())
+
+    with self.assertRaisesRegex(NoChannelError, "supported OT-2 GEN2 eight-channel"):
+      await liquid_handler.setup(skip_home=True)
+
+  @patch("ot_api.lh.aspirate_in_place")
+  @patch("ot_api.lh.move_arm")
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.add", side_effect=_mock_add)
+  @patch("ot_api.labware.define", side_effect=_mock_define)
+  async def test_p20_full_head_uses_its_model_range_and_default_flow_rate(
+    self, _mock_define, _mock_add, mock_pick_up, _mock_move, mock_aspirate
+  ):
+    """P20 uses its per-nozzle minimum and default flow through the normal frontend."""
+    self.backend.left_pipette = {"pipetteId": "fixed-head-id", "name": "p20_multi_gen2"}
+    tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack_20")
+    self.deck.assign_child_at_slot(tip_rack, slot=2)
+
+    await self.lh.pick_up_tips(tip_rack["A1:H1"])
+    await self.lh.aspirate(self.plate["A1:H1"], vols=[1] * 8)
+    self.assertEqual([well.tracker.get_used_volume() for well in self.plate["A1:H1"]], [99] * 8)
+
+    mock_pick_up.assert_called_once()
+    mock_aspirate.assert_called_once_with(
+      volume=1.0,
+      flow_rate=7.6,
+      pipette_id="fixed-head-id",
+    )
+
+  @patch("ot_api.lh.aspirate_in_place")
+  @patch("ot_api.lh.move_arm")
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.add", side_effect=_mock_add)
+  @patch("ot_api.labware.define", side_effect=_mock_define)
+  async def test_fixed_head_rejects_volume_outside_the_detected_model_range(
+    self, _mock_define, _mock_add, _mock_pick_up, _mock_move, mock_aspirate
+  ):
+    """P300 rejects a volume below its operating minimum before liquid dispatch."""
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+
+    with self.assertRaisesRegex(NoChannelError, "20 through 300"):
+      await self.lh.aspirate(self.plate["A1:H1"], vols=[19] * 8)
+
+    mock_aspirate.assert_not_called()
+
+  @patch("ot_api.lh.aspirate_in_place", side_effect=RuntimeError("dispatch failed"))
+  @patch("ot_api.lh.move_arm")
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.add", side_effect=_mock_add)
+  @patch("ot_api.labware.define", side_effect=_mock_define)
+  async def test_full_head_liquid_failure_rolls_back_every_source_and_tip(
+    self, _mock_define, _mock_add, _mock_pick_up, _mock_move, mock_aspirate
+  ):
+    """One failed liquid command leaves all eight software volumes uncommitted."""
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    with self.assertRaisesRegex(RuntimeError, "dispatch failed"):
+      await self.lh.aspirate(self.plate["A1:H1"], vols=[20] * 8)
+    mock_aspirate.assert_called_once()
+    self.assertEqual([well.tracker.get_used_volume() for well in self.plate["A1:H1"]], [100] * 8)
+    self.assertEqual(
+      [tracker.get_tip().tracker.get_used_volume() for tracker in self.lh.head.values()], [0] * 8
+    )
+
+  @patch("ot_api.lh.dispense_in_place")
+  @patch("ot_api.lh.aspirate_in_place")
+  @patch("ot_api.lh.move_arm")
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.add", side_effect=_mock_add)
+  @patch("ot_api.labware.define", side_effect=_mock_define)
+  async def test_late_invalid_volume_rolls_back_queued_state_without_dispatch(
+    self, _mock_define, _mock_add, _mock_pick_up, mock_move, mock_aspirate, mock_dispense
+  ):
+    """Reject an invalid eighth well without leaving changes queued on the first seven."""
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    self.plate.get_well("H1").tracker.set_volume(0)
+    with self.assertRaises(TooLittleLiquidError):
+      await self.lh.aspirate(self.plate["A1:H1"], vols=[20] * 8)
+    self.assertEqual(
+      [well.tracker.get_used_volume() for well in self.plate["A1:H1"]], [100] * 7 + [0]
+    )
+    self.assertEqual(
+      [tracker.get_tip().tracker.get_used_volume() for tracker in self.lh.head.values()], [0] * 8
+    )
+    mock_move.assert_not_called()
+    mock_aspirate.assert_not_called()
+
+    self.plate.get_well("H1").tracker.set_volume(100)
+    await self.lh.aspirate(self.plate["A1:H1"], vols=[20] * 8)
+    self.plate.get_well("H2").tracker.set_volume(350)
+    mock_move.reset_mock()
+    with self.assertRaises(TooLittleVolumeError):
+      await self.lh.dispense(self.plate["A2:H2"], vols=[20] * 8)
+    self.assertEqual(
+      [well.tracker.get_used_volume() for well in self.plate["A2:H2"]], [0] * 7 + [350]
+    )
+    self.assertEqual(
+      [tracker.get_tip().tracker.get_used_volume() for tracker in self.lh.head.values()], [20] * 8
+    )
+    mock_move.assert_not_called()
+    mock_dispense.assert_not_called()
+
+  @patch("ot_api.lh.drop_tip")
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.add", side_effect=_mock_add)
+  @patch("ot_api.labware.define", side_effect=_mock_define)
+  async def test_late_occupied_return_spot_rolls_back_every_tip_without_dispatch(
+    self, _mock_define, _mock_add, _mock_pick_up, mock_drop
+  ):
+    """An occupied eighth return spot must preserve all mounted tips."""
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    self.tip_rack.get_item("H1").tracker.add_tip(self.tip_rack.get_item("H2").get_tip())
+    with self.assertRaises(HasTipError):
+      await self.lh.return_tips()
+    self.assertTrue(all(tracker.has_tip for tracker in self.lh.head.values()))
+    self.assertEqual([spot.has_tip() for spot in self.tip_rack["A1:H1"]], [False] * 7 + [True])
+    mock_drop.assert_not_called()
+
+  @patch("ot_api.lh.pick_up_tip")
+  async def test_late_mounted_tip_rejects_pickup_without_leaving_queued_changes(self, mock_pick_up):
+    """An occupied eighth channel preserves the first seven empty channels and rack tips."""
+    tip = self.tip_rack.get_item("H2").get_tip()
+    self.lh.head[7].add_tip(tip)
+    with self.assertRaises(HasTipError):
+      await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    self.assertEqual([tracker.has_tip for tracker in self.lh.head.values()], [False] * 7 + [True])
+    self.assertTrue(all(spot.has_tip() for spot in self.tip_rack["A1:H1"]))
+    mock_pick_up.assert_not_called()
+
+  @patch("ot_api.lh.pick_up_tip")
+  async def test_fixed_head_rejects_displaced_or_rotated_columns_before_dispatch(
+    self, mock_pick_up
+  ):
+    """Index ordering alone cannot authorize a physically misaligned head."""
+    for displacement in (Coordinate(x=1), Coordinate(y=1), Coordinate(z=1)):
+      spot = self.tip_rack.get_item("H1")
+      original = spot.location
+      assert original is not None
+      spot.location = original + displacement
+      with self.assertRaisesRegex(ValueError, "aligned 9 mm"):
+        await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+      spot.location = original
+    self.tip_rack.rotate(z=180)
+    with self.assertRaisesRegex(ValueError, "unrotated"):
+      await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    mock_pick_up.assert_not_called()
+
+  @patch("ot_api.lh.aspirate_in_place")
+  @patch("ot_api.lh.move_arm")
+  async def test_fixed_head_rejects_unrepresentable_parameters_before_movement(
+    self, mock_move, mock_aspirate
+  ):
+    """A single physical command cannot encode different settings for each nozzle."""
+    ops = [
+      SingleChannelAspiration(
+        well, Coordinate.zero(), self.tip_rack.get_item("A1").get_tip(), 20, None, None, None, None
+      )
+      for well in self.plate["A1:H1"]
+    ]
+    mismatches = (
+      {"offset": Coordinate(z=1)},
+      {"flow_rate": 1},
+      {"liquid_height": 1},
+      {"blow_out_air_volume": 1},
+      {"mix": Mix(20, 2, 10)},
+    )
+    for changes in mismatches:
+      with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, "one shared"):
+        await self.backend.aspirate(ops[:-1] + [replace(ops[-1], **changes)], list(range(8)))
+    mock_move.assert_not_called()
+    mock_aspirate.assert_not_called()
+
+  @patch("ot_api.lh.aspirate_in_place")
+  @patch("ot_api.lh.move_arm")
+  async def test_fixed_head_rejects_surface_following_before_movement(
+    self, mock_move, mock_aspirate
+  ):
+    """Fixed-head mixing cannot follow the liquid surface."""
+    for mix in (
+      Mix(20, 2, 10, surface_following_distance=1),
+      Mix(20, 2, 10, auto_surface_following=True),
+    ):
+      ops = [
+        SingleChannelAspiration(
+          well, Coordinate.zero(), self.tip_rack.get_item("A1").get_tip(), 20, None, None, None, mix
+        )
+        for well in self.plate["A1:H1"]
+      ]
+      with self.subTest(mix=mix), self.assertRaisesRegex(ValueError, "surface following"):
+        await self.backend.aspirate(ops, list(range(8)))
+    mock_move.assert_not_called()
+    mock_aspirate.assert_not_called()
+
+
 def _make_backend_with_pipettes(left_name="p300_single_gen2", right_name="p20_single_gen2"):
   """Create a backend with pipette state set directly (no ot_api needed)."""
   backend = OpentronsOT2Backend.__new__(OpentronsOT2Backend)
+  backend.fixed_head_mount = None
   backend.left_pipette = {"name": left_name, "pipetteId": "left-id"} if left_name else None
   backend.right_pipette = {"name": right_name, "pipetteId": "right-id"} if right_name else None
   backend.left_pipette_has_tip = False

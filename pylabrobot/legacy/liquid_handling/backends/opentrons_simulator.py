@@ -50,6 +50,7 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
     """
     # Skip OpentronsOT2Backend.__init__ (requires ot_api); call grandparent directly.
     LiquidHandlerBackend.__init__(self)
+    self.fixed_head_mount = None
 
     pv = OpentronsOT2Backend.pipette_name2volume
     if left_pipette_name is not None and left_pipette_name not in pv:
