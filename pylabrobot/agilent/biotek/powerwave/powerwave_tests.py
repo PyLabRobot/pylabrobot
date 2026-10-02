@@ -1159,6 +1159,36 @@ class TestAbortedRead(unittest.IsolatedAsyncioTestCase):
 
     self.assertIn("signal out of range", str(caught.exception))
 
+  async def test_total_silence_is_reported_as_an_abandoned_read(self):
+    # A fault can abandon the read without sending DLE first, and can take the
+    # serial interface down with it, so nothing arrives at all. Verified on a
+    # PowerWaveX w/ Incubator asked to read at 200 nm.
+    plate = _plate_resource()
+    reader, _ = _reader(self._script_until_read(), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveReadAbortedError) as caught:
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    message = str(caught.exception)
+    self.assertIn("sent nothing", message)
+    self.assertIn("power cycle", message)
+    self.assertIsNone(caught.exception.code)
+
+  async def test_a_silent_scan_is_reported_too(self):
+    plate = _plate_resource()
+    # geometry, '&', the second ACK, status, both wavelength lists, then silence
+    script = _ACK + _STATUS_OK + _ACK + _ACK + _STATUS_OK + b"\x1a" + b"\x1a"
+    reader, _ = _reader(script, model="PowerWaveX")
+    reader._SCAN_SECONDS_PER_WAVELENGTH = 0  # no real monochromator to wait for
+
+    with self.assertRaises(PowerWaveReadAbortedError) as caught:
+      await reader.scan_plate(
+        plate, start_wavelength=400, stop_wavelength=420, step=10, well=plate.get_item(0)
+      )
+
+    self.assertIn("No scan data arrived", str(caught.exception))
+
   async def test_a_normal_read_is_untouched(self):
     plate = _plate_resource()
     reader, fake = _reader(_read_script(), model="PowerWaveX")

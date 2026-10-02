@@ -139,6 +139,10 @@ class PowerWaveX:
   #: How long to wait for the status string that explains an abandoned read.
   _ABORT_STATUS_SECONDS = 10.0
 
+  #: Seconds allowed per scanned wavelength, on top of :attr:`timeout`. An
+  #: instance attribute so a test can collapse the wait.
+  _SCAN_SECONDS_PER_WAVELENGTH = SCAN_SECONDS_PER_WAVELENGTH
+
   #: How long the line must stay quiet for :meth:`_drain_input` to call it clear,
   #: and the total time it will spend draining.
   _DRAIN_QUIET_SECONDS = 1.5
@@ -299,6 +303,18 @@ class PowerWaveX:
 
     340 models cannot go below 340 nm; this driver does not detect that, since the
     instrument configuration word does not distinguish it for every variant.
+
+    Warning:
+      This is the manual's specified range, not a safe one. An individual
+      instrument's lamp and optics may not reach the ends of it, and asking for a
+      wavelength they cannot reach does more than fail the read. A PowerWaveX w/
+      Incubator (firmware R06.20) asked to read at 200 nm abandoned the read and
+      latched ``0F11`` ("signal out of range") on its front panel; it did so twice,
+      once answering ``080`` to every later command and once going silent
+      altogether, which needed a power cycle to clear. Scans and reads from 400 nm
+      upwards were unaffected on that instrument. Treat the far ends of this range
+      as untested on any given unit, and probe them only when someone can reach
+      the front panel.
     """
     return (MIN_WAVELENGTH, MAX_WAVELENGTH)
 
@@ -485,8 +501,11 @@ class PowerWaveX:
     uncalibrated = [w for w in wavelengths if w not in (self._wavelength_table or [])]
     if len(uncalibrated) > 0:
       logger.warning(
-        "[PowerWaveX %s] %s nm not in the calibrated wavelength table %s. The read will "
-        "still work, but gains are calibrated only for the stored table (page B-8).",
+        "[PowerWaveX %s] %s nm not in the calibrated wavelength table %s. Gains are "
+        "calibrated only for the stored table (page B-8), so the read may be less "
+        "accurate. A wavelength this instrument's optics cannot reach at all will "
+        "abandon the read and latch a fault on the front panel; see "
+        "abs_wavelength_range.",
         self.port,
         uncalibrated,
         self._wavelength_table,
@@ -914,17 +933,26 @@ class PowerWaveX:
       "[PowerWaveX %s] scan calibrated %s, first pass %s", self.port, calibrated, first_pass
     )
 
+    # Every wavelength is measured before any data is sent, so the start code and
+    # the whole section must arrive inside one deadline. Scanning is slower than a
+    # plate read.
+    timeout = self.timeout + self._SCAN_SECONDS_PER_WAVELENGTH * len(expected)
+
     # A single CR marks the start of the data, then one line per wavelength, then
     # one ^Z and one checksum byte for the whole series.
-    start_code = await self._read_exactly(1)
+    try:
+      start_code = await self._read_exactly(1, timeout=timeout)
+    except TimeoutError as silence:
+      raise PowerWaveReadAbortedError(
+        f"No scan data arrived: the instrument sent nothing for {timeout:.0f}s after "
+        f"acknowledging the scan. It has abandoned it. Check its front panel for a fault "
+        f"code; if it answers nothing at all it needs a power cycle."
+      ) from silence
     if start_code == DLE:
       await self._raise_read_aborted(0, len(expected))
     if start_code != CR:
       raise PowerWaveParseError(f"Expected CR data start code, got {start_code!r}")
 
-    # Every wavelength is measured before any data is sent, so the whole section
-    # must arrive inside one deadline. Scanning is slower than a plate read.
-    timeout = self.timeout + SCAN_SECONDS_PER_WAVELENGTH * len(expected)
     section = await self._read_until(SUB, timeout=timeout)
     checksum = (await self._read_exactly(1, timeout=timeout))[0]
     verify_scan_checksum(section, checksum)
@@ -1060,7 +1088,18 @@ class PowerWaveX:
     """
     blocks = []
     for index in range(num_blocks):
-      start = await self._read_exactly(1, timeout=timeout)
+      try:
+        start = await self._read_exactly(1, timeout=timeout)
+      except TimeoutError as silence:
+        # Nothing at all arrived. A fault can abandon the read without the DLE
+        # below, and can take the serial interface down with it.
+        raise PowerWaveReadAbortedError(
+          f"No data block arrived after {index} of {num_blocks} "
+          f"block{'' if num_blocks == 1 else 's'}: the instrument sent nothing for "
+          f"{timeout if timeout is not None else self.timeout:.0f}s. It has abandoned the "
+          f"read. Check its front panel for a fault code; if it answers nothing at all it "
+          f"needs a power cycle, and otherwise run self_test()."
+        ) from silence
       if start == DLE:
         await self._raise_read_aborted(index, num_blocks)
       frame = start + await self._read_until(SUB, timeout=timeout)
