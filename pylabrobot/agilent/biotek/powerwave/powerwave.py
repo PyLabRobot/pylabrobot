@@ -546,7 +546,9 @@ class PowerWaveX:
       wavelengths: One to six wavelengths in nm.
       interval: Seconds between reads. Must be at least
         :meth:`request_minimum_kinetic_interval`, which depends on the assay and
-        the baud rate; a warning is logged if it is shorter.
+        the baud rate, and so is only known once the assay has been loaded. A
+        shorter interval raises :class:`ValueError`, because the instrument
+        rejects the read outright rather than running it late.
       count: Number of reads, 2 to 9999.
       shake_speed: 0 slow, 1 medium, 2 fast, 3 variable. Shaking runs between
         reads.
@@ -593,12 +595,15 @@ class PowerWaveX:
     # range and the baud rate (page B-13).
     minimum = await self.request_minimum_kinetic_interval()
     if interval < minimum:
-      logger.warning(
-        "[PowerWaveX %s] requested interval %ds is below the instrument's minimum of %ds "
-        "for this assay; cycles will run late",
-        self.port,
-        interval,
-        minimum,
+      # The instrument does not run such a series late, it refuses it: a
+      # PowerWaveX w/ Incubator asked for two wavelengths every 15 s against a
+      # 19 s minimum answered READ PLATE with status 090. Raise here instead,
+      # where the number it wants can be reported.
+      raise ValueError(
+        f"interval {interval}s is below the instrument's minimum of {minimum}s for this "
+        f"assay. The minimum depends on the wavelength count, the strip range and the "
+        f"baud rate, so it is only known once the assay is loaded; reading at {interval}s "
+        f"would be rejected with status 090."
       )
 
     logger.info(

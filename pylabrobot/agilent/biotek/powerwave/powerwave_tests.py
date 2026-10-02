@@ -1369,19 +1369,35 @@ class TestKineticRead(unittest.IsolatedAsyncioTestCase):
     stamps = [r.timestamp for r in results]
     self.assertEqual(stamps, sorted(stamps))
 
-  async def test_interval_below_the_instrument_minimum_warns(self):
+  async def test_interval_below_the_instrument_minimum_raises(self):
+    # The instrument refuses such a series with status 090 rather than running it
+    # late, so the driver stops before sending READ PLATE.
     plate = _plate_resource()
-    reader, _ = _reader(
+    reader, fake = _reader(
       self._kinetic_script(cycles=2, wavelengths=1, minimum=60), model="PowerWaveX"
     )
     reader._wavelength_table = [600]
 
-    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
+    with self.assertRaises(ValueError) as caught:
       await reader.read_absorbance_kinetic(
         plate, plate.get_all_items(), [600], interval=20, count=2
       )
 
-    self.assertIn("below the instrument's minimum", "\n".join(logs.output))
+    self.assertIn("minimum of 60s", str(caught.exception))
+    self.assertNotIn(b"S", fake.writes)  # READ PLATE was never sent
+
+  async def test_interval_at_the_instrument_minimum_is_accepted(self):
+    plate = _plate_resource()
+    reader, _ = _reader(
+      self._kinetic_script(cycles=2, wavelengths=1, minimum=20), model="PowerWaveX"
+    )
+    reader._wavelength_table = [600]
+
+    results = await reader.read_absorbance_kinetic(
+      plate, plate.get_all_items(), [600], interval=20, count=2
+    )
+
+    self.assertEqual(len(results), 2)
 
   async def test_read_count_bounds(self):
     plate = _plate_resource()
