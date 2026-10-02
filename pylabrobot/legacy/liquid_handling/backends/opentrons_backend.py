@@ -1,8 +1,9 @@
 import inspect
 import logging
+import math
 import re
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot import utils
 from pylabrobot.io import LOG_LEVEL_IO
@@ -19,6 +20,7 @@ from pylabrobot.legacy.liquid_handling.standard import (
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
+  PipettingOp,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
@@ -27,8 +29,12 @@ from pylabrobot.legacy.liquid_handling.standard import (
 )
 from pylabrobot.resources import (
   Coordinate,
+  Plate,
+  Resource,
   Tip,
+  Trash,
 )
+from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.opentrons import OTDeck
 from pylabrobot.resources.tip_rack import TipRack
 
@@ -100,8 +106,29 @@ class _IOLogger:
     return attr
 
 
+def _fixed_head_tip_geometry(tip: Tip) -> Tuple[object, ...]:
+  """Compare physical tip properties independently of resource identity and placement."""
+  return (
+    tip.get_size_x(),
+    tip.get_size_y(),
+    tip.get_size_z(),
+    tip.fitting_depth,
+    tip.has_filter,
+    tip.maximal_volume,
+    tip.nominal_volume,
+    tip.collar_height if tip.has_collar_height else None,
+    tip.pick_up_location,
+  )
+
+
 class OpentronsOT2Backend(LiquidHandlerBackend):
   """Backends for the Opentrons OT2 liquid handling robots."""
+
+  _FIXED_HEAD_CHANNELS = list(range(8))
+  _FIXED_HEAD_VOLUME_RANGES = {
+    "p20_multi_gen2": (1, 20),
+    "p300_multi_gen2": (20, 300),
+  }
 
   pipette_name2volume = {
     "p10_single": 10,
@@ -120,7 +147,23 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     "p1000_single_gen3": 1000,
   }
 
-  def __init__(self, host: str, port: int = 31950):
+  def __init__(
+    self,
+    host: str,
+    port: int = 31950,
+    fixed_head_mount: Optional[Literal["left", "right"]] = None,
+  ):
+    """Create an OT-2 backend.
+
+    Args:
+      host: Hostname or IP address of the OT-2.
+      port: Robot-server port.
+      fixed_head_mount: Mount containing a supported OT-2 GEN2 eight-channel pipette. When set,
+        the backend exposes the eight fixed nozzles as one full-head operation. All eight channels
+        must be selected together. P20 and P300 GEN2 models are supported, with per-nozzle volumes
+        of 1–20 and 20–300 µL, respectively. The other mount is not exposed in this mode. Resources
+        must be unrotated A-to-H columns of a tip rack or plate at 9 mm pitch.
+    """
     super().__init__()
 
     if not USE_OT:
@@ -131,6 +174,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     self.host = host
     self.port = port
+    if fixed_head_mount not in {None, "left", "right"}:
+      raise ValueError("fixed_head_mount must be left, right, or None")
+    self.fixed_head_mount = fixed_head_mount
 
     # All hardware I/O goes through this handle so a subclass (e.g. the chatterbox)
     # can dry-run the backend by swapping it for a recording stand-in. The real handle
@@ -149,11 +195,27 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self._plr_name_to_load_name: Dict[str, str] = {}
 
   def serialize(self) -> dict:
-    return {
+    data = {
       **super().serialize(),
       "host": self.host,
       "port": self.port,
     }
+    if self.fixed_head_mount is not None:
+      data["fixed_head_mount"] = self.fixed_head_mount
+    return data
+
+  def _fixed_head_pipette(self) -> Dict[str, str]:
+    """Return the selected fixed-head pipette or reject the mounted configuration."""
+
+    if self.fixed_head_mount is None:
+      raise RuntimeError("fixed-head operation is not enabled")
+    pipette = self.left_pipette if self.fixed_head_mount == "left" else self.right_pipette
+    if pipette is None or pipette["name"] not in self._FIXED_HEAD_VOLUME_RANGES:
+      raise NoChannelError(
+        f"The {self.fixed_head_mount} mount must contain a supported OT-2 GEN2 "
+        "eight-channel pipette."
+      )
+    return pipette
 
   async def setup(self, skip_home: bool = False):
     # create run
@@ -164,6 +226,8 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.left_pipette, self.right_pipette = self._ot.lh.add_mounted_pipettes()
 
     self.left_pipette_has_tip = self.right_pipette_has_tip = False
+    if self.fixed_head_mount is not None:
+      self._fixed_head_pipette()
 
     # get api version
     health = self._ot.health.get()
@@ -174,7 +238,117 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   @property
   def num_channels(self) -> int:
+    if self.fixed_head_mount is not None:
+      return len(self._FIXED_HEAD_CHANNELS)
     return len([p for p in [self.left_pipette, self.right_pipette] if p is not None])
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    def supports_tip(channel_vol: float, tip_vol: float) -> bool:
+      if channel_vol == 20:
+        return tip_vol in {10, 20}
+      if channel_vol == 300:
+        return tip_vol in {200, 300}
+      if channel_vol == 1000:
+        return tip_vol in {1000}
+      raise ValueError(f"Unknown channel volume: {channel_vol}")
+
+    if self.fixed_head_mount is not None:
+      if channel_idx not in self._FIXED_HEAD_CHANNELS:
+        return False
+      pipette = self._fixed_head_pipette()
+      return supports_tip(self.pipette_name2volume[pipette["name"]], tip.maximal_volume)
+    if channel_idx == 0:
+      if self.left_pipette is None:
+        return False
+      left_volume = OpentronsOT2Backend.pipette_name2volume[self.left_pipette["name"]]
+      return supports_tip(left_volume, tip.maximal_volume)
+    if channel_idx == 1:
+      if self.right_pipette is None:
+        return False
+      right_volume = OpentronsOT2Backend.pipette_name2volume[self.right_pipette["name"]]
+      return supports_tip(right_volume, tip.maximal_volume)
+    return False
+
+  def _validate_fixed_head_ops(self, ops: Sequence[PipettingOp], use_channels: List[int]) -> None:
+    """Validate one ordered, 9 mm-pitch column for the fixed eight-nozzle head."""
+
+    if use_channels != self._FIXED_HEAD_CHANNELS or len(ops) != len(self._FIXED_HEAD_CHANNELS):
+      raise ValueError("fixed-head operations require channels 0 through 7 in order")
+
+    geometry = _fixed_head_tip_geometry(ops[0].tip)
+    if any(_fixed_head_tip_geometry(op.tip) != geometry for op in ops[1:]):
+      raise ValueError("fixed-head operations require one shared tip geometry")
+    if not all(self.can_pick_up_tip(channel, op.tip) for channel, op in zip(use_channels, ops)):
+      raise NoChannelError("The fixed-head pipette cannot use the selected tips.")
+
+    resources = [op.resource for op in ops]
+    if len({id(resource) for resource in resources}) != len(resources):
+      if all(
+        isinstance(op, Drop)
+        and op.resource is resources[0]
+        and isinstance(op.resource, Trash)
+        and op.resource.name == "trash"
+        and op.resource.is_in_subtree_of(self.deck)
+        for op in ops
+      ):
+        anchor = ops[0].offset
+        if not all(op.offset == anchor + Coordinate(y=-9 * index) for index, op in enumerate(ops)):
+          raise ValueError("fixed-head trash offsets must form one 9 mm-pitch column")
+        return
+      raise ValueError("fixed-head operations require eight distinct positions")
+
+    if any(op.offset != ops[0].offset for op in ops[1:]):
+      raise ValueError("fixed-head operations require one shared offset")
+
+    parent = resources[0].parent
+    if parent is None or any(resource.parent is not parent for resource in resources):
+      raise ValueError("fixed-head positions must share one itemized resource")
+    if not isinstance(parent, (TipRack, Plate)):
+      raise ValueError("fixed-head positions must belong to a tip rack or plate")
+
+    itemized_parent = cast(ItemizedResource[Resource], parent)
+    rows = [itemized_parent.get_child_row(resource) for resource in resources]
+    columns = [itemized_parent.get_child_column(resource) for resource in resources]
+    if rows != self._FIXED_HEAD_CHANNELS or len(set(columns)) != 1:
+      raise ValueError("fixed-head positions must be one ordered A-to-H column")
+    z_anchor = (
+      "cavity_bottom"
+      if isinstance(ops[0], (SingleChannelAspiration, SingleChannelDispense))
+      else "b"
+    )
+    positions = [resource.get_location_wrt(self.deck, "c", "c", z_anchor) for resource in resources]
+    anchor = positions[0]
+    for index, (resource, position) in enumerate(zip(resources, positions)):
+      rotation = resource.get_absolute_rotation()
+      if any(angle % 360 != 0 for angle in (rotation.x, rotation.y, rotation.z)):
+        raise ValueError("fixed-head positions must be unrotated")
+      if not all(
+        math.isclose(actual, expected, rel_tol=0, abs_tol=1e-6)
+        for actual, expected in (
+          (position.x, anchor.x),
+          (position.y, anchor.y - 9 * index),
+          (position.z, anchor.z),
+        )
+      ):
+        raise ValueError("fixed-head positions must use aligned 9 mm row pitch at one height")
+
+  @staticmethod
+  def _validate_equal_fixed_head_values(
+    ops: Sequence[Union[SingleChannelAspiration, SingleChannelDispense]],
+  ) -> None:
+    """Reject per-nozzle settings that one fixed-head command cannot represent."""
+
+    first = ops[0]
+    if any(op.volume != first.volume for op in ops[1:]):
+      raise ValueError("fixed-head operations require one shared volume")
+    if any(op.flow_rate != first.flow_rate for op in ops[1:]):
+      raise ValueError("fixed-head operations require one shared flow_rate")
+    if any(op.liquid_height != first.liquid_height for op in ops[1:]):
+      raise ValueError("fixed-head operations require one shared liquid_height")
+    if any(op.blow_out_air_volume != first.blow_out_air_volume for op in ops[1:]):
+      raise ValueError("fixed-head operations require one shared blow_out_air_volume")
+    if any(op.mix != first.mix for op in ops[1:]):
+      raise ValueError("fixed-head operations require one shared mix")
 
   async def stop(self):
     """Cancel any active OT run, then clear labware definitions."""
@@ -315,8 +489,18 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     self._tip_racks[tip_rack.name] = slot
 
-  def _get_pickup_pipette(self, ops: List[Pickup]) -> str:
+  def _get_pickup_pipette(self, ops: List[Pickup], use_channels: Optional[List[int]] = None) -> str:
     """Get the pipette for a tip pick-up, or raise."""
+    use_channels = list(range(len(ops))) if use_channels is None else use_channels
+    if self.fixed_head_mount is not None:
+      self._validate_fixed_head_ops(ops, use_channels)
+      pipette = self._fixed_head_pipette()
+      has_tip = (
+        self.left_pipette_has_tip if self.fixed_head_mount == "left" else self.right_pipette_has_tip
+      )
+      if has_tip:
+        raise NoChannelError("The fixed-head pipette already has tips.")
+      return cast(str, pipette["pipetteId"])
     assert len(ops) == 1, "only one channel supported for now"
     op = ops[0]
     assert op.resource.parent is not None, "must not be a floating resource"
@@ -325,8 +509,18 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       raise NoChannelError("No pipette channel of right type with no tip available.")
     return pipette_id
 
-  def _get_drop_pipette(self, ops: List[Drop]) -> str:
+  def _get_drop_pipette(self, ops: List[Drop], use_channels: Optional[List[int]] = None) -> str:
     """Get the pipette for a tip drop, or raise."""
+    use_channels = list(range(len(ops))) if use_channels is None else use_channels
+    if self.fixed_head_mount is not None:
+      self._validate_fixed_head_ops(ops, use_channels)
+      pipette = self._fixed_head_pipette()
+      has_tip = (
+        self.left_pipette_has_tip if self.fixed_head_mount == "left" else self.right_pipette_has_tip
+      )
+      if not has_tip:
+        raise NoChannelError("The fixed-head pipette has no tips.")
+      return cast(str, pipette["pipetteId"])
     assert len(ops) == 1, "only one channel supported for now"
     op = ops[0]
     assert op.resource.parent is not None, "must not be a floating resource"
@@ -336,9 +530,37 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     return pipette_id
 
   def _get_liquid_pipette(
-    self, ops: Union[List[SingleChannelAspiration], List[SingleChannelDispense]]
+    self,
+    ops: Union[List[SingleChannelAspiration], List[SingleChannelDispense]],
+    use_channels: Optional[List[int]] = None,
   ) -> str:
     """Get the pipette for an aspirate/dispense, or raise."""
+    use_channels = list(range(len(ops))) if use_channels is None else use_channels
+    if self.fixed_head_mount is not None:
+      self._validate_fixed_head_ops(ops, use_channels)
+      self._validate_equal_fixed_head_values(ops)
+      pipette = self._fixed_head_pipette()
+      minimum, maximum = self._FIXED_HEAD_VOLUME_RANGES[pipette["name"]]
+      if not minimum <= ops[0].volume <= maximum:
+        raise NoChannelError(
+          f"{pipette['name']} supports {minimum} through {maximum} µL per nozzle."
+        )
+      if ops[0].volume > ops[0].tip.maximal_volume:
+        raise ValueError("fixed-head volume exceeds the selected tip capacity")
+      if ops[0].mix is not None:
+        mix = ops[0].mix
+        if not minimum <= mix.volume <= min(maximum, ops[0].tip.maximal_volume):
+          raise ValueError(f"fixed-head mix volume must be within {minimum} through {maximum} µL")
+        if mix.surface_following_distance not in (None, 0) or mix.auto_surface_following:
+          raise ValueError("fixed-head mixing does not support surface following")
+      if ops[0].blow_out_air_volume not in (None, 0):
+        raise ValueError("fixed-head operations do not support blow_out_air_volume")
+      has_tip = (
+        self.left_pipette_has_tip if self.fixed_head_mount == "left" else self.right_pipette_has_tip
+      )
+      if not has_tip:
+        raise NoChannelError("The fixed-head pipette has no tips.")
+      return cast(str, pipette["pipetteId"])
     assert len(ops) == 1, "only one channel supported for now"
     pipette_id = self.select_liquid_pipette(ops[0].volume)
     if pipette_id is None:
@@ -366,7 +588,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     """Pick up tips from the specified resource."""
 
-    pipette_id = self._get_pickup_pipette(ops)
+    pipette_id = self._get_pickup_pipette(ops, use_channels)
     op = ops[0]
 
     offset_x, offset_y, offset_z = (
@@ -397,7 +619,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     """Drop tips from the specified resource."""
 
-    pipette_id = self._get_drop_pipette(ops)
+    pipette_id = self._get_drop_pipette(ops, use_channels)
     op = ops[0]
 
     use_fixed_trash = op.resource.name == "trash" and _fixed_trash_is_addressable(
@@ -510,7 +732,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
     """Aspirate liquid from the specified resource using pip."""
 
-    pipette_id = self._get_liquid_pipette(ops)
+    pipette_id = self._get_liquid_pipette(ops, use_channels)
     op = ops[0]
     volume = op.volume
 
@@ -585,7 +807,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     """Dispense liquid from the specified resource using pip."""
 
-    pipette_id = self._get_liquid_pipette(ops)
+    pipette_id = self._get_liquid_pipette(ops, use_channels)
     op = ops[0]
     volume = op.volume
 
@@ -663,6 +885,10 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     return cast(List[dict], self._ot.modules.list_connected_modules())
 
   def _pipette_id_for_channel(self, channel: int) -> str:
+    if self.fixed_head_mount is not None:
+      if channel != 0:
+        raise NoChannelError("Position the fixed head through anchor channel 0.")
+      return cast(str, self._fixed_head_pipette()["pipetteId"])
     pipettes = []
     if self.left_pipette is not None:
       pipettes.append(self.left_pipette["pipetteId"])
@@ -755,25 +981,3 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       speed=speed,
       force_direct=force_direct,
     )
-
-  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
-    def supports_tip(channel_vol: float, tip_vol: float) -> bool:
-      if channel_vol == 20:
-        return tip_vol in {10, 20}
-      if channel_vol == 300:
-        return tip_vol in {200, 300}
-      if channel_vol == 1000:
-        return tip_vol in {1000}
-      raise ValueError(f"Unknown channel volume: {channel_vol}")
-
-    if channel_idx == 0:
-      if self.left_pipette is None:
-        return False
-      left_volume = OpentronsOT2Backend.pipette_name2volume[self.left_pipette["name"]]
-      return supports_tip(left_volume, tip.maximal_volume)
-    if channel_idx == 1:
-      if self.right_pipette is None:
-        return False
-      right_volume = OpentronsOT2Backend.pipette_name2volume[self.right_pipette["name"]]
-      return supports_tip(right_volume, tip.maximal_volume)
-    return False

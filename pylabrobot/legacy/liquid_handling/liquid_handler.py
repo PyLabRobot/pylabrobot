@@ -752,14 +752,6 @@ class LiquidHandler(Resource, Machine):
       for tip_spot, offset, tip in zip(tip_spots, offsets, tips)
     ]
 
-    # queue operations on the trackers
-    for channel, op in zip(use_channels, pickups):
-      if self.head[channel].has_tip:
-        raise HasTipError("Channel has tip")
-      if does_tip_tracking() and not op.resource.tracker.is_disabled:
-        op.resource.tracker.remove_tip()
-      self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
-
     # fix the backend kwargs
     extras = self._check_args(
       self.backend.pick_up_tips,
@@ -769,6 +761,21 @@ class LiquidHandler(Resource, Machine):
     )
     for extra in extras:
       del backend_kwargs[extra]
+
+    # Queue the complete request before entering the hardware boundary.
+    try:
+      for channel, op in zip(use_channels, pickups):
+        if self.head[channel].has_tip:
+          raise HasTipError("Channel has tip")
+        if does_tip_tracking() and not op.resource.tracker.is_disabled:
+          op.resource.tracker.remove_tip()
+        self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
+    except BaseException:
+      for channel, op in zip(use_channels, pickups):
+        if does_tip_tracking() and not op.resource.tracker.is_disabled:
+          op.resource.tracker.rollback()
+        self.head[channel].rollback()
+      raise
 
     # actually pick up the tips
     error: Optional[BaseException] = None
@@ -898,16 +905,6 @@ class LiquidHandler(Resource, Machine):
       for tip_spot, tip, offset in zip(tip_spots, tips, offsets)
     ]
 
-    # queue operations on the trackers
-    for channel, op in zip(use_channels, drops):
-      if (
-        does_tip_tracking()
-        and isinstance(op.resource, TipSpot)
-        and not op.resource.tracker.is_disabled
-      ):
-        op.resource.tracker.add_tip(op.tip, commit=False)
-      self.head[channel].remove_tip()
-
     # fix the backend kwargs
     extras = self._check_args(
       self.backend.drop_tips,
@@ -917,6 +914,26 @@ class LiquidHandler(Resource, Machine):
     )
     for extra in extras:
       del backend_kwargs[extra]
+
+    try:
+      for channel, op in zip(use_channels, drops):
+        if (
+          does_tip_tracking()
+          and isinstance(op.resource, TipSpot)
+          and not op.resource.tracker.is_disabled
+        ):
+          op.resource.tracker.add_tip(op.tip, commit=False)
+        self.head[channel].remove_tip()
+    except BaseException:
+      for channel, op in zip(use_channels, drops):
+        if (
+          does_tip_tracking()
+          and isinstance(op.resource, TipSpot)
+          and not op.resource.tracker.is_disabled
+        ):
+          op.resource.tracker.rollback()
+        self.head[channel].rollback()
+      raise
 
     # actually drop the tips
     error: Optional[BaseException] = None

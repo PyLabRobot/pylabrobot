@@ -11,7 +11,7 @@ with ``OpentronsOT2Simulator``, which overrides the high-level methods themselve
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Dict, List, Literal, Optional, Tuple, cast
 
 from pylabrobot.io import LOG_LEVEL_IO
 from pylabrobot.legacy.liquid_handling.backends.backend import LiquidHandlerBackend
@@ -126,6 +126,7 @@ class OpentronsOT2ChatterboxBackend(OpentronsOT2Backend):
     port: int = 31950,
     api_version: str = _OT_DECK_IS_ADDRESSABLE_AREA_VERSION,
     verbose: bool = True,
+    fixed_head_mount: Optional[Literal["left", "right"]] = None,
   ):
     """Initialize the chatterbox.
 
@@ -135,6 +136,7 @@ class OpentronsOT2ChatterboxBackend(OpentronsOT2Backend):
       api_version: reported Opentrons API version; defaults to the version at
         which tip drops route through the addressable-area trash.
       verbose: if True, print every recorded call.
+      fixed_head_mount: Mount whose eight nozzles operate together through the fixed-head route.
     """
     # Skip OpentronsOT2Backend.__init__ (it requires ot_api); set up state directly.
     LiquidHandlerBackend.__init__(self)
@@ -149,6 +151,9 @@ class OpentronsOT2ChatterboxBackend(OpentronsOT2Backend):
     self._right_pipette_name = right_pipette_name
     self.host = host
     self.port = port
+    if fixed_head_mount not in {None, "left", "right"}:
+      raise ValueError("fixed_head_mount must be left, right, or None")
+    self.fixed_head_mount = fixed_head_mount
 
     left = (
       {"name": left_pipette_name, "pipetteId": "chatterbox-left"} if left_pipette_name else None
@@ -171,10 +176,13 @@ class OpentronsOT2ChatterboxBackend(OpentronsOT2Backend):
     return cast(List[Tuple[str, tuple, dict]], self._ot.calls)
 
   def serialize(self) -> dict:
-    return {
+    data = {
       **LiquidHandlerBackend.serialize(self),
       "left_pipette_name": self._left_pipette_name,
       "right_pipette_name": self._right_pipette_name,
       "host": self.host,
       "port": self.port,
     }
+    if self.fixed_head_mount is not None:
+      data["fixed_head_mount"] = self.fixed_head_mount
+    return data

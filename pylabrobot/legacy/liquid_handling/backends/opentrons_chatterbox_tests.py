@@ -11,9 +11,22 @@ from pylabrobot.legacy.liquid_handling.backends import (
   OpentronsOT2ChatterboxBackend,
   OpentronsOT2Simulator,
 )
-from pylabrobot.resources import set_tip_tracking, set_volume_tracking
-from pylabrobot.resources.celltreat import CellTreat_96_wellplate_350ul_Fb
-from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
+from pylabrobot.legacy.liquid_handling.standard import Mix
+from pylabrobot.resources import (
+  does_tip_tracking,
+  does_volume_tracking,
+  set_tip_tracking,
+  set_volume_tracking,
+)
+from pylabrobot.resources.celltreat import (
+  CellTreat_96_wellplate_350ul_Fb,
+  celltreat_96_wellplate_350uL_Fb,
+)
+from pylabrobot.resources.opentrons import (
+  OTDeck,
+  opentrons_96_filtertiprack_20ul,
+  opentrons_96_tiprack_300ul,
+)
 
 
 def _names(backend: OpentronsOT2ChatterboxBackend):
@@ -129,6 +142,90 @@ class OpentronsChatterboxVsSimulatorTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(simulator_outcome, (True, 5.0, 10.0))
     self.assertEqual(chatterbox_outcome, simulator_outcome)
+
+
+class OpentronsFixedHeadChatterboxTests(unittest.IsolatedAsyncioTestCase):
+  """Exercise full-head operation through the normal frontend and recorded transport."""
+
+  async def test_both_models_and_mounts_preserve_eight_well_state_and_command_sequence(self):
+    """Pickup, mixing, transfer, and discard use the selected mount once per primitive."""
+    previous_tip_tracking = does_tip_tracking()
+    previous_volume_tracking = does_volume_tracking()
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+    try:
+      for model, volume, flow, rack_factory in (
+        ("p20_multi_gen2", 1, 7.6, opentrons_96_filtertiprack_20ul),
+        ("p20_multi_gen2", 20, 7.6, opentrons_96_filtertiprack_20ul),
+        ("p300_multi_gen2", 20, 94, opentrons_96_tiprack_300ul),
+        ("p300_multi_gen2", 300, 94, opentrons_96_tiprack_300ul),
+      ):
+        for mount in ("left", "right"):
+          with self.subTest(model=model, mount=mount, volume=volume):
+            backend = OpentronsOT2ChatterboxBackend(
+              left_pipette_name=model if mount == "left" else None,
+              right_pipette_name=model if mount == "right" else None,
+              fixed_head_mount=mount,
+              verbose=False,
+            )
+            deck = OTDeck()
+            lh = LiquidHandler(backend=backend, deck=deck)
+            await lh.setup(skip_home=True)
+            self.assertEqual(list(lh.head), list(range(8)))
+            tips = rack_factory(name="tips")
+            deck.assign_child_at_slot(tips, slot=1)
+            plate = celltreat_96_wellplate_350uL_Fb(name="plate")
+            deck.assign_child_at_slot(plate, slot=2)
+            for well in plate["A1:H1"]:
+              well.tracker.set_volume(volume + 10)
+            await lh.pick_up_tips(tips["A1:H1"])
+            await lh.aspirate(plate["A1:H1"], vols=[volume] * 8, mix=[Mix(volume, 2, flow)] * 8)
+            await lh.dispense(plate["A2:H2"], vols=[volume] * 8)
+            await lh.discard_tips()
+
+            primitives = [
+              (name, args, kwargs)
+              for name, args, kwargs in backend.commands
+              if name
+              in {
+                "lh.pick_up_tip",
+                "lh.aspirate_in_place",
+                "lh.dispense_in_place",
+                "lh.drop_tip_in_place",
+              }
+            ]
+            self.assertEqual(
+              [name for name, _, _ in primitives],
+              [
+                "lh.pick_up_tip",
+                "lh.aspirate_in_place",
+                "lh.dispense_in_place",
+                "lh.aspirate_in_place",
+                "lh.dispense_in_place",
+                "lh.aspirate_in_place",
+                "lh.dispense_in_place",
+                "lh.drop_tip_in_place",
+              ],
+            )
+            self.assertTrue(
+              all(kwargs["pipette_id"] == f"chatterbox-{mount}" for _, _, kwargs in primitives)
+            )
+            self.assertTrue(
+              all(
+                kwargs["volume"] == volume and kwargs["flow_rate"] == flow
+                for name, _, kwargs in primitives
+                if name in {"lh.aspirate_in_place", "lh.dispense_in_place"}
+              )
+            )
+            self.assertEqual([well.tracker.get_used_volume() for well in plate["A1:H1"]], [10] * 8)
+            self.assertEqual(
+              [well.tracker.get_used_volume() for well in plate["A2:H2"]], [volume] * 8
+            )
+            self.assertTrue(all(not tracker.has_tip for tracker in lh.head.values()))
+            self.assertEqual(backend.serialize()["fixed_head_mount"], mount)
+    finally:
+      set_tip_tracking(previous_tip_tracking)
+      set_volume_tracking(previous_volume_tracking)
 
 
 if __name__ == "__main__":
