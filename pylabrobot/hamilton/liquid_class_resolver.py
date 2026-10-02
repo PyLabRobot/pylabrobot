@@ -33,6 +33,7 @@ ASPIRATE_CLASS_ATTRIBUTES: Dict[str, Callable[[HamiltonLiquidClass], float]] = {
 DISPENSE_CLASS_ATTRIBUTES: Dict[str, Callable[[HamiltonLiquidClass], float]] = {
   "flow_rates": lambda hlc: hlc.dispense_flow_rate,
   "transport_air_volumes": lambda hlc: hlc.dispense_air_transport_volume,
+  "cut_off_speeds": lambda hlc: hlc.dispense_stop_flow_rate,
   "stop_back_volumes": lambda hlc: hlc.dispense_stop_back_volume,
   "blow_out_air_volumes": lambda hlc: hlc.dispense_blow_out_volume,
   "settling_times": lambda hlc: hlc.dispense_settling_time,
