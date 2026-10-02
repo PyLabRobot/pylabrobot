@@ -332,6 +332,12 @@ class PowerWaveX:
       reported ``[205]`` alone, 200 and 210 being already done. Nothing below
       200 nm has been probed.
 
+      One scan per power-on is enough. The per-wavelength calibration survives
+      both HALT and a full self-test - each was tried, and a following scan
+      reported nothing left to calibrate - so it is only lost when the
+      instrument is powered off. There is no command that clears it either, so
+      a wavelength cannot be returned to its uncalibrated state remotely.
+
       The fault is never reported over the serial port, and the instrument stops
       answering it entirely until an operator acknowledges the fault at the front
       panel. It then sends a single ``DLE``, the same byte that completes a HALT,
