@@ -305,16 +305,34 @@ class PowerWaveX:
     instrument configuration word does not distinguish it for every variant.
 
     Warning:
-      This is the manual's specified range, not a safe one. An individual
-      instrument's lamp and optics may not reach the ends of it, and asking for a
-      wavelength they cannot reach does more than fail the read. A PowerWaveX w/
-      Incubator (firmware R06.20) asked to read at 200 nm abandoned the read and
-      latched ``0F11`` ("signal out of range") on its front panel; it did so twice,
-      once answering ``080`` to every later command and once going silent
-      altogether, which needed a power cycle to clear. Scans and reads from 400 nm
-      upwards were unaffected on that instrument. Treat the far ends of this range
-      as untested on any given unit, and probe them only when someone can reach
-      the front panel.
+      Reading near the bottom of this range can abandon the read and latch
+      ``0F11`` ("signal out of range"), and often stops the instrument responding
+      at all until it is power cycled. Observed on a PowerWaveX w/ Incubator
+      (firmware R06.20), reading a full 96-well plate::
+
+        205 nm, never calibrated   faulted 3 times out of 3
+        200 nm, never calibrated   faulted 2 times out of 2
+        200 nm, after a scan       read normally, twice, one from a cold start
+        215 nm, never calibrated   read normally
+        395 nm, never calibrated   read normally
+
+      So neither the wavelength alone nor the calibration state alone predicts
+      it. What those runs are consistent with is that READ PLATE sets its own
+      gain for a wavelength it has not calibrated, that this attempt fails below
+      somewhere around 210 nm where little light reaches the detector, and that
+      :meth:`scan_plate` - which calibrates every wavelength it sweeps, and
+      manages it even at 200 nm - leaves the wavelength readable afterwards.
+      Scanning a band before reading inside it is therefore worth trying, but
+      that rule rests on the handful of runs above and nothing below 200 nm or
+      between 205 and 215 nm has been probed.
+
+      The fault reports itself inconsistently, so do not count on diagnosing it
+      from the driver. Of five faults, one sent ``DLE`` immediately, one sent it
+      after 27.7 s, and three sent nothing whatever within 70 to 150 s of
+      listening. Only the first two are explainable from the wire; the rest show
+      the code on the front panel alone. A graceful abort leaves ``080`` latched,
+      which :meth:`self_test` clears without a power cycle; a silent one needs
+      the power cycle.
     """
     return (MIN_WAVELENGTH, MAX_WAVELENGTH)
 
@@ -501,11 +519,11 @@ class PowerWaveX:
     uncalibrated = [w for w in wavelengths if w not in (self._wavelength_table or [])]
     if len(uncalibrated) > 0:
       logger.warning(
-        "[PowerWaveX %s] %s nm not in the calibrated wavelength table %s. Gains are "
-        "calibrated only for the stored table (page B-8), so the read may be less "
-        "accurate. A wavelength this instrument's optics cannot reach at all will "
-        "abandon the read and latch a fault on the front panel; see "
-        "abs_wavelength_range.",
+        "[PowerWaveX %s] %s nm not in the calibrated wavelength table %s. The read sets "
+        "its own gain, which is less accurate than the stored table (page B-8) and can "
+        "hang the instrument outright where little light reaches the detector, such as "
+        "in the far UV. scan_plate() over a band containing the wavelength calibrates "
+        "it properly first; see abs_wavelength_range.",
         self.port,
         uncalibrated,
         self._wavelength_table,
