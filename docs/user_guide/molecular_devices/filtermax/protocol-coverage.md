@@ -34,6 +34,18 @@ maps to the host serial device, save the results and shut the guest down normall
 PLR. Confirm the VM is powered off: closing SoftMax or an empty unprivileged `fuser` result does not
 establish that VirtualBox released the host device.
 
+The driver serializes complete request/response exchanges. Ordinary calls queue behind an active
+operation; a measurement retains ownership through its preparation, kinetic intervals, STOP
+recovery, and tray ejection. Cancellation signals the operation owner and is checked between
+complete device messages. An ENQ already received commits the receiver to consuming all
+continuation frames through ETX and EOT before STOP can be sent. An empty transaction or EOT
+after ETB is a protocol error, not a successful partial response.
+
+Only pending firmware work receives STOP; cancellation and recovery share that accounting so
+STOP is not sent twice. Cancelling the Python task also waits for its owner's cleanup before
+propagating `asyncio.CancelledError`. Recovery errors are logged without replacing the original
+failure, and a successful read whose tray ejection fails reports that failure.
+
 The instrument does not emit a separate busy token in the captured operations. A command owns the
 half-duplex transaction until its response arrives. Long reads return one or more framed result
 messages. Kinetic timing is scheduled client-side, matching SoftMax's observed behavior. Result
@@ -99,6 +111,11 @@ SF B 1 595 35 2 535 25 2 535 25 4 535 25 4 625 35 10 0 0 16
 | Luminescence C4, 400 ms | `LUM 0 1 0 3 3 1 1 0 0 0 400000 0 3 1 1 0 O INFO` | One 12-value row message, then `INFO` |
 | Dual luminescence C4, 400 ms | `LUM 1 2 0 0 3 3 1 1 0 0 0 400000 0 3 1 1 0 O INFO` | Two raw channel messages, then `INFO` |
 | Luminescence, three-read kinetic | `LUM 3 1 0 3 3 1 1 0 0 0 400000 0 3 1 3 0 O INFO` | Repeated row messages; countdown field is 3, 2, 1 |
+
+Scan results expose zero-based `grid_column` and `grid_row` indices, not physical coordinates.
+Horizontal scans use grid row zero. Fill scans preserve the full square-grid indices after
+applying the circular mask. Physical point spacing has not been verified and is not configurable.
+Plate geometry uses millimetres, including the `well_depth` field.
 
 Absorbance values are returned in milli-OD and converted to OD. Luminescence values remain raw RLU.
 SoftMax exposed only row-order reads, only horizontal/fill well scans, and one absorbance wavelength

@@ -151,7 +151,10 @@ class TestFilterMaxStartup(unittest.IsolatedAsyncioTestCase):
     """Receiving an identity establishes a rate even when the device is wrong."""
     for baudrate in (38400, 9600):
       with self.subTest(baudrate=baudrate):
-        responses = {38400: b"", baudrate: exchange_response(IDENTITY.replace("57855", "1"))}
+        responses: dict[int, bytes | BaseException] = {
+          38400: b"",
+          baudrate: exchange_response(IDENTITY.replace("57855", "1")),
+        }
         driver, io = self.make_driver(responses)
         with self.assertRaises(FilterMaxIdentityError):
           await driver.setup()

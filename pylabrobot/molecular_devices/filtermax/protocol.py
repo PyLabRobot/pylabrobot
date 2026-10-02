@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import AsyncIterator, List, Optional
 
 from pylabrobot.io.serial import Serial
 
@@ -31,7 +32,7 @@ _ERROR_RE = re.compile(r"^- E(?P<code>\d+):\s*(?P<detail>.*)$", re.DOTALL)
 
 
 class _CancelRequested(Exception):
-  pass
+  """Cancellation was observed before the next device message began."""
 
 
 class _HandshakeTimeout(FilterMaxTimeoutError):
@@ -45,6 +46,7 @@ def checksum(data: bytes) -> int:
 
 
 def build_frame(payload: str, frame_number: int = 1, final: bool = True) -> bytes:
+  """Encode a numbered ASCII payload with its terminator and checksum."""
   if not 0 <= frame_number <= 7:
     raise ValueError("frame_number must be between 0 and 7")
   terminator = ETX if final else ETB
@@ -54,6 +56,8 @@ def build_frame(payload: str, frame_number: int = 1, final: bool = True) -> byte
 
 @dataclass(frozen=True)
 class FilterMaxMessage:
+  """A complete, checksum-validated device message."""
+
   payload: str
   frame_count: int
 
@@ -62,8 +66,15 @@ class FilterMaxTransport:
   """Private command transport. Public raw-command access is intentionally not exposed."""
 
   def __init__(self, io: Serial):
+    """Use one lock for each complete exchange or measurement stream."""
     self.io = io
-    self._send_lock = asyncio.Lock()
+    self._transaction_lock = asyncio.Lock()
+
+  @asynccontextmanager
+  async def _transaction(self) -> AsyncIterator[None]:
+    """Own the wire until all replies, including a possible STOP reply, are consumed."""
+    async with self._transaction_lock:
+      yield
 
   async def _read_byte(
     self,
@@ -71,6 +82,7 @@ class FilterMaxTransport:
     *,
     cancel_event: Optional[asyncio.Event] = None,
   ) -> int:
+    """Read before the deadline, checking cancellation only at a message boundary."""
     while True:
       if cancel_event is not None and cancel_event.is_set():
         raise _CancelRequested
@@ -82,6 +94,7 @@ class FilterMaxTransport:
       await asyncio.sleep(0)
 
   async def _expect(self, expected: int, deadline: float) -> None:
+    """Read and validate one control byte."""
     actual = await self._read_byte(deadline)
     if actual != expected:
       raise FilterMaxProtocolError(
@@ -89,20 +102,20 @@ class FilterMaxTransport:
       )
 
   async def send_request(self, payload: str, timeout: float = 5.0) -> None:
-    """Send one captured host transaction without waiting for the device message."""
+    """Send a request while the caller holds transaction ownership."""
 
     deadline = time.monotonic() + timeout
-    async with self._send_lock:
-      await self.io.write(bytes((ENQ,)))
-      try:
-        await self._expect(ACK, deadline)
-      except FilterMaxTimeoutError as exc:
-        raise _HandshakeTimeout("Timed out waiting for ACK to the initial FilterMax ENQ") from exc
-      await self.io.write(build_frame(payload))
+    await self.io.write(bytes((ENQ,)))
+    try:
       await self._expect(ACK, deadline)
-      await self.io.write(bytes((EOT,)))
+    except FilterMaxTimeoutError as exc:
+      raise _HandshakeTimeout("Timed out waiting for ACK to the initial FilterMax ENQ") from exc
+    await self.io.write(build_frame(payload))
+    await self._expect(ACK, deadline)
+    await self.io.write(bytes((EOT,)))
 
   async def _read_frame_after_stx(self, deadline: float) -> bytes:
+    """Read a whole frame and validate its terminator and checksum."""
     frame = bytearray((STX,))
     while not frame.endswith(b"\r\n"):
       if len(frame) > 4096:
@@ -131,7 +144,11 @@ class FilterMaxTransport:
     command: str = "",
     cancel_event: Optional[asyncio.Event] = None,
   ) -> FilterMaxMessage:
-    """Receive and acknowledge one device message, including all continuation frames."""
+    """Receive a whole message under transaction ownership.
+
+    Cancellation is checked before ENQ. Once ENQ is received, all continuation
+    frames and the final EOT are consumed before control returns to the owner.
+    """
 
     deadline = time.monotonic() + timeout
     first = await self._read_byte(deadline, cancel_event=cancel_event)
@@ -144,7 +161,7 @@ class FilterMaxTransport:
     while True:
       control = await self._read_byte(deadline)
       if control == EOT:
-        break
+        raise FilterMaxProtocolError("FilterMax EOT arrived before a final ETX frame")
       if control != STX:
         raise FilterMaxProtocolError(f"Expected device STX or EOT, received 0x{control:02X}")
       frame = await self._read_frame_after_stx(deadline)
@@ -177,5 +194,7 @@ class FilterMaxTransport:
     *,
     cancel_event: Optional[asyncio.Event] = None,
   ) -> FilterMaxMessage:
-    await self.send_request(payload)
-    return await self.receive_message(timeout, command=payload, cancel_event=cancel_event)
+    """Serialize a complete request and its response."""
+    async with self._transaction():
+      await self.send_request(payload)
+      return await self.receive_message(timeout, command=payload, cancel_event=cancel_event)

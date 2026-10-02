@@ -209,8 +209,7 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     self.assertEqual((len(result.data), len(result.data[0])), (8, 12))
     self.assertAlmostEqual(result.data[7][11], 0.081)  # type: ignore[arg-type]
     self.assertIn(
-      "PLATE Temp 12770 8570 1427 1069 1405 1118 12 8 "
-      "902 900 640 640 0 300 0 1027 1 1",
+      "PLATE Temp 12770 8570 1427 1069 1405 1118 12 8 902 900 640 640 0 300 0 1027 1 1",
       host_payloads(io),
     )
     self.assertIn("SHIFT", host_payloads(io))
@@ -247,9 +246,44 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(result.scan_points["C4"]), 21)
     self.assertAlmostEqual(result.scan_points["C4"][0].value, 16 / 1000)
     self.assertEqual(
-      len({(point.x, point.y) for point in result.scan_points["C4"]}),
+      len({(point.grid_column, point.grid_row) for point in result.scan_points["C4"]}),
       21,
     )
+    positions = [(point.grid_column, point.grid_row) for point in result.scan_points["C4"]]
+    self.assertEqual(positions[:3], [(1, 0), (2, 0), (3, 0)])
+    self.assertEqual(positions[-3:], [(1, 4), (2, 4), (3, 4)])
+    self.assertIn((2, 2), positions)
+    self.assertAlmostEqual(result.data[2][3], 0.137)  # type: ignore[arg-type]
+
+  async def test_horizontal_scan_preserves_grid_indices_and_mean(self) -> None:
+    """Scan positions are integer sample indices, with unchanged optical densities."""
+    row = "+ " + " ".join(str(value) for value in range(36))
+    incoming = b"".join(
+      (
+        exchange_response("+ 2 1"),
+        exchange_response("+"),
+        exchange_response("+"),
+        exchange_response("+ -67"),
+        measurement_response(row, "+ INFO"),
+        exchange_response("+ 25.0"),
+        exchange_response("+ 6512"),
+      )
+    )
+    driver, _ = self.make_driver(incoming)
+    result = (
+      await driver.read_absorbance(
+        PlateGeometry.costar_96_clear_landscape(),
+        450,
+        wells=["A2"],
+        well_scan=WellScanSettings(pattern="horizontal", density=3),
+      )
+    )[0]
+    self.assertEqual(
+      [(point.grid_column, point.grid_row) for point in result.scan_points["A2"]],
+      [(0, 0), (1, 0), (2, 0)],
+    )
+    self.assertEqual([point.value for point in result.scan_points["A2"]], [0.003, 0.004, 0.005])
+    self.assertAlmostEqual(result.data[0][1], 0.004)  # type: ignore[arg-type]
 
   def test_fill_density_28_matches_softmax_616_point_mask(self) -> None:
     layout = FilterMaxF5._scan_layout(WellScanSettings(pattern="fill", density=28))
@@ -311,7 +345,7 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     commands = [payload for payload in host_payloads(io) if payload.startswith("LUM ")]
     self.assertEqual([command.split()[-4] for command in commands], ["3", "2", "1"])
 
-  async def test_malformed_read_is_stopped_before_tray_recovery(self) -> None:
+  async def test_malformed_values_after_final_info_still_eject_tray(self) -> None:
     incoming = b"".join(
       (
         exchange_response("+ 2 1"),
@@ -319,7 +353,6 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
         exchange_response("+"),
         exchange_response("+ -67"),
         measurement_response("+ 1 2", "+ INFO"),
-        exchange_response("- E140: "),
         exchange_response("+ 6512"),
       )
     )
@@ -330,7 +363,8 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
         450,
         wells=["C4"],
       )
-    self.assertEqual(host_payloads(io)[-2:], ["STOP", "E P"])
+    self.assertEqual(host_payloads(io)[-1], "E P")
+    self.assertNotIn("STOP", host_payloads(io))
 
   async def test_captured_e62_is_preserved_in_session_error_log(self) -> None:
     error = "- E62: ABS Led 7 ADCValue: 16277 Gain 255 LedHighPoti 44 LedLowPoti 255"

@@ -24,19 +24,24 @@ _TECHNIQUE_BITS: Tuple[Tuple[int, FilterTechnique], ...] = (
 
 
 def _local_name(tag: str) -> str:
+  """Remove an XML namespace from an element name."""
   return tag.rsplit("}", 1)[-1]
 
 
 def _children(element: ET.Element) -> Dict[str, str]:
+  """Read trimmed text fields from one catalog record."""
   return {_local_name(child.tag): (child.text or "").strip() for child in element}
 
 
 @dataclass(frozen=True)
 class FilterSlideCatalog:
+  """Filter definitions indexed by slide, position, wavelength, and technique."""
+
   filters: Tuple[FilterDefinition, ...]
 
   @classmethod
   def from_softmax_xml(cls, path: Union[str, Path]) -> "FilterSlideCatalog":
+    """Load a SoftMax XML export locally, without communicating with the reader."""
     root = ET.parse(path).getroot()
     slides: Dict[int, Tuple[int, str, FilterKind]] = {}
     for element in root:
@@ -92,6 +97,7 @@ class FilterSlideCatalog:
     return cls(tuple(parsed))
 
   def filters_for_slide(self, kind: FilterKind, slide_id: int) -> Tuple[FilterDefinition, ...]:
+    """Return the selected slide's definitions in one-based slot order."""
     return tuple(
       sorted(
         (item for item in self.filters if item.kind == kind and item.slide_id == slide_id),
@@ -108,6 +114,11 @@ class FilterSlideCatalog:
     slide_id: Optional[int] = None,
     position: Optional[int] = None,
   ) -> FilterSelection:
+    """Resolve a wavelength in nm to one compatible slide and one-based slot.
+
+    Ambiguous matches require a slide ID or position; absent matches raise
+    FilterMaxFilterNotFoundError. Resolution does not query installed hardware.
+    """
     matches = [
       item
       for item in self.filters

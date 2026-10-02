@@ -47,6 +47,7 @@ class FilterMaxDeviceError(FilterMaxError):
   """An error reported by the FilterMax firmware."""
 
   def __init__(self, code: int, detail: str, command: str):
+    """Preserve the firmware code, detail text, and failed request."""
     self.code = code
     self.detail = detail
     self.command = command

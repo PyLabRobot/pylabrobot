@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 
 from pylabrobot.molecular_devices.filtermax.errors import (
@@ -34,11 +35,55 @@ class FakeSerial:
     return data
 
 
+class YieldingSerial(FakeSerial):
+  """Expose interleaving that a serial executor permits between every byte."""
+
+  async def write(self, data: bytes) -> None:
+    """Yield before writing to the simulated port."""
+    await asyncio.sleep(0)
+    await super().write(data)
+
+  async def read(self, num_bytes: int = 1) -> bytes:
+    """Yield before returning the next bytes."""
+    await asyncio.sleep(0)
+    return await super().read(num_bytes)
+
+
 def device_message(payload: str) -> bytes:
   return bytes((ENQ,)) + build_frame(payload) + bytes((EOT,))
 
 
 class TestFilterMaxProtocol(unittest.IsolatedAsyncioTestCase):
+  async def test_concurrent_exchanges_keep_their_own_responses(self) -> None:
+    """Another request cannot consume an outstanding response's control bytes."""
+    incoming = b"".join(
+      bytes((ACK, ACK)) + device_message(payload) for payload in ("+ 24.6", "+ 24.7")
+    )
+    transport = FilterMaxTransport(YieldingSerial(incoming))  # type: ignore[arg-type]
+    first, second = await asyncio.wait_for(
+      asyncio.gather(transport.exchange("TG"), transport.exchange("TG")), timeout=1
+    )
+    self.assertEqual((first.payload, second.payload), ("+ 24.6", "+ 24.7"))
+
+  async def test_eot_requires_a_final_frame(self) -> None:
+    """Empty transactions and truncated continuation chains cannot return data."""
+    for frames in (b"", build_frame("+ 24.6", final=False)):
+      with self.subTest(frames=frames):
+        incoming = bytes((ACK, ACK, ENQ)) + frames + bytes((EOT,))
+        transport = FilterMaxTransport(FakeSerial(incoming))  # type: ignore[arg-type]
+        with self.assertRaises(FilterMaxProtocolError):
+          await transport.exchange("TG")
+
+  async def test_frame_numbers_wrap_through_zero(self) -> None:
+    """A valid continuation sequence can span more than seven frames."""
+    frames = b"".join(
+      build_frame(str(index), frame_number=(index + 1) % 8, final=index == 8) for index in range(9)
+    )
+    incoming = bytes((ACK, ACK, ENQ)) + frames + bytes((EOT,))
+    transport = FilterMaxTransport(FakeSerial(incoming))  # type: ignore[arg-type]
+    message = await transport.exchange("?")
+    self.assertEqual((message.payload, message.frame_count), ("012345678", 9))
+
   def test_captured_checksum(self) -> None:
     self.assertEqual(build_frame("TG"), b"\x021TG\x03CF\r\n")
     self.assertEqual(build_frame("CS"), b"\x021CS\x03CA\r\n")

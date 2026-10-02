@@ -22,6 +22,7 @@ FilterMax F5
     KineticTiming
     ShakingSettings
     WellScanSettings
+    WellScanPoint
     AbsorbanceResult
     LuminescenceResult
     FluorescenceResult
