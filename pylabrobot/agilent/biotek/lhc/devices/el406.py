@@ -344,7 +344,7 @@ class EL406:
       axis: Which axis to shake along.
       soak_duration: How long to leave the plate still afterwards, in seconds. Zero soaks not at
         all.
-      move_carrier_home: Whether the carrier returns home afterwards.
+      move_carrier_home: Whether the carrier moves to its home position first.
 
     Raises:
       BiotekError: If the step cannot run, or fails while running.

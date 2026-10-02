@@ -415,7 +415,7 @@ def check_shake_soak(
   """Check a shake or soak.
 
   A step that neither shakes, soaks nor moves the carrier home has nothing to do. Shaking and
-  soaking for more than a minute together requires moving the carrier home afterwards.
+  soaking for more than a minute together requires moving the carrier home first.
 
   Args:
     step: The step to check.

@@ -7,8 +7,7 @@ from typing import Literal
 ShakeIntensity = Literal["Variable", "Slow", "Medium", "Fast"]
 """How vigorously the carrier shakes.
 
-The three fixed levels shake at a set frequency; ``"Variable"`` sweeps across the range instead of
-holding one frequency.
+The three fixed levels shake at 3.5, 5 and 8 Hz. What ``"Variable"`` does is up to the firmware.
 """
 
 SHAKE_INTENSITY_TO_BYTE: dict[ShakeIntensity, int] = {

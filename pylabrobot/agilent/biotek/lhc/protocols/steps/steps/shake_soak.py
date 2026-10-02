@@ -27,8 +27,8 @@ class ShakeSoak(Step):
 
   Attributes:
     enabled: Whether the step does anything at all.
-    move_carrier_home: Whether the carrier returns home afterwards. Required when shaking and
-      soaking together take longer than a minute.
+    move_carrier_home: Whether the carrier moves to its home position first. Required when
+      shaking and soaking together take longer than a minute.
     shake: Whether to shake, for how long, along which axis and how vigorously.
     soak: Whether to soak, and for how long.
   """
