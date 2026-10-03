@@ -92,6 +92,7 @@ BioTek PowerWaveX
     PowerWaveSelfTestError
     PowerWaveFatalError
     PowerWaveParseError
+    PowerWaveReadAbortedError
 
 
 BioTek Synergy H1
