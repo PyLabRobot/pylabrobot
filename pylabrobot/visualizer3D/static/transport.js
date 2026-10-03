@@ -53,6 +53,11 @@ function sayHello() {
   );
 }
 
+/** Say something to the server, when there is a socket to say it on. */
+export function send(event, data) {
+  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ event, data }));
+}
+
 export function connect() {
   if (
     socket &&
@@ -89,6 +94,7 @@ export function connect() {
     if (kind === "scene") handlers.scene(data);
     else if (kind === "state") handlers.state(data);
     else if (kind === "moves") handlers.moves(data.moves);
+    else if (kind === "motion") handlers.motion(data);
   };
 }
 
