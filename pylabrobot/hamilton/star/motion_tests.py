@@ -13,15 +13,11 @@ import shutil
 import subprocess
 import time
 import unittest
-from unittest import mock
 from typing import Any, Dict, List, Optional, Tuple, cast
+from unittest import mock
 
 import websockets
 
-from pylabrobot.resources.plate import Plate
-from pylabrobot.resources.tip_rack import TipRack
-from pylabrobot.resources.tip_tracking import does_tip_tracking, set_tip_tracking
-from pylabrobot.visualizer3D.demo import build_facility, fill, star_of
 from pylabrobot.hamilton.star import motion
 from pylabrobot.hamilton.star.motion import (
   HEAD96_ASPIRATE_FIXED,
@@ -32,6 +28,10 @@ from pylabrobot.hamilton.star.motion import (
   attach_viewer_motion,
   star_motion,
 )
+from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.resources.tip_tracking import does_tip_tracking, set_tip_tracking
+from pylabrobot.visualizer3D.demo import build_facility, fill, star_of
 from pylabrobot.visualizer3D.server import Viewer3D
 from pylabrobot.visualizer3D.server_tests import free_ports, track_volumes
 

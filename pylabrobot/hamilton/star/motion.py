@@ -368,7 +368,7 @@ def _tip_pickup(frames: _Frames, command: str, params: Dict[str, Any]) -> Dict[s
   # How far each tip will hang below its stop disc once on: read off the tip in the spot and where
   # the shaft will seat it, as `TipMountingShaft.tip_bottom` then reads it. The simulator's table of
   # defined tip lengths is only the fallback, for a spot the model has no tip in.
-  defined = getattr(frames.driver, "defined_tip_lengths", {}).get(int(params["tt"]), 0.0)
+  defined: float = getattr(frames.driver, "defined_tip_lengths", {}).get(int(params["tt"]), 0.0)
 
   def carried(c: int) -> float:
     spot, shaft = frames.spot_at(*_positions(params, c)), frames.shaft(c)
