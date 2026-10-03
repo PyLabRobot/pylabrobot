@@ -1,15 +1,20 @@
-import asyncio
 from abc import ABCMeta, abstractmethod
 from typing import (
+  Any,
   Dict,
   List,
+  Literal,
   Optional,
   Sequence,
   Tuple,
   TypeVar,
   Union,
+  overload,
 )
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.usb import USB
 from pylabrobot.legacy.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -83,6 +88,10 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     )
 
     self._cache: Dict[str, List[Optional[int]]] = {}
+    self._response_buffer = bytearray()
+    self._reply_synchronized = True
+    self.read_timeout = read_timeout
+    self._command_transaction_lock = anyio.Lock()
 
   def _assemble_command(self, module: str, command: str, params: List[Optional[int]]) -> str:
     """Assemble a firmware command to the Tecan machine.
@@ -126,6 +135,28 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     return {"module": module, "data": data}
 
+  async def _read_response(self, timeout: float) -> bytes:
+    """Assemble one NUL-terminated firmware frame across USB packets."""
+    with anyio.fail_after(timeout):
+      while b"\x00" not in self._response_buffer:
+        self._response_buffer.extend(await self.io.read())
+    end = self._response_buffer.index(0) + 1
+    frame = bytes(self._response_buffer[:end])
+    del self._response_buffer[:end]
+    return frame
+
+  @overload
+  async def send_command(
+    self,
+    module: str,
+    command: Literal["RNT", "RPG", "RPR", "RPX", "RPY", "RPZ"],
+    params: Optional[List[Optional[int]]] = None,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait: Literal[True] = True,
+  ) -> Dict[str, Any]: ...
+
+  @overload
   async def send_command(
     self,
     module: str,
@@ -133,8 +164,18 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     params: Optional[List[Optional[int]]] = None,
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
-    wait=True,
-  ):
+    wait: bool = True,
+  ) -> Optional[Dict[str, Union[str, int, List[Union[int, str]]]]]: ...
+
+  async def send_command(
+    self,
+    module: str,
+    command: str,
+    params: Optional[List[Optional[int]]] = None,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait: bool = True,
+  ) -> Optional[Dict[str, Union[str, int, List[Union[int, str]]]]]:
     """Send a firmware command to the Tecan machine. Caches `set` commands and ignores if
     redundant.
 
@@ -150,27 +191,51 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       A dictionary containing the parsed response, or None if no response was read within `timeout`.
     """
 
-    if command[0] == "S" and params is not None:
-      k = module + command
-      if k in self._cache and self._cache[k] == params:
-        return
-      self._cache[k] = params
+    cache_key = module + command if command.startswith("S") and params is not None else None
+    cache_value = list(params) if cache_key is not None and params is not None else None
 
-    cmd = self._assemble_command(module, command, [] if params is None else params)
+    await self._command_transaction_lock.acquire()
+    try:
+      await anyio.lowlevel.checkpoint()
+      if not self._reply_synchronized:
+        raise RuntimeError("EVO reply boundary unknown; enter a new lifespan before sending")
+      if cache_key is not None and self._cache.get(cache_key) == cache_value:
+        return None
+      cmd = self._assemble_command(module, command, [] if params is None else params)
+      with anyio.CancelScope(shield=True):
+        await self.io.write(cmd.encode(), timeout=write_timeout)
+        if wait:
+          try:
+            frame = await self._read_response(
+              self.read_timeout if read_timeout is None else read_timeout
+            )
+          except TimeoutError:
+            self._reply_synchronized = False
+            raise
+          response = self.parse_response(frame)
+        else:
+          response = None
+        if cache_key is not None:
+          assert cache_value is not None
+          self._cache[cache_key] = cache_value
+    finally:
+      self._command_transaction_lock.release()
+    await anyio.lowlevel.checkpoint()
+    return response
 
-    await self.io.write(cmd.encode(), timeout=write_timeout)
-    if not wait:
-      return None
+  def _reset_run_state(self) -> None:
+    self._cache.clear()
+    self._response_buffer.clear()
+    self._reply_synchronized = True
 
-    resp = await self.io.read(timeout=read_timeout)
-    return self.parse_response(resp)
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the USB transport for one Tecan backend lifespan."""
+    await super()._enter_lifespan(stack)
 
-  async def setup(self):
-    await super().setup()
-    await self.io.setup()
-
-  async def stop(self):
-    await self.io.stop()
+    self._reset_run_state()
+    stack.callback(self._reset_run_state)
+    self._validate_lifespan_context()
+    await stack.enter_async_context(self.io.lifespan())
 
 
 class EVOBackend(TecanLiquidHandler):
@@ -212,11 +277,19 @@ class EVOBackend(TecanLiquidHandler):
     self._roma_connected: Optional[bool] = None
     self._pnp_connected: Optional[bool] = None
     self._mca_connected: Optional[bool] = None
+    self._arm_position_cache: Dict[str, int] = {}
+    self.liha: Optional[LiHa] = None
+    self.roma: Optional[RoMa] = None
+    self.mca: Optional[Mca] = None
+    self._x_range: Optional[int] = None
+    self._y_range: Optional[int] = None
+    self._z_range: Optional[int] = None
 
     self._z_traversal_height = 210  # mm, the default value for SHZ command
     self._z_roma_traversal_height = (
       68.7  # mm, is what was used to develop this but possibly too low
     )
+    self._reset_run_state()
 
   @property
   def num_channels(self) -> int:
@@ -261,21 +334,35 @@ class EVOBackend(TecanLiquidHandler):
   def serialize(self) -> dict:
     return {**super().serialize(), **self.io.serialize()}
 
-  async def setup(self):
-    """Setup
+  def _reset_run_state(self) -> None:
+    super()._reset_run_state()
+    self._arm_position_cache.clear()
+    self._num_channels = None
+    self._liha_connected = None
+    self._roma_connected = None
+    self._pnp_connected = None
+    self._mca_connected = None
+    self._x_range = None
+    self._y_range = None
+    self._z_range = None
+    self.liha = None
+    self.roma = None
+    self.mca = None
 
-    Creates a USB connection and finds read/write interfaces.
-    """
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Discover and initialize the EVO arms for one lifespan."""
 
-    await super().setup()
+    await super()._enter_lifespan(stack)
 
     self._liha_connected = await self.setup_arm(EVOBackend.LIHA)
     self._mca_connected = await self.setup_arm(EVOBackend.MCA)
     self._roma_connected = await self.setup_arm(EVOBackend.ROMA)
+    self._pnp_connected = False
 
     if self.roma_connected:  # position_initialization_x in reverse order from setup_arm
-      self.roma = RoMa(self, EVOBackend.ROMA)
-      await self.roma.position_initialization_x()
+      roma = RoMa(self, EVOBackend.ROMA)
+      self.roma = roma
+      await roma.position_initialization_x()
       # move to home position (TBD) after initialization
       await self._park_roma()
     if self.mca_connected:
@@ -284,24 +371,30 @@ class EVOBackend(TecanLiquidHandler):
       await self._park_mca()
 
     if self.liha_connected:
-      self.liha = LiHa(self, EVOBackend.LIHA)
-      await self.liha.position_initialization_x()
+      liha = LiHa(self, EVOBackend.LIHA)
+      self.liha = liha
+      await liha.position_initialization_x()
 
-    self._num_channels = await self.liha.report_number_tips()
-    self._x_range = await self.liha.report_x_param(5)
-    self._y_range = (await self.liha.report_y_param(5))[0]
-    self._z_range = (await self.liha.report_z_param(5))[0]
+    if self.liha is None:
+      raise RuntimeError("LiHa is not connected")
+    liha = self.liha
+
+    self._num_channels = await liha.report_number_tips()
+    self._x_range = await liha.report_x_param(5)
+    self._y_range = (await liha.report_y_param(5))[0]
+    self._z_range = (await liha.report_z_param(5))[0]
+    z_range = self._z_range
 
     # Initialize plungers. Assumes wash station assigned at rail 1.
-    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
-    await self.liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
-    await self.liha.position_valve_logical([1] * self.num_channels)
-    await self.liha.move_plunger_relative([100] * self.num_channels)
-    await self.liha.position_valve_logical([0] * self.num_channels)
-    await self.liha.set_end_speed_plunger([1800] * self.num_channels)
-    await self.liha.move_plunger_relative([-100] * self.num_channels)
-    await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
+    await liha.set_z_travel_height([z_range] * self.num_channels)
+    await liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
+    await liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
+    await liha.position_valve_logical([1] * self.num_channels)
+    await liha.move_plunger_relative([100] * self.num_channels)
+    await liha.position_valve_logical([0] * self.num_channels)
+    await liha.set_end_speed_plunger([1800] * self.num_channels)
+    await liha.move_plunger_relative([-100] * self.num_channels)
+    await liha.position_absolute_all_axis(45, 1031, 90, [z_range] * self.num_channels)
 
   async def setup_arm(self, module):
     try:
@@ -319,13 +412,31 @@ class EVOBackend(TecanLiquidHandler):
 
     return True
 
+  def _require_liha(self) -> "LiHa":
+    """Return the active LiHa wrapper or raise the connected-state error."""
+
+    if not self.liha_connected or self.liha is None:
+      raise RuntimeError("LiHa is not connected")
+    return self.liha
+
+  def _require_roma(self) -> "RoMa":
+    """Return the active RoMa wrapper or raise the connected-state error."""
+
+    if not self.roma_connected or self.roma is None:
+      raise RuntimeError("RoMa is not connected")
+    return self.roma
+
   async def _park_liha(self):
-    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
+    liha = self._require_liha()
+    z_range = self._z_range
+    assert z_range is not None
+    await liha.set_z_travel_height([z_range] * self.num_channels)
+    await liha.position_absolute_all_axis(45, 1031, 90, [z_range] * self.num_channels)
 
   async def _park_roma(self):
-    await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
-    await self.roma.action_move_vector_coordinate_position()
+    roma = self._require_roma()
+    await roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
+    await roma.action_move_vector_coordinate_position()
 
   async def _park_mca(self):
     """Moves the MCA arm to a safe park position to prevent collision."""
@@ -333,19 +444,24 @@ class EVOBackend(TecanLiquidHandler):
 
     # Ensure MCA is initialized before moving
     await self.send_command(EVO.MCA, command="PIA")
-    await asyncio.sleep(0.5)
+    await self._sleep_between_mca_commands(0.5)
 
     # Raise MCA Z-axis first to avoid collision
     await self.send_command(EVO.MCA, command="PAA", params=[None, None, 2000])  # Raise Z-axis
-    await asyncio.sleep(1)
+    await self._sleep_between_mca_commands(1)
 
     # Move MCA to parking position (adjust X, Y as needed)
     await self.send_command(EVO.MCA, command="PAA", params=[6000, 1000, None])
-    await asyncio.sleep(1)
+    await self._sleep_between_mca_commands(1)
 
     # Stop movement to prevent drifting
     await self.send_command(EVO.MCA, command="BMA", params=[0, 0, 0])
-    await asyncio.sleep(0.5)
+    await self._sleep_between_mca_commands(0.5)
+
+  async def _sleep_between_mca_commands(self, delay: float) -> None:
+    """Wait between MCA parking commands."""
+
+    await anyio.sleep(delay)
 
   # ============== LiquidHandlerBackend methods ==============
 
@@ -358,6 +474,10 @@ class EVOBackend(TecanLiquidHandler):
       ops: The aspiration operations to perform.
       use_channels: The channels to use for the operations.
     """
+
+    liha = self._require_liha()
+    z_range = self._z_range
+    assert z_range is not None
 
     # Get positions including offsets
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
@@ -388,21 +508,21 @@ class EVOBackend(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(
+    await liha.set_z_travel_height([z_range] * self.num_channels)
+    await liha.position_absolute_all_axis(
       x,
       y - yi * ys,
       ys,
-      [z if z else self._z_range for z in z_positions["travel"]],
+      [z if z else z_range for z in z_positions["travel"]],
     )
     # TODO check channel positions match resource positions
 
     # aspirate airgap
     pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "lag")
     if any(ppr):
-      await self.liha.position_valve_logical(pvl)
-      await self.liha.set_end_speed_plunger(sep)
-      await self.liha.move_plunger_relative(ppr)
+      await liha.position_valve_logical(pvl)
+      await liha.set_end_speed_plunger(sep)
+      await liha.move_plunger_relative(ppr)
 
     # perform liquid level detection
     # TODO: verify for other liquid detection modes
@@ -411,34 +531,34 @@ class EVOBackend(TecanLiquidHandler):
       assert tlc is not None
       detproc = tlc.lld_mode  # must be same for all channels?
       sense = tlc.lld_conductivity
-      await self.liha.set_detection_mode(detproc, sense)
+      await liha.set_detection_mode(detproc, sense)
       ssl, sdl, sbl = self._liquid_detection(use_channels, tecan_liquid_classes)
-      await self.liha.set_search_speed(ssl)
-      await self.liha.set_search_retract_distance(sdl)
-      await self.liha.set_search_z_start(z_positions["start"])
-      await self.liha.set_search_z_max(list(z if z else self._z_range for z in z_positions["max"]))
-      await self.liha.set_search_submerge(sbl)
+      await liha.set_search_speed(ssl)
+      await liha.set_search_retract_distance(sdl)
+      await liha.set_search_z_start(z_positions["start"])
+      await liha.set_search_z_max(list(z if z else z_range for z in z_positions["max"]))
+      await liha.set_search_submerge(sbl)
       shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels  # TODO: max?
-      await self.liha.set_z_travel_height(shz)
-      await self.liha.move_detect_liquid(self._bin_use_channels(use_channels), zadd)
-      await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+      await liha.set_z_travel_height(shz)
+      await liha.move_detect_liquid(self._bin_use_channels(use_channels), zadd)
+      await liha.set_z_travel_height([z_range] * self.num_channels)
 
     # aspirate + retract
     # SSZ: z_add / (vol / asp_speed)
     zadd = [min(z, 32) if z else None for z in zadd]
     ssz, sep, stz, mtr, ssz_r = self._aspirate_action(ops, use_channels, tecan_liquid_classes, zadd)
-    await self.liha.set_slow_speed_z(ssz)
-    await self.liha.set_end_speed_plunger(sep)
-    await self.liha.set_tracking_distance_z(stz)
-    await self.liha.move_tracking_relative(mtr)
-    await self.liha.set_slow_speed_z(ssz_r)
-    await self.liha.move_absolute_z(z_positions["start"])  # TODO: use retract_position and offset
+    await liha.set_slow_speed_z(ssz)
+    await liha.set_end_speed_plunger(sep)
+    await liha.set_tracking_distance_z(stz)
+    await liha.move_tracking_relative(mtr)
+    await liha.set_slow_speed_z(ssz_r)
+    await liha.move_absolute_z(z_positions["start"])  # TODO: use retract_position and offset
 
     # aspirate airgap
     pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "tag")
-    await self.liha.position_valve_logical(pvl)
-    await self.liha.set_end_speed_plunger(sep)
-    await self.liha.move_plunger_relative(ppr)
+    await liha.position_valve_logical(pvl)
+    await liha.set_end_speed_plunger(sep)
+    await liha.move_plunger_relative(ppr)
 
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     """Dispense liquid from the specified channels.
@@ -447,6 +567,10 @@ class EVOBackend(TecanLiquidHandler):
       ops: The dispense operations to perform.
       use_channels: The channels to use for the dispense operations.
     """
+
+    liha = self._require_liha()
+    z_range = self._z_range
+    assert z_range is not None
 
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
@@ -465,19 +589,19 @@ class EVOBackend(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height([z if z else self._z_range for z in z_positions["travel"]])
-    await self.liha.position_absolute_all_axis(
+    await liha.set_z_travel_height([z if z else z_range for z in z_positions["travel"]])
+    await liha.position_absolute_all_axis(
       x,
       y - yi * ys,
       ys,
-      [z if z else self._z_range for z in z_positions["dispense"]],
+      [z if z else z_range for z in z_positions["dispense"]],
     )
 
     sep, spp, stz, mtr = self._dispense_action(ops, use_channels, tecan_liquid_classes)
-    await self.liha.set_end_speed_plunger(sep)
-    await self.liha.set_stop_speed_plunger(spp)
-    await self.liha.set_tracking_distance_z(stz)
-    await self.liha.move_tracking_relative(mtr)
+    await liha.set_end_speed_plunger(sep)
+    await liha.set_stop_speed_plunger(spp)
+    await liha.set_tracking_distance_z(stz)
+    await liha.move_tracking_relative(mtr)
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     """Pick up tips from a resource.
@@ -486,6 +610,10 @@ class EVOBackend(TecanLiquidHandler):
       ops: The pickup operations to perform.
       use_channels: The channels to use for the pickup operations.
     """
+
+    liha = self._require_liha()
+    z_range = self._z_range
+    assert z_range is not None
 
     assert min(use_channels) >= self.num_channels - self.diti_count, (
       f"DiTis can only be configured for the last {self.diti_count} channels"
@@ -499,10 +627,8 @@ class EVOBackend(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(
-      x, y - yi * ys, ys, [self._z_range] * self.num_channels
-    )
+    await liha.set_z_travel_height([z_range] * self.num_channels)
+    await liha.position_absolute_all_axis(x, y - yi * ys, ys, [z_range] * self.num_channels)
 
     # aspirate airgap
     pvl: List[Optional[int]] = [None] * self.num_channels
@@ -512,16 +638,14 @@ class EVOBackend(TecanLiquidHandler):
       pvl[channel] = 0
       sep[channel] = 70 * 6  # ? 12, always 70?
       ppr[channel] = 10 * 3  # ? 6
-    await self.liha.position_valve_logical(pvl)
-    await self.liha.set_end_speed_plunger(sep)
-    await self.liha.move_plunger_relative(ppr)
+    await liha.position_valve_logical(pvl)
+    await liha.set_end_speed_plunger(sep)
+    await liha.move_plunger_relative(ppr)
 
     # get tips
     first_z_start, _ = self._first_valid(z_positions["start"])
     assert first_z_start is not None, "Could not find a valid z_start position"
-    await self.liha.get_disposable_tip(
-      self._bin_use_channels(use_channels), first_z_start - 227, 210
-    )
+    await liha.get_disposable_tip(self._bin_use_channels(use_channels), first_z_start - 227, 210)
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     """Drops tips.
@@ -530,6 +654,10 @@ class EVOBackend(TecanLiquidHandler):
       ops: The drop operations to perform.
       use_channels: The channels to use for the drop operations.
     """
+
+    liha = self._require_liha()
+    z_range = self._z_range
+    assert z_range is not None
 
     assert min(use_channels) >= self.num_channels - self.diti_count, (
       f"DiTis can only be configured for the last {self.diti_count} channels"
@@ -546,16 +674,16 @@ class EVOBackend(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(
+    await liha.set_z_travel_height([z_range] * self.num_channels)
+    await liha.position_absolute_all_axis(
       x,
       y - yi * ys,
       ys,
-      [self._z_range] * self.num_channels,
+      [z_range] * self.num_channels,
     )
 
     # TODO check channel positions match resource positions for z-axis
-    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=0)
+    await liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=0)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("MCA not implemented yet")
@@ -573,35 +701,35 @@ class EVOBackend(TecanLiquidHandler):
 
   async def pick_up_resource(self, pickup: ResourcePickup):
     # TODO: implement PnP for moving tubes
-    assert self.roma_connected
+    roma = self._require_roma()
 
-    z_range = await self.roma.report_z_param(5)
+    z_range = await roma.report_z_param(5)
     x, y, z = self._roma_positions(
       pickup.resource, pickup.resource.get_location_wrt(self.deck), z_range
     )
     h = int(pickup.resource.get_absolute_size_y() * 10)
 
     # move to resource
-    await self.roma.set_smooth_move_x(1)
-    await self.roma.set_fast_speed_x(10000)
-    await self.roma.set_fast_speed_y(5000, 1500)
-    await self.roma.set_fast_speed_z(1300)
-    await self.roma.set_fast_speed_r(5000, 1500)
-    await self.roma.set_vector_coordinate_position(1, x, y, z["safe"], 900, None, 1, 0)
-    await self.roma.action_move_vector_coordinate_position()
-    await self.roma.set_smooth_move_x(0)
+    await roma.set_smooth_move_x(1)
+    await roma.set_fast_speed_x(10000)
+    await roma.set_fast_speed_y(5000, 1500)
+    await roma.set_fast_speed_z(1300)
+    await roma.set_fast_speed_r(5000, 1500)
+    await roma.set_vector_coordinate_position(1, x, y, z["safe"], 900, None, 1, 0)
+    await roma.action_move_vector_coordinate_position()
+    await roma.set_smooth_move_x(0)
 
     # pick up resource
-    await self.roma.position_absolute_g(900)  # TODO: verify
-    await self.roma.set_target_window_class(1, 0, 0, 0, 135, 0)
-    await self.roma.set_vector_coordinate_position(1, x, y, z["travel"], 900, None, 1, 1)
+    await roma.position_absolute_g(900)  # TODO: verify
+    await roma.set_target_window_class(1, 0, 0, 0, 135, 0)
+    await roma.set_vector_coordinate_position(1, x, y, z["travel"], 900, None, 1, 1)
     # TODO verify z param
-    await self.roma.set_vector_coordinate_position(1, x, y, z["end"], 900, None, 1, 0)
-    await self.roma.action_move_vector_coordinate_position()
-    await self.roma.set_fast_speed_y(3500, 1000)
-    await self.roma.set_fast_speed_r(2000, 600)
-    await self.roma.set_gripper_params(100, 75)
-    await self.roma.grip_plate(h - 100)
+    await roma.set_vector_coordinate_position(1, x, y, z["end"], 900, None, 1, 0)
+    await roma.action_move_vector_coordinate_position()
+    await roma.set_fast_speed_y(3500, 1000)
+    await roma.set_fast_speed_r(2000, 600)
+    await roma.set_gripper_params(100, 75)
+    await roma.grip_plate(h - 100)
 
   async def move_picked_up_resource(self, move: ResourceMove):
     raise NotImplementedError()
@@ -609,35 +737,36 @@ class EVOBackend(TecanLiquidHandler):
   async def drop_resource(self, drop: ResourceDrop):
     """Drop a resource like a plate or a lid using the integrated robotic arm."""
 
-    z_range = await self.roma.report_z_param(5)
+    roma = self._require_roma()
+    z_range = await roma.report_z_param(5)
     x, y, z = self._roma_positions(
       drop.resource, drop.resource.get_location_wrt(self.deck), z_range
     )
     xt, yt, zt = self._roma_positions(drop.resource, drop.destination, z_range)
 
     # move to target
-    await self.roma.set_target_window_class(1, 0, 0, 0, 135, 0)
-    await self.roma.set_target_window_class(2, 0, 0, 0, 53, 0)
-    await self.roma.set_target_window_class(3, 0, 0, 0, 55, 0)
-    await self.roma.set_target_window_class(4, 45, 0, 0, 0, 0)
-    await self.roma.set_vector_coordinate_position(1, x, y, z["end"], 900, None, 1, 1)
-    await self.roma.set_vector_coordinate_position(2, x, y, z["travel"], 900, None, 1, 2)
-    await self.roma.set_vector_coordinate_position(3, x, y, z["safe"], 900, None, 1, 3)
-    await self.roma.set_vector_coordinate_position(4, xt, yt, zt["safe"], 900, None, 1, 4)
-    await self.roma.set_vector_coordinate_position(5, xt, yt, zt["travel"], 900, None, 1, 3)
-    await self.roma.set_vector_coordinate_position(6, xt, yt, zt["end"], 900, None, 1, 0)
-    await self.roma.action_move_vector_coordinate_position()
+    await roma.set_target_window_class(1, 0, 0, 0, 135, 0)
+    await roma.set_target_window_class(2, 0, 0, 0, 53, 0)
+    await roma.set_target_window_class(3, 0, 0, 0, 55, 0)
+    await roma.set_target_window_class(4, 45, 0, 0, 0, 0)
+    await roma.set_vector_coordinate_position(1, x, y, z["end"], 900, None, 1, 1)
+    await roma.set_vector_coordinate_position(2, x, y, z["travel"], 900, None, 1, 2)
+    await roma.set_vector_coordinate_position(3, x, y, z["safe"], 900, None, 1, 3)
+    await roma.set_vector_coordinate_position(4, xt, yt, zt["safe"], 900, None, 1, 4)
+    await roma.set_vector_coordinate_position(5, xt, yt, zt["travel"], 900, None, 1, 3)
+    await roma.set_vector_coordinate_position(6, xt, yt, zt["end"], 900, None, 1, 0)
+    await roma.action_move_vector_coordinate_position()
 
     # release resource
-    await self.roma.position_absolute_g(900)
-    await self.roma.set_fast_speed_y(5000, 1500)
-    await self.roma.set_fast_speed_r(5000, 1500)
-    await self.roma.set_vector_coordinate_position(1, xt, yt, zt["end"], 900, None, 1, 1)
-    await self.roma.set_vector_coordinate_position(2, xt, yt, zt["travel"], 900, None, 1, 2)
-    await self.roma.set_vector_coordinate_position(3, xt, yt, zt["safe"], 900, None, 1, 0)
-    await self.roma.action_move_vector_coordinate_position()
-    await self.roma.set_fast_speed_y(3500, 1000)
-    await self.roma.set_fast_speed_r(2000, 600)
+    await roma.position_absolute_g(900)
+    await roma.set_fast_speed_y(5000, 1500)
+    await roma.set_fast_speed_r(5000, 1500)
+    await roma.set_vector_coordinate_position(1, xt, yt, zt["end"], 900, None, 1, 1)
+    await roma.set_vector_coordinate_position(2, xt, yt, zt["travel"], 900, None, 1, 2)
+    await roma.set_vector_coordinate_position(3, xt, yt, zt["safe"], 900, None, 1, 0)
+    await roma.action_move_vector_coordinate_position()
+    await roma.set_fast_speed_y(3500, 1000)
+    await roma.set_fast_speed_r(2000, 600)
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     if not isinstance(tip, TecanTip):
@@ -894,8 +1023,6 @@ class EVOArm:
   Provides firmware commands for EVO arms. Caches arm positions.
   """
 
-  _pos_cache: Dict[str, int] = {}
-
   def __init__(self, backend: EVOBackend, module: str):
     self.backend = backend
     self.module = module
@@ -989,8 +1116,8 @@ class LiHa(EVOArm):
       TecanError: if moving to the target position causes a collision
     """
 
-    cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
-    for module, pos in EVOArm._pos_cache.items():
+    cur_x = self.backend._arm_position_cache.setdefault(self.module, await self.report_x_param(0))
+    for module, pos in self.backend._arm_position_cache.items():
       if module == self.module:
         continue
       if cur_x < x and cur_x < pos < x:  # moving right
@@ -1002,7 +1129,7 @@ class LiHa(EVOArm):
 
     await self.backend.send_command(module=self.module, command="PAA", params=list([x, y, ys] + z))
 
-    EVOArm._pos_cache[self.module] = x
+    self.backend._arm_position_cache[self.module] = x
 
   async def position_valve_logical(self, param: List[Optional[int]]):
     """Position valve logical for each channel.
@@ -1324,8 +1451,8 @@ class RoMa(EVOArm):
       TecanError: if moving to the target position causes a collision
     """
 
-    cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
-    for module, pos in EVOArm._pos_cache.items():
+    cur_x = self.backend._arm_position_cache.setdefault(self.module, await self.report_x_param(0))
+    for module, pos in self.backend._arm_position_cache.items():
       if module == self.module:
         continue
       if cur_x < x and cur_x < pos < x:  # moving right
@@ -1346,7 +1473,7 @@ class RoMa(EVOArm):
 
     await self.backend.send_command(module=self.module, command="AAC")
 
-    EVOArm._pos_cache[self.module] = await self.report_x_param(0)
+    self.backend._arm_position_cache[self.module] = await self.report_x_param(0)
 
   async def position_absolute_g(self, g: int):
     """Position absolute for G-axis
