@@ -12,6 +12,7 @@ only ones the two generations share.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ from ._protocol import (
   PowerWaveError,
   PowerWaveNakError,
   PowerWaveFatalError,
+  PowerWaveHaltedError,
   PowerWaveParseError,
   PowerWaveReadAbortedError,
   PowerWaveStatusError,
@@ -154,6 +156,10 @@ class PowerWaveX:
   #: How long to wait for the status string that explains an abandoned read.
   _ABORT_STATUS_SECONDS = 10.0
 
+  #: How long :meth:`halt` waits for a read in progress to let go of the serial
+  #: port. A read notices within one io slice, so this only has to cover that.
+  _HALT_HANDOVER_SECONDS = 5.0
+
   #: Seconds allowed per scanned wavelength, on top of :attr:`timeout`. An
   #: instance attribute so a test can collapse the wait.
   _SCAN_SECONDS_PER_WAVELENGTH = SCAN_SECONDS_PER_WAVELENGTH
@@ -196,6 +202,13 @@ class PowerWaveX:
     self._assay_defined = False
     self._assay_wavelengths: List[int] = []
     self._strip_range: Optional[tuple[int, int]] = None
+    self._plate_geometry: Optional[tuple[int, int]] = None
+
+    # Only one task may read the serial port at a time, and halt() has to be able
+    # to take it away from a read in progress rather than queue behind it.
+    self._halt_requested = asyncio.Event()
+    self._reader_idle = asyncio.Event()
+    self._reader_idle.set()
 
     self.io = Serial(
       human_readable_device_name="Agilent BioTek PowerWaveX",
@@ -494,22 +507,88 @@ class PowerWaveX:
     outside. This command is framed differently from every other: the instrument
     sends neither ACK nor a status string, only a single ``DLE`` once the abort
     has completed.
+
+    Safe to call while a read or scan is running, which is the point of it: the
+    read in progress is asked to stop, and raises
+    :class:`PowerWaveHaltedError` in whichever task was awaiting it, before this
+    takes the serial port and sends the command. That ordering matters because
+    both would otherwise be polling the same bytes, and the read would swallow
+    the ``DLE`` this waits for.
+
+    Raises:
+      PowerWaveError: If a read in progress does not let go of the serial port,
+        or the instrument does not acknowledge with ``DLE``.
     """
+    if not self._reader_idle.is_set():
+      logger.info("[PowerWaveX %s] halting a read in progress", self.port)
+      self._halt_requested.set()
+      try:
+        await asyncio.wait_for(self._reader_idle.wait(), timeout=self._HALT_HANDOVER_SECONDS)
+      except (asyncio.TimeoutError, TimeoutError):
+        raise PowerWaveError(
+          f"A read in progress did not release the serial port within "
+          f"{self._HALT_HANDOVER_SECONDS:.0f}s, so HALT was not sent. The instrument is "
+          f"still reading."
+        ) from None
+      finally:
+        self._halt_requested.clear()
+
     await self.io.write(bytes(Command.HALT.value))
     logger.debug("[PowerWaveX %s] sent HALT", self.port)
 
+    # Whatever the abandoned read left on the wire arrives before the DLE, and is
+    # discarded with it.
     response = await self._read_until(DLE)
     if not response.endswith(DLE):
       raise PowerWaveError(f"HALT was not acknowledged with DLE, got {response!r}")
+    if len(response) > 1:
+      logger.debug(
+        "[PowerWaveX %s] discarded %d bytes of abandoned read before the DLE",
+        self.port,
+        len(response) - 1,
+      )
 
     # The abort leaves the carrier presented outside (page B-12).
     self._carrier_position = "out"
     self._assay_defined = False
+    self._strip_range = None
     logger.info("[PowerWaveX %s] halted, carrier out", self.port)
 
   # ------------------------------------------------------------------------------------
   # Absorbance reads
   # ------------------------------------------------------------------------------------
+
+  def _check_read_wavelengths(self, wavelengths: Sequence[int]) -> None:
+    """Range-check wavelengths for a read, and warn about uncalibrated ones.
+
+    Shared by every read path so that the long-running ones are not the quiet
+    ones. Deliberately a warning rather than a refusal: whether a wavelength is
+    safe depends on calibration this driver cannot see, since a scan in an
+    earlier session leaves the instrument calibrated and tracking that would mean
+    holding state the instrument itself will not confirm. See
+    :attr:`abs_wavelength_range` for what the risk actually is.
+
+    Raises:
+      ValueError: If a wavelength is outside the instrument's range.
+    """
+    low, high = self.abs_wavelength_range
+    for wavelength in wavelengths:
+      if not low <= wavelength <= high:
+        raise ValueError(f"Wavelength must be within {low}-{high} nm, got {wavelength}")
+
+    uncalibrated = [w for w in wavelengths if w not in (self._wavelength_table or [])]
+    if len(uncalibrated) > 0:
+      logger.warning(
+        "[PowerWaveX %s] %s nm not in the calibrated wavelength table %s. The read sets "
+        "its own gain, which is less accurate than the stored table (page B-8) and can "
+        "hang the instrument outright where little light reaches the detector: below "
+        "210 nm it abandons the read and waits for its front panel. scan_plate() over a "
+        "band containing the wavelength calibrates it properly first; see "
+        "abs_wavelength_range.",
+        self.port,
+        uncalibrated,
+        self._wavelength_table,
+      )
 
   async def read_absorbance(
     self,
@@ -563,23 +642,7 @@ class PowerWaveX:
     """
     first_strip, last_strip = self._strip_range_for(plate, wells)
 
-    low, high = self.abs_wavelength_range
-    for wavelength in wavelengths:
-      if not low <= wavelength <= high:
-        raise ValueError(f"Wavelength must be within {low}-{high} nm, got {wavelength}")
-
-    uncalibrated = [w for w in wavelengths if w not in (self._wavelength_table or [])]
-    if len(uncalibrated) > 0:
-      logger.warning(
-        "[PowerWaveX %s] %s nm not in the calibrated wavelength table %s. The read sets "
-        "its own gain, which is less accurate than the stored table (page B-8) and can "
-        "hang the instrument outright where little light reaches the detector, such as "
-        "in the far UV. scan_plate() over a band containing the wavelength calibrates "
-        "it properly first; see abs_wavelength_range.",
-        self.port,
-        uncalibrated,
-        self._wavelength_table,
-      )
+    self._check_read_wavelengths(wavelengths)
 
     num_strips = last_strip - first_strip + 1
     logger.info(
@@ -592,14 +655,19 @@ class PowerWaveX:
       last_strip,
     )
 
-    # Order matters (pages B-12, B-13): the assay definition resets the strip range,
-    # and so does the geometry command, so both must follow it in this order.
-    await self.push_assay_definition(wavelengths, read_type="endpoint")
-    await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
-    if num_strips != plate.num_items_x:
-      await self.set_strip_range(first_strip, last_strip)
+    # Held across the setup commands as well as the data, because a second
+    # operation starting here would interleave its assay definition with this
+    # one's data stream.
+    async with self._reading():
+      # Order matters (pages B-12, B-13): the assay definition resets the strip
+      # range, and so does the geometry command, so both must follow it in this
+      # order.
+      await self.push_assay_definition(wavelengths, read_type="endpoint")
+      await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
+      if num_strips != plate.num_items_x:
+        await self.set_strip_range(first_strip, last_strip)
 
-    blocks = await self._read_plate(len(wavelengths), plate.num_items_y, num_strips)
+      blocks = await self._read_plate(len(wavelengths), plate.num_items_y, num_strips)
 
     temperature = await self._try_read_temperature()
     timestamp = datetime.now()
@@ -663,17 +731,19 @@ class PowerWaveX:
 
     Returns:
       One :class:`AbsorbanceResult` per wavelength per cycle, ordered by cycle
-      then wavelength, each timestamped when its cycle began.
+      then wavelength. Each is timestamped when its cycle's data finished
+      arriving, not when the instrument measured it: the instrument reports no
+      time of its own, and a read takes roughly ten seconds to transfer, so a
+      cycle was measured somewhat before its timestamp. The spacing between
+      timestamps is sound - twelve cycles at a 15 s interval held a mean gap of
+      15.03 s with 0.38 s of total drift - so rates computed from differences are
+      unaffected, while absolute times carry that offset.
 
     Note:
       Use :meth:`halt` to abort a run in progress.
     """
     first_strip, last_strip = self._strip_range_for(plate, wells)
-
-    low, high = self.abs_wavelength_range
-    for wavelength in wavelengths:
-      if not low <= wavelength <= high:
-        raise ValueError(f"Wavelength must be within {low}-{high} nm, got {wavelength}")
+    self._check_read_wavelengths(wavelengths)
 
     num_strips = last_strip - first_strip + 1
 
@@ -684,6 +754,38 @@ class PowerWaveX:
         "run ends. Use count and interval instead."
       )
 
+    # Held across the setup commands too, so a second operation cannot interleave
+    # its assay definition with this run's cycles.
+    async with self._reading():
+      return await self._kinetic_exchange(
+        plate,
+        wells,
+        wavelengths,
+        interval,
+        count,
+        shake_speed,
+        first_strip,
+        last_strip,
+        num_strips,
+      )
+
+  async def _kinetic_exchange(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelengths: Sequence[int],
+    interval: int,
+    count: int,
+    shake_speed: int,
+    first_strip: int,
+    last_strip: int,
+    num_strips: int,
+  ) -> List[AbsorbanceResult]:
+    """Load a kinetic assay and collect every cycle (pages B-10, B-13).
+
+    Split out so :meth:`read_absorbance_kinetic` can hold the serial port across
+    the whole run, which is what lets :meth:`halt` stop it.
+    """
     await self.push_assay_definition(
       wavelengths,
       read_type="kinetic",
@@ -720,18 +822,22 @@ class PowerWaveX:
       round(interval * count / 60),
     )
 
-    await self._start_read()
-
     # Each cycle arrives an interval apart, so the per-block deadline has to cover
     # the wait as well as the transfer.
     block_timeout = interval + self.timeout
 
     results: List[AbsorbanceResult] = []
+    await self._start_read()
+
     for cycle in range(count):
-      timestamp = datetime.now()
       blocks = await self._collect_blocks(
         len(wavelengths), plate.num_items_y, num_strips, timeout=block_timeout
       )
+      # Stamped once the cycle's data is in hand. Taking it before the wait
+      # named the moment this loop started waiting, which for every cycle after
+      # the first is when the previous cycle's data finished arriving - well
+      # before the cycle it was labelling.
+      timestamp = datetime.now()
       for wavelength, block in zip(wavelengths, blocks):
         results.append(
           AbsorbanceResult(
@@ -779,6 +885,10 @@ class PowerWaveX:
     await self.io.write(payload)
     await self._read_status()
 
+    # Kept so that a later strip range can be checked against the geometry that
+    # is actually selected, rather than against the widest the family allows.
+    self._plate_geometry = (num_rows, num_columns)
+
     self._strip_range = (1, num_columns)
     logger.debug("[PowerWaveX %s] plate geometry set to %dx%d", self.port, num_rows, num_columns)
 
@@ -796,10 +906,25 @@ class PowerWaveX:
       first_strip: First column to read, from 1.
       last_strip: Last column to read, inclusive.
 
+    Raises:
+      ValueError: If the range falls outside 1 to :data:`._protocol.MAX_STRIP`, or
+        outside the width of the geometry currently selected.
+
     Note:
       The instrument does not range-check these itself; it answered ``000`` to a
-      first strip of 0 when tested. The bounds are enforced here instead.
+      first strip of 0 when tested, and accepted columns 13 to 24 against a
+      96-well geometry. The bounds are enforced here instead, against the
+      selected geometry where :meth:`set_plate_geometry` has established one.
     """
+    if self._plate_geometry is not None:
+      _, num_columns = self._plate_geometry
+      if last_strip > num_columns:
+        raise ValueError(
+          f"last_strip {last_strip} is outside the {num_columns}-column geometry "
+          f"currently selected. The instrument accepts the request and reads columns "
+          f"that do not exist."
+        )
+
     payload = encode_strip_range(first_strip, last_strip)
 
     await self._send_command(Command.SET_STRIP_RANGE)
@@ -970,6 +1095,12 @@ class PowerWaveX:
       num_wells = 1
     else:
       assert column is not None
+      if not 1 <= column <= plate.num_items_x:
+        raise ValueError(
+          f"column must be 1-{plate.num_items_x} for this {plate.num_items_y}x"
+          f"{plate.num_items_x} plate, got {column}. The instrument does not check "
+          f"this: it accepted row 99 and column 99 and then stopped responding."
+        )
       if plate.num_items_y != 8:
         raise NotImplementedError(
           "Scanning a whole strip is only supported on 8-row plates. The manual warns "
@@ -1001,32 +1132,56 @@ class PowerWaveX:
       len(expected),
     )
 
-    await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
+    async with self._reading():
+      await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
+      return await self._scan_exchange(
+        plate, request, expected, num_wells, row, target_column, shake_time
+      )
+
+  async def _scan_exchange(
+    self,
+    plate: Plate,
+    request: bytes,
+    expected: List[int],
+    num_wells: int,
+    row: int,
+    target_column: int,
+    shake_time: int,
+  ) -> SpectralScanResult:
+    """Send a prepared scan request and collect its response (page B-14).
+
+    Split out so :meth:`scan_plate` can hold the serial port across the whole
+    exchange, which is what lets :meth:`halt` interrupt a scan.
+    """
+    # One budget for every phase of the scan, because the slow parts come before
+    # the data: the instrument shakes first, then calibrates whatever wavelengths
+    # it must, and only then sweeps. Timing any one phase against the plain
+    # response timeout fails a scan that is merely slow - a 31-wavelength
+    # calibrated scan, or any shake approaching its 99 second maximum, outlasts it
+    # before the first wavelength list arrives.
+    timeout = self.timeout + shake_time + self._SCAN_SECONDS_PER_WAVELENGTH * len(expected)
 
     await self._send_command(Command.SCAN_PLATE)
     await self.io.write(request + ETX)
 
-    # The request is acknowledged a second time, after ETX (page B-14).
-    acknowledgement = await self.io.read(1)
+    # The request is acknowledged a second time, after ETX (page B-14). Poll for
+    # it rather than reading one io slice, as _send_command does: the instrument
+    # is free to take its time here.
+    acknowledgement = await self._read_exactly(1, timeout=timeout)
     if acknowledgement == NAK:
       raise PowerWaveNakError("Instrument rejected the scan request: invalid arguments")
     if acknowledgement != ACK:
       raise PowerWaveError(f"Expected ACK or NAK after the scan request, got {acknowledgement!r}")
 
-    await self._read_status()
+    await self._read_status(timeout=timeout)
 
     # Two wavelength lists precede the data. Both terminators are always sent,
     # even when the list is empty.
-    calibrated = parse_scan_wavelength_list(await self._read_until(SUB))
-    first_pass = parse_scan_wavelength_list(await self._read_until(SUB))
+    calibrated = parse_scan_wavelength_list(await self._read_until(SUB, timeout=timeout))
+    first_pass = parse_scan_wavelength_list(await self._read_until(SUB, timeout=timeout))
     logger.debug(
       "[PowerWaveX %s] scan calibrated %s, first pass %s", self.port, calibrated, first_pass
     )
-
-    # Every wavelength is measured before any data is sent, so the start code and
-    # the whole section must arrive inside one deadline. Scanning is slower than a
-    # plate read.
-    timeout = self.timeout + self._SCAN_SECONDS_PER_WAVELENGTH * len(expected)
 
     # A single CR marks the start of the data, then one line per wavelength, then
     # one ^Z and one checksum byte for the whole series.
@@ -1367,6 +1522,7 @@ class PowerWaveX:
     deadline = time.monotonic() + self.timeout
     response = b""
     while len(response) == 0:
+      self._check_halted()
       if time.monotonic() > deadline:
         raise TimeoutError(f"No reply to {command.name} within {self.timeout}s")
       response = await self.io.read(1)
@@ -1376,6 +1532,41 @@ class PowerWaveX:
     if response == NAK:
       raise PowerWaveNakError(f"Instrument rejected {command.name} with NAK")
     raise PowerWaveError(f"Expected ACK or NAK after {command.name}, got {response!r}")
+
+  @contextlib.asynccontextmanager
+  async def _reading(self):
+    """Hold the serial port for one long operation, so :meth:`halt` can take it.
+
+    A read or scan occupies the port for seconds to minutes, and the instrument
+    offers no way to ask what it is doing, so the only way to abort one is to
+    stop reading and send HALT. Without an owner, HALT issued from another task -
+    a GUI's stop button, say - races the read for the same bytes: whichever polls
+    first swallows the other's reply, which is how HALT came to consume a data
+    block and then time out waiting for a ``DLE`` the read had already eaten.
+
+    While this is held, :meth:`halt` sets a flag that the read loops notice and
+    raise :class:`PowerWaveHaltedError` on, so the port is handed over rather
+    than contended for.
+    """
+    if not self._reader_idle.is_set():
+      raise PowerWaveError(
+        "Another read or scan is already using the serial port. Wait for it to "
+        "finish, or call halt() to abort it."
+      )
+
+    self._halt_requested.clear()
+    self._reader_idle.clear()
+    try:
+      yield
+    finally:
+      self._reader_idle.set()
+
+  def _check_halted(self) -> None:
+    """Abandon a read that :meth:`halt` has asked to stop."""
+    if self._halt_requested.is_set():
+      raise PowerWaveHaltedError(
+        "The read was interrupted by halt(); the serial port has been handed over."
+      )
 
   async def _drain_input(self) -> None:
     """Discard anything the instrument is still sending, until the line goes quiet.
@@ -1509,6 +1700,7 @@ class PowerWaveX:
     buffer = bytearray()
 
     while len(buffer) < num_bytes:
+      self._check_halted()
       if time.monotonic() > deadline:
         raise TimeoutError(
           f"Timed out reading {num_bytes} bytes, got {len(buffer)}: {bytes(buffer)!r}"
@@ -1526,6 +1718,7 @@ class PowerWaveX:
     while True:
       if buffer.endswith(terminator):
         return bytes(buffer)
+      self._check_halted()
       if time.monotonic() > deadline:
         raise TimeoutError(
           f"Timed out waiting for {terminator!r}, partial response: {bytes(buffer)!r}"

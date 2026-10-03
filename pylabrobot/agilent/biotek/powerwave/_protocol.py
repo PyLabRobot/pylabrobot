@@ -91,6 +91,16 @@ class PowerWaveParseError(PowerWaveError):
   """A response could not be parsed."""
 
 
+class PowerWaveHaltedError(PowerWaveError):
+  """A read or scan was interrupted by :meth:`.PowerWaveX.halt`.
+
+  Raised in the task that was reading, so that a caller waiting on a long
+  operation returns promptly once something else halts the instrument. The halt
+  itself is not an error: it is reported to whoever asked for it by returning
+  normally.
+  """
+
+
 class PowerWaveReadAbortedError(PowerWaveError):
   """The instrument abandoned a read or scan part way through.
 
@@ -556,27 +566,61 @@ def parse_plate(frame: bytes, num_rows: int = 8, num_columns: int = 12) -> List[
     A nested list indexed ``[row][column]`` in optical density units.
 
   Raises:
-    PowerWaveParseError: If the block does not hold exactly
-      ``num_rows * num_columns`` readings.
+    PowerWaveParseError: If the block is not exactly ``num_rows`` comma-separated
+      rows of ``num_columns`` well-formed readings, terminated by ``^Z``.
   """
-  expected = num_rows * num_columns
-  readings: List[float] = []
+  # Validate the row structure rather than scanning the block for anything that
+  # looks like a reading. The checksum is the first guard, but it is a byte sum
+  # and so blind to compensating edits: turning ",+0201,+0207" into
+  # ",+0201.+0205" moves the separator up two and the digit down two, leaving the
+  # checksum identical while silently changing a well from 0.207 to 0.205. Only
+  # the framing catches that.
+  start = frame.find(CR)
+  if start == -1:
+    raise PowerWaveParseError(f"No CR before the first plate row: {frame[:32]!r}...")
+  body = frame[start + 1 :]
 
-  # latin-1 is byte-transparent, so a binary checksum prefix cannot raise here.
-  for match in _READING_RE.finditer(frame):
-    if match.group("overrange") is not None:
-      readings.append(OVERRANGE)
-    else:
-      magnitude = int(match.group("magnitude")) / 1000
-      readings.append(magnitude if match.group("sign") == b"+" else -magnitude)
-
-  if len(readings) != expected:
+  if not body.endswith(SUB):
     raise PowerWaveParseError(
-      f"Expected {expected} readings for a {num_rows}x{num_columns} plate, parsed "
-      f"{len(readings)}. The instrument's plate geometry or strip range may not match."
+      f"Plate data block is not terminated by ^Z, so it is truncated: ...{frame[-24:]!r}"
+    )
+  body = body[:-1]
+
+  rows = [row for row in body.split(CR + LF) if len(row.strip(CR + LF)) > 0]
+  if len(rows) != num_rows:
+    raise PowerWaveParseError(
+      f"Expected {num_rows} rows for a {num_rows}x{num_columns} plate, found {len(rows)}. "
+      f"The instrument's plate geometry or strip range may not match."
     )
 
-  return [readings[row * num_columns : (row + 1) * num_columns] for row in range(num_rows)]
+  data: List[List[float]] = []
+  for index, row in enumerate(rows):
+    fields = row.strip(CR + LF).split(b",")
+    # Every row opens with a comma, so the split leaves an empty leading field.
+    if fields[0] != b"":
+      raise PowerWaveParseError(f"Plate row {index + 1} does not begin with a comma: {row[:24]!r}")
+
+    readings: List[float] = []
+    for field in fields[1:]:
+      reading = _READING_RE.fullmatch(field)
+      if reading is None:
+        raise PowerWaveParseError(
+          f"Malformed reading in plate row {index + 1}: {field!r} in {row[:24]!r}"
+        )
+      if reading.group("overrange") is not None:
+        readings.append(OVERRANGE)
+      else:
+        magnitude = int(reading.group("magnitude")) / 1000
+        readings.append(magnitude if reading.group("sign") == b"+" else -magnitude)
+
+    if len(readings) != num_columns:
+      raise PowerWaveParseError(
+        f"Expected {num_columns} readings in plate row {index + 1}, parsed "
+        f"{len(readings)} from {row[:24]!r}"
+      )
+    data.append(readings)
+
+  return data
 
 
 def count_overrange(data: List[List[float]]) -> int:

@@ -6,6 +6,7 @@ that this driver was ported from. Fixtures marked "synthetic" are hand-built for
 cases the capture does not cover.
 """
 
+import asyncio
 import math
 import struct
 import unittest
@@ -30,6 +31,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   PowerWaveChecksumError,
   PowerWaveError,
   PowerWaveFatalError,
+  PowerWaveHaltedError,
   PowerWaveNakError,
   PowerWaveParseError,
   PowerWaveReadAbortedError,
@@ -486,12 +488,37 @@ class TestPlateParsing(unittest.TestCase):
       parse_plate(truncated)
 
   def test_non_default_plate_geometry(self):
-    # Synthetic: 24-well plates are 4x6.
-    readings = b"".join(b",+0100" for _ in range(24))
-    frame = b"\r" + readings + b"\r\n\x1a"
+    # Synthetic: 24-well plates are 4x6. One CR LF-terminated line per row, as
+    # every captured frame has.
+    frame = b"\r" + b"".join(b",+0100" * 6 + b"\r\n" for _ in range(4)) + b"\x1a"
     data = parse_plate(frame, num_rows=4, num_columns=6)
     self.assertEqual(len(data), 4)
     self.assertEqual(len(data[0]), 6)
+
+  def test_rows_must_be_separate_lines(self):
+    # All 24 readings on one line is not a 4x6 plate, however many values it has.
+    frame = b"\r" + b",+0100" * 24 + b"\r\n\x1a"
+    with self.assertRaises(PowerWaveParseError):
+      parse_plate(frame, num_rows=4, num_columns=6)
+
+  def test_a_checksum_neutral_edit_is_rejected(self):
+    # "," up two and "7" down two leaves the byte sum untouched, so only the row
+    # structure catches it. Without that check A2 silently reads 0.205.
+    tampered = _CAPTURED_PLATE.replace(b",+0201,+0207", b",+0201.+0205", 1)
+    self.assertEqual(plate_checksum(tampered), plate_checksum(_CAPTURED_PLATE))
+    with self.assertRaises(PowerWaveParseError):
+      parse_plate(tampered)
+
+  def test_structural_damage_is_rejected(self):
+    for label, bad in (
+      ("no ^Z terminator", _CAPTURED_PLATE[:-1]),
+      ("a row short of a reading", _CAPTURED_PLATE.replace(b",+0122\r\n", b"\r\n", 1)),
+      ("junk after a reading", _CAPTURED_PLATE.replace(b",+0207", b",+0207Z", 1)),
+      ("a row not starting with a comma", _CAPTURED_PLATE.replace(b"\r,+0201", b"\r+0201", 1)),
+    ):
+      with self.subTest(label=label):
+        with self.assertRaises(PowerWaveParseError):
+          parse_plate(bad)
 
   def test_count_overrange_on_clean_plate(self):
     self.assertEqual(count_overrange(parse_plate(_CAPTURED_PLATE)), 0)
@@ -725,6 +752,129 @@ class TestPlateCarrier(unittest.IsolatedAsyncioTestCase):
     reader, _ = _reader(b"")
     with self.assertRaises(TimeoutError):
       await reader.open()
+
+
+class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
+  """HALT has to take the serial port away from a read, not queue behind it.
+
+  Its whole purpose is aborting a run, which means being called while one is
+  outstanding - a GUI's stop button. Both used to poll the same bytes, so the
+  read would swallow HALT's DLE and HALT would then time out.
+  """
+
+  class _SilentThenDLE(_FakeSerial):
+    """A line that answers nothing until HALT is sent, then acknowledges it."""
+
+    def __init__(self, preamble: bytes = b""):
+      super().__init__(preamble)
+      self.halted = False
+
+    async def write(self, data: bytes) -> None:
+      await super().write(data)
+      if data == b"X":
+        self.halted = True
+        self._inbox.extend(b"\x10")
+
+    async def read(self, num_bytes: int = 1) -> bytes:
+      await asyncio.sleep(0)  # let the other task run
+      return await super().read(num_bytes)
+
+  async def test_halt_interrupts_the_read_and_is_acknowledged(self):
+    plate = _plate_resource()
+    fake = self._SilentThenDLE(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
+    reader.io = fake  # type: ignore[assignment]
+    reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+    reader._wavelength_table = [620]
+
+    read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
+    while reader._reader_idle.is_set():  # wait until the read owns the port
+      await asyncio.sleep(0)
+
+    await reader.halt()
+
+    self.assertTrue(fake.halted)
+    self.assertEqual(reader.carrier_position, "out")
+    self.assertFalse(reader._assay_defined)
+
+    with self.assertRaises(PowerWaveHaltedError):
+      await read
+
+  async def test_the_read_releases_the_port_before_halt_sends_anything(self):
+    # If HALT sent X while the read was still polling, the read would consume the
+    # DLE. The port must be idle at the moment X goes out.
+    plate = _plate_resource()
+    fake = self._SilentThenDLE(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
+    idle_when_x_sent: dict = {}
+
+    original_write = fake.write
+
+    async def watching_write(data: bytes) -> None:
+      if data == b"X":
+        idle_when_x_sent["idle"] = reader._reader_idle.is_set()
+      await original_write(data)
+
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
+    reader.io = fake  # type: ignore[assignment]
+    reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+    reader._wavelength_table = [620]
+    fake.write = watching_write  # type: ignore[method-assign]
+
+    read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
+    while reader._reader_idle.is_set():
+      await asyncio.sleep(0)
+    await reader.halt()
+    with self.assertRaises(PowerWaveHaltedError):
+      await read
+
+    self.assertTrue(idle_when_x_sent.get("idle"))
+
+  async def test_a_second_read_is_refused_while_one_is_running(self):
+    plate = _plate_resource()
+    fake = self._SilentThenDLE(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
+    reader.io = fake  # type: ignore[assignment]
+    reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+    reader._wavelength_table = [620]
+
+    read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
+    while reader._reader_idle.is_set():
+      await asyncio.sleep(0)
+
+    with self.assertRaises(PowerWaveError) as caught:
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+    self.assertIn("already using the serial port", str(caught.exception))
+
+    await reader.halt()
+    with self.assertRaises(PowerWaveHaltedError):
+      await read
+
+  async def test_the_port_is_usable_again_after_a_halt(self):
+    plate = _plate_resource()
+    fake = self._SilentThenDLE(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
+    reader.io = fake  # type: ignore[assignment]
+    reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+    reader._wavelength_table = [620]
+
+    read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
+    while reader._reader_idle.is_set():
+      await asyncio.sleep(0)
+    await reader.halt()
+    with self.assertRaises(PowerWaveHaltedError):
+      await read
+
+    # The halt flag must not linger, or every later read fails immediately.
+    self.assertFalse(reader._halt_requested.is_set())
+    self.assertTrue(reader._reader_idle.is_set())
 
 
 class TestHalt(unittest.IsolatedAsyncioTestCase):
