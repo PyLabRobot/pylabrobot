@@ -66,6 +66,7 @@ from pylabrobot.lib.liquid_handling.tip_presence_probing import (
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
+from pylabrobot.resources.hamilton.core_gripper_tools import HamiltonCoreGripperTool
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipDropMethod, TipPickupMethod
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMountingShaft
 from pylabrobot.resources.resource import Resource
@@ -83,6 +84,20 @@ logger = logging.getLogger(__name__)
 ANY_COLUMN = 1e6
 """An X tolerance wider than any deck: X alone never splits a tip command into batches, so spots
 spread across columns go out in one, as legacy sends them."""
+
+
+def core_tool_face_distance(tool: HamiltonCoreGripperTool) -> float:
+  """How far a CO-RE grip tool's face stands from its channel's axis, in Y."""
+  pick_up = tool.pick_up_location or tool.get_anchor("c", "c", "t")
+  return float(tool.get_size_y() - pick_up.y)
+
+
+def core_tool_grip_line_overhang(tool: HamiltonCoreGripperTool) -> float:
+  """How far a mounted CO-RE grip tool's grip line hangs below its channel's stop disc, in mm: the
+  height the CO-RE plate commands are given in."""
+  pick_up = tool.pick_up_location or tool.get_anchor("c", "c", "t")
+  return float(pick_up.z - tool.fitting_depth - tool.grip_line_height)
+
 
 T = TypeVar("T")
 
