@@ -494,6 +494,14 @@ _READING_RE = re.compile(rb"(?P<sign>[+-])(?P<magnitude>\d{4})|(?P<overrange>\*{
 
 #: Overrange wells ("*****") are reported as this value: a real but saturated
 #: measurement, distinct from ``None`` which PyLabRobot uses for "not measured".
+#:
+#: The marker is not emitted at the 3.000 OD top of the instrument's specified
+#: range (page 1-1). Reading a part-covered carrier on a PowerWaveX w/ Incubator
+#: (firmware R06.20) returned finite values of 4.054, 4.043 and 4.026 OD
+#: alongside genuinely overrange wells, so the switch to ``"*****"`` happens
+#: somewhere above 4.05. Values between 3.000 and that point are outside the
+#: specified range but still arrive as numbers, and should not be trusted as
+#: measurements merely because they parsed.
 OVERRANGE = math.inf
 
 

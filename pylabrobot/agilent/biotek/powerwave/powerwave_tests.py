@@ -76,6 +76,48 @@ _CAPTURED_PLATE = (
 )
 _CAPTURED_PLATE_CHECKSUM = 142
 
+#: A 550 nm read of a carrier half covered by a sheet of plastic, captured from a
+#: PowerWaveX w/ Incubator (firmware R06.20). The first hardware frame this driver
+#: has seen containing overrange wells, and the first containing anything other
+#: than 0.000: uncovered columns read 0.000, covered ones saturate, and finite
+#: readings run as high as 4.032 OD - above the specified 3.000 limit yet still
+#: sent as numbers rather than "*****".
+_CAPTURED_OVERRANGE_PLATE = (
+  b"\r,+0000,+0000,+0000,+0025,+2682,+3243,+3207,*****,+3567,+0000,+0000,+0000\r\n,+0000,+0000,+011"
+  b"9,*****,*****,*****,*****,*****,+3690,*****,+0000,+0000\r\n,+0000,+0000,+0116,*****,*****,****"
+  b"*,+4032,+3383,+3874,*****,+3881,+0000\r\n,+0000,+0000,+0062,*****,*****,+3916,+3516,+3450,****"
+  b"*,+3685,*****,+0602\r\n,+0000,+0000,+0142,*****,+2250,+2793,+3155,+2722,*****,+3705,+3466,+268"
+  b"2\r\n,+0000,+0000,+0093,*****,+2274,+1141,+3127,+4013,+3763,+3433,+3791,+0000\r\n,+0000,+0000,+0"
+  b"091,+0728,*****,+1628,+3314,+3350,*****,+3681,+0000,+0000\r\n,+0000,+0000,+0000,+0003,+1959,+3"
+  b"281,+3292,+3716,+3623,+0023,+0000,+0000\r\n\x1a"
+)
+_CAPTURED_OVERRANGE_CHECKSUM = 17
+
+
+class TestCapturedOverrangePlate(unittest.TestCase):
+  """The real overrange capture, which an empty carrier could never produce."""
+
+  def test_checksum_verifies(self):
+    self.assertEqual(plate_checksum(_CAPTURED_OVERRANGE_PLATE), _CAPTURED_OVERRANGE_CHECKSUM)
+    verify_plate_checksum(_CAPTURED_OVERRANGE_PLATE, _CAPTURED_OVERRANGE_CHECKSUM)
+
+  def test_parses_to_a_full_plate(self):
+    grid = parse_plate(_CAPTURED_OVERRANGE_PLATE)
+    self.assertEqual(len(grid), 8)
+    self.assertTrue(all(len(row) == 12 for row in grid))
+
+  def test_overrange_wells_become_infinite(self):
+    grid = parse_plate(_CAPTURED_OVERRANGE_PLATE)
+    self.assertEqual(count_overrange(grid), 20)
+    self.assertTrue(all(math.isinf(v) for row in grid for v in row if math.isinf(v)))
+
+  def test_finite_readings_span_blank_to_above_the_specified_limit(self):
+    grid = parse_plate(_CAPTURED_OVERRANGE_PLATE)
+    finite = [v for row in grid for v in row if not math.isinf(v)]
+    self.assertEqual(min(finite), 0.0)  # the uncovered columns
+    self.assertAlmostEqual(max(finite), 4.032)  # past 3.000 and still a number
+    self.assertGreater(sum(1 for v in finite if v > 3.0), 0)
+
 
 class TestStatusStrings(unittest.TestCase):
   """Status string handling, page B-21."""

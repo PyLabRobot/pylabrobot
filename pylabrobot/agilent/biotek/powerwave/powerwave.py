@@ -222,10 +222,12 @@ class PowerWaveX:
       "Incubator (firmware R06.20) passing its self-test. Identification, the "
       "wavelength table, temperature, the minimum kinetic interval, carrier movement, "
       "the assay definition, plate geometry, strip range, endpoint reads, kinetic "
-      "reads and spectral scans have all been exercised on it end to end. What has "
-      "NOT been checked is absolute photometric accuracy: every verification read was "
-      "taken on an empty carrier, which returns 0.000 OD everywhere by construction, "
-      "so the numbers have never been compared against a known standard. "
+      "reads and spectral scans have all been exercised on it end to end, including "
+      "absorbing samples that read from 0.004 to 4.05 OD and saturated wells that "
+      "come back as overrange. What has NOT been checked is absolute photometric "
+      "accuracy: no reading has been compared against a known standard, only against "
+      "an empty light path reading 0.000 and the expectation that a given sample "
+      "absorbs less as the wavelength rises. "
       "Please report results at https://discuss.pylabrobot.org."
     )
 
