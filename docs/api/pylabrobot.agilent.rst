@@ -88,6 +88,7 @@ BioTek PowerWaveX
     PowerWaveError
     PowerWaveNakError
     PowerWaveStatusError
+    PowerWaveBusyError
     PowerWaveChecksumError
     PowerWaveSelfTestError
     PowerWaveFatalError

@@ -1,4 +1,5 @@
 from ._protocol import (
+  PowerWaveBusyError,
   PowerWaveChecksumError,
   PowerWaveError,
   PowerWaveFatalError,

@@ -91,6 +91,18 @@ class PowerWaveParseError(PowerWaveError):
   """A response could not be parsed."""
 
 
+class PowerWaveBusyError(PowerWaveError):
+  """Another operation is using the serial port.
+
+  The instrument answers one command at a time, and a read or scan holds the
+  line for seconds to minutes while it streams data. A command issued meanwhile
+  would interleave with that stream, so it is refused rather than allowed to
+  corrupt both. Callers that poll - a display showing the incubator temperature,
+  say - should treat this as "ask again later"; :meth:`.PowerWaveX.halt` is the
+  way to take the line from a run that is in progress.
+  """
+
+
 class PowerWaveHaltedError(PowerWaveError):
   """A read or scan was interrupted by :meth:`.PowerWaveX.halt`.
 

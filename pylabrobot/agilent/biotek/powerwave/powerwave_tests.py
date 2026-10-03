@@ -14,6 +14,7 @@ import unittest.mock
 from typing import Optional
 
 from pylabrobot.agilent.biotek.powerwave import PowerWaveX
+from pylabrobot.agilent.biotek.powerwave import _protocol as _protocol_module
 from pylabrobot.agilent.biotek.powerwave._protocol import (
   ASSAY_DEFINITION_LENGTH,
   FLAG_USE_TOTAL_KINETIC_TIME,
@@ -28,6 +29,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   SELF_TEST_ERRORS,
   STATUS_LENGTH,
   Command,
+  PowerWaveBusyError,
   PowerWaveChecksumError,
   PowerWaveError,
   PowerWaveFatalError,
@@ -650,6 +652,9 @@ def _reader(script: bytes = b"", *, timeout: float = 0.2, model: Optional[str] =
   # The scripted transport answers a read before any command is written, so the
   # stale-byte drain in setup() would eat the script. Flush only.
   reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+  # halt() calls the last byte before silence its acknowledgement; a scripted
+  # transport falls silent at once, so it need not wait a real second for that.
+  reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
   if model is not None:
     reader._model = model
   return reader, fake
@@ -788,9 +793,10 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX"
     reader._wavelength_table = [620]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
 
     read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
-    while reader._reader_idle.is_set():  # wait until the read owns the port
+    while reader._port_free.is_set():  # wait until the read owns the port
       await asyncio.sleep(0)
 
     await reader.halt()
@@ -802,36 +808,39 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(PowerWaveHaltedError):
       await read
 
-  async def test_the_read_releases_the_port_before_halt_sends_anything(self):
-    # If HALT sent X while the read was still polling, the read would consume the
-    # DLE. The port must be idle at the moment X goes out.
+  async def test_halt_owns_the_port_when_it_sends_the_command(self):
+    # The read must have let go before X goes out, and halt must hold the port
+    # itself from then on, so nothing starts a read into the DLE it waits for.
     plate = _plate_resource()
     fake = self._SilentThenDLE(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
-    idle_when_x_sent: dict = {}
+    seen: dict = {}
 
     original_write = fake.write
 
     async def watching_write(data: bytes) -> None:
       if data == b"X":
-        idle_when_x_sent["idle"] = reader._reader_idle.is_set()
+        seen["owner_is_halt"] = reader._port_owner is asyncio.current_task()
+        seen["port_claimed"] = not reader._port_free.is_set()
       await original_write(data)
 
     reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
     reader.io = fake  # type: ignore[assignment]
     reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
     reader._model = "PowerWaveX"
     reader._wavelength_table = [620]
     fake.write = watching_write  # type: ignore[method-assign]
 
     read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
-    while reader._reader_idle.is_set():
+    while reader._port_free.is_set():
       await asyncio.sleep(0)
     await reader.halt()
     with self.assertRaises(PowerWaveHaltedError):
       await read
 
-    self.assertTrue(idle_when_x_sent.get("idle"))
+    self.assertTrue(seen.get("owner_is_halt"), "halt did not own the port when it sent X")
+    self.assertTrue(seen.get("port_claimed"), "the port was left free while halt ran")
 
   async def test_a_second_read_is_refused_while_one_is_running(self):
     plate = _plate_resource()
@@ -842,14 +851,15 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX"
     reader._wavelength_table = [620]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
 
     read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
-    while reader._reader_idle.is_set():
+    while reader._port_free.is_set():
       await asyncio.sleep(0)
 
-    with self.assertRaises(PowerWaveError) as caught:
+    with self.assertRaises(PowerWaveBusyError) as caught:
       await reader.read_absorbance(plate, plate.get_all_items(), 620)
-    self.assertIn("already using the serial port", str(caught.exception))
+    self.assertIn("using the serial port", str(caught.exception))
 
     await reader.halt()
     with self.assertRaises(PowerWaveHaltedError):
@@ -864,9 +874,10 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX"
     reader._wavelength_table = [620]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
 
     read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
-    while reader._reader_idle.is_set():
+    while reader._port_free.is_set():
       await asyncio.sleep(0)
     await reader.halt()
     with self.assertRaises(PowerWaveHaltedError):
@@ -874,7 +885,185 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
 
     # The halt flag must not linger, or every later read fails immediately.
     self.assertFalse(reader._halt_requested.is_set())
-    self.assertTrue(reader._reader_idle.is_set())
+    self.assertTrue(reader._port_free.is_set())
+
+
+class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
+  """Every exchange owns the serial port, not just reads.
+
+  Guarding reads against each other left any other command free to interleave
+  with one. A display polling the incubator temperature on a timer would read
+  bytes belonging to a read in progress.
+  """
+
+  async def test_a_command_is_refused_while_a_read_runs(self):
+    plate = _plate_resource()
+    fake = TestHaltInterruptsAReadInProgress._SilentThenDLE(
+      _ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK
+    )
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
+    reader.io = fake  # type: ignore[assignment]
+    reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
+    reader._model = "PowerWaveX w/ Incubator"
+    reader._wavelength_table = [620]
+
+    read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
+    while reader._port_free.is_set():
+      await asyncio.sleep(0)
+
+    for label, call in (
+      ("temperature", reader.request_current_temperature()),
+      ("model", reader.request_model()),
+      ("carrier", reader.open()),
+      ("setpoint", reader.set_temperature(30)),
+    ):
+      with self.subTest(command=label):
+        with self.assertRaises(PowerWaveBusyError):
+          await call
+
+    await reader.halt()
+    with self.assertRaises(PowerWaveHaltedError):
+      await read
+
+  async def test_a_composite_operation_may_claim_the_port_once(self):
+    # read_absorbances holds the port and still calls push_assay_definition and
+    # set_plate_geometry, which claim it too. Re-entrancy within one task is why
+    # that is not a deadlock or a spurious busy error.
+    plate = _plate_resource()
+    reader, fake = _reader(_read_script(), model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    result = (await reader.read_absorbance(plate, plate.get_all_items(), 620))[0]
+
+    self.assertEqual(len(result.data), 8)
+    self.assertEqual(fake.remaining, b"")
+    self.assertIsNone(reader._port_owner)
+
+  async def test_the_port_is_released_when_an_operation_raises(self):
+    plate = _plate_resource()
+    reader, _ = _reader(_ACK + _STATUS_OK + _ACK + b"\x1e080\x03", model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveStatusError):
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    self.assertIsNone(reader._port_owner)
+    self.assertTrue(reader._port_free.is_set())
+
+
+class TestHaltAcknowledgement(unittest.IsolatedAsyncioTestCase):
+  """HALT's DLE is told from the data by position, not by its value."""
+
+  class _LeftoversThenDLE(_FakeSerial):
+    """A line still streaming an abandoned read when HALT arrives."""
+
+    def __init__(self, leftovers: bytes):
+      super().__init__(b"")
+      self._leftovers = leftovers
+
+    async def write(self, data: bytes) -> None:
+      await super().write(data)
+      if data == b"X":
+        # Everything still in flight, then the acknowledgement last.
+        self._inbox.extend(self._leftovers + b"\x10")
+
+  async def _halt_with(self, leftovers: bytes):
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=5)
+    fake = self._LeftoversThenDLE(leftovers)
+    reader.io = fake  # type: ignore[assignment]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+    await reader.halt()
+    return reader, fake
+
+  async def test_a_checksum_of_0x10_is_not_taken_for_the_acknowledgement(self):
+    # A plate checksum is a raw byte, so one in 256 is 0x10. Stopping at the
+    # first DLE took such a byte for the acknowledgement and left the real one
+    # queued as the reply to whatever ran next.
+    block = b"\r,+0100,+0100\r\n\x1a" + bytes([0x10])
+    reader, fake = await self._halt_with(block)
+
+    self.assertEqual(fake.remaining, b"")  # nothing left for the next command
+    self.assertEqual(reader.carrier_position, "out")
+
+  async def test_several_leftover_dle_bytes_are_all_consumed(self):
+    leftovers = b"\r,+0100\r\n\x1a" + bytes([0x10]) + b"\r,+0100\r\n\x1a" + bytes([0x10])
+    reader, fake = await self._halt_with(leftovers)
+    self.assertEqual(fake.remaining, b"")
+
+  async def test_the_homing_gap_before_the_dle_is_waited_out(self):
+    # The instrument homes its axes before acknowledging, so the leftovers are
+    # followed by a gap and then the DLE. Treating the first quiet moment as the
+    # end picks up the end of the leftovers and leaves the DLE queued.
+    class _HomingGap(_FakeSerial):
+      def __init__(self, leftovers: bytes):
+        super().__init__(b"")
+        self._leftovers = leftovers
+        self._pending_dle = False
+
+      async def write(self, data: bytes) -> None:
+        await super().write(data)
+        if data == b"X":
+          self._inbox.extend(self._leftovers)
+          self._pending_dle = True
+
+      async def read(self, num_bytes: int = 1) -> bytes:
+        await asyncio.sleep(0)
+        if len(self._inbox) == 0 and self._pending_dle:
+          self._pending_dle = False  # the gap ends; now it acknowledges
+          self._inbox.extend(b"\x10")
+          return b""  # one quiet poll first, as the real gap gives
+        return await super().read(num_bytes)
+
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=5)
+    fake = _HomingGap(b"\r,+0100,+0100\r\n\x1a\x42")
+    reader.io = fake  # type: ignore[assignment]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+
+    await reader.halt()
+
+    self.assertEqual(fake.remaining, b"")  # the DLE was waited for, not missed
+    self.assertEqual(reader.carrier_position, "out")
+
+  async def test_silence_without_a_dle_is_an_error(self):
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=2)
+    fake = _FakeSerial(b"\r,+0100\r\n\x1a")  # data, then quiet, never a DLE
+    reader.io = fake  # type: ignore[assignment]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+
+    with self.assertRaises(TimeoutError) as caught:
+      await reader.halt()
+    self.assertIn("not acknowledged", str(caught.exception))
+
+
+class TestStripRangeBeforeGeometry(unittest.IsolatedAsyncioTestCase):
+  """96-well is the instrument's default, so the guard applies from the start."""
+
+  async def test_columns_beyond_the_default_geometry_are_refused(self):
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
+    with self.assertRaises(ValueError):
+      await reader.set_strip_range(13, 24)
+    self.assertEqual(fake.writes, [])  # nothing reached the instrument
+
+  async def test_the_default_still_allows_a_96_well_range(self):
+    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
+    await reader.set_strip_range(1, 12)
+    self.assertEqual(fake.writes[0], b"%")
+
+  async def test_selecting_384_well_widens_the_guard(self):
+    reader, _ = _reader((_ACK + _STATUS_OK) * 2, model="PowerWaveX")
+    with unittest.mock.patch.object(
+      _protocol_module, "PLATE_GEOMETRIES", {(8, 12): 2, (16, 24): 3}
+    ):
+      await reader.set_plate_geometry(16, 24)
+    await reader.set_strip_range(13, 24)  # legal once 24 columns are selected
 
 
 class TestHalt(unittest.IsolatedAsyncioTestCase):
