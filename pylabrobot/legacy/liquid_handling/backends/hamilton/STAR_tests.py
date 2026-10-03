@@ -1,18 +1,27 @@
-# mypy: disable-error-code="attr-defined,method-assign"
+# mypy: disable-error-code="assignment,attr-defined,method-assign,no-any-return,override"
 
 import contextlib
 import copy
 import datetime
+import sys
 import unittest
 import unittest.mock
+from collections import Counter
 from dataclasses import replace
-from typing import Literal, cast
+from typing import Any, Literal, Optional, TypeVar, cast, overload
 
+import anyio
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.io.usb import USB
 from pylabrobot.legacy.arms.standard import CartesianCoords
 from pylabrobot.legacy.liquid_handling import LiquidHandler
+from pylabrobot.legacy.liquid_handling.pipette_batch_scheduling import ChannelBatch
 from pylabrobot.legacy.liquid_handling.standard import GripDirection, Mix, Pickup
 from pylabrobot.legacy.plate_reading import PlateReader
 from pylabrobot.legacy.plate_reading.chatterbox import PlateReaderChatterboxBackend
+from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   PLT_CAR_L5MD_A00,
@@ -56,17 +65,26 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL_filter,
   hamilton_core_gripper_tool,
 )
+from pylabrobot.testing.concurrency import AnyioTestBase
 
+from .base import HamiltonLiquidHandler
+from .hamilton_base_lifecycle_tests import (
+  RecordingReplyRouter,
+  RecordingUSB,
+)
 from .STAR_backend import (
   CommandSyntaxError,
   DriveConfiguration,
+  ExtendedConfiguration,
   HamiltonNoTipError,
   HardwareError,
   Head96Information,
+  MachineConfiguration,
   PipChannelInformation,
   STARBackend,
   STARFirmwareError,
   UnknownHamiltonError,
+  _run_concurrently,
   iSWAPInformation,
   parse_star_fw_string,
 )
@@ -76,6 +94,13 @@ from .STAR_chatterbox import (
   _DEFAULT_MACHINE_CONFIGURATION,
   STARChatterboxBackend,
 )
+
+T = TypeVar("T")
+
+if sys.version_info >= (3, 11):
+  from builtins import BaseExceptionGroup
+else:
+  from exceptiongroup import BaseExceptionGroup
 
 
 class TestSTARResponseParsing(unittest.TestCase):
@@ -209,6 +234,58 @@ def _stub_mix96_motion(star):
     "head96_experimental_dispense",
   ):
     setattr(star, method, unittest.mock.AsyncMock())
+
+
+class _ConcurrentCalls:
+  """Record calls and release them in reverse order after every expected call has started."""
+
+  def __init__(self, keys: list[Any]) -> None:
+    self.keys = keys
+    self.calls: list[tuple[Any, tuple[Any, ...], dict[str, Any]]] = []
+    self.completed: list[Any] = []
+    self._all_started = anyio.Event()
+    self._finished = {key: anyio.Event() for key in keys}
+
+  async def run(
+    self,
+    key: Any,
+    *args: Any,
+    result: Any = None,
+    error: Optional[BaseException] = None,
+    **kwargs: Any,
+  ) -> Any:
+    self.calls.append((key, args, kwargs))
+    if len(self.calls) == len(self.keys):
+      self._all_started.set()
+    await self._all_started.wait()
+    index = self.keys.index(key)
+    if index + 1 < len(self.keys):
+      await self._finished[self.keys[index + 1]].wait()
+    self.completed.append(key)
+    self._finished[key].set()
+    if error is not None:
+      raise error
+    return result
+
+
+async def _raise_child_cancellation(
+  peer_started: anyio.Event,
+  cancellation_created: anyio.Event,
+  captured: list[BaseException],
+) -> None:
+  """Raise a cancellation object after leaving the scope that created it."""
+  await peer_started.wait()
+  cancellation: Optional[BaseException] = None
+  with anyio.CancelScope() as cancel_scope:
+    cancel_scope.cancel()
+    try:
+      await anyio.lowlevel.checkpoint()
+    except BaseException as error:
+      cancellation = error
+  assert cancellation is not None
+  captured.append(cancellation)
+  cancellation_created.set()
+  raise cancellation
 
 
 class TestPipChannelInformationParsing(unittest.TestCase):
@@ -453,18 +530,20 @@ class TestiSWAPInformationGuard(unittest.TestCase):
 
 
 class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
-  """`STARChatterboxBackend.setup()` populates `_iswap_information` from the
+  """The STAR chatterbox lifespan populates `_iswap_information` from the
   default record (or a constructor override) when the iSWAP is installed."""
 
   @staticmethod
   def _make_chatterbox(**kwargs) -> STARChatterboxBackend:
     cb = STARChatterboxBackend(**kwargs)
     cb.set_deck(STARLetDeck())
+    cb.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
     return cb
 
   async def test_default_record_assigned_when_iswap_installed(self):
     cb = self._make_chatterbox()
-    await cb.setup()
+    with self.assertWarns(DeprecationWarning):
+      await cb.setup(skip_iswap=False)
     self.assertIs(cb.iswap_information, _DEFAULT_ISWAP_INFORMATION)
 
   async def test_constructor_override_takes_precedence(self):
@@ -488,7 +567,8 @@ class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
       },
     )
     cb = self._make_chatterbox(iswap_information=custom)
-    await cb.setup()
+    with self.assertWarns(DeprecationWarning):
+      await cb.setup()
     self.assertIs(cb.iswap_information, custom)
     self.assertEqual(cb.iswap_information.fw_version, "custom-test")
     self.assertEqual(cb.iswap_information.link_1_length, 140.0)
@@ -499,7 +579,8 @@ class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
     no_iswap_conf.left_x_drive = copy.deepcopy(no_iswap_conf.left_x_drive)
     no_iswap_conf.left_x_drive.iswap_installed = False
     cb = self._make_chatterbox(extended_configuration=no_iswap_conf)
-    await cb.setup()
+    with self.assertWarns(DeprecationWarning):
+      await cb.setup()
     self.assertIsNone(cb._iswap_information)
     with self.assertRaisesRegex(RuntimeError, "iSWAP information not loaded"):
       _ = cb.iswap_information
@@ -513,7 +594,9 @@ class TestHead96DriveDefaults(unittest.IsolatedAsyncioTestCase):
   async def _setup_cb(self) -> STARChatterboxBackend:
     cb = STARChatterboxBackend()  # mocks a 2023 (2013+) head
     cb.set_deck(STARLetDeck())
-    await cb.setup()
+    cb.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
+    with self.assertWarns(DeprecationWarning):
+      await cb.setup()
     return cb
 
   async def test_setup_seeds_yz_defaults_from_machine(self):
@@ -549,6 +632,7 @@ class TestHead96CrashRecovery(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.cb = STARChatterboxBackend()
     self.cb.set_deck(STARLetDeck())
+    self.cb.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
     await self.cb.setup()
     assert self.cb._head96_information is not None
     z_min, z_max = self.cb._head96_information.z_range
@@ -620,44 +704,1101 @@ class TestiSWAPYMaxBootstrap(unittest.IsolatedAsyncioTestCase):
     await b._iswap_rotation_drive_request_y_max()
 
 
-class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
+class RecordingSTARBackend(STARBackend):
+  """Record the STAR initialization protocol while using the real base lifespan."""
+
+  def __init__(
+    self,
+    fail_at: Optional[str] = None,
+    failure: Optional[BaseException] = None,
+    block_at: Optional[str] = None,
+  ) -> None:
+    super().__init__(read_timeout=1, packet_read_timeout=1)
+    self.events: list[str] = []
+    io = RecordingUSB(self.events)
+    self.io = cast(USB, io)
+    self._reply_router = RecordingReplyRouter(io, cast(Any, self), self.events)
+    self.fail_at = fail_at
+    self.failure = failure
+    self.block_at = block_at
+    self.block_started = anyio.Event()
+    self.set_deck(STARLetDeck())
+    self.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
+
+  @overload
+  async def _record(self, event: str) -> None: ...
+
+  @overload
+  async def _record(self, event: str, result: T) -> T: ...
+
+  async def _record(self, event: str, result: Any = None) -> Any:
+    self.events.append(event)
+    if event == self.fail_at:
+      if self.failure is not None:
+        raise self.failure
+      raise RuntimeError(f"{event} failed")
+    if event == self.block_at:
+      self.block_started.set()
+      await anyio.sleep_forever()
+    return result
+
+  async def request_machine_configuration(self) -> MachineConfiguration:
+    return await self._record("machine.configuration", _DEFAULT_MACHINE_CONFIGURATION)
+
+  async def request_extended_configuration(self) -> ExtendedConfiguration:
+    return await self._record("extended.configuration", _DEFAULT_EXTENDED_CONFIGURATION)
+
+  async def request_instrument_initialization_status(self) -> bool:
+    return await self._record("instrument.status", False)
+
+  async def pre_initialize_instrument(self) -> None:
+    await self._record("instrument.initialize")
+
+  async def request_tip_presence(self) -> list[Optional[bool]]:
+    return await self._record("pip.tip_presence", [False] * 8)
+
+  async def initialize_pip(self) -> None:
+    await self._record("pip.initialize")
+
+  async def channels_request_y_minimum_spacing(self) -> list[float]:
+    return await self._record("pip.spacing", [9.0] * 8)
+
+  async def request_pip_channel_version(self, channel: int) -> str:
+    assert channel == 0
+    return await self._record("pip.version", "2023-01-01")
+
+  async def _pip_channel_request_configuration(self, channel: int) -> PipChannelInformation:
+    await self._record(f"pip.configuration.{channel}")
+    return PipChannelInformation(
+      channel_type="ML_STAR",
+      head_type="ML_STAR",
+      stop_disc_type="core_i",
+      pressure_adc="Renesas_X9268",
+    )
+
+  async def request_autoload_initialization_status(self) -> bool:
+    return await self._record("autoload.status", False)
+
+  async def initialize_autoload(self) -> None:
+    await self._record("autoload.initialize")
+
+  async def park_autoload(self) -> None:
+    await self._record("autoload.park")
+
+  async def request_iswap_initialization_status(self) -> bool:
+    return await self._record("iswap.status", False)
+
+  async def initialize_iswap(self) -> None:
+    await self._record("iswap.initialize")
+
+  async def park_iswap(self, **kwargs: Any) -> None:
+    await self._record("iswap.park")
+
+  async def _iswap_rotation_drive_request_predefined_increments(self) -> dict[str, int]:
+    return await self._record(
+      "iswap.rotation_increments", {"left": -1, "front": 0, "right": 1, "parking": 2}
+    )
+
+  async def _iswap_wrist_drive_request_predefined_increments(self) -> dict[str, int]:
+    return await self._record(
+      "iswap.wrist_increments", {"right": -1, "straight": 0, "left": 1, "reverse": 2}
+    )
+
+  async def request_iswap_version(self) -> str:
+    return await self._record("iswap.version", "test")
+
+  async def _iswap_rotation_drive_request_x_offset(self) -> float:
+    return await self._record("iswap.x_offset", 1.0)
+
+  async def _iswap_rotation_drive_request_y_max(self) -> float:
+    return await self._record("iswap.y_max", 2.0)
+
+  async def iswap_request_link_1_length(self) -> float:
+    return await self._record("iswap.link_1", 3.0)
+
+  async def iswap_request_link_2_length(self) -> float:
+    return await self._record("iswap.link_2", 4.0)
+
+  async def request_core_96_head_initialization_status(self) -> bool:
+    return await self._record("core96.status", False)
+
+  async def initialize_core_96_head(self, **kwargs: Any) -> None:
+    await self._record("core96.initialize")
+
+  async def head96_request_firmware_version(self) -> datetime.date:
+    return await self._record("core96.version", datetime.date(2023, 1, 1))
+
+  async def _head96_request_configuration(self) -> tuple[str, str, str]:
+    return await self._record("core96.configuration", ("0", "1", "1"))
+
+  async def head96_request_type(self) -> str:
+    return await self._record("core96.type", "96 head II")
+
+  async def _head96_request_x_offset(self) -> float:
+    return await self._record("core96.x_offset", 365.0)
+
+  async def _head96_probe_z_max(self) -> float:
+    return await self._record("core96.z_max", 342.5)
+
+  async def head96_request_y_speed(self) -> float:
+    return await self._record("core96.y_speed", 100.0)
+
+  async def head96_request_y_acceleration(self) -> float:
+    return await self._record("core96.y_acceleration", 100.0)
+
+  async def head96_request_z_speed(self) -> float:
+    return await self._record("core96.z_speed", 100.0)
+
+  async def head96_request_z_acceleration(self) -> float:
+    return await self._record("core96.z_acceleration", 100.0)
+
+
+def _module_events(events: list[str], module: str) -> list[str]:
+  return [event for event in events if event.startswith(f"{module}.")]
+
+
+def _exception_is_reachable(error: Optional[BaseException], target: BaseException) -> bool:
+  """Return whether an exception is reachable through groups or context links."""
+  pending = [error] if error is not None else []
+  seen: set[int] = set()
+  while pending:
+    current = pending.pop()
+    if current is target:
+      return True
+    if id(current) in seen:
+      continue
+    seen.add(id(current))
+    if isinstance(current, BaseExceptionGroup):
+      pending.extend(current.exceptions)
+    if current.__context__ is not None:
+      pending.append(current.__context__)
+  return False
+
+
+class TestSTARLifecycle(AnyioTestBase):
+  async def test_lifespan_preserves_setup_transcript_and_publishes_channels(self) -> None:
+    backend = RecordingSTARBackend()
+
+    async with backend:
+      assert backend.num_channels == 8
+      assert backend.setup_done
+      transcript = [
+        event for event in backend.events if not event.startswith(("transport.", "reader."))
+      ]
+      common_prefix = [
+        "machine.configuration",
+        "extended.configuration",
+        "instrument.status",
+        "instrument.initialize",
+        "pip.tip_presence",
+      ]
+      assert transcript[: len(common_prefix)] == common_prefix
+      assert _module_events(backend.events, "pip") == [
+        "pip.tip_presence",
+        "pip.initialize",
+        "pip.spacing",
+        "pip.version",
+        *[f"pip.configuration.{index}" for index in range(8)],
+      ]
+      assert _module_events(backend.events, "autoload") == [
+        "autoload.status",
+        "autoload.initialize",
+        "autoload.park",
+      ]
+      assert _module_events(backend.events, "iswap") == [
+        "iswap.status",
+        "iswap.initialize",
+        "iswap.park",
+        "iswap.rotation_increments",
+        "iswap.wrist_increments",
+        "iswap.version",
+        "iswap.x_offset",
+        "iswap.y_max",
+        "iswap.link_1",
+        "iswap.link_2",
+      ]
+      assert _module_events(backend.events, "core96") == [
+        "core96.status",
+        "core96.initialize",
+        "core96.version",
+        "core96.configuration",
+        "core96.type",
+        "core96.x_offset",
+        "core96.z_max",
+        "core96.y_speed",
+        "core96.y_acceleration",
+        "core96.z_speed",
+        "core96.z_acceleration",
+      ]
+      expected_concurrent_events = [
+        *_module_events(backend.events, "autoload"),
+        *_module_events(backend.events, "pip")[1:],
+        *_module_events(backend.events, "iswap"),
+        *_module_events(backend.events, "core96"),
+      ]
+      assert Counter(transcript[len(common_prefix) :]) == Counter(expected_concurrent_events)
+
+    assert not backend.setup_done
+    assert (
+      backend.events.index("reader.stop")
+      < backend.events.index("reader.exit")
+      < backend.events.index("transport.exit")
+    )
+
+  async def test_setup_options_are_forwarded_with_false_defaults(self) -> None:
+    backend = RecordingSTARBackend()
+    async with backend.lifespan(
+      skip_instrument_initialization=True,
+      skip_pip=True,
+      skip_autoload=True,
+      skip_iswap=True,
+      skip_core96_head=True,
+    ):
+      pass
+
+    assert "instrument.initialize" not in backend.events
+    assert _module_events(backend.events, "pip") == ["pip.tip_presence"]
+    assert _module_events(backend.events, "autoload") == []
+    assert _module_events(backend.events, "iswap") == []
+    assert _module_events(backend.events, "core96") == []
+
+  @pytest.mark.parametrize(
+    "kwargs",
+    [
+      {"unknown": False},
+      {"skip_instrument_initialization": 1},
+      {"skip_pip": None},
+      {"skip_autoload": "false"},
+      {"skip_iswap": 0},
+      {"skip_core96_head": object()},
+    ],
+  )
+  async def test_invalid_options_fail_before_transport_entry(self, kwargs: dict[str, Any]) -> None:
+    backend = RecordingSTARBackend()
+    with pytest.raises(TypeError):
+      async with backend.lifespan(**kwargs):
+        pytest.fail("invalid entry reached the body")
+    assert "transport.enter" not in backend.events
+
+  @pytest.mark.parametrize(
+    "phase", ["machine.configuration", "iswap.initialize", "core96.z_acceleration"]
+  )
+  async def test_firmware_failure_preserves_exact_exception_at_each_phase(self, phase: str) -> None:
+    firmware_error = STARFirmwareError(errors={}, raw_response=phase)
+    backend = RecordingSTARBackend(fail_at=phase, failure=firmware_error)
+    with pytest.raises(STARFirmwareError) as error_info:
+      async with backend:
+        pytest.fail("failed entry reached the body")
+
+    assert error_info.value is firmware_error
+    assert (
+      backend.events.index("reader.stop")
+      < backend.events.index("reader.exit")
+      < backend.events.index("transport.exit")
+    )
+    assert not backend.setup_done
+
+  async def test_genuinely_concurrent_failures_remain_grouped(self) -> None:
+    autoload_error = STARFirmwareError(errors={}, raw_response="autoload")
+    pip_error = STARFirmwareError(errors={}, raw_response="pip")
+
+    class ConcurrentFailureSTARBackend(RecordingSTARBackend):
+      def __init__(self) -> None:
+        super().__init__()
+        self.ready_count = 0
+        self.both_ready = anyio.Event()
+
+      async def _raise_when_both_ready(self, error: STARFirmwareError) -> None:
+        self.ready_count += 1
+        if self.ready_count == 2:
+          self.both_ready.set()
+        with anyio.CancelScope(shield=True):
+          await self.both_ready.wait()
+          raise error
+
+      async def request_autoload_initialization_status(self) -> bool:
+        await self._raise_when_both_ready(autoload_error)
+        raise AssertionError("unreachable")
+
+      async def initialize_pip(self) -> None:
+        await self._raise_when_both_ready(pip_error)
+
+    backend = ConcurrentFailureSTARBackend()
+    with pytest.raises(BaseExceptionGroup) as error_info:
+      async with backend:
+        pytest.fail("failed entry reached the body")
+
+    assert len(error_info.value.exceptions) == 2
+    assert autoload_error in error_info.value.exceptions
+    assert pip_error in error_info.value.exceptions
+
+  async def test_lifespan_body_preserves_singleton_exception_group(self) -> None:
+    backend = RecordingSTARBackend()
+    body_error = RuntimeError("body failed")
+    body_group = BaseExceptionGroup("body failure", [body_error])
+
+    with pytest.raises(BaseExceptionGroup) as error_info:
+      async with backend:
+        raise body_group
+
+    observed_group = error_info.value
+    while observed_group.message != body_group.message:
+      assert len(observed_group.exceptions) == 1
+      observed_group = observed_group.exceptions[0]
+      assert isinstance(observed_group, BaseExceptionGroup)
+    assert type(observed_group) is type(body_group)
+    assert observed_group.exceptions == (body_error,)
+
+  async def test_setup_failure_does_not_unwrap_cleanup_exception_group(self) -> None:
+    setup_error = STARFirmwareError(errors={}, raw_response="machine.configuration")
+    cleanup_error = RuntimeError("transport cleanup failed")
+    cleanup_group = BaseExceptionGroup("transport cleanup failure", [cleanup_error])
+    backend = RecordingSTARBackend(
+      fail_at="machine.configuration",
+      failure=setup_error,
+    )
+    cast(RecordingUSB, backend.io).exit_error = cleanup_group
+
+    with pytest.raises(BaseExceptionGroup) as error_info:
+      async with backend:
+        pytest.fail("failed entry reached the body")
+
+    assert error_info.value is cleanup_group
+    assert error_info.value.exceptions == (cleanup_error,)
+    assert _exception_is_reachable(error_info.value.__context__, setup_error)
+
+  async def test_cancellation_during_entry_cleans_up_transport(self) -> None:
+    backend = RecordingSTARBackend(block_at="iswap.initialize")
+
+    async def enter() -> None:
+      async with backend:
+        pytest.fail("cancelled entry reached the body")
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(enter)
+      await backend.block_started.wait()
+      task_group.cancel_scope.cancel()
+
+    assert (
+      backend.events.index("reader.stop")
+      < backend.events.index("reader.exit")
+      < backend.events.index("transport.exit")
+    )
+    assert not backend.is_active
+
+  async def test_sequential_reuse_repeats_setup_and_resets_setup_done(self) -> None:
+    backend = RecordingSTARBackend()
+    for _ in range(2):
+      async with backend:
+        assert backend.setup_done
+        assert backend.num_channels == 8
+      assert not backend.setup_done
+
+    assert backend.events.count("machine.configuration") == 2
+    assert backend.events.count("transport.enter") == 2
+    assert backend.events.count("transport.exit") == 2
+
+  async def test_autoload_overlaps_ordered_arm_setup(self) -> None:
+    class ConcurrentSTARBackend(RecordingSTARBackend):
+      def __init__(self) -> None:
+        super().__init__()
+        self.autoload_started = anyio.Event()
+        self.pip_started = anyio.Event()
+
+      async def request_autoload_initialization_status(self) -> bool:
+        self.events.append("autoload.started")
+        self.autoload_started.set()
+        await self.pip_started.wait()
+        return False
+
+      async def initialize_pip(self) -> None:
+        await self.autoload_started.wait()
+        self.events.append("pip.initialize")
+        self.pip_started.set()
+
+    backend = ConcurrentSTARBackend()
+    with anyio.fail_after(1):
+      async with backend:
+        pass
+
+    arm_events = [
+      event.split(".", 1)[0]
+      for event in backend.events
+      if event in {"pip.initialize", "iswap.initialize", "core96.initialize"}
+    ]
+    assert arm_events == ["pip", "iswap", "core96"]
+    assert backend.events.index("autoload.started") < backend.events.index("pip.initialize")
+
+
+class TestSTAROperationConcurrency(AnyioTestBase):
+  async def test_minimum_spacing_is_concurrent_and_ordered_by_channel(self) -> None:
+    backend = STARBackend()
+    backend._num_channels = 3
+    calls = _ConcurrentCalls([0, 1, 2])
+
+    async def request(channel_idx: int) -> float:
+      return await calls.run(channel_idx, result=[1.5, 2.5, 3.5][channel_idx])
+
+    backend.channel_request_y_minimum_spacing = request
+    with anyio.fail_after(1):
+      result = await backend.channels_request_y_minimum_spacing()
+
+    assert result == [1.5, 2.5, 3.5]
+    assert {key for key, _, _ in calls.calls} == {0, 1, 2}
+    assert calls.completed == [2, 1, 0]
+
+  async def test_minimum_spacing_preserves_operation_exception(self) -> None:
+    backend = STARBackend()
+    backend._num_channels = 2
+    error = RuntimeError("spacing failed")
+    calls = _ConcurrentCalls([0, 1])
+
+    async def request(channel_idx: int) -> float:
+      return await calls.run(channel_idx, result=1.0, error=error if channel_idx == 1 else None)
+
+    backend.channel_request_y_minimum_spacing = request
+    with pytest.raises(RuntimeError) as error_info:
+      await backend.channels_request_y_minimum_spacing()
+    assert error_info.value is error
+    assert {key for key, _, _ in calls.calls} == {0, 1}
+
+  async def test_minimum_spacing_defers_exact_child_cancellation_until_sibling_finishes(
+    self,
+  ) -> None:
+    backend = STARBackend()
+    backend._num_channels = 2
+    peer_started = anyio.Event()
+    cancellation_created = anyio.Event()
+    sibling_completed = anyio.Event()
+    captured: list[BaseException] = []
+
+    async def request(channel_idx: int) -> float:
+      if channel_idx == 0:
+        await _raise_child_cancellation(peer_started, cancellation_created, captured)
+        raise AssertionError("unreachable")
+      peer_started.set()
+      await cancellation_created.wait()
+      await anyio.lowlevel.checkpoint()
+      sibling_completed.set()
+      return 2.5
+
+    backend.channel_request_y_minimum_spacing = request
+    observed: Optional[BaseException] = None
+    try:
+      await backend.channels_request_y_minimum_spacing()
+    except BaseException as error:
+      observed = error
+
+    assert observed is captured[0]
+    assert sibling_completed.is_set()
+
+  async def test_cycle_counts_are_concurrent_and_ordered_by_channel(self) -> None:
+    backend = STARBackend()
+    backend._num_channels = 3
+    calls = _ConcurrentCalls([0, 1, 2])
+    results = [
+      {
+        "tip_pick_up_cycles": index,
+        "tip_discard_cycles": index + 10,
+        "aspiration_cycles": index + 20,
+        "dispensing_cycles": index + 30,
+      }
+      for index in range(3)
+    ]
+
+    async def request(channel_idx: int) -> STARBackend.ChannelCycleCounts:
+      return await calls.run(channel_idx, result=results[channel_idx])
+
+    backend.channel_request_cycle_counts = request
+    with anyio.fail_after(1):
+      result = await backend.channels_request_cycle_counts()
+
+    assert result == results
+    assert {key for key, _, _ in calls.calls} == {0, 1, 2}
+    assert calls.completed == [2, 1, 0]
+
+  async def test_cycle_counts_preserve_operation_exception(self) -> None:
+    backend = STARBackend()
+    backend._num_channels = 2
+    error = RuntimeError("cycle count failed")
+    calls = _ConcurrentCalls([0, 1])
+
+    async def request(channel_idx: int) -> STARBackend.ChannelCycleCounts:
+      result: STARBackend.ChannelCycleCounts = {
+        "tip_pick_up_cycles": 0,
+        "tip_discard_cycles": 0,
+        "aspiration_cycles": 0,
+        "dispensing_cycles": 0,
+      }
+      return await calls.run(channel_idx, result=result, error=error if channel_idx == 1 else None)
+
+    backend.channel_request_cycle_counts = request
+    with pytest.raises(RuntimeError) as error_info:
+      await backend.channels_request_cycle_counts()
+    assert error_info.value is error
+    assert {key for key, _, _ in calls.calls} == {0, 1}
+
+  async def test_prepare_batched_moves_all_idle_channels_concurrently(self) -> None:
+    backend = STARBackend()
+    backend.set_deck(STARLetDeck())
+    backend._num_channels = 3
+    calls = _ConcurrentCalls([1, 2])
+
+    async def request_tip_presence() -> list[bool]:
+      return [True, True, True]
+
+    async def request_tip_length(channel_idx: int) -> float:
+      assert channel_idx == 0
+      return 8.0
+
+    async def move_idle(**kwargs: Any) -> None:
+      await calls.run(kwargs["channel_idx"], **kwargs)
+
+    async def position_active(positions: dict[int, float]) -> None:
+      assert positions == {0: 210.0}
+
+    backend.request_tip_presence = request_tip_presence
+    backend.request_tip_len_on_channel = request_tip_length
+    backend.move_channel_stop_disk_z = move_idle
+    backend.position_channels_in_z_direction = position_active
+    with unittest.mock.patch(f"{STARBackend.__module__}.plan_batches", return_value=[]):
+      with anyio.fail_after(1):
+        result = await backend._prepare_batched(
+          containers=[cast(Container, object())],
+          use_channels=[0],
+          min_traverse_height_at_beginning_of_command=210.0,
+        )
+
+    assert result == ([0], [8.0], [])
+    assert {key for key, _, _ in calls.calls} == {1, 2}
+    assert all(kwargs["z"] == backend.MAXIMUM_CHANNEL_Z_POSITION for _, _, kwargs in calls.calls)
+    assert calls.completed == [2, 1]
+
+  async def test_prepare_batched_preserves_idle_move_exception(self) -> None:
+    backend = STARBackend()
+    backend.set_deck(STARLetDeck())
+    backend._num_channels = 3
+    error = RuntimeError("idle move failed")
+    calls = _ConcurrentCalls([1, 2])
+
+    async def move_idle(**kwargs: Any) -> None:
+      channel_idx = kwargs["channel_idx"]
+      await calls.run(channel_idx, error=error if channel_idx == 2 else None, **kwargs)
+
+    backend.request_tip_presence = unittest.mock.AsyncMock(return_value=[True, True, True])
+    backend.request_tip_len_on_channel = unittest.mock.AsyncMock(return_value=8.0)
+    backend.move_channel_stop_disk_z = move_idle
+    with unittest.mock.patch(f"{STARBackend.__module__}.plan_batches", return_value=[]):
+      with pytest.raises(RuntimeError) as error_info:
+        await backend._prepare_batched(
+          containers=[cast(Container, object())],
+          use_channels=[0],
+          min_traverse_height_at_beginning_of_command=210.0,
+        )
+    assert error_info.value is error
+    assert {key for key, _, _ in calls.calls} == {1, 2}
+
+  async def test_lld_runs_batch_members_concurrently_and_keeps_indexed_results(self) -> None:
+    backend = STARBackend()
+    calls = _ConcurrentCalls([2, 0])
+
+    async def detect(**kwargs: Any) -> None:
+      await calls.run(kwargs["channel_idx"], **kwargs)
+
+    backend._move_z_drive_to_liquid_surface_using_clld = detect
+    backend.request_pip_height_last_lld = unittest.mock.AsyncMock(
+      return_value=[100.0, 101.0, 102.0]
+    )
+    batch = ChannelBatch(x_position=1.0, indices=[1, 0], channels=[2, 0])
+    with anyio.fail_after(1):
+      result = await backend._run_lld_on_channel_batch(
+        batch=batch,
+        containers=[cast(Container, object()), cast(Container, object())],
+        tip_lengths=[8.0, 8.0],
+        z_cavity_bottom=[10.0, 20.0],
+        z_top=[30.0, 40.0],
+        lld_mode=[backend.LLDMode.GAMMA, backend.LLDMode.GAMMA],
+        search_speed=7.5,
+        n_replicates=1,
+      )
+
+    assert result == {1: [102.0], 0: [100.0]}
+    assert calls.completed == [0, 2]
+    assert {key for key, _, _ in calls.calls} == {0, 2}
+    assert {key: kwargs for key, _, kwargs in calls.calls} == {
+      2: {
+        "channel_idx": 2,
+        "lowest_immers_pos": 20.0,
+        "start_pos_search": 45.0,
+        "channel_speed": 7.5,
+      },
+      0: {
+        "channel_idx": 0,
+        "lowest_immers_pos": 10.0,
+        "start_pos_search": 35.0,
+        "channel_speed": 7.5,
+      },
+    }
+
+  async def test_lld_preserves_returned_operation_exception(self) -> None:
+    backend = STARBackend()
+    error = RuntimeError("lld failed")
+    calls = _ConcurrentCalls([0, 1])
+
+    async def detect(**kwargs: Any) -> None:
+      channel_idx = kwargs["channel_idx"]
+      await calls.run(channel_idx, error=error if channel_idx == 1 else None, **kwargs)
+
+    backend._move_z_drive_to_liquid_surface_using_clld = detect
+    backend.request_pip_height_last_lld = unittest.mock.AsyncMock(return_value=[10.0, 20.0])
+    batch = ChannelBatch(x_position=1.0, indices=[0, 1], channels=[0, 1])
+    with pytest.raises(RuntimeError) as error_info:
+      await backend._run_lld_on_channel_batch(
+        batch=batch,
+        containers=[cast(Container, object()), cast(Container, object())],
+        tip_lengths=[8.0, 8.0],
+        z_cavity_bottom=[0.0, 0.0],
+        z_top=[10.0, 10.0],
+        lld_mode=[backend.LLDMode.GAMMA, backend.LLDMode.GAMMA],
+        search_speed=5.0,
+        n_replicates=1,
+      )
+    assert error_info.value is error
+    assert {key for key, _, _ in calls.calls} == {0, 1}
+
+  async def test_lld_defers_exact_child_cancellation_instead_of_using_empty_result_slot(
+    self,
+  ) -> None:
+    backend = STARBackend()
+    peer_started = anyio.Event()
+    cancellation_created = anyio.Event()
+    sibling_completed = anyio.Event()
+    captured: list[BaseException] = []
+
+    async def detect(**kwargs: Any) -> None:
+      if kwargs["channel_idx"] == 0:
+        await _raise_child_cancellation(peer_started, cancellation_created, captured)
+        raise AssertionError("unreachable")
+      peer_started.set()
+      await cancellation_created.wait()
+      await anyio.lowlevel.checkpoint()
+      sibling_completed.set()
+
+    backend._move_z_drive_to_liquid_surface_using_clld = detect
+    backend.request_pip_height_last_lld = unittest.mock.AsyncMock(return_value=[10.0, 20.0])
+    batch = ChannelBatch(x_position=1.0, indices=[0, 1], channels=[0, 1])
+    observed: Optional[BaseException] = None
+    try:
+      await backend._run_lld_on_channel_batch(
+        batch=batch,
+        containers=[cast(Container, object()), cast(Container, object())],
+        tip_lengths=[8.0, 8.0],
+        z_cavity_bottom=[0.0, 0.0],
+        z_top=[10.0, 10.0],
+        lld_mode=[backend.LLDMode.GAMMA, backend.LLDMode.GAMMA],
+        search_speed=5.0,
+        n_replicates=1,
+      )
+    except BaseException as error:
+      observed = error
+
+    assert observed is captured[0]
+    assert sibling_completed.is_set()
+    backend.request_pip_height_last_lld.assert_not_awaited()
+
+  async def test_empty_tips_forwards_arguments_to_concurrent_channel_commands(self) -> None:
+    backend = STARBackend()
+    backend._num_channels = 4
+    calls = _ConcurrentCalls([3, 1])
+
+    async def empty_tip(**kwargs: Any) -> None:
+      await calls.run(kwargs["channel_idx"], **kwargs)
+
+    backend.empty_tip = empty_tip
+    with anyio.fail_after(1):
+      await backend.empty_tips(
+        channels=[3, 1],
+        vol=123.0,
+        flow_rate=45.0,
+        acceleration=678.0,
+        current_limit=4,
+        reset_dispensing_drive_after=False,
+      )
+
+    assert calls.completed == [1, 3]
+    assert {key: kwargs for key, _, kwargs in calls.calls} == {
+      3: {
+        "channel_idx": 3,
+        "vol": 123.0,
+        "flow_rate": 45.0,
+        "acceleration": 678.0,
+        "current_limit": 4,
+        "reset_dispensing_drive_after": False,
+      },
+      1: {
+        "channel_idx": 1,
+        "vol": 123.0,
+        "flow_rate": 45.0,
+        "acceleration": 678.0,
+        "current_limit": 4,
+        "reset_dispensing_drive_after": False,
+      },
+    }
+
+  async def test_empty_tips_preserves_channel_exception(self) -> None:
+    backend = STARBackend()
+    backend._num_channels = 2
+    error = RuntimeError("empty failed")
+    calls = _ConcurrentCalls([0, 1])
+
+    async def empty_tip(**kwargs: Any) -> None:
+      channel_idx = kwargs["channel_idx"]
+      await calls.run(channel_idx, error=error if channel_idx == 1 else None, **kwargs)
+
+    backend.empty_tip = empty_tip
+    with pytest.raises(RuntimeError) as error_info:
+      await backend.empty_tips(channels=[0, 1])
+    assert error_info.value is error
+    assert {key for key, _, _ in calls.calls} == {0, 1}
+
+  async def test_empty_tips_defers_exact_child_cancellation_until_sibling_finishes(self) -> None:
+    backend = STARBackend()
+    backend._num_channels = 2
+    peer_started = anyio.Event()
+    cancellation_created = anyio.Event()
+    sibling_completed = anyio.Event()
+    captured: list[BaseException] = []
+
+    async def empty_tip(**kwargs: Any) -> None:
+      if kwargs["channel_idx"] == 0:
+        await _raise_child_cancellation(peer_started, cancellation_created, captured)
+        raise AssertionError("unreachable")
+      peer_started.set()
+      await cancellation_created.wait()
+      await anyio.lowlevel.checkpoint()
+      sibling_completed.set()
+
+    backend.empty_tip = empty_tip
+    observed: Optional[BaseException] = None
+    try:
+      await backend.empty_tips(channels=[0, 1])
+    except BaseException as error:
+      observed = error
+
+    assert observed is captured[0]
+    assert sibling_completed.is_set()
+
+  async def test_mix96_moves_x_and_y_concurrently_with_original_arguments(self) -> None:
+    backend = STARBackend()
+    _stub_mix96_motion(backend)
+    calls = _ConcurrentCalls(["x", "y"])
+
+    async def move_x(*args: Any, **kwargs: Any) -> None:
+      await calls.run("x", *args, **kwargs)
+
+    async def move_y(*args: Any, **kwargs: Any) -> None:
+      await calls.run("y", *args, **kwargs)
+
+    backend.head96_move_x = move_x
+    backend.head96_move_y = move_y
+    with anyio.fail_after(1):
+      await backend.mix96_at_coordinate(
+        Mix(volume=50.0, repetitions=0, flow_rate=100.0),
+        a1_coordinate=Coordinate(500.0, 150.0, 100.0),
+        blowout_air_volume=0.0,
+      )
+
+    assert calls.completed == ["y", "x"]
+    assert {key: (args, kwargs) for key, args, kwargs in calls.calls} == {
+      "x": ((500.0,), {"acceleration_level": 1}),
+      "y": ((150.0,), {}),
+    }
+
+  async def test_mix96_preserves_axis_exception(self) -> None:
+    backend = STARBackend()
+    _stub_mix96_motion(backend)
+    error = RuntimeError("y move failed")
+    calls = _ConcurrentCalls(["x", "y"])
+
+    async def move_x(*args: Any, **kwargs: Any) -> None:
+      await calls.run("x", *args, **kwargs)
+
+    async def move_y(*args: Any, **kwargs: Any) -> None:
+      await calls.run("y", *args, error=error, **kwargs)
+
+    backend.head96_move_x = move_x
+    backend.head96_move_y = move_y
+    with pytest.raises(RuntimeError) as error_info:
+      await backend.mix96_at_coordinate(
+        Mix(volume=50.0, repetitions=0, flow_rate=100.0),
+        a1_coordinate=Coordinate(500.0, 250.0, 100.0),
+        blowout_air_volume=0.0,
+      )
+    assert error_info.value is error
+    assert {key for key, _, _ in calls.calls} == {"x", "y"}
+
+  async def test_parent_cancellation_cancels_owned_channel_requests_and_propagates(self) -> None:
+    backend = STARBackend()
+    backend._num_channels = 2
+    all_started = anyio.Event()
+    blocker = anyio.Event()
+    started: list[int] = []
+    cancelled: list[int] = []
+    invocation_cancelled: list[BaseException] = []
+    invocation_completed = anyio.Event()
+
+    async def request(channel_idx: int) -> float:
+      started.append(channel_idx)
+      if len(started) == 2:
+        all_started.set()
+      try:
+        await blocker.wait()
+      except anyio.get_cancelled_exc_class():
+        cancelled.append(channel_idx)
+        raise
+      return float(channel_idx)
+
+    async def invoke() -> None:
+      try:
+        await backend.channels_request_y_minimum_spacing()
+      except anyio.get_cancelled_exc_class() as error:
+        invocation_cancelled.append(error)
+        raise
+      invocation_completed.set()
+
+    backend.channel_request_y_minimum_spacing = request
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(invoke)
+      await all_started.wait()
+      task_group.cancel_scope.cancel()
+
+    assert len(invocation_cancelled) == 1
+    assert set(cancelled) == {0, 1}
+    assert not invocation_completed.is_set()
+
+  async def test_return_exceptions_never_returns_custom_fatal_base_exception(self) -> None:
+    class FatalOperationError(BaseException):
+      pass
+
+    fatal = FatalOperationError("fatal operation outcome")
+
+    async def fail() -> None:
+      raise fatal
+
+    async def succeed() -> str:
+      return "completed"
+
+    with pytest.raises(BaseExceptionGroup) as error_info:
+      await _run_concurrently([fail(), succeed()], return_exceptions=True)
+
+    assert _exception_is_reachable(error_info.value, fatal)
+
+
+class TestSTARTiming(AnyioTestBase):
+  async def test_core96_idle_poll_sleeps_before_each_probe_until_success(self, monkeypatch) -> None:
+    backend = STARBackend()
+    clock = iter([0.0, 0.0, 5.0])
+    sleeps: list[float] = []
+    commands: list[tuple[str, str, int]] = []
+    busy = STARFirmwareError(
+      errors={
+        "CoRe 96 Head": CommandSyntaxError(
+          message="No parallel processes permitted",
+          trace_information=40,
+          raw_response="40",
+          raw_module="H0",
+        )
+      },
+      raw_response="busy",
+    )
+
+    async def sleep(duration: float) -> None:
+      sleeps.append(duration)
+
+    async def send_command(module: str, command: str, read_timeout: int) -> None:
+      commands.append((module, command, read_timeout))
+      if len(commands) == 1:
+        raise busy
+
+    monkeypatch.setattr(anyio, "current_time", lambda: next(clock))
+    monkeypatch.setattr(anyio, "sleep", sleep)
+    backend.send_command = send_command
+    await backend._core96_wait_for_idle(timeout=10.0, poll_interval=5.0)
+
+    assert sleeps == [5.0, 5.0]
+    assert commands == [("C0", "EV", 10), ("C0", "EV", 10)]
+
+  async def test_core96_idle_poll_stops_when_elapsed_time_reaches_timeout(
+    self, monkeypatch
+  ) -> None:
+    backend = STARBackend()
+    clock = iter([0.0, 0.0, 5.0, 10.0])
+    sleeps: list[float] = []
+    busy = STARFirmwareError(
+      errors={
+        "CoRe 96 Head": CommandSyntaxError(
+          message="No parallel processes permitted",
+          trace_information=40,
+          raw_response="40",
+          raw_module="H0",
+        )
+      },
+      raw_response="busy",
+    )
+
+    async def sleep(duration: float) -> None:
+      sleeps.append(duration)
+
+    async def send_command(**kwargs: Any) -> None:
+      assert kwargs == {"module": "C0", "command": "EV", "read_timeout": 10}
+      raise busy
+
+    monkeypatch.setattr(anyio, "current_time", lambda: next(clock))
+    monkeypatch.setattr(anyio, "sleep", sleep)
+    backend.send_command = send_command
+    with pytest.raises(TimeoutError, match="did not become idle"):
+      await backend._core96_wait_for_idle(timeout=10.0, poll_interval=5.0)
+    assert sleeps == [5.0, 5.0]
+
+  async def test_mix96_settles_once_before_retracting(self, monkeypatch) -> None:
+    backend = STARBackend()
+    _stub_mix96_motion(backend)
+    events: list[tuple[str, float]] = []
+
+    async def sleep(duration: float) -> None:
+      events.append(("sleep", duration))
+
+    async def move_tool_z(z: float, speed: float) -> None:
+      events.append(("z", z))
+
+    monkeypatch.setattr(anyio, "sleep", sleep)
+    backend.head96_move_tool_z = move_tool_z
+    await backend.mix96_at_coordinate(
+      Mix(volume=50.0, repetitions=0, flow_rate=100.0),
+      a1_coordinate=Coordinate(500.0, 250.0, 100.0),
+      blowout_air_volume=0.0,
+      settling_time=2.5,
+    )
+
+    assert events == [("z", 105.0), ("z", 100.0), ("sleep", 2.5), ("z", 105.0)]
+
+  async def test_carrier_wait_sleeps_between_presence_checks_and_stops_when_complete(
+    self, monkeypatch
+  ) -> None:
+    backend = STARBackend()
+    deck = STARLetDeck()
+    deck.assign_child_resource(TIP_CAR_480_A00(name="tips"), rails=1)
+    backend.set_deck(deck)
+    detections = iter([[], [2]])
+    presence_checks = 0
+    sleeps: list[float] = []
+    indicators: list[tuple[list[bool], list[bool]]] = []
+
+    async def request_presence() -> list[int]:
+      nonlocal presence_checks
+      presence_checks += 1
+      return next(detections)
+
+    async def set_indicators(bit_pattern: list[bool], blink_pattern: list[bool]) -> None:
+      indicators.append((bit_pattern, blink_pattern))
+
+    async def sleep(duration: float) -> None:
+      sleeps.append(duration)
+
+    backend.request_presence_of_carriers_on_deck = request_presence
+    backend.set_loading_indicators = set_indicators
+    monkeypatch.setattr(anyio, "sleep", sleep)
+    await backend.verify_and_wait_for_carriers(check_interval=0.25)
+
+    assert presence_checks == 2
+    assert sleeps == [0.25]
+    assert len(indicators) == 2
+    assert any(indicators[0][0]) and any(indicators[0][1])
+    assert indicators[1] == ([False] * 54, [False] * 54)
+
+
+class TestSTARChatterboxLifecycle(AnyioTestBase):
+  async def test_chatterbox_entry_is_resource_free_and_reusable(self) -> None:
+    backend = STARChatterboxBackend()
+    backend.set_deck(STARLetDeck())
+    backend.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
+    events: list[str] = []
+    io = RecordingUSB(events)
+    backend.io = cast(USB, io)
+    router = RecordingReplyRouter(io, cast(Any, backend), events)
+    backend._reply_router = router
+
+    for _ in range(2):
+      async with backend:
+        assert backend.setup_done
+        assert backend.num_channels == 8
+        assert backend.iswap_information is _DEFAULT_ISWAP_INFORMATION
+      assert not backend.setup_done
+      assert events == []
+      assert router.run_count == 0
+
+
+class TestSTARUSBComms(AnyioTestBase):
   """Test that USB data is parsed correctly."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
     self.star = STARBackend(read_timeout=1, packet_read_timeout=1)
     self.star.set_deck(STARLetDeck())
-    self.star.io = unittest.mock.AsyncMock()
-    await super().asyncSetUp()
+    self.star.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
+    io = RecordingUSB([])
+    self.star.io = cast(USB, io)
+    self.star._reply_router = RecordingReplyRouter(io, cast(Any, self.star), [])
+    await HamiltonLiquidHandler._enter_lifespan(self.star, stack)
 
   async def test_send_command_correct_response(self):
-    self.star.io.read.side_effect = [b"C0QMid0001"]
+    io = cast(RecordingUSB, self.star.io)
+    await io.publish("C0QMid0001")
     resp = await self.star.send_command("C0", command="QM", fmt="id####")
-    self.assertEqual(resp, {"id": 1})
+    assert resp == {"id": 1}
 
   async def test_send_command_wrong_id(self):
-    self.star.io.read.side_effect = lambda: b"C0QMid0002"
-    with self.assertRaises(TimeoutError):
+    io = cast(RecordingUSB, self.star.io)
+    await io.publish("C0QMid0002")
+    with pytest.raises(TimeoutError):
       await self.star.send_command("C0", command="QM", fmt="id####")
 
   async def test_send_command_plaintext_response(self):
-    self.star.io.read.side_effect = lambda: b"this is plaintext"
-    with self.assertRaises(TimeoutError):
+    io = cast(RecordingUSB, self.star.io)
+    await io.publish("this is plaintext")
+    with pytest.raises(TimeoutError):
       await self.star.send_command("C0", command="QM", fmt="id####")
 
 
-class STARCommandCatcher(STARBackend):
-  """Mock backend for star that catches commands and saves them instead of sending them to the
-  machine."""
+class STARTestBackend(STARBackend):
+  """Provide initialized STAR state without acquiring hardware resources."""
+
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, **backend_kwargs: Any
+  ) -> None:
+    if backend_kwargs:
+      raise TypeError("STARTestBackend does not accept lifespan options")
+    self._validate_lifespan_context()
+    self._num_channels = 8
+    self._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    if self._extended_conf is None:
+      self._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self._core_parked = True
+    self._iswap_parked = True
+    self._head96_installed = True
+    self._setup_done = True
+    stack.callback(self._reset_setup_state)
+
+  def _reset_setup_state(self) -> None:
+    self._setup_done = False
+    self._num_channels = None
+
+
+class STARCommandCatcher(STARTestBackend):
+  """Mock backend for star that catches commands instead of sending them to a machine."""
 
   def __init__(self):
     super().__init__()
     self.commands = []
-
-  async def setup(self) -> None:  # type: ignore
-    self._num_channels = 8
-    self._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
-    self._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self._core_parked = True
 
   async def send_command(  # type: ignore
     self,
@@ -675,8 +1816,25 @@ class STARCommandCatcher(STARBackend):
     )
     self.commands.append(cmd)
 
-  async def stop(self):
-    self.stop_finished = True
+
+class TestSTARCommandCatcherLifecycle(AnyioTestBase):
+  async def test_command_catcher_is_resource_free_and_reusable(self) -> None:
+    backend = STARCommandCatcher()
+    backend.set_deck(STARLetDeck())
+    backend.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
+    events: list[str] = []
+    io = RecordingUSB(events)
+    backend.io = cast(USB, io)
+    router = RecordingReplyRouter(io, cast(Any, backend), events)
+    backend._reply_router = router
+
+    for _ in range(2):
+      async with backend:
+        assert backend.setup_done
+        assert backend.num_channels == 8
+      assert not backend.setup_done
+      assert events == []
+      assert router.run_count == 0
 
 
 class TestSTARCoreGripperRegistration(unittest.IsolatedAsyncioTestCase):
@@ -710,12 +1868,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   """Test STAR backend for liquid handling."""
 
   async def asyncSetUp(self):
-    self.STAR = STARBackend(read_timeout=1)
+    self.STAR = STARTestBackend(read_timeout=1)
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
-    self.STAR.io = unittest.mock.AsyncMock()
-    self.STAR.io.setup = unittest.mock.AsyncMock()
-    self.STAR.io.write = unittest.mock.MagicMock()
-    self.STAR.io.read = unittest.mock.MagicMock()
 
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
@@ -767,7 +1921,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
     await self.lh.setup()
@@ -996,7 +2149,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         ),
       ]
     )
-    self.STAR.io.write.reset_mock()
 
   async def test_tip_drop_56(self):
     await self.test_tip_pickup_56()  # pick up tips first
@@ -1042,7 +2194,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         )
       ]
     )
-    self.STAR.io.write.reset_mock()
 
   async def test_single_channel_aspiration(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
@@ -1830,24 +2981,28 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert tr.rotation.z == 90
     assert tr.location == Coordinate(78.3, -3.95, -6.0)
     deck.assign_child_resource(tip_car, track=2)
-    await lh.setup()
-
-    await lh.pick_up_tips(tr["A4:A1"])
-    self.STAR._write_and_read_command.side_effect = [
-      "C0TRid0002kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
-    ]
-    await lh.drop_tips(tr["A4:A1"])
-
-    self.STAR._write_and_read_command.assert_has_calls(
-      [
-        _any_write_and_read_command_call(
-          "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2262tz2162th2450td0"
-        ),
-        _any_write_and_read_command_call(
-          "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2262tz2182th2450te2450ti1"
-        ),
+    await self.lh.stop()
+    with self.assertWarns(DeprecationWarning):
+      await lh.setup()
+    try:
+      await lh.pick_up_tips(tr["A4:A1"])
+      self.STAR._write_and_read_command.side_effect = [
+        "C0TRid0002kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
       ]
-    )
+      await lh.drop_tips(tr["A4:A1"])
+
+      self.STAR._write_and_read_command.assert_has_calls(
+        [
+          _any_write_and_read_command_call(
+            "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2262tz2162th2450td0"
+          ),
+          _any_write_and_read_command_call(
+            "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2262tz2182th2450te2450ti1"
+          ),
+        ]
+      )
+    finally:
+      await lh.stop()
 
   def test_serialize(self):
     serialized = LiquidHandler(backend=STARBackend(), deck=STARLetDeck()).serialize()
@@ -1886,7 +3041,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
 class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.STAR = STARBackend()
+    self.STAR = STARTestBackend()
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
@@ -1901,10 +3056,11 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
   async def test_simple_movement(self):
     await self.lh.move_plate(self.plate, self.plt_car[1])
@@ -2013,7 +3169,7 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
 
 class STARFoilTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.star = STARBackend()
+    self.star = STARTestBackend()
     self.star._write_and_read_command = unittest.mock.AsyncMock()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.star, deck=self.deck)
@@ -2040,10 +3196,11 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
         workspace_range=(-323.2, 1337.5),
       ),
     )
-    self.star.setup = unittest.mock.AsyncMock()
     self.star._core_parked = True
     self.star._iswap_parked = True
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
     await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
 
@@ -2230,13 +3387,11 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
   """Test STAR tip pickup and drop Z positions for 10, 50, 300, and 1000 uL tips."""
 
   async def asyncSetUp(self):
-    self.backend = STARBackend()
+    self.backend = STARTestBackend()
     self.backend._write_and_read_command = unittest.mock.AsyncMock()
-    self.backend.io = unittest.mock.AsyncMock()
     self.backend._num_channels = 8
     self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.backend.setup = unittest.mock.AsyncMock()
     self.backend._core_parked = True
     self.backend._iswap_parked = True
 
@@ -2246,7 +3401,9 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.tip_car = TIP_CAR_480_A00(name="tip_carrier")
     self.deck.assign_child_resource(self.tip_car, track=1)
 
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
     set_tip_tracking(enabled=False)
 
   def _get_tp_tz_from_calls(self, cmd_prefix: str):
@@ -2379,13 +3536,11 @@ class TestSTAR96TipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     """Set up a full-size STAR with mocked communication and a carrier on track 1."""
-    self.backend = STARBackend()
+    self.backend = STARTestBackend()
     self.backend._write_and_read_command = unittest.mock.AsyncMock()
-    self.backend.io = unittest.mock.AsyncMock()
     self.backend._num_channels = 8
     self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.backend.setup = unittest.mock.AsyncMock()
     self.backend._core_parked = True
     self.backend._iswap_parked = True
 
@@ -2394,6 +3549,7 @@ class TestSTAR96TipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, track=1)
     self.lh = LiquidHandler(self.backend, deck=self.deck)
     await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
   async def _assert_pickup_and_return(self, rack: TipRack) -> None:
     """Assert pickup and return commands at the verified 216.4 mm deposit height."""
@@ -2437,7 +3593,7 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
   """The firmware commands sent for Hamilton tip racks, checked command by command."""
 
   async def asyncSetUp(self):
-    self.backend = STARBackend()
+    self.backend = STARTestBackend()
     self.backend._write_and_read_command = unittest.mock.AsyncMock(
       side_effect=lambda **kwargs: (
         "C0TRid0000kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
@@ -2445,11 +3601,9 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
         else None
       )
     )
-    self.backend.io = unittest.mock.AsyncMock()
     self.backend._num_channels = 8
     self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.backend.setup = unittest.mock.AsyncMock()
     self.backend._core_parked = True
     self.backend._iswap_parked = True
     self.deck = STARDeck()
@@ -2462,6 +3616,7 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.ntr_carrier, location=Coordinate(752.5, 63, 100))
     self.lh = LiquidHandler(self.backend, deck=self.deck)
     await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
   def _sent(self, prefix: str) -> str:
     """The last command sent that starts with `prefix`, without its id."""
@@ -2720,12 +3875,8 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
   """Tests for probe_liquid_heights: detection dispatch, replicates, error handling."""
 
   async def asyncSetUp(self):
-    self.STAR = STARBackend(read_timeout=1)
+    self.STAR = STARTestBackend(read_timeout=1)
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
-    self.STAR.io = unittest.mock.AsyncMock()
-    self.STAR.io.setup = unittest.mock.AsyncMock()
-    self.STAR.io.write = unittest.mock.MagicMock()
-    self.STAR.io.read = unittest.mock.MagicMock()
 
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
@@ -2741,7 +3892,6 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
     await self.lh.setup()
@@ -3004,7 +4154,9 @@ class TestXArmGeometry(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     self.lh = LiquidHandler(STARChatterboxBackend(), deck=STARLetDeck())
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
   async def test_single_left_arm(self):
     self.assertIsNotNone(self.lh.backend.extended_conf.left_x_drive.workspace_range)
@@ -3035,9 +4187,13 @@ class TestXArmReachByDeck(unittest.IsolatedAsyncioTestCase):
 
   async def test_x_past_starlet_edge_reachable_on_star_only(self):
     star = LiquidHandler(STARChatterboxBackend(), deck=STARDeck())
-    await star.setup()
+    with self.assertWarns(DeprecationWarning):
+      await star.setup()
+    self.addAsyncCleanup(star.stop)
     starlet = LiquidHandler(STARChatterboxBackend(), deck=STARLetDeck())
-    await starlet.setup()
+    with self.assertWarns(DeprecationWarning):
+      await starlet.setup()
+    self.addAsyncCleanup(starlet.stop)
 
     star_range = star.backend.extended_conf.left_x_drive.x_range
     starlet_range = starlet.backend.extended_conf.left_x_drive.x_range

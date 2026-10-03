@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import enum
 import functools
@@ -9,6 +8,7 @@ import sys
 import warnings
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
+from types import TracebackType
 from typing import (
   Any,
   Awaitable,
@@ -26,12 +26,20 @@ from typing import (
   cast,
 )
 
+import anyio
+
 if sys.version_info < (3, 10):
   from typing_extensions import Concatenate, ParamSpec
 else:
   from typing import Concatenate, ParamSpec
 
+if sys.version_info >= (3, 11):
+  from builtins import BaseExceptionGroup
+else:
+  from exceptiongroup import BaseExceptionGroup
+
 from pylabrobot import audio
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.hamilton.protocol.text.framing import (
   parse_fw_string as parse_star_fw_string,
 )
@@ -169,6 +177,39 @@ logger = logging.getLogger("pylabrobot")
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
+
+
+async def _run_concurrently(
+  awaitables: Sequence[Awaitable[T]], *, return_exceptions: bool = False
+) -> List[Union[T, Exception]]:
+  """Run awaitables concurrently while retaining gather's ordering and exception shape."""
+  results: List[Optional[Union[T, Exception]]] = [None] * len(awaitables)
+  first_failure: Optional[BaseException] = None
+  first_cancellation: Optional[BaseException] = None
+
+  async def run(index: int, awaitable: Awaitable[T]) -> None:
+    nonlocal first_cancellation, first_failure
+    try:
+      results[index] = await awaitable
+    except anyio.get_cancelled_exc_class() as error:
+      if first_failure is None:
+        first_failure = error
+      if first_cancellation is None:
+        first_cancellation = error
+    except Exception as error:
+      results[index] = error
+      if first_failure is None:
+        first_failure = error
+
+  async with anyio.create_task_group() as task_group:
+    for index, awaitable in enumerate(awaitables):
+      task_group.start_soon(run, index, awaitable)
+
+  if first_cancellation is not None and return_exceptions:
+    raise first_cancellation
+  if first_failure is not None and not return_exceptions:
+    raise first_failure
+  return cast(List[Union[T, Exception]], results)
 
 
 def need_iswap_parked(
@@ -1091,23 +1132,106 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
     return datetime.date(int(year_match.group(1)), 1, 1)
 
-  async def setup(
+  async def _enter_lifespan(
     self,
-    skip_instrument_initialization=False,
-    skip_pip=False,
-    skip_autoload=False,
-    skip_iswap=False,
-    skip_core96_head=False,
-  ):
-    """Creates a USB connection and finds read/write interfaces.
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_instrument_initialization: bool = False,
+    skip_pip: bool = False,
+    skip_autoload: bool = False,
+    skip_iswap: bool = False,
+    skip_core96_head: bool = False,
+  ) -> None:
+    """Own STAR resources and initialize its installed modules."""
+    for name, value in (
+      ("skip_instrument_initialization", skip_instrument_initialization),
+      ("skip_pip", skip_pip),
+      ("skip_autoload", skip_autoload),
+      ("skip_iswap", skip_iswap),
+      ("skip_core96_head", skip_core96_head),
+    ):
+      if type(value) is not bool:
+        raise TypeError(f"{name} must be a bool")
 
-    Args:
-      skip_autoload: if True, skip initializing the autoload module, if applicable.
-      skip_iswap: if True, skip initializing the iSWAP module, if applicable.
-      skip_core96_head: if True, skip initializing the CoRe 96 head module, if applicable.
-    """
+    initialization_exception: Optional[BaseException] = None
 
-    await super().setup()
+    async def preserve_setup_exception(
+      exception_type: Optional[type[BaseException]],
+      exception: Optional[BaseException],
+      traceback: Optional[TracebackType],
+    ) -> Optional[bool]:
+      """Normalize wrappers only when they contain the captured setup failure."""
+      if initialization_exception is None:
+        return None
+      return await self._preserve_initialization_exception(
+        exception_type,
+        exception,
+        traceback,
+        initialization_exception,
+      )
+
+    stack.push_async_exit(preserve_setup_exception)
+    await super()._enter_lifespan(stack)
+    try:
+      await self._initialize(
+        stack,
+        skip_instrument_initialization=skip_instrument_initialization,
+        skip_pip=skip_pip,
+        skip_autoload=skip_autoload,
+        skip_iswap=skip_iswap,
+        skip_core96_head=skip_core96_head,
+      )
+    except BaseException as error:
+      initialization_exception = error
+      raise
+
+  async def _preserve_initialization_exception(
+    self,
+    exception_type: Optional[type[BaseException]],
+    exception: Optional[BaseException],
+    traceback: Optional[TracebackType],
+    initialization_exception: BaseException,
+  ) -> Optional[bool]:
+    """Restore a captured setup failure wrapped only by task-group machinery."""
+    del exception_type, traceback
+    if exception is None:
+      return None
+
+    def leaf_ids(error: BaseException) -> list[int]:
+      """Return the identities of all terminal exceptions in one failure tree."""
+      pending = [error]
+      leaves = []
+      while pending:
+        current = pending.pop()
+        if isinstance(current, BaseExceptionGroup):
+          pending.extend(current.exceptions)
+        else:
+          leaves.append(id(current))
+      return sorted(leaves)
+
+    original_exception = exception
+    while isinstance(exception, BaseExceptionGroup) and len(exception.exceptions) == 1:
+      exception = exception.exceptions[0]
+    while (
+      isinstance(initialization_exception, BaseExceptionGroup)
+      and len(initialization_exception.exceptions) == 1
+    ):
+      initialization_exception = initialization_exception.exceptions[0]
+    if exception is original_exception or leaf_ids(exception) != leaf_ids(initialization_exception):
+      return None
+    raise exception
+
+  async def _initialize(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_instrument_initialization: bool,
+    skip_pip: bool,
+    skip_autoload: bool,
+    skip_iswap: bool,
+    skip_core96_head: bool,
+  ) -> None:
+    """Run the STAR firmware initialization transcript."""
 
     self.id_ = 0
 
@@ -1135,6 +1259,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
+    stack.callback(self._reset_num_channels)
 
     async def set_up_pip():
       if skip_pip:
@@ -1239,16 +1364,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await set_up_iswap()
       await set_up_core96_head()
 
-    await asyncio.gather(set_up_autoload(), set_up_arm_modules())
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(set_up_autoload)
+      task_group.start_soon(set_up_arm_modules)
 
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
     # the core grippers.
     self._core_parked = True
 
     self._setup_done = True
+    stack.callback(self._reset_setup_done)
 
-  async def stop(self):
-    await super().stop()
+  def _reset_num_channels(self) -> None:
+    """Clear the channel count discovered for one lifespan."""
+    self._num_channels = None
+
+  def _reset_setup_done(self) -> None:
+    """Clear the setup marker published for one lifespan."""
     self._setup_done = False
 
   @property
@@ -1365,10 +1497,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns:
       A list of minimum Y spacings in mm, one per channel.
     """
-    return list(
-      await asyncio.gather(
-        *(self.channel_request_y_minimum_spacing(i) for i in range(self.num_channels))
-      )
+    return cast(
+      List[float],
+      await _run_concurrently(
+        [self.channel_request_y_minimum_spacing(i) for i in range(self.num_channels)]
+      ),
     )
 
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
@@ -1451,10 +1584,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       and ``dispensing_cycles``.
     """
 
-    return list(
-      await asyncio.gather(
-        *(self.channel_request_cycle_counts(channel_idx=idx) for idx in range(self.num_channels))
-      )
+    return cast(
+      List[STARBackend.ChannelCycleCounts],
+      await _run_concurrently(
+        [self.channel_request_cycle_counts(channel_idx=idx) for idx in range(self.num_channels)]
+      ),
     )
 
   # # # ACTION Commands # # #
@@ -1716,8 +1850,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Z pre-positioning
     idle_channels = sorted(set(range(self.num_channels)) - set(use_channels))
     if min_traverse_height_at_beginning_of_command is not None:
-      await asyncio.gather(
-        *[
+      await _run_concurrently(
+        [
           self.move_channel_stop_disk_z(channel_idx=ch_idx, z=self.MAXIMUM_CHANNEL_Z_POSITION)
           for ch_idx in idle_channels
         ]
@@ -1780,8 +1914,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     measurements: Dict[int, List[Optional[float]]] = {orig_idx: [] for orig_idx in batch.indices}
 
     for _ in range(n_replicates):
-      results = await asyncio.gather(
-        *[
+      results = await _run_concurrently(
+        [
           _detect_func(lld_mode[orig_idx])(
             channel_idx=channel,
             lowest_immers_pos=lip,
@@ -2206,8 +2340,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"channel_idx must be between 0 and {self.num_channels - 1}, got {channels}"
         )
 
-    await asyncio.gather(
-      *[
+    await _run_concurrently(
+      [
         self.empty_tip(
           channel_idx=ch,
           vol=vol,
@@ -3118,9 +3252,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     with H0 CommandSyntaxError trace 40 ("No parallel processes permitted"). When the head
     finishes, EV succeeds and harmlessly ensures the Z axis is at the safe position.
     """
-    start = asyncio.get_event_loop().time()
-    while asyncio.get_event_loop().time() - start < timeout:
-      await asyncio.sleep(poll_interval)
+    start = anyio.current_time()
+    while anyio.current_time() - start < timeout:
+      await anyio.sleep(poll_interval)
       try:
         await self.send_command(module="C0", command="EV", read_timeout=10)
         logger.info("CoRe 96 head finished (EV succeeded)")
@@ -8365,9 +8499,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # the X and Y drives. Its speed/acceleration request+set round-trip currently blocks
     # parallelisation of the Y drive: the second read is trapped behind the in-flight X move on
     # the single connection, so the Y move only starts once X has finished.
-    await asyncio.gather(
-      self.head96_move_x(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3),
-      self.head96_move_y(a1.y),
+    await _run_concurrently(
+      [
+        self.head96_move_x(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3),
+        self.head96_move_y(a1.y),
+      ]
     )
 
     # the tip oscillates between the floor (a1.z) and mix_start (floor + sf), starting at
@@ -8413,7 +8549,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # settle in place (tip still in the liquid) after the last cycle
     if settling_time:
-      await asyncio.sleep(settling_time)
+      await anyio.sleep(settling_time)
 
     # careful exit at swap_speed back up to the swap-start height (mirrors the descent), before
     # the fast traverse out
@@ -10105,7 +10241,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.set_loading_indicators(bit_pattern[::-1], blink_pattern[::-1])
 
       # Wait before checking again
-      await asyncio.sleep(check_interval)
+      await anyio.sleep(check_interval)
 
       # Check for presence again
       detected_rails = set(await self.request_presence_of_carriers_on_deck())

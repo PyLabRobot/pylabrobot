@@ -6,8 +6,12 @@ and liquid handling operations.
 
 import unittest
 import unittest.mock
-from typing import Optional
+from typing import Any, Optional, cast
 
+import anyio
+import pytest
+
+from pylabrobot.io.socket import Socket
 from pylabrobot.legacy.liquid_handling.backends.hamilton.nimbus_backend import (
   Aspirate,
   DisableADC,
@@ -31,12 +35,16 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.nimbus_backend import (
   UnlockDoor,
   _get_tip_type_from_tip,
 )
+from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.messages import (
   HoiParams,
   HoiParamsParser,
 )
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
+from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp_backend_lifecycle_tests import (
+  RecordingSocket,
+)
 from pylabrobot.legacy.liquid_handling.standard import (
   Drop,
   Pickup,
@@ -50,6 +58,7 @@ from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER
 from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
 from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestNimbusTipType(unittest.TestCase):
@@ -1111,6 +1120,210 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(drop_cmd.end_tip_deposit_process[0], -2240)
 
     tip_rack.unassign()
+
+
+class RecordingNimbusBackend(NimbusBackend):
+  """Record Nimbus lifecycle phases while retaining the production orchestration."""
+
+  def __init__(
+    self,
+    *,
+    initialized: bool = False,
+    missing: Optional[str] = None,
+    fail_at: Optional[str] = None,
+    block_at: Optional[str] = None,
+  ) -> None:
+    super().__init__(host="ignored", port=0)
+    self.events: list[str] = []
+    self.io = cast(Socket, RecordingSocket(self.events))
+    self.set_deck(NimbusDeck())
+    self.set_heads({})
+    self.initialized = initialized
+    self.missing = missing
+    self.fail_at = fail_at
+    self.block_at = block_at
+    self.block_started = anyio.Event()
+
+  async def _phase(self, name: str) -> None:
+    self.events.append(name)
+    if name == self.fail_at:
+      raise RuntimeError(f"failed at {name}")
+    if name == self.block_at:
+      self.block_started.set()
+      await anyio.sleep_forever()
+
+  async def _initialize_connection(self) -> None:
+    await self._phase("protocol7")
+
+  async def _register_client(self) -> None:
+    await self._phase("protocol3")
+
+  async def _discover_root(self) -> None:
+    await self._phase("root.discovery")
+    self._discovered_objects["root"] = [Address(1, 1, 48896)]
+
+  async def _discover_instrument_objects(self) -> None:
+    await self._phase("instrument.discovery")
+    self._pipette_address = None if self.missing == "Pipette" else Address(1, 1, 257)
+    self._nimbus_core_address = None if self.missing == "NimbusCore" else Address(1, 1, 48896)
+    self._door_lock_address = Address(1, 1, 268)
+
+  async def send_command(self, command: HamiltonCommand, timeout: float = 10.0) -> Optional[dict]:
+    del timeout
+    if isinstance(command, GetChannelConfiguration_1):
+      await self._phase("channel.configuration")
+      return {"channels": 2, "channel_types": [0, 0]}
+    if isinstance(command, IsTipPresent):
+      await self._phase("tip.presence")
+      return {"tip_present": [0, 0]}
+    if isinstance(command, IsInitialized):
+      await self._phase("initialization.status")
+      return {"initialized": self.initialized}
+    if isinstance(command, SetChannelConfiguration):
+      if "channel.initialize" not in self.events:
+        await self._phase("channel.initialize")
+      return None
+    if isinstance(command, InitializeSmartRoll):
+      await self._phase("InitializeSmartRoll")
+      return None
+    raise AssertionError(f"unexpected setup command: {type(command).__name__}")
+
+  async def is_door_locked(self) -> bool:
+    return False
+
+  async def lock_door(self) -> None:
+    await self._phase("door.lock")
+
+  async def unlock_door(self) -> None:
+    await self._phase("door.unlock")
+
+  def _build_waste_position_params(
+    self,
+    use_channels: list[int],
+    z_position_at_end_of_a_command: Optional[float] = None,
+    roll_distance: Optional[float] = None,
+  ) -> tuple[list[int], list[int], list[int], list[int], list[int], list[int]]:
+    del use_channels, z_position_at_end_of_a_command, roll_distance
+    return ([0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0])
+
+
+class TestNimbusLifecycle(AnyioTestBase):
+  async def test_full_setup_transcript_and_parent_lifespan(self) -> None:
+    backend = RecordingNimbusBackend()
+
+    async with backend.lifespan(unlock_door=True):
+      assert backend.num_channels == 2
+
+    assert backend.events == [
+      "socket.enter",
+      "protocol7",
+      "protocol3",
+      "root.discovery",
+      "instrument.discovery",
+      "channel.configuration",
+      "tip.presence",
+      "initialization.status",
+      "door.lock",
+      "channel.initialize",
+      "InitializeSmartRoll",
+      "door.unlock",
+      "socket.exit",
+    ]
+
+  async def test_default_options_do_not_unlock_or_force_initialization(self) -> None:
+    backend = RecordingNimbusBackend(initialized=True)
+
+    async with backend:
+      pass
+
+    assert "door.unlock" not in backend.events
+    assert "channel.initialize" not in backend.events
+    assert "InitializeSmartRoll" not in backend.events
+
+  async def test_force_initialize_runs_channel_and_roll_initialization(self) -> None:
+    backend = RecordingNimbusBackend(initialized=True)
+
+    async with backend.lifespan(force_initialize=True):
+      pass
+
+    assert "channel.initialize" in backend.events
+    assert "InitializeSmartRoll" in backend.events
+
+  @pytest.mark.parametrize(
+    "kwargs",
+    [
+      {"unknown": False},
+      {"unlock_door": 0},
+      {"unlock_door": None},
+      {"force_initialize": 1},
+      {"force_initialize": "false"},
+    ],
+  )
+  async def test_invalid_options_fail_before_transport_acquisition(
+    self, kwargs: dict[str, Any]
+  ) -> None:
+    backend = RecordingNimbusBackend()
+
+    with pytest.raises(TypeError):
+      async with backend.lifespan(**kwargs):
+        pytest.fail("invalid options reached body")
+    assert backend.events == []
+
+  @pytest.mark.parametrize("missing", ["Pipette", "NimbusCore"])
+  async def test_missing_required_object_unwinds_socket(self, missing: str) -> None:
+    backend = RecordingNimbusBackend(missing=missing)
+
+    with pytest.raises(RuntimeError, match=missing):
+      async with backend:
+        pytest.fail("missing capability reached body")
+
+    assert backend.events[-1] == "socket.exit"
+    assert not backend.is_connected
+
+  @pytest.mark.parametrize(
+    "phase", ["instrument.discovery", "channel.configuration", "InitializeSmartRoll"]
+  )
+  async def test_phase_failure_unwinds_socket(self, phase: str) -> None:
+    backend = RecordingNimbusBackend(fail_at=phase)
+
+    with pytest.raises(RuntimeError, match=f"failed at {phase}"):
+      async with backend:
+        pytest.fail("failed phase reached body")
+
+    assert backend.events[-1] == "socket.exit"
+    assert not backend.is_connected
+
+  async def test_cancellation_during_initialization_unwinds_socket(self) -> None:
+    backend = RecordingNimbusBackend(block_at="InitializeSmartRoll")
+
+    async def enter() -> None:
+      async with backend:
+        pytest.fail("cancelled initialization reached body")
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(enter)
+      await backend.block_started.wait()
+      task_group.cancel_scope.cancel()
+
+    assert backend.events[-1] == "socket.exit"
+    assert not backend.is_connected
+
+  async def test_discovered_capabilities_are_unpublished_after_exit(self) -> None:
+    backend = RecordingNimbusBackend(initialized=True)
+
+    async with backend:
+      assert backend.num_channels == 2
+
+    with pytest.raises(RuntimeError, match="setup"):
+      _ = backend.num_channels
+    assert backend._pipette_address is None
+    assert backend._nimbus_core_address is None
+
+
+class TestNimbusTipPickupDropRemainingSizes(TestNimbusTipPickupDropAllSizes):
+  """Retain the remaining inherited tip-size fixtures after lifecycle coverage."""
+
+  test_10uL_tips = None  # type: ignore[assignment]
 
   async def test_50uL_tips(self):
     from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_50uL

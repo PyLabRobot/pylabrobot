@@ -10,6 +10,7 @@ import enum
 import logging
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.legacy.liquid_handling.backends.hamilton.tcp.introspection import (
@@ -955,25 +956,27 @@ class NimbusBackend(HamiltonTCPBackend):
 
     self._channel_traversal_height: float = 146.0  # Default traversal height in mm
 
-  async def setup(self, unlock_door: bool = False, force_initialize: bool = False):
-    """Set up the Nimbus backend.
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    unlock_door: bool = False,
+    force_initialize: bool = False,
+  ) -> None:
+    """Own the native TCP lifespan and execute Nimbus initialization."""
+    for name, value in (("unlock_door", unlock_door), ("force_initialize", force_initialize)):
+      if type(value) is not bool:
+        raise TypeError(f"{name} must be a bool")
 
-    This method:
-    1. Establishes TCP connection and performs protocol initialization
-    2. Discovers instrument objects
-    3. Queries channel configuration to get num_channels
-    4. Queries tip presence
-    5. Queries initialization status
-    6. Locks door if available
-    7. Conditionally initializes NimbusCore with InitializeSmartRoll (only if not initialized)
-    8. Optionally unlocks door after initialization
+    await super()._enter_lifespan(stack)
+    stack.callback(self._reset_lifespan_capabilities)
+    await self._initialize_nimbus(
+      unlock_door=unlock_door,
+      force_initialize=force_initialize,
+    )
 
-    Args:
-      unlock_door: If True, unlock door after initialization (default: False)
-      force_initialize: If True, force initialization even if already initialized
-    """
-    # Call parent setup (TCP connection, Protocol 7 init, Protocol 3 registration)
-    await super().setup()
+  async def _initialize_nimbus(self, *, unlock_door: bool, force_initialize: bool) -> None:
+    """Run the Nimbus discovery and initialization transcript."""
 
     # Discover instrument objects
     await self._discover_instrument_objects()
@@ -1093,6 +1096,15 @@ class NimbusBackend(HamiltonTCPBackend):
         logger.warning("Door unlock requested but not available or not set up")
       except Exception as e:
         logger.warning(f"Failed to unlock door: {e}")
+
+  def _reset_lifespan_capabilities(self) -> None:
+    """Unpublish capabilities discovered for one Nimbus lifespan."""
+    self._num_channels = None
+    self._pipette_address = None
+    self._door_lock_address = None
+    self._nimbus_core_address = None
+    self._is_initialized = None
+    self._channel_configurations = None
 
   async def _discover_instrument_objects(self):
     """Discover instrument-specific objects using introspection."""
@@ -1244,10 +1256,6 @@ class NimbusBackend(HamiltonTCPBackend):
     except Exception as e:
       logger.error(f"Failed to unlock door: {e}")
       raise
-
-  async def stop(self):
-    """Stop the backend and close connection."""
-    await HamiltonTCPBackend.stop(self)
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
     """Request tip presence on each channel.

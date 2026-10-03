@@ -6,11 +6,13 @@ It handles connection management, message routing, and the introspection API.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
 from pylabrobot.legacy.liquid_handling.backends.backend import LiquidHandlerBackend
@@ -100,6 +102,8 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
       max_reconnect_attempts: Maximum reconnection attempts
     """
 
+    super().__init__()
+
     self.io = Socket(
       human_readable_device_name="Hamilton Liquid Handler",
       host=host,
@@ -126,6 +130,8 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
   async def _ensure_connected(self):
     """Ensure connection is healthy before operations."""
     if not self._connected:
+      if not self.is_active:
+        raise RuntimeError("HamiltonTCPBackend requires an active lifespan")
       if not self.auto_reconnect:
         raise ConnectionError(
           f"{self.io._unique_id} Connection not established and auto-reconnect disabled"
@@ -135,6 +141,10 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
   async def _reconnect(self):
     """Attempt to reconnect with exponential backoff."""
+    if not self.is_active or not self.io.is_active:
+      raise RuntimeError(
+        "HamiltonTCPBackend reconnect requires active backend and Socket lifespans"
+      )
     if not self.auto_reconnect:
       raise ConnectionError(f"{self.io._unique_id} Auto-reconnect disabled")
 
@@ -144,24 +154,24 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
           f"{self.io._unique_id} Reconnection attempt {attempt + 1}/{self.max_reconnect_attempts}"
         )
 
-        # Clean up existing connection
-        try:
-          await self.stop()
-        except Exception:
-          pass
-
         # Wait before reconnecting (exponential backoff)
         if attempt > 0:
           wait_time = 1.0 * (2 ** (attempt - 1))  # 1s, 2s, 4s, etc.
-          await asyncio.sleep(wait_time)
+          await self._wait_before_reconnect(wait_time)
 
         # Attempt to reconnect
-        await self.setup()
+        await self.io.reconnect()
+        self._connected = True
+        await self._run_handshake()
         self._reconnect_attempts = 0
         logger.info(f"{self.io._unique_id} Reconnection successful")
         return
 
+      except anyio.get_cancelled_exc_class():
+        self._connected = False
+        raise
       except Exception as e:
+        self._connected = False
         logger.warning(f"{self.io._unique_id} Reconnection attempt {attempt + 1} failed: {e}")
 
     # All reconnection attempts failed
@@ -169,6 +179,10 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     raise ConnectionError(
       f"{self.io._unique_id} Failed to reconnect after {self.max_reconnect_attempts} attempts"
     )
+
+  async def _wait_before_reconnect(self, delay: float) -> None:
+    """Wait for one reconnect backoff interval."""
+    await anyio.sleep(delay)
 
   async def write(self, data: bytes, timeout: Optional[float] = None):
     """Write data to the socket with connection state tracking.
@@ -199,10 +213,13 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     await self._ensure_connected()
 
     try:
-      data = await self.io.read(num_bytes, timeout=timeout)
+      if timeout is None:
+        data = await self.io.read(num_bytes)
+      else:
+        data = await self.io.read(num_bytes, timeout=timeout)
       self._connected = True
       return data
-    except (ConnectionError, OSError, TimeoutError):
+    except (ConnectionError, OSError, TimeoutError, anyio.EndOfStream):
       self._connected = False
       raise
 
@@ -289,8 +306,8 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     logger.warning(f"Unknown IP protocol: {ip_protocol}, attempting CommandResponse parse")
     return CommandResponse.from_bytes(complete_data)
 
-  async def setup(self):
-    """Initialize Hamilton connection and discover objects.
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own one Socket lifespan and run the direct-read Hamilton handshake.
 
     Hamilton uses strict request-response protocol:
     1. Establish TCP connection
@@ -299,20 +316,24 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     4. Discover objects via Protocol 3 introspection
     """
 
-    # Step 1: Establish TCP connection
-    await self.io.setup()
+    await super()._enter_lifespan(stack)
+    self._validate_lifespan_context()
+    await stack.enter_async_context(self.io.lifespan())
 
-    # Set connection state after successful connection
     self._connected = True
+    stack.callback(self._clear_connection_state)
     self._reconnect_attempts = 0
+    await self._run_handshake()
 
-    # Step 2: Initialize connection (Protocol 7)
+  def _clear_connection_state(self) -> None:
+    """Unpublish connection state when this lifespan starts unwinding."""
+    self._connected = False
+
+  async def _run_handshake(self) -> None:
+    """Run the Protocol 7, Protocol 3, and root-discovery handshake."""
+
     await self._initialize_connection()
-
-    # Step 3: Register client (Protocol 3)
     await self._register_client()
-
-    # Step 4: Discover root objects
     await self._discover_root()
 
     logger.info(f"Hamilton backend setup complete. Client ID: {self._client_id}")
@@ -551,35 +572,32 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
       else:
         logger.info(f"  {key}: {value}")
 
-    # Send command
-    await self.write(message)
-
-    # Read response (timeout handled by TCP layer)
-    response_message = await self._read_one_message()
-    assert isinstance(response_message, CommandResponse)
-
-    # Check for error actions
-    action = Hoi2Action(response_message.hoi.action_code)
-    if action in (
-      Hoi2Action.STATUS_EXCEPTION,
-      Hoi2Action.COMMAND_EXCEPTION,
-      Hoi2Action.INVALID_ACTION_RESPONSE,
-    ):
-      error_message = f"Error response (action={action:#x}): {response_message.hoi.params.hex()}"
-      logger.error(f"Hamilton error {action}: {error_message}")
-      raise RuntimeError(f"Hamilton error {action}: {error_message}")
-
-    return command.interpret_response(response_message)
-
-  async def stop(self):
-    """Stop the backend and close connection."""
     try:
-      await self.io.stop()
-    except Exception as e:
-      logger.warning(f"Error during stop: {e}")
-    finally:
+      with anyio.fail_after(timeout) as request_scope:
+        await self.write(message)
+        response_message = await self._read_one_message()
+        assert isinstance(response_message, CommandResponse)
+
+        action = Hoi2Action(response_message.hoi.action_code)
+        if action in (
+          Hoi2Action.STATUS_EXCEPTION,
+          Hoi2Action.COMMAND_EXCEPTION,
+          Hoi2Action.INVALID_ACTION_RESPONSE,
+        ):
+          error_message = (
+            f"Error response (action={action:#x}): {response_message.hoi.params.hex()}"
+          )
+          logger.error(f"Hamilton error {action}: {error_message}")
+          raise RuntimeError(f"Hamilton error {action}: {error_message}")
+
+        return command.interpret_response(response_message)
+    except anyio.get_cancelled_exc_class():
       self._connected = False
-    logger.info("Hamilton backend stopped")
+      raise
+    except TimeoutError:
+      if request_scope.cancel_called:
+        self._connected = False
+      raise
 
   def serialize(self) -> dict:
     """Serialize backend configuration."""
