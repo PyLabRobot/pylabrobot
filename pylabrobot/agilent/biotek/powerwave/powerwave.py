@@ -306,31 +306,38 @@ class PowerWaveX:
 
     Warning:
       Reading near the bottom of this range can abandon the read and latch
-      ``0F11`` ("signal out of range"), and often stops the instrument responding
+      ``0F11`` or ``0F21`` ("signal out of range" on detector channel 1 or 2,
+      whichever reads worst on the run), and often stops the instrument responding
       at all until it is power cycled. Observed on a PowerWaveX w/ Incubator
       (firmware R06.20), reading a full 96-well plate::
 
-        205 nm, never calibrated   faulted 3 times out of 3
         200 nm, never calibrated   faulted 2 times out of 2
-        205 nm, after a scan        read normally
-        200 nm, after a scan        read normally, twice, one from a cold start
+        205 nm, never calibrated   faulted 3 times out of 3
+        208 nm, never calibrated   faulted
+        210 nm, never calibrated   read normally
+        212 nm, never calibrated   read normally
+        214 nm, never calibrated   read normally
         215 nm, never calibrated   read normally
         395 nm, never calibrated   read normally
+        200 nm, after a scan       read normally, twice, one from a cold start
+        205 nm, after a scan       read normally
 
       The wavelength alone does not predict it and neither does the calibration
       state alone, but the pair does: READ PLATE sets its own gain for a
-      wavelength it has not calibrated, and that attempt fails below somewhere
-      between 205 and 215 nm where little light reaches the detector.
+      wavelength it has not calibrated, and that attempt fails below a threshold
+      between 208 and 210 nm, where little light reaches the detector. The
+      208 nm fault came with 210 nm already calibrated immediately above it, so
+      a calibrated neighbour does not help; each wavelength stands alone.
       :meth:`scan_plate` calibrates every wavelength it sweeps and manages it
       even at 200 nm, after which reads there succeed - 205 nm failed three times
       running uncalibrated and then read normally once a 200-210 nm scan in 5 nm
       steps had calibrated it.
 
-      So to read below about 215 nm, scan a band covering the wavelength first.
+      So to read below 210 nm, scan a band covering the wavelength first.
       A scan's :attr:`SpectralScanResult.calibrated` lists what it had to
       calibrate, which is a direct read-out of what was missing: that 5 nm scan
       reported ``[205]`` alone, 200 and 210 being already done. Nothing below
-      200 nm has been probed.
+      200 nm has been probed, that being the bottom of the specified range.
 
       The order-sorting filter wheel is not the cause: 200, 205 and 215 nm share a
       single band, so it sits in the same position whether the read faults or
