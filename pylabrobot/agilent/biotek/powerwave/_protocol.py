@@ -400,7 +400,14 @@ FLAG_USE_TOTAL_KINETIC_TIME = 0x80
 #: R06.20) asked for 3 cycles kept sending a 4th, leaving the caller reading into a
 #: run that had hours left. With the bit cleared the same request sends exactly
 #: three blocks and the closing ``^Z``. Verified directly.
-KINETIC_FLAGS = FLAG_SHAKE | FLAG_SHAKE_EVERY_READ | FLAG_SHAKE_CONTINUOUS
+KINETIC_SHAKE_FLAGS = FLAG_SHAKE | FLAG_SHAKE_EVERY_READ | FLAG_SHAKE_CONTINUOUS
+
+#: Byte 31 for a kinetic run that does not shake, which is the default: every bit
+#: in :data:`KINETIC_SHAKE_FLAGS` is about shaking, so asking for none leaves the
+#: byte empty. Shaking a plate between cycles is a decision about the assay, not
+#: a detail of reading one, and it is not something to do to someone's samples
+#: unless they asked.
+KINETIC_FLAGS = 0
 
 
 def build_assay_definition(
@@ -747,6 +754,11 @@ SELF_TEST_ERRORS: Dict[str, str] = {
 }
 
 _SELF_TEST_FAIL_RE = re.compile(r"\*\*\*\s*SYSTEM TEST FAIL\s*\*\*\*")
+
+#: The pass banner, which a report must carry if it is not declaring a failure.
+#: Captured verbatim from a PowerWaveX w/ Incubator: the body ends "SYSTEM TEST
+#: PASS" with trailing spaces.
+_SELF_TEST_PASS_RE = re.compile(r"SYSTEM TEST PASS")
 _SELF_TEST_ERROR_RE = re.compile(r"ERROR\s*\((\d{4})\)")
 
 
@@ -772,14 +784,30 @@ def parse_self_test_report(report: str) -> Optional[str]:
   appears only in the ASCII report body, which this instrument prints in the
   older Rev C1 layout even though its error codes follow Rev D2.
 
+  A report must actually say how the test went. Treating the absence of a failure
+  banner as a pass made an empty report, or a truncated one, look like a healthy
+  instrument - the one answer this function must never invent, since the status
+  string alongside it says ``"000"`` either way.
+
   Returns:
-    The four-digit error code, ``None`` if the report shows no failure, or the
+    The four-digit error code, ``None`` if the report declares a pass, or the
     empty string if it declares a failure without naming a code.
+
+  Raises:
+    PowerWaveParseError: If the report declares neither, and so cannot be read as
+      a verdict at all.
   """
-  if _SELF_TEST_FAIL_RE.search(report) is None:
+  if _SELF_TEST_FAIL_RE.search(report) is not None:
+    match = _SELF_TEST_ERROR_RE.search(report)
+    return match.group(1) if match is not None else ""
+
+  if _SELF_TEST_PASS_RE.search(report) is not None:
     return None
-  match = _SELF_TEST_ERROR_RE.search(report)
-  return match.group(1) if match is not None else ""
+
+  raise PowerWaveParseError(
+    f"The self-test report declares neither a pass nor a failure, so it says "
+    f"nothing about the instrument's health: {report[:120]!r}"
+  )
 
 
 # --------------------------------------------------------------------------------------

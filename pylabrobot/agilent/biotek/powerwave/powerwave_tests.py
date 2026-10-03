@@ -19,6 +19,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   ASSAY_DEFINITION_LENGTH,
   FLAG_USE_TOTAL_KINETIC_TIME,
   KINETIC_FLAGS,
+  KINETIC_SHAKE_FLAGS,
   MAX_WAVELENGTH,
   MIN_WAVELENGTH,
   ORDER_SORTING_FILTER_BANDS,
@@ -369,7 +370,7 @@ class TestAssayDefinition(unittest.TestCase):
       read_type="kinetic",
       # The 2021 run set the total-time bit, which the driver no longer sends; pin
       # it explicitly so this stays a byte-for-byte check of that capture.
-      flags=KINETIC_FLAGS | FLAG_USE_TOTAL_KINETIC_TIME,
+      flags=KINETIC_SHAKE_FLAGS | FLAG_USE_TOTAL_KINETIC_TIME,
       kinetic_interval=60,
       kinetic_read_count=9999,
       shake_time=5,
@@ -379,11 +380,15 @@ class TestAssayDefinition(unittest.TestCase):
     self.assertEqual(built, bytes(expected))
 
   def test_kinetic_flags_value(self):
-    # 0x70: shake, shake before every read, continuous shake. The total-time bit is
-    # excluded on purpose: with it set the instrument ignores the read count and
-    # keeps cycling past the blocks the driver is waiting for.
-    self.assertEqual(KINETIC_FLAGS, 0x70)
-    self.assertEqual(KINETIC_FLAGS & FLAG_USE_TOTAL_KINETIC_TIME, 0)
+    # A kinetic run does not shake unless asked, and every bit in the shake set is
+    # about shaking, so the default byte is empty.
+    self.assertEqual(KINETIC_FLAGS, 0)
+
+    # 0x70: shake, shake before every read, continuous shake. The total-time bit
+    # is excluded on purpose: with it set the instrument ignores the read count
+    # and keeps cycling past the blocks the driver is waiting for.
+    self.assertEqual(KINETIC_SHAKE_FLAGS, 0x70)
+    self.assertEqual(KINETIC_SHAKE_FLAGS & FLAG_USE_TOTAL_KINETIC_TIME, 0)
 
   def test_wavelength_encoding_pads_to_eighteen_bytes(self):
     self.assertEqual(encode_assay_wavelengths([550]), b"550000000000000000")
@@ -1010,6 +1015,101 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(reader._port_free.is_set())
 
 
+class TestResynchronisationAfterAFailure(unittest.IsolatedAsyncioTestCase):
+  """A broken exchange hands the port back clean.
+
+  Nothing records that the stream needs recovery. The operation that broke it
+  clears up on its way out, so there is no mode for a later call to be stuck in
+  and nothing has to decide when recovery has happened.
+  """
+
+  @staticmethod
+  def _bad_checksum_script():
+    wrong = (_CAPTURED_PLATE_CHECKSUM + 1) % 256
+    # 'V', '{', 'S' acknowledged, then a block whose checksum does not match,
+    # and the end-of-data marker that the read will never reach.
+    return (_ACK + _STATUS_OK) * 3 + _CAPTURED_PLATE + bytes([wrong]) + b"\x1a"
+
+  async def test_the_leftover_terminator_does_not_answer_the_next_command(self):
+    plate = _plate_resource()
+    reader, fake = _reader(self._bad_checksum_script(), model="PowerWaveX")
+    reader._DRAIN_QUIET_SECONDS = 0.01  # type: ignore[misc]
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveChecksumError):
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    # Without the clean-up this ^Z was still queued, and the next command read it
+    # as its acknowledgement: "expected ACK or NAK ... got b'\x1a'".
+    self.assertEqual(fake.remaining, b"")
+
+    fake._inbox.extend(_ACK + _CAPTURED_CONFIG)
+    self.assertEqual(await reader.request_model(), "PowerWaveX w/ Incubator")
+
+  async def test_the_port_is_free_after_a_failed_exchange(self):
+    plate = _plate_resource()
+    reader, _ = _reader(self._bad_checksum_script(), model="PowerWaveX")
+    reader._DRAIN_QUIET_SECONDS = 0.01  # type: ignore[misc]
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveChecksumError):
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+
+    self.assertIsNone(reader._port_owner)
+    self.assertTrue(reader._port_free.is_set())
+
+  async def test_a_halted_read_is_not_drained_here(self):
+    # halt() resynchronises the line itself and is waiting for the release, so
+    # draining in this path would sit through the run halt just abandoned.
+    drained = []
+
+    class _Watching(TestHaltInterruptsAReadInProgress._SilentThenDLE):
+      async def reset_input_buffer(self) -> None:
+        drained.append(True)
+        await super().reset_input_buffer()
+
+    plate = _plate_resource()
+    fake = _Watching(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
+    reader.io = fake  # type: ignore[assignment]
+    reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+    reader._DRAIN_QUIET_SECONDS = 0.01  # type: ignore[misc]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+    reader._wavelength_table = [620]
+
+    read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
+    while reader._port_free.is_set():
+      await asyncio.sleep(0)
+    await reader.halt()
+    with self.assertRaises(PowerWaveHaltedError):
+      await read
+
+    self.assertEqual(drained, [])  # the halted read left the line to halt()
+
+
+class TestSetupFailure(unittest.IsolatedAsyncioTestCase):
+  """A session that could not identify the instrument is not a usable session."""
+
+  async def test_a_failed_setup_closes_the_transport(self):
+    reader, fake = _reader(b"")  # answers nothing, so identification times out
+
+    with self.assertRaises((TimeoutError, PowerWaveError)):
+      await reader.setup()
+
+    self.assertFalse(reader.connected)
+    self.assertTrue(fake.stop_called)
+
+  async def test_a_successful_setup_still_connects(self):
+    script = _ACK + _CAPTURED_CONFIG + _ACK + _CAPTURED_TABLE + _STATUS_OK
+    reader, fake = _reader(script)
+
+    await reader.setup()
+
+    self.assertTrue(reader.connected)
+    self.assertFalse(fake.stop_called)
+
+
 class TestHaltAcknowledgement(unittest.IsolatedAsyncioTestCase):
   """HALT's DLE is told from the data by position, not by its value."""
 
@@ -1166,11 +1266,26 @@ class TestIncubator(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(fake.writes, [b"[", b"%"])
     self.assertEqual(reader.temperature_setpoint, 37)
 
-  async def test_set_temperature_is_idempotent(self):
-    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX w/ Incubator")
+  async def test_the_setpoint_is_always_sent(self):
+    # Never skipped on the strength of what this driver believes the setpoint to
+    # be: it cannot be read back, so that belief is only a record of what some
+    # earlier session wrote, and it used to survive reconnecting.
+    reader, fake = _reader((_ACK + _STATUS_OK) * 2, model="PowerWaveX w/ Incubator")
     await reader.set_temperature(37)
     await reader.set_temperature(37)
-    self.assertEqual(fake.writes, [b"[", b"%"])
+    self.assertEqual(fake.writes, [b"[", b"%", b"[", b"%"])
+
+  async def test_stop_forgets_the_setpoint(self):
+    reader, _ = _reader(_ACK + _STATUS_OK, model="PowerWaveX w/ Incubator")
+    await reader.set_temperature(37)
+    self.assertEqual(reader.temperature_setpoint, 37)
+
+    await reader.stop()
+
+    self.assertIsNone(reader.temperature_setpoint)
+    self.assertIsNone(reader._strip_range)
+    self.assertFalse(reader._assay_defined)
+    self.assertEqual(reader._plate_geometry, (8, 12))
 
   async def test_stop_heating_sets_zero(self):
     reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX w/ Incubator")
@@ -1777,7 +1892,12 @@ class TestSelfTest(unittest.IsolatedAsyncioTestCase):
     b"Air:            0      0      0      0      0      0      0      0      0\r\n"
     b"\r\n*** SYSTEM TEST FAIL *** ERROR (0201) DETECTED   \x1e000\x03"
   )
-  _PASSING_TAIL = b"Lambda: 550  Gain:  1.23  Resets: 0\r\nNoise Max:  4\r\n\x1e000\x03"
+  # A real report ends with the pass banner; the earlier fixture left it out,
+  # which is what let a verdict-less report count as healthy.
+  _PASSING_TAIL = (
+    b"Lambda: 550  Gain:  1.23  Resets: 0\r\nNoise Max:  4\r\n"
+    b"\r\nSYSTEM TEST PASS        \x1e000\x03"
+  )
 
   async def test_failing_self_test_raises_with_the_decoded_code(self):
     reader, fake = _reader(_ACK + self._FAILING_TAIL, model="PowerWaveX w/ Incubator")
@@ -1820,10 +1940,27 @@ class TestSelfTestReportParsing(unittest.TestCase):
     self.assertEqual(parse_self_test_report("*** SYSTEM TEST FAIL ***"), "")
 
   def test_pass_returns_none(self):
-    self.assertIsNone(parse_self_test_report("Lambda: 550  Gain: 1.20\nNoise Max: 3"))
+    self.assertIsNone(
+      parse_self_test_report("Lambda: 550  Gain: 1.20\nNoise Max: 3\nSYSTEM TEST PASS   ")
+    )
 
   def test_error_text_without_a_fail_banner_is_not_a_failure(self):
-    self.assertIsNone(parse_self_test_report("see ERROR (0201) in the manual"))
+    # The code is only a verdict when the FAIL banner declares one.
+    self.assertIsNone(parse_self_test_report("see ERROR (0201) in the manual\nSYSTEM TEST PASS"))
+
+  def test_a_report_with_no_verdict_is_refused(self):
+    # Absence of a FAIL banner used to mean "passed", so an empty or truncated
+    # report looked like a healthy instrument - and the status string beside it
+    # says "000" either way, so nothing else would have caught it.
+    for label, report in (
+      ("empty", ""),
+      ("whitespace", "   \r\n  "),
+      ("truncated mid-report", "Lambda: 550  Gain:  1.23  Resets: 0\r\nNoise Max:"),
+      ("unrelated text", "garbage"),
+    ):
+      with self.subTest(report=label):
+        with self.assertRaises(PowerWaveParseError):
+          parse_self_test_report(report)
 
   def test_d2_error_codes(self):
     self.assertEqual(
@@ -1897,6 +2034,39 @@ class TestKineticRead(unittest.IsolatedAsyncioTestCase):
       )
 
     self.assertEqual(fake.writes, [])  # nothing was sent
+
+  async def test_the_default_run_does_not_shake(self):
+    # Shaking a plate between cycles is a decision about the assay, and used to
+    # happen on every kinetic read whether or not anyone asked.
+    plate = _plate_resource()
+    reader, fake = _reader(self._kinetic_script(cycles=2, wavelengths=1), model="PowerWaveX")
+    reader._wavelength_table = [600]
+
+    await reader.read_absorbance_kinetic(plate, plate.get_all_items(), [600], interval=60, count=2)
+
+    table = fake.writes[1]
+    self.assertEqual(table[30], 0)  # byte 31: no shake bits
+    self.assertEqual(table[162:164], b"\x00\x00")  # bytes 163-164: no shake time
+
+  async def test_shaking_is_sent_when_asked_for(self):
+    plate = _plate_resource()
+    reader, fake = _reader(self._kinetic_script(cycles=2, wavelengths=1), model="PowerWaveX")
+    reader._wavelength_table = [600]
+
+    await reader.read_absorbance_kinetic(
+      plate,
+      plate.get_all_items(),
+      [600],
+      interval=60,
+      count=2,
+      shake_time=5,
+      shake_speed=2,
+    )
+
+    table = fake.writes[1]
+    self.assertEqual(table[30], KINETIC_SHAKE_FLAGS)
+    self.assertEqual(table[162:164], struct.pack("<H", 5))
+    self.assertEqual(table[164], 2)
 
   async def test_assay_table_does_not_set_the_total_time_bit(self):
     plate = _plate_resource()

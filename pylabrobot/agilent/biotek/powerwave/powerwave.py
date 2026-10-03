@@ -29,6 +29,7 @@ from ._protocol import (
   DLE,
   ETX,
   KINETIC_FLAGS,
+  KINETIC_SHAKE_FLAGS,
   MAX_WAVELENGTH,
   MIN_WAVELENGTH,
   NAK,
@@ -270,14 +271,23 @@ class PowerWaveX:
     await self.io.setup()
     self._connected = True
 
-    # A previous session may have died mid-operation, leaving the instrument part
-    # way through a response. Flushing once is not enough: bytes already on the
-    # wire arrive after the flush and would be read as the reply to the first
-    # command. Drain until the line has been quiet for a moment.
-    await self._drain_input()
+    try:
+      # A previous session may have died mid-operation, leaving the instrument
+      # part way through a response. Flushing once is not enough: bytes already
+      # on the wire arrive after the flush and would be read as the reply to the
+      # first command. Drain until the line has been quiet for a moment.
+      await self._drain_input()
 
-    self._model = await self.request_model()
-    self._wavelength_table = await self.request_wavelength_table()
+      self._model = await self.request_model()
+      self._wavelength_table = await self.request_wavelength_table()
+    except BaseException:
+      # Identification failed, so this is not a usable session. Leaving the
+      # transport open with connected reporting True invites a caller to keep
+      # using it.
+      self._connected = False
+      with contextlib.suppress(Exception):
+        await self.io.stop()
+      raise
 
     logger.info(
       "[PowerWaveX %s] connected: model=%s, calibrated wavelengths=%s",
@@ -287,9 +297,23 @@ class PowerWaveX:
     )
 
   async def stop(self) -> None:
-    """Close the serial connection."""
+    """Close the serial connection, and forget what belonged to the session.
+
+    Everything dropped here describes the instrument rather than this driver, and
+    cannot be read back from it, so carrying it across a reconnect would be
+    asserting something no longer known. The next session asks again.
+    """
     await self.io.stop()
     self._connected = False
+
+    self._model = None
+    self._wavelength_table = None
+    self._carrier_position = None
+    self._temperature_setpoint = None
+    self._assay_defined = False
+    self._assay_wavelengths = []
+    self._strip_range = None
+    self._plate_geometry = (8, 12)  # the instrument's own default again
     self._carrier_position = None
     logger.info("[PowerWaveX %s] disconnected", self.port)
 
@@ -730,6 +754,7 @@ class PowerWaveX:
     wavelengths: Sequence[int],
     interval: int,
     count: int,
+    shake_time: int = 0,
     shake_speed: int = 1,
     total_read_time: Optional[int] = None,
   ) -> List[AbsorbanceResult]:
@@ -750,8 +775,12 @@ class PowerWaveX:
         shorter interval raises :class:`ValueError`, because the instrument
         rejects the read outright rather than running it late.
       count: Number of reads, 2 to 9999.
-      shake_speed: 0 slow, 1 medium, 2 fast, 3 variable. Shaking runs between
-        reads.
+      shake_time: Seconds to shake before each cycle, 0 to 99. Zero, the default,
+        means the plate is never shaken: the flags that enable shaking are left
+        clear and no shake time is sent. Shaking is a property of an assay rather
+        than of reading one, so it is never done unasked.
+      shake_speed: 0 slow, 1 medium, 2 fast, 3 variable. Only consulted when
+        ``shake_time`` is above zero.
       total_read_time: Not supported; pass ``None``. Running a kinetic series by
         total time means the instrument ignores ``count``, so the driver cannot
         know how many blocks to expect. See :data:`._protocol.KINETIC_FLAGS`.
@@ -790,6 +819,7 @@ class PowerWaveX:
         wavelengths,
         interval,
         count,
+        shake_time,
         shake_speed,
         first_strip,
         last_strip,
@@ -803,6 +833,7 @@ class PowerWaveX:
     wavelengths: Sequence[int],
     interval: int,
     count: int,
+    shake_time: int,
     shake_speed: int,
     first_strip: int,
     last_strip: int,
@@ -816,9 +847,10 @@ class PowerWaveX:
     await self.push_assay_definition(
       wavelengths,
       read_type="kinetic",
-      flags=KINETIC_FLAGS,
+      flags=KINETIC_SHAKE_FLAGS if shake_time > 0 else KINETIC_FLAGS,
       kinetic_interval=interval,
       kinetic_read_count=count,
+      shake_time=shake_time,
       shake_speed=shake_speed,
     )
     await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
@@ -1511,10 +1543,11 @@ class PowerWaveX:
     if not self.supports_heating:
       raise NotImplementedError(f"{self.model} has no incubator.")
 
-    if self._temperature_setpoint == temperature:
-      logger.debug("[PowerWaveX %s] setpoint already %d", self.port, temperature)
-      return
-
+    # Always sent, never skipped because this driver believes the setpoint is
+    # already right. It cannot be asked, so that belief is only ever a record of
+    # what some earlier session wrote, and it survived reconnecting: setting 37
+    # again sent nothing at all, however the instrument had been changed in the
+    # meantime. The command is one byte.
     payload = encode_temperature_setpoint(temperature)
 
     async with self._owns_port():
@@ -1609,9 +1642,46 @@ class PowerWaveX:
     self._port_free.clear()
     try:
       yield
+    except PowerWaveHaltedError:
+      # halt() resynchronises the line itself, and is waiting for this release.
+      # Draining here would sit through the rest of the run it just abandoned.
+      raise
+    except asyncio.CancelledError:
+      # Best effort: an await in this path can be cancelled in turn, so the line
+      # may stay dirty. setup()'s drain is the backstop for that.
+      with contextlib.suppress(Exception, asyncio.CancelledError):
+        await self._resynchronise("left by a cancelled operation")
+      raise
+    except Exception:
+      # The exchange stopped part way through, so the instrument is very likely
+      # still talking. Hand the port back clean rather than leave the next
+      # command to read the remains and fail for reasons of its own: a checksum
+      # error used to surface one command later as "expected ACK, got 0x1a".
+      with contextlib.suppress(Exception):
+        await self._resynchronise("left by a failed exchange")
+      raise
     finally:
       self._port_owner = None
       self._port_free.set()
+
+  async def _resynchronise(self, reason: str) -> None:
+    """Discard what a broken exchange left behind, and say so if it cannot.
+
+    No flag records that the stream needs this. The port is cleaned on the way
+    out of whatever broke it, so the next caller finds it as good as the
+    connection allows; anything that tracked "needs recovery" instead would need
+    something to decide when recovery had happened, and nothing here can know
+    that.
+    """
+    if await self._drain_input(reason=reason):
+      return
+
+    logger.warning(
+      "[PowerWaveX %s] the instrument was still sending after %ds, so the line is "
+      "still out of step - it is probably still running. Call halt() to abort it.",
+      self.port,
+      self._DRAIN_LIMIT_SECONDS,
+    )
 
   def _check_halted(self) -> None:
     """Abandon a read that :meth:`halt` has asked to stop."""
@@ -1661,8 +1731,12 @@ class PowerWaveX:
       f"ending {bytes(buffer[-8:])!r}"
     )
 
-  async def _drain_input(self, reason: str = "left by a previous session") -> None:
+  async def _drain_input(self, reason: str = "left by a previous session") -> bool:
     """Discard anything the instrument is still sending, until the line goes quiet.
+
+    Returns:
+      Whether the line actually fell quiet. ``False`` means it was still talking
+      when :attr:`_DRAIN_LIMIT_SECONDS` ran out, so the stream is still dirty.
 
     A session that was interrupted mid-response - a crashed script, an abandoned
     plate read - leaves the rest of that response in flight. Those bytes would
@@ -1676,7 +1750,7 @@ class PowerWaveX:
     # out: their scripted transport answers a read before any command is sent,
     # whereas a real instrument stays silent until it is asked something.
     if self._DRAIN_QUIET_SECONDS <= 0:
-      return
+      return True
 
     discarded = bytearray()
     deadline = time.monotonic() + self._DRAIN_LIMIT_SECONDS
@@ -1696,6 +1770,8 @@ class PowerWaveX:
         reason,
         bytes(discarded[:64]),
       )
+
+    return time.monotonic() < deadline
 
   async def _raise_read_aborted(self, done: int, total: int) -> None:
     """Explain a read or scan the instrument abandoned, then raise.
