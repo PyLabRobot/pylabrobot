@@ -934,6 +934,15 @@ class PowerWaveX:
 
       The geometry command must precede a scan on any plate that is not the
       standard 96-well, which :meth:`set_plate_geometry` does here.
+
+      A scan and a plate read agree. Scanning three wells of a part-covered
+      carrier spanning most of the usable range, then comparing each against the
+      620 nm plate read of the same wells, gave 0.114 against 0.098, 1.884
+      against 1.873, and 2.230 against 2.209 - within 0.021 OD, from two
+      different instrument operations parsed by two different code paths. Each
+      well's spectrum also fell monotonically from about 580 nm upwards, and the
+      wells saturated in the order their plate readings predicted: none, three
+      and nine wavelengths overrange respectively.
     """
     if (well is None) == (column is None):
       raise ValueError("Give exactly one of well or column")
