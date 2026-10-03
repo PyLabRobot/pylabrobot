@@ -1,9 +1,12 @@
-import asyncio
 import logging
 import statistics
 import time
-from typing import Dict, List, Optional, Union
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.legacy.plate_reading.utils import _get_min_max_row_col_tuples
 from pylabrobot.resources.plate import Plate
@@ -42,6 +45,7 @@ class ExperimentalSparkBackend(PlateReaderBackend):
   """Backend for Tecan Spark plate reader."""
 
   def __init__(self, vid: int = 0x0C47) -> None:
+    super().__init__()
     self.vid = vid
     self.reader = SparkReaderAsync(vid=self.vid)
 
@@ -54,9 +58,11 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     self.sensor_control = SensorControl(self.reader.send_command)
     self.data_control = DataControl(self.reader.send_command)
 
-  async def setup(self) -> None:
-    """Set up the plate reader."""
-    await self.reader.connect()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Enter the reader and initialize the Spark command modules."""
+    await super()._enter_lifespan(stack)
+
+    await stack.enter_async_context(self.reader.lifespan())
     await self.config_control.init_module()
     await self.data_control.turn_all_interval_messages_off()
 
@@ -77,10 +83,6 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       return None
 
     return statistics.mean(temps) / 100.0
-
-  async def stop(self) -> None:
-    """Close connections."""
-    await self.reader.close()
 
   async def open(self) -> None:
     """Move the plate carrier out."""
@@ -121,7 +123,12 @@ class ExperimentalSparkBackend(PlateReaderBackend):
         )
 
   async def _run_measurement(
-    self, device: SparkDevice, plate: Plate, wells: Optional[List[Well]], z: float = 9150
+    self,
+    device: SparkDevice,
+    plate: Plate,
+    wells: Optional[List[Well]],
+    z: float = 9150,
+    cleanup: Optional[Callable[[], Awaitable[None]]] = None,
   ) -> List[bytes]:
     """Execute a measurement: start background read, scan plate, collect results.
 
@@ -133,46 +140,75 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     is stopped causes 15+ second hangs per command.
     """
 
-    bg_task, stop_event, results = await self.reader.start_background_read(device)
-
-    if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError(f"Failed to start background read for {device.name}")
-
-    try:
-      await self.measurement_control.prepare_instrument(measure_reference=True)
-      await self.scan_plate_range(plate, wells, z)
-
-      # The interrupt endpoint is hot right now (just received RespReady for
-      # the SCAN command).  Send cleanup commands NOW, before any idle gap
-      # that would let the endpoint go stale.
-      await self.data_control.turn_all_interval_messages_off()
-      await self.measurement_control.end_measurement()
+    async with self.reader.background_read(device) as results:
+      prepared = False
+      try:
+        await self.measurement_control.prepare_instrument(measure_reference=True)
+        prepared = True
+        await self.scan_plate_range(plate, wells, z)
+      finally:
+        if cleanup is not None:
+          await cleanup()
+        elif prepared:
+          with anyio.CancelScope(shield=True):
+            try:
+              await self.data_control.turn_all_interval_messages_off()
+            finally:
+              await self.measurement_control.end_measurement()
 
       # Smart drain: wait for remaining bulk data packets.
       # Exit early once no new packets arrive for 0.5 s (after a 2 s minimum).
-      drain_start = time.monotonic()
+      drain_start = anyio.current_time()
       last_count = len(results)
-      while time.monotonic() - drain_start < 5.0:
-        await asyncio.sleep(0.5)
+      while anyio.current_time() - drain_start < 5.0:
+        await anyio.sleep(0.5)
         current_count = len(results)
         if current_count > last_count:
           last_count = current_count
-        elif time.monotonic() - drain_start > 2.0:
+        elif anyio.current_time() - drain_start > 2.0:
           break
-    finally:
-      stop_event.set()
-      await bg_task
 
     return results
 
+  @asynccontextmanager
+  async def _measurement_session(
+    self,
+  ) -> AsyncIterator[Tuple[Callable[[], None], Callable[[], Awaitable[None]]]]:
+    """Own cleanup from measurement START commitment through result processing."""
+    started = False
+    cleanup_attempted = False
+
+    def start_committed() -> None:
+      nonlocal started
+      started = True
+
+    async def cleanup() -> None:
+      nonlocal cleanup_attempted
+      with anyio.CancelScope(shield=True):
+        try:
+          await self.data_control.turn_all_interval_messages_off()
+        finally:
+          await self.measurement_control.end_measurement()
+          cleanup_attempted = True
+
+    try:
+      yield start_committed, cleanup
+    finally:
+      if started and not cleanup_attempted:
+        await cleanup()
+
   async def _setup_absorbance(
-    self, wavelength: Union[int, str], bandwidth: int, num_reads: int
+    self,
+    wavelength: Union[int, str],
+    bandwidth: int,
+    num_reads: int,
+    on_start_commit: Callable[[], None],
   ) -> None:
     """Configure the instrument for an absorbance measurement."""
     self.reader.clear_messages()
     await self.data_control.set_interval(InstrumentMessageType.TEMPERATURE, 200)
     await self.measurement_control.set_measurement_mode(MeasurementMode.ABSORBANCE)
-    await self.measurement_control.start_measurement()
+    await self.reader._send_command("MEASUREMENT START", _on_commit=on_start_commit)
     await self.plate_control.set_motor_speed(MovementSpeed.NORMAL)
     await self.measurement_control.set_scan_direction(ScanDirection.UP)
     await self.system_control.set_settle_time(50000)
@@ -188,12 +224,13 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     bandwidth: int,
     num_reads: int,
     gain: int,
+    on_start_commit: Callable[[], None],
   ) -> None:
     """Configure the instrument for a fluorescence measurement."""
     self.reader.clear_messages()
     await self.data_control.set_interval(InstrumentMessageType.TEMPERATURE, 200)
     await self.measurement_control.set_measurement_mode(MeasurementMode.FLUORESCENCE_TOP)
-    await self.measurement_control.start_measurement()
+    await self.reader._send_command("MEASUREMENT START", _on_commit=on_start_commit)
     await self.plate_control.set_motor_speed(MovementSpeed.NORMAL)
 
     await self.system_control.set_integration_time(40)
@@ -234,21 +271,22 @@ class ExperimentalSparkBackend(PlateReaderBackend):
         "ABSORPTION device is not connected. Cannot perform absorbance measurement."
       )
 
-    await self._setup_absorbance(wavelength * 10, bandwidth, num_reads)
-    results = await self._run_measurement(SparkDevice.ABSORPTION, plate, wells)
-    measurement_time = time.time()
+    async with self._measurement_session() as (start_committed, cleanup):
+      await self._setup_absorbance(wavelength * 10, bandwidth, num_reads, start_committed)
+      results = await self._run_measurement(SparkDevice.ABSORPTION, plate, wells, cleanup=cleanup)
+      measurement_time = time.time()
 
-    data_matrix = process_absorbance(results)
-    avg_temp = await self.get_average_temperature()
+      data_matrix = process_absorbance(results)
+      avg_temp = await self.get_average_temperature()
 
-    return [
-      {
-        "wavelength": wavelength,
-        "time": measurement_time,
-        "temperature": avg_temp if avg_temp is not None else 0.0,
-        "data": data_matrix,
-      }
-    ]
+      return [
+        {
+          "wavelength": wavelength,
+          "time": measurement_time,
+          "temperature": avg_temp if avg_temp is not None else 0.0,
+          "data": data_matrix,
+        }
+      ]
 
   async def read_fluorescence(
     self,
@@ -268,24 +306,32 @@ class ExperimentalSparkBackend(PlateReaderBackend):
         "FLUORESCENCE device is not connected. Cannot perform fluorescence measurement."
       )
 
-    await self._setup_fluorescence(
-      excitation_wavelength * 10, emission_wavelength * 10, bandwidth, num_reads, gain
-    )
-    results = await self._run_measurement(SparkDevice.FLUORESCENCE, plate, wells, focal_height)
-    measurement_time = time.time()
+    async with self._measurement_session() as (start_committed, cleanup):
+      await self._setup_fluorescence(
+        excitation_wavelength * 10,
+        emission_wavelength * 10,
+        bandwidth,
+        num_reads,
+        gain,
+        start_committed,
+      )
+      results = await self._run_measurement(
+        SparkDevice.FLUORESCENCE, plate, wells, focal_height, cleanup
+      )
+      measurement_time = time.time()
 
-    data_matrix = process_fluorescence(results)
-    avg_temp = await self.get_average_temperature()
+      data_matrix = process_fluorescence(results)
+      avg_temp = await self.get_average_temperature()
 
-    return [
-      {
-        "ex_wavelength": excitation_wavelength,
-        "em_wavelength": emission_wavelength,
-        "time": measurement_time,
-        "temperature": avg_temp if avg_temp is not None else 0.0,
-        "data": data_matrix,
-      }
-    ]
+      return [
+        {
+          "ex_wavelength": excitation_wavelength,
+          "em_wavelength": emission_wavelength,
+          "time": measurement_time,
+          "temperature": avg_temp if avg_temp is not None else 0.0,
+          "data": data_matrix,
+        }
+      ]
 
   async def experimental_read_absorbance_spectrum(
     self,
@@ -330,22 +376,23 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     # Firmware range syntax: FROM~TO:STEP in deci-tenths of nm
     wavelength_range = f"{wavelength_start * 10}~{wavelength_end * 10}:{wavelength_step * 10}"
 
-    await self._setup_absorbance(wavelength_range, bandwidth, num_reads)
-    results = await self._run_measurement(SparkDevice.ABSORPTION, plate, wells)
-    measurement_time = time.time()
+    async with self._measurement_session() as (start_committed, cleanup):
+      await self._setup_absorbance(wavelength_range, bandwidth, num_reads, start_committed)
+      results = await self._run_measurement(SparkDevice.ABSORPTION, plate, wells, cleanup=cleanup)
+      measurement_time = time.time()
 
-    spectrum_data = process_absorbance_spectrum(results)
-    avg_temp = await self.get_average_temperature()
+      spectrum_data = process_absorbance_spectrum(results)
+      avg_temp = await self.get_average_temperature()
 
-    return [
-      {
-        "wavelength": wl,
-        "time": measurement_time,
-        "temperature": avg_temp if avg_temp is not None else 0.0,
-        "data": data_matrix,
-      }
-      for wl, data_matrix in sorted(spectrum_data.items())
-    ]
+      return [
+        {
+          "wavelength": wl,
+          "time": measurement_time,
+          "temperature": avg_temp if avg_temp is not None else 0.0,
+          "data": data_matrix,
+        }
+        for wl, data_matrix in sorted(spectrum_data.items())
+      ]
 
   async def experimental_read_fluorescence_excitation_spectrum(
     self,
@@ -399,23 +446,28 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       f"{excitation_wavelength_end * 10}:{excitation_wavelength_step * 10}"
     )
 
-    await self._setup_fluorescence(ex_range, emission_wavelength * 10, bandwidth, num_reads, gain)
-    results = await self._run_measurement(SparkDevice.FLUORESCENCE, plate, wells, focal_height)
-    measurement_time = time.time()
+    async with self._measurement_session() as (start_committed, cleanup):
+      await self._setup_fluorescence(
+        ex_range, emission_wavelength * 10, bandwidth, num_reads, gain, start_committed
+      )
+      results = await self._run_measurement(
+        SparkDevice.FLUORESCENCE, plate, wells, focal_height, cleanup
+      )
+      measurement_time = time.time()
 
-    spectrum_data = process_fluorescence_spectrum(results)
-    avg_temp = await self.get_average_temperature()
+      spectrum_data = process_fluorescence_spectrum(results)
+      avg_temp = await self.get_average_temperature()
 
-    return [
-      {
-        "ex_wavelength": ex_wl,
-        "em_wavelength": emission_wavelength,
-        "time": measurement_time,
-        "temperature": avg_temp if avg_temp is not None else 0.0,
-        "data": data_matrix,
-      }
-      for ex_wl, data_matrix in sorted(spectrum_data.items())
-    ]
+      return [
+        {
+          "ex_wavelength": ex_wl,
+          "em_wavelength": emission_wavelength,
+          "time": measurement_time,
+          "temperature": avg_temp if avg_temp is not None else 0.0,
+          "data": data_matrix,
+        }
+        for ex_wl, data_matrix in sorted(spectrum_data.items())
+      ]
 
   async def experimental_read_fluorescence_emission_spectrum(
     self,
@@ -469,23 +521,28 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       f"{emission_wavelength_end * 10}:{emission_wavelength_step * 10}"
     )
 
-    await self._setup_fluorescence(excitation_wavelength * 10, em_range, bandwidth, num_reads, gain)
-    results = await self._run_measurement(SparkDevice.FLUORESCENCE, plate, wells, focal_height)
-    measurement_time = time.time()
+    async with self._measurement_session() as (start_committed, cleanup):
+      await self._setup_fluorescence(
+        excitation_wavelength * 10, em_range, bandwidth, num_reads, gain, start_committed
+      )
+      results = await self._run_measurement(
+        SparkDevice.FLUORESCENCE, plate, wells, focal_height, cleanup
+      )
+      measurement_time = time.time()
 
-    spectrum_data = process_fluorescence_spectrum(results)
-    avg_temp = await self.get_average_temperature()
+      spectrum_data = process_fluorescence_spectrum(results)
+      avg_temp = await self.get_average_temperature()
 
-    return [
-      {
-        "ex_wavelength": excitation_wavelength,
-        "em_wavelength": em_wl,
-        "time": measurement_time,
-        "temperature": avg_temp if avg_temp is not None else 0.0,
-        "data": data_matrix,
-      }
-      for em_wl, data_matrix in sorted(spectrum_data.items())
-    ]
+      return [
+        {
+          "ex_wavelength": excitation_wavelength,
+          "em_wavelength": em_wl,
+          "time": measurement_time,
+          "temperature": avg_temp if avg_temp is not None else 0.0,
+          "data": data_matrix,
+        }
+        for em_wl, data_matrix in sorted(spectrum_data.items())
+      ]
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float

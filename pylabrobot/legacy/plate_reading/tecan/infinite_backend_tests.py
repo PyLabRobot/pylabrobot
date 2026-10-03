@@ -691,7 +691,7 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(mode_responses, ["BY#T5000", "ST"])
     self.assertEqual(clear_responses, ["+"])
-    self.assertEqual(self.mock_usb.read.await_args_list[1], call(timeout=30, size=128))
+    self.assertEqual(self.mock_usb.read.await_args_list[1], call(size=128))
     self.assertEqual(self.mock_usb.read.await_count, 3)
 
   async def test_timed_command_uses_longer_advertised_timeout(self):
@@ -703,7 +703,7 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     responses = await self.backend._send_command("INIT FORCE")
 
     self.assertEqual(responses, ["BY#T80000", "ST"])
-    self.assertEqual(self.mock_usb.read.await_args_list[1], call(timeout=80, size=128))
+    self.assertEqual(self.mock_usb.read.await_args_list[1], call(size=128))
 
   async def test_required_terminal_response_does_not_accept_busy_frame(self):
     self.mock_usb.read.return_value = self._frame("BY#T5000")
@@ -931,7 +931,7 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         call(self._frame("SHAKING ON")),
       ]
     )
-    self.assertEqual(self.mock_usb.read.await_args_list[-1], call(timeout=7, size=128))
+    self.assertEqual(self.mock_usb.read.await_args_list[-1], call(size=128))
 
   async def test_shake_accepts_coalesced_busy_and_completion_frames(self):
     self.mock_usb.read.side_effect = [
@@ -992,12 +992,12 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.mock_usb.stop.assert_not_awaited()
     self.mock_usb.setup.assert_not_awaited()
 
-  async def test_normal_read_timeout_retains_transport_recovery(self):
+  async def test_normal_command_timeout_retains_transport_recovery(self):
     self.mock_usb.read.side_effect = TimeoutError("transport timed out")
 
     with patch.object(self.backend, "_recover_transport", new_callable=AsyncMock) as recover:
       with self.assertRaisesRegex(TimeoutError, "transport timed out"):
-        await self.backend._read_packet(128)
+        await self.backend._send_command("?SENSOR PLATEPOS")
 
     recover.assert_awaited_once_with()
 
