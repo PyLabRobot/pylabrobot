@@ -1,7 +1,8 @@
 import logging
 import math
-import time
 from typing import Any, Awaitable, Callable, Coroutine, Dict, Literal, Optional, Tuple, Union, cast
+
+import anyio
 
 from pylabrobot.events import event_operation, is_event_bus_active, resource_reference
 from pylabrobot.legacy.machines import Machine, need_setup_finished
@@ -118,19 +119,25 @@ async def _golden_ratio_search(
       cache[x] = await func(x)
     return cache[x]
 
-  t0 = time.time()
   iteration = 0
-  while abs(b - a) > tol:
-    if (await cached_func(c)) > (await cached_func(d)):
-      b = d
-    else:
-      a = c
-    c = b - (b - a) / phi
-    d = a + (b - a) / phi
-    if time.time() - t0 > timeout:
-      raise TimeoutError("Timeout while searching for optimal focus position")
-    iteration += 1
-    logger.debug("Golden ratio search (autofocus) iteration %d, a=%s, b=%s", iteration, a, b)
+  with anyio.move_on_after(timeout if timeout > 0 else math.inf) as scope:
+    while abs(b - a) > tol:
+      c_value = await cached_func(c)
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      if c_value > (await cached_func(d)):
+        b = d
+      else:
+        a = c
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      c = b - (b - a) / phi
+      d = a + (b - a) / phi
+      if timeout <= 0:
+        raise TimeoutError("Timeout while searching for optimal focus position")
+      iteration += 1
+      logger.debug("Golden ratio search (autofocus) iteration %d, a=%s, b=%s", iteration, a, b)
+
+  if scope.cancel_called:
+    raise TimeoutError("Timeout while searching for optimal focus position")
 
   return (b + a) / 2
 

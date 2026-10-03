@@ -1,20 +1,17 @@
-# mypy: disable-error-code="union-attr,assignment,arg-type,attr-defined"
+# mypy: disable-error-code="assignment,arg-type,attr-defined"
 """Mock FTDI IO for EL406 testing."""
 
-import asyncio
 import unittest
-from unittest.mock import patch
+from typing import Any
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.legacy.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.resources import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well
-
-_real_sleep = asyncio.sleep
-
-
-async def _noop(*a, **kw):
-  await _real_sleep(0)
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 def _make_plate(name: str, num_wells: int, size_z: float = 14.0) -> Plate:
@@ -51,30 +48,56 @@ PT1536 = _make_plate("test_1536", 1536)
 PT1536F = _make_plate("test_1536_flange", 1536, size_z=10.0)
 
 
-class EL406TestCase(unittest.IsolatedAsyncioTestCase):
-  """Base test case with mock FTDI IO and patched asyncio.sleep."""
+class EL406TestCase(AnyioTestBase):
+  """Base test case with a lifespan-owned software FTDI transport."""
 
-  async def asyncSetUp(self):
-    self._sleep_patcher = patch("asyncio.sleep", side_effect=_noop)
-    self._sleep_patcher.start()
+  def assertEqual(self, first: Any, second: Any, msg: str | None = None) -> None:
+    unittest.TestCase().assertEqual(first, second, msg)
+
+  def assertTrue(self, expression: Any, msg: str | None = None) -> None:
+    unittest.TestCase().assertTrue(expression, msg)
+
+  def assertFalse(self, expression: Any, msg: str | None = None) -> None:
+    unittest.TestCase().assertFalse(expression, msg)
+
+  def assertGreater(self, first: Any, second: Any, msg: str | None = None) -> None:
+    unittest.TestCase().assertGreater(first, second, msg)
+
+  def assertIn(self, member: Any, container: Any, msg: str | None = None) -> None:
+    unittest.TestCase().assertIn(member, container, msg)
+
+  def assertIs(self, first: Any, second: Any, msg: str | None = None) -> None:
+    unittest.TestCase().assertIs(first, second, msg)
+
+  def assertIsNone(self, value: Any, msg: str | None = None) -> None:
+    unittest.TestCase().assertIsNone(value, msg)
+
+  def assertIsInstance(self, obj: Any, cls: Any, msg: str | None = None) -> None:
+    unittest.TestCase().assertIsInstance(obj, cls, msg)
+
+  def assertRaises(self, exception: type[BaseException]) -> Any:
+    return unittest.TestCase().assertRaises(exception)
+
+  def subTest(self, **params: Any) -> Any:
+    return unittest.TestCase().subTest(**params)
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
     self.backend = ExperimentalBioTekEL406Backend()
     self.backend.io = MockFTDI()
-    await self.backend.setup()
-    self.backend.io.set_read_buffer(b"\x06" * 500)
-
-  async def asyncTearDown(self):
-    if self.backend.io is not None:
-      self.backend.io.set_read_buffer(b"\x06" * 500)
-      await self.backend.stop()
-    self._sleep_patcher.stop()
+    await stack.enter_async_context(self.backend.lifespan(skip_reset=True))
+    io = self.backend.io
+    assert isinstance(io, MockFTDI)
+    io.set_read_buffer(b"\x06" * 500)
 
 
-class MockFTDI:
+class MockFTDI(HasLifespan):
   """Mock FTDI IO wrapper for testing without hardware."""
 
   ACK = b"\x06"
 
   def __init__(self):
+    super().__init__()
     self.written_data: list = []
     self.read_buffer: bytes = self._default_response_buffer()
 
@@ -85,17 +108,17 @@ class MockFTDI:
     single_response = b"\x06" + header
     return single_response * 200
 
-  async def setup(self):
-    pass
-
-  async def stop(self):
-    pass
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("MockFTDI does not accept lifespan options")
 
   async def write(self, data: bytes) -> int:
     self.written_data.append(data)
     return len(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
+    while not self.read_buffer:
+      await anyio.sleep(0.001)
     result = self.read_buffer[:num_bytes]
     self.read_buffer = self.read_buffer[num_bytes:]
     return result

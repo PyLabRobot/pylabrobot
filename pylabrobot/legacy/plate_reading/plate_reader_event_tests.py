@@ -3,11 +3,15 @@ import unittest
 from typing import Any, Dict, List, Optional
 from unittest.mock import patch
 
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.legacy.plate_reading.plate_reader import PlateReader
 from pylabrobot.resources import Coordinate, Plate, Well
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class _RecordingPlateReaderBackend(PlateReaderBackend):
@@ -23,11 +27,12 @@ class _RecordingPlateReaderBackend(PlateReaderBackend):
     if self.failure is not None:
       raise self.failure
 
-  async def setup(self) -> None:
-    pass
+  async def _cleanup(self) -> None:
+    """Release the resource-free recording backend."""
 
-  async def stop(self) -> None:
-    pass
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Own the recorder for the duration of the frontend lifespan."""
+    stack.push_shielded_async_callback(self._cleanup)
 
   async def open(self, **backend_kwargs: Any) -> None:
     self._record("open", backend_kwargs=backend_kwargs)
@@ -88,6 +93,31 @@ class _RecordingPlateReaderBackend(PlateReaderBackend):
     return self.records
 
 
+class TestPlateReaderScopedEvents(AnyioTestBase):
+  async def test_body_failure_exits_reader_without_replacing_error(self) -> None:
+    backend = _RecordingPlateReaderBackend()
+    reader = PlateReader(name="reader", size_x=1, size_y=1, size_z=1, backend=backend)
+    error = RuntimeError("body failed")
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      with pytest.raises(RuntimeError) as raised:
+        async with reader:
+          assert backend.is_active
+          raise error
+
+    assert raised.value is error
+    assert not backend.is_active
+    assert [event.name for event in events] == [
+      "machine.setup.started",
+      "machine.setup.completed",
+      "machine.stop.started",
+      "machine.stop.completed",
+    ]
+
+
 class PlateReaderEventTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self) -> None:
     self.backend = _RecordingPlateReaderBackend()
@@ -100,7 +130,7 @@ class PlateReaderEventTests(unittest.IsolatedAsyncioTestCase):
     )
     self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.reader.assign_child_resource(self.plate, location=Coordinate.zero())
-    await self.reader.setup()
+    await self.enterAsyncContext(self.reader)
 
   @staticmethod
   def _assert_correlated_pairs(events: list[PLREvent]) -> None:

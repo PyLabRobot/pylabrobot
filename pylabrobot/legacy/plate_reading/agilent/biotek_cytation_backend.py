@@ -1,13 +1,16 @@
-import asyncio
-import atexit
 import logging
 import math
 import re
+import threading
 import time
 import warnings
+from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Any, AsyncIterator, List, Literal, Optional, Tuple, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 from pylabrobot.legacy.plate_reading.backend import ImagerBackend
 from pylabrobot.resources import Plate
@@ -101,43 +104,48 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     self._pos_y: Optional[float] = None
     self._objective: Optional[Objective] = None
     self._acquiring = False
+    self._acquisition_state_unknown = False
+    self._acquisition_lock = threading.Lock()
+    self._acquisition_scope_token: Optional[object] = None
 
-  async def setup(self, use_cam: bool = False) -> None:
-    logger.info(f"{self.__class__.__name__} setting up")
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    use_cam: bool = False,
+  ) -> None:
+    """Own the BioTek transport and optional synchronous PySpin resources."""
+    await super()._enter_lifespan(stack)
+    if not use_cam:
+      return
 
-    await super().setup()
+    system, cam = await anyio.to_thread.run_sync(self._set_up_camera_sync, abandon_on_cancel=False)
+    self._spinnaker_system = system
+    self._cam = cam
+    stack.callback(self._clear_camera_resources)
+    stack.push_shielded_async_callback(self._stop_camera_worker, cam, system)
+    await anyio.lowlevel.checkpoint()
 
-    if use_cam:
-      try:
-        await self._set_up_camera()
-      except:
-        # if setting up the camera fails, we have to close the ftdi connection
-        # so that the user can try calling setup() again.
-        # if we don't close the ftdi connection here, it will be open until the
-        # python kernel is restarted.
-        try:
-          await self.stop()
-        except Exception:
-          pass
-        raise
+    if self._filters is None:
+      await self._load_filters()
+    if self._objectives is None:
+      await self._load_objectives()
 
-  async def stop(self):
-    await super().stop()
-
-    if self._acquiring:
-      self.stop_acquisition()
-
-    logger.info(f"{self.__class__.__name__} stopping")
-    await self.stop_shaking()
-    await self.io.stop()
-
-    self._stop_camera()
-
+  def _clear_camera_resources(self) -> None:
+    """Unpublish camera and imaging state after synchronous teardown."""
+    self._spinnaker_system = None
+    self._cam = None
+    self._acquiring = False
+    self._acquisition_state_unknown = False
+    self._acquisition_scope_token = None
     self._objectives = None
     self._filters = None
     self._slow_mode = None
-
     self._clear_imaging_state()
+
+  async def _stop_camera_worker(self, cam: Any, system: Any) -> None:
+    """Finish synchronous PySpin teardown without abandoning its worker."""
+    await anyio.to_thread.run_sync(self._stop_camera_sync, cam, system, abandon_on_cancel=False)
 
   def _clear_imaging_state(self):
     self._exposure = None
@@ -157,9 +165,8 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
   def supports_cooling(self):
     return True
 
-  async def _set_up_camera(self) -> None:
-    atexit.register(self._stop_camera)
-
+  def _set_up_camera_sync(self) -> Tuple[Any, Any]:
+    """Acquire and configure PySpin resources synchronously."""
     if not USE_PYSPIN:
       raise RuntimeError(
         "PySpin is not installed. Please follow the imaging setup instructions. "
@@ -171,107 +178,110 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     logger.debug(f"{self.__class__.__name__} setting up camera")
 
     # -- Retrieve singleton reference to system object (Spinnaker) --
-    self._spinnaker_system = PySpin.System.GetInstance()
-    version = self._spinnaker_system.GetLibraryVersion()
-    logger.debug(
-      f"{self.__class__.__name__} Library version: %d.%d.%d.%d",
-      version.major,
-      version.minor,
-      version.type,
-      version.build,
-    )
-
-    # -- Get the camera by serial number, or the first. --
-    cam_list = self._spinnaker_system.GetCameras()
-    num_cameras = cam_list.GetSize()
-    logger.debug(f"{self.__class__.__name__} number of cameras detected: %d", num_cameras)
-
-    for cam in cam_list:
-      info = self._get_device_info(cam)
-      serial_number = info["DeviceSerialNumber"]
-      logger.debug(f"{self.__class__.__name__} camera detected: %s", serial_number)
-
-      if (
-        self.imaging_config.camera_serial_number is not None
-        and serial_number == self.imaging_config.camera_serial_number
-      ):
-        self._cam = cam
-        logger.info(f"{self.__class__.__name__} using camera with serial number %s", serial_number)
-        break
-    else:  # if no specific camera was found by serial number so use the first one
-      if num_cameras > 0:
-        self._cam = cam_list.GetByIndex(0)
-        logger.info(
-          f"{self.__class__.__name__} using first camera with serial number %s",
-          info["DeviceSerialNumber"],
-        )
-      else:
-        logger.error(f"{self.__class__.__name__}: No cameras found")
-        self._cam = None
-    cam_list.Clear()
-
-    if self._cam is None:
-      raise RuntimeError(
-        f"{self.__class__.__name__}: No camera found. Make sure the camera is connected and the serial "
-        "number is correct."
+    system = PySpin.System.GetInstance()
+    cam = None
+    initialized = False
+    try:
+      version = system.GetLibraryVersion()
+      logger.debug(
+        f"{self.__class__.__name__} Library version: %d.%d.%d.%d",
+        version.major,
+        version.minor,
+        version.type,
+        version.build,
       )
 
-    # -- Initialize camera --
-    for _ in range(10):
+      # -- Get the camera by serial number, or the first. --
+      cam_list = system.GetCameras()
       try:
-        self._cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
-        break
-      except:  # noqa
-        await asyncio.sleep(0.1)
-        pass
-    else:
-      raise RuntimeError(
-        "Failed to initialize camera. Make sure the camera is connected and the "
-        "Spinnaker SDK is installed correctly."
-      )
-    nodemap = self._cam.GetNodeMap()
+        num_cameras = cam_list.GetSize()
+        logger.debug(f"{self.__class__.__name__} number of cameras detected: %d", num_cameras)
 
-    # -- Configure trigger to be software --
-    # This is needed for longer exposure times (otherwise 27.8ms is the maximum)
-    # 1. Set trigger selector to frame start
-    ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
-    if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
-      raise RuntimeError(
-        "unable to configure TriggerSelector (can't read or write TriggerSelector)"
-      )
-    ptr_frame_start = PySpin.CEnumEntryPtr(ptr_trigger_selector.GetEntryByName("FrameStart"))
-    if not PySpin.IsReadable(ptr_frame_start):
-      raise RuntimeError("unable to configure TriggerSelector (can't read FrameStart)")
-    ptr_trigger_selector.SetIntValue(int(ptr_frame_start.GetNumericValue()))
+        info = None
+        for candidate in cam_list:
+          info = self._get_device_info(candidate)
+          serial_number = info["DeviceSerialNumber"]
+          logger.debug(f"{self.__class__.__name__} camera detected: %s", serial_number)
+          if (
+            self.imaging_config.camera_serial_number is not None
+            and serial_number == self.imaging_config.camera_serial_number
+          ):
+            cam = candidate
+            logger.info(
+              f"{self.__class__.__name__} using camera with serial number %s", serial_number
+            )
+            break
+        else:
+          if num_cameras > 0:
+            cam = cam_list.GetByIndex(0)
+            logger.info(f"{self.__class__.__name__} using first available camera")
+          else:
+            logger.error(f"{self.__class__.__name__}: No cameras found")
+      finally:
+        cam_list.Clear()
 
-    # 2. Set trigger source to software
-    ptr_trigger_source = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSource"))
-    if not PySpin.IsReadable(ptr_trigger_source) or not PySpin.IsWritable(ptr_trigger_source):
-      raise RuntimeError("unable to configure TriggerSource (can't read or write TriggerSource)")
-    ptr_inference_ready = PySpin.CEnumEntryPtr(ptr_trigger_source.GetEntryByName("Software"))
-    if not PySpin.IsReadable(ptr_inference_ready):
-      raise RuntimeError("unable to configure TriggerSource (can't read Software)")
-    ptr_trigger_source.SetIntValue(int(ptr_inference_ready.GetNumericValue()))
+      if cam is None:
+        raise RuntimeError(
+          f"{self.__class__.__name__}: No camera found. Make sure the camera is connected and the "
+          "serial number is correct."
+        )
 
-    # 3. Set trigger mode to on
-    ptr_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
-    if not PySpin.IsReadable(ptr_trigger_mode) or not PySpin.IsWritable(ptr_trigger_mode):
-      raise RuntimeError("unable to configure TriggerMode (can't read or write TriggerMode)")
-    ptr_trigger_on = PySpin.CEnumEntryPtr(ptr_trigger_mode.GetEntryByName("On"))
-    if not PySpin.IsReadable(ptr_trigger_on):
-      raise RuntimeError("unable to query TriggerMode On")
-    ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
+      for _ in range(10):
+        try:
+          cam.Init()
+          initialized = True
+          break
+        except Exception:  # noqa: BLE001
+          time.sleep(0.1)
+      else:
+        raise RuntimeError(
+          "Failed to initialize camera. Make sure the camera is connected and the "
+          "Spinnaker SDK is installed correctly."
+        )
+      nodemap = cam.GetNodeMap()
 
-    # "NOTE: Blackfly and Flea3 GEV cameras need 1 second delay after trigger mode is turned on"
-    await asyncio.sleep(1)
+      # -- Configure trigger to be software --
+      # This is needed for longer exposure times (otherwise 27.8ms is the maximum)
+      # 1. Set trigger selector to frame start
+      ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
+      if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
+        raise RuntimeError(
+          "unable to configure TriggerSelector (can't read or write TriggerSelector)"
+        )
+      ptr_frame_start = PySpin.CEnumEntryPtr(ptr_trigger_selector.GetEntryByName("FrameStart"))
+      if not PySpin.IsReadable(ptr_frame_start):
+        raise RuntimeError("unable to configure TriggerSelector (can't read FrameStart)")
+      ptr_trigger_selector.SetIntValue(int(ptr_frame_start.GetNumericValue()))
 
-    # -- Load filter information --
-    if self._filters is None:
-      await self._load_filters()
+      # 2. Set trigger source to software
+      ptr_trigger_source = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSource"))
+      if not PySpin.IsReadable(ptr_trigger_source) or not PySpin.IsWritable(ptr_trigger_source):
+        raise RuntimeError("unable to configure TriggerSource (can't read or write TriggerSource)")
+      ptr_inference_ready = PySpin.CEnumEntryPtr(ptr_trigger_source.GetEntryByName("Software"))
+      if not PySpin.IsReadable(ptr_inference_ready):
+        raise RuntimeError("unable to configure TriggerSource (can't read Software)")
+      ptr_trigger_source.SetIntValue(int(ptr_inference_ready.GetNumericValue()))
 
-    # -- Load objective information --
-    if self._objectives is None:
-      await self._load_objectives()
+      # 3. Set trigger mode to on
+      ptr_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
+      if not PySpin.IsReadable(ptr_trigger_mode) or not PySpin.IsWritable(ptr_trigger_mode):
+        raise RuntimeError("unable to configure TriggerMode (can't read or write TriggerMode)")
+      ptr_trigger_on = PySpin.CEnumEntryPtr(ptr_trigger_mode.GetEntryByName("On"))
+      if not PySpin.IsReadable(ptr_trigger_on):
+        raise RuntimeError("unable to query TriggerMode On")
+      ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
+
+      # "NOTE: Blackfly and Flea3 GEV cameras need 1 second delay after trigger mode is turned on"
+      time.sleep(1)
+      return system, cam
+    except BaseException:
+      if cam is not None and initialized:
+        try:
+          cam.DeInit()
+        except Exception:
+          pass
+      system.ReleaseInstance()
+      raise
 
   @property
   def objectives(self) -> List[Optional[Objective]]:
@@ -422,25 +432,29 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     else:
       raise RuntimeError(f"{self.__class__.__name__}: Unsupported version: {self.version}")
 
-  def _stop_camera(self) -> None:
-    if self._cam is not None:
-      if self._acquiring:
-        self.stop_acquisition()
+  def _stop_camera_sync(self, cam: Any, system: Any) -> None:
+    """Stop and release captured PySpin resources synchronously."""
+    with ExitStack() as stack:
+      if system is not None:
+        stack.callback(system.ReleaseInstance)
+      if cam is None:
+        return
+      stack.callback(cam.DeInit)
+      self._force_stop_acquisition_sync()
 
-      self._reset_trigger()
-
-      self._cam.DeInit()
-      self._cam = None
-    if self._spinnaker_system is not None:
-      self._spinnaker_system.ReleaseInstance()
+      self._reset_camera_trigger(cam)
 
   def _reset_trigger(self):
     if self._cam is None:
       return
+    self._reset_camera_trigger(self._cam)
+
+  def _reset_camera_trigger(self, cam: Any) -> None:
+    """Reset trigger mode on one captured camera handle."""
 
     # adopted from example
     try:
-      nodemap = self._cam.GetNodeMap()
+      nodemap = cam.GetNodeMap()
       node_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
       if not PySpin.IsReadable(node_trigger_mode) or not PySpin.IsWritable(node_trigger_mode):
         return
@@ -506,20 +520,118 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     self._clear_imaging_state()
 
   def start_acquisition(self):
-    if self._cam is None:
-      raise RuntimeError(f"{self.__class__.__name__}: Camera is not initialized.")
-    if self._acquiring:
-      return
-    retry(self._cam.BeginAcquisition)
-    self._acquiring = True
+    with self._acquisition_lock:
+      if self._acquisition_scope_token is not None:
+        raise RuntimeError("Cannot start acquisition while an acquisition scope is active")
+      try:
+        self._start_acquisition_sync()
+      except BaseException:
+        self._stop_acquisition_sync()
+        raise
 
   def stop_acquisition(self):
+    with self._acquisition_lock:
+      if self._acquisition_scope_token is not None:
+        raise RuntimeError("Cannot stop acquisition while an acquisition scope is active")
+      self._stop_acquisition_sync()
+
+  def _restart_acquisition_sync(self) -> None:
+    """Restart acquisition as one complete synchronous transition."""
+    with self._acquisition_lock:
+      self._stop_acquisition_sync()
+      try:
+        self._start_acquisition_sync()
+      except BaseException:
+        self._stop_acquisition_sync()
+        raise
+
+  def _get_exposure_ms_sync(self) -> float:
+    """Read the current exposure while owning the synchronous transition lock."""
+    with self._acquisition_lock:
+      assert self._cam is not None
+      return float(self._cam.ExposureTime.GetValue()) / 1000
+
+  def _start_acquisition_sync(self) -> None:
+    """Start acquisition while the caller owns the synchronous transition lock."""
     if self._cam is None:
       raise RuntimeError(f"{self.__class__.__name__}: Camera is not initialized.")
-    if not self._acquiring:
+    if self._acquisition_state_unknown:
+      raise RuntimeError("Camera acquisition state is unknown; stop acquisition before starting")
+    if self._acquiring:
       return
+    self._acquisition_state_unknown = True
+    retry(self._cam.BeginAcquisition)
+    self._acquiring = True
+    self._acquisition_state_unknown = False
+
+  def _stop_acquisition_sync(self) -> None:
+    """Stop acquisition while the caller owns the synchronous transition lock."""
+    if self._cam is None:
+      raise RuntimeError(f"{self.__class__.__name__}: Camera is not initialized.")
+    if not (self._acquiring or self._acquisition_state_unknown):
+      return
+    self._acquisition_state_unknown = True
     retry(self._cam.EndAcquisition)
     self._acquiring = False
+    self._acquisition_state_unknown = False
+
+  async def _acquire_acquisition_lock(self) -> None:
+    """Acquire the synchronous transition lock without shielding cancellation."""
+    while not self._acquisition_lock.acquire(blocking=False):
+      await anyio.sleep(0.01)
+
+  async def _enter_acquisition_scope(self, token: object) -> None:
+    """Admit and begin one scope without shielding pre-mutation waiting."""
+    await self._acquire_acquisition_lock()
+    try:
+      if not self.is_active or self._cam is None:
+        raise RuntimeError("Acquisition requires an active configured camera")
+      if self._acquisition_scope_token is not None:
+        raise RuntimeError("Acquisition is already scoped")
+      if self._acquiring or self._acquisition_state_unknown:
+        raise RuntimeError("Acquisition is already active or its state is unknown")
+      await anyio.lowlevel.checkpoint()
+      try:
+        await anyio.to_thread.run_sync(self._start_acquisition_sync, abandon_on_cancel=False)
+      except BaseException:
+        if self._acquiring or self._acquisition_state_unknown:
+          with anyio.CancelScope(shield=True):
+            await anyio.to_thread.run_sync(self._stop_acquisition_sync, abandon_on_cancel=False)
+        raise
+      self._acquisition_scope_token = token
+    finally:
+      self._acquisition_lock.release()
+
+  def _exit_acquisition_scope_sync(self, token: object) -> None:
+    """End one scope as a complete locked worker transition."""
+    with self._acquisition_lock:
+      if self._acquisition_scope_token is token:
+        try:
+          self._stop_acquisition_sync()
+        finally:
+          self._acquisition_scope_token = None
+
+  def _force_stop_acquisition_sync(self) -> None:
+    """Stop tracked acquisition for parent cleanup and invalidate scope ownership."""
+    with self._acquisition_lock:
+      try:
+        self._stop_acquisition_sync()
+      finally:
+        self._acquisition_scope_token = None
+
+  @asynccontextmanager
+  async def acquisition(self) -> AsyncIterator[None]:
+    """Own PySpin acquisition for the lifetime of this context."""
+    token = object()
+    await self._enter_acquisition_scope(token)
+    try:
+      await anyio.lowlevel.checkpoint()
+      yield
+    finally:
+      with anyio.CancelScope(shield=True):
+        await anyio.to_thread.run_sync(
+          self._exit_acquisition_scope_sync, token, abandon_on_cancel=False
+        )
 
   async def led_on(self, intensity: int = 10):
     if not 1 <= intensity <= 10:
@@ -601,23 +713,26 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
       await self.send_command("Y", f"O01{relative_y_str}")
 
     self._pos_x, self._pos_y = x, y
-    await asyncio.sleep(0.1)
+    await anyio.sleep(0.1)
 
   async def set_auto_exposure(self, auto_exposure: Literal["off", "once", "continuous"]):
     if self._cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
-    if self._cam.ExposureAuto.GetAccessMode() != PySpin.RW:
-      raise RuntimeError("unable to write ExposureAuto")
+    value = {
+      "off": PySpin.ExposureAuto_Off,
+      "once": PySpin.ExposureAuto_Once,
+      "continuous": PySpin.ExposureAuto_Continuous,
+    }[auto_exposure]
+    await anyio.to_thread.run_sync(self._set_auto_exposure_sync, value, abandon_on_cancel=False)
 
-    retry(
-      self._cam.ExposureAuto.SetValue,
-      {
-        "off": PySpin.ExposureAuto_Off,
-        "once": PySpin.ExposureAuto_Once,
-        "continuous": PySpin.ExposureAuto_Continuous,
-      }[auto_exposure],
-    )
+  def _set_auto_exposure_sync(self, value: int) -> None:
+    """Set automatic exposure through one locked PySpin transaction."""
+    with self._acquisition_lock:
+      assert self._cam is not None
+      if self._cam.ExposureAuto.GetAccessMode() != PySpin.RW:
+        raise RuntimeError("unable to write ExposureAuto")
+      retry(self._cam.ExposureAuto.SetValue, value)
 
   async def set_exposure(self, exposure: Exposure):
     """exposure (integration time) in ms, or "machine-auto" """
@@ -636,20 +751,25 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
         self._exposure = "machine-auto"
         return
       raise ValueError("exposure must be a number or 'auto'")
-    retry(self._cam.ExposureAuto.SetValue, PySpin.ExposureAuto_Off)
-
-    # set exposure time (in microseconds)
-    if self._cam.ExposureTime.GetAccessMode() != PySpin.RW:
-      raise RuntimeError("unable to write ExposureTime")
-    exposure_us = int(exposure * 1000)
-    min_et = retry(self._cam.ExposureTime.GetMin)
-    if exposure_us < min_et:
-      raise ValueError(f"exposure must be >= {min_et}")
-    max_et = retry(self._cam.ExposureTime.GetMax)
-    if exposure_us > max_et:
-      raise ValueError(f"exposure must be <= {max_et}")
-    retry(self._cam.ExposureTime.SetValue, exposure_us)
+    await anyio.to_thread.run_sync(
+      self._set_exposure_sync, int(exposure * 1000), abandon_on_cancel=False
+    )
     self._exposure = exposure
+
+  def _set_exposure_sync(self, exposure_us: int) -> None:
+    """Set manual exposure through one locked PySpin transaction."""
+    with self._acquisition_lock:
+      assert self._cam is not None
+      retry(self._cam.ExposureAuto.SetValue, PySpin.ExposureAuto_Off)
+      if self._cam.ExposureTime.GetAccessMode() != PySpin.RW:
+        raise RuntimeError("unable to write ExposureTime")
+      min_et = retry(self._cam.ExposureTime.GetMin)
+      if exposure_us < min_et:
+        raise ValueError(f"exposure must be >= {min_et}")
+      max_et = retry(self._cam.ExposureTime.GetMax)
+      if exposure_us > max_et:
+        raise ValueError(f"exposure must be <= {max_et}")
+      retry(self._cam.ExposureTime.SetValue, exposure_us)
 
   async def select(self, row: int, column: int):
     if row == self._row and column == self._column:
@@ -673,38 +793,41 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     if not (gain == "machine-auto" or 0 <= gain <= 30):
       raise ValueError("gain must be between 0 and 30 (inclusive), or 'auto'")
 
-    nodemap = self._cam.GetNodeMap()
-
-    # set/disable automatic gain
-    node_gain_auto = PySpin.CEnumerationPtr(nodemap.GetNode("GainAuto"))
-    if not PySpin.IsReadable(node_gain_auto) or not PySpin.IsWritable(node_gain_auto):
-      raise RuntimeError("unable to set automatic gain")
-    node = (
-      PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Continuous"))
-      if gain == "machine-auto"
-      else PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Off"))
-    )
-    if not PySpin.IsReadable(node):
-      raise RuntimeError("unable to set automatic gain (enum entry retrieval)")
-    node_gain_auto.SetIntValue(node.GetValue())
-
-    if not gain == "machine-auto":
-      node_gain = PySpin.CFloatPtr(nodemap.GetNode("Gain"))
-      if (
-        not PySpin.IsReadable(node_gain)
-        or not PySpin.IsWritable(node_gain)
-        or node_gain.GetMax() == 0
-      ):
-        raise RuntimeError("unable to set gain")
-      min_gain = node_gain.GetMin()
-      if gain < min_gain:
-        raise ValueError(f"gain must be >= {min_gain}")
-      max_gain = node_gain.GetMax()
-      if gain > max_gain:
-        raise ValueError(f"gain must be <= {max_gain}")
-      node_gain.SetValue(gain)
-
+    await anyio.to_thread.run_sync(self._set_gain_sync, gain, abandon_on_cancel=False)
     self._gain = gain
+
+  def _set_gain_sync(self, gain: Gain) -> None:
+    """Set gain through one locked PySpin transaction."""
+    with self._acquisition_lock:
+      assert self._cam is not None
+      nodemap = self._cam.GetNodeMap()
+      node_gain_auto = PySpin.CEnumerationPtr(nodemap.GetNode("GainAuto"))
+      if not PySpin.IsReadable(node_gain_auto) or not PySpin.IsWritable(node_gain_auto):
+        raise RuntimeError("unable to set automatic gain")
+      node = (
+        PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Continuous"))
+        if gain == "machine-auto"
+        else PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Off"))
+      )
+      if not PySpin.IsReadable(node):
+        raise RuntimeError("unable to set automatic gain (enum entry retrieval)")
+      node_gain_auto.SetIntValue(node.GetValue())
+
+      if gain != "machine-auto":
+        node_gain = PySpin.CFloatPtr(nodemap.GetNode("Gain"))
+        if (
+          not PySpin.IsReadable(node_gain)
+          or not PySpin.IsWritable(node_gain)
+          or node_gain.GetMax() == 0
+        ):
+          raise RuntimeError("unable to set gain")
+        min_gain = node_gain.GetMin()
+        if gain < min_gain:
+          raise ValueError(f"gain must be >= {min_gain}")
+        max_gain = node_gain.GetMax()
+        if gain > max_gain:
+          raise ValueError(f"gain must be <= {max_gain}")
+        node_gain.SetValue(gain)
 
   def _imaging_mode_code(self, mode: ImagingMode) -> int:
     if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.PHASE_CONTRAST:
@@ -785,40 +908,89 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
   ) -> Image:
-    assert self._cam is not None
-    nodemap = self._cam.GetNodeMap()
-
     assert self.imaging_config is not None, "Need to set imaging_config first"
 
     num_tries = 0
     while num_tries < self.imaging_config.max_image_read_attempts:
-      node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
-      if not PySpin.IsWritable(node_softwaretrigger_cmd):
-        raise RuntimeError("unable to execute software trigger")
-
       try:
-        node_softwaretrigger_cmd.Execute()
-        timeout = int(self._cam.ExposureTime.GetValue() / 1000 + 1000)  # from example
-        image_result = self._cam.GetNextImage(timeout)
-        if not image_result.IsIncomplete():
-          processor = PySpin.ImageProcessor()
-          processor.SetColorProcessing(color_processing_algorithm)
-          image_converted = processor.Convert(image_result, pixel_format)
-          image_result.Release()
-          return image_converted.GetNDArray()  # type: ignore
+        image = await anyio.to_thread.run_sync(
+          self._acquire_image_once_sync,
+          color_processing_algorithm,
+          pixel_format,
+          abandon_on_cancel=False,
+        )
+        if image is not None:
+          return image
       except SpinnakerException as e:
         # the image is not ready yet, try again
         logger.warning("Failed to get image: %s", e)
-        self.stop_acquisition()
-        self.start_acquisition()
+        if self._acquisition_scope_token is None:
+          await anyio.to_thread.run_sync(self._restart_acquisition_sync, abandon_on_cancel=False)
         if "[-1011]" in str(e):
           logger.warning(
             "[-1011] error might occur when the camera is plugged into a USB hub that does not have enough throughput."
           )
 
       num_tries += 1
-      await asyncio.sleep(0.3)
+      await anyio.sleep(0.3)
     raise TimeoutError("max_image_read_attempts reached")
+
+  def _acquire_image_once_sync(
+    self, color_processing_algorithm: int, pixel_format: int
+  ) -> Optional[Image]:
+    """Execute one complete PySpin frame transaction under the acquisition lock."""
+    with self._acquisition_lock:
+      if self._cam is None:
+        raise RuntimeError(f"{self.__class__.__name__}: Camera is not initialized.")
+      nodemap = self._cam.GetNodeMap()
+      node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
+      if not PySpin.IsWritable(node_softwaretrigger_cmd):
+        raise RuntimeError("unable to execute software trigger")
+      node_softwaretrigger_cmd.Execute()
+      timeout = int(self._cam.ExposureTime.GetValue() / 1000 + 1000)
+      image_result = self._cam.GetNextImage(timeout)
+      try:
+        if image_result.IsIncomplete():
+          return None
+        processor = PySpin.ImageProcessor()
+        processor.SetColorProcessing(color_processing_algorithm)
+        image_converted = processor.Convert(image_result, pixel_format)
+        return image_converted.GetNDArray()  # type: ignore[no-any-return]
+      finally:
+        image_result.Release()
+
+  def _stop_acquisition_or_error(self) -> Optional[BaseException]:
+    """Stop acquisition on the worker, returning its failure instead of raising it."""
+    try:
+      self.stop_acquisition()
+    except BaseException as error:
+      return error
+    return None
+
+  async def _stop_captured_acquisition(self) -> None:
+    """Stop the acquisition one capture started, unless a scope owns it instead."""
+    if self._acquisition_scope_token is not None:
+      return
+    # Transfer worker failures as values so cleanup context linking is backend-independent.
+    error = await anyio.to_thread.run_sync(self._stop_acquisition_or_error, abandon_on_cancel=False)
+    if error is not None:
+      raise error
+
+  @asynccontextmanager
+  async def _captured_frames(self, *, auto_stop_acquisition: bool) -> AsyncIterator[None]:
+    """Own what one capture owes the device: its LED, and the acquisition it started.
+
+    Args:
+      auto_stop_acquisition: Whether this capture owes the camera an acquisition stop.
+
+    Yields:
+      Once that cleanup is registered, ready for the capture itself.
+    """
+    async with AsyncExitStackWithShielding() as stack:
+      if auto_stop_acquisition:
+        stack.push_shielded_async_callback(self._stop_captured_acquisition)
+      stack.push_shielded_async_callback(self.led_off)
+      yield
 
   async def capture(
     self,
@@ -863,9 +1035,9 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     await self.set_plate(plate)
 
     if not self._acquiring:
-      self.start_acquisition()
+      await anyio.to_thread.run_sync(self.start_acquisition, abandon_on_cancel=False)
 
-    try:
+    async with self._captured_frames(auto_stop_acquisition=auto_stop_acquisition):
       await self.set_objective(objective)
       await self.set_imaging_mode(mode, led_intensity=led_intensity)
       await self.select(row, column)
@@ -912,23 +1084,21 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
       images: List[Image] = []
       for x_pos, y_pos in positions:
         await self.set_position(x=x_pos, y=y_pos)
-        t0 = time.time()
+        t0 = anyio.current_time()
         images.append(
           await self._acquire_image(
             color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
           )
         )
-        t1 = time.time()
+        t1 = anyio.current_time()
         logger.debug(
           "[cytation5] acquired image in %.2f seconds at position",
           t1 - t0,
         )
-    finally:
-      await self.led_off()
-      if auto_stop_acquisition:
-        self.stop_acquisition()
 
-    exposure_ms = float(self._cam.ExposureTime.GetValue()) / 1000
+    exposure_ms = await anyio.to_thread.run_sync(
+      self._get_exposure_ms_sync, abandon_on_cancel=False
+    )
     assert self._focal_height is not None, "Focal height not set. Run set_focus() first."
     focal_height_val = float(self._focal_height)
 

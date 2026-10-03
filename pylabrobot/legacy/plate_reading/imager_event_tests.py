@@ -3,6 +3,9 @@ import unittest
 from typing import Any, Dict, List, Literal, Optional, cast
 from unittest.mock import patch
 
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.plate_reading.backend import ImagerBackend, ImageReaderBackend
 from pylabrobot.legacy.plate_reading.image_reader import ImageReader
@@ -17,6 +20,7 @@ from pylabrobot.legacy.plate_reading.standard import (
 )
 from pylabrobot.resources import Coordinate, Plate, Resource, Well
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class _RecordingImagerBackend(ImagerBackend):
@@ -25,11 +29,12 @@ class _RecordingImagerBackend(ImagerBackend):
     self.results: list[ImagingResult] = []
     self.failure: Optional[BaseException] = None
 
-  async def setup(self) -> None:
-    pass
+  async def _cleanup(self) -> None:
+    """Release the resource-free recording backend."""
 
-  async def stop(self) -> None:
-    pass
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Own the recorder for the duration of the frontend lifespan."""
+    stack.push_shielded_async_callback(self._cleanup)
 
   async def capture(
     self,
@@ -71,11 +76,12 @@ class _RecordingImageReaderBackend(ImageReaderBackend):
     self.records: List[Dict] = [{"data": [[1.0]]}]
     self.capture_calls = 0
 
-  async def setup(self) -> None:
-    pass
+  async def _cleanup(self) -> None:
+    """Release the resource-free image reader."""
 
-  async def stop(self) -> None:
-    pass
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Own the recorder for the duration of the frontend lifespan."""
+    stack.push_shielded_async_callback(self._cleanup)
 
   async def open(self, **backend_kwargs: Any) -> None:
     pass
@@ -128,6 +134,43 @@ class _RecordingImageReaderBackend(ImageReaderBackend):
     return ImagingResult(images=[cast(Image, object())], exposure_time=10.0, focal_height=1.0)
 
 
+class TestImagerScopedEvents(AnyioTestBase):
+  async def test_body_failure_exits_imager_without_replacing_error(self) -> None:
+    backend = _RecordingImagerBackend()
+    imager = Imager(name="imager", size_x=1, size_y=1, size_z=1, backend=backend)
+    error = RuntimeError("body failed")
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      with pytest.raises(RuntimeError) as raised:
+        async with imager:
+          assert backend.is_active
+          raise error
+
+    assert raised.value is error
+    assert not backend.is_active
+    assert [event.name for event in events] == [
+      "machine.setup.started",
+      "machine.setup.completed",
+      "machine.stop.started",
+      "machine.stop.completed",
+    ]
+
+  async def test_body_failure_exits_image_reader_without_replacing_error(self) -> None:
+    backend = _RecordingImageReaderBackend()
+    reader = ImageReader(name="image_reader", size_x=1, size_y=1, size_z=1, backend=backend)
+    error = RuntimeError("body failed")
+    with pytest.raises(RuntimeError) as raised:
+      async with reader:
+        assert backend.is_active
+        raise error
+
+    assert raised.value is error
+    assert not backend.is_active
+
+
 class ImagerEventTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self) -> None:
     self.backend = _RecordingImagerBackend()
@@ -140,7 +183,7 @@ class ImagerEventTests(unittest.IsolatedAsyncioTestCase):
     )
     self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.imager.assign_child_resource(self.plate, location=Coordinate.zero())
-    await self.imager.setup()
+    await self.enterAsyncContext(self.imager)
 
   def assert_capture_lifecycle(self, events: list[PLREvent], terminal: str) -> None:
     self.assertEqual(
@@ -431,21 +474,21 @@ class ImageReaderEventCompositionTests(unittest.IsolatedAsyncioTestCase):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     image_reader.assign_child_resource(adapter, location=Coordinate.zero())
     image_reader.assign_child_resource(plate, location=Coordinate.zero())
-    await image_reader.setup()
     events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
-    with use_event_bus(event_bus):
-      await image_reader.open()
-      await image_reader.capture(
-        plate.get_well("A1"),
-        ImagingMode.BRIGHTFIELD,
-        Objective.O_4X_PL_FL,
-        10.0,
-        1.0,
-        1.0,
-      )
+    async with image_reader:
+      with use_event_bus(event_bus):
+        await image_reader.open()
+        await image_reader.capture(
+          plate.get_well("A1"),
+          ImagingMode.BRIGHTFIELD,
+          Objective.O_4X_PL_FL,
+          10.0,
+          1.0,
+          1.0,
+        )
 
     self.assertEqual([resource["name"] for resource in events[0].data["resources"]], ["plate"])
     self.assertEqual(events[2].data["plate"]["name"], "plate")
@@ -461,25 +504,25 @@ class ImageReaderEventCompositionTests(unittest.IsolatedAsyncioTestCase):
     )
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     image_reader.assign_child_resource(plate, location=Coordinate.zero())
-    await image_reader.setup()
     events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
-    with use_event_bus(event_bus):
-      records = await image_reader.read_absorbance(
-        450,
-        [plate.get_well("A1")],
-        True,
-      )
-      image = await image_reader.capture(
-        plate.get_well("B2"),
-        ImagingMode.BRIGHTFIELD,
-        Objective.O_4X_PL_FL,
-        10.0,
-        1.0,
-        1.0,
-      )
+    async with image_reader:
+      with use_event_bus(event_bus):
+        records = await image_reader.read_absorbance(
+          450,
+          [plate.get_well("A1")],
+          True,
+        )
+        image = await image_reader.capture(
+          plate.get_well("B2"),
+          ImagingMode.BRIGHTFIELD,
+          Objective.O_4X_PL_FL,
+          10.0,
+          1.0,
+          1.0,
+        )
 
     self.assertIs(records, backend.records)
     self.assertEqual(len(image.images), 1)
