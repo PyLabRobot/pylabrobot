@@ -515,6 +515,13 @@ class PowerWaveX:
     both would otherwise be polling the same bytes, and the read would swallow
     the ``DLE`` this waits for.
 
+    Verified against a PowerWaveX w/ Incubator (firmware R06.20) by interrupting
+    each kind of run in flight: an endpoint read 6 s in, a 31-wavelength scan 8 s
+    in, and a ten-cycle kinetic run 25 s in. Each returned here with the ``DLE``
+    in hand after 0.4 to 3.6 s, left the carrier outside, and raised
+    :class:`PowerWaveHaltedError` in the interrupted call. Unlike a fault, a halt
+    latches nothing: the next read worked with no :meth:`self_test` in between.
+
     Raises:
       PowerWaveError: If a read in progress does not let go of the serial port,
         or the instrument does not acknowledge with ``DLE``.
