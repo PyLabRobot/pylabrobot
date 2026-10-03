@@ -314,6 +314,7 @@ class PowerWaveX:
         200 nm, never calibrated   faulted 2 times out of 2
         205 nm, never calibrated   faulted 3 times out of 3
         208 nm, never calibrated   faulted
+        209 nm, never calibrated   faulted
         210 nm, never calibrated   read normally
         212 nm, never calibrated   read normally
         214 nm, never calibrated   read normally
@@ -324,10 +325,11 @@ class PowerWaveX:
 
       The wavelength alone does not predict it and neither does the calibration
       state alone, but the pair does: READ PLATE sets its own gain for a
-      wavelength it has not calibrated, and that attempt fails below a threshold
-      between 208 and 210 nm, where little light reaches the detector. The
-      208 nm fault came with 210 nm already calibrated immediately above it, so
-      a calibrated neighbour does not help; each wavelength stands alone.
+      wavelength it has not calibrated, and that attempt fails below 210 nm,
+      where too little light reaches the detector. The threshold is that sharp:
+      210 nm reads, 209 nm does not. The 208 and 209 nm faults both happened
+      with 210 nm already calibrated immediately above them, so a calibrated
+      neighbour does not help; each wavelength stands alone.
       :meth:`scan_plate` calibrates every wavelength it sweeps and manages it
       even at 200 nm, after which reads there succeed - 205 nm failed three times
       running uncalibrated and then read normally once a 200-210 nm scan in 5 nm
@@ -336,8 +338,12 @@ class PowerWaveX:
       So to read below 210 nm, scan a band covering the wavelength first.
       A scan's :attr:`SpectralScanResult.calibrated` lists what it had to
       calibrate, which is a direct read-out of what was missing: that 5 nm scan
-      reported ``[205]`` alone, 200 and 210 being already done. Nothing below
-      200 nm has been probed, that being the bottom of the specified range.
+      reported ``[205]`` alone, 200 and 210 being already done.
+
+      200 nm is a real floor and the firmware enforces it: a scan request for
+      190-200 nm, legal in every other field, was answered ACK and status
+      ``090`` without moving anything. So the bottom of this range cannot be
+      crossed, which is the one far-UV probe that carries no risk at all.
 
       The order-sorting filter wheel is not the cause: 200, 205 and 215 nm share a
       single band, so it sits in the same position whether the read faults or
@@ -907,13 +913,16 @@ class PowerWaveX:
         argument is out of range.
 
         These checks are the only thing standing between a caller and a hung
-        instrument, so do not relax them. The manual implies the instrument
-        rejects a bad request, but a PowerWaveX w/ Incubator (firmware R06.20)
-        does not: sent row 99, column 99, 999 to 200 nm with a step of 0, it
-        answered ACK and status ``000``, accepting every impossible field, and
-        then stopped responding - neither HALT nor any other command brought it
-        back, and it had to be recovered at the front panel. A step of 0 in
-        particular gives the firmware no way to finish sweeping.
+        instrument, so do not relax them. The instrument validates a scan
+        request only partly, and not the fields that matter most. A PowerWaveX
+        w/ Incubator (firmware R06.20) sent row 99, column 99, 999 to 200 nm
+        with a step of 0 answered ACK and status ``000``, accepting every
+        impossible field, and then stopped responding - neither HALT nor any
+        other command brought it back, and it had to be recovered at the front
+        panel. A step of 0 in particular gives the firmware no way to finish
+        sweeping. It does check the wavelength bounds, refusing 190 nm with
+        status ``090``, so a NAK or an error status proves nothing about the
+        other fields.
       NotImplementedError: For a whole-strip scan of a plate that is not 8 rows;
         the manual warns against row "00" on 384-well plates.
 
