@@ -168,9 +168,11 @@ test("the channels set off in Y one after another, each a stagger after the last
     drives: { ...DRIVES, y: { speed: 250, acceleration: 800, stagger: 0.5 } },
   };
   const seconds = await playOut(createPlayer(world.deps()), request);
-  // In channel order: ch0 first, ch2 last, two staggers after it.
+  // All three move toward the front, so the front-most channel leaves first and the ripple runs
+  // back: ch2 first, ch0 last, two staggers after it. A channel that set off before the one in
+  // front of it had moved would run into the back of it.
   const first = (name) => world.log.findIndex((e) => e.name === name);
-  assert.ok(first("ch0") < first("ch1") && first("ch1") < first("ch2"), "not in channel order");
+  assert.ok(first("ch2") < first("ch1") && first("ch1") < first("ch0"), "not leader-first");
   const expected = 2 * 0.5 + motionProfile(100, 250, 800).duration;
   assert.ok(Math.abs(seconds - expected) < 0.05, `took ${seconds}, expected ${expected}`);
   assert.deepEqual([world.at("ch0")[1], world.at("ch1")[1], world.at("ch2")[1]], [50, 40, 30]);

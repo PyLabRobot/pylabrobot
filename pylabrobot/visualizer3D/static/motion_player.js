@@ -156,12 +156,23 @@ export function createPlayer({
           ).duration;
           moves.push(() => move(armIndex, 0, arm.x, drives.x));
         }
-        // The channels set off one after another, in channel order, each `stagger` after the last.
+        // The channels set off one after another, each `stagger` after the last. Who goes first
+        // depends on where they are going: the channel the move puts ahead of the others leaves
+        // first, and the ripple runs back along the direction of travel - a channel starting
+        // before the one in front of it has moved would run into the back of it.
         const stagger = drives.y?.stagger > 0 ? drives.y.stagger : 0;
-        const moving = channels("y")
-          .filter((c) => Math.abs(readAxis(c.index, 1) - c.y) >= STILL)
-          .sort((a, b) => (a.channel ?? 0) - (b.channel ?? 0));
-        moving.forEach((c, rank) => {
+        const moving = channels("y").filter(
+          (c) => Math.abs(readAxis(c.index, 1) - c.y) >= STILL,
+        );
+        const rankOf = new Map();
+        for (const towardBack of [false, true]) {
+          moving
+            .filter((c) => c.y - readAxis(c.index, 1) > 0 === towardBack)
+            .sort((a, b) => (towardBack ? b.y - a.y : a.y - b.y))
+            .forEach((c, rank) => rankOf.set(c, rank));
+        }
+        moving.forEach((c) => {
+          const rank = rankOf.get(c);
           const dy = c.y - readAxis(c.index, 1);
           const travel = motionProfile(dy, drives.y?.speed, drives.y?.acceleration).duration;
           timing.across = Math.max(timing.across, rank * stagger + travel);
