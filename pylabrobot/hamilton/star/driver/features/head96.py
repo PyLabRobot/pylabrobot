@@ -751,6 +751,27 @@ class Head96(Head):
       await self._record_after_tip_command(command_error)
     await self.dispensing_drive_request_uL_position()
 
+  def _spots_under_shafts(self, offset: Optional[Coordinate]) -> List[Optional[int]]:
+    """For each shaft, in spot order (A1, B1, ..., H12), the index of the rack spot it stands over
+    when head channel A1 is sent to spot A1 plus `offset`, or None where it is past the rack.
+
+    Raises:
+      ValueError: If the offset leaves the channels between spots rather than over them.
+    """
+    pitch = self.configuration.channel_pitch
+    offset = offset or Coordinate.zero()
+    columns, rows = round(offset.x / pitch), round(-offset.y / pitch)
+    for residual in (offset.x - columns * pitch, -offset.y - rows * pitch):
+      if abs(residual) > 1.0:
+        raise ValueError(
+          f"an offset of ({offset.x}, {offset.y}) puts the channels between the rack's spots"
+        )
+    under: List[Optional[int]] = []
+    for shaft in range(96):
+      column, row = shaft // 8 + columns, shaft % 8 + rows
+      under.append(column * 8 + row if 0 <= column < 12 and 0 <= row < 8 else None)
+    return under
+
   # -- tip drop ------------------------------------------------------------------------------------
 
   async def drop_tips(
