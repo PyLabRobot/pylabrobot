@@ -927,6 +927,63 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(PowerWaveHaltedError):
       await read
 
+  async def test_the_assay_push_owns_the_port_while_it_flushes(self):
+    # push_assay_definition settles and flushes to discard the stray NAK the
+    # instrument emits after accepting a table. Released beforehand, the port
+    # read as free for the two seconds that takes, and a command entering the
+    # window had its reply flushed away for no visible reason.
+    class _RecordingFlush(_FakeSerial):
+      def __init__(self, script: bytes):
+        super().__init__(script)
+        self.owner_while_flushing: object = "never flushed"
+
+      async def reset_input_buffer(self) -> None:
+        self.owner_while_flushing = reader._port_owner
+        self._inbox.clear()
+
+    fake = _RecordingFlush(_ACK + _STATUS_OK)
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=5)
+    reader.io = fake  # type: ignore[assignment]
+    reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+
+    await reader.push_assay_definition([450], read_type="endpoint")
+
+    self.assertIsNotNone(fake.owner_while_flushing)
+    self.assertNotEqual(fake.owner_while_flushing, "never flushed")
+    self.assertIsNone(reader._port_owner)  # and released once finished
+
+  async def test_a_command_cannot_enter_the_assay_flush_window(self):
+    class _SlowFlush(_FakeSerial):
+      def __init__(self, script: bytes):
+        super().__init__(script)
+        self.outcome: str = "flush never ran"
+
+      async def reset_input_buffer(self) -> None:
+        # From a separate task: re-entrancy deliberately lets the owning task
+        # back in, so only another task can show the window is closed.
+        async def intruder():
+          try:
+            await reader.request_current_temperature()
+            return "accepted"
+          except PowerWaveBusyError:
+            return "refused"
+
+        self.outcome = await asyncio.create_task(intruder())
+        self._inbox.clear()
+
+    fake = _SlowFlush(_ACK + _STATUS_OK)
+    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=5)
+    reader.io = fake  # type: ignore[assignment]
+    reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._model = "PowerWaveX w/ Incubator"
+
+    await reader.push_assay_definition([450], read_type="endpoint")
+
+    self.assertEqual(fake.outcome, "refused")
+
   async def test_a_composite_operation_may_claim_the_port_once(self):
     # read_absorbances holds the port and still calls push_assay_definition and
     # set_plate_geometry, which claim it too. Re-entrancy within one task is why

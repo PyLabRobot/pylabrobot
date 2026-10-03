@@ -1303,16 +1303,23 @@ class PowerWaveX:
       await self.io.write(table)
       await self._read_status()
 
+      # The instrument emits a stray NAK shortly after accepting the table, with
+      # no command outstanding. Observed repeatedly on a PowerWaveX w/ Incubator
+      # in 2021. Settle, then discard it so it cannot be mistaken for the next
+      # reply.
+      #
+      # Inside the ownership block, because this flush is part of the exchange
+      # rather than cleanup after it. Released first, the port read as free for
+      # the two seconds this takes, and a command entering that window had its
+      # reply discarded by the flush below - or its outgoing bytes discarded by
+      # the output flush - for no reason the caller could see.
+      await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
+      await self.io.reset_input_buffer()
+      await self.io.reset_output_buffer()
+      await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
+
     self._assay_wavelengths = list(wavelengths)
     self._assay_defined = True
-
-    # The instrument emits a stray NAK shortly after accepting the table, with no
-    # command outstanding. Observed repeatedly on a PowerWaveX w/ Incubator in 2021.
-    # Settle, then discard it so it cannot be mistaken for the next reply.
-    await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
-    await self.io.reset_input_buffer()
-    await self.io.reset_output_buffer()
-    await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
 
     logger.debug(
       "[PowerWaveX %s] assay defined: %s, %s nm", self.port, read_type, list(wavelengths)
