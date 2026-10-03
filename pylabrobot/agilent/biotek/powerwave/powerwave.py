@@ -116,6 +116,21 @@ class PowerWaveX:
   read in a single pass of the plate. Driven over RS-232 at 9600 baud, 8 data
   bits, no parity, two stop bits.
 
+  Only 96-well plates are usable on a 96-well instrument. The geometry command
+  accepts 8x12 and 16x24, but a PowerWaveX w/ Incubator refuses the 384-well
+  request with status ``0A0``, so :class:`PowerWaveStatusError` on
+  :meth:`set_plate_geometry` means the instrument is not a 384-well model rather
+  than that anything went wrong. The instrument recovers immediately and reads
+  96-well plates as usual afterwards.
+
+  Shaking is honoured: a scan asked to shake for 10 or 20 seconds took exactly
+  that much longer than the same scan without it, to within 0.2 s. Kinetic
+  intervals hold without drifting, 12 cycles at 15 s running to a mean gap of
+  15.03 s and +0.38 s of total drift. The incubator tracks a new setpoint rather
+  than merely accepting one, reaching 37.0 C from 30.0 C; it has no active
+  cooling, so a lower setpoint only stops heating and the chamber then drifts
+  down on its own.
+
   Example:
     >>> reader = PowerWaveX(name="reader", port="/dev/ttyUSB0")
     >>> await reader.setup()
