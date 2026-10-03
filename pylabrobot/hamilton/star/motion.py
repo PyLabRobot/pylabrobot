@@ -34,7 +34,7 @@ resource is placed by its stop disc, which sits higher by the length of a mounte
 is converted to the stop disc, with the overhang the channel has when the move is made.
 """
 
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, cast
 
 from pylabrobot.hamilton.star.driver.features.pipettes import (
   core_tool_face_distance,
@@ -180,7 +180,9 @@ class _Frames:
     simulator (which works it out the same way, `SimulatedPipettes._below_stop_disc`).
     """
     shaft = self.shaft(channel)
-    bottom = shaft.tip_bottom() if shaft is not None else None
+    if shaft is None:
+      return 0.0
+    bottom = shaft.tip_bottom()
     if bottom is None:
       return 0.0
     if isinstance(shaft.tip, HamiltonCoreGripperTool):
@@ -372,7 +374,7 @@ def _tip_pickup(frames: _Frames, command: str, params: Dict[str, Any]) -> Dict[s
     spot, shaft = frames.spot_at(*_positions(params, c)), frames.shaft(c)
     if spot is None or spot.tip is None or shaft is None:
       return defined
-    return -_mounted_location(shaft, spot.tip)["z"]
+    return float(-_mounted_location(shaft, spot.tip)["z"])
 
   request = _stroke(
     frames,
@@ -557,7 +559,10 @@ def _core_plate(frames: _Frames, command: str, params: Dict[str, Any], kind: str
   if len(channels) != 2:
     raise ValueError("a CO-RE plate command needs two channels carrying tools")
   back, front = channels
-  tool = frames.shaft(front).tip
+  shaft = frames.shaft(front)
+  tool = shaft.tip if shaft is not None else None
+  if not isinstance(tool, HamiltonCoreGripperTool):
+    raise ValueError("a CO-RE plate command needs its CO-RE grip tool on the front channel")
   grippers = _core_grippers(frames)
   handover = grippers._handover if grippers is not None else None
   held = handover[0] if handover else None
@@ -931,7 +936,7 @@ class _HeadFrames:
 
   def axis_on_deck(self) -> Coordinate:
     """Where channel A1's axis is now, in deck mm (Z at the shaft's end)."""
-    return self.a1.get_location_wrt(self.driver.deck, x="c", y="c", z="b")
+    return cast(Coordinate, self.a1.get_location_wrt(self.driver.deck, x="c", y="c", z="b"))
 
   def local_y(self, y: float) -> float:
     return round(float(y - self.on_arm.y - self.axis_in_head.y), 2)
@@ -1213,6 +1218,7 @@ def _decode(
     # where it ends.
     return None
   return None
+
 
 def attach_viewer_motion(driver: Any, viewer: Any) -> None:
   """Let a viewer act out what the driver's commands move.

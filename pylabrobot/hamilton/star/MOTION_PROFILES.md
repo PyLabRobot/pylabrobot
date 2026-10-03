@@ -149,7 +149,7 @@ Profile: **jaws**. The fingers move to the width `ga` at `gv` / `gr` (FW). Each 
 Profile: **jaws**. Closes to `gb` at the default close speed and acceleration (PLR, section 0), then takes hold (HEUR, as `R0 GA`).
 
 ### Plate and lid moves (`iSWAPTransport`, Python, from the primitives above)
-The compound commands (`C0 PP` / `PR` / `PM`) are not used. Their internal motion isn't public, and the firmware "choos[es] among multiple valid poses unpredictably" (DOC, [discuss.pylabrobot.org/t/517/1](https://discuss.pylabrobot.org/t/intro-to-epic-tame-the-iswap/517/1)). A move is planned as primitives (`hamilton/star/driver/features/iswap_transport.py`):
+The compound commands (`C0 PP` / `PR` / `PM`) are not used. Their internal motion isn't public, and the firmware "chooses among multiple valid poses unpredictably" (DOC, [discuss.pylabrobot.org/t/517/1](https://discuss.pylabrobot.org/t/intro-to-epic-tame-the-iswap/517/1)). A move is planned as primitives (`hamilton/star/driver/features/iswap_transport.py`):
 
 | Choice | Value | Tag | Source / justification |
 |---|---|---|---|

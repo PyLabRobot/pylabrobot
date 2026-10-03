@@ -14,7 +14,7 @@ import subprocess
 import time
 import unittest
 from unittest import mock
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import websockets
 
@@ -105,7 +105,7 @@ class DecoderTests(unittest.IsolatedAsyncioTestCase):
       # The simulator keeps its own model with it; only the decoder must not lean on it.
       if inspect.stack()[1].filename == motion.__file__:
         raise AssertionError("the decoder asked the simulator how long the tip is")
-      return simulators_own(this, channel)
+      return float(simulators_own(this, channel))
 
     with mock.patch.object(type(pipettes), "_below_stop_disc", not_from_the_decoder):
       with mock.patch.object(self.star.driver, "defined_tip_lengths", {}, create=True):
@@ -208,7 +208,7 @@ class DecoderTests(unittest.IsolatedAsyncioTestCase):
     def decoded(**changed: Any) -> Dict[str, Any]:
       request = star_motion(self.star.driver, "C0", "AS", {**params, "zx": floor, **changed})
       assert request is not None
-      return request["channels"][0]
+      return cast(Dict[str, Any], request["channels"][0])
 
     plain = decoded(ip=["0020"], it=["0"], fp=["0000"], po=["0000"])
     deeper = decoded(ip=["0050"], it=["0"], fp=["0000"], po=["0000"])
@@ -286,7 +286,7 @@ class Head96DecoderTests(unittest.IsolatedAsyncioTestCase):
   ):
     facility, star = await simulated_star(self)
     head = star.driver.arms[0].head96
-    requests: List[Dict[str, Any]] = []
+    requests: List[Tuple[str, Dict[str, Any], Dict[str, Any]]] = []
 
     async def listen(module: str, command: str, params: Dict[str, Any]) -> None:
       request = star_motion(star.driver, module, command, params)

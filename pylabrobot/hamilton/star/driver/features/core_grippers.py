@@ -172,7 +172,7 @@ class CoreGrippers:
     shaft = self._pipettes.shaft(self._front_channel)
     return shaft.tip if shaft is not None and shaft.has_tip() else None
 
-  def _hang_location(self, held: Resource, from_top: float) -> Optional[Coordinate]:
+  def _hang_location(self, held: Resource, from_top: Optional[float]) -> Optional[Coordinate]:
     """Where `held` hangs from the front tool, as its child location, or None without the model.
 
     Its centre at the jaws' centre, its top `from_top` below the grip line - the front channel's
