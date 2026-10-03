@@ -891,10 +891,14 @@ class HighResSampleStorage(Resource):
     raise ResourceNotFoundError(f"Plate {plate_name!r} not found in {self.name!r}.")
 
   def _find_available_sites_sorted(self, plate: Plate) -> List[PlateHolder]:
-    plate_height = plate.get_size_z()
-    if plate.lid is not None:
-      lid_location = plate.get_lid_location(plate.lid)
-      plate_height = max(plate_height, lid_location.z + plate.lid.get_size_z())
+    # A slot holds a plate with the body's bottom on the slot floor, so the plate needs clearance
+    # from that floor up to its top, and nothing may extend below it.
+    bottom, plate_height = plate.get_occupied_z_bounds()
+    if bottom < 0:
+      raise ValueError(
+        f"Plate {plate.name!r} with its lid extends {-bottom:g} mm below the plate's bottom; a slot "
+        "holds a plate with its bottom on the slot floor."
+      )
     available = [
       site
       for rack in self._racks_by_number.values()
