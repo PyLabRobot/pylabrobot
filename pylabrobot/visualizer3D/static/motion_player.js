@@ -161,15 +161,15 @@ export function createPlayer({
         // first, and the ripple runs back along the direction of travel - a channel starting
         // before the one in front of it has moved would run into the back of it.
         const stagger = drives.y?.stagger > 0 ? drives.y.stagger : 0;
-        const moving = channels("y").filter(
-          (c) => Math.abs(readAxis(c.index, 1) - c.y) >= STILL,
-        );
+        const moving = channels("y").filter((c) => Math.abs(readAxis(c.index, 1) - c.y) >= STILL);
         const rankOf = new Map();
         for (const towardBack of [false, true]) {
           moving
             .filter((c) => c.y - readAxis(c.index, 1) > 0 === towardBack)
             .sort((a, b) => (towardBack ? b.y - a.y : a.y - b.y))
-            .forEach((c, rank) => rankOf.set(c, rank));
+            .forEach((c, rank) => {
+              rankOf.set(c, rank);
+            });
         }
         moving.forEach((c) => {
           const rank = rankOf.get(c);
