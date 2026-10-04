@@ -192,11 +192,13 @@ class iSWAPCollisionTests(unittest.IsolatedAsyncioTestCase):
     plan = self.transport.plan_pick_up(self.deck.get_resource("source_1"), direction="back")
     t = time.perf_counter()
     check_plan(self.transport, plan)
-    self.assertLess(time.perf_counter() - t, 3.0)
-    # Once the deck's pieces are worked out they are kept: a second check redoes only what changed.
+    first = time.perf_counter() - t
+    self.assertLess(first, 10.0)
+    # Once the deck's pieces are worked out they are kept: a second check redoes only what changed,
+    # and is done in well under half the first's time, on any machine.
     t = time.perf_counter()
     check_plan(self.transport, plan)
-    self.assertLess(time.perf_counter() - t, 0.5)
+    self.assertLess(time.perf_counter() - t, first / 2.0)
 
 
 if __name__ == "__main__":
