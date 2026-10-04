@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.hamilton.star.driver.features.iswap_transport import (
   Grip,
@@ -35,21 +35,25 @@ from pylabrobot.hamilton.star.driver.features.iswap_transport import (
   Travel,
   iSWAPTransport,
 )
+from pylabrobot.hamilton.star.driver.features.star_collisions import (
+  ENCLOSURES,
+  Exemptions,
+  _allowed,
+  held_allowed,
+  iswap_names,
+  mounted_groups,
+  root_of,
+  scene,
+)
 from pylabrobot.resources.collision import (
   Collision,
   Group,
   Pose,
   Segment,
-  StaticScene,
   check,
-  declared_hulls,
-  solid_pieces,
 )
 from pylabrobot.resources.resource import Resource
 
-# Resources that are enclosures, not solids: the X-arm travels into the left extension housing, and
-# the model has the 96-head inside it whenever the arm is far enough left.
-ENCLOSURES = ("left_extension_housing",)
 # The most any point of the arm may stray from the hulls a turn is checked with, in mm.
 TURN_SLACK = 0.5
 # How far past the grip centre anything the gripper carries reaches, at most, in mm: the fingers
@@ -233,27 +237,7 @@ class PlanSweeps:
   touches: List[Resource]
   end: Joints
   held: Optional[Resource] = None
-  machine: Set[str] = dataclasses.field(default_factory=set)
-  """The groups that are the iSWAP's own parts: one mechanism, allowed to touch itself."""
-  carriage: Set[str] = dataclasses.field(default_factory=set)
-  """The groups mounted together on the X-arm: nothing in a plan moves them relative to each
-  other, so they are let off each other too."""
-  body: Optional[str] = None
-  """The X-arm's own body, if it has a group: mounted in the carriage and too coarsely boxed to
-  judge the parts against, it is checked only against what stands still."""
-
-  def between(self, a: str, b: str) -> bool:
-    """Whether two of the groups are checked against each other."""
-    if self.body is not None and self.body in (a, b):
-      return False
-    if a in self.machine and b in self.machine:
-      return False
-    if a in self.carriage and b in self.carriage:
-      return False
-    held = self.held.name if self.held is not None else None
-    if held is not None and {a, b} & self.machine and held in (a, b):
-      return False
-    return True
+  exemptions: Exemptions = dataclasses.field(default_factory=Exemptions)
 
 
 def _standing_on(resource: Resource, stop: Resource) -> List[Resource]:
@@ -328,40 +312,31 @@ def sweeps(transport: iSWAPTransport, plan: Plan) -> PlanSweeps:
       if step.resource.parent is not None:
         touches += _standing_on(step.resource.parent, deck)
 
-  # What the gripper carries is a group of its own: it is left out here, so the gripper's own
-  # pieces do not change shape with what it holds.
-  taken_along: List[Resource] = [] if transport.holding is None else [transport.holding]
   # What the plan moves without driving it: everything mounted on the X-arm that is not the iSWAP's
   # own column. The plan is what moves the carriage, so it is what moves these; they keep their
   # place on the carriage and ride the frame with it.
-  mounted = [c for c in parts.arm.children if c is not parts.column]
-  still = [Segment([Pose()], 0.0, 0.0, float(len(plan.steps)))]
-
-  def pieces(root: Resource, *leave_out: Resource):
-    return solid_pieces(root, {id(r) for r in leave_out})
-
-  groups = [
-    Group("iSWAP column", pieces(parts.column, parts.link), sw.parts["column"], sw.carried),
-    Group("iSWAP link 1", pieces(parts.link, parts.gripper), sw.parts["link"], sw.carried),
-    Group(
-      "iSWAP gripper",
-      pieces(parts.gripper, *parts.fingers, *taken_along),
-      sw.parts["gripper"],
-      sw.carried,
+  groups = mounted_groups(
+    parts.arm,
+    float(len(plan.steps)),
+    sw.parts,
+    carrying=transport.holding,
+    held=held,
+    frame=sw.carried,
+  )
+  machine = iswap_names(groups)
+  carriage = {r.name for r in parts.arm.children if r is not parts.column}
+  return PlanSweeps(
+    groups,
+    touches,
+    j,
+    held,
+    Exemptions(
+      machine=machine,
+      carriage=carriage,
+      body="X-arm",
+      held=held.name if held is not None else None,
     ),
-  ]
-  if held is not None:
-    groups.append(Group(held.name, pieces(held), sw.parts["held"], sw.carried))
-  for k, finger in enumerate(parts.fingers):
-    groups.append(
-      Group(f"iSWAP {finger.name}", pieces(finger), sw.parts[f"finger {k}"], sw.carried)
-    )
-  groups.append(Group("X-arm", pieces(parts.arm, parts.column, *mounted), still, sw.carried))
-  for rider in mounted:
-    groups.append(Group(rider.name, pieces(rider), still, sw.carried))
-  machine = {g.name for g in groups if g.name.startswith("iSWAP ")} | {"iSWAP column"}
-  carriage = {*(rider.name for rider in mounted)}
-  return PlanSweeps(groups, touches, j, held, machine, carriage, "X-arm")
+  )
 
 
 def check_plan(
@@ -378,9 +353,7 @@ def check_plan(
   """
   parts = parts_of(transport)
   if root is None:
-    root = transport.deck
-    while root.parent is not None:
-      root = root.parent
+    root = root_of(transport.deck)
   around = sweeps(transport, plan)
   standing = scene(root, ENCLOSURES).obstacles([parts.arm])
   return check(
@@ -389,38 +362,6 @@ def check_plan(
     clearance,
     _allowed(around.touches),
     standing,
-    between_groups=around.between,
-    allow_for=_held_allowed(around),
+    between_groups=around.exemptions.between,
+    allow_for=held_allowed(around.held, around.touches),
   )
-
-
-def _held_allowed(around: "PlanSweeps") -> Dict[str, List[Resource]]:
-  """What is held may meet all the plan means to touch, shapes too: it is a box, so its meeting the
-  nest it goes into - a plate's wells in a thermocycler's block - means nothing."""
-  if around.held is None or declared_hulls(around.held) is not None:
-    return {}
-  return {around.held.name: list(around.touches)}
-
-
-def _allowed(touches: Sequence[Resource]) -> List[Resource]:
-  """Of what a plan means to touch, what the moving parts may meet: all but what has a shape of its
-  own (declared hulls). A box stands for something only roughly - a plate holder the fingers reach
-  into - so meeting it means nothing; a shape is what is there, and the arm must keep clear of it
-  even on its way to put something down in it: a thermocycler's body behind its plate nest."""
-  return [r for r in touches if declared_hulls(r) is None]
-
-
-_SCENES: Dict[Tuple[int, Tuple[str, ...]], StaticScene] = {}
-
-
-def scene(root: Resource, hollow: Sequence[str] = ()) -> StaticScene:
-  """The kept solid pieces of `root`, so that a check works out only what changed since the last."""
-  key = (id(root), tuple(hollow))
-  kept = _SCENES.get(key)
-  if kept is None or kept.root is not root:
-    kept = _SCENES[key] = StaticScene(root, hollow)
-  return kept
-
-
-def describe(collisions: Sequence[Collision]) -> str:
-  return "\n".join(str(c) for c in collisions) or "nothing in the way"

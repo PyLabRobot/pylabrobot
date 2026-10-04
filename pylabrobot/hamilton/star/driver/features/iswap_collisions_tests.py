@@ -3,7 +3,7 @@
 import unittest
 import unittest.mock
 
-from pylabrobot.hamilton.star.driver.features import iswap_collisions
+from pylabrobot.hamilton.star.driver.features import star_collisions
 from pylabrobot.hamilton.star.driver.features.iswap_collisions import (
   Joints,
   Kinematics,
@@ -182,7 +182,7 @@ class iSWAPCollisionTests(unittest.IsolatedAsyncioTestCase):
     hulls = ((0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (0.0, 10.0, 0.0), (0.0, 0.0, 10.0))
     boxed, shaped = Resource("boxed", 10, 10, 10), Resource("shaped", 10, 10, 10, model="shaped")
     with unittest.mock.patch(
-      "pylabrobot.hamilton.star.driver.features.iswap_collisions.declared_hulls",
+      "pylabrobot.hamilton.star.driver.features.star_collisions.declared_hulls",
       lambda r: (hulls,) if r.model == "shaped" else None,
     ):
       self.assertEqual(_allowed([boxed, shaped]), [boxed])
@@ -194,8 +194,8 @@ class iSWAPCollisionTests(unittest.IsolatedAsyncioTestCase):
     # which is what makes it quick, and is said in what it builds rather than in seconds, which no
     # two machines agree on.
     check_plan(self.transport, plan)
-    scene = iswap_collisions.StaticScene
-    with unittest.mock.patch.object(iswap_collisions, "StaticScene", side_effect=scene) as built:
+    scene = star_collisions.StaticScene
+    with unittest.mock.patch.object(star_collisions, "StaticScene", side_effect=scene) as built:
       check_plan(self.transport, plan)
     self.assertEqual(built.call_count, 0)
 
