@@ -1,9 +1,9 @@
 """What iSWAP transport plans sweep through, on a simulated STARlet's demo deck."""
 
-import time
 import unittest
 import unittest.mock
 
+from pylabrobot.hamilton.star.driver.features import iswap_collisions
 from pylabrobot.hamilton.star.driver.features.iswap_collisions import (
   Joints,
   Kinematics,
@@ -187,18 +187,17 @@ class iSWAPCollisionTests(unittest.IsolatedAsyncioTestCase):
     ):
       self.assertEqual(_allowed([boxed, shaped]), [boxed])
 
-  async def test_a_check_is_quick(self):
+  async def test_a_second_check_builds_no_new_scene(self):
     await self.iswap.make_space()
     plan = self.transport.plan_pick_up(self.deck.get_resource("source_1"), direction="back")
-    t = time.perf_counter()
-    check_plan(self.transport, plan)
-    first = time.perf_counter() - t
-    self.assertLess(first, 10.0)
     # Once the deck's pieces are worked out they are kept: a second check redoes only what changed,
-    # and is done in well under half the first's time, on any machine.
-    t = time.perf_counter()
+    # which is what makes it quick, and is said in what it builds rather than in seconds, which no
+    # two machines agree on.
     check_plan(self.transport, plan)
-    self.assertLess(time.perf_counter() - t, first / 2.0)
+    scene = iswap_collisions.StaticScene
+    with unittest.mock.patch.object(iswap_collisions, "StaticScene", side_effect=scene) as built:
+      check_plan(self.transport, plan)
+    self.assertEqual(built.call_count, 0)
 
 
 if __name__ == "__main__":
