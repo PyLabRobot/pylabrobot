@@ -125,6 +125,8 @@ async def main() -> None:
   # The turned gripper reaches less far than the elbow's own travel: with the wrist at -135 the
   # grip centre hangs behind the elbow, so the farthest site the pose can bring the jaws to is the
   # elbow's front stop less that hang - site three, not site four.
+  if plate.parent is None:
+    raise RuntimeError("the plate has no parent site to grip it at")
   sites: List[Resource] = [plate.parent, carrier[3]]
 
   viewer = Viewer3D(facility, name="iswap_demo.py", open_browser=False)

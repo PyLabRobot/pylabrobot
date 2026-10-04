@@ -15,6 +15,7 @@ import logging
 
 from pylabrobot.resources import set_volume_tracking
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.tip_rack import TipRack
 from pylabrobot.resources.tip_tracking import set_tip_tracking
 
 from ..hamilton.star.motion import attach_viewer_motion
@@ -40,6 +41,8 @@ async def main() -> None:
   source_carrier = deck.get_resource("source_carrier")
   destination_carrier = deck.get_resource("destination_carrier")
   rack = deck.get_resource("tips_0")
+  if not isinstance(rack, TipRack):
+    raise RuntimeError("the demo deck no longer holds the tips this run uses")
 
   plates = [
     child for site in source_carrier.children for child in site.children if isinstance(child, Plate)
