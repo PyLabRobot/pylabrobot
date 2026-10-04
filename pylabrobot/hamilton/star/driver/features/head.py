@@ -753,6 +753,28 @@ class Head:
       here.z if z is None else z - on_the_arm.z - shaft.z,
     )
 
+  def get_reference_point_location(self) -> Optional[Coordinate]:
+    """Where the model has the head's reference point, in mm on the deck.
+
+    The inverse of `update_location_by_reference_point`: it converts a reported position into a
+    location, and this converts a location back into the position that would be reported. X is the
+    arm's, so it is carried through unread.
+
+    Returns:
+      Where the model has it, or None when there is nothing modelling the head yet.
+    """
+    deck = self._driver.deck
+    if self.resource is None or self.resource.location is None or deck is None:
+      return None
+    arm = self.resource.parent
+    if arm is None:
+      return None
+    # The drives report channel A1's axis: the shaft's centre, not the corner it is placed by.
+    shaft = self.resource.get_item(HEAD_REFERENCE_SHAFT).get_location_wrt(
+      self.resource, "c", "c", "b"
+    )
+    return self.resource.location + arm.get_location_wrt(deck) + shaft
+
   # ----------------------------------------
   # Movement
   # ----------------------------------------

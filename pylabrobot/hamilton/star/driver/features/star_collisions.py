@@ -14,7 +14,7 @@ than assumed away.
 from __future__ import annotations
 
 import dataclasses
-from typing import Dict, List, Mapping, Optional, Sequence, Set
+from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from pylabrobot.hamilton.star.driver.features.head import Head
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
@@ -38,6 +38,8 @@ from pylabrobot.resources.resource import Resource
 # Resources that are enclosures, not solids: the X-arm travels into the left extension housing, and
 # the model has the 96-head inside it whenever the arm is far enough left.
 ENCLOSURES = ("left_extension_housing",)
+# Two channels' moves within this much of each other, in mm, are one move: the row shifting together.
+DELTA_TOLERANCE = 1e-6
 
 
 @dataclasses.dataclass
@@ -202,16 +204,17 @@ def _check_ride(
   touch: Sequence[Resource],
   clearance: float,
   root: Resource,
+  carriage: Sequence[str] = (),
 ) -> List[Collision]:
   """A pipette or head command's check: its movers swept against what stands around the arm and
   against each other.
 
   The iSWAP's parts are let off each other - nothing in the command moves them relative to each
   other - and the arm's own body is judged against nothing that rides it. The riders are checked
-  against each other: the command is what moves them relative to each other.
+  against each other, less those the command carries along together (`carriage`).
   """
   groups = mounted_groups(arm, 1.0, segments)
-  exemptions = Exemptions(machine=iswap_names(groups), body="X-arm")
+  exemptions = Exemptions(machine=iswap_names(groups), carriage=set(carriage), body="X-arm")
   standing = scene(root, ENCLOSURES).obstacles([arm])
   return check(
     root, groups, clearance, _allowed(touch), standing, between_groups=exemptions.between
@@ -232,7 +235,8 @@ def check_pipette_move(
   The command is one unit of time, and every channel it moves sweeps its whole way in it: the check
   is conservative about the order the drives settle in. Y and Z are where the drives report each
   channel's stop disc, in mm on the deck, as `move_to_y_positions` and
-  `move_stop_disc_to_z_positions` take them. A tip mounted on a channel sweeps with it.
+  `move_stop_disc_to_z_positions` take them. A tip mounted on a channel sweeps with it. Channels
+  commanded by the same amount move as one rigid body and are let off each other.
 
   Args:
     pipettes: the channels' feature, with the arm where the command starts.
@@ -257,15 +261,35 @@ def check_pipette_move(
   arm = pipettes.resources[0].parent
   if arm is None:
     raise RuntimeError("the channels are not on an arm, so what they sweep is not known")
-  segments: Dict[str, List[Segment]] = {}
+  deltas: Dict[str, Tuple[float, float]] = {}
   for channel, (to_y, to_z) in targets.items():
     here = pipettes.get_reference_point_location(channel)
     if here is None:
       raise RuntimeError(f"channel {channel} is not modelled, so what it sweeps is not known")
     dy = 0.0 if to_y is None else to_y - here.y
     dz = 0.0 if to_z is None else to_z - here.z
-    segments[pipettes.resources[channel].name] = on_axes((0.0, dy, dz), 0.0, 1.0)
-  return _check_ride(arm, segments, touch, clearance, root if root is not None else root_of(arm))
+    deltas[pipettes.resources[channel].name] = (dy, dz)
+  # Channels commanded by the same amount move as one rigid body - the row shifting together - so
+  # nothing in the command moves them relative to each other, and they are let off each other.
+  shared: List[Tuple[Tuple[float, float], List[str]]] = []
+  for name, delta in deltas.items():
+    for common, names in shared:
+      if all(abs(delta[k] - common[k]) <= DELTA_TOLERANCE for k in (0, 1)):
+        names.append(name)
+        break
+    else:
+      shared.append((delta, [name]))
+  segments: Dict[str, List[Segment]] = {}
+  carriage: Set[str] = set()
+  for delta, names in shared:
+    segment = on_axes((0.0, delta[0], delta[1]), 0.0, 1.0)
+    for name in names:
+      segments[name] = segment
+    if len(names) > 1:
+      carriage.update(names)
+  return _check_ride(
+    arm, segments, touch, clearance, root if root is not None else root_of(arm), sorted(carriage)
+  )
 
 
 def check_head_move(
