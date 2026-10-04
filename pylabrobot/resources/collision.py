@@ -11,7 +11,8 @@ be solid or not by how it holds its children:
 
 - a resource with no children is solid, unless it is flat (a site, a trash's opening);
 - a plate, a tip rack, any itemized resource, is solid as a whole: its items are inside it, but what
-  sits in its items - a tip in a tip spot - is looked at too;
+  sits in its items - a tip in a tip spot - is looked at too, as is what sits on it - a lid seated
+  on a plate;
 - a resource whose children lie outside its box - a channel with its tip mounting shaft below it, a
   finger with its pad - is solid, and so are its children;
 - a resource whose children lie inside its box - a deck, a carrier, the X-arm - is a frame: only
@@ -39,6 +40,7 @@ from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, 
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.itemized_resource import ItemizedResource
+from pylabrobot.resources.lid import Lid
 from pylabrobot.resources.resource import Resource
 
 Vec = Tuple[float, float, float]
@@ -303,6 +305,11 @@ def solid_pieces(
       if not _flat(resource):
         into.append(Piece(resource, _corners(resource, inset=CONTACT)))
       for item in children:
+        if isinstance(item, Lid):
+          # A lid sits on the resource, not in its grid, and above its box: its own box is what is
+          # there.
+          visit(item, into)
+          continue
         for held in item.children:
           visit(held, into)
       return

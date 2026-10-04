@@ -26,6 +26,7 @@ from pylabrobot.resources.collision import (
 )
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.lid import Lid
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
@@ -180,6 +181,15 @@ class SolidTests(unittest.TestCase):
     channel = Resource("channel", 9, 9, 140)
     channel.assign_child_resource(Resource("shaft", 7, 7, 8), location=Coordinate(1, 1, -8))
     self.assertEqual({p.resource.name for p in solid_pieces(channel)}, {"channel", "shaft"})
+
+  def test_a_lid_seated_on_a_plate_is_solid_with_it(self):
+    carrier, plate = self.carrier()
+    lid = Lid("lid", plate.get_size_x(), plate.get_size_y(), 10.0, nesting_z_height=2.0)
+    plate.assign_child_resource(lid)
+    pieces = {p.resource.name: p for p in solid_pieces(carrier)}
+    self.assertEqual(set(pieces), {"carrier", "plate", "lid"})
+    # The lid sits on the plate's top, sunk by its nesting height, above where the plate itself sits.
+    self.assertAlmostEqual(pieces["lid"].lo[2], 77.0 + 14.2 - 2.0 + CONTACT)
 
   def test_an_enclosure_is_not_solid(self):
     housing = Resource("housing", 200, 200, 200, category="housing")
