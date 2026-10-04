@@ -227,6 +227,25 @@ def NEST_96_wellplate_2200uL_Ub(name: str) -> Plate:
   )
 
 
+# Liquid height over the cavity bottom (mm) -> volume (uL), computed from spec: the well is a
+# truncated cone, 6.40 mm across the floor and 6.85 mm across the rim, 10.80 mm deep. The last
+# point is the brim-full volume.
+_nest_96_wellplate_200uL_Fb_height_volume_data = {
+  0.0: 0.0,
+  1.0: 32.4,
+  2.0: 65.2,
+  3.0: 98.4,
+  4.0: 132.1,
+  5.0: 166.1,
+  6.0: 200.7,
+  7.0: 235.6,
+  8.0: 271.0,
+  9.0: 306.8,
+  10.0: 343.1,
+  10.8: 372.4,
+}
+
+
 def nest_96_wellplate_200uL_Fb(name: str) -> Plate:
   """NEST Cat. No. 701011: 96 well cell culture plate, flat bottom, non-treated, polystyrene.
   Spec: NEST data sheet, "96 well cell culture plate, Flat bottom" technical drawing
@@ -257,6 +276,7 @@ def nest_96_wellplate_200uL_Fb(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       bottom_type=WellBottomType.FLAT,
       max_volume=200,  # from spec (upper end of the recommended medium volume, 0.1-0.2 mL)
+      height_volume_data=_nest_96_wellplate_200uL_Fb_height_volume_data,
       name_prefix=name,
     ),
   )
