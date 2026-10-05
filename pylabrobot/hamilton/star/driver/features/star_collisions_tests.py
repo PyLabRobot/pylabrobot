@@ -6,8 +6,8 @@ from pylabrobot.hamilton.star.driver.features.star_collisions import (
   check_head_move,
   check_pipette_move,
 )
-from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.lid import Lid
+from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.tip_rack import TipRack
 from pylabrobot.resources.tip_tracking import does_tip_tracking, set_tip_tracking
 from pylabrobot.visualizer3D.demo import build_facility, star_of
