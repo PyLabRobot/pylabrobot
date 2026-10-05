@@ -238,6 +238,30 @@ class SweepTests(unittest.TestCase):
     (near,) = check(root, [past], clearance=5.0, obstacles=Obstacles([post]))
     self.assertAlmostEqual(near.gap, 3.0, places=6)
 
+  def test_a_meeting_is_walked_to_where_it_happens(self):
+    wall = Obstacles([block("wall", (48, -100, -100), (2, 200, 200))])
+    piece = [block("m", (0, 0, 0), (10, 10, 10))]
+    swept = Group("swept", piece, straight((100, 0, 0)))
+    root = Resource("r", 1, 1, 1)
+    (hit,) = check(root, [swept], obstacles=wall)
+    # The mover meets the wall face on, its front at x 48: 38 mm of the 100 mm way in.
+    at, when = hit.at, hit.when
+    assert at is not None and when is not None
+    self.assertAlmostEqual(when, 0.38, places=2)
+    self.assertAlmostEqual(at.shift[0], 38.0, places=1)
+
+  def test_a_way_its_hull_only_leans_on_stands_as_the_sweep_said(self):
+    # The swept hull of the box spans corners the way itself never visits: a wall beside the way,
+    # met by the hull alone, is reported without a place where the mover was brought to it.
+    wall = Obstacles([block("wall", (55, -100, -100), (2, 200, 200))])
+    piece = [block("m", (0, 0, 0), (10, 10, 10))]
+    moved = Group("moved", piece, on_axes((100, 100, 0)))
+    root = Resource("r", 1, 1, 1)
+    (hit,) = check(root, [moved], obstacles=wall)
+    self.assertIsNotNone(hit)
+    self.assertIsNone(hit.at)
+    self.assertIsNone(hit.when)
+
   def test_moves_on_their_own_axes_are_taken_as_the_box_they_span(self):
     # Something going 100 along X and 100 along Y, each on its own profile, may pass the corner.
     corner = block("corner", (101, 0, 0), (10, 10, 10))

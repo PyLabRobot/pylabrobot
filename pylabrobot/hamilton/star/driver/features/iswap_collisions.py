@@ -339,6 +339,39 @@ def sweeps(transport: iSWAPTransport, plan: Plan) -> PlanSweeps:
   )
 
 
+def judge(
+  transport: iSWAPTransport, plan: Plan, clearance: float = 0.0, root: Optional[Resource] = None
+) -> Tuple[List[Collision], Dict[str, Group]]:
+  """Everything `plan` would bring the arm, what it holds, or what rides the X-arm with it, within
+  `clearance` mm of, and the sweeps it was judged with.
+
+  Args:
+    transport: the transport the plan is for, with the arm where the plan starts.
+    plan: from `plan_pick_up` or `plan_drop`.
+    clearance: how close is too close, in mm. 0 reports only what meets.
+    root: what stands around the arm; the whole tree the deck is in when None.
+
+  Returns:
+    What the plan would hit, and each group that was judged by name, so what would have met can be
+    brought to where the meeting happened.
+  """
+  parts = parts_of(transport)
+  if root is None:
+    root = root_of(transport.deck)
+  around = sweeps(transport, plan)
+  standing = scene(root, ENCLOSURES).obstacles([parts.arm])
+  found = check(
+    root,
+    around.groups,
+    clearance,
+    _allowed(around.touches),
+    standing,
+    between_groups=around.exemptions.between,
+    allow_for=held_allowed(around.held, around.touches),
+  )
+  return found, {g.name: g for g in around.groups}
+
+
 def check_plan(
   transport: iSWAPTransport, plan: Plan, clearance: float = 0.0, root: Optional[Resource] = None
 ) -> List[Collision]:
@@ -351,17 +384,4 @@ def check_plan(
     clearance: how close is too close, in mm. 0 reports only what meets.
     root: what stands around the arm; the whole tree the deck is in when None.
   """
-  parts = parts_of(transport)
-  if root is None:
-    root = root_of(transport.deck)
-  around = sweeps(transport, plan)
-  standing = scene(root, ENCLOSURES).obstacles([parts.arm])
-  return check(
-    root,
-    around.groups,
-    clearance,
-    _allowed(around.touches),
-    standing,
-    between_groups=around.exemptions.between,
-    allow_for=held_allowed(around.held, around.touches),
-  )
+  return judge(transport, plan, clearance, root)[0]

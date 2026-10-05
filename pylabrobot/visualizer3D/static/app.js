@@ -594,9 +594,10 @@ initTransport({
     motion: (data) => {
       playMotion(data, () => send("motion_done", { id: data.id }));
     },
-    // What a refused command would hit: a box over each resource named, held for looking at.
+    // What a refused command would hit: what would have met is brought to the meeting, and a box
+    // goes over each resource named, held for looking at.
     collisions: (data) => {
-      if (Array.isArray(data.collisions)) showCollisions(data.collisions);
+      if (Array.isArray(data.collisions)) showCollisions(data.collisions, data.moves);
     },
   },
 });

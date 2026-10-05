@@ -763,13 +763,64 @@ class Collision:
   segment: int
   gap: float  # how far apart they come, in mm: 0 when they meet
   other_group: Optional[str] = None
+  when: Optional[float] = None
+  """How far through the segment's time the mover was when it first met, 0 to 1, worked out by
+  walking the way finely. None where the sweep met without a sampled pose doing so, and between
+  groups, where both are on their way."""
+  at: Optional[Pose] = None
+  """The mover's pose then, relative to where it stands: what brings it to the meeting."""
 
   def __str__(self) -> str:
     against = f" (moving with {self.other_group})" if self.other_group else ""
+    way = f", {self.when:.0%} of the way in" if self.when is not None else ""
     return (
-      f"{self.mover.name} ({self.group}, segment {self.segment}) comes within {self.gap:.2f} mm of "
-      f"{self.obstacle.name}{against}"
+      f"{self.mover.name} ({self.group}, segment {self.segment}{way}) comes within {self.gap:.2f} "
+      f"mm of {self.obstacle.name}{against}"
     )
+
+
+# How finely a reported sweep is walked to find where the meeting happens: the most shift or turn
+# between one sampled pose and the next.
+SAMPLE_SHIFT_MM = 1.0
+SAMPLE_TURN_DEG = 1.0
+SAMPLE_MOST = 512
+
+
+def _samples(segment: Segment) -> List[Tuple[float, Pose]]:
+  """A segment's way, finely: how far through its time, and the pose then.
+
+  A segment of two poses moves from one to the other, and the way between is taken as the straight
+  one: a turn about the origin and a shift, each eased. Exact where the segment moves straight, and
+  within its slack where it turns. A segment of more poses spans a box on independent axes, along
+  no known line, so its poses stand for themselves and are sampled as they are.
+  """
+  if len(segment.poses) == 2:
+    turn0, shift0 = segment.poses[0].turn, segment.poses[0].apply((0.0, 0.0, 0.0))
+    turn1, shift1 = segment.poses[1].turn, segment.poses[1].apply((0.0, 0.0, 0.0))
+    span = max(
+      math.hypot(shift1[0] - shift0[0], shift1[1] - shift0[1], shift1[2] - shift0[2])
+      / SAMPLE_SHIFT_MM,
+      abs(turn1 - turn0) / SAMPLE_TURN_DEG,
+      1.0,
+    )
+    n = min(math.ceil(span), SAMPLE_MOST)
+    return [
+      (
+        j / n,
+        Pose(
+          turn0 + (turn1 - turn0) * j / n,
+          (0.0, 0.0, 0.0),
+          (
+            shift0[0] + (shift1[0] - shift0[0]) * j / n,
+            shift0[1] + (shift1[1] - shift0[1]) * j / n,
+            shift0[2] + (shift1[2] - shift0[2]) * j / n,
+          ),
+        ),
+      )
+      for j in range(n + 1)
+    ]
+  most = len(segment.poses) - 1
+  return [(k / most, pose) for k, pose in enumerate(segment.poses)]
 
 
 def check(
@@ -795,6 +846,11 @@ def check(
       share; a callable of two group names asks per pair - parts of one machine that nothing here
       moves relative to each other are let off.
     allow_for: more things meant to be touched, by group name: by that group only.
+
+  A meeting against what stands still is walked finely once it is found: the way is sampled, and
+  the collision carries where the mover first met (`when`, `at`), so what it ran into can be
+  brought to where the meeting happened and held there. Between groups, both are on their way and
+  the meeting stands as the sweep found it.
   """
   allowed = {id(r) for r in allow}
   if obstacles is None:
@@ -804,11 +860,35 @@ def check(
   found: List[Collision] = []
   seen: Set[Tuple[int, int, str]] = set()
 
-  def report(mover: Piece, obstacle: Resource, group: str, k: int, gap: float, other=None) -> None:
+  def report(
+    mover: Piece,
+    obstacle: Resource,
+    group: str,
+    k: int,
+    gap: float,
+    other=None,
+    when: Optional[float] = None,
+    at: Optional[Pose] = None,
+  ) -> None:
     key = (id(mover.resource), id(obstacle), group)
     if key not in seen:
       seen.add(key)
-      found.append(Collision(mover.resource, obstacle, group, k, max(gap, 0.0), other))
+      found.append(Collision(mover.resource, obstacle, group, k, max(gap, 0.0), other, when, at))
+
+  def contact(
+    piece: Piece, group: Group, k: int, other: Piece
+  ) -> Tuple[Optional[float], Optional[Pose]]:
+    """Where along the segment's way the piece first meets what stands against it, walked finely.
+
+    The sweep that reported the meeting is the hull of the whole way; the way itself may clear what
+    its hull only leans on. Nothing found says so, and the meeting stands as the sweep said it.
+    """
+    if k >= len(group.segments):
+      return None, None
+    for f, pose in _samples(group.segments[k]):
+      if distance([pose.apply(q) for q in piece.points], other.points) <= 0.0:
+        return f, pose
+    return None, None
 
   def swept_entries(
     group: Group, grow_by: float, in_place: bool
@@ -840,7 +920,8 @@ def check(
           continue
         gap = distance(hull, other.points, stop_beyond=slack + reach + 1.0) - slack
         if gap <= 0.0 or gap < reach:
-          report(piece, other.resource, group.name, k, gap)
+          when, at = contact(piece, group, k, other)
+          report(piece, other.resource, group.name, k, gap, when=when, at=at)
 
   # Groups against each other, only over the times both segments cover - each group standing where
   # it starts before its first segment, and where it ends after its last. Two groups on one frame

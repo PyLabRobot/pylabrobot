@@ -27,6 +27,7 @@ from typing import (
   FrozenSet,
   Iterable,
   List,
+  Mapping,
   Optional,
   Sequence,
   Set,
@@ -660,15 +661,21 @@ class Viewer3D:
   # How long a command waits for a page to play its motion before going on without it.
   MOTION_TIMEOUT_S = 120.0
 
-  async def show_collisions(self, collisions: Sequence[Collision]) -> None:
-    """Draw on the pages what a refused command would hit: a box over each resource named.
+  async def show_collisions(
+    self, collisions: Sequence[Collision], groups: Optional[Mapping[str, Any]] = None
+  ) -> None:
+    """Draw on the pages what a refused command would hit, and bring the mover to the meeting.
 
-    The boxes stay until the scene is rebuilt or other collisions are shown, so what a refused
-    command ran into can be looked at. With no page connected, or called from off the viewer's
-    loop, nothing is sent.
+    A box goes over each resource the command ran into. Where the check walked its way finely
+    (`Collision.at`), what would have hit is brought there first - eased, if the page glides - and
+    held, so the collision point is on screen. The boxes stay until the scene is rebuilt or other
+    collisions are shown. With no page connected, or called from off the viewer's loop, nothing is
+    sent.
 
     Args:
       collisions: what a check found, whose `obstacle` is the resource drawn over.
+      groups: the check's groups by name, so what a collision's group carries can be brought to
+        where it first met. Without them, the boxes stand alone.
     """
     if not self._clients or self._loop is None or asyncio.get_running_loop() is not self._loop:
       return
@@ -680,8 +687,30 @@ class Viewer3D:
         continue
       seen.add(index)
       items.append({"index": index, "resource": collision.obstacle.name, "group": collision.group})
-    if items:
-      await self._broadcast("collisions", {"collisions": items})
+    moves: List[Dict[str, Any]] = []
+    if groups is not None:
+      # One pose per group: the first meeting along its way is where it is brought to.
+      first: Dict[str, Collision] = {}
+      for collision in collisions:
+        if collision.at is not None and collision.group not in first:
+          first[collision.group] = collision
+      for name, collision in first.items():
+        group = groups.get(name)
+        if group is None:
+          continue
+        pose = collision.at
+        if pose is None:
+          continue
+        at = [pose.turn, *pose.pivot, *pose.shift]
+        brought: Set[int] = set()
+        for piece in group.pieces:
+          index = self._index_of.get(piece.resource.name)
+          if index is None or index in brought:
+            continue
+          brought.add(index)
+          moves.append({"index": index, "at": at})
+    if items or moves:
+      await self._broadcast("collisions", {"collisions": items, "moves": moves})
 
   async def act_out(self, command: str, motion: Optional[Dict[str, Any]]) -> None:
     """Act out one command's motion, and hold the command until a page has played it.

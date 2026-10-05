@@ -20,7 +20,7 @@ import websockets
 from websockets.typing import Origin
 
 from pylabrobot.resources import does_volume_tracking, set_volume_tracking
-from pylabrobot.resources.collision import Collision
+from pylabrobot.resources.collision import Collision, Group, Pose, solid_pieces, straight
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import hamilton_96_tiprack_1000uL
@@ -861,6 +861,8 @@ class ShowCollisionsTests(unittest.IsolatedAsyncioTestCase):
     self.facility = empty_facility()
     self.plate = cor_96_wellplate_360uL_Fb("plate")
     self.facility.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
+    self.mover = Resource("mover", 10, 10, 10)
+    self.facility.assign_child_resource(self.mover, location=Coordinate(0, 0, 0))
     self.viewer = Viewer3D(
       self.facility,
       open_browser=False,
@@ -894,6 +896,35 @@ class ShowCollisionsTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(
         said["data"]["collisions"],
         [{"index": self.viewer._index_of["plate"], "resource": "plate", "group": "test"}],
+      )
+      self.assertEqual(said["data"]["moves"], [])
+
+  async def test_what_would_have_met_is_brought_to_the_meeting(self):
+    async with websockets.connect(self.ws(), max_size=None) as ws:
+      self.assertEqual(json.loads(await ws.recv())["event"], "scene")
+      group = Group("mover group", solid_pieces(self.mover), straight((40.0, 0.0, 0.0), 0.0, 1.0))
+      hit = Collision(
+        mover=self.mover,
+        obstacle=self.plate,
+        group="mover group",
+        segment=0,
+        gap=0.0,
+        when=0.38,
+        at=Pose(shift=(38.0, 0.0, 0.0)),
+      )
+      await self.viewer.show_collisions([hit], {"mover group": group})
+      while True:
+        said = json.loads(await ws.recv())
+        if said["event"] == "collisions":
+          break
+      self.assertEqual(
+        said["data"]["moves"],
+        [
+          {
+            "index": self.viewer._index_of["mover"],
+            "at": [0.0, 0.0, 0.0, 0.0, 38.0, 0.0, 0.0],
+          }
+        ],
       )
 
   async def test_nothing_is_sent_for_what_the_scene_does_not_name(self):

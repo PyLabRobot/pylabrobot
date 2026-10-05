@@ -225,6 +225,47 @@ export function onChange(listener) {
   changeListeners.push(listener);
 }
 
+/**
+ * Bring what an index is drawn as to where a refused command would first have met something, and
+ * hold there.
+ *
+ * The pose is a world-frame delta: a turn about a vertical through a pivot, then a shift. Composed
+ * with the instance's world matrix and put back in its parent's terms, it eases there the way any
+ * move does, and what stands on it comes along.
+ *
+ * @param {number} index
+ * @param {number[]} at  turn in degrees, then the pivot and the shift, in mm
+ */
+export function applyContactPose(index, at) {
+  const [turn, px, py, pz, sx, sy, sz] = at;
+  const rad = (turn * Math.PI) / 180;
+  const met = new THREE.Matrix4()
+    .makeTranslation(px, py, pz)
+    .multiply(new THREE.Matrix4().makeRotationZ(rad))
+    .multiply(new THREE.Matrix4().makeTranslation(-px, -py, -pz));
+  met.premultiply(new THREE.Matrix4().makeTranslation(sx, sy, sz));
+  const brought = new THREE.Matrix4().multiplyMatrices(met, world.matrices[index]);
+  const parent = world.parentOf[index];
+  const local =
+    parent >= 0
+      ? new THREE.Matrix4().copy(world.matrices[parent]).invert().multiply(brought)
+      : brought;
+  const e = local.elements;
+  const location = { x: e[12], y: e[13], z: e[14] };
+  const rotation = { x: 0, y: 0, z: (Math.atan2(e[1], e[0]) * 180) / Math.PI };
+  // Where the glide eases from, and what the panel reads meanwhile.
+  const o = index * 6;
+  const from = { x: world.local[o], y: world.local[o + 1], z: world.local[o + 2] };
+  setLocalRotation(index, rotation);
+  refreshSubtree(index);
+  if (!glideSeconds || reducedMotion?.matches) {
+    if (setLocal(index, location)) refreshSubtree(index);
+    announce({ kind: "glide", index });
+    return;
+  }
+  glides.set(index, { from, to: location, left: glideSeconds });
+}
+
 export function updateGlides(delta) {
   if (!glides.size) return false;
   for (const [index, glide] of glides) {

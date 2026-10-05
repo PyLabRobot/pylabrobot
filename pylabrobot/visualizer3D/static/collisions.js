@@ -1,10 +1,13 @@
 // What a refused command would hit: a red, transparent box over each resource the command ran
-// into, drawn over everything, held until the next word about collisions or the scene is rebuilt.
+// into, drawn over everything. Where the check walked its way finely, what would have hit is
+// brought to the meeting first, and the page holds it there. Held until the next word about
+// collisions or the scene is rebuilt.
 
 import * as THREE from "three";
 
 import { COLLISION, COLLISION_OPACITY } from "./constants.js";
 import { OVERLAY_ORDER, worldBox } from "./drawn.js";
+import { applyContactPose } from "./live.js";
 import { view } from "./renderer.js";
 
 const boxes = new THREE.Group();
@@ -48,9 +51,17 @@ function collisionBox(index) {
   return mesh;
 }
 
-/** The server's word about what a refused command would hit, one item per resource. */
-export function showCollisions(items) {
+/** The server's word about what a refused command would hit: boxes over each resource named, and
+ * (`moves`) what would have hit it brought to where the meeting happened. */
+export function showCollisions(items, moves = []) {
   clearCollisions();
+  const brought = new Set();
+  for (const move of moves) {
+    if (typeof move.index !== "number" || !Array.isArray(move.at)) continue;
+    if (brought.has(move.index)) continue;
+    brought.add(move.index);
+    applyContactPose(move.index, move.at);
+  }
   for (const item of items) {
     if (typeof item.index !== "number") continue;
     boxes.add(collisionBox(item.index));
