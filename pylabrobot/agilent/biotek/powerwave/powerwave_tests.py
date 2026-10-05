@@ -300,11 +300,11 @@ class TestAssayDefinition(unittest.TestCase):
     with self.assertRaises(ValueError):
       build_assay_definition([550], read_type="spectral")
 
-  def test_matches_the_verified_2021_endpoint_table(self):
-    """Byte-for-byte equality with the construction verified on real hardware in 2021.
+  def test_matches_the_reference_endpoint_table(self):
+    """Byte-for-byte equality with an endpoint table verified on real hardware.
 
-    Reproduced verbatim from the source notebook so that any future refactor of
-    :func:`build_assay_definition` cannot silently change the wire format.
+    Pinned so that any refactor of :func:`build_assay_definition` cannot silently
+    change the wire format.
     """
     wavelengths = [350, 550, 600, 630, 700, 990]
     command_wavelengths = bytearray()
@@ -335,8 +335,8 @@ class TestAssayDefinition(unittest.TestCase):
     )
     self.assertEqual(build_assay_definition(wavelengths, read_type="endpoint"), bytes(expected))
 
-  def test_matches_the_verified_2021_kinetic_table(self):
-    """Byte-for-byte equality with the kinetic construction verified in 2021."""
+  def test_matches_the_reference_kinetic_table(self):
+    """Byte-for-byte equality with a kinetic table verified on real hardware."""
     wavelengths = [600, 630]
     command_wavelengths = bytearray()
     for this_wavelength in wavelengths:
@@ -367,8 +367,8 @@ class TestAssayDefinition(unittest.TestCase):
     built = build_assay_definition(
       wavelengths,
       read_type="kinetic",
-      # The 2021 run set the total-time bit, which the driver no longer sends; pin
-      # it explicitly so this stays a byte-for-byte check of that capture.
+      # The reference table sets the total-time bit, so pin it to keep this a
+      # byte-for-byte check.
       flags=KINETIC_SHAKE_FLAGS | FLAG_USE_TOTAL_KINETIC_TIME,
       kinetic_interval=60,
       kinetic_read_count=9999,

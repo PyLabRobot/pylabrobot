@@ -384,6 +384,8 @@ FLAG_USE_TOTAL_KINETIC_TIME = 0x80
 #: Byte 31 for a kinetic run governed by its read count: shake, shake before every
 #: read, continuous shake.
 #:
+#: :data:`FLAG_USE_TOTAL_KINETIC_TIME` is deliberately absent: it makes the
+#: instrument run for ``total_kinetic_read_time`` and ignore ``kinetic_read_count``.
 KINETIC_SHAKE_FLAGS = FLAG_SHAKE | FLAG_SHAKE_EVERY_READ | FLAG_SHAKE_CONTINUOUS
 
 #: Byte 31 for a kinetic run that does not shake, which is the default: every bit
@@ -426,8 +428,8 @@ def build_assay_definition(
     kinetic_read_count: Bytes 62-63, number of reads, 2 to 9999.
     shake_time: Bytes 163-164, seconds.
     shake_speed: Byte 165, 0 slow, 1 medium, 2 fast, 3 variable.
-    total_kinetic_read_time: Bytes 166-167. The manual says minutes, but a 2021
-      bench test showed a setting of 9999 yielding a run of about 9999 *seconds*.
+    total_kinetic_read_time: Bytes 166-167. The manual says minutes, but the
+      instrument treats it as seconds: 9999 gave a run of about 9999 s.
       Only consulted when :data:`FLAG_USE_TOTAL_KINETIC_TIME` is set.
     delay_before_first_read: Byte 168, 0 no, 1 yes.
     delay: Bytes 169-170, seconds.
