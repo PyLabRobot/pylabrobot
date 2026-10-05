@@ -200,7 +200,7 @@ DEVICE_CONFIGURATIONS: Dict[int, str] = {
   0x0032: "PowerWaveX",
   0x0038: "PowerWave 200 w/ Incubator",
   0x0039: "PowerWave 340 w/ Incubator",
-  0x003A: "PowerWaveX w/ Incubator", # Code is validated for this machine
+  0x003A: "PowerWaveX w/ Incubator",  # Code is validated for this machine
   0x003B: "PowerWaveX 340 w/ Incubator",
   0x0072: "PowerWaveX Select",
   0x007A: "PowerWaveX Select w/ Incubator",
@@ -257,7 +257,7 @@ MAX_WAVELENGTH = 999
 #: Nothing here is selectable. The instrument picks the position itself from the
 #: wavelength asked for: no computer-control command chooses it, and the wheel
 #: surfaces over the serial port only as motor 1 in fault codes, such as
-#: :data:`SELF_TEST_ERRORS` ``"0201"`` for a wheel that cannot find home. 
+#: :data:`SELF_TEST_ERRORS` ``"0201"`` for a wheel that cannot find home.
 #:
 #: Recorded because it is useful for reasoning about faults
 
@@ -388,7 +388,7 @@ KINETIC_SHAKE_FLAGS = FLAG_SHAKE | FLAG_SHAKE_EVERY_READ | FLAG_SHAKE_CONTINUOUS
 
 #: Byte 31 for a kinetic run that does not shake, which is the default: every bit
 #: in :data:`KINETIC_SHAKE_FLAGS` is about shaking, so asking for none leaves the
-#: byte empty. 
+#: byte empty.
 
 KINETIC_FLAGS = 0
 

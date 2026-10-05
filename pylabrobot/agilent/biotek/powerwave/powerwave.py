@@ -378,8 +378,6 @@ class PowerWaveX:
       200 nm is a real floor and the firmware enforces it: a scan request for
       190-200 nm, legal in every other field, was answered ACK and status
       ``090`` without moving anything.
-
-    
     """
     return (MIN_WAVELENGTH, MAX_WAVELENGTH)
 
@@ -429,7 +427,7 @@ class PowerWaveX:
     The floor scales with the wavelength count, since the carriage makes a pass
     per wavelength. Measured on a PowerWaveX w/ Incubator (firmware R06.20) at
     9600 baud over a full 96-well plate, asked immediately after the assay was
-    pushed: 10 s for one wavelength, 19 s for two, 38 s for four. 
+    pushed: 10 s for one wavelength, 19 s for two, 38 s for four.
     """
     async with self._owns_port():
       await self._send_command(Command.GET_MINIMUM_KINETIC_INTERVAL)
@@ -1049,7 +1047,7 @@ class PowerWaveX:
         request only partly, and not the fields that matter most. A PowerWaveX
         w/ Incubator (firmware R06.20) sent row 99, column 99, 999 to 200 nm
         with a step of 0 answered ACK and status ``000``, accepting every
-        impossible field, and then stopx responding - neither HALT nor any
+        impossible field, and then stopped responding - neither HALT nor any
         other command brought it back, and it had to be recovered at the front
         panel. A step of 0 in particular gives the firmware no way to finish
         sweeping. It does check the wavelength bounds, refusing 190 nm with
@@ -1064,8 +1062,6 @@ class PowerWaveX:
 
       The geometry command must precede a scan on any plate that is not the
       standard 96-well, which :meth:`set_plate_geometry` does here.
-
-     
     """
     if (well is None) == (column is None):
       raise ValueError("Give exactly one of well or column")
@@ -1457,7 +1453,7 @@ class PowerWaveX:
       The manual lists the setpoint as data bytes "1 - 2", but this instrument
       accepts a *single* raw byte holding the integer degrees. Confirmed on a
       PowerWaveX w/ Incubator (firmware R06.20), which returned status "000" to a
-      one-byte payload. 
+      one-byte payload.
     """
     if not self.supports_heating:
       raise NotImplementedError(f"{self.model} has no incubator.")
@@ -1761,8 +1757,6 @@ class PowerWaveX:
     two-wavelength one. So it waits out the driver's full response timeout rather
     than a short window. Firmware that does not send it is tolerated: this only
     warns, at the cost of one such wait per read.
-
-    
     """
     try:
       trailer = await self._read_exactly(1)
