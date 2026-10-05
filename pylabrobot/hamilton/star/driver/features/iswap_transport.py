@@ -32,7 +32,7 @@ X-arm with it (`iswap_collisions.check_plan`); a plan that would hit something i
 import asyncio
 import dataclasses
 import math
-from typing import Any, List, Literal, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Awaitable, Callable, List, Literal, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.lid import Lid
@@ -309,6 +309,8 @@ class iSWAPTransport:
       iswap.default_minimum_traverse_height if traverse_height is None else traverse_height
     )
     self._held: Optional[_Held] = None
+    # Told what a refused plan would hit, before the refusal is raised. Set by whoever draws it.
+    self.collision_reporter: Optional[Callable[[Sequence[Any]], Awaitable[None]]] = None
 
   # -- what is where ----------------------------------------------------------------------------
 
@@ -663,6 +665,8 @@ class iSWAPTransport:
     if self.check_collisions:
       found = self.collisions(plan)
       if found:
+        if self.collision_reporter is not None:
+          await self.collision_reporter(found)
         raise iSWAPCollisionError(plan, found)
     for step in plan.steps:
       await self._do(step, plan)
