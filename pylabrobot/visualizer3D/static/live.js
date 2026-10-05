@@ -226,44 +226,27 @@ export function onChange(listener) {
 }
 
 /**
- * Bring what an index is drawn as to where a refused command would first have met something, and
- * hold there.
- *
- * The pose is a world-frame delta: a turn about a vertical through a pivot, then a shift. Composed
- * with the instance's world matrix and put back in its parent's terms, it eases there the way any
- * move does, and what stands on it comes along.
+ * Draw an index at a local placement of its own, given as a matrix, and hold there: where a
+ * refused command would have brought it. What stands on it comes along, and a travelling part -
+ * the X-arm - is placed through its own drive, so it stays one piece with what it carries.
  *
  * @param {number} index
- * @param {number[]} at  turn in degrees, then the pivot and the shift, in mm
+ * @param {any} local  the placement relative to the parent, worked out by the caller against
+ *   where the parent stands at the same instant
  */
-export function applyContactPose(index, at) {
-  const [turn, px, py, pz, sx, sy, sz] = at;
-  const rad = (turn * Math.PI) / 180;
-  const met = new THREE.Matrix4()
-    .makeTranslation(px, py, pz)
-    .multiply(new THREE.Matrix4().makeRotationZ(rad))
-    .multiply(new THREE.Matrix4().makeTranslation(-px, -py, -pz));
-  met.premultiply(new THREE.Matrix4().makeTranslation(sx, sy, sz));
-  const brought = new THREE.Matrix4().multiplyMatrices(met, world.matrices[index]);
-  const parent = world.parentOf[index];
-  const local =
-    parent >= 0
-      ? new THREE.Matrix4().copy(world.matrices[parent]).invert().multiply(brought)
-      : brought;
+export function placeAtMeeting(index, local) {
   const e = local.elements;
-  const location = { x: e[12], y: e[13], z: e[14] };
-  const rotation = { x: 0, y: 0, z: (Math.atan2(e[1], e[0]) * 180) / Math.PI };
-  // Where the glide eases from, and what the panel reads meanwhile.
-  const o = index * 6;
-  const from = { x: world.local[o], y: world.local[o + 1], z: world.local[o + 2] };
-  setLocalRotation(index, rotation);
-  refreshSubtree(index);
-  if (!glideSeconds || reducedMotion?.matches) {
-    if (setLocal(index, location)) refreshSubtree(index);
-    announce({ kind: "glide", index });
+  const arm = arms.find((a) => a.index === index);
+  if (arm) {
+    arm.currentX = e[12];
+    arm.targetX = e[12];
+    placeArm(arm);
     return;
   }
-  glides.set(index, { from, to: location, left: glideSeconds });
+  setLocal(index, { x: e[12], y: e[13], z: e[14] });
+  setLocalRotation(index, { x: 0, y: 0, z: (Math.atan2(e[1], e[0]) * 180) / Math.PI });
+  refreshSubtree(index);
+  announce({ kind: "glide", index });
 }
 
 export function updateGlides(delta) {

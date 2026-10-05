@@ -681,9 +681,15 @@ class Viewer3D:
       return
     items: List[Dict[str, Any]] = []
     seen: Set[int] = set()
+    met = [c.when for c in collisions if c.when is not None]
+    moment = min(met) if met else None
     for collision in collisions:
       index = self._index_of.get(collision.obstacle.name)
       if index is None or index in seen:
+        continue
+      # Boxes on what is met at the instant the mover is held at; a meeting the hull only leans on,
+      # with no instant of its own, stands as the sweep said it.
+      if moment is not None and collision.when is not None and collision.when != moment:
         continue
       seen.add(index)
       items.append({"index": index, "resource": collision.obstacle.name, "group": collision.group})

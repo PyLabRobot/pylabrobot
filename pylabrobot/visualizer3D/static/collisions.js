@@ -7,8 +7,9 @@ import * as THREE from "three";
 
 import { COLLISION, COLLISION_OPACITY } from "./constants.js";
 import { OVERLAY_ORDER, worldBox } from "./drawn.js";
-import { applyContactPose } from "./live.js";
+import { placeAtMeeting } from "./live.js";
 import { view } from "./renderer.js";
+import { world } from "./world.js";
 
 const boxes = new THREE.Group();
 
@@ -51,20 +52,43 @@ function collisionBox(index) {
   return mesh;
 }
 
-/** The server's word about what a refused command would hit: boxes over each resource named, and
- * (`moves`) what would have hit it brought to where the meeting happened. */
+/** The server's word about what a refused command would hit: what would have met it is brought to
+ * the instant of the first meeting, and a box goes over each resource met there. */
 export function showCollisions(items, moves = []) {
   clearCollisions();
-  const brought = new Set();
+  // Where each moved part stands at the instant, worked out against where things stood before, so
+  // nothing is dragged twice: a part's parent moves by its own delta, and the part by its own.
+  const instant = new Map();
   for (const move of moves) {
     if (typeof move.index !== "number" || !Array.isArray(move.at)) continue;
-    if (brought.has(move.index)) continue;
-    brought.add(move.index);
-    applyContactPose(move.index, move.at);
+    if (instant.has(move.index)) continue;
+    instant.set(move.index, metMatrix(move.at, world.matrices[move.index]));
   }
+  const locals = new Map();
+  for (const [index, matrix] of instant) {
+    const parent = world.parentOf[index];
+    const stood = parent >= 0 ? (instant.get(parent) ?? world.matrices[parent]) : null;
+    locals.set(
+      index,
+      stood ? new THREE.Matrix4().copy(stood).invert().multiply(matrix) : matrix
+    );
+  }
+  for (const [index, local] of locals) placeAtMeeting(index, local);
   for (const item of items) {
     if (typeof item.index !== "number") continue;
     boxes.add(collisionBox(item.index));
   }
   boxes.visible = boxes.children.length > 0;
+}
+
+/** A part's world matrix at the meeting: its pose there, composed with where it stands. */
+function metMatrix(at, stood) {
+  const [turn, px, py, pz, sx, sy, sz] = at;
+  const rad = (turn * Math.PI) / 180;
+  const met = new THREE.Matrix4()
+    .makeTranslation(px, py, pz)
+    .multiply(new THREE.Matrix4().makeRotationZ(rad))
+    .multiply(new THREE.Matrix4().makeTranslation(-px, -py, -pz));
+  met.premultiply(new THREE.Matrix4().makeTranslation(sx, sy, sz));
+  return new THREE.Matrix4().multiplyMatrices(met, stood);
 }
