@@ -970,12 +970,12 @@ class PowerWaveX:
   # ------------------------------------------------------------------------------------
   # Documented but not implemented
   #
-  # These four Appendix B commands are deliberately unimplemented. They are declared
-  # here so the gap is discoverable from the API rather than by reading the manual,
-  # and so a caller gets a specific explanation instead of AttributeError.
+  # These three Appendix B commands are deliberately unimplemented. They are private
+  # stubs that record why each is left out, so the gap is visible in the driver rather
+  # than only in the manual.
   # ------------------------------------------------------------------------------------
 
-  async def configure_wavelengths(self, wavelengths: Sequence[int]) -> None:
+  async def _configure_wavelengths(self, wavelengths: Sequence[int]) -> None:
     """Not implemented: write the calibration wavelength table (``'M'``, page B-8).
 
     This rewrites the table in the instrument's **non-volatile memory**, and the
@@ -1202,7 +1202,7 @@ class PowerWaveX:
       timestamp=datetime.now(),
     )
 
-  async def request_plate_barcode(self) -> str:
+  async def _request_plate_barcode(self) -> str:
     """Not implemented: read the microplate barcode (``'s'``, page B-19).
 
     Requires the barcode scanner option. The manual notes the instrument returns
@@ -1216,7 +1216,7 @@ class PowerWaveX:
       "scanner option, which was not available to develop against."
     )
 
-  async def close_plate_access_door(self) -> None:
+  async def _close_plate_access_door(self) -> None:
     """Not implemented: close the robotic access door (``')'``, page B-20).
 
     Only meaningful on the robotic-access-door models, whose configuration words

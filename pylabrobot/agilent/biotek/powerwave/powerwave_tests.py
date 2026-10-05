@@ -2229,13 +2229,13 @@ class TestElxStatusCodes(unittest.TestCase):
 
 
 class TestUnimplementedCommands(unittest.IsolatedAsyncioTestCase):
-  """The four Appendix B commands that are declared but deliberately not sent."""
+  """The three Appendix B commands that are declared but deliberately not sent."""
 
   async def test_each_raises_not_implemented_without_touching_the_port(self):
     cases = [
-      ("configure_wavelengths", ([550],), "'M'"),
-      ("request_plate_barcode", (), "'s'"),
-      ("close_plate_access_door", (), "')'"),
+      ("_configure_wavelengths", ([550],), "'M'"),
+      ("_request_plate_barcode", (), "'s'"),
+      ("_close_plate_access_door", (), "')'"),
     ]
     for name, args, command in cases:
       with self.subTest(method=name):
@@ -2248,7 +2248,7 @@ class TestUnimplementedCommands(unittest.IsolatedAsyncioTestCase):
   async def test_door_message_names_the_connected_model(self):
     reader, _ = _reader(model="PowerWaveX w/ Incubator")
     with self.assertRaises(NotImplementedError) as ctx:
-      await reader.close_plate_access_door()
+      await reader._close_plate_access_door()
     self.assertIn("PowerWaveX w/ Incubator", str(ctx.exception))
 
   def test_every_documented_command_is_either_used_or_declared(self):
@@ -2259,9 +2259,9 @@ class TestUnimplementedCommands(unittest.IsolatedAsyncioTestCase):
 
     source = inspect.getsource(module)
     declared = {
-      "CONFIGURE_WAVELENGTHS": "configure_wavelengths",
-      "GET_PLATE_BARCODE": "request_plate_barcode",
-      "CLOSE_PLATE_ACCESS_DOOR": "close_plate_access_door",
+      "CONFIGURE_WAVELENGTHS": "_configure_wavelengths",
+      "GET_PLATE_BARCODE": "_request_plate_barcode",
+      "CLOSE_PLATE_ACCESS_DOOR": "_close_plate_access_door",
     }
     for command in Command:
       with self.subTest(command=command.name):
