@@ -7,7 +7,7 @@ import * as THREE from "three";
 
 import { COLLISION, COLLISION_OPACITY } from "./constants.js";
 import { OVERLAY_ORDER, worldBox } from "./drawn.js";
-import { placeAtMeeting } from "./live.js";
+import { holdAtMeeting } from "./live.js";
 import { view } from "./renderer.js";
 import { world } from "./world.js";
 
@@ -52,7 +52,7 @@ function collisionBox(index) {
   return mesh;
 }
 
-/** The server's word about what a refused command would hit: what would have met it is brought to
+/** The server's word about what a refused command would hit: what would have met it is eased to
  * the instant of the first meeting, and a box goes over each resource met there. */
 export function showCollisions(items, moves = []) {
   clearCollisions();
@@ -64,16 +64,18 @@ export function showCollisions(items, moves = []) {
     if (instant.has(move.index)) continue;
     instant.set(move.index, metMatrix(move.at, world.matrices[move.index]));
   }
-  const locals = new Map();
-  for (const [index, matrix] of instant) {
+  const parts = [];
+  for (const [index, met] of instant) {
     const parent = world.parentOf[index];
     const stood = parent >= 0 ? (instant.get(parent) ?? world.matrices[parent]) : null;
-    locals.set(
-      index,
-      stood ? new THREE.Matrix4().copy(stood).invert().multiply(matrix) : matrix
-    );
+    const to = stood ? new THREE.Matrix4().copy(stood).invert().multiply(met) : met;
+    const from =
+      parent >= 0
+        ? new THREE.Matrix4().copy(world.matrices[parent]).invert().multiply(world.matrices[index])
+        : new THREE.Matrix4().copy(world.matrices[index]);
+    parts.push({ index, from, to });
   }
-  for (const [index, local] of locals) placeAtMeeting(index, local);
+  holdAtMeeting(parts);
   for (const item of items) {
     if (typeof item.index !== "number") continue;
     boxes.add(collisionBox(item.index));

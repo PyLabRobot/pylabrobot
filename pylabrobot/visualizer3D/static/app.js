@@ -27,6 +27,7 @@ import {
   setHidden,
   updateArms,
   updateGlides,
+  updateMeeting,
 } from "./live.js";
 import {
   arms,
@@ -516,6 +517,8 @@ whileMoving(() => {
 whileMoving(updateArms);
 
 whileMoving(updateGlides);
+
+whileMoving(updateMeeting);
 
 whileMoving(stepMotion);
 

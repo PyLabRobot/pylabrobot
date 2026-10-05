@@ -226,15 +226,14 @@ export function onChange(listener) {
 }
 
 /**
- * Draw an index at a local placement of its own, given as a matrix, and hold there: where a
- * refused command would have brought it. What stands on it comes along, and a travelling part -
- * the X-arm - is placed through its own drive, so it stays one piece with what it carries.
+ * Draw an index at a local placement of its own, given as a matrix, right now: where a refused
+ * command would have brought it. What stands on it comes along, and a travelling part - the X-arm
+ * - is placed through its own drive, so it stays one piece with what it carries.
  *
  * @param {number} index
- * @param {any} local  the placement relative to the parent, worked out by the caller against
- *   where the parent stands at the same instant
+ * @param {any} local  the placement relative to the parent, as a matrix
  */
-export function placeAtMeeting(index, local) {
+function placeAt(index, local) {
   const e = local.elements;
   const arm = arms.find((a) => a.index === index);
   if (arm) {
@@ -247,6 +246,63 @@ export function placeAtMeeting(index, local) {
   setLocalRotation(index, { x: 0, y: 0, z: (Math.atan2(e[1], e[0]) * 180) / Math.PI });
   refreshSubtree(index);
   announce({ kind: "glide", index });
+}
+
+// The machine eased into where a refused command would first have met something, and held there:
+// every part brought along its own way to the same instant, so what moves together arrives
+// together. Eased here rather than left to the glides, which ease placements only - the parts
+// turn on their way as well. Where the meeting is was walked finely by the check, so the pose
+// eased to is the pose the collision said, not a look-alike.
+
+const MEETING_SECONDS = 1.2;
+let meeting = null;
+
+/**
+ * Ease what a refused command would have moved from where it stands to where it first met, and
+ * hold there.
+ *
+ * @param {Array<{index: number, from: any, to: any}>} parts  each part's placement now and at the
+ *   meeting, as matrices worked out against the parents each stands under at that instant
+ */
+export function holdAtMeeting(parts) {
+  const eased = parts.map(({ index, from, to }) => ({
+    index,
+    arm: arms.some((a) => a.index === index),
+    from: { x: from.elements[12], y: from.elements[13], z: from.elements[14], rz: angleOf(from) },
+    to: { x: to.elements[12], y: to.elements[13], z: to.elements[14], rz: angleOf(to) },
+  }));
+  meeting = { left: MEETING_SECONDS, parts: eased };
+  invalidate();
+}
+
+function angleOf(local) {
+  return (Math.atan2(local.elements[1], local.elements[0]) * 180) / Math.PI;
+}
+
+/** Asked by the frame loop while the meeting is easing; whether it still is. */
+export function updateMeeting(delta) {
+  if (!meeting) return false;
+  meeting.left -= delta;
+  const done = meeting.left <= 0;
+  const p = done ? 1 : 1 - meeting.left / MEETING_SECONDS;
+  const still = reducedMotion?.matches;
+  for (const part of meeting.parts) {
+    const f = still ? 1 : p;
+    const local = new THREE.Matrix4()
+      .makeTranslation(
+        part.from.x + (part.to.x - part.from.x) * f,
+        part.from.y + (part.to.y - part.from.y) * f,
+        part.from.z + (part.to.z - part.from.z) * f
+      )
+      .multiply(
+        new THREE.Matrix4().makeRotationZ(
+          ((part.from.rz + (part.to.rz - part.from.rz) * f) * Math.PI) / 180
+        )
+      );
+    placeAt(part.index, local);
+  }
+  if (done) meeting = null;
+  return true;
 }
 
 export function updateGlides(delta) {

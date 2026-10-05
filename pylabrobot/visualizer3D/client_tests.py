@@ -27,6 +27,7 @@ BOUNDARIES = {
   "resize": "the viewport changing shape",
   "atBoundary": "a call from outside the page",
   "hideSelectionLater": "a timer the page set for itself, to take the selection box down",
+  "holdAtMeeting": "a message arriving from the server, easing what would have met into the meeting",
   None: "the input listeners - clicks and keys anywhere, the pointer over the viewport, a crossing"
   " into a row that raises a hover box - and the camera's own change event",
 }
