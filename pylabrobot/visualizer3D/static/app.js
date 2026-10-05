@@ -3,6 +3,7 @@ import { forgetDetail, updateDetail, updateEdgeMode } from "./appearance.js";
 import { buildMeshes } from "./boxes.js";
 import { PROTOCOL } from "./constants.js";
 import { initDeviceTools } from "./device_tools.js";
+import { clearCollisions, showCollisions } from "./collisions.js";
 import { hiddenNames, meshes, meshRoots, modelMeshes, stateOf, worldBox } from "./drawn.js";
 import { niceNumber } from "./format.js";
 import {
@@ -438,6 +439,8 @@ function rebuildScene(data) {
   glides.clear();
   // A motion under way moves resources by where they stood in the last scene.
   dropMotions();
+  // What the last scene's indices named is not what these do: the collision boxes go.
+  clearCollisions();
   timings.decodeMs = performance.now() - _tScene;
   const _tBuild = performance.now();
   forgetDetail();
@@ -590,6 +593,10 @@ initTransport({
     // A command the device is carrying out: acted out, and the server told when it has been.
     motion: (data) => {
       playMotion(data, () => send("motion_done", { id: data.id }));
+    },
+    // What a refused command would hit: a box over each resource named, held for looking at.
+    collisions: (data) => {
+      if (Array.isArray(data.collisions)) showCollisions(data.collisions);
     },
   },
 });

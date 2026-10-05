@@ -95,6 +95,7 @@ export function connect() {
     else if (kind === "state") handlers.state(data);
     else if (kind === "moves") handlers.moves(data.moves);
     else if (kind === "motion") handlers.motion(data);
+    else if (kind === "collisions") handlers.collisions(data);
   };
 }
 

@@ -20,13 +20,25 @@ import socket
 import sys
 import threading
 import webbrowser
-from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  FrozenSet,
+  Iterable,
+  List,
+  Optional,
+  Sequence,
+  Set,
+  Tuple,
+)
 from urllib.parse import parse_qs, urlsplit
 
 import websockets
 from websockets.asyncio.server import Server, ServerConnection
 from websockets.http11 import Request, Response
 
+from pylabrobot.resources.collision import Collision
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -179,6 +191,10 @@ class Viewer3D:
       the package is found without it.
     allowed_hosts: extra hostnames a browser may reach the viewer by. IP addresses, `localhost`,
       this machine's hostname and `<hostname>.local` are always accepted.
+    raise_on_collision: whether a collision check that found something may refuse here. When a
+      device's collision gate is attached to this viewer (`attach_viewer_collisions`), the flag is
+      what turns the checks into gates: a command that would hit something is drawn on the page
+      and raises, rather than being reported to whoever called the check.
 
   Access: each run makes a token, hands it out only in the link it prints and opens (`url`, as
   its `#token=` fragment, which no request carries), and refuses a websocket without it. Both
@@ -195,6 +211,7 @@ class Viewer3D:
   token: str
   allowed_hosts: Set[str]
   models_root: Optional[str]
+  raise_on_collision: bool
   rebuilds: int
   clients_seen: List[Dict[str, Optional[str]]]
   _clients: Set[ServerConnection]
@@ -643,6 +660,29 @@ class Viewer3D:
   # How long a command waits for a page to play its motion before going on without it.
   MOTION_TIMEOUT_S = 120.0
 
+  async def show_collisions(self, collisions: Sequence[Collision]) -> None:
+    """Draw on the pages what a refused command would hit: a box over each resource named.
+
+    The boxes stay until the scene is rebuilt or other collisions are shown, so what a refused
+    command ran into can be looked at. With no page connected, or called from off the viewer's
+    loop, nothing is sent.
+
+    Args:
+      collisions: what a check found, whose `obstacle` is the resource drawn over.
+    """
+    if not self._clients or self._loop is None or asyncio.get_running_loop() is not self._loop:
+      return
+    items: List[Dict[str, Any]] = []
+    seen: Set[int] = set()
+    for collision in collisions:
+      index = self._index_of.get(collision.obstacle.name)
+      if index is None or index in seen:
+        continue
+      seen.add(index)
+      items.append({"index": index, "resource": collision.obstacle.name, "group": collision.group})
+    if items:
+      await self._broadcast("collisions", {"collisions": items})
+
   async def act_out(self, command: str, motion: Optional[Dict[str, Any]]) -> None:
     """Act out one command's motion, and hold the command until a page has played it.
 
@@ -854,6 +894,7 @@ class Viewer3D:
     name: str = "facility",
     models_root: Optional[str] = None,
     allowed_hosts: Iterable[str] = (),
+    raise_on_collision: bool = False,
   ):
     self.root = root
     self.host = host
@@ -861,6 +902,7 @@ class Viewer3D:
     self.ws_port = ws_port
     self.open_browser = open_browser
     self.name = name
+    self.raise_on_collision = raise_on_collision
     self.token = secrets.token_urlsafe(32)
     machine = socket.gethostname().lower()
     # The interface bound to counts as a way in when it is a name rather than an address.
