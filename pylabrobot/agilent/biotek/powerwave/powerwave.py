@@ -79,7 +79,6 @@ except ImportError as e:  # pragma: no cover - depends on the environment
 
 logger = logging.getLogger(__name__)
 
-CarrierPosition = Literal["in", "out"]
 ScanSeries = Literal["single", "first", "next", "last"]
 
 
@@ -196,7 +195,6 @@ class PowerWaveX:
     self._connected = False
     self._model: Optional[str] = None
     self._wavelength_table: Optional[List[int]] = None
-    self._carrier_position: Optional[CarrierPosition] = None
     self._temperature_setpoint: Optional[int] = None
     self._assay_defined = False
     self._assay_wavelengths: List[int] = []
@@ -297,13 +295,11 @@ class PowerWaveX:
 
     self._model = None
     self._wavelength_table = None
-    self._carrier_position = None
     self._temperature_setpoint = None
     self._assay_defined = False
     self._assay_wavelengths = []
     self._strip_range = None
     self._plate_geometry = (8, 12)  # the instrument's own default again
-    self._carrier_position = None
     logger.info("[PowerWaveX %s] disconnected", self.port)
 
   # ------------------------------------------------------------------------------------
@@ -392,11 +388,6 @@ class PowerWaveX:
     """Supported incubator setpoint range in degrees C (page B-17)."""
     return (22.0, 50.0)
 
-  @property
-  def carrier_position(self) -> Optional[CarrierPosition]:
-    """Where the plate carrier is, or ``None`` if it has not been moved yet."""
-    return self._carrier_position
-
   # ------------------------------------------------------------------------------------
   # Identification
   # ------------------------------------------------------------------------------------
@@ -454,24 +445,17 @@ class PowerWaveX:
   async def open(self) -> None:
     """Present the plate carrier outside the instrument so a plate can be loaded.
 
-    PRESENT PLATE CARRIER (``'J'``), page B-7. Does nothing if the carrier is
-    already known to be out.
+    PRESENT PLATE CARRIER (``'J'``), page B-7.
     """
-    if self._carrier_position == "out":
-      logger.debug("[PowerWaveX %s] carrier already out", self.port)
-      return
-
     async with self._owns_port():
       await self._send_command(Command.PRESENT_PLATE_CARRIER)
       await self._read_status()
-    self._carrier_position = "out"
     logger.info("[PowerWaveX %s] carrier out", self.port)
 
   async def close(self) -> None:
     """Store the plate carrier inside the instrument.
 
-    STORE PLATE CARRIER (``'A'``), page B-7. Does nothing if the carrier is
-    already known to be in.
+    STORE PLATE CARRIER (``'A'``), page B-7.
 
     Note:
       Unlike the newer USB BioTek readers, this instrument takes no plate
@@ -479,14 +463,9 @@ class PowerWaveX:
       (``'{'``) request, which this driver does not yet implement, so tall or
       lidded labware has not been exercised.
     """
-    if self._carrier_position == "in":
-      logger.debug("[PowerWaveX %s] carrier already in", self.port)
-      return
-
     async with self._owns_port():
       await self._send_command(Command.STORE_PLATE_CARRIER)
       await self._read_status()
-    self._carrier_position = "in"
     logger.info("[PowerWaveX %s] carrier in", self.port)
 
   async def halt(self) -> None:
@@ -551,8 +530,6 @@ class PowerWaveX:
           len(response) - 1,
         )
 
-    # The abort leaves the carrier presented outside (page B-12).
-    self._carrier_position = "out"
     self._assay_defined = False
     self._strip_range = None
     logger.info("[PowerWaveX %s] halted, carrier out", self.port)

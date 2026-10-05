@@ -684,16 +684,14 @@ class TestLifecycle(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(reader.supports_cooling)
     self.assertEqual(fake.remaining, b"")
 
-  async def test_stop_closes_and_forgets_carrier_position(self):
+  async def test_stop_closes(self):
     reader, fake = _reader(_ACK + _STATUS_OK)
     await reader.open()
-    self.assertEqual(reader.carrier_position, "out")
 
     await reader.stop()
 
     self.assertTrue(fake.stop_called)
     self.assertFalse(reader.connected)
-    self.assertIsNone(reader.carrier_position)
 
   async def test_properties_raise_before_setup(self):
     reader, _ = _reader()
@@ -714,23 +712,9 @@ class TestPlateCarrier(unittest.IsolatedAsyncioTestCase):
     reader, fake = _reader(_ACK + _STATUS_OK)
     await reader.open()
     self.assertEqual(fake.writes, [b"J"])
-    self.assertEqual(reader.carrier_position, "out")
 
   async def test_close_sends_A(self):
     reader, fake = _reader(_ACK + _STATUS_OK)
-    await reader.close()
-    self.assertEqual(fake.writes, [b"A"])
-    self.assertEqual(reader.carrier_position, "in")
-
-  async def test_open_is_idempotent(self):
-    reader, fake = _reader(_ACK + _STATUS_OK)
-    await reader.open()
-    await reader.open()  # no bytes left in the script, so this must not talk
-    self.assertEqual(fake.writes, [b"J"])
-
-  async def test_close_is_idempotent(self):
-    reader, fake = _reader(_ACK + _STATUS_OK)
-    await reader.close()
     await reader.close()
     self.assertEqual(fake.writes, [b"A"])
 
@@ -739,7 +723,6 @@ class TestPlateCarrier(unittest.IsolatedAsyncioTestCase):
     await reader.open()
     await reader.close()
     self.assertEqual(fake.writes, [b"J", b"A"])
-    self.assertEqual(reader.carrier_position, "in")
 
   async def test_status_error_propagates(self):
     reader, _ = _reader(_ACK + b"\x1e090\x03")
@@ -806,7 +789,6 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
     await reader.halt()
 
     self.assertTrue(fake.halted)
-    self.assertEqual(reader.carrier_position, "out")
     self.assertFalse(reader._assay_defined)
 
     with self.assertRaises(PowerWaveHaltedError):
@@ -1143,7 +1125,6 @@ class TestHaltAcknowledgement(unittest.IsolatedAsyncioTestCase):
     reader, fake = await self._halt_with(block)
 
     self.assertEqual(fake.remaining, b"")  # nothing left for the next command
-    self.assertEqual(reader.carrier_position, "out")
 
   async def test_several_leftover_dle_bytes_are_all_consumed(self):
     leftovers = b"\r,+0100\r\n\x1a" + bytes([0x10]) + b"\r,+0100\r\n\x1a" + bytes([0x10])
@@ -1184,7 +1165,6 @@ class TestHaltAcknowledgement(unittest.IsolatedAsyncioTestCase):
     await reader.halt()
 
     self.assertEqual(fake.remaining, b"")  # the DLE was waited for, not missed
-    self.assertEqual(reader.carrier_position, "out")
 
   async def test_silence_without_a_dle_is_an_error(self):
     reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=2)
@@ -1229,13 +1209,6 @@ class TestHalt(unittest.IsolatedAsyncioTestCase):
     reader, fake = _reader(b"\x10")
     await reader.halt()
     self.assertEqual(fake.writes, [b"X"])
-
-  async def test_halt_leaves_carrier_outside(self):
-    reader, _ = _reader(_ACK + _STATUS_OK + b"\x10")
-    await reader.close()
-    self.assertEqual(reader.carrier_position, "in")
-    await reader.halt()
-    self.assertEqual(reader.carrier_position, "out")
 
   async def test_halt_without_dle_times_out(self):
     reader, _ = _reader(b"")
@@ -1333,7 +1306,6 @@ class TestStatusFraming(unittest.IsolatedAsyncioTestCase):
     with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
       await reader.open()
     self.assertIn("discarding 1 unexpected bytes", "\n".join(logs.output))
-    self.assertEqual(reader.carrier_position, "out")
 
 
 def _plate_resource(name: str = "plate"):
