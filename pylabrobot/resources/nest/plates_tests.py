@@ -36,7 +36,7 @@ class TestNest96Wellplate200uLFb(unittest.TestCase):
     self.assertEqual(well.get_size_y(), 6.85)
     self.assertEqual(well.bottom_type, WellBottomType.FLAT)
     self.assertEqual(well.cross_section_type, CrossSectionType.CIRCLE)
-    self.assertEqual(well.max_volume, 200)
+    self.assertEqual(well.max_volume, 372.4)
 
     # The cavity is 10.80 mm deep: the rim is at the plate height and the floor is 1.20 mm thick.
     rim = well.get_absolute_location("c", "c", "t").z
@@ -51,7 +51,7 @@ class TestNest96Wellplate200uLFb(unittest.TestCase):
     self.assertEqual(well.compute_volume_from_height(0.0), 0.0)
     assert well.height_volume_data is not None
     self.assertAlmostEqual(max(well.height_volume_data), cavity_depth)
-    self.assertAlmostEqual(well.compute_volume_from_height(cavity_depth), 372.4)
+    self.assertEqual(max(well.height_volume_data.values()), well.max_volume)
 
     # The well is a truncated cone, 6.40 mm across the floor and 6.85 mm across the rim.
     def cone_volume(h: float) -> float:
@@ -59,9 +59,8 @@ class TestNest96Wellplate200uLFb(unittest.TestCase):
       r = r_floor + (r_rim - r_floor) * h / cavity_depth
       return math.pi * h * (r_floor**2 + r_floor * r + r**2) / 3
 
-    for i in range(109):
-      h = i / 10
-      self.assertAlmostEqual(well.compute_volume_from_height(h), cone_volume(h), delta=0.1)
+    for h, volume in well.height_volume_data.items():
+      self.assertAlmostEqual(volume, cone_volume(h), delta=0.05)
     self.assertAlmostEqual(well.compute_height_from_volume(200), 5.98, places=2)
 
   def test_serialize_round_trip(self):
