@@ -160,15 +160,37 @@
     "id": "biotek-powerwave-x",
     "vendor": "Agilent (BioTek)",
     "name": "PowerWaveX",
+    "models": [
+      {"name": "PowerWaveX w/ Incubator", "status": "mostly", "needs_hardware_testing": false},
+      {"name": "PowerWaveX", "status": "wip"},
+      {"name": "PowerWaveX 340 w/ Incubator", "status": "wip"},
+      {"name": "PowerWaveX Select", "status": "wip"},
+      {"name": "PowerWaveX Select w/ Incubator", "status": "wip"},
+      {"name": "PowerWaveX w/ Robot Access Door", "status": "wip"},
+      {"name": "PowerWaveX w/ Incubator and Robot Access Door", "status": "wip"},
+      {"name": "PowerWaveX Select w/ Robot Access Door", "status": "wip"},
+      {"name": "PowerWaveX Select w/ Incubator and Robot Access Door", "status": "wip"},
+      {"name": "PowerWave 200", "status": "wip"},
+      {"name": "PowerWave 200 w/ Incubator", "status": "wip"},
+      {"name": "PowerWave 200 w/ Robot Access Door", "status": "wip"},
+      {"name": "PowerWave 200 w/ Incubator and Robot Access Door", "status": "wip"},
+      {"name": "PowerWave 340", "status": "wip"},
+      {"name": "PowerWave 340 w/ Incubator", "status": "wip"},
+      {"name": "PowerWave 340 w/ Robot Access Door", "status": "wip"},
+      {"name": "PowerWave 340 w/ Incubator and Robot Access Door", "status": "wip"}
+    ],
     "kind": "plate reader",
     "capabilities": [
-      "absorbance"
+      "absorbance",
+      "heating"
     ],
     "status": "mostly",
+    "needs_hardware_testing": true,
     "api": "pylabrobot.agilent.biotek.powerwave.PowerWaveX",
     "api_version": "v1",
     "code_slug": "agilent/biotek/powerwave",
     "doc_slug": "agilent/biotek/powerwave/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/evdh",
     "notes": "RS-232 absorbance reader. Endpoint and kinetic reads, 200-999 nm, up to six wavelengths per pass, strip ranges, optional incubator. Protocol verified on firmware R06.20; absorbance data verified against captured traffic only."
   },
   {
