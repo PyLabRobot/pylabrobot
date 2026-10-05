@@ -641,6 +641,38 @@ class Group:
       for piece in self.pieces
     ]
 
+  def _frame_at(self, t: float) -> Pose:
+    """The pose of the frame at time `t`: its way while it is moving, where it last came to rest
+    while it is not, and where it starts before its way begins."""
+    if not self.frame:
+      return STILL
+    rest = STILL
+    for segment in self.frame:
+      if segment.start <= t <= segment.end and segment.end > segment.start:
+        f = (t - segment.start) / (segment.end - segment.start)
+        return _pose_between(segment.poses[0], segment.poses[-1], f)
+      if segment.end <= t:
+        rest = segment.poses[-1]
+    return rest
+
+  def pose_at(self, t: float) -> Pose:
+    """The group's pose at time `t`, as the world sees it: the frame it rides, then its own way
+    between the segment's poses. Where its way does not cover `t`, where it stands."""
+    for segment in self.segments:
+      if (
+        segment.start <= t <= segment.end
+        and segment.end > segment.start
+        and math.isfinite(segment.end - segment.start)
+      ):
+        f = (t - segment.start) / (segment.end - segment.start)
+        own = (
+          _pose_between(segment.poses[0], segment.poses[-1], f)
+          if len(segment.poses) == 2
+          else segment.poses[round(f * (len(segment.poses) - 1))]
+        )
+        return self._frame_at(t).then(own)
+    return STILL
+
 
 def moving(
   name: str,
@@ -764,15 +796,15 @@ class Collision:
   gap: float  # how far apart they come, in mm: 0 when they meet
   other_group: Optional[str] = None
   when: Optional[float] = None
-  """How far through the segment's time the mover was when it first met, 0 to 1, worked out by
-  walking the way finely. None where the sweep met without a sampled pose doing so, and between
-  groups, where both are on their way."""
+  """How far into the way's time the mover was when it first met, in the check's own units - one
+  command or plan step is one - worked out by walking the way finely. None where the sweep met
+  without a sampled pose doing so, and where both parties are on their way."""
   at: Optional[Pose] = None
   """The mover's pose then, relative to where it stands: what brings it to the meeting."""
 
   def __str__(self) -> str:
     against = f" (moving with {self.other_group})" if self.other_group else ""
-    way = f", {self.when:.0%} of the way in" if self.when is not None else ""
+    way = f", at {self.when:.2f} into the way" if self.when is not None else ""
     return (
       f"{self.mover.name} ({self.group}, segment {self.segment}{way}) comes within {self.gap:.2f} "
       f"mm of {self.obstacle.name}{against}"
@@ -786,39 +818,42 @@ SAMPLE_TURN_DEG = 1.0
 SAMPLE_MOST = 512
 
 
-def _samples(segment: Segment) -> List[Tuple[float, Pose]]:
-  """A segment's way, finely: how far through its time, and the pose then.
+def _pose_between(p0: Pose, p1: Pose, f: float) -> Pose:
+  """The way between two poses, taken straight: a turn about the origin and a shift, each eased.
+  Exact where the move is straight, and within the segment's slack where it turns."""
+  turn0, shift0 = p0.turn, p0.apply((0.0, 0.0, 0.0))
+  turn1, shift1 = p1.turn, p1.apply((0.0, 0.0, 0.0))
+  return Pose(
+    turn0 + (turn1 - turn0) * f,
+    (0.0, 0.0, 0.0),
+    (
+      shift0[0] + (shift1[0] - shift0[0]) * f,
+      shift0[1] + (shift1[1] - shift0[1]) * f,
+      shift0[2] + (shift1[2] - shift0[2]) * f,
+    ),
+  )
 
-  A segment of two poses moves from one to the other, and the way between is taken as the straight
-  one: a turn about the origin and a shift, each eased. Exact where the segment moves straight, and
-  within its slack where it turns. A segment of more poses spans a box on independent axes, along
-  no known line, so its poses stand for themselves and are sampled as they are.
+
+def _samples(segment: Segment) -> List[Tuple[float, Pose]]:
+  """A segment's way, finely: how far into its time, and the pose then.
+
+  A segment of two poses moves from one to the other, and is walked at about a millimetre or a
+  degree a step. A segment of more poses spans a box on independent axes, along no known line, so
+  its poses stand for themselves and are sampled as they are.
   """
   if len(segment.poses) == 2:
-    turn0, shift0 = segment.poses[0].turn, segment.poses[0].apply((0.0, 0.0, 0.0))
-    turn1, shift1 = segment.poses[1].turn, segment.poses[1].apply((0.0, 0.0, 0.0))
     span = max(
-      math.hypot(shift1[0] - shift0[0], shift1[1] - shift0[1], shift1[2] - shift0[2])
+      math.hypot(
+        segment.poses[1].shift[0] - segment.poses[0].shift[0],
+        segment.poses[1].shift[1] - segment.poses[0].shift[1],
+        segment.poses[1].shift[2] - segment.poses[0].shift[2],
+      )
       / SAMPLE_SHIFT_MM,
-      abs(turn1 - turn0) / SAMPLE_TURN_DEG,
+      abs(segment.poses[1].turn - segment.poses[0].turn) / SAMPLE_TURN_DEG,
       1.0,
     )
     n = min(math.ceil(span), SAMPLE_MOST)
-    return [
-      (
-        j / n,
-        Pose(
-          turn0 + (turn1 - turn0) * j / n,
-          (0.0, 0.0, 0.0),
-          (
-            shift0[0] + (shift1[0] - shift0[0]) * j / n,
-            shift0[1] + (shift1[1] - shift0[1]) * j / n,
-            shift0[2] + (shift1[2] - shift0[2]) * j / n,
-          ),
-        ),
-      )
-      for j in range(n + 1)
-    ]
+    return [(j / n, _pose_between(segment.poses[0], segment.poses[1], j / n)) for j in range(n + 1)]
   most = len(segment.poses) - 1
   return [(k / most, pose) for k, pose in enumerate(segment.poses)]
 
@@ -881,13 +916,20 @@ def check(
     """Where along the segment's way the piece first meets what stands against it, walked finely.
 
     The sweep that reported the meeting is the hull of the whole way; the way itself may clear what
-    its hull only leans on. Nothing found says so, and the meeting stands as the sweep said it.
+    its hull only leans on. Nothing found says so, and the meeting stands as the sweep said it. The
+    pose is the group's as the world sees it, the frame it rides included.
     """
     if k >= len(group.segments):
       return None, None
-    for f, pose in _samples(group.segments[k]):
+    segment = group.segments[k]
+    if not math.isfinite(segment.end - segment.start):
+      return None, None  # standing before or after its way, not a stretch of it
+    span = segment.end - segment.start
+    for f, _ in _samples(segment):
+      t = segment.start + f * span
+      pose = group.pose_at(t)
       if distance([pose.apply(q) for q in piece.points], other.points) <= 0.0:
-        return f, pose
+        return t, pose
     return None, None
 
   def swept_entries(
@@ -975,7 +1017,12 @@ def check(
           continue
         gap = distance(hull_a, hull_b) - slack_a - slack_b
         if gap <= 0.0 or gap < reach:
-          report(pa, pb.resource, a.name, ka, gap, b.name)
+          # Where the other stands where it stood - still, or before or after its own way - the
+          # meeting is walked finely as well; both on their way, it stands as the sweep found it.
+          when = at = None
+          if all(pose == STILL for pose in sb.poses):
+            when, at = contact(pa, a, ka, pb)
+          report(pa, pb.resource, a.name, ka, gap, b.name, when=when, at=at)
   return found
 
 

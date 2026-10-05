@@ -909,7 +909,7 @@ class ShowCollisionsTests(unittest.IsolatedAsyncioTestCase):
         group="mover group",
         segment=0,
         gap=0.0,
-        when=0.38,
+        when=0.95,
         at=Pose(shift=(38.0, 0.0, 0.0)),
       )
       await self.viewer.show_collisions([hit], {"mover group": group})

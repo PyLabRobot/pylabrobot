@@ -39,7 +39,7 @@ import websockets
 from websockets.asyncio.server import Server, ServerConnection
 from websockets.http11 import Request, Response
 
-from pylabrobot.resources.collision import Collision
+from pylabrobot.resources.collision import STILL, Collision
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -689,26 +689,23 @@ class Viewer3D:
       items.append({"index": index, "resource": collision.obstacle.name, "group": collision.group})
     moves: List[Dict[str, Any]] = []
     if groups is not None:
-      # One pose per group: the first meeting along its way is where it is brought to.
-      first: Dict[str, Collision] = {}
-      for collision in collisions:
-        if collision.at is not None and collision.group not in first:
-          first[collision.group] = collision
-      for name, collision in first.items():
-        group = groups.get(name)
-        if group is None:
-          continue
-        pose = collision.at
-        if pose is None:
-          continue
-        at = [pose.turn, *pose.pivot, *pose.shift]
-        brought: Set[int] = set()
-        for piece in group.pieces:
-          index = self._index_of.get(piece.resource.name)
-          if index is None or index in brought:
+      # The whole of what was judged is brought to the instant of the first meeting, so what moves
+      # together arrives together: each group's pose there, its pieces with it.
+      met = [c.when for c in collisions if c.when is not None]
+      if met:
+        moment = min(met)
+        for group in groups.values():
+          pose = group.pose_at(moment)
+          if pose == STILL:
             continue
-          brought.add(index)
-          moves.append({"index": index, "at": at})
+          at = [pose.turn, *pose.pivot, *pose.shift]
+          brought: Set[int] = set()
+          for piece in group.pieces:
+            index = self._index_of.get(piece.resource.name)
+            if index is None or index in brought:
+              continue
+            brought.add(index)
+            moves.append({"index": index, "at": at})
     if items or moves:
       await self._broadcast("collisions", {"collisions": items, "moves": moves})
 
