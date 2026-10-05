@@ -2,15 +2,32 @@
 
 import unittest
 
+from pylabrobot.hamilton.star.driver.features.iswap_transport import (
+  iSWAPCollisionError,
+  iSWAPTransport,
+)
 from pylabrobot.hamilton.star.driver.features.star_collisions import (
+  CollisionError,
   check_head_move,
   check_pipette_move,
 )
+from pylabrobot.hamilton.star.motion import attach_viewer_collisions
 from pylabrobot.resources.lid import Lid
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.tip_rack import TipRack
 from pylabrobot.resources.tip_tracking import does_tip_tracking, set_tip_tracking
 from pylabrobot.visualizer3D.demo import build_facility, star_of
+
+
+class _RecordingViewer:
+  """What the glue needs of a viewer, and a list of everything it was told to draw."""
+
+  def __init__(self, raise_on_collision: bool):
+    self.raise_on_collision = raise_on_collision
+    self.shown: list = []
+
+  async def show_collisions(self, collisions) -> None:
+    self.shown.append(collisions)
 
 
 class StarCollisionTests(unittest.IsolatedAsyncioTestCase):
@@ -100,6 +117,95 @@ class StarCollisionTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(check_pipette_move(self.pipettes, z={0: touching + 1.0}, touch=[source_0]), [])
     hits = check_pipette_move(self.pipettes, z={0: touching - 2.0}, touch=[source_0])
     self.assertIn("source_0_lid", {c.obstacle.name for c in hits})
+
+
+class CollisionGateTests(unittest.IsolatedAsyncioTestCase):
+  """The viewer's flag turns the arm's checks into gates at the driver's dispatch."""
+
+  async def asyncSetUp(self) -> None:
+    was = does_tip_tracking()
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, was)
+    self.facility = build_facility()
+    self.star = star_of(self.facility)
+    self.deck = self.star.deck
+    self.deck.get_resource("destination_1").unassign()
+    await self.star.setup()
+    assert self.star.pipettes is not None and self.star.head96 is not None
+    self.pipettes = self.star.pipettes
+    self.head = self.star.head96
+    assert self.star.iswap is not None
+    self.iswap = self.star.iswap
+    self.viewer = _RecordingViewer(raise_on_collision=True)
+    self.transport = iSWAPTransport(self.iswap, check_collisions=True)
+    attach_viewer_collisions(self.star.driver, self.viewer, self.transport)
+
+  async def test_a_channel_move_that_would_hit_something_is_refused_saying_which_command(self):
+    # Lowered with the gate off: the lowering itself would be refused from the row's spread, where
+    # two of the channels stand over plates.
+    self.viewer.raise_on_collision = False
+    await self.pipettes.move_stop_disc_to_z_positions({i: 150.0 for i in range(8)})
+    self.viewer.raise_on_collision = True
+    before = self.pipettes.get_reference_point_location(0)
+    yp = " ".join(f"{round(300.0 * 10):04}" for _ in range(8))
+    with self.assertRaises(CollisionError) as refused:
+      await self.star.driver.send_command(module="C0", command="JY", yp=yp)
+    self.assertEqual(refused.exception.origin, "the channels' Y move (C0 JY)")
+    self.assertTrue(self.viewer.shown)
+    # Refused before the device heard it: the channels are where they were.
+    self.assertEqual(self.pipettes.get_reference_point_location(0), before)
+
+  async def test_one_channels_move_is_refused_naming_the_channel(self):
+    await self.iswap.make_space()
+    za = f"{self.pipettes.configuration.z_drive_mm_to_increments(150.0):05}"
+    with self.assertRaises(CollisionError) as refused:
+      await self.star.driver.send_command(module=self.pipettes.channel_id(0), command="ZA", za=za)
+    self.assertEqual(
+      refused.exception.origin, f"channel 0's Z move ({self.pipettes.channel_id(0)} ZA)"
+    )
+    self.assertTrue(self.viewer.shown)
+
+  async def test_a_head_move_that_would_hit_something_is_refused_saying_which_command(self):
+    self.viewer.raise_on_collision = False
+    await self.head.move_stop_disc_to_z_position(200.0)
+    self.viewer.raise_on_collision = True
+    ya = f"{self.head.configuration.y_drive_mm_to_increments(100.0):05}"
+    with self.assertRaises(CollisionError) as refused:
+      await self.star.driver.send_command(
+        module=self.head.configuration.module, command="YA", ya=ya
+      )
+    self.assertEqual(
+      refused.exception.origin,
+      f"the head's Y move ({self.head.configuration.module} YA)",
+    )
+    self.assertTrue(self.viewer.shown)
+
+  async def test_with_the_flag_off_the_same_command_runs(self):
+    self.viewer.raise_on_collision = False
+    await self.pipettes.move_stop_disc_to_z_positions({i: 150.0 for i in range(8)})
+    yp = " ".join(f"{round(300.0 * 10):04}" for _ in range(8))
+    await self.star.driver.send_command(module="C0", command="JY", yp=yp)
+    self.assertEqual(self.viewer.shown, [])
+
+  async def test_reads_are_never_handed_to_the_gate(self):
+    handed: list = []
+
+    async def recorder(module: str, command: str, params) -> None:
+      handed.append((module, command))
+
+    self.star.driver.collision_listener = recorder
+    await self.pipettes.request_y_positions()
+    self.assertEqual(handed, [])
+
+  async def test_a_refused_plan_is_drawn_before_it_is_refused(self):
+    plan = self.transport.plan_pick_up(
+      self.deck.get_resource("source_3"), direction="front", elbow="right"
+    )
+    with self.assertRaises(iSWAPCollisionError):
+      await self.transport.execute(plan)
+    self.assertTrue(self.viewer.shown)
+    for shown in self.viewer.shown:
+      self.assertIn("tips_2", {c.obstacle.name for c in shown})
 
 
 if __name__ == "__main__":

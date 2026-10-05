@@ -42,6 +42,17 @@ ENCLOSURES = ("left_extension_housing",)
 DELTA_TOLERANCE = 1e-6
 
 
+class CollisionError(RuntimeError):
+  """A command would bring what it moves into what stands in its way: `origin` says which command
+  it was, `collisions` what it would hit."""
+
+  def __init__(self, origin: str, collisions: Sequence[Collision]):
+    self.origin = origin
+    self.collisions = list(collisions)
+    lines = "\n  ".join(str(c) for c in self.collisions)
+    super().__init__(f"{origin} would hit something:\n  {lines}")
+
+
 @dataclasses.dataclass
 class Exemptions:
   """Which pairs of a check's groups are let off each other.

@@ -36,9 +36,17 @@ is converted to the stop disc, with the overhang the channel has when the move i
 
 from typing import Any, Dict, List, Optional, Sequence, cast
 
+from pylabrobot.hamilton.star.driver.features.head import Head
 from pylabrobot.hamilton.star.driver.features.pipettes import (
+  Pipettes,
   core_tool_face_distance,
   core_tool_grip_line_overhang,
+)
+from pylabrobot.hamilton.star.driver.features.star_collisions import (
+  Collision,
+  CollisionError,
+  check_head_move,
+  check_pipette_move,
 )
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton.core_grippers import (
@@ -1240,3 +1248,82 @@ def attach_viewer_motion(driver: Any, viewer: Any) -> None:
     await viewer.act_out(module + command, motion)
 
   driver.motion_listener = listener
+
+
+async def _refuse(viewer: Any, origin: str, found: List[Collision]) -> None:
+  """Draw what a refused command would hit, and refuse it, saying where the refusal came from."""
+  if not found:
+    return
+  await viewer.show_collisions(found)
+  raise CollisionError(origin, found)
+
+
+def attach_viewer_collisions(driver: Any, viewer: Any, transport: Any = None) -> None:
+  """Let a viewer turn the arm's collision checks into gates, and draw what they refuse.
+
+  The driver hands every command that moves something to its `collision_listener` before it is
+  sent (`STARDriver.send_command` does). When the viewer's `raise_on_collision` is on, the
+  commands that move the channels or a head are swept where everything stands, and what they
+  would hit is drawn on the page and raised as a `CollisionError` naming the command: a command
+  that would hit something never reaches the device. When it is off, nothing is judged here and
+  the checks stay what they are where they are called. The iSWAP's plans are judged where they
+  are made: the transport refuses them before its first step, and `transport` is drawn what they
+  hit first.
+
+  Args:
+    driver: a STAR driver with a `collision_listener`.
+    viewer: a `Viewer3D` with `raise_on_collision` and `show_collisions`.
+    transport: the iSWAP transport to tell what its refused plan would hit, when there is one.
+  """
+
+  pipettes = [f for f in driver.features if isinstance(f, Pipettes)]
+  heads = [f for f in driver.features if isinstance(f, Head)]
+
+  def channel_of(module: str) -> Optional[int]:
+    return next(
+      (
+        p.channel_from_module(module) for p in pipettes if p.channel_from_module(module) is not None
+      ),
+      None,
+    )
+
+  def head_of(module: str) -> Optional[Head]:
+    return next((h for h in heads if h.configuration.module == module), None)
+
+  async def listener(module: str, command: str, params: Dict[str, Any]) -> None:
+    if not viewer.raise_on_collision:
+      return
+    if module == "C0" and command == "JY":
+      ys = {i: int(field) / 10 for i, field in enumerate(str(params["yp"]).split())}
+      for p in pipettes:
+        await _refuse(viewer, "the channels' Y move (C0 JY)", check_pipette_move(p, y=ys))
+    elif module == "C0" and command == "JZ":
+      zs = {i: int(field) / 10 for i, field in enumerate(params["zp"])}
+      for p in pipettes:
+        await _refuse(viewer, "the channels' Z move (C0 JZ)", check_pipette_move(p, z=zs))
+    else:
+      channel = channel_of(module)
+      head = head_of(module)
+      if command == "ZA" and channel is not None:
+        z = pipettes[0].configuration.z_drive_increments_to_mm(int(params["za"]))
+        await _refuse(
+          viewer,
+          f"channel {channel}'s Z move ({module} ZA)",
+          check_pipette_move(pipettes[0], z={channel: z}),
+        )
+      elif head is not None and command == "YA":
+        y = head.configuration.y_drive_increments_to_mm(int(params["ya"]))
+        await _refuse(viewer, f"the head's Y move ({module} YA)", check_head_move(head, y=y))
+      elif head is not None and command == "ZA":
+        z = head.configuration.z_drive_increments_to_mm(int(params["za"]))
+        await _refuse(viewer, f"the head's Z move ({module} ZA)", check_head_move(head, z=z))
+
+  driver.collision_listener = listener
+
+  if transport is not None:
+
+    async def report(found: List[Collision]) -> None:
+      if viewer.raise_on_collision:
+        await viewer.show_collisions(found)
+
+    transport.collision_reporter = report
