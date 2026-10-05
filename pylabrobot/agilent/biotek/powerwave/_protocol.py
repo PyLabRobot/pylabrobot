@@ -8,7 +8,7 @@ Operator's Manual* (Bio-Tek p/n 7261014 Rev D2, July 2005), Appendix B
 "Computer Control". Note that the older non-X PowerWave manual (p/n 7261000
 Rev C1) does not document the carrier commands.
 
-The link is RS-232: 9600 baud, 8 data bits, no parity, **2 stop bits**.
+The link according to manual is RS-232: 9600 baud, 8 data bits, no parity, **2 stop bits**.
 """
 
 from __future__ import annotations
@@ -159,7 +159,7 @@ def parse_status(response: bytes) -> str:
   * An ELx status: four hexadecimal characters + ``ETX``, with no ``RS``.
 
   Both are accepted here, since which one arrives depends on the instrument's
-  status mode rather than on the command sent.
+  status/state mode rather than on the command sent.
 
   Args:
     response: The raw five-byte status string.
@@ -200,7 +200,7 @@ DEVICE_CONFIGURATIONS: Dict[int, str] = {
   0x0032: "PowerWaveX",
   0x0038: "PowerWave 200 w/ Incubator",
   0x0039: "PowerWave 340 w/ Incubator",
-  0x003A: "PowerWaveX w/ Incubator",
+  0x003A: "PowerWaveX w/ Incubator", # Code is validated for this machine
   0x003B: "PowerWaveX 340 w/ Incubator",
   0x0072: "PowerWaveX Select",
   0x007A: "PowerWaveX Select w/ Incubator",
@@ -257,20 +257,10 @@ MAX_WAVELENGTH = 999
 #: Nothing here is selectable. The instrument picks the position itself from the
 #: wavelength asked for: no computer-control command chooses it, and the wheel
 #: surfaces over the serial port only as motor 1 in fault codes, such as
-#: :data:`SELF_TEST_ERRORS` ``"0201"`` for a wheel that cannot find home. Note
-#: that ``0F11``, the code a far-UV read latches, is *not* about this wheel - its
-#: ``<filter>`` digit is the assay's wavelength slot, as in ``0E00``.
+#: :data:`SELF_TEST_ERRORS` ``"0201"`` for a wheel that cannot find home. 
 #:
-#: Recorded because it is useful for reasoning about faults, which is all it is
-#: good for. These edges come from third-party PowerWave documentation rather than
-#: manual revision D2, and cannot be checked from here: nothing reports the
-#: current position, and a wheel move is far too quick to time over a 9600 baud
-#: line. Treat them as unverified.
-#:
-#: They do settle one question. 200, 205 and 215 nm all fall in the first band, so
-#: the wheel sits in the same position for the far-UV wavelengths that abandon a
-#: read and for the one that reads normally, which rules it out as the cause. See
-#: :attr:`.PowerWaveX.abs_wavelength_range`.
+#: Recorded because it is useful for reasoning about faults
+
 ORDER_SORTING_FILTER_BANDS: Dict[Tuple[int, int], str] = {
   (200, 241): "open (no filter)",
   (242, 369): "filter 1",
@@ -394,19 +384,12 @@ FLAG_USE_TOTAL_KINETIC_TIME = 0x80
 #: Byte 31 for a kinetic run governed by its read count: shake, shake before every
 #: read, continuous shake.
 #:
-#: :data:`FLAG_USE_TOTAL_KINETIC_TIME` is deliberately absent. The 2021 bench runs
-#: set it, but it makes the instrument run for ``total_kinetic_read_time`` and
-#: ignore ``kinetic_read_count`` entirely: a PowerWaveX w/ Incubator (firmware
-#: R06.20) asked for 3 cycles kept sending a 4th, leaving the caller reading into a
-#: run that had hours left. With the bit cleared the same request sends exactly
-#: three blocks and the closing ``^Z``. Verified directly.
 KINETIC_SHAKE_FLAGS = FLAG_SHAKE | FLAG_SHAKE_EVERY_READ | FLAG_SHAKE_CONTINUOUS
 
 #: Byte 31 for a kinetic run that does not shake, which is the default: every bit
 #: in :data:`KINETIC_SHAKE_FLAGS` is about shaking, so asking for none leaves the
-#: byte empty. Shaking a plate between cycles is a decision about the assay, not
-#: a detail of reading one, and it is not something to do to someone's samples
-#: unless they asked.
+#: byte empty. 
+
 KINETIC_FLAGS = 0
 
 
@@ -523,14 +506,7 @@ _READING_RE = re.compile(rb"(?P<sign>[+-])(?P<magnitude>\d{4})|(?P<overrange>\*{
 
 #: Overrange wells ("*****") are reported as this value: a real but saturated
 #: measurement, distinct from ``None`` which PyLabRobot uses for "not measured".
-#:
-#: The marker is not emitted at the 3.000 OD top of the instrument's specified
-#: range (page 1-1). Reading a part-covered carrier on a PowerWaveX w/ Incubator
-#: (firmware R06.20) returned finite values of 4.054, 4.043 and 4.026 OD
-#: alongside genuinely overrange wells, so the switch to ``"*****"`` happens
-#: somewhere above 4.05. Values between 3.000 and that point are outside the
-#: specified range but still arrive as numbers, and should not be trusted as
-#: measurements merely because they parsed.
+
 OVERRANGE = math.inf
 
 
@@ -541,9 +517,6 @@ def plate_checksum(frame: bytes) -> int:
   data start code, up through and including the ``<^Z>`` data terminator". The
   data start code is the ``CR`` that precedes the first row.
 
-  This was verified against 330 consecutive plate reads captured from a
-  PowerWaveX w/ Incubator, where each block's checksum byte is transmitted
-  immediately after its ``^Z``.
 
   Args:
     frame: The plate data block, which may carry leading bytes before the ``CR``
@@ -588,12 +561,14 @@ def parse_plate(frame: bytes, num_rows: int = 8, num_columns: int = 12) -> List[
     PowerWaveParseError: If the block is not exactly ``num_rows`` comma-separated
       rows of ``num_columns`` well-formed readings, terminated by ``^Z``.
   """
+
   # Validate the row structure rather than scanning the block for anything that
   # looks like a reading. The checksum is the first guard, but it is a byte sum
   # and so blind to compensating edits: turning ",+0201,+0207" into
   # ",+0201.+0205" moves the separator up two and the digit down two, leaving the
   # checksum identical while silently changing a well from 0.207 to 0.205. Only
   # the framing catches that.
+
   start = frame.find(CR)
   if start == -1:
     raise PowerWaveParseError(f"No CR before the first plate row: {frame[:32]!r}...")
@@ -716,8 +691,8 @@ def encode_strip_range(first_strip: int, last_strip: int) -> bytes:
 # --------------------------------------------------------------------------------------
 
 #: Self-test error codes, in Rev D2 numbering. Rev C1 numbers several of these
-#: differently (its 0202 is the monochromator and it has an 0203), so a code read
-#: from a PowerWaveX must be looked up here and not in the older manual.
+#: differently (its 0202 is the monochromator and it has an 0203).
+
 SELF_TEST_ERRORS: Dict[str, str] = {
   "0200": "Plate carrier did not find the home sensor",
   "0201": "Order sorting filter wheel did not find the home sensor",
@@ -783,11 +758,6 @@ def parse_self_test_report(report: str) -> Optional[str]:
   the test passed: a failing instrument still answers ``"000"``. The verdict
   appears only in the ASCII report body, which this instrument prints in the
   older Rev C1 layout even though its error codes follow Rev D2.
-
-  A report must actually say how the test went. Treating the absence of a failure
-  banner as a pass made an empty report, or a truncated one, look like a healthy
-  instrument - the one answer this function must never invent, since the status
-  string alongside it says ``"000"`` either way.
 
   Returns:
     The four-digit error code, ``None`` if the report declares a pass, or the
@@ -1183,10 +1153,6 @@ def scan_checksum(section: bytes) -> int:
   The sum runs from the first byte after the ``CR`` data start code through and
   including the ``^Z`` terminator, mod 256 - the same rule as READ PLATE. There
   is one checksum for the whole scan, not one per wavelength.
-
-  Verified against a PowerWaveX w/ Incubator (firmware R06.20): a single-well
-  400-440 nm scan in 10 nm steps closed with ``^Z`` and checksum 238, and an
-  eight-row strip scan of 400-420 nm with checksum 70.
 
   Args:
     section: The data section through and including ``^Z``, with or without the

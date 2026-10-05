@@ -127,13 +127,6 @@ class PowerWaveX:
   than that anything went wrong. The instrument recovers immediately and reads
   96-well plates as usual afterwards.
 
-  Shaking is honoured: a scan asked to shake for 10 or 20 seconds took exactly
-  that much longer than the same scan without it, to within 0.2 s. Kinetic
-  intervals hold without drifting, 12 cycles at 15 s running to a mean gap of
-  15.03 s and +0.38 s of total drift. The incubator tracks a new setpoint rather
-  than merely accepting one, reaching 37.0 C from 30.0 C; it has no active
-  cooling, so a lower setpoint only stops heating and the chamber then drifts
-  down on its own.
 
   Example:
     >>> reader = PowerWaveX(name="reader", port="/dev/ttyUSB0")
@@ -261,11 +254,7 @@ class PowerWaveX:
       "the assay definition, plate geometry, strip range, endpoint reads, kinetic "
       "reads and spectral scans have all been exercised on it end to end, including "
       "absorbing samples that read from 0.004 to 4.05 OD and saturated wells that "
-      "come back as overrange. What has NOT been checked is absolute photometric "
-      "accuracy: no reading has been compared against a known standard, only against "
-      "an empty light path reading 0.000 and the expectation that a given sample "
-      "absorbs less as the wavelength rises. "
-      "Please report results at https://discuss.pylabrobot.org."
+      "come back as overrange."
     )
 
     await self.io.setup()
@@ -373,18 +362,6 @@ class PowerWaveX:
       at all until it is power cycled. Observed on a PowerWaveX w/ Incubator
       (firmware R06.20), reading a full 96-well plate::
 
-        200 nm, never calibrated   faulted 2 times out of 2
-        205 nm, never calibrated   faulted 3 times out of 3
-        208 nm, never calibrated   faulted
-        209 nm, never calibrated   faulted
-        210 nm, never calibrated   read normally
-        212 nm, never calibrated   read normally
-        214 nm, never calibrated   read normally
-        215 nm, never calibrated   read normally
-        395 nm, never calibrated   read normally
-        200 nm, after a scan       read normally, twice, one from a cold start
-        205 nm, after a scan       read normally
-
       The wavelength alone does not predict it and neither does the calibration
       state alone, but the pair does: READ PLATE sets its own gain for a
       wavelength it has not calibrated, and that attempt fails below 210 nm,
@@ -404,32 +381,9 @@ class PowerWaveX:
 
       200 nm is a real floor and the firmware enforces it: a scan request for
       190-200 nm, legal in every other field, was answered ACK and status
-      ``090`` without moving anything. So the bottom of this range cannot be
-      crossed, which is the one far-UV probe that carries no risk at all.
+      ``090`` without moving anything.
 
-      The order-sorting filter wheel is not the cause: 200, 205 and 215 nm share a
-      single band, so it sits in the same position whether the read faults or
-      not. See :data:`._protocol.ORDER_SORTING_FILTER_BANDS`.
-
-      One scan per power-on is enough. The per-wavelength calibration survives
-      both HALT and a full self-test - each was tried, and a following scan
-      reported nothing left to calibrate - so it is only lost when the
-      instrument is powered off. There is no command that clears it either, so
-      a wavelength cannot be returned to its uncalibrated state remotely.
-
-      The fault is never reported over the serial port, and the instrument stops
-      answering it entirely until an operator acknowledges the fault at the front
-      panel. It then sends a single ``DLE``, the same byte that completes a HALT,
-      and resumes. Verified by listening across a deliberate fault: status
-      ``000`` at 11 s as the read began, then 99 s of silence, then ``DLE`` at the
-      instant the panel key was pressed.
-
-      This is worth knowing because it looks like several different failures. The
-      ``DLE`` seems to arrive immediately, or late, or never, purely according to
-      whether someone pressed the key while anything was listening. Recovery is
-      always the same and never needs a power cycle: press the panel key, which
-      restores the serial port, then call :meth:`self_test` to clear the ``080``
-      that stays latched until it runs.
+    
     """
     return (MIN_WAVELENGTH, MAX_WAVELENGTH)
 
@@ -484,9 +438,7 @@ class PowerWaveX:
     The floor scales with the wavelength count, since the carriage makes a pass
     per wavelength. Measured on a PowerWaveX w/ Incubator (firmware R06.20) at
     9600 baud over a full 96-well plate, asked immediately after the assay was
-    pushed: 10 s for one wavelength, 19 s for two, 38 s for four. It reports that
-    floor whatever interval the assay asked for, so a shorter request does not
-    hide it.
+    pushed: 10 s for one wavelength, 19 s for two, 38 s for four. 
     """
     async with self._owns_port():
       await self._send_command(Command.GET_MINIMUM_KINETIC_INTERVAL)
@@ -1053,8 +1005,7 @@ class PowerWaveX:
 
     This rewrites the table in the instrument's **non-volatile memory**, and the
     manual requires a self-test afterwards to recalibrate gains for the new set.
-    It is only correct after physically changing the optics, so it is left out
-    rather than offered as a routine call.
+    It is only correct after physically changing the optics, so it is left out.
 
     The encoder exists and is tested, so wiring this up is small:
     :func:`._protocol.encode_wavelength_table` builds the 24-byte payload, which
@@ -1121,7 +1072,7 @@ class PowerWaveX:
         request only partly, and not the fields that matter most. A PowerWaveX
         w/ Incubator (firmware R06.20) sent row 99, column 99, 999 to 200 nm
         with a step of 0 answered ACK and status ``000``, accepting every
-        impossible field, and then stopped responding - neither HALT nor any
+        impossible field, and then stopx responding - neither HALT nor any
         other command brought it back, and it had to be recovered at the front
         panel. A step of 0 in particular gives the firmware no way to finish
         sweeping. It does check the wavelength bounds, refusing 190 nm with
@@ -1137,14 +1088,7 @@ class PowerWaveX:
       The geometry command must precede a scan on any plate that is not the
       standard 96-well, which :meth:`set_plate_geometry` does here.
 
-      A scan and a plate read agree. Scanning three wells of a part-covered
-      carrier spanning most of the usable range, then comparing each against the
-      620 nm plate read of the same wells, gave 0.114 against 0.098, 1.884
-      against 1.873, and 2.230 against 2.209 - within 0.021 OD, from two
-      different instrument operations parsed by two different code paths. Each
-      well's spectrum also fell monotonically from about 580 nm upwards, and the
-      wells saturated in the order their plate readings predicted: none, three
-      and nine wavelengths overrange respectively.
+     
     """
     if (well is None) == (column is None):
       raise ValueError("Give exactly one of well or column")
@@ -1336,8 +1280,8 @@ class PowerWaveX:
       await self._read_status()
 
       # The instrument emits a stray NAK shortly after accepting the table, with
-      # no command outstanding. Observed repeatedly on a PowerWaveX w/ Incubator
-      # in 2021. Settle, then discard it so it cannot be mistaken for the next
+      # no command outstanding. Observed repeatedly on a PowerWaveX w/ Incubator.
+      # Settle, then discard it so it cannot be mistaken for the next
       # reply.
       #
       # Inside the ownership block, because this flush is part of the exchange
@@ -1398,9 +1342,7 @@ class PowerWaveX:
     """Read and verify ``num_blocks`` consecutive plate data blocks.
 
     Each block is a ``CR`` start code, the rows, a ``^Z`` terminator and a raw
-    checksum byte. The checksum byte must be consumed here: leaving it in the
-    stream makes it the first byte of the next block, which is how the original
-    2021 kinetic loop ended up slicing frames by hand.
+    checksum byte. The checksum byte must be consumed here.
     """
     blocks = []
     for index in range(num_blocks):
@@ -1538,7 +1480,7 @@ class PowerWaveX:
       The manual lists the setpoint as data bytes "1 - 2", but this instrument
       accepts a *single* raw byte holding the integer degrees. Confirmed on a
       PowerWaveX w/ Incubator (firmware R06.20), which returned status "000" to a
-      one-byte payload. Sending two bytes has not been tried.
+      one-byte payload. 
     """
     if not self.supports_heating:
       raise NotImplementedError(f"{self.model} has no incubator.")
@@ -1843,9 +1785,7 @@ class PowerWaveX:
     than a short window. Firmware that does not send it is tolerated: this only
     warns, at the cost of one such wait per read.
 
-    Leaving it queued makes it the reply to the next command, which is how a
-    second read in one session failed with an unexpected ``^Z`` in place of an
-    ACK.
+    
     """
     try:
       trailer = await self._read_exactly(1)

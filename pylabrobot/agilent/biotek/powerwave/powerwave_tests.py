@@ -1,8 +1,7 @@
 """Tests for the PowerWave wire protocol.
 
 The fixtures marked "captured" are real bytes recorded from a PowerWaveX w/
-Incubator over RS-232 in 2021, recovered from the stored outputs of the notebook
-that this driver was ported from. Fixtures marked "synthetic" are hand-built for
+Incubator over RS-232. Fixtures marked "synthetic" are hand-built for
 cases the capture does not cover.
 """
 
