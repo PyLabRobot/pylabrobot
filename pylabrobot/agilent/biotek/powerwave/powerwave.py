@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Literal, Optional, Sequence, Tuple, cast
 
+# This import from another driver's base module conflicts with the contribution
+# rule that shared driver functionality belongs in pylabrobot.lib; it is retained here.
 from pylabrobot.agilent.biotek.plate_reader_base import AbsorbanceResult
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate, Plate, PlateHolder, Well
@@ -215,6 +217,7 @@ class PowerWaveX:
     self._port_free = asyncio.Event()
     self._port_free.set()
     self._port_owner: Optional[asyncio.Task] = None
+    self._halt_owner: Optional[asyncio.Task] = None
 
     self.io = Serial(
       human_readable_device_name="Agilent BioTek PowerWaveX",
@@ -505,6 +508,9 @@ class PowerWaveX:
     if self._port_owner is current:
       yield  # already ours: a nested call from the same operation
       return
+
+    if self._halt_owner is not None and self._halt_owner is not current:
+      raise PowerWaveBusyError("HALT has reserved the serial port. Wait for it to finish.")
 
     if self._port_owner is not None:
       raise PowerWaveBusyError(
@@ -831,44 +837,54 @@ class PowerWaveX:
     latches nothing: the next read worked with no :meth:`self_test` in between.
 
     Raises:
+      PowerWaveBusyError: If another halt is already in progress.
       PowerWaveError: If a read in progress does not let go of the serial port,
         or the instrument does not acknowledge with ``DLE``.
     """
-    if not self._port_free.is_set():
-      logger.info("[PowerWaveX %s] halting a read in progress", self.port)
-      self._halt_requested.set()
-      try:
-        await asyncio.wait_for(self._port_free.wait(), timeout=self._HALT_HANDOVER_SECONDS)
-      except (asyncio.TimeoutError, TimeoutError):
-        raise PowerWaveError(
-          f"A read in progress did not release the serial port within "
-          f"{self._HALT_HANDOVER_SECONDS:.0f}s, so HALT was not sent. The instrument is "
-          f"still reading."
-        ) from None
-      finally:
-        self._halt_requested.clear()
+    if self._halt_owner is not None:
+      raise PowerWaveBusyError("Another halt is already in progress.")
 
-    # Held for the acknowledgement too, so nothing starts a read into the DLE this
-    # is about to wait for.
-    async with self._owns_port():
-      await self.io.write(bytes(Command.HALT.value))
-      logger.debug("[PowerWaveX %s] sent HALT", self.port)
+    # Reserve before yielding so the interrupted task cannot start another
+    # exchange between releasing the port and HALT acquiring it.
+    self._halt_owner = asyncio.current_task()
+    try:
+      if not self._port_free.is_set():
+        logger.info("[PowerWaveX %s] halting a read in progress", self.port)
+        self._halt_requested.set()
+        try:
+          await asyncio.wait_for(self._port_free.wait(), timeout=self._HALT_HANDOVER_SECONDS)
+        except (asyncio.TimeoutError, TimeoutError):
+          raise PowerWaveError(
+            f"A read in progress did not release the serial port within "
+            f"{self._HALT_HANDOVER_SECONDS:.0f}s, so HALT was not sent. The instrument is "
+            f"still reading."
+          ) from None
 
-      # The acknowledgement is the last byte, not the first DLE: see
-      # _read_halt_acknowledgement. Sending the command before reading is what
-      # stops the stream, so this never waits out a run it could have aborted.
-      try:
-        response = await self._read_halt_acknowledgement(self.timeout)
-      except TimeoutError:
-        # Whatever is still in flight would otherwise answer the next command.
-        await self._drain_input(reason="left by an unacknowledged halt")
-        raise
-      if len(response) > 1:
-        logger.debug(
-          "[PowerWaveX %s] discarded %d bytes of the abandoned run before the DLE",
-          self.port,
-          len(response) - 1,
-        )
+      # Held for the acknowledgement too, so nothing starts a read into the DLE this
+      # is about to wait for.
+      async with self._owns_port():
+        await self.io.write(bytes(Command.HALT.value))
+        logger.debug("[PowerWaveX %s] sent HALT", self.port)
+
+        # The acknowledgement is the last byte, not the first DLE: see
+        # _read_halt_acknowledgement. Sending the command before reading is what
+        # stops the stream, so this never waits out a run it could have aborted.
+        try:
+          response = await self._read_halt_acknowledgement(self.timeout)
+        except TimeoutError:
+          # Whatever is still in flight would otherwise answer the next command.
+          await self._drain_input(reason="left by an unacknowledged halt")
+          raise
+        if len(response) > 1:
+          logger.debug(
+            "[PowerWaveX %s] discarded %d bytes of the abandoned run before the DLE",
+            self.port,
+            len(response) - 1,
+          )
+
+    finally:
+      self._halt_requested.clear()
+      self._halt_owner = None
 
     logger.info("[PowerWaveX %s] halted, carrier out", self.port)
 

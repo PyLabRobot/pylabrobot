@@ -631,11 +631,19 @@ _CAPTURED_CONFIG = b":\x00"  # PowerWaveX w/ Incubator, low byte first
 _CAPTURED_TABLE = b"550,620,665,520,450,595,"
 
 
+def _create_reader(fake: _FakeSerial, timeout: float) -> PowerWaveX:
+  """Construct a driver with a fake transport, independently of pyserial."""
+  with (
+    unittest.mock.patch("pylabrobot.agilent.biotek.powerwave.powerwave.HAS_SERIAL", True),
+    unittest.mock.patch("pylabrobot.agilent.biotek.powerwave.powerwave.Serial", return_value=fake),
+  ):
+    return PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=timeout)
+
+
 def _reader(script: bytes = b"", *, timeout: float = 0.2, model: Optional[str] = None):
   """Build a PowerWaveX wired to a scripted fake transport."""
-  reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=timeout)
   fake = _FakeSerial(script)
-  reader.io = fake  # type: ignore[assignment]
+  reader = _create_reader(fake, timeout)
   # No real line to settle, so skip the post-assay-definition NAK flush delay.
   reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
   # The scripted transport answers a read before any command is written, so the
@@ -651,6 +659,18 @@ def _reader(script: bytes = b"", *, timeout: float = 0.2, model: Optional[str] =
 
 class TestLifecycle(unittest.IsolatedAsyncioTestCase):
   """setup() and stop()."""
+
+  def test_missing_pyserial_raises_before_constructing_transport(self):
+    """Production construction explains the required serial extra."""
+    with (
+      unittest.mock.patch("pylabrobot.agilent.biotek.powerwave.powerwave.HAS_SERIAL", False),
+      unittest.mock.patch(
+        "pylabrobot.agilent.biotek.powerwave.powerwave.Serial"
+      ) as serial_constructor,
+    ):
+      with self.assertRaisesRegex(RuntimeError, r"pip install pylabrobot\[serial\]"):
+        PowerWaveX(name="test_reader", port="/dev/ttyUSB0")
+      serial_constructor.assert_not_called()
 
   async def test_setup_identifies_instrument(self):
     # '}' -> ACK + 2 config bytes and no status string (page B-19),
@@ -759,8 +779,7 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
   async def test_halt_interrupts_the_read_and_is_acknowledged(self):
     plate = _plate_resource()
     fake = self._SilentThenDLE(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=30)
     reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX"
@@ -793,8 +812,7 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
         seen["port_claimed"] = not reader._port_free.is_set()
       await original_write(data)
 
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=30)
     reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
@@ -815,8 +833,7 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
   async def test_a_second_read_is_refused_while_one_is_running(self):
     plate = _plate_resource()
     fake = self._SilentThenDLE(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=30)
     reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX"
@@ -838,8 +855,7 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
   async def test_the_port_is_usable_again_after_a_halt(self):
     plate = _plate_resource()
     fake = self._SilentThenDLE(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=30)
     reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX"
@@ -858,6 +874,116 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(reader._port_free.is_set())
 
 
+class TestHaltReservation(unittest.IsolatedAsyncioTestCase):
+  """HALT reserves the handoff and releases its reservation on every exit path."""
+
+  async def test_interrupted_reader_cannot_start_a_query_before_halt(self):
+    """An immediate recovery query cannot steal the released port from HALT."""
+    plate = _plate_resource()
+    reader, _ = _reader(timeout=0.2)
+    reader._HALT_HANDOVER_SECONDS = 0.05
+    reader._wavelength_table = [620]
+    fake = TestHaltInterruptsAReadInProgress._SilentThenDLE((_ACK + _STATUS_OK) * 3)
+    reader.io = fake  # type: ignore[assignment]
+
+    async def measure() -> None:
+      """Try querying temperature as soon as the read is interrupted."""
+      with self.assertRaises(PowerWaveHaltedError):
+        try:
+          await reader.read_absorbance(plate, plate.get_all_items(), 620)
+        except PowerWaveHaltedError:
+          with self.assertRaises(PowerWaveBusyError):
+            await reader.request_current_temperature()
+          raise
+
+    read = asyncio.create_task(measure())
+    try:
+      while b"S" not in fake.writes or fake.remaining:
+        await asyncio.sleep(0)
+      await reader.halt()
+      await read
+    finally:
+      read.cancel()
+      await asyncio.gather(read, return_exceptions=True)
+
+    self.assertTrue(fake.halted)
+    self.assertNotIn(b"]", fake.writes)
+    fake._inbox.extend(_ACK + _CAPTURED_CONFIG)
+    self.assertEqual(await reader.request_model(), "PowerWaveX w/ Incubator")
+
+  async def test_second_halt_is_refused_until_acknowledgement(self):
+    """Only one caller may send HALT and consume its acknowledgement."""
+    reader, _ = _reader()
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def acknowledgement(timeout: float) -> bytes:
+      """Hold HALT in its acknowledgement phase."""
+      entered.set()
+      await release.wait()
+      return b"\x10"
+
+    reader._read_halt_acknowledgement = acknowledgement  # type: ignore[method-assign]
+    halt = asyncio.create_task(reader.halt())
+    try:
+      await entered.wait()
+      with self.assertRaises(PowerWaveBusyError):
+        await reader.halt()
+      with self.assertRaises(PowerWaveBusyError):
+        await reader.request_current_temperature()
+    finally:
+      release.set()
+      await halt
+
+  async def test_handoff_timeout_releases_reservation(self):
+    """A failed handoff leaves ordinary commands available once the owner exits."""
+    reader, fake = _reader(_ACK + _CAPTURED_CONFIG)
+    reader._HALT_HANDOVER_SECONDS = 0.01
+    async with reader._owns_port():
+      with self.assertRaisesRegex(PowerWaveError, "HALT was not sent"):
+        await asyncio.create_task(reader.halt())
+    self.assertFalse(reader._halt_requested.is_set())
+    self.assertNotIn(b"X", fake.writes)
+    self.assertEqual(await reader.request_model(), "PowerWaveX w/ Incubator")
+
+  async def test_cancellation_during_handoff_releases_reservation(self):
+    """Cancelling HALT before the owner exits clears the interruption request."""
+    reader, fake = _reader(_ACK + _CAPTURED_CONFIG)
+    async with reader._owns_port():
+      halt = asyncio.create_task(reader.halt())
+      await reader._halt_requested.wait()
+      with self.assertRaises(PowerWaveBusyError):
+        await reader.halt()
+      self.assertTrue(reader._halt_requested.is_set())
+      halt.cancel()
+      with self.assertRaises(asyncio.CancelledError):
+        await halt
+    self.assertFalse(reader._halt_requested.is_set())
+    self.assertNotIn(b"X", fake.writes)
+    self.assertEqual(await reader.request_model(), "PowerWaveX w/ Incubator")
+
+  async def test_cancellation_during_acknowledgement_releases_reservation(self):
+    """Cancelling the acknowledgement wait releases both ownership and reservation."""
+    reader, fake = _reader()
+    entered = asyncio.Event()
+
+    async def acknowledgement(timeout: float) -> bytes:
+      """Wait until the HALT task is cancelled."""
+      entered.set()
+      await asyncio.Future()
+      return b"\x10"
+
+    reader._read_halt_acknowledgement = acknowledgement  # type: ignore[method-assign]
+    halt = asyncio.create_task(reader.halt())
+    await entered.wait()
+    halt.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await halt
+    self.assertFalse(reader._halt_requested.is_set())
+    fake._inbox.extend(_ACK + _CAPTURED_CONFIG)
+    self.assertEqual(await reader.request_model(), "PowerWaveX w/ Incubator")
+
+
 class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
   """Every exchange owns the serial port, not just reads.
 
@@ -871,8 +997,7 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
     fake = TestHaltInterruptsAReadInProgress._SilentThenDLE(
       _ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK
     )
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=30)
     reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
@@ -912,8 +1037,7 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
         self._inbox.clear()
 
     fake = _RecordingFlush(_ACK + _STATUS_OK)
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=5)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=5)
     reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX"
@@ -944,8 +1068,7 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
         self._inbox.clear()
 
     fake = _SlowFlush(_ACK + _STATUS_OK)
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=5)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=5)
     reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX w/ Incubator"
@@ -1035,8 +1158,7 @@ class TestResynchronisationAfterAFailure(unittest.IsolatedAsyncioTestCase):
 
     plate = _plate_resource()
     fake = _Watching(_ACK + _STATUS_OK + _ACK + _STATUS_OK + _ACK + _STATUS_OK)
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=30)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=30)
     reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
     reader._DRAIN_QUIET_SECONDS = 0.01  # type: ignore[misc]
     reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
@@ -1092,9 +1214,8 @@ class TestHaltAcknowledgement(unittest.IsolatedAsyncioTestCase):
         self._inbox.extend(self._leftovers + b"\x10")
 
   async def _halt_with(self, leftovers: bytes):
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=5)
     fake = self._LeftoversThenDLE(leftovers)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=5)
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
     reader._model = "PowerWaveX"
@@ -1139,9 +1260,8 @@ class TestHaltAcknowledgement(unittest.IsolatedAsyncioTestCase):
           return b""  # one quiet poll first, as the real gap gives
         return await super().read(num_bytes)
 
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=5)
     fake = _HomingGap(b"\r,+0100,+0100\r\n\x1a\x42")
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=5)
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
     reader._model = "PowerWaveX"
@@ -1151,9 +1271,8 @@ class TestHaltAcknowledgement(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(fake.remaining, b"")  # the DLE was waited for, not missed
 
   async def test_silence_without_a_dle_is_an_error(self):
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=2)
     fake = _FakeSerial(b"\r,+0100\r\n\x1a")  # data, then quiet, never a DLE
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=2)
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
     reader._model = "PowerWaveX"
@@ -1172,9 +1291,12 @@ class TestHalt(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(fake.writes, [b"X"])
 
   async def test_halt_without_dle_times_out(self):
-    reader, _ = _reader(b"")
+    reader, fake = _reader(b"")
     with self.assertRaises(TimeoutError):
       await reader.halt()
+    self.assertFalse(reader._halt_requested.is_set())
+    fake._inbox.extend(_ACK + _CAPTURED_CONFIG)
+    self.assertEqual(await reader.request_model(), "PowerWaveX w/ Incubator")
 
 
 class TestIncubator(unittest.IsolatedAsyncioTestCase):
@@ -1522,8 +1644,7 @@ class TestStaleByteDrain(unittest.IsolatedAsyncioTestCase):
       stale=b"\x1a",
       script=_ACK + _CAPTURED_CONFIG + _ACK + _CAPTURED_TABLE + _STATUS_OK,
     )
-    reader = PowerWaveX(name="test_reader", port="/dev/ttyUSB0", timeout=0.2)
-    reader.io = fake  # type: ignore[assignment]
+    reader = _create_reader(fake, timeout=0.2)
     reader._DRAIN_QUIET_SECONDS = 0.05  # type: ignore[misc]
 
     with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
