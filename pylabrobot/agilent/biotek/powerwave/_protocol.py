@@ -625,27 +625,6 @@ def count_overrange(data: List[List[float]]) -> int:
 
 
 # --------------------------------------------------------------------------------------
-# Strip range and plate geometry helpers (pages B-12, B-13)
-# --------------------------------------------------------------------------------------
-
-
-def wells_bounding_box(
-  well_indices: Sequence[Tuple[int, int]],
-) -> Optional[Tuple[int, int, int, int]]:
-  """Return ``(min_row, min_column, max_row, max_column)`` for zero-based well indices.
-
-  Returns ``None`` for an empty selection. Used to derive a SET STRIP RANGE
-  request; the PowerWave can only read contiguous rectangles, so a sparse
-  selection is over-read and filtered by the caller.
-  """
-  if len(well_indices) == 0:
-    return None
-  rows = [row for row, _ in well_indices]
-  columns = [column for _, column in well_indices]
-  return (min(rows), min(columns), max(rows), max(columns))
-
-
-# --------------------------------------------------------------------------------------
 # Plate geometry and strip range (pages B-12, B-13)
 # --------------------------------------------------------------------------------------
 

@@ -17,7 +17,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Literal, Optional, Sequence, Tuple, cast
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, cast
 
 from pylabrobot.agilent.biotek.plate_reader_base import AbsorbanceResult
 from pylabrobot.io.serial import Serial
@@ -40,13 +40,13 @@ from ._protocol import (
   Command,
   PowerWaveBusyError,
   PowerWaveError,
-  PowerWaveNakError,
   PowerWaveFatalError,
   PowerWaveHaltedError,
+  PowerWaveNakError,
   PowerWaveParseError,
   PowerWaveReadAbortedError,
-  PowerWaveStatusError,
   PowerWaveSelfTestError,
+  PowerWaveStatusError,
   build_assay_definition,
   configuration_has_incubator,
   count_overrange,
@@ -80,6 +80,19 @@ except ImportError as e:  # pragma: no cover - depends on the environment
 logger = logging.getLogger(__name__)
 
 ScanSeries = Literal["single", "first", "next", "last"]
+
+ShakeSpeed = Literal["slow", "medium", "fast", "variable"]
+
+#: Wire code for each shake speed, shared by the assay definition and the scan
+#: request (pages B-10, B-14).
+_SHAKE_SPEED_CODES: Dict[ShakeSpeed, int] = {"slow": 0, "medium": 1, "fast": 2, "variable": 3}
+
+
+def _shake_speed_code(speed: ShakeSpeed) -> int:
+  """The wire code for a shake speed, or ValueError for an unknown one."""
+  if speed not in _SHAKE_SPEED_CODES:
+    raise ValueError(f"shake_speed must be one of {list(_SHAKE_SPEED_CODES)}, got {speed!r}")
+  return _SHAKE_SPEED_CODES[speed]
 
 
 @dataclass
@@ -126,7 +139,6 @@ class PowerWaveX:
   anything went wrong. The instrument recovers immediately and reads
   96-well plates as usual afterwards.
 
-
   Example:
     >>> reader = PowerWaveX(name="reader", port="/dev/ttyUSB0")
     >>> await reader.setup()
@@ -158,8 +170,8 @@ class PowerWaveX:
   #: heard the acknowledgement.
   _HALT_QUIET_SECONDS = 1.0
 
-  #: Seconds allowed per scanned wavelength, on top of :attr:`timeout`. An
-  #: instance attribute so a test can collapse the wait.
+  #: Seconds allowed per scanned wavelength, on top of :attr:`timeout`. A class
+  #: attribute so a test can collapse the wait.
   _SCAN_SECONDS_PER_WAVELENGTH = SCAN_SECONDS_PER_WAVELENGTH
 
   #: How long the line must stay quiet for :meth:`_drain_input` to call it clear,
@@ -281,7 +293,7 @@ class PowerWaveX:
       ``0F11`` or ``0F21`` ("signal out of range" on detector channel 1 or 2,
       whichever reads worst on the run), and often stops the instrument responding
       at all until it is power cycled. Observed on a PowerWaveX w/ Incubator
-      (firmware R06.20), reading a full 96-well plate::
+      (firmware R06.20), reading a full 96-well plate.
 
       The wavelength alone does not predict it and neither does the calibration
       state alone, but the pair does: READ PLATE sets its own gain for a
@@ -334,8 +346,7 @@ class PowerWaveX:
 
     # The io layer reads in one-second slices, so poll until this driver's own
     # deadline. An instrument that is still finishing a read or a carriage move
-    # takes several seconds to acknowledge the next command; waiting only one
-    # slice made a second read in the same session fail intermittently.
+    # takes several seconds to acknowledge the next command, longer than one slice.
     deadline = time.monotonic() + self.timeout
     response = b""
     while len(response) == 0:
@@ -479,7 +490,6 @@ class PowerWaveX:
     instrument offers no way to ask what it is doing, so a temperature query
     issued meanwhile - the obvious thing for a display to do on a timer - would
     read bytes belonging to the read and leave the read reading its own reply.
-    Guarding only reads against each other left that wide open.
 
     Re-entrant within one task, so a composite operation can claim the port once
     and still call the commands it is built from. A different task is refused
@@ -519,8 +529,8 @@ class PowerWaveX:
     except Exception:
       # The exchange stopped part way through, so the instrument is very likely
       # still talking. Hand the port back clean rather than leave the next
-      # command to read the remains and fail for reasons of its own: a checksum
-      # error used to surface one command later as "expected ACK, got 0x1a".
+      # command to read the remains and fail for reasons of its own, such as a
+      # checksum error surfacing one command later as "expected ACK, got 0x1a".
       with contextlib.suppress(Exception):
         await self._resynchronise("left by a failed exchange")
       raise
@@ -674,9 +684,11 @@ class PowerWaveX:
     return model
 
   async def request_wavelength_table(self) -> List[int]:
-    """Read the installed filter wavelengths in nm (page B-11).
+    """Read the calibrated wavelength table in nm (page B-11).
 
-    Unpopulated filter positions report ``000`` and are omitted.
+    A calibration set, not a list of installed filters: the monochromator reads
+    any wavelength in range. Unused table positions report ``000`` and are
+    omitted.
     """
     async with self._owns_port():
       await self._send_command(Command.GET_WAVELENGTH_TABLE)
@@ -718,13 +730,10 @@ class PowerWaveX:
     as :attr:`model` and :attr:`wavelength_table`.
     """
     logger.warning(
-      "This PowerWaveX driver is verified against one instrument: a PowerWaveX w/ "
-      "Incubator (firmware R06.20) passing its self-test. Identification, the "
-      "wavelength table, temperature, the minimum kinetic interval, carrier movement, "
-      "the assay definition, plate geometry, strip range, endpoint reads, kinetic "
-      "reads and spectral scans have all been exercised on it end to end, including "
-      "absorbing samples that read from 0.004 to 4.05 OD and saturated wells that "
-      "come back as overrange."
+      "The PowerWaveX driver has been tested on one instrument only, a PowerWaveX w/ "
+      "Incubator (firmware R06.20). Other PowerWave models and firmware are untested. "
+      "If you run it on one, please report the result at https://discuss.pylabrobot.org "
+      "or open a pull request so this warning can be updated."
     )
 
     await self.io.setup()
@@ -790,8 +799,8 @@ class PowerWaveX:
     Note:
       Unlike the newer USB BioTek readers, this instrument takes no plate
       geometry with the store command. Geometry is a separate SET PLATE GEOMETRY
-      (``'{'``) request, which this driver does not yet implement, so tall or
-      lidded labware has not been exercised.
+      (``'{'``) request, which the read and scan methods send themselves. Tall or
+      lidded labware has not been tested.
     """
     async with self._owns_port():
       await self._send_command(Command.STORE_PLATE_CARRIER)
@@ -997,10 +1006,9 @@ class PowerWaveX:
       # reply.
       #
       # Inside the ownership block, because this flush is part of the exchange
-      # rather than cleanup after it. Released first, the port read as free for
-      # the two seconds this takes, and a command entering that window had its
-      # reply discarded by the flush below - or its outgoing bytes discarded by
-      # the output flush - for no reason the caller could see.
+      # rather than cleanup after it. A command allowed in during these two
+      # seconds would have its reply, or its outgoing bytes, discarded by the
+      # flushes below.
       await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
       await self.io.reset_input_buffer()
       await self.io.reset_output_buffer()
@@ -1213,7 +1221,9 @@ class PowerWaveX:
 
     Args:
       plate: The plate loaded in the carrier.
-      wells: The wells to read. Must currently be every well of ``plate``.
+      wells: The wells to read. The instrument reads whole columns, so the read
+        covers every column that holds a selected well, and all of their wells
+        are reported. Columns outside that range are ``None``.
       wavelengths: One to six wavelengths in nm, 200 to 999.
 
     Returns:
@@ -1284,8 +1294,9 @@ class PowerWaveX:
     """Read absorbance at one wavelength.
 
     Args:
-      plate: The plate loaded in the carrier. Must be 8x12; see the note below.
-      wells: The wells to read. Must currently be every well of ``plate``.
+      plate: The plate loaded in the carrier, 8x12 or 16x24.
+      wells: The wells to read; widened to whole columns as for
+        :meth:`read_absorbances`.
       wavelength: Wavelength in nm, 200 to 999. The monochromator selects it at
         1 nm increments (page 1-1), so any value in range is readable regardless
         of the stored wavelength table.
@@ -1294,9 +1305,9 @@ class PowerWaveX:
       A single-element list, for consistency with the other BioTek readers.
 
     Raises:
-      NotImplementedError: If ``wells`` is a subset of the plate, or the plate is
-        not 8x12. Both need commands this driver does not yet send: SET STRIP
-        RANGE (``'%'``, page B-13) and SET PLATE GEOMETRY (``'{'``, page B-12).
+      NotImplementedError: If the plate is neither 8x12 nor 16x24.
+      PowerWaveStatusError: With ``0A0`` if a 96-well instrument is asked to read
+        a 384-well plate.
 
     Note:
       The carrier is not moved. Call :meth:`close` first if the plate is still
@@ -1312,7 +1323,7 @@ class PowerWaveX:
     interval: int,
     count: int,
     shake_time: int,
-    shake_speed: int,
+    shake_speed_code: int,
     first_strip: int,
     last_strip: int,
     num_strips: int,
@@ -1329,7 +1340,7 @@ class PowerWaveX:
       kinetic_interval=interval,
       kinetic_read_count=count,
       shake_time=shake_time,
-      shake_speed=shake_speed,
+      shake_speed=shake_speed_code,
     )
     await self._set_plate_geometry(plate.num_items_y, plate.num_items_x)
     if num_strips != plate.num_items_x:
@@ -1370,10 +1381,9 @@ class PowerWaveX:
       blocks = await self._collect_blocks(
         len(wavelengths), plate.num_items_y, num_strips, timeout=block_timeout
       )
-      # Stamped once the cycle's data is in hand. Taking it before the wait
-      # named the moment this loop started waiting, which for every cycle after
-      # the first is when the previous cycle's data finished arriving - well
-      # before the cycle it was labelling.
+      # Stamped once the cycle's data is in hand. Before the wait, it would name
+      # the moment the previous cycle's data finished arriving, well before the
+      # cycle it labels.
       timestamp = datetime.now()
       for wavelength, block in zip(wavelengths, blocks):
         results.append(
@@ -1399,7 +1409,7 @@ class PowerWaveX:
     interval: int,
     count: int,
     shake_time: int = 0,
-    shake_speed: int = 1,
+    shake_speed: ShakeSpeed = "medium",
     total_read_time: Optional[int] = None,
   ) -> List[AbsorbanceResult]:
     """Read the plate repeatedly at a fixed interval (page B-10).
@@ -1423,8 +1433,9 @@ class PowerWaveX:
         means the plate is never shaken: the flags that enable shaking are left
         clear and no shake time is sent. Shaking is a property of an assay rather
         than of reading one, so it is never done unasked.
-      shake_speed: 0 slow, 1 medium, 2 fast, 3 variable. Only consulted when
-        ``shake_time`` is above zero.
+      shake_speed: ``"slow"``, ``"medium"``, ``"fast"`` or ``"variable"``, which
+        cycles through the speeds. Only consulted when ``shake_time`` is above
+        zero.
       total_read_time: Not supported; pass ``None``. Running a kinetic series by
         total time means the instrument ignores ``count``, so the driver cannot
         know how many blocks to expect. See :data:`._protocol.KINETIC_FLAGS`.
@@ -1454,6 +1465,8 @@ class PowerWaveX:
         "run ends. Use count and interval instead."
       )
 
+    shake_speed_code = _shake_speed_code(shake_speed)
+
     # Held across the setup commands too, so a second operation cannot interleave
     # its assay definition with this run's cycles.
     async with self._owns_port():
@@ -1464,7 +1477,7 @@ class PowerWaveX:
         interval,
         count,
         shake_time,
-        shake_speed,
+        shake_speed_code,
         first_strip,
         last_strip,
         num_strips,
@@ -1610,7 +1623,7 @@ class PowerWaveX:
     column: Optional[int] = None,
     calibrate: bool = False,
     shake_time: int = 0,
-    shake_speed: int = 0,
+    shake_speed: ShakeSpeed = "slow",
     series: ScanSeries = "single",
   ) -> SpectralScanResult:
     """Spectrally scan one well, or one whole strip (``'&'``, page B-14).
@@ -1632,7 +1645,9 @@ class PowerWaveX:
         still calibrates any wavelength not scanned since power-up, and any with
         a previous error. Recommended when absolute accuracy matters.
       shake_time: Seconds to shake before scanning, 0 to 99.
-      shake_speed: 0 slow, 1 medium, 2 fast, 3 cycle.
+      shake_speed: ``"slow"``, ``"medium"``, ``"fast"`` or ``"variable"``, which
+        cycles through the speeds. Only consulted when ``shake_time`` is above
+        zero.
       series: Use ``"first"``, ``"next"`` and ``"last"`` to scan adjacent strips
         efficiently. They must be contiguous and go left to right, because the
         first pass for the next strip is collected during the current one.
@@ -1700,7 +1715,7 @@ class PowerWaveX:
       series=series,
       calibrate=calibrate,
       shake_time=shake_time,
-      shake_speed=shake_speed,
+      shake_speed=_shake_speed_code(shake_speed),
     )
     expected = scan_wavelengths(start_wavelength, stop_wavelength, step)
 

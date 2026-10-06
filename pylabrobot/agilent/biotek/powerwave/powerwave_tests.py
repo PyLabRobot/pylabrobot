@@ -15,6 +15,8 @@ from typing import Awaitable, Callable, List, Optional, Tuple
 from pylabrobot.agilent.biotek.powerwave import PowerWaveX
 from pylabrobot.agilent.biotek.powerwave._protocol import (
   ASSAY_DEFINITION_LENGTH,
+  ELX_ERRORS,
+  ELX_FATAL_ERRORS,
   FLAG_USE_TOTAL_KINETIC_TIME,
   KINETIC_FLAGS,
   KINETIC_SHAKE_FLAGS,
@@ -22,9 +24,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   MIN_WAVELENGTH,
   ORDER_SORTING_FILTER_BANDS,
   OVERRANGE,
-  ELX_ERRORS,
   SCAN_WHOLE_STRIP,
-  ELX_FATAL_ERRORS,
   SELF_TEST_ERRORS,
   STATUS_LENGTH,
   Command,
@@ -63,7 +63,6 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   scan_checksum,
   scan_wavelengths,
   verify_plate_checksum,
-  wells_bounding_box,
 )
 
 # Captured: one wavelength's 96-well plate data block, through and including ^Z.
@@ -527,19 +526,6 @@ class TestPlateParsing(unittest.TestCase):
 
   def test_count_overrange_on_clean_plate(self):
     self.assertEqual(count_overrange(parse_plate(_CAPTURED_PLATE)), 0)
-
-
-class TestStripRangeHelpers(unittest.TestCase):
-  """Strip range derivation, page B-13."""
-
-  def test_bounding_box(self):
-    self.assertEqual(wells_bounding_box([(0, 0), (2, 5), (1, 3)]), (0, 0, 2, 5))
-
-  def test_single_well(self):
-    self.assertEqual(wells_bounding_box([(3, 7)]), (3, 7, 3, 7))
-
-  def test_empty_selection(self):
-    self.assertIsNone(wells_bounding_box([]))
 
 
 class TestCommandBytes(unittest.TestCase):
@@ -1960,6 +1946,24 @@ class TestKineticRead(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(table[30], 0)  # byte 31: no shake bits
     self.assertEqual(table[162:164], b"\x00\x00")  # bytes 163-164: no shake time
 
+  async def test_unknown_shake_speed_is_refused_before_sending(self):
+    plate = _plate_resource()
+    reader, fake = _reader(b"", model="PowerWaveX")
+    reader._wavelength_table = [600]
+
+    with self.assertRaises(ValueError):
+      await reader.read_absorbance_kinetic(
+        plate,
+        plate.get_all_items(),
+        [600],
+        interval=60,
+        count=2,
+        shake_time=5,
+        shake_speed="turbo",  # type: ignore[arg-type]
+      )
+
+    self.assertEqual(fake.writes, [])
+
   async def test_shaking_is_sent_when_asked_for(self):
     plate = _plate_resource()
     reader, fake = _reader(self._kinetic_script(cycles=2, wavelengths=1), model="PowerWaveX")
@@ -1972,7 +1976,7 @@ class TestKineticRead(unittest.IsolatedAsyncioTestCase):
       interval=60,
       count=2,
       shake_time=5,
-      shake_speed=2,
+      shake_speed="fast",
     )
 
     table = fake.writes[1]
@@ -1996,7 +2000,7 @@ class TestKineticRead(unittest.IsolatedAsyncioTestCase):
     reader._wavelength_table = [600]
 
     await reader.read_absorbance_kinetic(
-      plate, plate.get_all_items(), [600], interval=60, count=2, shake_speed=2
+      plate, plate.get_all_items(), [600], interval=60, count=2, shake_speed="fast"
     )
 
     table = fake.writes[1]
