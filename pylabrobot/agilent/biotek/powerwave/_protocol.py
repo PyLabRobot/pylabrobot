@@ -17,7 +17,7 @@ import enum
 import math
 import re
 import struct
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Literal, Optional, Sequence, Tuple
 
 # --------------------------------------------------------------------------------------
 # Control bytes (page B-6)
@@ -133,62 +133,6 @@ class PowerWaveReadAbortedError(PowerWaveError):
 
 
 # --------------------------------------------------------------------------------------
-# Status strings (page B-21)
-# --------------------------------------------------------------------------------------
-
-#: Status strings are RS + three ASCII characters + ETX. Only "000" means OK.
-STATUS_MESSAGES: Dict[str, str] = {
-  "000": "OK",
-  "080": "Instrument failure - perform self-test",
-  "090": "Error in assay, scan, or table definition",
-  "0A0": "Error in strip range selection",
-  "0B0": "Incubator setpoint error",
-  "0C0": "Incubator temperature error",
-  "0E0": "Barcode error",
-}
-
-STATUS_LENGTH = 5  # RS + 3 + ETX
-
-
-def parse_status(response: bytes) -> str:
-  """Validate a status string and return its code.
-
-  The instrument has two status formats, both five bytes (page B-21):
-
-  * ``RS`` + three characters + ``ETX``, whose middle digit is the fault code.
-  * An ELx status: four hexadecimal characters + ``ETX``, with no ``RS``.
-
-  Both are accepted here, since which one arrives depends on the instrument's
-  status/state mode rather than on the command sent.
-
-  Args:
-    response: The raw five-byte status string.
-
-  Returns:
-    The status code: ``"000"`` in the first format, ``"0000"`` in the second.
-
-  Raises:
-    PowerWaveParseError: If the response is not a well-formed status string.
-    PowerWaveFatalError: For an ELx ``A``-prefixed error, which needs a power cycle.
-    PowerWaveStatusError: If the instrument reported any other error.
-  """
-  if is_elx_status(response):
-    return parse_elx_status(response)
-
-  if len(response) != STATUS_LENGTH or not response.startswith(RS) or not response.endswith(ETX):
-    raise PowerWaveParseError(
-      f"Malformed status string (expected RS + 3 bytes + ETX, or four hex digits + ETX, "
-      f"page B-21): {response!r}"
-    )
-
-  code = response[1:-1].decode("ascii", errors="replace")
-  if code == "000":
-    return code
-
-  raise PowerWaveStatusError(code, STATUS_MESSAGES.get(code, "Unknown status code"))
-
-
-# --------------------------------------------------------------------------------------
 # Instrument configuration (page B-19)
 # --------------------------------------------------------------------------------------
 
@@ -200,7 +144,7 @@ DEVICE_CONFIGURATIONS: Dict[int, str] = {
   0x0032: "PowerWaveX",
   0x0038: "PowerWave 200 w/ Incubator",
   0x0039: "PowerWave 340 w/ Incubator",
-  0x003A: "PowerWaveX w/ Incubator",  # Code is validated for this machine
+  0x003A: "PowerWaveX w/ Incubator",
   0x003B: "PowerWaveX 340 w/ Incubator",
   0x0072: "PowerWaveX Select",
   0x007A: "PowerWaveX Select w/ Incubator",
@@ -252,24 +196,6 @@ WAVELENGTH_TABLE_LENGTH = 4 * MAX_WAVELENGTHS  # "550,620,665,520,450,595," - no
 MIN_WAVELENGTH = 200
 MAX_WAVELENGTH = 999
 
-#: Which order-sorting filter the monochromator uses for each wavelength band.
-#:
-#: Nothing here is selectable. The instrument picks the position itself from the
-#: wavelength asked for: no computer-control command chooses it, and the wheel
-#: surfaces over the serial port only as motor 1 in fault codes, such as
-#: :data:`SELF_TEST_ERRORS` ``"0201"`` for a wheel that cannot find home.
-#:
-#: Recorded because it is useful for reasoning about faults
-
-ORDER_SORTING_FILTER_BANDS: Dict[Tuple[int, int], str] = {
-  (200, 241): "open (no filter)",
-  (242, 369): "filter 1",
-  (370, 459): "filter 2",
-  (460, 569): "filter 3",
-  (570, 634): "filter 4",
-  (635, 999): "filter 5",
-}
-
 
 def parse_wavelength_table(payload: bytes) -> List[int]:
   """Parse the 24-byte wavelength setup table (page B-11).
@@ -296,6 +222,22 @@ def parse_wavelength_table(payload: bytes) -> List[int]:
   return [value for value in values if value != 0]
 
 
+def _validate_wavelengths(wavelengths: Sequence[int], allow_empty: bool = False) -> None:
+  """Check a wavelength list: one to six integers, each in the readable range."""
+  if not allow_empty and len(wavelengths) == 0:
+    raise ValueError("At least one wavelength must be specified")
+  if len(wavelengths) > MAX_WAVELENGTHS:
+    raise ValueError(f"At most {MAX_WAVELENGTHS} wavelengths may be specified")
+  for value in wavelengths:
+    if not isinstance(value, int) or isinstance(value, bool):
+      raise TypeError(f"Wavelengths must be integers, got {value!r}")
+    if not MIN_WAVELENGTH <= value <= MAX_WAVELENGTH:
+      raise ValueError(
+        f"Wavelength {value} out of range {MIN_WAVELENGTH}-{MAX_WAVELENGTH} nm. "
+        "Note that 340 models cannot read below 340 nm (page 1-5)."
+      )
+
+
 def encode_wavelength_table(wavelengths: Sequence[int]) -> bytes:
   """Encode a wavelength setup table for CONFIGURE WAVELENGTHS (page B-8).
 
@@ -309,21 +251,6 @@ def encode_wavelength_table(wavelengths: Sequence[int]) -> bytes:
   encoded = "".join(f"{value:03d}," for value in padded).encode("ascii")
   assert len(encoded) == WAVELENGTH_TABLE_LENGTH
   return encoded
-
-
-def _validate_wavelengths(wavelengths: Sequence[int], allow_empty: bool = False) -> None:
-  if not allow_empty and len(wavelengths) == 0:
-    raise ValueError("At least one wavelength must be specified")
-  if len(wavelengths) > MAX_WAVELENGTHS:
-    raise ValueError(f"At most {MAX_WAVELENGTHS} wavelengths may be specified")
-  for value in wavelengths:
-    if not isinstance(value, int) or isinstance(value, bool):
-      raise TypeError(f"Wavelengths must be integers, got {value!r}")
-    if not MIN_WAVELENGTH <= value <= MAX_WAVELENGTH:
-      raise ValueError(
-        f"Wavelength {value} out of range {MIN_WAVELENGTH}-{MAX_WAVELENGTH} nm. "
-        "Note that 340 models cannot read below 340 nm (page 1-5)."
-      )
 
 
 # --------------------------------------------------------------------------------------
@@ -373,7 +300,10 @@ def encode_temperature_setpoint(temperature: int) -> bytes:
 
 ASSAY_DEFINITION_LENGTH = 170
 
-READ_TYPES: Dict[str, int] = {"endpoint": 0, "kinetic": 2, "scan": 3}
+ReadType = Literal["endpoint", "kinetic", "scan"]
+
+#: Assay definition byte 56 for each read type (page B-10).
+READ_TYPES: Dict[ReadType, int] = {"endpoint": 0, "kinetic": 2, "scan": 3}
 
 #: Bit flags for assay definition byte 31 (page B-10).
 FLAG_SHAKE = 0x10
@@ -391,13 +321,21 @@ KINETIC_SHAKE_FLAGS = FLAG_SHAKE | FLAG_SHAKE_EVERY_READ | FLAG_SHAKE_CONTINUOUS
 #: Byte 31 for a kinetic run that does not shake, which is the default: every bit
 #: in :data:`KINETIC_SHAKE_FLAGS` is about shaking, so asking for none leaves the
 #: byte empty.
-
 KINETIC_FLAGS = 0
+
+
+def encode_assay_wavelengths(wavelengths: Sequence[int]) -> bytes:
+  """Encode assay definition bytes 67-84: six ASCII wavelengths, ``"000"`` if unused."""
+  _validate_wavelengths(wavelengths)
+  padded = list(wavelengths) + [0] * (MAX_WAVELENGTHS - len(wavelengths))
+  encoded = "".join(f"{value:03d}" for value in padded).encode("ascii")
+  assert len(encoded) == 3 * MAX_WAVELENGTHS
+  return encoded
 
 
 def build_assay_definition(
   wavelengths: Sequence[int],
-  read_type: str = "endpoint",
+  read_type: ReadType = "endpoint",
   *,
   assay_name: bytes = b"ABCDEF",
   flags: int = 0,
@@ -429,7 +367,7 @@ def build_assay_definition(
     shake_time: Bytes 163-164, seconds.
     shake_speed: Byte 165, 0 slow, 1 medium, 2 fast, 3 variable.
     total_kinetic_read_time: Bytes 166-167. The manual says minutes, but the
-      instrument treats it as seconds: 9999 gave a run of about 9999 s.
+      instrument treats it as seconds.
       Only consulted when :data:`FLAG_USE_TOTAL_KINETIC_TIME` is set.
     delay_before_first_read: Byte 168, 0 no, 1 yes.
     delay: Bytes 169-170, seconds.
@@ -490,15 +428,6 @@ def build_assay_definition(
   return bytes(table)
 
 
-def encode_assay_wavelengths(wavelengths: Sequence[int]) -> bytes:
-  """Encode assay definition bytes 67-84: six ASCII wavelengths, ``"000"`` if unused."""
-  _validate_wavelengths(wavelengths)
-  padded = list(wavelengths) + [0] * (MAX_WAVELENGTHS - len(wavelengths))
-  encoded = "".join(f"{value:03d}" for value in padded).encode("ascii")
-  assert len(encoded) == 3 * MAX_WAVELENGTHS
-  return encoded
-
-
 # --------------------------------------------------------------------------------------
 # Plate data (page B-9)
 # --------------------------------------------------------------------------------------
@@ -508,7 +437,6 @@ _READING_RE = re.compile(rb"(?P<sign>[+-])(?P<magnitude>\d{4})|(?P<overrange>\*{
 
 #: Overrange wells ("*****") are reported as this value: a real but saturated
 #: measurement, distinct from ``None`` which PyLabRobot uses for "not measured".
-
 OVERRANGE = math.inf
 
 
@@ -673,7 +601,6 @@ def encode_strip_range(first_strip: int, last_strip: int) -> bytes:
 
 #: Self-test error codes, in Rev D2 numbering. Rev C1 numbers several of these
 #: differently (its 0202 is the monochromator and it has an 0203).
-
 SELF_TEST_ERRORS: Dict[str, str] = {
   "0200": "Plate carrier did not find the home sensor",
   "0201": "Order sorting filter wheel did not find the home sensor",
@@ -900,6 +827,20 @@ class PowerWaveFatalError(PowerWaveError):
     self.message = message
 
 
+def _substitution(table: Optional[Dict[str, str]], digit: str, noun: str) -> str:
+  """Expand one templated digit.
+
+  A digit of ``0`` is meaningful where the table defines it, as motor ``0`` is the
+  carrier X axis. Where it is not defined it means the detail does not apply, so
+  the placeholder is dropped rather than rendered as "device 0".
+  """
+  if table is not None and digit in table:
+    return table[digit]
+  if digit == "0":
+    return ""
+  return f"{noun} {digit}"
+
+
 def describe_elx_status(code: str) -> Optional[str]:
   """Describe an ELx status code, expanding any templated digits (page B-21).
 
@@ -957,20 +898,6 @@ def describe_elx_status(code: str) -> Optional[str]:
   return expanded[0].upper() + expanded[1:]
 
 
-def _substitution(table: Optional[Dict[str, str]], digit: str, noun: str) -> str:
-  """Expand one templated digit.
-
-  A digit of ``0`` is meaningful where the table defines it, as motor ``0`` is the
-  carrier X axis. Where it is not defined it means the detail does not apply, so
-  the placeholder is dropped rather than rendered as "device 0".
-  """
-  if table is not None and digit in table:
-    return table[digit]
-  if digit == "0":
-    return ""
-  return f"{noun} {digit}"
-
-
 def is_elx_status(response: bytes) -> bool:
   """Whether a five-byte reply is an ELx status string rather than an RS one."""
   return (
@@ -1000,6 +927,62 @@ def parse_elx_status(response: bytes) -> str:
   if code.startswith("A"):
     raise PowerWaveFatalError(code, description)
   raise PowerWaveStatusError(code, description)
+
+
+# --------------------------------------------------------------------------------------
+# Status strings (page B-21)
+# --------------------------------------------------------------------------------------
+
+#: Status strings are RS + three ASCII characters + ETX. Only "000" means OK.
+STATUS_MESSAGES: Dict[str, str] = {
+  "000": "OK",
+  "080": "Instrument failure - perform self-test",
+  "090": "Error in assay, scan, or table definition",
+  "0A0": "Error in strip range selection",
+  "0B0": "Incubator setpoint error",
+  "0C0": "Incubator temperature error",
+  "0E0": "Barcode error",
+}
+
+STATUS_LENGTH = 5  # RS + 3 + ETX
+
+
+def parse_status(response: bytes) -> str:
+  """Validate a status string and return its code.
+
+  The instrument has two status formats, both five bytes (page B-21):
+
+  * ``RS`` + three characters + ``ETX``, whose middle digit is the fault code.
+  * An ELx status: four hexadecimal characters + ``ETX``, with no ``RS``.
+
+  Both are accepted here, since which one arrives depends on the instrument's
+  status/state mode rather than on the command sent.
+
+  Args:
+    response: The raw five-byte status string.
+
+  Returns:
+    The status code: ``"000"`` in the first format, ``"0000"`` in the second.
+
+  Raises:
+    PowerWaveParseError: If the response is not a well-formed status string.
+    PowerWaveFatalError: For an ELx ``A``-prefixed error, which needs a power cycle.
+    PowerWaveStatusError: If the instrument reported any other error.
+  """
+  if is_elx_status(response):
+    return parse_elx_status(response)
+
+  if len(response) != STATUS_LENGTH or not response.startswith(RS) or not response.endswith(ETX):
+    raise PowerWaveParseError(
+      f"Malformed status string (expected RS + 3 bytes + ETX, or four hex digits + ETX, "
+      f"page B-21): {response!r}"
+    )
+
+  code = response[1:-1].decode("ascii", errors="replace")
+  if code == "000":
+    return code
+
+  raise PowerWaveStatusError(code, STATUS_MESSAGES.get(code, "Unknown status code"))
 
 
 # --------------------------------------------------------------------------------------

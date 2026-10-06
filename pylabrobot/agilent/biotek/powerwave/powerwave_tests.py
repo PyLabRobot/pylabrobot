@@ -20,9 +20,6 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   FLAG_USE_TOTAL_KINETIC_TIME,
   KINETIC_FLAGS,
   KINETIC_SHAKE_FLAGS,
-  MAX_WAVELENGTH,
-  MIN_WAVELENGTH,
-  ORDER_SORTING_FILTER_BANDS,
   OVERRANGE,
   SCAN_WHOLE_STRIP,
   SELF_TEST_ERRORS,
@@ -38,6 +35,7 @@ from pylabrobot.agilent.biotek.powerwave._protocol import (
   PowerWaveReadAbortedError,
   PowerWaveSelfTestError,
   PowerWaveStatusError,
+  ReadType,
   build_assay_definition,
   configuration_has_incubator,
   count_overrange,
@@ -290,13 +288,14 @@ class TestAssayDefinition(unittest.TestCase):
     self.assertEqual(table[168:170], struct.pack("<H", 2))  # 169-170: delay
 
   def test_read_type_byte(self):
-    for read_type, expected in (("endpoint", 0), ("kinetic", 2), ("scan", 3)):
+    cases: List[Tuple[ReadType, int]] = [("endpoint", 0), ("kinetic", 2), ("scan", 3)]
+    for read_type, expected in cases:
       with self.subTest(read_type=read_type):
         self.assertEqual(build_assay_definition([550], read_type=read_type)[55], expected)
 
   def test_unknown_read_type_raises(self):
     with self.assertRaises(ValueError):
-      build_assay_definition([550], read_type="spectral")
+      build_assay_definition([550], read_type="spectral")  # type: ignore[arg-type]
 
   def test_matches_the_reference_endpoint_table(self):
     """Byte-for-byte equality with an endpoint table verified on real hardware.
@@ -1042,7 +1041,7 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX"
 
-    await reader._push_assay_definition([450], read_type="endpoint")
+    await reader._push_assay_definition(build_assay_definition([450]))
 
     self.assertIsNotNone(fake.owner_while_flushing)
     self.assertNotEqual(fake.owner_while_flushing, "never flushed")
@@ -1073,7 +1072,7 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX w/ Incubator"
 
-    await reader._push_assay_definition([450], read_type="endpoint")
+    await reader._push_assay_definition(build_assay_definition([450]))
 
     self.assertEqual(fake.outcome, "refused")
 
@@ -1565,7 +1564,7 @@ class TestAssayDefinitionPush(unittest.IsolatedAsyncioTestCase):
   async def test_push_flushes_the_stray_nak(self):
     reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
 
-    await reader._push_assay_definition([550])
+    await reader._push_assay_definition(build_assay_definition([550]))
 
     self.assertEqual(fake.writes[0], b"V")
     self.assertEqual(len(fake.writes[1]), 170)
@@ -1902,6 +1901,20 @@ class TestReadWithStripRange(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(fake.writes[5], b"\x01\x02")  # widened to strips 1-2
     # The extra wells were measured, so they are reported rather than discarded.
     self.assertEqual(results[0].data[7][0], 0.100)
+
+  async def test_overrange_warning_counts_only_the_wells_read(self):
+    plate = _plate_resource()
+    block = self._two_column_block().replace(b",+0100", b",*****", 1)
+    script = (_ACK + _STATUS_OK) * 4  # 'V', '{', '%', 'S'
+    script += block + bytes([plate_checksum(block)]) + b"\x1a"
+    reader, _ = _reader(script, model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    wells = [w for w in plate.get_all_items() if w.get_column() in (0, 1)]
+    with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", level="WARNING") as logs:
+      await reader.read_absorbance(plate, wells, 620)
+
+    self.assertIn("1 of 16 wells overrange", "\n".join(logs.output))
 
 
 class TestSelfTest(unittest.IsolatedAsyncioTestCase):
@@ -2411,31 +2424,6 @@ class TestScanRequestEncoding(unittest.TestCase):
     self.assertEqual(scan_wavelengths(400, 450, 10), [400, 410, 420, 430, 440, 450])
     # the stop is included only when the step lands on it
     self.assertEqual(scan_wavelengths(400, 425, 10), [400, 410, 420])
-
-
-class TestOrderSortingFilterBands(unittest.TestCase):
-  """The recorded order-sorting filter bands, page-less and unverified.
-
-  Nothing selects these, so the only thing worth testing is that the table itself
-  is coherent and still says what the far-UV findings rely on.
-  """
-
-  def test_bands_are_contiguous_and_cover_the_whole_range(self):
-    edges = sorted(ORDER_SORTING_FILTER_BANDS)
-    self.assertEqual(edges[0][0], MIN_WAVELENGTH)
-    self.assertEqual(edges[-1][1], MAX_WAVELENGTH)
-    for (_, upper), (lower, _) in zip(edges, edges[1:]):
-      self.assertEqual(lower, upper + 1)  # no gap, no overlap
-
-  def test_the_far_uv_probes_share_one_band(self):
-    # The claim abs_wavelength_range makes: the wheel cannot explain why 205 nm
-    # abandons a read while 215 nm does not.
-    bands = {
-      next(band for band in ORDER_SORTING_FILTER_BANDS if band[0] <= wl <= band[1])
-      for wl in (200, 205, 215)
-    }
-    self.assertEqual(len(bands), 1)
-    self.assertEqual(ORDER_SORTING_FILTER_BANDS[bands.pop()], "open (no filter)")
 
 
 class TestScanResponseParsing(unittest.TestCase):

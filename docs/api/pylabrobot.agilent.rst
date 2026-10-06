@@ -84,6 +84,7 @@ BioTek PowerWaveX
   :recursive:
 
     PowerWaveX
+    AbsorbanceResult
     SpectralScanResult
     PowerWaveError
     PowerWaveNakError

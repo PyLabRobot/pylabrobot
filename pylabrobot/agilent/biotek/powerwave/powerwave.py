@@ -19,9 +19,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Literal, Optional, Sequence, Tuple, cast
 
-# This import from another driver's base module conflicts with the contribution
-# rule that shared driver functionality belongs in pylabrobot.lib; it is retained here.
-from pylabrobot.agilent.biotek.plate_reader_base import AbsorbanceResult
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate, Plate, PlateHolder, Well
 
@@ -98,6 +95,26 @@ def _shake_speed_code(speed: ShakeSpeed) -> int:
 
 
 @dataclass
+class AbsorbanceResult:
+  """One plate read at one wavelength.
+
+  Attributes:
+    data: Absorbance indexed ``[row][column]``, in optical density units. Columns
+      outside the strip range that was read are ``None``. Overrange wells are
+      :data:`~._protocol.OVERRANGE`.
+    wavelength: The wavelength read, in nm.
+    temperature: ``None``; query the chamber temperature separately with
+      :meth:`PowerWaveX.request_current_temperature`.
+    timestamp: When the read's data finished arriving.
+  """
+
+  data: List[List[Optional[float]]]
+  wavelength: int
+  temperature: Optional[float]
+  timestamp: datetime
+
+
+@dataclass
 class SpectralScanResult:
   """One spectral scan of a well or a strip (page B-14).
 
@@ -135,12 +152,9 @@ class PowerWaveX:
   read in a single pass of the plate. Driven over RS-232 at 9600 baud, 8 data
   bits, no parity, two stop bits.
 
-  Only 96-well plates are usable on a 96-well instrument. The geometry command
-  accepts 8x12 and 16x24, but a PowerWaveX w/ Incubator refuses the 384-well
-  request with status ``0A0``, so :class:`PowerWaveStatusError` from reading a
-  384-well plate means the instrument is not a 384-well model rather than that
-  anything went wrong. The instrument recovers immediately and reads
-  96-well plates as usual afterwards.
+  The geometry command accepts 8x12 and 16x24 plates, but a 96-well instrument
+  refuses a 384-well read with status ``0A0`` (:class:`PowerWaveStatusError`)
+  and reads 96-well plates normally afterwards.
 
   Example:
     >>> reader = PowerWaveX(name="reader", port="/dev/ttyUSB0")
@@ -293,32 +307,21 @@ class PowerWaveX:
     instrument configuration word does not distinguish it for every variant.
 
     Warning:
-      Reading near the bottom of this range can abandon the read and latch
-      ``0F11`` or ``0F21`` ("signal out of range" on detector channel 1 or 2,
-      whichever reads worst on the run), and often stops the instrument responding
-      at all until it is power cycled. Observed on a PowerWaveX w/ Incubator
-      (firmware R06.20), reading a full 96-well plate.
+      Reading below 210 nm at a wavelength the instrument has not calibrated
+      abandons the read, latches ``0F11`` or ``0F21`` ("signal out of range" on
+      detector channel 1 or 2), and can leave the instrument unresponsive until
+      it is power cycled. READ PLATE sets its own gain for an uncalibrated
+      wavelength, and below 210 nm too little light reaches the detector for that
+      to succeed. Each wavelength stands alone: a calibrated neighbour does not
+      help.
 
-      The wavelength alone does not predict it and neither does the calibration
-      state alone, but the pair does: READ PLATE sets its own gain for a
-      wavelength it has not calibrated, and that attempt fails below 210 nm,
-      where too little light reaches the detector. The threshold is that sharp:
-      210 nm reads, 209 nm does not. The 208 and 209 nm faults both happened
-      with 210 nm already calibrated immediately above them, so a calibrated
-      neighbour does not help; each wavelength stands alone.
-      :meth:`scan_plate` calibrates every wavelength it sweeps and manages it
-      even at 200 nm, after which reads there succeed - 205 nm failed three times
-      running uncalibrated and then read normally once a 200-210 nm scan in 5 nm
-      steps had calibrated it.
+      :meth:`scan_plate` calibrates every wavelength it sweeps, down to 200 nm,
+      after which reads there succeed. So to read below 210 nm, first scan a band
+      covering the wavelength; :attr:`SpectralScanResult.calibrated` lists the
+      wavelengths the scan had to calibrate.
 
-      So to read below 210 nm, scan a band covering the wavelength first.
-      A scan's :attr:`SpectralScanResult.calibrated` lists what it had to
-      calibrate, which is a direct read-out of what was missing: that 5 nm scan
-      reported ``[205]`` alone, 200 and 210 being already done.
-
-      200 nm is a real floor and the firmware enforces it: a scan request for
-      190-200 nm, legal in every other field, was answered ACK and status
-      ``090`` without moving anything.
+      200 nm is a firmware floor: a scan request below it is answered with status
+      ``090``.
     """
     return (MIN_WAVELENGTH, MAX_WAVELENGTH)
 
@@ -469,11 +472,8 @@ class PowerWaveX:
   async def _resynchronise(self, reason: str) -> None:
     """Discard what a broken exchange left behind, and say so if it cannot.
 
-    No flag records that the stream needs this. The port is cleaned on the way
-    out of whatever broke it, so the next caller finds it as good as the
-    connection allows; anything that tracked "needs recovery" instead would need
-    something to decide when recovery had happened, and nothing here can know
-    that.
+    Runs on the way out of the exchange that broke, so the next caller finds the
+    line as clean as the connection allows.
     """
     if await self._drain_input(reason=reason):
       return
@@ -597,13 +597,8 @@ class PowerWaveX:
     read is outstanding, which is why the same fault can look immediate, late, or
     silent. Anything that follows is decoded by
     :func:`._protocol.parse_status`, including the four-character ELx codes that
-    carry a real description.
-
-    Verified on a PowerWaveX w/ Incubator (firmware R06.20) reading an
-    uncalibrated 205 nm: status ``000``, 99 s of silence, then ``DLE`` at the
-    moment the panel key was pressed, with ``0F11`` ("signal out of range") on
-    the display and ``080`` latched until :meth:`self_test` ran. See
-    :attr:`abs_wavelength_range`.
+    carry a real description. The instrument then answers ``080`` until
+    :meth:`self_test` runs. See :attr:`abs_wavelength_range`.
 
     Args:
       done: Data blocks received before the abort.
@@ -645,16 +640,13 @@ class PowerWaveX:
 
     The manual documents a ``^Z`` terminator and a checksum per data block and
     stops there. A PowerWaveX w/ Incubator (firmware R06.20) also sends one extra
-    ``^Z`` after the last block's checksum - once per READ PLATE command, however
-    many blocks or kinetic cycles it produced. Verified directly: a one-wavelength
-    endpoint read ends ``^Z r ^Z``, and a three-cycle kinetic read sends three
-    blocks and a single trailing ``^Z``.
+    ``^Z`` after the last block's checksum, once per READ PLATE command however
+    many blocks or kinetic cycles it produced.
 
-    It does not follow the checksum promptly: the instrument returns the carriage
-    home first, which measured 7.3 s after a one-wavelength read and 7.7 s after a
-    two-wavelength one. So it waits out the driver's full response timeout rather
-    than a short window. Firmware that does not send it is tolerated: this only
-    warns, at the cost of one such wait per read.
+    It arrives only after the carriage has returned home, around 7-8 s after the
+    checksum, so this waits out the driver's full response timeout rather than a
+    short window. Firmware that does not send it is tolerated with a warning, at
+    the cost of one such wait per read.
     """
     try:
       trailer = await self._read_exactly(1)
@@ -714,9 +706,8 @@ class PowerWaveX:
     caller's word for the interval.
 
     The floor scales with the wavelength count, since the carriage makes a pass
-    per wavelength. Measured on a PowerWaveX w/ Incubator (firmware R06.20) at
-    9600 baud over a full 96-well plate, asked immediately after the assay was
-    pushed: 10 s for one wavelength, 19 s for two, 38 s for four.
+    per wavelength: over a full 96-well plate at 9600 baud it is about 10 s for
+    one wavelength, 19 s for two and 38 s for four.
     """
     async with self._owns_port():
       await self._send_command(Command.GET_MINIMUM_KINETIC_INTERVAL)
@@ -829,12 +820,9 @@ class PowerWaveX:
     both would otherwise be polling the same bytes, and the read would swallow
     the ``DLE`` this waits for.
 
-    Verified against a PowerWaveX w/ Incubator (firmware R06.20) by interrupting
-    each kind of run in flight: an endpoint read 6 s in, a 31-wavelength scan 8 s
-    in, and a ten-cycle kinetic run 25 s in. Each returned here with the ``DLE``
-    in hand after 0.4 to 3.6 s, left the carrier outside, and raised
-    :class:`PowerWaveHaltedError` in the interrupted call. Unlike a fault, a halt
-    latches nothing: the next read worked with no :meth:`self_test` in between.
+    Endpoint reads, scans and kinetic runs all stop within a few seconds. Unlike
+    a fault, a halt latches nothing: the next read works without a
+    :meth:`self_test` in between.
 
     Raises:
       PowerWaveBusyError: If another halt is already in progress.
@@ -926,10 +914,9 @@ class PowerWaveX:
       NotImplementedError: If the identified model has no incubator.
 
     Note:
-      The manual lists the setpoint as data bytes "1 - 2", but this instrument
-      accepts a *single* raw byte holding the integer degrees. Confirmed on a
-      PowerWaveX w/ Incubator (firmware R06.20), which returned status "000" to a
-      one-byte payload.
+      The manual lists the setpoint as data bytes "1 - 2", but a PowerWaveX w/
+      Incubator (firmware R06.20) takes a *single* raw byte holding the integer
+      degrees.
     """
     if not self.supports_heating:
       raise NotImplementedError(f"{self.model} has no incubator.")
@@ -957,12 +944,9 @@ class PowerWaveX:
   def _check_read_wavelengths(self, wavelengths: Sequence[int]) -> None:
     """Range-check wavelengths for a read, and warn about uncalibrated ones.
 
-    Shared by every read path so that the long-running ones are not the quiet
-    ones. Deliberately a warning rather than a refusal: whether a wavelength is
-    safe depends on calibration this driver cannot see, since a scan in an
-    earlier session leaves the instrument calibrated and tracking that would mean
-    holding state the instrument itself will not confirm. See
-    :attr:`abs_wavelength_range` for what the risk actually is.
+    A warning rather than a refusal: whether a wavelength is safe depends on
+    calibration the instrument does not report, such as a scan in an earlier
+    session. See :attr:`abs_wavelength_range` for the risk.
 
     Raises:
       ValueError: If a wavelength is outside the instrument's range.
@@ -986,44 +970,27 @@ class PowerWaveX:
         self._wavelength_table,
       )
 
-  async def _push_assay_definition(
-    self,
-    wavelengths: Sequence[int],
-    read_type: str = "endpoint",
-    **kwargs,
-  ) -> None:
+  async def _push_assay_definition(self, table: bytes) -> None:
     """Download a 170-byte assay definition table (``'V'``, page B-10).
 
     Args:
-      wavelengths: One to six wavelengths in nm.
-      read_type: ``"endpoint"``, ``"kinetic"`` or ``"scan"``.
-      kwargs: Remaining assay fields, passed to
-        :func:`._protocol.build_assay_definition`.
+      table: The table, built by :func:`._protocol.build_assay_definition`.
     """
-    table = build_assay_definition(wavelengths, read_type=read_type, **kwargs)
-
     async with self._owns_port():
       await self._send_command(Command.SET_ASSAY_DEFINITION)
       await self.io.write(table)
       await self._read_status()
 
       # The instrument emits a stray NAK shortly after accepting the table, with
-      # no command outstanding. Observed repeatedly on a PowerWaveX w/ Incubator.
-      # Settle, then discard it so it cannot be mistaken for the next
-      # reply.
-      #
-      # Inside the ownership block, because this flush is part of the exchange
-      # rather than cleanup after it. A command allowed in during these two
-      # seconds would have its reply, or its outgoing bytes, discarded by the
-      # flushes below.
+      # no command outstanding. Settle, then discard it so it cannot be mistaken
+      # for the next reply. This stays inside the ownership block: a command let
+      # in during the settle would have its reply discarded by the flush.
       await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
       await self.io.reset_input_buffer()
       await self.io.reset_output_buffer()
       await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
 
-    logger.debug(
-      "[PowerWaveX %s] assay defined: %s, %s nm", self.port, read_type, list(wavelengths)
-    )
+    logger.debug("[PowerWaveX %s] assay definition loaded", self.port)
 
   async def _set_plate_geometry(self, num_rows: int, num_columns: int) -> None:
     """Select the microplate geometry (``'{'``, page B-12).
@@ -1241,6 +1208,7 @@ class PowerWaveX:
     first_strip, last_strip = self._strip_range_for(plate, wells)
 
     self._check_read_wavelengths(wavelengths)
+    table = build_assay_definition(wavelengths, read_type="endpoint")
 
     num_strips = last_strip - first_strip + 1
     logger.info(
@@ -1260,7 +1228,7 @@ class PowerWaveX:
       # Order matters (pages B-12, B-13): the assay definition resets the strip
       # range, and so does the geometry command, so both must follow it in this
       # order.
-      await self._push_assay_definition(wavelengths, read_type="endpoint")
+      await self._push_assay_definition(table)
       await self._set_plate_geometry(plate.num_items_y, plate.num_items_x)
       if num_strips != plate.num_items_x:
         await self._set_strip_range(first_strip, last_strip)
@@ -1279,7 +1247,7 @@ class PowerWaveX:
           "outside the instrument's specified range (page 1-1)",
           self.port,
           overrange,
-          plate.num_items,
+          plate.num_items_y * num_strips,
           wavelength,
         )
       results.append(
@@ -1326,12 +1294,10 @@ class PowerWaveX:
   async def _kinetic_exchange(
     self,
     plate: Plate,
-    wells: List[Well],
+    table: bytes,
     wavelengths: Sequence[int],
     interval: int,
     count: int,
-    shake_time: int,
-    shake_speed_code: int,
     first_strip: int,
     last_strip: int,
     num_strips: int,
@@ -1341,15 +1307,7 @@ class PowerWaveX:
     Split out so :meth:`read_absorbance_kinetic` can hold the serial port across
     the whole run, which is what lets :meth:`halt` stop it.
     """
-    await self._push_assay_definition(
-      wavelengths,
-      read_type="kinetic",
-      flags=KINETIC_SHAKE_FLAGS if shake_time > 0 else KINETIC_FLAGS,
-      kinetic_interval=interval,
-      kinetic_read_count=count,
-      shake_time=shake_time,
-      shake_speed=shake_speed_code,
-    )
+    await self._push_assay_definition(table)
     await self._set_plate_geometry(plate.num_items_y, plate.num_items_x)
     if num_strips != plate.num_items_x:
       await self._set_strip_range(first_strip, last_strip)
@@ -1358,10 +1316,8 @@ class PowerWaveX:
     # range and the baud rate (page B-13).
     minimum = await self.request_minimum_kinetic_interval()
     if interval < minimum:
-      # The instrument does not run such a series late, it refuses it: a
-      # PowerWaveX w/ Incubator asked for two wavelengths every 15 s against a
-      # 19 s minimum answered READ PLATE with status 090. Raise here instead,
-      # where the number it wants can be reported.
+      # The instrument refuses such a series with status 090 rather than running
+      # it late. Raise here instead, where the minimum can be reported.
       raise ValueError(
         f"interval {interval}s is below the instrument's minimum of {minimum}s for this "
         f"assay. The minimum depends on the wavelength count, the strip range and the "
@@ -1389,9 +1345,7 @@ class PowerWaveX:
       blocks = await self._collect_blocks(
         len(wavelengths), plate.num_items_y, num_strips, timeout=block_timeout
       )
-      # Stamped once the cycle's data is in hand. Before the wait, it would name
-      # the moment the previous cycle's data finished arriving, well before the
-      # cycle it labels.
+      # Stamped once the cycle's data is in hand, so it labels this cycle.
       timestamp = datetime.now()
       for wavelength, block in zip(wavelengths, blocks):
         results.append(
@@ -1437,7 +1391,7 @@ class PowerWaveX:
         shorter interval raises :class:`ValueError`, because the instrument
         rejects the read outright rather than running it late.
       count: Number of reads, 2 to 9999.
-      shake_time: Seconds to shake before each cycle, 0 to 99. Zero, the default,
+      shake_time: Seconds to shake before each cycle, 0 to 999. Zero, the default,
         means the plate is never shaken: the flags that enable shaking are left
         clear and no shake time is sent. Shaking is a property of an assay rather
         than of reading one, so it is never done unasked.
@@ -1454,9 +1408,8 @@ class PowerWaveX:
       arriving, not when the instrument measured it: the instrument reports no
       time of its own, and a read takes roughly ten seconds to transfer, so a
       cycle was measured somewhat before its timestamp. The spacing between
-      timestamps is sound - twelve cycles at a 15 s interval held a mean gap of
-      15.03 s with 0.38 s of total drift - so rates computed from differences are
-      unaffected, while absolute times carry that offset.
+      timestamps tracks the interval closely, so rates computed from differences
+      are unaffected, while absolute times carry that offset.
 
     Note:
       Use :meth:`halt` to abort a run in progress.
@@ -1473,22 +1426,21 @@ class PowerWaveX:
         "run ends. Use count and interval instead."
       )
 
-    shake_speed_code = _shake_speed_code(shake_speed)
+    table = build_assay_definition(
+      wavelengths,
+      read_type="kinetic",
+      flags=KINETIC_SHAKE_FLAGS if shake_time > 0 else KINETIC_FLAGS,
+      kinetic_interval=interval,
+      kinetic_read_count=count,
+      shake_time=shake_time,
+      shake_speed=_shake_speed_code(shake_speed),
+    )
 
     # Held across the setup commands too, so a second operation cannot interleave
     # its assay definition with this run's cycles.
     async with self._owns_port():
       return await self._kinetic_exchange(
-        plate,
-        wells,
-        wavelengths,
-        interval,
-        count,
-        shake_time,
-        shake_speed_code,
-        first_strip,
-        last_strip,
-        num_strips,
+        plate, table, wavelengths, interval, count, first_strip, last_strip, num_strips
       )
 
   async def self_test(self, timeout: float = 180, raise_on_failure: bool = True) -> str:
@@ -1667,19 +1619,11 @@ class PowerWaveX:
 
     Raises:
       ValueError: If neither or both of ``well`` and ``column`` are given, or any
-        argument is out of range.
-
-        These checks are the only thing standing between a caller and a hung
-        instrument, so do not relax them. The instrument validates a scan
-        request only partly, and not the fields that matter most. A PowerWaveX
-        w/ Incubator (firmware R06.20) sent row 99, column 99, 999 to 200 nm
-        with a step of 0 answered ACK and status ``000``, accepting every
-        impossible field, and then stopped responding - neither HALT nor any
-        other command brought it back, and it had to be recovered at the front
-        panel. A step of 0 in particular gives the firmware no way to finish
-        sweeping. It does check the wavelength bounds, refusing 190 nm with
-        status ``090``, so a NAK or an error status proves nothing about the
-        other fields.
+        argument is out of range. The instrument checks only the wavelength
+        bounds of a scan request: it accepts an impossible row, column, direction
+        or step (a step of 0 especially) with status ``000``, then stops
+        responding to every command, HALT included, until it is recovered at its
+        front panel. These checks are what prevents that, so do not relax them.
       NotImplementedError: For a whole-strip scan of a plate that is not 8 rows;
         the manual warns against row "00" on 384-well plates.
 

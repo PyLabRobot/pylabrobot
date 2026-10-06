@@ -10,4 +10,4 @@ from ._protocol import (
   PowerWaveSelfTestError,
   PowerWaveStatusError,
 )
-from .powerwave import PowerWaveX, SpectralScanResult
+from .powerwave import AbsorbanceResult, PowerWaveX, SpectralScanResult
