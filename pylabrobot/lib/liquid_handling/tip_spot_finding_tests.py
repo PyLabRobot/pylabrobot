@@ -7,10 +7,18 @@ from typing import List, Optional, Tuple
 import pytest
 
 from pylabrobot.lib.liquid_handling.tip_spot_finding import find_tip_spots
-from pylabrobot.resources import TIP_CAR_480_A00, Coordinate, Resource, TipRack, TipSpot
+from pylabrobot.resources import (
+  TIP_CAR_480_A00,
+  Coordinate,
+  Resource,
+  ResourceStack,
+  TipRack,
+  TipSpot,
+)
 from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_50uL,
   hamilton_96_tiprack_300uL_filter,
+  hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL_filter,
 )
 
@@ -191,6 +199,27 @@ def test_matches_reference_on_random_decks(seed: int) -> None:
     x_aligned = rng.choice([False, True])
     query = (has_tip, volume, has_filter, count, x_aligned)
     assert find_tip_spots(root, *query) == _reference_find_tip_spots(racks, *query), query
+
+
+def test_available_for_tip_handling_selects_by_whether_a_head_can_reach_the_rack() -> None:
+  """Asked for, a rack with another standing on it gives no spots until that one is taken off."""
+  root = Resource("root", size_x=1000, size_y=1000, size_z=100)
+  stack = ResourceStack("stack", "z")
+  root.assign_child_resource(stack, location=Coordinate(0, 0, 0))
+  lower, upper = hamilton_96_tiprack_300uL_NTR("lower"), hamilton_96_tiprack_300uL_NTR("upper")
+  stack.assign_child_resource(lower)
+  stack.assign_child_resource(upper)
+
+  either = find_tip_spots(root, has_tip=True)
+  reachable = find_tip_spots(root, has_tip=True, available_for_tip_handling=True)
+  covered = find_tip_spots(root, has_tip=True, available_for_tip_handling=False)
+  assert {spot.parent for spot in either} == {lower, upper}
+  assert {spot.parent for spot in reachable} == {upper}
+  assert {spot.parent for spot in covered} == {lower}
+
+  stack.unassign_child_resource(upper)
+  reachable = find_tip_spots(root, has_tip=True, available_for_tip_handling=True)
+  assert {spot.parent for spot in reachable} == {lower}
 
 
 def test_root_can_be_any_level_of_the_tree() -> None:

@@ -182,6 +182,22 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
 
     self.driver._log_exchange = recorded  # type: ignore[method-assign]
 
+  async def test_a_covered_rack_is_not_picked_up_from_nor_dropped_into(self):
+    from pylabrobot.resources.lid import Lid
+
+    self.tip_rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    with self.assertRaisesRegex(ValueError, "pick up tips from 'tip_rack_01': it is not available"):
+      await self.head.pick_up_tips(self.tip_rack)
+    self.assertEqual(self.sent, [])
+
+    self.tip_rack.lid.unassign()
+    await self.head.pick_up_tips(self.tip_rack)
+    self.tip_rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    self.sent.clear()
+    with self.assertRaisesRegex(ValueError, "drop tips into 'tip_rack_01': it is not available"):
+      await self.head.drop_tips(self.tip_rack)
+    self.assertEqual(self.sent, [])
+
   async def test_pick_up_and_drop_send_what_legacy_sends(self):
     await self.head.pick_up_tips(self.tip_rack)
     await self.head.drop_tips(self.tip_rack)

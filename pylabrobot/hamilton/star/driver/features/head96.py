@@ -38,7 +38,7 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipRack, tip_origin
+from pylabrobot.resources.tip_rack import TipRack, check_tip_racks_available, tip_origin
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
 from pylabrobot.resources.well import Well
 
@@ -698,6 +698,7 @@ class Head96(Head):
       raise RuntimeError("the head already carries tips; drop them before picking up more")
     if tip_rack.num_items != 96:
       raise ValueError("Tip rack must have 96 tips")
+    check_tip_racks_available(tip_rack.get_all_items()[:1], "pick up tips from")
     tips = [
       spot.tip_for_pickup() if not spot.tracks_tips or spot.tip is not None else None
       for spot in tip_rack.get_all_items()
@@ -783,6 +784,7 @@ class Head96(Head):
     if isinstance(resource, TipRack):
       if resource.num_items != 96:
         raise ValueError("Tip rack must have 96 tips")
+      check_tip_racks_available(resource.get_all_items()[:1], "drop tips into")
       location = resource.get_item("A1").get_location_wrt(deck, x="c", y="c", z="b")
     else:
       location = self._position_centred_in(resource)

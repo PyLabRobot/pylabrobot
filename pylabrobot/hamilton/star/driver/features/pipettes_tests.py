@@ -2299,6 +2299,36 @@ def _answer_pick_ups_as_the_device(pipettes: Pipettes, rack: Any, empty: List[st
   driver._answer = answered
 
 
+class TestTipCommandsRefuseARackNoHeadCanReach(unittest.IsolatedAsyncioTestCase):
+  """A rack under a lid is not picked up from, nor dropped into, and nothing is sent."""
+
+  def setUp(self):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+
+  async def test_a_pickup_from_a_covered_rack_is_refused(self):
+    from pylabrobot.resources.lid import Lid
+
+    pipettes, rack, sent = await channels_over_a_rack()
+    rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    with self.assertRaisesRegex(ValueError, "pick up tips from 'rack': it is not available"):
+      await pipettes.pick_up_tips(rack["A1:H1"])
+    self.assertEqual(sent, [])
+
+  async def test_a_drop_into_a_covered_rack_is_refused(self):
+    from pylabrobot.resources.lid import Lid
+
+    pipettes, rack, sent = await channels_over_a_rack()
+    await pipettes.pick_up_tips(rack["A1:H1"])
+    rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    sent.clear()
+    with self.assertRaisesRegex(ValueError, "drop tips into 'rack': it is not available"):
+      await pipettes.drop_tips(rack["A1:H1"])
+    self.assertEqual(sent, [])
+
+
 class TestProbeTipPresenceViaPickup(unittest.IsolatedAsyncioTestCase):
   """Spots probed by picking their tips up and putting them back; empty ones answer as a device."""
 

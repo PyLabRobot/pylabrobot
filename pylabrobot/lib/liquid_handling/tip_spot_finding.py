@@ -104,6 +104,7 @@ def find_tip_spots(
   has_filter: Optional[bool] = None,
   count: Optional[int] = None,
   x_aligned: bool = False,
+  available_for_tip_handling: Optional[bool] = None,
 ) -> List[TipSpot]:
   """Find tip spots in consumption order.
 
@@ -126,6 +127,9 @@ def find_tip_spots(
     x_aligned: Return spots from a single rack column: the first column in consumption order
       holding at least count spots. A shorter column is skipped. Falls back to the unaligned
       batch when no column can serve count. Without count, returns the first column.
+    available_for_tip_handling: True for spots in racks a head can reach, False for spots in
+      racks it cannot, e.g. under a lid or under another rack in a stack, None for both. See
+      `TipRack.available_for_tip_handling`.
 
   Returns:
     Matching tip spots.
@@ -137,7 +141,12 @@ def find_tip_spots(
   if count is not None and count <= 0:
     raise ValueError(f"count must be positive, got {count}")
 
-  racks = _get_tip_racks(root)
+  racks = [
+    (rack, frame)
+    for rack, frame in _get_tip_racks(root)
+    if available_for_tip_handling is None
+    or rack.available_for_tip_handling == available_for_tip_handling
+  ]
 
   rack_order = sorted(range(len(racks)), key=lambda index: _get_rack_rank(*racks[index], index))
 

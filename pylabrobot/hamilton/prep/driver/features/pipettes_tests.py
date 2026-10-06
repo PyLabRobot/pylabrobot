@@ -68,6 +68,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_tip_300uL,
 )
 from pylabrobot.resources.hamilton.core_gripper_tools import hamilton_core_gripper_tool
+from pylabrobot.resources.lid import Lid
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.tip_tracking import set_tip_tracking
 from pylabrobot.resources.volume_tracker import set_volume_tracking
@@ -164,6 +165,39 @@ def test_channels_attach_the_bounds_the_device_answers():
     attached = [(ch.bounds["y_min"], ch.bounds["y_max"]) for ch in p.pipettes.channels if ch.bounds]
     assert attached == reported
     await p.stop()
+
+  _run(_t())
+
+
+def test_tip_commands_refuse_a_rack_no_head_can_reach():
+  """A rack under a lid is not picked up from, nor dropped into, and nothing is sent."""
+
+  async def _t():
+    set_tip_tracking(True)
+    try:
+      deck = PrepDeck()
+      tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
+      p = PrepSimulationDriver(deck=deck)
+      await p.setup()
+      assert p.pipettes is not None
+      spots = [tip_rack.get_item("A1"), tip_rack.get_item("B1")]
+
+      tip_rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+      sent = _record(p)
+      with pytest.raises(ValueError, match="pick up tips from 'ntr': it is not available"):
+        await p.pipettes.pick_up_tips(spots, use_channels=[0, 1])
+      assert sent == []
+
+      tip_rack.lid.unassign()
+      await p.pipettes.pick_up_tips(spots, use_channels=[0, 1])
+      tip_rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+      sent.clear()
+      with pytest.raises(ValueError, match="drop tips into 'ntr': it is not available"):
+        await p.pipettes.drop_tips(spots, use_channels=[0, 1])
+      assert sent == []
+      await p.stop()
+    finally:
+      set_tip_tracking(False)
 
   _run(_t())
 

@@ -330,12 +330,12 @@ def _check_no_lid(resource: Resource, action: str) -> None:
 
 
 def _check_tip_racks_available(resources: Sequence[TipSpot], action: str) -> None:
-  """Raise if a lid or another tip rack sits on a rack behind ``resources``, checking each rack once.
-  ``action`` is a verb phrase for the error."""
+  """Raise if a rack behind ``resources`` is not available for tip handling, checking each rack
+  once. ``action`` is a verb phrase for the error."""
   racks = {id(r.parent): r.parent for r in resources if isinstance(r.parent, TipRack)}
   for rack in racks.values():
-    if not rack._available_for_tip_handling:
-      raise ValueError(f"Cannot {action} {rack.name!r}: something is stacked on top of it.")
+    if not rack.available_for_tip_handling:
+      raise ValueError(f"Cannot {action} {rack.name!r}: it is not available for tip handling.")
 
 
 class LiquidHandler(Resource, Machine):
