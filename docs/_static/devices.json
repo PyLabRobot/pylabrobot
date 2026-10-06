@@ -191,7 +191,7 @@
     "code_slug": "agilent/biotek/powerwave",
     "doc_slug": "agilent/biotek/powerwave/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/evdh",
-    "notes": "RS-232 absorbance reader. Endpoint and kinetic reads, 200-999 nm, up to six wavelengths per pass, strip ranges, optional incubator. Protocol verified on firmware R06.20; absorbance data verified against captured traffic only."
+    "notes": "RS-232 absorbance reader. Endpoint and kinetic reads and spectral scans, 200-999 nm, up to six wavelengths per pass, strip ranges, optional incubator. Verified end to end on a PowerWaveX w/ Incubator, firmware R06.20."
   },
   {
     "id": "agrowtek-pump-array",

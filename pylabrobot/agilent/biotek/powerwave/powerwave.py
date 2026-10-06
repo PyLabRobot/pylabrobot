@@ -612,7 +612,7 @@ class PowerWaveX:
           f"The instrument abandoned the read {where}: {reported}. The fault is shown on "
           f"its front panel and stays latched there until cleared; readings will keep "
           f"failing with 080 until it is.",
-          code=getattr(reported, "code", None),
+          code=reported.code,
         ) from reported
       raise PowerWaveReadAbortedError(
         f"The instrument abandoned the read {where}, then reported status {code}.", code=code

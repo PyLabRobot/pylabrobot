@@ -10,7 +10,7 @@ import math
 import struct
 import unittest
 import unittest.mock
-from typing import Optional
+from typing import Awaitable, Callable, List, Optional, Tuple
 
 from pylabrobot.agilent.biotek.powerwave import PowerWaveX
 from pylabrobot.agilent.biotek.powerwave._protocol import (
@@ -2173,16 +2173,16 @@ class TestUnimplementedCommands(unittest.IsolatedAsyncioTestCase):
   """The three Appendix B commands that are declared but deliberately not sent."""
 
   async def test_each_raises_not_implemented_without_touching_the_port(self):
-    cases = [
-      ("_configure_wavelengths", ([550],), "'M'"),
-      ("_request_plate_barcode", (), "'s'"),
-      ("_close_plate_access_door", (), "')'"),
+    cases: List[Tuple[str, Callable[[PowerWaveX], Awaitable[object]], str]] = [
+      ("_configure_wavelengths", lambda reader: reader._configure_wavelengths([550]), "'M'"),
+      ("_request_plate_barcode", lambda reader: reader._request_plate_barcode(), "'s'"),
+      ("_close_plate_access_door", lambda reader: reader._close_plate_access_door(), "')'"),
     ]
-    for name, args, command in cases:
+    for name, call, command in cases:
       with self.subTest(method=name):
         reader, fake = _reader(model="PowerWaveX")
         with self.assertRaises(NotImplementedError) as ctx:
-          await getattr(reader, name)(*args)
+          await call(reader)
         self.assertIn(command, str(ctx.exception))
         self.assertEqual(fake.writes, [])
 
