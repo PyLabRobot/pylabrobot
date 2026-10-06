@@ -121,9 +121,9 @@ class PowerWaveX:
 
   Only 96-well plates are usable on a 96-well instrument. The geometry command
   accepts 8x12 and 16x24, but a PowerWaveX w/ Incubator refuses the 384-well
-  request with status ``0A0``, so :class:`PowerWaveStatusError` on
-  :meth:`set_plate_geometry` means the instrument is not a 384-well model rather
-  than that anything went wrong. The instrument recovers immediately and reads
+  request with status ``0A0``, so :class:`PowerWaveStatusError` from reading a
+  384-well plate means the instrument is not a 384-well model rather than that
+  anything went wrong. The instrument recovers immediately and reads
   96-well plates as usual afterwards.
 
 
@@ -195,13 +195,6 @@ class PowerWaveX:
     self._connected = False
     self._model: Optional[str] = None
     self._wavelength_table: Optional[List[int]] = None
-    self._temperature_setpoint: Optional[int] = None
-    self._assay_defined = False
-    self._assay_wavelengths: List[int] = []
-    self._strip_range: Optional[tuple[int, int]] = None
-    # 96-well is the instrument's own default (page B-12), so a strip range can be
-    # checked against it before anything has selected a geometry explicitly.
-    self._plate_geometry: tuple[int, int] = (8, 12)
 
     # One operation at a time owns the serial port, and halt() has to be able to
     # take it from a run in progress rather than queue behind it.
@@ -284,22 +277,16 @@ class PowerWaveX:
     )
 
   async def stop(self) -> None:
-    """Close the serial connection, and forget what belonged to the session.
+    """Close the serial connection, and forget the identity read at setup.
 
-    Everything dropped here describes the instrument rather than this driver, and
-    cannot be read back from it, so carrying it across a reconnect would be
-    asserting something no longer known. The next session asks again.
+    The next session asks the instrument again, in case a different one is on the
+    port.
     """
     await self.io.stop()
     self._connected = False
 
     self._model = None
     self._wavelength_table = None
-    self._temperature_setpoint = None
-    self._assay_defined = False
-    self._assay_wavelengths = []
-    self._strip_range = None
-    self._plate_geometry = (8, 12)  # the instrument's own default again
     logger.info("[PowerWaveX %s] disconnected", self.port)
 
   # ------------------------------------------------------------------------------------
@@ -528,8 +515,6 @@ class PowerWaveX:
           len(response) - 1,
         )
 
-    self._assay_defined = False
-    self._strip_range = None
     logger.info("[PowerWaveX %s] halted, carrier out", self.port)
 
   # ------------------------------------------------------------------------------------
@@ -640,10 +625,10 @@ class PowerWaveX:
       # Order matters (pages B-12, B-13): the assay definition resets the strip
       # range, and so does the geometry command, so both must follow it in this
       # order.
-      await self.push_assay_definition(wavelengths, read_type="endpoint")
-      await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
+      await self._push_assay_definition(wavelengths, read_type="endpoint")
+      await self._set_plate_geometry(plate.num_items_y, plate.num_items_x)
       if num_strips != plate.num_items_x:
-        await self.set_strip_range(first_strip, last_strip)
+        await self._set_strip_range(first_strip, last_strip)
 
       blocks = await self._read_plate(len(wavelengths), plate.num_items_y, num_strips)
       temperature = await self._try_read_temperature()
@@ -771,7 +756,7 @@ class PowerWaveX:
     Split out so :meth:`read_absorbance_kinetic` can hold the serial port across
     the whole run, which is what lets :meth:`halt` stop it.
     """
-    await self.push_assay_definition(
+    await self._push_assay_definition(
       wavelengths,
       read_type="kinetic",
       flags=KINETIC_SHAKE_FLAGS if shake_time > 0 else KINETIC_FLAGS,
@@ -780,9 +765,9 @@ class PowerWaveX:
       shake_time=shake_time,
       shake_speed=shake_speed,
     )
-    await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
+    await self._set_plate_geometry(plate.num_items_y, plate.num_items_x)
     if num_strips != plate.num_items_x:
-      await self.set_strip_range(first_strip, last_strip)
+      await self._set_strip_range(first_strip, last_strip)
 
     # Only meaningful once the assay is loaded: it depends on the assay, the strip
     # range and the baud rate (page B-13).
@@ -840,7 +825,7 @@ class PowerWaveX:
 
     return results
 
-  async def set_plate_geometry(self, num_rows: int, num_columns: int) -> None:
+  async def _set_plate_geometry(self, num_rows: int, num_columns: int) -> None:
     """Select the microplate geometry (``'{'``, page B-12).
 
     Must be sent *after* the assay definition table, which is why
@@ -872,14 +857,9 @@ class PowerWaveX:
       await self.io.write(payload)
       await self._read_status()
 
-    # Kept so that a later strip range can be checked against the geometry that
-    # is actually selected, rather than against the widest the family allows.
-    self._plate_geometry = (num_rows, num_columns)
-
-    self._strip_range = (1, num_columns)
     logger.debug("[PowerWaveX %s] plate geometry set to %dx%d", self.port, num_rows, num_columns)
 
-  async def set_strip_range(self, first_strip: int, last_strip: int) -> None:
+  async def _set_strip_range(self, first_strip: int, last_strip: int) -> None:
     """Restrict the read to a contiguous range of plate columns (``'%'``, page B-13).
 
     Strips are numbered plate columns, from 1. The instrument cannot skip strips
@@ -894,24 +874,14 @@ class PowerWaveX:
       last_strip: Last column to read, inclusive.
 
     Raises:
-      ValueError: If the range falls outside 1 to :data:`._protocol.MAX_STRIP`, or
-        outside the width of the geometry currently selected.
+      ValueError: If the range falls outside 1 to :data:`._protocol.MAX_STRIP`.
 
     Note:
       The instrument does not range-check these itself; it answered ``000`` to a
       first strip of 0 when tested, and accepted columns 13 to 24 against a
-      96-well geometry. The bounds are enforced here instead, against the
-      selected geometry where :meth:`set_plate_geometry` has established one.
+      96-well geometry. Callers take the range from :meth:`_strip_range_for`,
+      which keeps it within the plate.
     """
-    if self._plate_geometry is not None:
-      _, num_columns = self._plate_geometry
-      if last_strip > num_columns:
-        raise ValueError(
-          f"last_strip {last_strip} is outside the {num_columns}-column geometry "
-          f"currently selected. The instrument accepts the request and reads columns "
-          f"that do not exist."
-        )
-
     payload = encode_strip_range(first_strip, last_strip)
 
     async with self._owns_port():
@@ -919,7 +889,6 @@ class PowerWaveX:
       await self.io.write(payload)
       await self._read_status()
 
-    self._strip_range = (first_strip, last_strip)
     logger.debug("[PowerWaveX %s] strip range set to %d-%d", self.port, first_strip, last_strip)
 
   async def self_test(self, timeout: float = 180, raise_on_failure: bool = True) -> str:
@@ -1061,7 +1030,7 @@ class PowerWaveX:
       column to the left. The driver handles the first pass transparently.
 
       The geometry command must precede a scan on any plate that is not the
-      standard 96-well, which :meth:`set_plate_geometry` does here.
+      standard 96-well, so it is sent before every scan.
     """
     if (well is None) == (column is None):
       raise ValueError("Give exactly one of well or column")
@@ -1112,7 +1081,7 @@ class PowerWaveX:
     )
 
     async with self._owns_port():
-      await self.set_plate_geometry(plate.num_items_y, plate.num_items_x)
+      await self._set_plate_geometry(plate.num_items_y, plate.num_items_x)
       return await self._scan_exchange(
         plate, request, expected, num_wells, row, target_column, shake_time
       )
@@ -1231,7 +1200,7 @@ class PowerWaveX:
       f"robotic-access-door models; this one reports {self._model or 'an unknown model'}."
     )
 
-  async def push_assay_definition(
+  async def _push_assay_definition(
     self,
     wavelengths: Sequence[int],
     read_type: str = "endpoint",
@@ -1267,9 +1236,6 @@ class PowerWaveX:
       await self.io.reset_output_buffer()
       await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
 
-    self._assay_wavelengths = list(wavelengths)
-    self._assay_defined = True
-
     logger.debug(
       "[PowerWaveX %s] assay defined: %s, %s nm", self.port, read_type, list(wavelengths)
     )
@@ -1296,12 +1262,6 @@ class PowerWaveX:
 
   async def _start_read(self) -> None:
     """Send READ PLATE and consume the status string that precedes the data."""
-    if not self._assay_defined:
-      raise PowerWaveError(
-        "No assay definition has been pushed. Call push_assay_definition() first, or use "
-        "read_absorbance() which does it for you."
-      )
-
     await self._send_command(Command.READ_PLATE)
     await self._read_status()
 
@@ -1458,11 +1418,6 @@ class PowerWaveX:
     if not self.supports_heating:
       raise NotImplementedError(f"{self.model} has no incubator.")
 
-    # Always sent, never skipped because this driver believes the setpoint is
-    # already right. It cannot be asked, so that belief is only ever a record of
-    # what some earlier session wrote, and it survived reconnecting: setting 37
-    # again sent nothing at all, however the instrument had been changed in the
-    # meantime. The command is one byte.
     payload = encode_temperature_setpoint(temperature)
 
     async with self._owns_port():
@@ -1470,7 +1425,6 @@ class PowerWaveX:
       await self.io.write(payload)
       await self._read_status()
 
-    self._temperature_setpoint = temperature
     if temperature == 0:
       logger.info("[PowerWaveX %s] incubator off", self.port)
     else:
@@ -1479,15 +1433,6 @@ class PowerWaveX:
   async def stop_heating(self) -> None:
     """Switch the incubator heaters off, by setting the setpoint to zero (page B-17)."""
     await self.set_temperature(0)
-
-  @property
-  def temperature_setpoint(self) -> Optional[int]:
-    """The setpoint this driver last wrote, or ``None`` if it has written none.
-
-    The instrument offers no way to read its setpoint back, so a value left in
-    non-volatile memory by a previous session is not visible here.
-    """
-    return self._temperature_setpoint
 
   # ------------------------------------------------------------------------------------
   # Transport

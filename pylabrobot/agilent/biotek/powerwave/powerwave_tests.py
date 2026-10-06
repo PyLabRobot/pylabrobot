@@ -13,7 +13,6 @@ import unittest.mock
 from typing import Optional
 
 from pylabrobot.agilent.biotek.powerwave import PowerWaveX
-from pylabrobot.agilent.biotek.powerwave import _protocol as _protocol_module
 from pylabrobot.agilent.biotek.powerwave._protocol import (
   ASSAY_DEFINITION_LENGTH,
   FLAG_USE_TOTAL_KINETIC_TIME,
@@ -789,7 +788,6 @@ class TestHaltInterruptsAReadInProgress(unittest.IsolatedAsyncioTestCase):
     await reader.halt()
 
     self.assertTrue(fake.halted)
-    self.assertFalse(reader._assay_defined)
 
     with self.assertRaises(PowerWaveHaltedError):
       await read
@@ -914,7 +912,7 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
       await read
 
   async def test_the_assay_push_owns_the_port_while_it_flushes(self):
-    # push_assay_definition settles and flushes to discard the stray NAK the
+    # _push_assay_definition settles and flushes to discard the stray NAK the
     # instrument emits after accepting a table. Released beforehand, the port
     # read as free for the two seconds that takes, and a command entering the
     # window had its reply flushed away for no visible reason.
@@ -934,7 +932,7 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX"
 
-    await reader.push_assay_definition([450], read_type="endpoint")
+    await reader._push_assay_definition([450], read_type="endpoint")
 
     self.assertIsNotNone(fake.owner_while_flushing)
     self.assertNotEqual(fake.owner_while_flushing, "never flushed")
@@ -966,13 +964,13 @@ class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
     reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
     reader._model = "PowerWaveX w/ Incubator"
 
-    await reader.push_assay_definition([450], read_type="endpoint")
+    await reader._push_assay_definition([450], read_type="endpoint")
 
     self.assertEqual(fake.outcome, "refused")
 
   async def test_a_composite_operation_may_claim_the_port_once(self):
-    # read_absorbances holds the port and still calls push_assay_definition and
-    # set_plate_geometry, which claim it too. Re-entrancy within one task is why
+    # read_absorbances holds the port and still calls _push_assay_definition and
+    # _set_plate_geometry, which claim it too. Re-entrancy within one task is why
     # that is not a deadlock or a spurious busy error.
     plate = _plate_resource()
     reader, fake = _reader(_read_script(), model="PowerWaveX")
@@ -1179,29 +1177,6 @@ class TestHaltAcknowledgement(unittest.IsolatedAsyncioTestCase):
     self.assertIn("not acknowledged", str(caught.exception))
 
 
-class TestStripRangeBeforeGeometry(unittest.IsolatedAsyncioTestCase):
-  """96-well is the instrument's default, so the guard applies from the start."""
-
-  async def test_columns_beyond_the_default_geometry_are_refused(self):
-    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
-    with self.assertRaises(ValueError):
-      await reader.set_strip_range(13, 24)
-    self.assertEqual(fake.writes, [])  # nothing reached the instrument
-
-  async def test_the_default_still_allows_a_96_well_range(self):
-    reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
-    await reader.set_strip_range(1, 12)
-    self.assertEqual(fake.writes[0], b"%")
-
-  async def test_selecting_384_well_widens_the_guard(self):
-    reader, _ = _reader((_ACK + _STATUS_OK) * 2, model="PowerWaveX")
-    with unittest.mock.patch.object(
-      _protocol_module, "PLATE_GEOMETRIES", {(8, 12): 2, (16, 24): 3}
-    ):
-      await reader.set_plate_geometry(16, 24)
-    await reader.set_strip_range(13, 24)  # legal once 24 columns are selected
-
-
 class TestHalt(unittest.IsolatedAsyncioTestCase):
   """HALT, page B-12: no ACK, no status string, a single DLE when done."""
 
@@ -1236,34 +1211,17 @@ class TestIncubator(unittest.IsolatedAsyncioTestCase):
     reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX w/ Incubator")
     await reader.set_temperature(37)
     self.assertEqual(fake.writes, [b"[", b"%"])
-    self.assertEqual(reader.temperature_setpoint, 37)
 
   async def test_the_setpoint_is_always_sent(self):
-    # Never skipped on the strength of what this driver believes the setpoint to
-    # be: it cannot be read back, so that belief is only a record of what some
-    # earlier session wrote, and it used to survive reconnecting.
     reader, fake = _reader((_ACK + _STATUS_OK) * 2, model="PowerWaveX w/ Incubator")
     await reader.set_temperature(37)
     await reader.set_temperature(37)
     self.assertEqual(fake.writes, [b"[", b"%", b"[", b"%"])
 
-  async def test_stop_forgets_the_setpoint(self):
-    reader, _ = _reader(_ACK + _STATUS_OK, model="PowerWaveX w/ Incubator")
-    await reader.set_temperature(37)
-    self.assertEqual(reader.temperature_setpoint, 37)
-
-    await reader.stop()
-
-    self.assertIsNone(reader.temperature_setpoint)
-    self.assertIsNone(reader._strip_range)
-    self.assertFalse(reader._assay_defined)
-    self.assertEqual(reader._plate_geometry, (8, 12))
-
   async def test_stop_heating_sets_zero(self):
     reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX w/ Incubator")
     await reader.stop_heating()
     self.assertEqual(fake.writes, [b"[", b"\x00"])
-    self.assertEqual(reader.temperature_setpoint, 0)
 
   async def test_set_temperature_out_of_range_raises(self):
     reader, fake = _reader(model="PowerWaveX w/ Incubator")
@@ -1277,10 +1235,6 @@ class TestIncubator(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(NotImplementedError):
       await reader.set_temperature(37)
     self.assertEqual(fake.writes, [])
-
-  async def test_setpoint_unknown_before_written(self):
-    reader, _ = _reader()
-    self.assertIsNone(reader.temperature_setpoint)
 
 
 class TestMinimumKineticInterval(unittest.IsolatedAsyncioTestCase):
@@ -1501,28 +1455,10 @@ class TestAssayDefinitionPush(unittest.IsolatedAsyncioTestCase):
   async def test_push_flushes_the_stray_nak(self):
     reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
 
-    await reader.push_assay_definition([550])
+    await reader._push_assay_definition([550])
 
     self.assertEqual(fake.writes[0], b"V")
     self.assertEqual(len(fake.writes[1]), 170)
-    self.assertTrue(reader._assay_defined)
-
-  async def test_read_plate_without_an_assay_raises(self):
-    reader, fake = _reader(model="PowerWaveX")
-
-    with self.assertRaises(PowerWaveError) as ctx:
-      await reader._read_plate(1, 8, 12)
-    self.assertIn("No assay definition", str(ctx.exception))
-    self.assertEqual(fake.writes, [])
-
-  async def test_halt_clears_the_assay(self):
-    reader, _ = _reader(_ACK + _STATUS_OK + b"\x10", model="PowerWaveX")
-    await reader.push_assay_definition([550])
-    self.assertTrue(reader._assay_defined)
-
-    await reader.halt()
-
-    self.assertFalse(reader._assay_defined)
 
 
 class TestPlateGeometryAndStripRange(unittest.IsolatedAsyncioTestCase):
@@ -1530,13 +1466,13 @@ class TestPlateGeometryAndStripRange(unittest.IsolatedAsyncioTestCase):
 
   async def test_geometry_96_well(self):
     reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
-    await reader.set_plate_geometry(8, 12)
+    await reader._set_plate_geometry(8, 12)
     self.assertEqual(fake.writes, [b"{", b"\x02"])
     self.assertEqual(fake.remaining, b"")
 
   async def test_geometry_384_well(self):
     reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
-    await reader.set_plate_geometry(16, 24)
+    await reader._set_plate_geometry(16, 24)
     self.assertEqual(fake.writes, [b"{", b"\x03"])
 
   async def test_geometry_consumes_a_status_string(self):
@@ -1546,32 +1482,37 @@ class TestPlateGeometryAndStripRange(unittest.IsolatedAsyncioTestCase):
     every subsequent command.
     """
     reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
-    await reader.set_plate_geometry(8, 12)
+    await reader._set_plate_geometry(8, 12)
     self.assertEqual(fake.remaining, b"")
 
   async def test_geometry_rejection_raises(self):
     """A 96-well instrument answers 0A0 to a 384-well geometry request."""
     reader, _ = _reader(_ACK + b"\x1e0A0\x03", model="PowerWaveX")
     with self.assertRaises(PowerWaveStatusError) as ctx:
-      await reader.set_plate_geometry(16, 24)
+      await reader._set_plate_geometry(16, 24)
     self.assertEqual(ctx.exception.code, "0A0")
 
-  async def test_geometry_resets_the_tracked_strip_range(self):
-    reader, _ = _reader(_ACK + _STATUS_OK + _ACK + _STATUS_OK, model="PowerWaveX")
-    await reader.set_strip_range(3, 5)
-    self.assertEqual(reader._strip_range, (3, 5))
-    await reader.set_plate_geometry(8, 12)
-    self.assertEqual(reader._strip_range, (1, 12))
+  async def test_reading_a_384_well_plate_on_a_96_well_model_raises(self):
+    from pylabrobot.resources import Greiner_384_wellplate_28ul_Fb
+
+    plate = Greiner_384_wellplate_28ul_Fb(name="plate")
+    reader, fake = _reader(_ACK + _STATUS_OK + _ACK + b"\x1e0A0\x03", model="PowerWaveX")
+    reader._wavelength_table = [620]
+
+    with self.assertRaises(PowerWaveStatusError) as ctx:
+      await reader.read_absorbance(plate, plate.get_all_items(), 620)
+    self.assertEqual(ctx.exception.code, "0A0")
+    self.assertNotIn(b"S", fake.writes)  # refused before READ PLATE
 
   async def test_unsupported_geometry_raises(self):
     reader, fake = _reader(model="PowerWaveX")
     with self.assertRaises(NotImplementedError):
-      await reader.set_plate_geometry(4, 6)
+      await reader._set_plate_geometry(4, 6)
     self.assertEqual(fake.writes, [])
 
   async def test_strip_range(self):
     reader, fake = _reader(_ACK + _STATUS_OK, model="PowerWaveX")
-    await reader.set_strip_range(3, 7)
+    await reader._set_strip_range(3, 7)
     self.assertEqual(fake.writes, [b"%", b"\x03\x07"])
     self.assertEqual(fake.remaining, b"")
 
@@ -1580,7 +1521,7 @@ class TestPlateGeometryAndStripRange(unittest.IsolatedAsyncioTestCase):
     for first, last in ((0, 5), (1, 25), (7, 3)):
       with self.subTest(first=first, last=last):
         with self.assertRaises(ValueError):
-          await reader.set_strip_range(first, last)
+          await reader._set_strip_range(first, last)
 
 
 class TestStaleByteDrain(unittest.IsolatedAsyncioTestCase):
