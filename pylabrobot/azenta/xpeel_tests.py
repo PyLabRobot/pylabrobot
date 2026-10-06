@@ -2,7 +2,7 @@ import unittest
 from typing import Tuple
 from unittest.mock import AsyncMock
 
-from pylabrobot.azenta.xpeel import XPeel
+from pylabrobot.azenta.xpeel import HAS_SERIAL, XPeel
 
 
 def _xpeel(*lines: bytes) -> Tuple[XPeel, AsyncMock]:
@@ -14,6 +14,7 @@ def _xpeel(*lines: bytes) -> Tuple[XPeel, AsyncMock]:
   return xpeel, io
 
 
+@unittest.skipUnless(HAS_SERIAL, "pyserial is not installed")
 class TestXPeelRequestStatus(unittest.IsolatedAsyncioTestCase):
   async def test_returns_the_three_error_codes(self) -> None:
     xpeel, io = _xpeel(b"*ready:00,00,00\r\n")
@@ -27,6 +28,7 @@ class TestXPeelRequestStatus(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(await xpeel.request_status(), (7, 20, 0))
 
 
+@unittest.skipUnless(HAS_SERIAL, "pyserial is not installed")
 class TestXPeelPeel(unittest.IsolatedAsyncioTestCase):
   async def test_sends_the_adhere_time_as_a_code(self) -> None:
     for adhere_time, code in ((2.5, 1), (5.0, 2), (7.5, 3), (10.0, 4)):
