@@ -87,7 +87,6 @@ import {
   updateDeltaLabels,
 } from "./tools.js";
 import { connect, initTransport, send } from "./transport.js";
-import { beginReplay, cachedStream, endReplay, takeHeld } from "./replay.js";
 import {
   buildTree,
   refreshTreeInfo,
@@ -610,54 +609,5 @@ showPane("tree");
 
 resize();
 
-// A refresh replays the run this tab cached, through the same player, and ends where the live
-// viewer stands. What arrives live while it replays is held and applied when it is over.
-function replayFromCache() {
-  const cached = cachedStream();
-  if (!cached || !cached.length || cached[0].kind !== "scene") return false;
-  beginReplay();
-  invalidate();
-  rebuildScene(cached[0].data);
-  let lastCollisions = null;
-  let k = 1;
-  const apply = ({ kind, data }) => {
-    if (kind === "state") {
-      if (world) applyState(data);
-    } else if (kind === "moves") {
-      if (world && Array.isArray(data.moves)) applyMoves(data.moves);
-    } else if (kind === "collisions") {
-      lastCollisions = data;
-      if (Array.isArray(data.collisions)) showCollisions(data.collisions);
-    } else if (kind === "scene") {
-      rebuildScene(data);
-    }
-  };
-  const next = () => {
-    if (k >= cached.length) {
-      endReplay();
-      for (const held of takeHeld()) {
-        invalidate();
-        apply(held);
-      }
-      if (lastCollisions && Array.isArray(lastCollisions.collisions)) {
-        showCollisions(lastCollisions.collisions);
-      }
-      return;
-    }
-    const message = cached[k++];
-    if (message.kind === "motion") playMotion(message.data, next);
-    else {
-      apply(message);
-      next();
-    }
-  };
-  next();
-  return true;
-}
-
-// A refresh replays the run this tab cached, through the same player, and ends where the live
-// viewer stands. What arrives live while it replays is held and applied when it is over. On a
-// first visit there is nothing cached, and the run is recorded as it arrives instead.
-replayFromCache();
-
 connect();
+
