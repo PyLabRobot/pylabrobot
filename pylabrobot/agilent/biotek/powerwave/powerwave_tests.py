@@ -983,6 +983,97 @@ class TestHaltReservation(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(await reader.request_model(), "PowerWaveX w/ Incubator")
 
 
+class TestLifecycleDuringARun(unittest.IsolatedAsyncioTestCase):
+  """setup() and stop() called while another task holds the serial port."""
+
+  def _running_read(self):
+    """A reader with a read in flight on a line that answers only HALT."""
+    plate = _plate_resource()
+    fake = TestHaltInterruptsAReadInProgress._SilentThenDLE((_ACK + _STATUS_OK) * 3)
+    reader = _create_reader(fake, timeout=30)
+    reader._ASSAY_SETTLE_SECONDS = 0  # type: ignore[misc]
+    reader._DRAIN_QUIET_SECONDS = 0  # type: ignore[misc]
+    reader._HALT_QUIET_SECONDS = 0.01  # type: ignore[misc]
+    reader._model = "PowerWaveX"
+    reader._wavelength_table = [620]
+    read = asyncio.create_task(reader.read_absorbance(plate, plate.get_all_items(), 620))
+    return reader, fake, read
+
+  async def test_setup_is_refused_without_touching_the_transport(self):
+    reader, fake, read = self._running_read()
+    while reader._port_free.is_set():
+      await asyncio.sleep(0)
+    writes_before = list(fake.writes)
+
+    with self.assertRaises(PowerWaveBusyError):
+      await reader.setup()
+
+    self.assertFalse(fake.setup_called)
+    self.assertFalse(fake.stop_called)
+    self.assertEqual(fake.writes, writes_before)
+    self.assertFalse(read.done())
+
+    await reader.halt()
+    with self.assertRaises(PowerWaveHaltedError):
+      await read
+
+  async def test_stop_halts_the_run_before_closing(self):
+    reader, fake, read = self._running_read()
+    halted_when_closed: List[bool] = []
+
+    async def recording_stop() -> None:
+      halted_when_closed.append(fake.halted)
+      fake.stop_called = True
+
+    fake.stop = recording_stop  # type: ignore[method-assign]
+    while reader._port_free.is_set():
+      await asyncio.sleep(0)
+
+    await reader.stop()
+
+    self.assertEqual(halted_when_closed, [True])
+    self.assertFalse(reader.connected)
+    with self.assertRaises(PowerWaveHaltedError):
+      await read
+
+  async def test_stop_waits_for_a_halt_in_progress(self):
+    reader, fake = _reader()
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def acknowledgement(timeout: float) -> bytes:
+      """Hold HALT in its acknowledgement phase."""
+      entered.set()
+      await release.wait()
+      return b"\x10"
+
+    reader._read_halt_acknowledgement = acknowledgement  # type: ignore[method-assign]
+    halt = asyncio.create_task(reader.halt())
+    await entered.wait()
+
+    stop = asyncio.create_task(reader.stop())
+    for _ in range(10):
+      await asyncio.sleep(0)
+    self.assertFalse(fake.stop_called)
+
+    release.set()
+    await halt
+    await stop
+    self.assertTrue(fake.stop_called)
+    self.assertEqual(fake.writes.count(b"X"), 1)
+
+  async def test_stop_closes_even_when_the_run_cannot_be_halted(self):
+    reader, fake = _reader()
+    reader._HALT_HANDOVER_SECONDS = 0.01
+    async with reader._owns_port():
+      with self.assertLogs("pylabrobot.agilent.biotek.powerwave.powerwave", "WARNING") as logs:
+        await asyncio.create_task(reader.stop())
+
+    self.assertTrue(fake.stop_called)
+    self.assertNotIn(b"X", fake.writes)
+    self.assertIn("closing the port anyway", "\n".join(logs.output))
+
+
 class TestPortOwnership(unittest.IsolatedAsyncioTestCase):
   """Every exchange owns the serial port, not just reads.
 

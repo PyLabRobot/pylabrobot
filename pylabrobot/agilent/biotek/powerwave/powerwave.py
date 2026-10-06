@@ -232,6 +232,8 @@ class PowerWaveX:
     self._port_free.set()
     self._port_owner: Optional[asyncio.Task] = None
     self._halt_owner: Optional[asyncio.Task] = None
+    self._halt_finished = asyncio.Event()
+    self._halt_finished.set()
 
     self.io = Serial(
       human_readable_device_name="Agilent BioTek PowerWaveX",
@@ -734,26 +736,29 @@ class PowerWaveX:
       "or open a pull request so this warning can be updated."
     )
 
-    await self.io.setup()
-    self._connected = True
+    # Claimed before the transport is touched: reopening, draining or closing it
+    # under a run in progress would swallow that run's data and break its port.
+    async with self._owns_port():
+      await self.io.setup()
+      self._connected = True
 
-    try:
-      # A previous session may have died mid-operation, leaving the instrument
-      # part way through a response. Flushing once is not enough: bytes already
-      # on the wire arrive after the flush and would be read as the reply to the
-      # first command. Drain until the line has been quiet for a moment.
-      await self._drain_input()
+      try:
+        # A previous session may have died mid-operation, leaving the instrument
+        # part way through a response. Flushing once is not enough: bytes already
+        # on the wire arrive after the flush and would be read as the reply to the
+        # first command. Drain until the line has been quiet for a moment.
+        await self._drain_input()
 
-      self._model = await self.request_model()
-      self._wavelength_table = await self.request_wavelength_table()
-    except BaseException:
-      # Identification failed, so this is not a usable session. Leaving the
-      # transport open with connected reporting True invites a caller to keep
-      # using it.
-      self._connected = False
-      with contextlib.suppress(Exception):
-        await self.io.stop()
-      raise
+        self._model = await self.request_model()
+        self._wavelength_table = await self.request_wavelength_table()
+      except BaseException:
+        # Identification failed, so this is not a usable session. Leaving the
+        # transport open with connected reporting True invites a caller to keep
+        # using it.
+        self._connected = False
+        with contextlib.suppress(Exception):
+          await self.io.stop()
+        raise
 
     logger.info(
       "[PowerWaveX %s] connected: model=%s, calibrated wavelengths=%s",
@@ -761,49 +766,6 @@ class PowerWaveX:
       self._model,
       self._wavelength_table,
     )
-
-  async def stop(self) -> None:
-    """Close the serial connection, and forget the identity read at setup.
-
-    The next session asks the instrument again, in case a different one is on the
-    port.
-    """
-    await self.io.stop()
-    self._connected = False
-
-    self._model = None
-    self._wavelength_table = None
-    logger.info("[PowerWaveX %s] disconnected", self.port)
-
-  # ------------------------------------------------------------------------------------
-  # Plate carrier
-  # ------------------------------------------------------------------------------------
-
-  async def open(self) -> None:
-    """Present the plate carrier outside the instrument so a plate can be loaded.
-
-    PRESENT PLATE CARRIER (``'J'``), page B-7.
-    """
-    async with self._owns_port():
-      await self._send_command(Command.PRESENT_PLATE_CARRIER)
-      await self._read_status()
-    logger.info("[PowerWaveX %s] carrier out", self.port)
-
-  async def close(self) -> None:
-    """Store the plate carrier inside the instrument.
-
-    STORE PLATE CARRIER (``'A'``), page B-7.
-
-    Note:
-      Unlike the newer USB BioTek readers, this instrument takes no plate
-      geometry with the store command. Geometry is a separate SET PLATE GEOMETRY
-      (``'{'``) request, which the read and scan methods send themselves. Tall or
-      lidded labware has not been tested.
-    """
-    async with self._owns_port():
-      await self._send_command(Command.STORE_PLATE_CARRIER)
-      await self._read_status()
-    logger.info("[PowerWaveX %s] carrier in", self.port)
 
   async def halt(self) -> None:
     """Abort a read or scan in progress (``'X'``, page B-12).
@@ -835,6 +797,7 @@ class PowerWaveX:
     # Reserve before yielding so the interrupted task cannot start another
     # exchange between releasing the port and HALT acquiring it.
     self._halt_owner = asyncio.current_task()
+    self._halt_finished.clear()
     try:
       if not self._port_free.is_set():
         logger.info("[PowerWaveX %s] halting a read in progress", self.port)
@@ -873,8 +836,72 @@ class PowerWaveX:
     finally:
       self._halt_requested.clear()
       self._halt_owner = None
+      self._halt_finished.set()
 
     logger.info("[PowerWaveX %s] halted, carrier out", self.port)
+
+  async def stop(self) -> None:
+    """Halt any run in progress, then close the serial connection.
+
+    Always disconnects. A read, scan or kinetic run still holding the serial port
+    is aborted with :meth:`halt` first, which presents the carrier and makes the
+    interrupted call raise :class:`PowerWaveHaltedError`. Closing the port under
+    the run instead would leave the instrument running with nobody listening. A
+    halt already in progress is allowed to finish. If the run cannot be halted,
+    the connection is closed anyway.
+
+    Forgets the identity read at setup, so the next session asks the instrument
+    again, in case a different one is on the port.
+    """
+    if self._halt_owner is not None:
+      await self._halt_finished.wait()
+    elif not self._port_free.is_set():
+      logger.warning("[PowerWaveX %s] stop() is halting the run in progress", self.port)
+      try:
+        await self.halt()
+      except (PowerWaveError, TimeoutError) as error:
+        logger.warning(
+          "[PowerWaveX %s] could not halt the run in progress (%s); closing the port anyway",
+          self.port,
+          error,
+        )
+
+    await self.io.stop()
+    self._connected = False
+
+    self._model = None
+    self._wavelength_table = None
+    logger.info("[PowerWaveX %s] disconnected", self.port)
+
+  # ------------------------------------------------------------------------------------
+  # Plate carrier
+  # ------------------------------------------------------------------------------------
+
+  async def open(self) -> None:
+    """Present the plate carrier outside the instrument so a plate can be loaded.
+
+    PRESENT PLATE CARRIER (``'J'``), page B-7.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.PRESENT_PLATE_CARRIER)
+      await self._read_status()
+    logger.info("[PowerWaveX %s] carrier out", self.port)
+
+  async def close(self) -> None:
+    """Store the plate carrier inside the instrument.
+
+    STORE PLATE CARRIER (``'A'``), page B-7.
+
+    Note:
+      Unlike the newer USB BioTek readers, this instrument takes no plate
+      geometry with the store command. Geometry is a separate SET PLATE GEOMETRY
+      (``'{'``) request, which the read and scan methods send themselves. Tall or
+      lidded labware has not been tested.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.STORE_PLATE_CARRIER)
+      await self._read_status()
+    logger.info("[PowerWaveX %s] carrier in", self.port)
 
   # ------------------------------------------------------------------------------------
   # Incubator
