@@ -107,7 +107,8 @@ class SpectralScanResult:
     column: The 1-based plate column scanned.
     row: The 1-based plate row, or ``None`` when the whole strip was scanned.
     calibrated: Wavelengths the instrument calibrated before scanning.
-    temperature: Chamber temperature in degrees C, or ``None``.
+    temperature: ``None``; query the chamber temperature separately with
+      :meth:`PowerWaveX.request_current_temperature`.
     timestamp: When the scan completed.
   """
 
@@ -898,16 +899,6 @@ class PowerWaveX:
     logger.info("[PowerWaveX %s] temperature: %.1f degrees C", self.port, temperature)
     return temperature
 
-  async def _try_read_temperature(self) -> Optional[float]:
-    """Read the chamber temperature for a result, returning None if unavailable."""
-    if not self.supports_heating:
-      return None
-    try:
-      return await self.request_current_temperature()
-    except (PowerWaveError, TimeoutError) as e:
-      logger.debug("[PowerWaveX %s] temperature unavailable for result: %s", self.port, e)
-      return None
-
   async def set_temperature(self, temperature: int) -> None:
     """Set the incubator setpoint in whole degrees C (page B-17).
 
@@ -1228,6 +1219,8 @@ class PowerWaveX:
 
     Returns:
       One :class:`AbsorbanceResult` per requested wavelength, in the order asked.
+      Each result's temperature is ``None``; use :meth:`request_current_temperature`
+      to query the chamber temperature separately.
     """
     first_strip, last_strip = self._strip_range_for(plate, wells)
 
@@ -1257,7 +1250,6 @@ class PowerWaveX:
         await self._set_strip_range(first_strip, last_strip)
 
       blocks = await self._read_plate(len(wavelengths), plate.num_items_y, num_strips)
-      temperature = await self._try_read_temperature()
 
     timestamp = datetime.now()
 
@@ -1278,7 +1270,7 @@ class PowerWaveX:
         AbsorbanceResult(
           data=data,
           wavelength=wavelength,
-          temperature=temperature,
+          temperature=None,
           timestamp=timestamp,
         )
       )
@@ -1609,7 +1601,7 @@ class PowerWaveX:
       column=target_column,
       row=row if row != SCAN_WHOLE_STRIP else None,
       calibrated=calibrated,
-      temperature=await self._try_read_temperature(),
+      temperature=None,
       timestamp=datetime.now(),
     )
 
@@ -1654,7 +1646,8 @@ class PowerWaveX:
 
     Returns:
       A :class:`SpectralScanResult` whose ``data`` is indexed
-      ``[wavelength][well]``.
+      ``[wavelength][well]``. Its temperature is ``None``; use
+      :meth:`request_current_temperature` to query the chamber temperature separately.
 
     Raises:
       ValueError: If neither or both of ``well`` and ``column`` are given, or any

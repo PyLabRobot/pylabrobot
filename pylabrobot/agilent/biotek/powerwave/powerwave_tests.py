@@ -1339,7 +1339,7 @@ class TestReadAbsorbance(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(fake.writes.count(b"S"), 1)
     self.assertEqual(fake.remaining, b"")
 
-  async def test_temperature_is_attached_when_an_incubator_is_present(self):
+  async def test_read_does_not_query_temperature_when_an_incubator_is_present(self):
     plate = _plate_resource()
     script = _read_script() + _ACK + struct.pack("<H", 371) + _STATUS_OK
     reader, fake = _reader(script, model="PowerWaveX w/ Incubator")
@@ -1347,8 +1347,10 @@ class TestReadAbsorbance(unittest.IsolatedAsyncioTestCase):
 
     result = (await reader.read_absorbance(plate, plate.get_all_items(), 620))[0]
 
-    self.assertAlmostEqual(result.temperature, 37.1)
-    self.assertIn(b"]", fake.writes)
+    self.assertIsNone(result.temperature)
+    self.assertNotIn(b"]", fake.writes)
+    self.assertAlmostEqual(await reader.request_current_temperature(), 37.1)
+    self.assertEqual(fake.remaining, b"")
 
   async def test_checksum_mismatch_raises(self):
     plate = _plate_resource()
@@ -2458,6 +2460,20 @@ class TestScanPlate(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result.column, 1)
     self.assertEqual(len(result.data), 3)
     self.assertEqual(len(result.data[0]), 1)
+
+  async def test_scan_does_not_query_temperature_when_an_incubator_is_present(self):
+    plate = _plate_resource()
+    script = self._scan_script([400, 410]) + _ACK + struct.pack("<H", 371) + _STATUS_OK
+    reader, fake = _reader(script, model="PowerWaveX w/ Incubator")
+
+    result = await reader.scan_plate(
+      plate, start_wavelength=400, stop_wavelength=410, step=10, well=plate.get_item(0)
+    )
+
+    self.assertIsNone(result.temperature)
+    self.assertNotIn(b"]", fake.writes)
+    self.assertAlmostEqual(await reader.request_current_temperature(), 37.1)
+    self.assertEqual(fake.remaining, b"")
 
   async def test_strip_scan_reads_every_row(self):
     plate = _plate_resource()
