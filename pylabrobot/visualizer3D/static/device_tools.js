@@ -22,7 +22,7 @@ const HEADS = new Set(["head96", "head384"]);
 const GRIPPER = "mechanical_gripper";
 const SHAFT = "tip_mounting_shaft";
 // A gripper's own parts, as opposed to whatever it has picked up: anything else below it is cargo.
-const GRIPPER_PARTS = new Set(["body", "finger", "pad"]);
+const GRIPPER_PARTS = new Set(["body", "jaw", "finger", "pad"]);
 
 // What a device says it is. A STAR and a Prep both declare it, and it is the only thing that
 // gets a button: a bench or a facility holds devices and is no feature of anything.
@@ -147,7 +147,7 @@ export function initDeviceTools({ onSelect }) {
     return { placed, rows, columns, filled: placed.filter((p) => p.filled).length };
   }
 
-  /** What a gripper is holding, or -1. Its own body, fingers and pads are not cargo. */
+  /** What a gripper is holding, or -1. Its own body, jaws, fingers and pads are not cargo. */
   function heldBy(index) {
     return world.childrenOf[index].find((c) => !GRIPPER_PARTS.has(categoryOf(c))) ?? -1;
   }
