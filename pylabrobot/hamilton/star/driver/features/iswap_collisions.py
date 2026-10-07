@@ -255,7 +255,7 @@ def sweeps(transport: iSWAPTransport, plan: Plan) -> PlanSweeps:
   parts = parts_of(transport)
   now = joints_now(transport)
   sw = _Sweeps(Kinematics(transport, now))
-  width = float(getattr(transport.iswap.gripper, "jaw_width", 0.0) or 0.0)
+  width = float(transport.iswap.gripper.jaw_width)
   held: Optional[Resource] = transport.holding
   if held is not None:
     sw.held_since = Pose()

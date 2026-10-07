@@ -227,7 +227,7 @@ def _hulls_for_model(model: str) -> Optional[Tuple[Tuple[Vec, ...], ...]]:
 
 def declared_hulls(resource: Resource) -> Optional[Tuple[Tuple[Vec, ...], ...]]:
   """The convex hulls `resource`'s model declares, in its own frame in mm, or None."""
-  model = getattr(resource, "model", None)
+  model = resource.model
   return _hulls_for_model(model) if model else None
 
 
@@ -414,7 +414,7 @@ class StaticScene(_Reuse):
           _rotation(resource),
           (resource.get_size_x(), resource.get_size_y(), resource.get_size_z()),
           resource.category,
-          getattr(resource, "model", None),
+          resource.model,
           len(resource.children),
           tuple(shapes),
         )

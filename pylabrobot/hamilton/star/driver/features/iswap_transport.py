@@ -35,7 +35,7 @@ import math
 from typing import Any, Awaitable, Callable, List, Literal, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.lid import Lid
+from pylabrobot.resources.lid import Liddable, Lid
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.plate_adapter import PlateAdapter
 from pylabrobot.resources.resource import Resource
@@ -510,9 +510,7 @@ class iSWAPTransport:
   def _from_top(resource: Resource, pickup_distance_from_top: Optional[float]) -> float:
     """How far below its top `resource` is gripped: as asked, its preferred pickup location, or 5 mm
     - and for a plate with a lid on, below the lid's skirt, where the jaws meet the plate."""
-    lid = getattr(resource, "lid", None)
-    if not isinstance(lid, Lid):
-      lid = None
+    lid = resource.lid if isinstance(resource, Liddable) else None
     skirt = lid.nesting_z_height if lid is not None else None
     if pickup_distance_from_top is not None:
       if lid is not None and skirt is not None and pickup_distance_from_top < skirt:
