@@ -7,7 +7,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.resources.TipRack.available_for_tip_handling &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -48,7 +48,7 @@
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../_static/plr_devices.js?v=ba1a2da2"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.TipRack.available_for_tip_handling';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.22.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -59,12 +59,12 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/graphviz.js?v=0710df9f"></script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.resources.TipRack.available_for_tip_handling.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.resources package" href="../pylabrobot.resources.html" />
-    <link rel="prev" title="pylabrobot.lib.liquid_handling.tip_spot_finding.Frame" href="pylabrobot.lib.liquid_handling.tip_spot_finding.Frame.html" />
+    <link rel="next" title="pylabrobot.resources.TipRack.frame_height" href="pylabrobot.resources.TipRack.frame_height.html" />
+    <link rel="prev" title="pylabrobot.resources.TipRack" href="pylabrobot.resources.TipRack.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="1.0.0b1" />
@@ -562,12 +562,12 @@
     <li class="breadcrumb-item"><a href="../pylabrobot.html" class="nav-link">API</a></li>
     
     
-    <li class="breadcrumb-item"><a href="../pylabrobot.lib.liquid_handling.html" class="nav-link">pylabrobot.lib.liquid_handling package</a></li>
+    <li class="breadcrumb-item"><a href="../pylabrobot.resources.html" class="nav-link">pylabrobot.resources package</a></li>
     
     
-    <li class="breadcrumb-item"><a href="pylabrobot.lib.liquid_handling.tip_spot_finding.html" class="nav-link">pylabrobot.lib.liquid_handling.tip_spot_finding</a></li>
+    <li class="breadcrumb-item"><a href="pylabrobot.resources.TipRack.html" class="nav-link">pylabrobot.resources.TipRack</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.resources.TipRack.available_for_tip_handling</span></li>
   </ul>
 </nav>
 </div>
@@ -584,48 +584,16 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-lib-liquid-handling-tip-spot-finding-find-tip-spots">
-<h1>pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots<a class="headerlink" href="#pylabrobot-lib-liquid-handling-tip-spot-finding-find-tip-spots" title="Link to this heading">#</a></h1>
-<dl class="py function">
-<dt class="sig sig-object py" id="pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots">
-<span class="sig-prename descclassname"><span class="pre">pylabrobot.lib.liquid_handling.tip_spot_finding.</span></span><span class="sig-name descname"><span class="pre">find_tip_spots</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.resource.Resource"><span class="pre">Resource</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">has_tip</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">has_filter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_aligned</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">available_for_tip_handling</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="pylabrobot.resources.tip_rack.TipSpot.html#pylabrobot.resources.tip_rack.TipSpot" title="pylabrobot.resources.tip_rack.TipSpot"><span class="pre">TipSpot</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots" title="Link to this definition">#</a></dt>
-<dd><p>Find tip spots in consumption order.</p>
-<p>Searches every tip rack in the tree under root, root included: a deck, a carrier, a bench
-resource holding several racks, a whole facility, or a single rack. Racks with an empty spot
-come first; among them, and then among full racks, the one with the fewest tips left, then the
-left-most, then the rear-most. Within a rack, spots run left to right, each column back to
-front, so a rack is opened at its left-most column. This suits channels on one X arm that
-cannot pass each other.</p>
+  <section id="pylabrobot-resources-tiprack-available-for-tip-handling">
+<h1>pylabrobot.resources.TipRack.available_for_tip_handling<a class="headerlink" href="#pylabrobot-resources-tiprack-available-for-tip-handling" title="Link to this heading">#</a></h1>
+<dl class="py property">
+<dt class="sig sig-object py" id="pylabrobot.resources.TipRack.available_for_tip_handling">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">TipRack.</span></span><span class="sig-name descname"><span class="pre">available_for_tip_handling</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><a class="headerlink" href="#pylabrobot.resources.TipRack.available_for_tip_handling" title="Link to this definition">#</a></dt>
+<dd><p>it is placed, has no lid on, and no other rack
+stands on it in its stack.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>root</strong> (<a class="reference internal" href="pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.resource.Resource"><em>Resource</em></a>) – Resource whose tree is searched for tip racks. Positions are compared in root’s own
-frame, so a deck gives the channels’ order however the device sits above it.</p></li>
-<li><p><strong>has_tip</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> | </em><em>None</em>) – True for spots holding a tip, False for empty spots, None for both.</p></li>
-<li><p><strong>volume</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>) – Tip nominal volume in uL. Read from the present tip, or from the configured tip when
-has_tip is False; with has_tip None, only spots holding a tip match.</p></li>
-<li><p><strong>has_filter</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> | </em><em>None</em>) – Tip filter state, matched like volume.</p></li>
-<li><p><strong>count</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – Return exactly this many spots, sorted back to front, or an empty list if fewer
-match. None returns every match.</p></li>
-<li><p><strong>x_aligned</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Return spots from a single rack column: the first column in consumption order
-holding at least count spots. A shorter column is skipped. Falls back to the unaligned
-batch when no column can serve count. Without count, returns the first column.</p></li>
-<li><p><strong>available_for_tip_handling</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> | </em><em>None</em>) – True for spots in racks a head can reach, False for spots in
-racks it cannot, e.g. under a lid or under another rack in a stack, None for both. See
-<code class="code docutils literal notranslate"><span class="pre">TipRack.available_for_tip_handling</span></code>.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Matching tip spots.</p>
-</dd>
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If count is not positive.</p></li>
-<li><p><strong>NoLocationError</strong> – If a resource between root and a rack has no location.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><em>List</em></a>[<a class="reference internal" href="pylabrobot.resources.tip_rack.TipSpot.html#pylabrobot.resources.tip_rack.TipSpot" title="pylabrobot.resources.tip_rack.TipSpot"><em>TipSpot</em></a>]</p>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Whether a head can reach this rack’s tips</p>
 </dd>
 </dl>
 </dd></dl>
@@ -643,20 +611,20 @@ racks it cannot, e.g. under a lid or under another rack in a stack, None for bot
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.lib.liquid_handling.tip_spot_finding.Frame.html"
+       href="pylabrobot.resources.TipRack.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.lib.liquid_handling.tip_spot_finding.Frame</p>
+        <p class="prev-next-title">pylabrobot.resources.TipRack</p>
       </div>
     </a>
     <a class="right-next"
-       href="../pylabrobot.resources.html"
+       href="pylabrobot.resources.TipRack.frame_height.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.resources package</p>
+        <p class="prev-next-title">pylabrobot.resources.TipRack.frame_height</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -679,7 +647,7 @@ racks it cannot, e.g. under a lid or under another rack in a stack, None for bot
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots"><code class="docutils literal notranslate"><span class="pre">find_tip_spots()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.resources.TipRack.available_for_tip_handling"><code class="docutils literal notranslate"><span class="pre">TipRack.available_for_tip_handling</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -687,7 +655,7 @@ racks it cannot, e.g. under a lid or under another rack in a stack, None for bot
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.resources.TipRack.available_for_tip_handling.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -702,7 +670,7 @@ racks it cannot, e.g. under a lid or under another rack in a stack, None for bot
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.lib.liquid_handling.tip_spot_finding.find_tip_spots.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.resources.TipRack.available_for_tip_handling.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
