@@ -27,7 +27,6 @@ from typing import (
   FrozenSet,
   Iterable,
   List,
-  Mapping,
   Optional,
   Sequence,
   Set,
@@ -39,7 +38,7 @@ import websockets
 from websockets.asyncio.server import Server, ServerConnection
 from websockets.http11 import Request, Response
 
-from pylabrobot.resources.collision import STILL, Collision
+from pylabrobot.resources.collision import Collision
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -661,21 +660,17 @@ class Viewer3D:
   # How long a command waits for a page to play its motion before going on without it.
   MOTION_TIMEOUT_S = 120.0
 
-  async def show_collisions(
-    self, collisions: Sequence[Collision], groups: Optional[Mapping[str, Any]] = None
-  ) -> None:
-    """Draw on the pages what a refused command would hit, and bring the mover to the meeting.
+  async def show_collisions(self, collisions: Sequence[Collision]) -> None:
+    """Draw on the pages what a refused command would hit.
 
-    A box goes over each resource the command ran into. Where the check walked its way finely
-    (`Collision.at`), what would have hit is brought there first - eased, if the page glides - and
-    held, so the collision point is on screen. The boxes stay until the scene is rebuilt or other
-    collisions are shown. With no page connected, or called from off the viewer's loop, nothing is
-    sent.
+    A box goes over each resource the command ran into - the ones met at the instant of the first
+    meeting, where the check walked its way finely; a meeting the hull only leans on, with no
+    instant of its own, stands as the sweep said it. The boxes stay until the scene is rebuilt or
+    other collisions are shown. With no page connected, or called from off the viewer's loop,
+    nothing is sent.
 
     Args:
       collisions: what a check found, whose `obstacle` is the resource drawn over.
-      groups: the check's groups by name, so what a collision's group carries can be brought to
-        where it first met. Without them, the boxes stand alone.
     """
     if not self._clients or self._loop is None or asyncio.get_running_loop() is not self._loop:
       return
@@ -687,33 +682,12 @@ class Viewer3D:
       index = self._index_of.get(collision.obstacle.name)
       if index is None or index in seen:
         continue
-      # Boxes on what is met at the instant the mover is held at; a meeting the hull only leans on,
-      # with no instant of its own, stands as the sweep said it.
       if moment is not None and collision.when is not None and collision.when != moment:
         continue
       seen.add(index)
       items.append({"index": index, "resource": collision.obstacle.name, "group": collision.group})
-    moves: List[Dict[str, Any]] = []
-    if groups is not None:
-      # The whole of what was judged is brought to the instant of the first meeting, so what moves
-      # together arrives together: each group's pose there, its pieces with it.
-      met = [c.when for c in collisions if c.when is not None]
-      if met:
-        moment = min(met)
-        for group in groups.values():
-          pose = group.pose_at(moment)
-          if pose == STILL:
-            continue
-          at = [pose.turn, *pose.pivot, *pose.shift]
-          brought: Set[int] = set()
-          for piece in group.pieces:
-            index = self._index_of.get(piece.resource.name)
-            if index is None or index in brought:
-              continue
-            brought.add(index)
-            moves.append({"index": index, "at": at})
-    if items or moves:
-      await self._broadcast("collisions", {"collisions": items, "moves": moves})
+    if items:
+      await self._broadcast("collisions", {"collisions": items})
 
   async def act_out(self, command: str, motion: Optional[Dict[str, Any]]) -> None:
     """Act out one command's motion, and hold the command until a page has played it.
