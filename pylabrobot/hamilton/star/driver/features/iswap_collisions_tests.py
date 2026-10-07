@@ -110,6 +110,24 @@ class iSWAPCollisionTests(unittest.IsolatedAsyncioTestCase):
     await self.transport.execute(pick)
     self.assertEqual(self.obstacles(self.transport.plan_drop(self.site, direction="front")), set())
 
+  async def test_a_tip_carrier_flush_against_the_source_carrier_stops_the_grip(self):
+    # The carrier's declared shape is what the checks see: its outer wall rises beside the sites,
+    # and the fingers pass below its top as they come down to grip. Butted against the source
+    # carrier there is no room for them; the demo deck keeps a track of clearance.
+    tip_carrier = self.deck.get_resource("tip_carrier")
+    self.deck.unassign_child_resource(tip_carrier)
+    self.deck.assign_child_resource(tip_carrier, track=2)
+    await self.iswap.make_space()
+    plate = self.deck.get_resource("source_1")
+    self.assertIn("tip_carrier", self.obstacles(self.transport.plan_pick_up(plate, "front")))
+    gated = iSWAPTransport(self.iswap)
+    before = joints_now(gated)
+    with self.assertRaises(iSWAPCollisionError) as refused:
+      await gated.pick_up_resource(plate, direction="front")
+    self.assertIn("tip_carrier", {c.obstacle.name for c in refused.exception.collisions})
+    self.assertEqual(joints_now(gated), before)
+    self.assertIsNone(gated.holding)
+
   async def test_a_plate_turned_a_quarter_onto_a_landscape_site_meets_its_neighbour(self):
     # PyLabRobot places it; the plate is 127.8 mm deep turned, the sites 96 mm apart.
     await self.iswap.make_space()
