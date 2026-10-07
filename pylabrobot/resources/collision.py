@@ -1030,20 +1030,43 @@ def check(
     return found
   ask = between_groups if callable(between_groups) else (lambda a, b: True)
 
+  timelines: Dict[int, Group] = {}
+  timeline_sweeps: Dict[Tuple[int, bool], List[Tuple[int, Piece, List[Vec], float, Vec, Vec]]] = {}
+
   def timeline(g: Group) -> Group:
     """`g` standing where it starts before its way and where it ends after it, so a pair is
-    compared over every time."""
+    compared over every time. One per group: every pair it takes part in is compared against the
+    same standing."""
+    known = timelines.get(id(g))
+    if known is not None:
+      return known
     if not g.segments:
-      return Group(g.name, g.pieces, [Segment([STILL], 0.0, -math.inf, math.inf)], g.frame)
-    first, last = g.segments[0], g.segments[-1]
-    return Group(
-      g.name,
-      g.pieces,
-      [Segment(first.poses[:1], 0.0, -math.inf, first.start)]
-      + g.segments
-      + [Segment(last.poses[-1:], 0.0, last.end, math.inf)],
-      g.frame,
-    )
+      built = Group(g.name, g.pieces, [Segment([STILL], 0.0, -math.inf, math.inf)], g.frame)
+    else:
+      first, last = g.segments[0], g.segments[-1]
+      built = Group(
+        g.name,
+        g.pieces,
+        [Segment(first.poses[:1], 0.0, -math.inf, first.start)]
+        + g.segments
+        + [Segment(last.poses[-1:], 0.0, last.end, math.inf)],
+        g.frame,
+      )
+    timelines[id(g)] = built
+    return built
+
+  def swept_over_time(
+    g: Group, in_place: bool
+  ) -> List[Tuple[int, Piece, List[Vec], float, Vec, Vec]]:
+    """The swept hulls of `g`'s timeline, in place where `in_place` says the pair shares a frame.
+    Swept once per group and way: every pair the group takes part in compares against the same
+    hulls, which no pair's company changes."""
+    key = (id(g), in_place)
+    entries = timeline_sweeps.get(key)
+    if entries is None:
+      entries = swept_entries(timeline(g), 0.0, in_place=in_place)
+      timeline_sweeps[key] = entries
+    return entries
 
   def pair(a: Group, b: Group) -> Optional[Tuple[Group, list, Group, list, bool]]:
     """The two groups' timelines and swept hulls, or None the caller lets them off. The hulls are
@@ -1051,13 +1074,12 @@ def check(
     which."""
     if not ask(a.name, b.name):
       return None
-    ta, tb = timeline(a), timeline(b)
     together = a.frame is not None and a.frame is b.frame
     return (
-      ta,
-      swept_entries(ta, 0.0, in_place=not together),
-      tb,
-      swept_entries(tb, 0.0, in_place=not together),
+      timeline(a),
+      swept_over_time(a, not together),
+      timeline(b),
+      swept_over_time(b, not together),
       together,
     )
 
