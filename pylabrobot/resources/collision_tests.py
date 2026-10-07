@@ -15,6 +15,8 @@ from pylabrobot.resources.collision import (
   Piece,
   Pose,
   Segment,
+  StaticScene,
+  _bounds,
   check,
   declared_hulls,
   distance,
@@ -314,6 +316,101 @@ class SweepTests(unittest.TestCase):
     self.assertEqual(
       check(root, [through], allow=[target.resource], obstacles=Obstacles([target])), []
     )
+
+
+class FrameTests(unittest.TestCase):
+  """What rides a moving frame: its own way, then the frame's, judged relative to the frame."""
+
+  @staticmethod
+  def frame() -> List[Segment]:
+    """The carriage's own way, shared by everything it carries."""
+    return [Segment([Pose(), Pose(shift=(50, 0, 0))], 0.0, 0.0, 1.0)]
+
+  def rider(self, name: str, at: Vec, way: Vec, frame: List[Segment]) -> Group:
+    return Group(
+      name,
+      [Piece(Resource(name, 10, 10, 10), box(at, (10, 10, 10)))],
+      [Segment([Pose(), Pose(shift=way)], 0.0, 0.0, 1.0)],  # type: ignore[arg-type]
+      frame,
+    )
+
+  def test_a_rider_is_carried_by_its_own_way_then_the_frames(self):
+    group = self.rider("rider", (0, 0, 0), (0, 10, 0), self.frame())
+    shifted = group.pose_at(0.5).apply((5.0, 5.0, 5.0))
+    # Half of the frame's x after half of the rider's own y.
+    self.assertAlmostEqual(shifted[0], 30.0, places=9)
+    self.assertAlmostEqual(shifted[1], 10.0, places=9)
+    self.assertAlmostEqual(shifted[2], 5.0, places=9)
+
+  def test_after_the_way_the_rider_stands_where_the_frame_left_it(self):
+    group = self.rider("rider", (0, 0, 0), (0, 10, 0), self.frame())
+    shifted = group.pose_at(2.0).apply((5.0, 5.0, 5.0))
+    self.assertAlmostEqual(shifted[0], 55.0, places=9)
+    self.assertAlmostEqual(shifted[1], 15.0, places=9)
+    self.assertAlmostEqual(shifted[2], 5.0, places=9)
+
+  def test_the_sweep_spans_the_own_way_and_the_frames(self):
+    group = self.rider("rider", (0, 0, 0), (0, 10, 0), self.frame())
+    hull = group.swept_in_place(0)[0][1]
+    lo, hi = _bounds(hull)
+    # The frame's x, the own way's y, over the piece's own extent.
+    self.assertAlmostEqual(lo[0], 0.0, places=9)
+    self.assertAlmostEqual(hi[0], 60.0, places=9)
+    self.assertAlmostEqual(lo[1], 0.0, places=9)
+    self.assertAlmostEqual(hi[1], 20.0, places=9)
+
+  def test_two_riders_on_one_frame_are_judged_relative_to_it(self):
+    root = Resource("r", 1, 1, 1)
+    frame = self.frame()
+    crossing = self.rider("a", (0, 0, 0), (40, 0, 0), frame)
+    standing = self.rider("b", (30, 0, 0), (0, 0, 0), frame)
+    found = check(root, [crossing, standing], obstacles=Obstacles([]))
+    self.assertEqual([c.obstacle.name for c in found], ["b"])
+    clear = self.rider("a", (0, 0, 0), (10, 0, 0), frame)
+    self.assertEqual(check(root, [clear, standing], obstacles=Obstacles([])), [])
+
+
+class SceneTests(unittest.TestCase):
+  """The kept scene: what changed is worked out again, the rest taken as it was."""
+
+  def scene(self) -> Tuple[StaticScene, Resource, ResourceHolder]:
+    carrier = Resource("carrier", 100, 100, 100)
+    site = ResourceHolder("site", 80, 80, 0)
+    carrier.assign_child_resource(site, location=Coordinate(10, 10, 80))
+    plate = cor_96_wellplate_360uL_Fb("plate")
+    site.assign_child_resource(plate)
+    return StaticScene(carrier), carrier, site
+
+  def test_a_second_walk_keeps_the_pieces_of_what_did_not_change(self):
+    kept, _carrier, _site = self.scene()
+    first = {p.resource.name: p for p in kept.solid_pieces()}
+    self.assertGreater(kept.worked_out, 0)
+    worked = kept.worked_out
+    second = {p.resource.name: p for p in kept.solid_pieces()}
+    self.assertEqual(kept.worked_out, worked)
+    # The root is walked afresh every time; everything under it is kept.
+    for name, piece in first.items():
+      if name != "carrier":
+        self.assertIs(second[name], piece)
+
+  def test_something_moved_is_worked_out_again(self):
+    kept, _carrier, site = self.scene()
+    first = {p.resource.name: p for p in kept.solid_pieces()}
+    plate = site.children[0]
+    plate.unassign()
+    site.assign_child_resource(plate, location=Coordinate(0, 0, -3))
+    second = {p.resource.name: p for p in kept.solid_pieces()}
+    self.assertGreater(kept.worked_out, 1)
+    self.assertIsNot(second["plate"], first["plate"])
+    self.assertAlmostEqual(second["plate"].lo[2], first["plate"].lo[2] - 3.0, places=6)
+
+  def test_an_enclosure_is_walked_through(self):
+    housing = Resource("housing", 200, 200, 200, category="housing")
+    inner = block("inner", (10, 10, 10), (20, 20, 20))
+    housing.assign_child_resource(inner.resource, location=Coordinate(10, 10, 10))
+    scene = StaticScene(housing, hollow=("housing",))
+    pieces = scene.solid_pieces()
+    self.assertEqual([p.resource.name for p in pieces], ["inner"])
 
 
 class TimeTests(unittest.TestCase):

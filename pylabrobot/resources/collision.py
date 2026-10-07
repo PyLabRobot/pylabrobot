@@ -707,10 +707,11 @@ class Group:
         rest = segment.poses[-1]
     return rest
 
-  def pose_at(self, t: float) -> Pose:
+  def pose_at(self, t: float, relative: bool = False) -> Pose:
     """The group's pose at time `t`, as the world sees it: its own way between the segment's poses,
-    and the frame it rides carrying it. Before its way, where it stands; after it, where its way
-    ends."""
+    and the frame it rides carrying it. `relative` leaves the frame off - its own way alone, for a
+    pair judged relative to the frame they share. Before its way, where it stands; after it, where
+    its way ends."""
     rest = STILL
     for segment in self.segments:
       if (
@@ -724,10 +725,10 @@ class Group:
           if len(segment.poses) == 2
           else segment.poses[round(f * (len(segment.poses) - 1))]
         )
-        return own.then(self._frame_at(t))
+        return own if relative else own.then(self._frame_at(t))
       if segment.end <= t and math.isfinite(segment.end):
         rest = segment.poses[-1]
-    return rest
+    return rest if relative else rest.then(self._frame_at(t))
 
 
 def moving(
@@ -981,13 +982,14 @@ def check(
     found.append(reported[key])
 
   def contact(
-    piece: Piece, group: Group, k: int, other: Piece
+    piece: Piece, group: Group, k: int, other: Piece, relative: bool = False
   ) -> Tuple[Optional[float], Optional[Pose]]:
     """Where along the segment's way the piece first meets what stands against it, walked finely.
 
     The sweep that reported the meeting is the hull of the whole way; the way itself may clear what
     its hull only leans on. Nothing found says so, and the meeting stands as the sweep said it. The
-    pose is the group's as the world sees it, the frame it rides included.
+    pose is the group's as the world sees it, the frame it rides included - or its own way alone,
+    where `relative` says the other's points are relative to the same frame.
     """
     if k >= len(group.segments):
       return None, None
@@ -997,7 +999,7 @@ def check(
     span = segment.end - segment.start
     for f, _ in _samples(segment):
       t = segment.start + f * span
-      pose = group.pose_at(t)
+      pose = group.pose_at(t, relative=relative)
       if distance(pose.apply_all(piece.array).tolist(), other.points) <= 0.0:
         return t, pose
     return None, None
@@ -1059,8 +1061,10 @@ def check(
       g.frame,
     )
 
-  def pair(a: Group, b: Group) -> Optional[Tuple[Group, list, Group, list]]:
-    """The two groups' timelines and swept hulls, or None the caller lets them off."""
+  def pair(a: Group, b: Group) -> Optional[Tuple[Group, list, Group, list, bool]]:
+    """The two groups' timelines and swept hulls, or None the caller lets them off. The hulls are
+    the world's own unless the two ride one frame, where they are relative to it - `together` says
+    which."""
     if not ask(a.name, b.name):
       return None
     ta, tb = timeline(a), timeline(b)
@@ -1070,6 +1074,7 @@ def check(
       swept_entries(ta, 0.0, in_place=not together),
       tb,
       swept_entries(tb, 0.0, in_place=not together),
+      together,
     )
 
   pairs = [
@@ -1079,7 +1084,7 @@ def check(
     for p in [pair(groups[i], groups[j])]
     if p is not None
   ]
-  for a, swept_a, b, swept_b in pairs:
+  for a, swept_a, b, swept_b, together in pairs:
     for ka, pa, hull_a, slack_a, lo_a, hi_a in swept_a:
       sa = a.segments[ka]
       for kb, pb, hull_b, slack_b, lo_b, hi_b in swept_b:
@@ -1092,8 +1097,9 @@ def check(
         if gap <= 0.0 or gap < reach:
           # Where the other stands where it stood - still, or before or after its own way - the
           # meeting is walked finely as well; both on their way, it stands as the sweep found it.
+          # A pair on one frame is walked relative to it, as their sweeps were.
           when = at = None
           if all(pose.turn == 0.0 and pose.shift == (0.0, 0.0, 0.0) for pose in sb.poses):
-            when, at = contact(pa, a, ka, pb)
+            when, at = contact(pa, a, ka, pb, relative=together)
           report(pa, pb.resource, a.name, ka, gap, b.name, when=when, at=at)
   return found

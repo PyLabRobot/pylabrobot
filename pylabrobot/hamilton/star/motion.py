@@ -1303,11 +1303,11 @@ def attach_viewer_collisions(driver: Any, viewer: Any, transport: Any = None) ->
       # is mounted - and the check speaks of the stop disc the drives report: each target is
       # lifted by the overhang of the tip the model has on the channel.
       zs: Dict[int, float] = {}
-      for channel, field in enumerate(params["zp"]):
+      for lifted, field in enumerate(params["zp"]):
         shaft = next(
           (
             child
-            for child in pipettes[0].resources[channel].children
+            for child in pipettes[0].resources[lifted].children
             if isinstance(child, TipMountingShaft)
           ),
           None,
@@ -1316,7 +1316,7 @@ def attach_viewer_collisions(driver: Any, viewer: Any, transport: Any = None) ->
         z = int(field) / 10
         if bottom is not None:
           z -= bottom.z
-        zs[channel] = z
+        zs[lifted] = z
       for p in pipettes:
         await _refuse(viewer, "the channels' Z move (C0 JZ)", check_pipette_move(p, z=zs))
     else:
