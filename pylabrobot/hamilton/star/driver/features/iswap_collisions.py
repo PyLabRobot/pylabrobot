@@ -216,7 +216,8 @@ class _Sweeps:
     n, slack = self.kin.arcs(a, b)
     if slack == 0:
       corners = [a.but(y=y, z=z) for y in (a.y, b.y) for z in (a.z, b.z)]
-      states = [s for c in corners for s in self._states(c, c, 0.0, 0.0)]
+      # Each corner once, at the plan's own x: the span of the carriage is the frame's to carry.
+      states = [self._states(c, c, 0.0, 0.0)[0] for c in corners]
       self._add(states, 0.0, t0, t1)
       return
     for k in range(n):
@@ -225,7 +226,7 @@ class _Sweeps:
 
   def jaws(self, at: Joints, change: float, t0: float) -> None:
     """The fingers sliding apart by `change`, at `at`."""
-    self._add(self._states(at, at, 0.0, 0.0), 0.0, t0, t0 + 1, (0.0, change))
+    self._add([self._states(at, at, 0.0, 0.0)[0]], 0.0, t0, t0 + 1, (0.0, change))
     self.opened += change
 
 
