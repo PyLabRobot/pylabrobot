@@ -1,6 +1,7 @@
 """What pipette and head commands sweep through, on a simulated STARlet's demo deck."""
 
 import unittest
+from typing import List
 
 from pylabrobot.hamilton.star.driver.features.iswap_transport import (
   iSWAPCollisionError,
@@ -13,6 +14,7 @@ from pylabrobot.hamilton.star.driver.features.star_collisions import (
 )
 from pylabrobot.hamilton.star.motion import attach_viewer_collisions
 from pylabrobot.resources.lid import Lid
+from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.tip_rack import TipRack
 from pylabrobot.resources.tip_tracking import does_tip_tracking, set_tip_tracking
@@ -163,6 +165,57 @@ class CollisionGateTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       refused.exception.origin, f"channel 0's Z move ({self.pipettes.channel_id(0)} ZA)"
     )
+    self.assertTrue(self.viewer.shown)
+
+  async def test_a_tipped_channels_jz_is_judged_at_its_stop_disc(self):
+    # The command takes Z to be each channel's lowest point - the tip's bottom where one is
+    # mounted - and the check speaks of the stop disc: the gate lifts each target by the overhang
+    # of the tip the model has on the channel. A tip lowered toward a lid is refused where it
+    # meets it; a stop a millimetre above runs.
+    self.viewer.raise_on_collision = False
+    source_0 = self.deck.get_resource("source_0")
+    assert isinstance(source_0, Plate)
+    lid = Lid(
+      name="source_0_lid",
+      size_x=source_0.get_size_x(),
+      size_y=source_0.get_size_y(),
+      size_z=10.0,
+      nesting_z_height=2.0,
+    )
+    source_0.assign_child_resource(lid)
+    rack = self.deck.get_resource("tips_0")
+    assert isinstance(rack, TipRack)
+    await self.pipettes.pick_up_tips([rack.get_item(f"{row}1") for row in "ABCDEFGH"])
+    arm = self.star.driver.arms[0]
+    deck_at = self.deck.get_absolute_location()
+    plate_center_x = source_0.get_absolute_location().x + source_0.get_size_x() / 2 - deck_at.x
+    plate_center_y = source_0.get_absolute_location().y + source_0.get_size_y() / 2 - deck_at.y
+    ref_0 = self.pipettes.get_reference_point_location(0)
+    assert ref_0 is not None
+    await arm.move_to_x_position(await arm.request_position() + plate_center_x - ref_0.x)
+    await self.pipettes.move_to_y_positions({i: plate_center_y + (3.5 - i) * 9.5 for i in range(8)})
+    self.viewer.raise_on_collision = True
+    assert self.pipettes.get_mounted_tip(0) is not None
+    shaft = next(
+      child for child in self.pipettes.resources[0].children if isinstance(child, TipMountingShaft)
+    )
+    bottom = shaft.tip_bottom()
+    assert bottom is not None
+    tip = self.pipettes.get_mounted_tip(0)
+    assert tip is not None
+    # The command's Z is the tip's bottom: at the lid's top it touches, above it the way is clear.
+    to_the_lid = (lid.get_absolute_location().z + lid.get_size_z()) - tip.get_absolute_location().z
+    jz_touching = ref_0.z + to_the_lid + bottom.z
+
+    def jz(offset: float) -> List[str]:
+      target = jz_touching + offset
+      return [f"{round(target * 10):04}" for _ in range(8)]
+
+    await self.star.driver.send_command(module="C0", command="JZ", zp=jz(1.0))
+    self.assertEqual(self.viewer.shown, [])
+    with self.assertRaises(CollisionError) as refused:
+      await self.star.driver.send_command(module="C0", command="JZ", zp=jz(-2.0))
+    self.assertEqual(refused.exception.origin, "the channels' Z move (C0 JZ)")
     self.assertTrue(self.viewer.shown)
 
   async def test_a_head_move_that_would_hit_something_is_refused_saying_which_command(self):

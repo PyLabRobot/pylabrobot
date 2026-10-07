@@ -49,6 +49,7 @@ from pylabrobot.hamilton.star.driver.features.star_collisions import (
   check_pipette_move,
 )
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.hamilton.core_grippers import (
   HamiltonCoreGrippers,
   HamiltonCoreGripperTool,
@@ -1298,7 +1299,24 @@ def attach_viewer_collisions(driver: Any, viewer: Any, transport: Any = None) ->
       for p in pipettes:
         await _refuse(viewer, "the channels' Y move (C0 JY)", check_pipette_move(p, y=ys))
     elif module == "C0" and command == "JZ":
-      zs = {i: int(field) / 10 for i, field in enumerate(params["zp"])}
+      # What the command takes Z to be is each channel's lowest point - the tip's bottom where one
+      # is mounted - and the check speaks of the stop disc the drives report: each target is
+      # lifted by the overhang of the tip the model has on the channel.
+      zs: Dict[int, float] = {}
+      for channel, field in enumerate(params["zp"]):
+        shaft = next(
+          (
+            child
+            for child in pipettes[0].resources[channel].children
+            if isinstance(child, TipMountingShaft)
+          ),
+          None,
+        )
+        bottom = shaft.tip_bottom() if shaft is not None else None
+        z = int(field) / 10
+        if bottom is not None:
+          z -= bottom.z
+        zs[channel] = z
       for p in pipettes:
         await _refuse(viewer, "the channels' Z move (C0 JZ)", check_pipette_move(p, z=zs))
     else:
