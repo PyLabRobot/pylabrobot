@@ -24,13 +24,9 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL_filter,
-  hamilton_96_tiprack_300uL_filter_slim,
   hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
-  hamilton_mfx_carrier_L5_base,
-  hamilton_mfx_resourceholder_ntr,
-  hamilton_mfx_tiprackholder_standard,
   hamilton_tip_carrier_L5_ntr_a00,
 )
 from pylabrobot.resources.plate import Plate
@@ -70,7 +66,9 @@ def build_facility(*, bare: bool = False) -> Facility:
   facility.assign_child_resource(bench, location=Coordinate(0, 0, 0))
 
   tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
-  # Filtered and unfiltered side by side, so the filter in a tip can be told apart.
+  # Filtered and unfiltered side by side, so the filter in a tip can be told apart. Its declared
+  # shape stands where its model does, so the plate carriers stand a track clear of it: a wall
+  # flush against a gripped plate is in the fingers' way.
   tip_carrier[0] = hamilton_96_tiprack_1000uL(name="tips_0")
   tip_carrier[1] = hamilton_96_tiprack_1000uL_filter(name="tips_1")
   tip_carrier[2] = hamilton_96_tiprack_300uL_filter(name="tips_2")
@@ -79,37 +77,18 @@ def build_facility(*, bare: bool = False) -> Facility:
   plate_carrier = PLT_CAR_L5AC_A00(name="source_carrier")
   for slot in range(5):
     plate_carrier[slot] = cor_96_wellplate_360uL_Fb(name=f"source_{slot}")
-  star.deck.assign_child_resource(plate_carrier, track=7)
+  star.deck.assign_child_resource(plate_carrier, track=8)
 
   destination_carrier = PLT_CAR_L5AC_A00(name="destination_carrier")
   for slot in range(5):
     destination_carrier[slot] = cor_96_wellplate_360uL_Fb(name=f"destination_{slot}")
-  star.deck.assign_child_resource(destination_carrier, track=13)
+  star.deck.assign_child_resource(destination_carrier, track=14)
 
   ntr_carrier = hamilton_tip_carrier_L5_ntr_a00(name="ntr_carrier")
   ntr_carrier[0] = hamilton_96_tiprack_10uL_NTR(name="ntr_10uL")
   ntr_carrier[1] = hamilton_96_tiprack_50uL_NTR(name="ntr_50uL")
   ntr_carrier[2] = hamilton_96_tiprack_300uL_NTR(name="ntr_300uL")
-  star.deck.assign_child_resource(ntr_carrier, track=19)
-
-  # The same nested racks on MFX NTR4 modules, and two MFX tip modules holding framed racks: the
-  # last six tracks, up to the waste block.
-  modules = {
-    0: hamilton_mfx_resourceholder_ntr(name="mfx_ntr4_0"),
-    1: hamilton_mfx_resourceholder_ntr(name="mfx_ntr4_1"),
-    2: hamilton_mfx_resourceholder_ntr(name="mfx_ntr4_2"),
-    3: hamilton_mfx_tiprackholder_standard(name="mfx_tiprack_holder_3"),
-    4: hamilton_mfx_tiprackholder_standard(name="mfx_tiprack_holder_4"),
-  }
-  mfx_carrier = hamilton_mfx_carrier_L5_base(name="mfx_carrier", modules=modules)
-  modules[0].assign_child_resource(hamilton_96_tiprack_10uL_NTR(name="mfx_ntr_10uL"))
-  modules[1].assign_child_resource(hamilton_96_tiprack_50uL_NTR(name="mfx_ntr_50uL"))
-  modules[2].assign_child_resource(hamilton_96_tiprack_300uL_NTR(name="mfx_ntr_300uL"))
-  modules[3].assign_child_resource(hamilton_96_tiprack_1000uL_filter(name="mfx_tips_1000uL_filter"))
-  modules[4].assign_child_resource(
-    hamilton_96_tiprack_300uL_filter_slim(name="mfx_tips_300uL_filter_slim")
-  )
-  star.deck.assign_child_resource(mfx_carrier, track=25)
+  star.deck.assign_child_resource(ntr_carrier, track=20)
 
   # The deck's own `size_z` (900 mm) is the working envelope, not its extent. The top of the X-arm
   # riding above it is the honest height: channel travel plus the arm's own height.
