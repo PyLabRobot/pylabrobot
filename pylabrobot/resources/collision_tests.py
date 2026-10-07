@@ -16,6 +16,7 @@ from pylabrobot.resources.collision import (
   Pose,
   Segment,
   check,
+  declared_hulls,
   distance,
   moving,
   on_axes,
@@ -26,6 +27,8 @@ from pylabrobot.resources.collision import (
 )
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.hamilton.tip_carriers import hamilton_tip_carrier_L5
+from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_1000uL
 from pylabrobot.resources.lid import Lid
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
@@ -176,6 +179,23 @@ class SolidTests(unittest.TestCase):
     plate.unassign()
     (piece,) = solid_pieces(carrier)
     self.assertAlmostEqual(piece.hi[2], 80.0 - CONTACT)
+
+  def test_a_carrier_whose_model_declares_hulls_is_its_shape(self):
+    # A tip carrier is walls and a roof around five pockets, not the slab its box suggests: what
+    # its model declares stands where the model does, pockets and all.
+    carrier = hamilton_tip_carrier_L5("carrier")
+    carrier[0] = hamilton_96_tiprack_1000uL("rack")
+    pieces = [p for p in solid_pieces(carrier) if p.resource is carrier]
+    hulls = declared_hulls(carrier)
+    self.assertIsNotNone(hulls)
+    assert hulls is not None
+    self.assertEqual(len(pieces), len(hulls))
+
+    def solid_at(point: Vec) -> bool:
+      return any(distance([point], piece.points) <= 0.0 for piece in pieces)
+
+    self.assertTrue(solid_at((4.0, 200.0, 112.0)))  # a side wall, above the slab's top
+    self.assertFalse(solid_at((67.0, 51.9, 64.0)))  # in the first pocket, under the rack
 
   def test_something_hung_below_is_solid_and_so_is_what_it_hangs_from(self):
     channel = Resource("channel", 9, 9, 140)
@@ -330,13 +350,9 @@ class ScaleTests(unittest.TestCase):
     pieces = solid_pieces(root)
     tree = Obstacles(pieces)
     built = time.perf_counter() - t
-    above = moving("above", [Resource("carried", 120, 80, 20)], straight((1500, 1000, 0)))
-    for p in above.pieces:
-      p.points = [(x + 100, y + 100, z + 100) for x, y, z in p.points]
-      p.lo, p.hi = (
-        (p.lo[0] + 100, p.lo[1] + 100, p.lo[2] + 100),
-        (p.hi[0] + 100, p.hi[1] + 100, p.hi[2] + 100),
-      )
+    carried = Resource("carried", 120, 80, 20)
+    carried.location = Coordinate(100, 100, 100)
+    above = moving("above", [carried], straight((1500, 1000, 0)))
     t = time.perf_counter()
     tree.visited = 0
     self.assertEqual(check(root, [above], obstacles=tree), [])

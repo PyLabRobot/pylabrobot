@@ -38,6 +38,8 @@ import math
 import os
 from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
+import numpy as np
+
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.lid import Lid
@@ -92,6 +94,19 @@ class Pose:
       p = (self.pivot[0] + c * x - s * y, self.pivot[1] + s * x + c * y, p[2])
     return _add(p, self.shift)
 
+  def apply_all(self, points: Union[np.ndarray, Sequence[Vec]]) -> np.ndarray:
+    """Every point of `points`, carried by this pose: `apply` for many at once, as an (n, 3)
+    array."""
+    out = np.array(points, dtype=float)
+    if self.turn:
+      c, s = math.cos(math.radians(self.turn)), math.sin(math.radians(self.turn))
+      x = out[:, 0] - self.pivot[0]
+      y = out[:, 1] - self.pivot[1]
+      out[:, 0] = self.pivot[0] + c * x - s * y
+      out[:, 1] = self.pivot[1] + s * x + c * y
+    out += np.asarray(self.shift)
+    return out
+
   def _linear(self) -> Tuple[float, Vec]:
     """This pose as a turn about the origin and a shift: p -> R p + t."""
     moved = self.apply((0.0, 0.0, 0.0))
@@ -132,6 +147,7 @@ class Piece:
 
   def __post_init__(self) -> None:
     self.lo, self.hi = _bounds(self.points)
+    self.array = np.array(self.points, dtype=float)
 
 
 def _bounds(points: Iterable[Vec]) -> Tuple[Vec, Vec]:
@@ -589,6 +605,22 @@ class Segment:
   end: float = 1.0
 
 
+def _through_poses(points: np.ndarray, poses: Sequence[Pose]) -> List[Vec]:
+  """`points` carried by every pose: the hull inputs along a segment's way."""
+  seen = [pose.apply_all(points) for pose in poses]
+  carried = np.concatenate(seen) if len(seen) > 1 else seen[0]
+  return list(map(tuple, carried.tolist()))
+
+
+def _carried(points: np.ndarray, poses: Sequence[Pose], frame: Sequence[Pose]) -> List[Vec]:
+  """`points` carried by every pose of the way, as the world sees them through every pose of the
+  frame: the way itself, then where the frame holds it."""
+  own = [pose.apply_all(points) for pose in poses]
+  seen = [where.apply_all(at) for at in own for where in frame]
+  carried = np.concatenate(seen) if len(seen) > 1 else seen[0]
+  return list(map(tuple, carried.tolist()))
+
+
 @dataclasses.dataclass
 class Group:
   """Things that move together, rigidly: their solid pieces as they are now, and their way, as
@@ -610,8 +642,7 @@ class Group:
     """Each piece's hull over segment `k`, and its slack."""
     segment = self.segments[k]
     return [
-      (piece, [pose.apply(p) for pose in segment.poses for p in piece.points], segment.slack)
-      for piece in self.pieces
+      (piece, _through_poses(piece.array, segment.poses), segment.slack) for piece in self.pieces
     ]
 
   def frame_poses(self, segment: Segment) -> List[Pose]:
@@ -633,12 +664,7 @@ class Group:
     segment = self.segments[k]
     frame = self.frame_poses(segment)
     return [
-      (
-        piece,
-        [f.apply(pose.apply(p)) for pose in segment.poses for f in frame for p in piece.points],
-        segment.slack,
-      )
-      for piece in self.pieces
+      (piece, _carried(piece.array, segment.poses, frame), segment.slack) for piece in self.pieces
     ]
 
   def _frame_at(self, t: float) -> Pose:
@@ -656,8 +682,8 @@ class Group:
     return rest
 
   def pose_at(self, t: float) -> Pose:
-    """The group's pose at time `t`, as the world sees it: the frame it rides, then its own way
-    between the segment's poses. Where its way does not cover `t`, where it stands."""
+    """The group's pose at time `t`, as the world sees it: its own way between the segment's poses,
+    and the frame it rides carrying it. Where its way does not cover `t`, where it stands."""
     for segment in self.segments:
       if (
         segment.start <= t <= segment.end
@@ -670,7 +696,7 @@ class Group:
           if len(segment.poses) == 2
           else segment.poses[round(f * (len(segment.poses) - 1))]
         )
-        return self._frame_at(t).then(own)
+        return own.then(self._frame_at(t))
     return STILL
 
 
@@ -837,25 +863,30 @@ def _pose_between(p0: Pose, p1: Pose, f: float) -> Pose:
 def _samples(segment: Segment) -> List[Tuple[float, Pose]]:
   """A segment's way, finely: how far into its time, and the pose then.
 
-  A segment of two poses moves from one to the other, and is walked at about a millimetre or a
-  degree a step. A segment of more poses spans a box on independent axes, along no known line, so
-  its poses stand for themselves and are sampled as they are.
+  The way is walked at about a millimetre or a degree a step. A segment of two poses moves from one
+  to the other. A segment of more poses spans a box on independent axes, along no known line, so
+  its way is walked straight from pose to pose: where the drive actually goes is the box's to hide,
+  and the walk only says where along such a line the meeting would be.
   """
-  if len(segment.poses) == 2:
+  most = len(segment.poses) - 1
+  out: List[Tuple[float, Pose]] = []
+  for k in range(most):
+    a, b = segment.poses[k], segment.poses[k + 1]
     span = max(
       math.hypot(
-        segment.poses[1].shift[0] - segment.poses[0].shift[0],
-        segment.poses[1].shift[1] - segment.poses[0].shift[1],
-        segment.poses[1].shift[2] - segment.poses[0].shift[2],
+        b.shift[0] - a.shift[0],
+        b.shift[1] - a.shift[1],
+        b.shift[2] - a.shift[2],
       )
       / SAMPLE_SHIFT_MM,
-      abs(segment.poses[1].turn - segment.poses[0].turn) / SAMPLE_TURN_DEG,
+      abs(b.turn - a.turn) / SAMPLE_TURN_DEG,
       1.0,
     )
     n = min(math.ceil(span), SAMPLE_MOST)
-    return [(j / n, _pose_between(segment.poses[0], segment.poses[1], j / n)) for j in range(n + 1)]
-  most = len(segment.poses) - 1
-  return [(k / most, pose) for k, pose in enumerate(segment.poses)]
+    for j in range(n):
+      out.append(((k + j / n) / most, _pose_between(a, b, j / n)))
+  out.append((1.0, segment.poses[-1]))
+  return out
 
 
 def check(
@@ -928,7 +959,7 @@ def check(
     for f, _ in _samples(segment):
       t = segment.start + f * span
       pose = group.pose_at(t)
-      if distance([pose.apply(q) for q in piece.points], other.points) <= 0.0:
+      if distance(pose.apply_all(piece.array).tolist(), other.points) <= 0.0:
         return t, pose
     return None, None
 
