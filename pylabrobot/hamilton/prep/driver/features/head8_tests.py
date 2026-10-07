@@ -36,6 +36,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_1000uL,
 )
+from pylabrobot.resources.lid import Lid
 from pylabrobot.resources.tip_tracker import does_tip_tracking, set_tip_tracking
 from pylabrobot.resources.volume_tracker import does_volume_tracking, set_volume_tracking
 
@@ -161,6 +162,34 @@ def test_head8_full_flow():
     )
     await p.head8.drop_tips(spots)
 
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_head8_tip_commands_refuse_a_rack_no_head_can_reach():
+  """A rack under a lid is not picked up from, nor dropped into, and nothing is sent."""
+
+  async def _run() -> None:
+    deck, tip_rack, _, _ = _make_deck()
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
+    await p.setup()
+    assert p.head8 is not None
+    spots = tip_rack.column(0)
+
+    tip_rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    sent, _ = _record_send(p)
+    with pytest.raises(ValueError, match="pick up tips from 'ntr': it is not available"):
+      await p.head8.pick_up_tips(spots)
+    assert sent == []
+
+    tip_rack.lid.unassign()
+    await p.head8.pick_up_tips(spots)
+    tip_rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    sent.clear()
+    with pytest.raises(ValueError, match="drop tips into 'ntr': it is not available"):
+      await p.head8.drop_tips(spots)
+    assert sent == []
     await p.stop()
 
   asyncio.run(_run())

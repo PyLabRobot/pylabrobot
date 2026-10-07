@@ -1403,22 +1403,22 @@ class TestCoveredTipRacks(unittest.IsolatedAsyncioTestCase):
     await self.lh.setup()
 
   async def test_only_the_top_rack_of_a_stack_can_be_picked_up_from(self):
-    with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'bottom': it is not available for tip handling"):
       await self.lh.pick_up_tips([self.bottom.get_item("A1")])
     self.backend.pick_up_tips.assert_not_called()
     await self.lh.pick_up_tips([self.top.get_item("A1")])
     self.backend.pick_up_tips.assert_called_once()
 
   async def test_tips_are_not_dropped_into_a_covered_rack(self):
-    with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'bottom': it is not available for tip handling"):
       await self.lh.drop_tips([self.bottom.get_item("A1")])
     self.backend.drop_tips.assert_not_called()
 
   async def test_a_lid_covers_a_rack_for_the_96_head(self):
     self.top.lid = Lid("lid", size_x=127.76, size_y=85.48, size_z=10.0, nesting_z_height=2.0)
-    with self.assertRaisesRegex(ValueError, "'top': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'top': it is not available for tip handling"):
       await self.lh.pick_up_tips96(self.top)
-    with self.assertRaisesRegex(ValueError, "'top': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'top': it is not available for tip handling"):
       await self.lh.drop_tips96(self.top)
     self.backend.pick_up_tips96.assert_not_called()
     self.backend.drop_tips96.assert_not_called()
