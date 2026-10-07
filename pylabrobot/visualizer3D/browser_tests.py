@@ -280,6 +280,11 @@ def modelled(viewer: Viewer3D) -> int:
   return sum(1 for model in scene["instances"]["model"] if "mesh" in scene["models"][model])
 
 
+def listed(viewer: Viewer3D) -> int:
+  """How many resources the scene names: what `resources()` counts once all have arrived."""
+  return len(viewer._scene_message()["instances"]["names"])
+
+
 @unittest.skipUnless(CHROME, "no headless browser to drive")
 class BrowserTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
@@ -734,7 +739,9 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     try:
       async with Browser() as browser:
         await browser.open(viewer.url)
-        await browser.settle("window.plrViewer && window.plrViewer.resources().length > 3000", 60)
+        await browser.settle(
+          f"window.plrViewer && window.plrViewer.resources().length === {listed(viewer)}", 60
+        )
         await browser.settle(f"window.plrViewer.models().length === {modelled(viewer)}", 60)
         await browser.frames()
         self.assertGreater(await browser.drawn_fraction("#viewport"), 0.02, "the opening view")
@@ -833,7 +840,9 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     try:
       async with Browser() as browser:
         await browser.open(viewer.url)
-        await browser.settle("window.plrViewer && window.plrViewer.resources().length > 3000", 60)
+        await browser.settle(
+          f"window.plrViewer && window.plrViewer.resources().length === {listed(viewer)}", 60
+        )
         rack = star.deck.get_resource("tips_0")
         assert isinstance(rack, TipRack) and star.pipettes is not None
         spot = rack.get_item("A1")
