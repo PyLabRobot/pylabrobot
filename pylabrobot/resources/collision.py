@@ -38,8 +38,6 @@ import math
 import os
 from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
-import numpy as np
-
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.lid import Lid
@@ -100,18 +98,9 @@ class Pose:
       p = (self.pivot[0] + c * x - s * y, self.pivot[1] + s * x + c * y, p[2])
     return _add(p, self.shift)
 
-  def apply_all(self, points: Union[np.ndarray, Sequence[Vec]]) -> np.ndarray:
-    """Every point of `points`, carried by this pose: `apply` for many at once, as an (n, 3)
-    array."""
-    out = np.array(points, dtype=float)
-    if self.turn:
-      c, s = math.cos(math.radians(self.turn)), math.sin(math.radians(self.turn))
-      x = out[:, 0] - self.pivot[0]
-      y = out[:, 1] - self.pivot[1]
-      out[:, 0] = self.pivot[0] + c * x - s * y
-      out[:, 1] = self.pivot[1] + s * x + c * y
-    out += np.asarray(self.shift)
-    return out
+  def apply_all(self, points: Sequence[Vec]) -> List[Vec]:
+    """Every point of `points`, carried by this pose: `apply` for many at once."""
+    return [self.apply(p) for p in points]
 
   def _linear(self) -> Tuple[float, Vec]:
     """This pose as a turn about the origin and a shift: p -> R p + t."""
@@ -154,7 +143,6 @@ class Piece:
 
   def __post_init__(self) -> None:
     self.lo, self.hi = _bounds(self.points)
-    self.array = np.array(self.points, dtype=float)
 
 
 def _bounds(points: Iterable[Vec]) -> Tuple[Vec, Vec]:
@@ -500,7 +488,7 @@ def _support(points: Sequence[Vec], d: Vec) -> Vec:
 
 
 def _solve(g: List[List[float]], b: List[float]) -> Optional[List[float]]:
-  """Solve the linear system `g` · x = `b` by Gaussian elimination, or None where it is singular."""
+  """Solve the linear system `g` Â· x = `b` by Gaussian elimination, or None where it is singular."""
   n = len(b)
   m = [row[:] + [b[i]] for i, row in enumerate(g)]
   for col in range(n):
@@ -631,20 +619,16 @@ class Segment:
   end: float = 1.0
 
 
-def _through_poses(points: np.ndarray, poses: Sequence[Pose]) -> List[Vec]:
+def _through_poses(points: Sequence[Vec], poses: Sequence[Pose]) -> List[Vec]:
   """`points` carried by every pose: the hull inputs along a segment's way."""
-  seen = [pose.apply_all(points) for pose in poses]
-  carried = np.concatenate(seen) if len(seen) > 1 else seen[0]
-  return list(map(tuple, carried.tolist()))
+  return [carried for pose in poses for carried in pose.apply_all(points)]
 
 
-def _carried(points: np.ndarray, poses: Sequence[Pose], frame: Sequence[Pose]) -> List[Vec]:
+def _carried(points: Sequence[Vec], poses: Sequence[Pose], frame: Sequence[Pose]) -> List[Vec]:
   """`points` carried by every pose of the way, as the world sees them through every pose of the
   frame: the way itself, then where the frame holds it."""
   own = [pose.apply_all(points) for pose in poses]
-  seen = [where.apply_all(at) for at in own for where in frame]
-  carried = np.concatenate(seen) if len(seen) > 1 else seen[0]
-  return list(map(tuple, carried.tolist()))
+  return [seen for at in own for where in frame for seen in where.apply_all(at)]
 
 
 @dataclasses.dataclass
@@ -668,7 +652,7 @@ class Group:
     """Each piece's hull over segment `k`, and its slack."""
     segment = self.segments[k]
     return [
-      (piece, _through_poses(piece.array, segment.poses), segment.slack) for piece in self.pieces
+      (piece, _through_poses(piece.points, segment.poses), segment.slack) for piece in self.pieces
     ]
 
   def frame_poses(self, segment: Segment) -> List[Pose]:
@@ -690,7 +674,7 @@ class Group:
     segment = self.segments[k]
     frame = self.frame_poses(segment)
     return [
-      (piece, _carried(piece.array, segment.poses, frame), segment.slack) for piece in self.pieces
+      (piece, _carried(piece.points, segment.poses, frame), segment.slack) for piece in self.pieces
     ]
 
   def _frame_at(self, t: float) -> Pose:
@@ -1000,7 +984,7 @@ def check(
     for f, _ in _samples(segment):
       t = segment.start + f * span
       pose = group.pose_at(t, relative=relative)
-      if distance(pose.apply_all(piece.array).tolist(), other.points) <= 0.0:
+      if distance(pose.apply_all(piece.points), other.points) <= 0.0:
         return t, pose
     return None, None
 
