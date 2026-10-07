@@ -15,6 +15,7 @@ pylabrobot.resources.tip\_rack.StandingTipRack
    .. autosummary::
       :toctree: .
    
+      ~StandingTipRack.available_for_tip_handling
       ~StandingTipRack.frame_height
       ~StandingTipRack.item_dx
       ~StandingTipRack.item_dy

@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.StandingTipRack.available\_for\_tip\_handling
+============================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. autoproperty:: StandingTipRack.available_for_tip_handling
