@@ -99,8 +99,21 @@ class Pose:
     return _add(p, self.shift)
 
   def apply_all(self, points: Sequence[Vec]) -> List[Vec]:
-    """Every point of `points`, carried by this pose: `apply` for many at once."""
-    return [self.apply(p) for p in points]
+    """Every point of `points`, carried by this pose: `apply` for many at once, the turn's cosine
+    and sine taken once for all of them."""
+    sx, sy, sz = self.shift
+    if not self.turn:
+      return [(p[0] + sx, p[1] + sy, p[2] + sz) for p in points]
+    c, s = math.cos(math.radians(self.turn)), math.sin(math.radians(self.turn))
+    px, py = self.pivot[0], self.pivot[1]
+    return [
+      (
+        px + c * (p[0] - px) - s * (p[1] - py) + sx,
+        py + s * (p[0] - px) + c * (p[1] - py) + sy,
+        p[2] + sz,
+      )
+      for p in points
+    ]
 
   def _linear(self) -> Tuple[float, Vec]:
     """This pose as a turn about the origin and a shift: p -> R p + t."""
