@@ -20,7 +20,6 @@ from pylabrobot.hamilton.star.driver.features.iswap_transport import (
   Rise,
   iSWAPTransport,
 )
-from pylabrobot.hamilton.star.driver.features.star_collisions import CollisionError
 from pylabrobot.hamilton.star.motion import attach_viewer_collisions, attach_viewer_motion
 
 from .demo import build_facility, star_of
@@ -67,10 +66,19 @@ async def main() -> None:
     print("the run is paused where it ended; ctrl-c ends the demo")
     await asyncio.Event().wait()
 
-  # The way is acted out to the instant of the meeting: the clean steps play as they would, and the
-  # step the meeting falls in is driven part way there. The checks refuse the last of it - what
-  # they found is drawn, and the arm stands where the fingers would have met.
+  # Where the way can be walked to the meeting, it is: the clean steps play as they would, and the
+  # step the meeting falls in is driven part way there, so the arm stands where the fingers would
+  # have met. A meeting the walk could not place inside the way - a hull that only leans on what it
+  # sweeps - is not driven to: the run stops where it stands and the boxes say what would have met.
   met = [c for c in found if c.when is not None]
+  if not met:
+    await viewer.show_collisions(found)
+    hit = ", ".join(sorted({collision.obstacle.name for collision in found}))
+    print(f"the pick-up was refused before anything moved: the fingers met {hit}")
+    for collision in found:
+      print(f"  {collision}")
+    print("the run is paused where it stands; ctrl-c ends the demo")
+    await asyncio.Event().wait()
   first = min(met, key=lambda c: c.when if c.when is not None else float("inf"))
   when = first.when
   assert when is not None
@@ -83,14 +91,11 @@ async def main() -> None:
     raise RuntimeError(f"acting out a meeting inside a {type(step).__name__} is not done here")
   stood_at = max(s.z for s in plan.steps[:step_index] if isinstance(s, Rise))
   here = await iswap.elbow_request_z_position()
-  try:
-    await iswap.elbow_move_to_z_position(
-      round(here + (step.z - stood_at) * moment, 1),
-      speed=step.speed,
-      acceleration=step.acceleration,
-    )
-  except CollisionError:
-    pass  # the gate drew what it found and refused the last of the way
+  await iswap.elbow_move_to_z_position(
+    round(here + (step.z - stood_at) * moment, 1),
+    speed=step.speed,
+    acceleration=step.acceleration,
+  )
   await viewer.show_collisions(found)
   hit = ", ".join(sorted({collision.obstacle.name for collision in found}))
   print(f"the way is held {moment * 100:.0f}% into the descent: the fingers met {hit}")
