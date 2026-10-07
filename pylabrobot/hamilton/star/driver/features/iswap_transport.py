@@ -47,7 +47,7 @@ from typing import (
 )
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.lid import Liddable, Lid
+from pylabrobot.resources.lid import Lid, Liddable
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.plate_adapter import PlateAdapter
 from pylabrobot.resources.resource import Resource

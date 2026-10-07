@@ -49,11 +49,11 @@ from pylabrobot.hamilton.star.driver.features.star_collisions import (
   check_pipette_move,
 )
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.hamilton.core_grippers import (
   HamiltonCoreGrippers,
   HamiltonCoreGripperTool,
 )
+from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.tip_rack import TipSpot, resting_location
 
 # The driver states no X speed or acceleration: these are fitted to a STAR's own timings, from 2.56
