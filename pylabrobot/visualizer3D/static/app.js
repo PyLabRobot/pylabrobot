@@ -610,4 +610,3 @@ showPane("tree");
 resize();
 
 connect();
-
