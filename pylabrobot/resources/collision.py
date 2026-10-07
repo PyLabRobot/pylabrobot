@@ -683,7 +683,9 @@ class Group:
 
   def pose_at(self, t: float) -> Pose:
     """The group's pose at time `t`, as the world sees it: its own way between the segment's poses,
-    and the frame it rides carrying it. Where its way does not cover `t`, where it stands."""
+    and the frame it rides carrying it. Before its way, where it stands; after it, where its way
+    ends."""
+    rest = STILL
     for segment in self.segments:
       if (
         segment.start <= t <= segment.end
@@ -697,7 +699,9 @@ class Group:
           else segment.poses[round(f * (len(segment.poses) - 1))]
         )
         return own.then(self._frame_at(t))
-    return STILL
+      if segment.end <= t and math.isfinite(segment.end):
+        rest = segment.poses[-1]
+    return rest
 
 
 def moving(
