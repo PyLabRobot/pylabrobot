@@ -15,8 +15,8 @@ be solid or not by how it holds its children:
   on a plate;
 - a resource whose children lie outside its box - a channel with its tip mounting shaft below it, a
   finger with its pad - is solid, and so are its children;
-- a resource whose children lie inside its box - a deck, a carrier, the X-arm - is a frame: only
-  its base, from its bottom up to the lowest thing it holds, is solid (a carrier's body under its
+- a resource whose children lie inside its box - a deck, a carrier, an arm - is a frame: only its
+  base, from its bottom up to the lowest thing it holds, is solid (a carrier's body under its
   sites, the deck's slab), and its children are looked at in turn.
 
 Sweeps. A group's way is cut into segments; each segment is the convex hull of the group's pieces
@@ -57,22 +57,27 @@ CONTACT = 0.05
 
 
 def _sub(a: Vec, b: Vec) -> Vec:
+  """`a` less `b`, by coordinate."""
   return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
 
 
 def _add(a: Vec, b: Vec) -> Vec:
+  """`a` plus `b`, by coordinate."""
   return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
 
 
 def _dot(a: Vec, b: Vec) -> float:
+  """The dot product of `a` and `b`."""
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 
 def _scale(a: Vec, k: float) -> Vec:
+  """`a` with each coordinate multiplied by `k`."""
   return (a[0] * k, a[1] * k, a[2] * k)
 
 
 def _vec(c: Coordinate) -> Vec:
+  """`c` as a plain tuple."""
   return (c.x, c.y, c.z)
 
 
@@ -88,6 +93,7 @@ class Pose:
   shift: Vec = (0.0, 0.0, 0.0)
 
   def apply(self, p: Vec) -> Vec:
+    """`p` carried by this pose: turned about its pivot, then shifted."""
     if self.turn:
       c, s = math.cos(math.radians(self.turn)), math.sin(math.radians(self.turn))
       x, y = p[0] - self.pivot[0], p[1] - self.pivot[1]
@@ -118,9 +124,9 @@ class Pose:
     return Pose(turn + other.turn, (0.0, 0.0, 0.0), other.apply(t))
 
   def inverse(self) -> "Pose":
+    """The pose that undoes this one."""
     turn, t = self._linear()
-    back = Pose(-turn)
-    return Pose(-turn, (0.0, 0.0, 0.0), _scale(back.apply(t), -1.0))
+    return Pose(-turn, (0.0, 0.0, 0.0), _scale(Pose(-turn).apply(t), -1.0))
 
   def after(self, x: float, y: float, z: float = 0.0) -> "Pose":
     """This pose, taken after a shift by (`x`, `y`, `z`) where things are now."""
@@ -129,6 +135,7 @@ class Pose:
 
   @staticmethod
   def shifted(x: float = 0.0, y: float = 0.0, z: float = 0.0) -> "Pose":
+    """A shift by (`x`, `y`, `z`), no turn."""
     return Pose(shift=(x, y, z))
 
 
@@ -151,6 +158,7 @@ class Piece:
 
 
 def _bounds(points: Iterable[Vec]) -> Tuple[Vec, Vec]:
+  """The lowest and highest corner of `points`, by coordinate."""
   xs, ys, zs = zip(*points)
   return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
 
@@ -188,6 +196,7 @@ def _absolute(resource: Resource) -> Coordinate:
 
 
 def _flat(resource: Resource) -> bool:
+  """Whether `resource` is thin enough on every axis to be a surface rather than a solid."""
   return min(resource.get_size_x(), resource.get_size_y(), resource.get_size_z()) <= CONTACT
 
 
@@ -214,12 +223,16 @@ def _hull_files() -> Dict[str, str]:
 
 @functools.lru_cache(maxsize=None)
 def _hulls_for_model(model: str) -> Optional[Tuple[Tuple[Vec, ...], ...]]:
+  """The hulls of the model's file, scaled to mm, or None where the model ships none."""
   path = _hull_files().get(model)
   if path is None:
     return None
   with open(path, encoding="utf-8") as f:
     data = json.load(f)
-  scale = {"mm": 1.0, "m": 1000.0}[data.get("units", "mm")]
+  units = data.get("units", "mm")
+  if units not in ("mm", "m"):
+    raise ValueError(f"{path}: hulls are in {units!r}, and only 'mm' or 'm' are known")
+  scale = {"mm": 1.0, "m": 1000.0}[units]
   return tuple(
     tuple((p[0] * scale, p[1] * scale, p[2] * scale) for p in hull) for hull in data["hulls"]
   )
@@ -232,6 +245,7 @@ def declared_hulls(resource: Resource) -> Optional[Tuple[Tuple[Vec, ...], ...]]:
 
 
 def _hull_pieces(resource: Resource, hulls: Sequence[Sequence[Vec]]) -> List["Piece"]:
+  """Each declared hull as a piece of `resource`, at `resource`'s place and turned as it is."""
   origin = _absolute(resource)
   rotation = resource.get_absolute_rotation()
   return [
@@ -261,6 +275,7 @@ def solid_pieces(
   lows: Dict[int, Optional[float]] = {}
 
   def box(resource: Resource) -> Tuple[Vec, Vec]:
+    """`resource`'s box, worked out once."""
     if id(resource) not in boxes:
       boxes[id(resource)] = _bounds(_corners(resource))
     return boxes[id(resource)]
@@ -280,6 +295,7 @@ def solid_pieces(
     return lows[id(resource)]
 
   def lowest_here(resource: Resource) -> Optional[float]:
+    """The lowest bottom of anything `resource` holds, worked out here."""
     low: Optional[float] = None
     for child in resource.children:
       if id(child) in leave_out:
@@ -293,6 +309,7 @@ def solid_pieces(
     return low
 
   def visit(resource: Resource, into: List[Piece]) -> None:
+    """Walk `resource` for its pieces, through the kept-scene cache where there is one."""
     if id(resource) in leave_out:
       return
     if reuse is not None and resource is not root:
@@ -301,11 +318,13 @@ def solid_pieces(
       visit_here(resource, into)
 
   def work_out(resource: Resource) -> List[Piece]:
+    """`resource`'s pieces, walked here."""
     found: List[Piece] = []
     visit_here(resource, found)
     return found
 
   def visit_here(resource: Resource, into: List[Piece]) -> None:
+    """Walk `resource` for its pieces by the module docstring's rules, its children after it."""
     children = [c for c in resource.children if id(c) not in leave_out]
     if resource.category in enclosures:
       for child in children:
@@ -363,6 +382,7 @@ class _Reuse:
 
 
 def _rotation(resource: Resource) -> Tuple[float, float, float]:
+  """`resource`'s rotation as a plain tuple."""
   r = resource.rotation
   return (r.x, r.y, r.z)
 
@@ -430,6 +450,7 @@ class StaticScene(_Reuse):
     return ((where.x, where.y, where.z), (turn.x, turn.y, turn.z), shape)
 
   def pieces(self, resource: Resource, work_out: Callable[[], List[Piece]]) -> List[Piece]:
+    """`resource`'s pieces, kept from the last asking where nothing about it has changed."""
     key = self._key(resource)
     kept = self._kept.get(id(resource))
     if key is not None and kept is not None and kept[0] is resource and kept[1] == key:
@@ -441,6 +462,7 @@ class StaticScene(_Reuse):
     return found
 
   def lowest(self, resource: Resource, work_out: Callable[[], Optional[float]]) -> Optional[float]:
+    """The lowest thing `resource` holds, kept from the last asking where nothing has changed."""
     key = self._key(resource)
     kept = self._lows.get(id(resource))
     if key is not None and kept is not None and kept[0] is resource and kept[1] == key:
@@ -455,11 +477,12 @@ class StaticScene(_Reuse):
     self._leave_out = {id(r) for r in leave_out}
     self._keys = {}
     try:
-      return solid_pieces(self.root, set(self._leave_out), self.hollow, reuse=self)
+      return solid_pieces(self.root, self._leave_out, self.hollow, reuse=self)
     finally:
       self._keys = {}
 
   def obstacles(self, leave_out: Iterable[Resource] = ()) -> "Obstacles":
+    """The root's solid pieces as an obstacle tree, less `leave_out` and what is under it."""
     return Obstacles(self.solid_pieces(leave_out))
 
 
@@ -467,6 +490,7 @@ class StaticScene(_Reuse):
 
 
 def _support(points: Sequence[Vec], d: Vec) -> Vec:
+  """The point of `points` furthest along `d`."""
   best, best_dot = points[0], _dot(points[0], d)
   for p in points[1:]:
     k = _dot(p, d)
@@ -476,6 +500,7 @@ def _support(points: Sequence[Vec], d: Vec) -> Vec:
 
 
 def _solve(g: List[List[float]], b: List[float]) -> Optional[List[float]]:
+  """Solve the linear system `g` · x = `b` by Gaussian elimination, or None where it is singular."""
   n = len(b)
   m = [row[:] + [b[i]] for i, row in enumerate(g)]
   for col in range(n):
@@ -562,6 +587,7 @@ class _Node:
 
 
 def _meets(lo: Vec, hi: Vec, lo2: Vec, hi2: Vec) -> bool:
+  """Whether the box from `lo` to `hi` meets the box from `lo2` to `hi2`, by coordinate."""
   return all(lo[k] <= hi2[k] and lo2[k] <= hi[k] for k in range(3))
 
 
@@ -762,11 +788,11 @@ def turning(
 
 
 def trapezoid(
-  distance_mm: float, speed: float, acceleration: Optional[float]
+  distance: float, speed: float, acceleration: Optional[float]
 ) -> Tuple[float, Callable[[float], float]]:
-  """A trapezoidal (or triangular) profile over `distance_mm`: its duration, and the distance
-  covered by a time."""
-  d = abs(distance_mm)
+  """A trapezoidal (or triangular) profile over `distance`: its duration, and the distance covered
+  by a time."""
+  d = abs(distance)
   if d == 0 or speed <= 0:
     return 0.0, lambda t: 0.0
   if not acceleration:
@@ -842,15 +868,18 @@ class Collision:
 
 
 # How finely a reported sweep is walked to find where the meeting happens: the most shift or turn
-# between one sampled pose and the next.
-SAMPLE_SHIFT_MM = 1.0
+# between one sampled pose and the next, and the most samples one stretch is walked in (a very long
+# way is walked coarser than this, rather than in more steps).
+SAMPLE_SHIFT = 1.0
 SAMPLE_TURN_DEG = 1.0
 SAMPLE_MOST = 512
 
 
 def _pose_between(p0: Pose, p1: Pose, f: float) -> Pose:
   """The way between two poses, taken straight: a turn about the origin and a shift, each eased.
-  Exact where the move is straight, and within the segment's slack where it turns."""
+  Exact where the move is a shift; where it turns, this strays from the true turn about the pivot
+  by as much as the pivot is far from the origin, which the walk that uses it only asks for where
+  the meeting is, not whether it is."""
   turn0, shift0 = p0.turn, p0.apply((0.0, 0.0, 0.0))
   turn1, shift1 = p1.turn, p1.apply((0.0, 0.0, 0.0))
   return Pose(
@@ -882,7 +911,7 @@ def _samples(segment: Segment) -> List[Tuple[float, Pose]]:
         b.shift[1] - a.shift[1],
         b.shift[2] - a.shift[2],
       )
-      / SAMPLE_SHIFT_MM,
+      / SAMPLE_SHIFT,
       abs(b.turn - a.turn) / SAMPLE_TURN_DEG,
       1.0,
     )
@@ -919,8 +948,9 @@ def check(
 
   A meeting against what stands still is walked finely once it is found: the way is sampled, and
   the collision carries where the mover first met (`when`, `at`), so what it ran into can be
-  brought to where the meeting happened and held there. Between groups, both are on their way and
-  the meeting stands as the sweep found it.
+  brought to where the meeting happened and held there. Between groups, the meeting stands as the
+  sweep found it - except where one group stands still while the other passes, which is walked
+  finely as well.
   """
   allowed = {id(r) for r in allow}
   if obstacles is None:
@@ -928,7 +958,7 @@ def check(
     obstacles = Obstacles(solid_pieces(root, leave_out))
   reach = max(clearance, 0.0)
   found: List[Collision] = []
-  seen: Set[Tuple[int, int, str]] = set()
+  reported: Dict[Tuple[int, int, str, Optional[str]], Collision] = {}
 
   def report(
     mover: Piece,
@@ -936,14 +966,19 @@ def check(
     group: str,
     k: int,
     gap: float,
-    other=None,
+    other: Optional[str] = None,
     when: Optional[float] = None,
     at: Optional[Pose] = None,
   ) -> None:
-    key = (id(mover.resource), id(obstacle), group)
-    if key not in seen:
-      seen.add(key)
-      found.append(Collision(mover.resource, obstacle, group, k, max(gap, 0.0), other, when, at))
+    """Say one meeting of `mover` and `obstacle` in `group`, keeping the closest of a pair."""
+    key = (id(mover.resource), id(obstacle), group, other)
+    earlier = reported.get(key)
+    if earlier is not None and earlier.gap <= gap:
+      return
+    if earlier is not None:
+      found.remove(earlier)
+    reported[key] = Collision(mover.resource, obstacle, group, k, max(gap, 0.0), other, when, at)
+    found.append(reported[key])
 
   def contact(
     piece: Piece, group: Group, k: int, other: Piece
@@ -1010,6 +1045,8 @@ def check(
   ask = between_groups if callable(between_groups) else (lambda a, b: True)
 
   def timeline(g: Group) -> Group:
+    """`g` standing where it starts before its way and where it ends after it, so a pair is
+    compared over every time."""
     if not g.segments:
       return Group(g.name, g.pieces, [Segment([STILL], 0.0, -math.inf, math.inf)], g.frame)
     first, last = g.segments[0], g.segments[-1]
@@ -1023,6 +1060,7 @@ def check(
     )
 
   def pair(a: Group, b: Group) -> Optional[Tuple[Group, list, Group, list]]:
+    """The two groups' timelines and swept hulls, or None the caller lets them off."""
     if not ask(a.name, b.name):
       return None
     ta, tb = timeline(a), timeline(b)
@@ -1055,14 +1093,7 @@ def check(
           # Where the other stands where it stood - still, or before or after its own way - the
           # meeting is walked finely as well; both on their way, it stands as the sweep found it.
           when = at = None
-          if all(pose == STILL for pose in sb.poses):
+          if all(pose.turn == 0.0 and pose.shift == (0.0, 0.0, 0.0) for pose in sb.poses):
             when, at = contact(pa, a, ka, pb)
           report(pa, pb.resource, a.name, ka, gap, b.name, when=when, at=at)
   return found
-
-
-def pieces_by_name(pieces: Iterable[Piece]) -> Dict[str, List[Piece]]:
-  by: Dict[str, List[Piece]] = {}
-  for p in pieces:
-    by.setdefault(p.resource.name, []).append(p)
-  return by

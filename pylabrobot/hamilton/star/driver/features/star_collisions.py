@@ -346,7 +346,3 @@ def check_head_move(
     clearance,
     root if root is not None else root_of(arm),
   )
-
-
-def describe(collisions: Sequence[Collision]) -> str:
-  return "\n".join(str(c) for c in collisions) or "nothing in the way"

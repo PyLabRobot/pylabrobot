@@ -73,6 +73,7 @@ class Joints:
   wrist: float
 
   def but(self, **changes: float) -> "Joints":
+    """These joints with the named drives changed."""
     return dataclasses.replace(self, **changes)
 
 
@@ -88,6 +89,7 @@ class Parts:
 
 
 def parts_of(transport: iSWAPTransport) -> Parts:
+  """The iSWAP's rigid parts as resources, from what the gripper hangs from."""
   gripper = transport.iswap.gripper
   link = gripper.parent
   column = link.parent
@@ -97,6 +99,7 @@ def parts_of(transport: iSWAPTransport) -> Parts:
 
 
 def joints_now(transport: iSWAPTransport) -> Joints:
+  """Where the transport's arm stands now, as `Joints`."""
   iswap = transport.iswap
   drive = iswap.elbow_get_reference_point_location()
   elbow, wrist = iswap.elbow_drive_get_angle(), iswap.wrist_drive_get_angle()
@@ -109,26 +112,32 @@ class Kinematics:
   """Where the parts go, as rigid moves from where they are at `now`, for any joints."""
 
   def __init__(self, transport: iSWAPTransport, now: Joints):
-    self.link_1, self.tool, self.straight = transport._lengths()
+    self.link_1, self.tool, _ = transport._lengths()
     self.now = now
     self.origin = transport.deck.get_absolute_location()  # the checks are made in absolute terms
     turned = math.radians(transport.iswap.gripper.get_absolute_rotation().z)
     self.jaw_axis = (-math.sin(turned), math.cos(turned))  # the gripper's own +Y, now
 
   def wrist(self, j: Joints) -> Tuple[float, float]:
+    """Where the wrist joint sits at `joints`, on the deck."""
     link = math.radians(j.elbow - 90.0)
     return j.x + self.link_1 * math.cos(link), j.y + self.link_1 * math.sin(link)
 
   def _abs(self, x: float, y: float) -> Tuple[float, float, float]:
+    """(`x`, `y`) on the deck as absolute terms."""
     return (x + self.origin.x, y + self.origin.y, 0.0)
 
   def column(self, j: Joints) -> Pose:
+    """The column's move to `joints`: it slides with the carriage."""
     return Pose(shift=(j.x - self.now.x, j.y - self.now.y, j.z - self.now.z))
 
   def link(self, j: Joints) -> Pose:
+    """Link 1's move to `joints`: it turns about the column as the elbow turns."""
     return Pose(j.elbow - self.now.elbow, self._abs(self.now.x, self.now.y), self.column(j).shift)
 
   def gripper(self, j: Joints) -> Pose:
+    """The gripper's move to `joints`: it turns as the elbow and wrist turn, and slides as the
+    wrist's end does."""
     w0, w = self.wrist(self.now), self.wrist(j)
     turn = (j.elbow - self.now.elbow) + (j.wrist - self.now.wrist)
     return Pose(turn, self._abs(*w0), (w[0] - w0[0], w[1] - w0[1], j.z - self.now.z))
@@ -187,6 +196,9 @@ class _Sweeps:
     self.carried: List[Segment] = []
 
   def _states(self, a: Joints, b: Joints, f0: float, f1: float) -> List[Joints]:
+    """The joints on the line from `a` to `b`, at fractions `f0` and `f1` of it - the x at the
+    plan's own, which the carriage's frame carries."""
+
     def at(f: float) -> Joints:
       return Joints(
         self.kin.now.x,
@@ -199,6 +211,7 @@ class _Sweeps:
     return [at(f) for f in (f0, f1)]
 
   def _add(self, states: List[Joints], slack: float, s0: float, s1: float, opens=(0.0, 0.0)):
+    """Append a segment for every part: its poses at `states`, the fingers opened by `opens`."""
     kin = self.kin
     for name, pose in (("column", kin.column), ("link", kin.link), ("gripper", kin.gripper)):
       self.parts[name].append(Segment([pose(s) for s in states], slack, s0, s1))
@@ -236,7 +249,6 @@ class PlanSweeps:
 
   groups: List[Group]
   touches: List[Resource]
-  end: Joints
   held: Optional[Resource] = None
   exemptions: Exemptions = dataclasses.field(default_factory=Exemptions)
 
@@ -329,7 +341,6 @@ def sweeps(transport: iSWAPTransport, plan: Plan) -> PlanSweeps:
   return PlanSweeps(
     groups,
     touches,
-    j,
     held,
     Exemptions(
       machine=machine,

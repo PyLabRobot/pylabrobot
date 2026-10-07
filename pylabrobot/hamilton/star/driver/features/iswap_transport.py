@@ -22,7 +22,7 @@ the drives can reach, the driver's pose check passes, and is nearest where the j
 
 The resource tree follows the plate: once the jaws have closed on it, it hangs from the gripper
 where it is; once they open, it is placed where PyLabRobot places anything on what it was put down
-on - a site, a plate adapter, a stack, a plate for a lid - as the arm capability once did.
+on - a site, a plate adapter, a stack, a plate for a lid.
 
 Before a plan runs, what it sweeps is checked against what stands around the arm and what rides the
 X-arm with it (`iswap_collisions.check_plan`); a plan that would hit something is refused with an
@@ -32,7 +32,19 @@ X-arm with it (`iswap_collisions.check_plan`); a plan that would hit something i
 import asyncio
 import dataclasses
 import math
-from typing import Any, Awaitable, Callable, List, Literal, Optional, Sequence, Tuple, Union, cast
+from typing import (
+  Any,
+  Awaitable,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+  Union,
+  cast,
+)
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.lid import Liddable, Lid
@@ -50,10 +62,10 @@ GripDirection = Literal["front", "back", "left", "right"]
 # numbers it (`C0 PP gr`: 1 = -Y, 2 = +X, 3 = +Y, 4 = -X): the side the wrist is on. The gripper then
 # faces the other way - a front grip faces +Y, deck degrees counter-clockwise from +X, as
 # `GRIPPER_DECK_DIRECTIONS` states them.
-GRIPPER_FACING: dict = {"front": 90.0, "right": 180.0, "back": -90.0, "left": 0.0}
+GRIPPER_FACING: Dict[str, float] = {"front": 90.0, "right": 180.0, "back": -90.0, "left": 0.0}
 
 # The elbow stops, as the deck angle link 1 lies along: the drive's own angle less a quarter turn.
-ELBOW_STOPS: dict = {"left": -180.0, "front": -90.0, "right": 0.0}
+ELBOW_STOPS: Dict[str, float] = {"left": -180.0, "front": -90.0, "right": 0.0}
 
 # Legacy's defaults (`STARBackend.pick_up_resource`), in mm.
 OPEN_MARGIN = 3.0  # the jaws open this much wider than the plate
@@ -120,6 +132,7 @@ def place(
 
 
 def _rotate(point: Coordinate, degrees: float) -> Coordinate:
+  """The point turned `degrees` degrees counter-clockwise about the origin."""
   a = math.radians(degrees)
   return Coordinate(
     point.x * math.cos(a) - point.y * math.sin(a),
@@ -228,6 +241,7 @@ class Plan:
   """Which way the gripper faces, deck degrees."""
 
   def describe(self) -> str:
+    """The plan's steps, as the driver would say them."""
     lines = [
       f"elbow {self.reach.elbow} ({self.reach.elbow_angle:.1f} deg), wrist "
       f"{self.reach.wrist_angle:.1f} deg, gripper facing {self.facing:.0f} deg"
@@ -408,6 +422,7 @@ class iSWAPTransport:
   SWEEP_SAMPLES = 36
 
   def _holds(self, elbow: float, wrist: float, y: float) -> bool:
+    """Whether the pose is inside what the arm can reach at all."""
     try:
       self.iswap._check_pose_reachable(elbow, wrist, y=y)
       return True
@@ -415,6 +430,7 @@ class iSWAPTransport:
       return False
 
   def _sweep_clear(self, elbow: float, wrist: float, reach: Reach, y: float) -> bool:
+    """Whether the elbow's sweep from where it is to `reach` stays over the deck at `y`."""
     n = self.SWEEP_SAMPLES
     return all(
       self._holds(
@@ -454,35 +470,11 @@ class iSWAPTransport:
         return travel
     return None
 
-  def _arm_points(self, reach: Optional[Reach] = None) -> List[Coordinate]:
-    """The elbow, the wrist and the grip centre - where they are, or where `reach` puts them."""
-    link_1, tool, straight = self._lengths()
-    if reach is None:
-      drive = self.iswap.elbow_get_reference_point_location()
-      elbow_angle = self.iswap.elbow_drive_get_angle() or 0.0
-      wrist_angle = self.iswap.wrist_drive_get_angle() or 0.0
-      if drive is None:
-        return []
-      x, y = drive.x, drive.y
-    else:
-      x, y, elbow_angle, wrist_angle = (
-        reach.elbow_x,
-        reach.elbow_y,
-        reach.elbow_angle,
-        reach.wrist_angle,
-      )
-    link = math.radians(elbow_angle - 90.0)
-    grip = link + math.radians(wrist_angle - straight)
-    wx, wy = x + link_1 * math.cos(link), y + link_1 * math.sin(link)
-    return [
-      Coordinate(x, y, 0),
-      Coordinate(wx, wy, 0),
-      Coordinate(wx + tool * math.cos(grip), wy + tool * math.sin(grip), 0),
-    ]
-
   def _reach_and_travel(
     self, grip: Coordinate, facing: float, elbow: Optional[str]
   ) -> Tuple[Reach, Travel]:
+    """The reach for `grip`, gripped across `facing`, and the travel of the elbow to it: which
+    elbow is asked for (`left`, `front`, `right`) ranks the reaches, the nearest one standing in."""
     reaches = self._ranked(self.reaches(grip, facing), elbow)
     for reach in reaches:
       travel = self._travel(reach)
@@ -496,6 +488,7 @@ class iSWAPTransport:
   # -- planning ---------------------------------------------------------------------------------
 
   def _grip_point(self, resource: Resource, offset: Coordinate, from_top: float) -> Coordinate:
+    """Where the grip centre sits to grip `resource`, `from_top` mm below its top, at `offset`."""
     centre = resource.center().rotated(resource.get_absolute_rotation())
     top = resource.get_location_wrt(self.deck, "l", "f", "b") + centre + offset
     return Coordinate(top.x, top.y, top.z + resource.get_absolute_size_z() - from_top)
@@ -635,6 +628,7 @@ class iSWAPTransport:
     return Plan(steps, reach, facing)
 
   def _grip_z_now(self) -> float:
+    """Where the grip centre stands now, in mm on the deck."""
     drive = self.iswap.elbow_get_reference_point_location()
     if drive is None:
       raise RuntimeError("the iSWAP is not modelled")
@@ -670,6 +664,7 @@ class iSWAPTransport:
       await self._do(step, plan)
 
   async def _do(self, step: Step, plan: Plan) -> None:
+    """Drive one step of `plan` on the device, leaving the tree where the step leaves it."""
     iswap = self.iswap
     c = iswap.configuration
     if isinstance(step, Rise):

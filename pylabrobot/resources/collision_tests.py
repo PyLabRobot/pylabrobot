@@ -26,7 +26,7 @@ from pylabrobot.resources.collision import (
   turning,
 )
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton.tip_carriers import hamilton_tip_carrier_L5
 from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_1000uL
 from pylabrobot.resources.lid import Lid
@@ -163,7 +163,7 @@ class SolidTests(unittest.TestCase):
     carrier = Resource("carrier", 140, 100, 100)
     site = ResourceHolder("site", 128, 86, 0)
     carrier.assign_child_resource(site, location=Coordinate(5, 5, 80))
-    plate = Cor_96_wellplate_360ul_Fb("plate")
+    plate = cor_96_wellplate_360uL_Fb("plate")
     site.assign_child_resource(plate, location=Coordinate(0, 0, -3))
     return carrier, plate
 
@@ -217,7 +217,7 @@ class SolidTests(unittest.TestCase):
     self.assertEqual(len(solid_pieces(housing)), 1)
 
   def test_a_turned_resource_is_solid_where_it_is_turned_to(self):
-    plate = Cor_96_wellplate_360ul_Fb("plate")
+    plate = cor_96_wellplate_360uL_Fb("plate")
     holder = Resource("holder", 300, 300, 1)
     holder.assign_child_resource(plate, location=Coordinate(150, 0, 1))
     plate.rotation = Rotation(z=90)
@@ -238,11 +238,11 @@ class SweepTests(unittest.TestCase):
     self.assertEqual([c.obstacle.name for c in check(root, [swept], obstacles=wall)], ["wall"])
 
   def test_resting_on_something_and_leaving_it_is_not_a_collision(self):
-    floor = Piece(Resource("floor", 100, 100, 10), box((0, 0, 0), (100, 100, 10)))
-    floor.points = box(
-      (CONTACT, CONTACT, CONTACT), (100 - 2 * CONTACT, 100 - 2 * CONTACT, 10 - 2 * CONTACT)
+    # The floor's faces are drawn in by CONTACT, so a thing resting on it only touches.
+    floor = Piece(
+      Resource("floor", 100, 100, 10),
+      box((CONTACT, CONTACT, CONTACT), (100 - 2 * CONTACT, 100 - 2 * CONTACT, 10 - 2 * CONTACT)),
     )
-    floor.lo, floor.hi = (CONTACT,) * 3, (100 - CONTACT, 100 - CONTACT, 10 - CONTACT)
     thing = Piece(
       Resource("thing", 10, 10, 10),
       box((20 + CONTACT, 20 + CONTACT, 10 + CONTACT), (10 - 2 * CONTACT,) * 3),
