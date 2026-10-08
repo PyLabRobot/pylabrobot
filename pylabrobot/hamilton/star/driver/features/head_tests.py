@@ -85,8 +85,8 @@ class TestDriveDefaults(unittest.IsolatedAsyncioTestCase):
       (200.0, 300.0, 50.0, 250.0),
     )
 
-  async def test_the_96_head_takes_its_dispensing_and_squeezer_defaults_too(self):
-    """`Head96.discover` reads four drive parameters on top of the Y and Z ones every head shares,
+  async def test_the_96_head_takes_its_squeezer_defaults_too(self):
+    """`Head96.discover` reads two drive parameters on top of the Y and Z ones every head shares,
     and its defaults answer with what it reported for them. Apart from the test above because it
     covers the override rather than the base: the 384-head adds no reads of its own.
 
@@ -96,8 +96,6 @@ class TestDriveDefaults(unittest.IsolatedAsyncioTestCase):
     decoded rather than handed over whole."""
     declared = dataclasses.replace(
       RECORDED_HEAD96,
-      dispensing_drive_speed_firmware_reported=400.0,
-      dispensing_drive_acceleration_firmware_reported=9000.0,
       squeezer_drive_speed_firmware_reported=12.0,
       squeezer_drive_acceleration_firmware_reported=50.0,
     )
@@ -109,14 +107,36 @@ class TestDriveDefaults(unittest.IsolatedAsyncioTestCase):
     c = cast(Head96, driver.x_arm.head96).configuration
     for read, declared_value in zip(
       (
-        c.dispensing_drive_speed_default,
-        c.dispensing_drive_acceleration_default,
         c.squeezer_drive_speed_default,
         c.squeezer_drive_acceleration_default,
       ),
-      (400.0, 9000.0, 12.0, 50.0),
+      (12.0, 50.0),
     ):
       self.assertAlmostEqual(read, declared_value, places=1)
+
+  async def test_a_head_with_firmware_from_before_2010_gets_its_lower_dispensing_acceleration(self):
+    declared = dataclasses.replace(RECORDED_HEAD96, firmware_version="1.0S 2008-11-11 (H0)")
+    driver = STARSimulationDriver(
+      deck=STARDeck(), declared_configuration_json=declaring(head96=declared)
+    )
+    await driver.setup()
+    head = cast(Head96, driver.x_arm.head96)
+    self.assertEqual(head.default_dispensing_drive_acceleration, 2900.0)
+
+  async def test_a_default_outside_the_range_of_its_drive_is_refused_when_assigned(self):
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    await driver.setup()
+    head = cast(Head96, driver.x_arm.head96)
+    with self.assertRaisesRegex(ValueError, "default_dispensing_drive_speed must be between"):
+      head.default_dispensing_drive_speed = 5000.0
+    with self.assertRaisesRegex(ValueError, "default_dispensing_drive_acceleration must be"):
+      head.default_dispensing_drive_acceleration = 50.0
+    self.assertEqual(
+      (head.default_dispensing_drive_speed, head.default_dispensing_drive_acceleration),
+      (250.0, 17000.0),
+    )
+    head.default_dispensing_drive_speed = 200.0
+    self.assertEqual(head.default_dispensing_drive_speed, 200.0)
 
   async def test_a_head_that_will_not_say_keeps_what_its_firmware_documents(self):
     """A head that refuses the read leaves discovery with nothing to record, and the defaults fall
@@ -207,10 +227,10 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
       self.sent,
       [
         "C0TTtt01tf1tl0519tv03600tg2tu0",
-        "H0DQdq11281dv13500du00000dr900000dw15",
+        "H0DQdq11281dv12926du00000dr878965dw15",
         "C0EPxs01179xd0yh2418tt01wu0za2164zh2450ze2450",
         "C0ERxs01179xd0yh2418za2164zh2450ze2450",
-        "H0DQdq11281dv13500du00000dr900000dw15",
+        "H0DQdq11281dv12926du00000dr878965dw15",
         "C0EPxs01179xd0yh2418tt01wu0za2164zh2450ze2450",
         # The trash drop centres the array; legacy put A1 4.5 mm right and 58.5 mm forward of this.
         "C0ERxs00465xd1yh1788za2164zh2450ze2450",
