@@ -145,7 +145,9 @@ class XPeel:
   async def request_status(self) -> Tuple[int, int, int]:
     """Request instrument status; returns three error codes."""
     resp = await self.send_command("*stat")
-    return tuple([int(x) for x in resp[-1].split(":")[1].split(",")])  # type: ignore
+    # The ready line carries the description send_command appends: "*ready:00,00,00 [No error]".
+    first, second, third = (int(x) for x in resp[-1].split(":", 1)[1].split()[0].split(","))
+    return first, second, third
 
   async def request_version(self):
     """Request firmware version."""
@@ -236,7 +238,9 @@ class XPeel:
       fast: If True, uses faster peel speed. Default False.
       adhere_time: Time in seconds for the roller to press on the seal before peeling.  Must be one of 2.5, 5.0, 7.5, or 10.0. Default 2.5.
     """
-    if adhere_time not in {2.5, 5.0, 7.5, 10.0}:
+    # The peeler takes the adhere time as a code: 1-4 for 2.5, 5.0, 7.5 and 10.0 seconds.
+    adhere_time_code = {2.5: 1, 5.0: 2, 7.5: 3, 10.0: 4}.get(adhere_time)
+    if adhere_time_code is None:
       raise ValueError("adhere_time must be one of: 2.5, 5.0, 7.5, 10.0")
     if begin_location not in {-2, 0, 2, 4}:
       raise ValueError("begin_location must be one of: -2, 0, 2, 4")
@@ -252,7 +256,7 @@ class XPeel:
       (4, False): 8,
     }.get((begin_location, fast), 9)
 
-    cmd = f"*xpeel:{parameter_set}{adhere_time}"
+    cmd = f"*xpeel:{parameter_set}{adhere_time_code}"
     return await self.send_command(cmd, expect_ack=True, wait_for_ready=True)
 
   async def restart(self):
