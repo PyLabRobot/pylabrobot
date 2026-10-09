@@ -1,6 +1,8 @@
 import random
-from typing import Any, List, Literal, Mapping, Optional, Union, cast
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, List, Literal, Mapping, Optional, Union, cast
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.legacy.machines import Machine
 from pylabrobot.resources import (
@@ -93,9 +95,15 @@ class Incubator(Machine, Resource):
   def racks(self) -> List[PlateCarrier]:
     return self._racks
 
-  async def setup(self, **backend_kwargs):
-    await super().setup()
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, **backend_kwargs: Any
+  ) -> None:
+    await super()._enter_lifespan(stack, **backend_kwargs)
     await self.backend.set_racks(self._racks)
+
+  async def _pre_backend_stop(self) -> None:
+    """Stop tracked shaking before the backend connection closes."""
+    await self.backend._force_stop_shaking()
 
   def get_num_free_sites(self) -> int:
     return sum(len(rack.get_free_sites()) for rack in self._racks)
@@ -188,6 +196,12 @@ class Incubator(Machine, Resource):
 
   async def stop_shaking(self):
     await self.backend.stop_shaking()
+
+  @asynccontextmanager
+  async def shaking(self, frequency: float = 1.0) -> AsyncIterator[None]:
+    """Shake for the lifetime of this context."""
+    async with self.backend.shaking(frequency):
+      yield
 
   def summary(self) -> str:
     def create_pretty_table(header, *columns) -> str:

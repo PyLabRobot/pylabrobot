@@ -1,5 +1,8 @@
-from typing import Dict
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Dict, Literal, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.events import LifespanEventInfo
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 
@@ -72,11 +75,28 @@ class IncubatorShakerStack(Resource, Machine):
     "incubator_shaker_dwp": 2.5,
   }
 
-  async def setup(self, **backend_kwargs) -> None:
-    """Connect to the stack and build per-unit proxies."""
+  def _lifespan_event_info(self, **kwargs: Any) -> Optional[LifespanEventInfo]:
+    """This stack owns its backend directly rather than Machine's evented entry."""
+    return None
 
-    await self.backend.setup(**backend_kwargs)
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    **backend_kwargs: Any,
+  ) -> None:
+    """Own the backend directly and build per-unit proxies.
 
+    Machine's entry would enter the same backend again and publish a frontend setup state
+    that this stack intentionally does not use.
+    """
+
+    await stack.enter_async_context(self.backend.lifespan(**backend_kwargs))
+
+    for loading_tray in list(self.loading_trays):
+      if isinstance(loading_tray, Resource) and loading_tray.parent is self:
+        self.unassign_child_resource(loading_tray)
+    self.units.clear()
+    self.loading_trays.clear()
     self.power_credit = 0.0
 
     # Calculate true stack size
@@ -120,10 +140,6 @@ class IncubatorShakerStack(Resource, Machine):
     assert self.power_credit < 5, (
       f"Too many units: unit composition {self.backend.unit_composition} is exceeding 5 power credit limit. Reduce number of units."
     )
-
-  async def stop(self):
-    """Gracefully stop backend communication."""
-    await self.backend.stop()
 
   async def request_loading_tray_states(self) -> dict:
     """Request loading tray states for all units."""
@@ -183,13 +199,51 @@ class IncubatorShakerStack(Resource, Machine):
 
   async def shake(self, *args, **kwargs) -> None:
     """Start shaking for all units in the stack."""
-    for i in range(self.num_units):
-      await self.units[i].shake(*args, **kwargs)
+    await self.backend._shake_all(self._shaker_indices(), *args, **kwargs)
 
   async def stop_all_shaking(self) -> None:
     """Stop shaking for all units in the stack."""
-    for i in range(self.num_units):
-      await self.units[i].stop_shaking()
+    await self.backend._stop_all_shaking(self._shaker_indices())
+
+  def _shaker_indices(self) -> list[int]:
+    """Return every discovered shaker-capable stack index."""
+    return [
+      index
+      for index, unit_type in enumerate(self.backend.unit_composition)
+      if "shaker" in unit_type
+    ]
+
+  @asynccontextmanager
+  async def shaking(
+    self,
+    *,
+    pattern: Literal["linear_x", "linear_y", "orbital", "elliptical", "figure_eight"] = "orbital",
+    rpm: Optional[float] = None,
+    frequency_hz: Optional[float] = None,
+    amplitude_x_mm: float = 3.0,
+    amplitude_y_mm: float = 3.0,
+    phase_deg: Optional[float] = None,
+  ) -> AsyncIterator[None]:
+    """Temporarily shake every discovered shaker-capable unit."""
+    indices = self._shaker_indices()
+    tokens = await self.backend._reserve_shaking_scopes(indices)
+    try:
+      async with AsyncExitStackWithShielding() as shaking_stack:
+        for index in indices:
+          await shaking_stack.enter_async_context(
+            self.units[index]._shaking_with_token(
+              tokens[index],
+              pattern=pattern,
+              rpm=rpm,
+              frequency_hz=frequency_hz,
+              amplitude_x_mm=amplitude_x_mm,
+              amplitude_y_mm=amplitude_y_mm,
+              phase_deg=phase_deg,
+            )
+          )
+        yield
+    finally:
+      await self.backend._release_shaking_reservations(tokens)
 
   # ------------------------------------------------------------------------
   # Unit accessors

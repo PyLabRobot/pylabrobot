@@ -1,8 +1,10 @@
-import asyncio
 import logging
-import time
 import warnings
-from typing import List, Literal, Optional, Union, cast
+from contextlib import asynccontextmanager, suppress
+from contextvars import ContextVar
+from typing import AsyncIterator, List, Literal, Optional, Union, cast
+
+import anyio
 
 try:
   import serial
@@ -12,6 +14,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.storage.backend import IncubatorBackend
 from pylabrobot.legacy.storage.cytomat.constants import (
@@ -49,6 +52,24 @@ from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 logger = logging.getLogger(__name__)
 
+# Budget for one complete command exchange: the command write and the reply read share it. It
+# bounds the exchange as a single operation rather than giving each phase its own budget, so a
+# lost connection fails the whole command instead of each step in turn. It is the sum of the
+# two transport budgets it replaces (the `Serial` `write_timeout` plus its read `timeout`), so
+# no command that used to succeed can newly fail under it.
+_COMMAND_TIMEOUT = 2.0
+
+# Bound for the shaking stop this lifespan registers. Measured, it bounds the cleanup's
+# cancellable wait for `IncubatorBackend._shaking_transition_lock` before it can dispatch
+# anything; it does not cut the `ll:vd` exchange short, because
+# `IncubatorBackend._stop_shaking_transition` shields that exchange and the exchange carries
+# `_COMMAND_TIMEOUT` of its own. The value covers one exchange the shaking owner may still be
+# completing plus the cleanup's own exchange, with scheduling margin. It is a fixed budget and
+# never derives from a shaking frequency or from how long the device was asked to shake.
+_CLEANUP_TIMEOUT = 2 * _COMMAND_TIMEOUT + 4.0
+
+_ACTION_DISPATCHED: ContextVar[bool] = ContextVar("cytomat_action_dispatched", default=False)
+
 
 class CytomatBackend(IncubatorBackend):
   default_baud = 9600
@@ -80,6 +101,8 @@ class CytomatBackend(IncubatorBackend):
       )
     self.model = model
     self._racks: List[PlateCarrier] = []
+    self._transaction_lock = anyio.Lock()
+    self._commands_dispatched = 0
 
     self.io = Serial(
       port=port,
@@ -92,8 +115,21 @@ class CytomatBackend(IncubatorBackend):
       human_readable_device_name="Cytomat",
     )
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the Serial transport, stop shaking before it closes, and initialize the device.
+
+    The registration order reproduces the legacy `stop()`, which stopped shaking and then
+    closed the transport: the shaking stop is pushed after Serial entry, so LIFO runs it
+    first. `Incubator._pre_backend_stop` calls the same force stop, but it routes through
+    `IncubatorBackend._stop_shaking_transition`, which returns early unless shaking is
+    tracked as active or unknown, so a full frontend exit still puts one `ll:vd` on the wire.
+
+    The entry commands are the legacy `setup()` sequence unchanged: `ll:in`, then one
+    completion wait on its default budget.
+    """
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._force_stop_shaking, shield_timeout=_CLEANUP_TIMEOUT)
     await self.initialize()
     await self.wait_for_task_completion()
 
@@ -101,19 +137,69 @@ class CytomatBackend(IncubatorBackend):
     await super().set_racks(racks)
     warnings.warn("Cytomat racks need to be configured with the exe software")
 
-  async def stop(self):
-    await self.io.stop()
-
   def _assemble_command(self, command_type: str, command: str, params: str):
     carriage_return = "\r" if self.model == CytomatType.C2C_425 else "\r\n"
     command = f"{command_type}:{command} {params}".strip() + carriage_return
     return command
 
+  def _publish_dispatch(self) -> None:
+    """Publish a successful write globally and to the current action invocation."""
+    self._commands_dispatched += 1
+    _ACTION_DISPATCHED.set(True)
+
+  async def _exchange(self, command_str: str) -> str:
+    """Run one complete command exchange as a single serialized transaction.
+
+    Waiting for the transaction and the checkpoint before the write stay cancellable. Once
+    the write may have committed, the write and the reply read are shielded under one finite
+    budget, so cancellation cannot abandon a command the device has already received. The
+    transaction is released before the final checkpoint, so a pending external cancellation
+    wins over a stored overrun instead of being masked as a `TimeoutError`.
+
+    The response parsing and the error-register reconciliation that follow deliberately sit
+    outside this transaction: `get_error_register` and `reset_error_register` are themselves
+    `send_command` calls, so they cannot run inside it. `anyio.Lock` is not reentrant, and
+    measured on both backends, re-acquiring it from the task that already holds it raises
+    `RuntimeError` immediately rather than blocking, so the failure would be fail-fast, not a
+    hang. Each reconciliation therefore runs as its own transaction, and every wire byte
+    still goes out under the lock.
+    """
+    logger.debug(command_str.encode(self.serial_message_encoding))
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    await self._transaction_lock.acquire()
+    try:
+      # Intentionally redundant with the cancellable acquire above on a contended lock, and
+      # the only stop on an uncontended one: anyio's fast-path `acquire` ends in a shielded
+      # checkpoint that swallows a cancellation arriving while the task waits there, so the
+      # pre-lock checkpoint cannot catch it. Nothing pins this line alone, so a green suite
+      # is not evidence it is dead; deleting it does cause a real post-cancellation write.
+      # The pre-lock checkpoint above is unpinned alone for the mirror-image reason: on a
+      # contended lock this one catches the same cancellation, so deleting either one by
+      # itself leaves the suite green. The two are complementary across the contended and
+      # uncontended paths, not duplicates; keep both.
+      # Do not remove it, above all if the acquire is ever shielded.
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      raw = b""
+      with anyio.CancelScope(shield=True):
+        with anyio.move_on_after(_COMMAND_TIMEOUT) as exchange_scope:
+          await self.io.write(command_str.encode(self.serial_message_encoding))
+          # Published as soon as the write returns and before the reply is read or
+          # interpreted, so no later failure can lose a command the device may already own.
+          self._publish_dispatch()
+          raw = await self.io.read(128)
+        exchange_timed_out = exchange_scope.cancelled_caught
+    finally:
+      self._transaction_lock.release()
+    await anyio.lowlevel.checkpoint()
+
+    if exchange_timed_out:
+      raise TimeoutError(f"Timed out waiting for a response to '{command_str.rstrip()}'")
+
+    return raw.decode(self.serial_message_encoding)
+
   async def send_command(self, command_type: str, command: str, params: str) -> str:
     async def _send_command(command_str) -> str:
-      logger.debug(command_str.encode(self.serial_message_encoding))
-      await self.io.write(command_str.encode(self.serial_message_encoding))
-      resp = (await self.io.read(128)).decode(self.serial_message_encoding)
+      resp = await self._exchange(command_str)
       if len(resp) == 0:
         raise RuntimeError("Cytomat did not respond to command, is it turned on?")
       key, *values = resp.split()
@@ -149,7 +235,7 @@ class CytomatBackend(IncubatorBackend):
         return await _send_command(command_str)
       except (CytomatCommandUnknownError, CytomatBusyError) as e:
         exc = e
-        await asyncio.sleep(0.1)
+        await anyio.sleep(0.1)
         continue
     assert exc is not None
     await self.reset_error_register()
@@ -159,14 +245,47 @@ class CytomatBackend(IncubatorBackend):
     self, command_type: str, command: str, params: str, timeout: Optional[int] = 60
   ) -> OverviewRegisterState:
     """Calls send_command, but has a timeout handler and returns the overview register state.
+
+    Once the action's write may have reached the device, this call owns reconciling it: the
+    completion poll runs under a shield, so cancellation cannot abandon an action the device
+    has already started. A call whose write never reached the wire owns nothing and polls
+    nothing. There is no abort command in this protocol, so reconciliation means waiting for
+    the device's own completion rather than undoing the action.
+
+    The shield needs no bound of its own to stay finite. `wait_for_task_completion` carries
+    the documented budget for this wait and checks it after every poll; each poll drives only
+    counted retry loops, and each exchange inside them is bounded by `_COMMAND_TIMEOUT`.
+
     Args:
       timeout: The maximum time to wait for the command to complete. If None, the command will not
         wait for completion.
     """
-    await self.send_command(command_type, command, params)
-    if timeout is not None:
-      overview_register = await self.wait_for_task_completion(timeout=timeout)
-    return overview_register
+    dispatch_token = _ACTION_DISPATCHED.set(False)
+    try:
+      try:
+        await self.send_command(command_type, command, params)
+      except BaseException:
+        # A write that returned before the failure is conservatively treated as received,
+        # because the device may already be acting on it. A call that never got that far owns
+        # nothing, so it reconciles nothing.
+        if timeout is not None and _ACTION_DISPATCHED.get():
+          with anyio.CancelScope(shield=True):
+            # The action is already failing, and the reason it failed is what the caller needs,
+            # so a reconciliation failure is dropped rather than replacing it.
+            with suppress(Exception):
+              await self.wait_for_task_completion(timeout=timeout)
+        raise
+
+      if timeout is not None:
+        with anyio.CancelScope(shield=True):
+          overview_register = await self.wait_for_task_completion(timeout=timeout)
+        # The reconciliation above was shielded, so a cancellation that arrived while the device
+        # was finishing is still pending here. Deliver it rather than returning as though the
+        # caller had never been cancelled.
+        await anyio.lowlevel.checkpoint()
+      return overview_register
+    finally:
+      _ACTION_DISPATCHED.reset(dispatch_token)
 
   def _site_to_firmware_string(self, site: PlateHolder) -> str:
     rack = cast(PlateCarrier, site.parent)
@@ -201,7 +320,7 @@ class CytomatBackend(IncubatorBackend):
       try:
         resp = await self.send_command("ch", "bs", "")
       except (CytomatCommandUnknownError, CytomatBusyError):
-        await asyncio.sleep(0.1)
+        await anyio.sleep(0.1)
         continue
       return OverviewRegisterState.from_resp(resp)
     await self.reset_error_register()
@@ -337,7 +456,7 @@ class CytomatBackend(IncubatorBackend):
   async def wait_for_transfer_station(self, occupied: bool = False):
     """Wait for the transfer station to be occupied, or unoccupied."""
     while (await self.get_overview_register()).transfer_station_occupied != occupied:
-      await asyncio.sleep(1)
+      await anyio.sleep(1)
 
   async def wait_for_task_completion(self, timeout=60) -> OverviewRegisterState:
     """
@@ -346,7 +465,7 @@ class CytomatBackend(IncubatorBackend):
     If the error bit is set in the overview register, the error register is read and the corresponding
     error is raised.
     """
-    start = time.time()
+    start = anyio.current_time()
     while True:
       overview_register = await self.get_overview_register()
       if not overview_register.busy_bit_set:
@@ -357,30 +476,67 @@ class CytomatBackend(IncubatorBackend):
           await self.reset_error_register()
           raise error_register_map[error_register]
         return overview_register
-      await asyncio.sleep(1)
-      if time.time() - start > timeout:
+      await anyio.sleep(1)
+      # The elapsed time is checked after the poll, so `timeout=0` still asks the device
+      # exactly once, exactly as it did before. A cancel scope around this loop would cancel
+      # at the first await instead and ask nothing, which is a wire change.
+      if anyio.current_time() - start > timeout:
         raise TimeoutError("Cytomat did not complete task in time")
 
   async def init_shakers(self):
     return hex_to_binary(await self.send_command("ll", "vi", ""))
 
-  async def start_shaking(self, frequency: float, shakers: Optional[List[int]] = None):
+  def _validate_shaking_request(self, shakers: Optional[List[int]]) -> List[int]:
+    """Validate a global shaking request before any device command can be sent."""
     if self.model == CytomatType.C5C:
       raise NotImplementedError("Shaking is not supported on this model")
-    await self.set_shaking_frequency(frequency=int(frequency), shakers=shakers)
+    selected_shakers = shakers or [1, 2]
+    assert all(shaker in [1, 2] for shaker in selected_shakers), "Shaker index must be 1 or 2"
+    return selected_shakers
+
+  async def _start_shaking_hardware(
+    self, frequency: float, shakers: Optional[List[int]] = None
+  ) -> str:
+    selected_shakers = self._validate_shaking_request(shakers)
+    await self._set_shaking_frequency(int(frequency), selected_shakers)
     return hex_to_binary(await self.send_command("ll", "va", ""))
 
-  async def stop_shaking(self):
+  async def _stop_shaking_hardware(self) -> str:
     if self.model == CytomatType.C5C:
       raise NotImplementedError("Shaking is not supported on this model")
     return hex_to_binary(await self.send_command("ll", "vd", ""))
 
+  async def start_shaking(self, frequency: float, shakers: Optional[List[int]] = None):
+    """Start durable global shaking through the shared operation owner."""
+    selected_shakers = self._validate_shaking_request(shakers)
+    return await self._start_durable_shaking(frequency, shakers=selected_shakers)
+
+  async def stop_shaking(self):
+    """Stop durable global shaking through the shared operation owner."""
+    return await super().stop_shaking()
+
   async def set_shaking_frequency(
     self, frequency: int, shakers: Optional[List[int]] = None
   ) -> List[str]:
-    shakers = shakers or [1, 2]
-    assert all(shaker in [1, 2] for shaker in shakers), "Shaker index must be 1 or 2"
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot set shaking frequency while a shaking scope is active")
+      selected_shakers = shakers or [1, 2]
+      assert all(shaker in [1, 2] for shaker in selected_shakers), "Shaker index must be 1 or 2"
+      return await self._set_shaking_frequency(frequency, selected_shakers)
+
+  async def _set_shaking_frequency(self, frequency: int, shakers: List[int]) -> List[str]:
+    """Set prevalidated shaker frequencies while the caller owns operation state."""
     return [await self.send_command("se", f"pb 2{idx - 1}", f"{frequency:04}") for idx in shakers]
+
+  @asynccontextmanager
+  async def shaking(  # type: ignore[override]
+    self, frequency: float, shakers: Optional[List[int]] = None
+  ) -> AsyncIterator[None]:
+    """Shake the globally controlled Cytomat mechanism for this context's lifetime."""
+    selected_shakers = self._validate_shaking_request(shakers)
+    async with self._shaking(frequency, shakers=selected_shakers):
+      yield
 
   async def get_incubation_query(
     self, query: Literal["ic", "ih", "io", "it"]
@@ -423,10 +579,22 @@ class CytomatBackend(IncubatorBackend):
 
 
 class CytomatChatterbox(CytomatBackend):
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Print the exchange the legacy chatterbox printed, and own no transport.
+
+    This deliberately does not call the Serial-owning parent entry. The legacy
+    `CytomatChatterbox.setup()` was exactly one completion wait and its `stop()` was a shaking
+    stop followed by the close print, so entering Serial here would open a transport the
+    chatterbox never opened and issue `ll:in`, which it never sent.
+
+    The close print is registered before the shaking stop, so LIFO stops shaking first and
+    prints the close last, reproducing the legacy `try`/`finally` order.
+    """
+    stack.push_async_callback(self._print_close_message)
+    stack.push_shielded_async_callback(self._force_stop_shaking, shield_timeout=_CLEANUP_TIMEOUT)
     await self.wait_for_task_completion()
 
-  async def stop(self):
+  async def _print_close_message(self) -> None:
     print("closing connection to cytomat")
 
   async def send_command(self, command_type, command, params):
