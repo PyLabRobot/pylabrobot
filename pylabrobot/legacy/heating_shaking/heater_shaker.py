@@ -1,6 +1,7 @@
 from typing import Optional
+from functools import partial
 
-from pylabrobot.legacy.machines.machine import Machine
+from pylabrobot.concurrency import attempt_in_order
 from pylabrobot.legacy.shaking import Shaker
 from pylabrobot.legacy.temperature_controlling import TemperatureController
 from pylabrobot.resources.coordinate import Coordinate
@@ -33,8 +34,10 @@ class HeaterShaker(TemperatureController, Shaker):
       model=model,
     )
     self.backend: HeaterShakerBackend = backend  # fix type
+    self._initialize_shaking_state()
 
-  async def stop(self):
-    await self.deactivate()
-    await self.stop_shaking()
-    await Machine.stop(self)
+  async def _pre_backend_stop(self) -> None:
+    """Deactivate temperature, then force stop and unlock scoped shaking."""
+    await attempt_in_order(
+      self.deactivate, partial(Shaker._pre_backend_stop, self, force_stop=True)
+    )

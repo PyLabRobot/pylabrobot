@@ -1,6 +1,8 @@
 import re
 from typing import Optional
 
+import anyio
+
 try:
   import serial
 
@@ -9,6 +11,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.tilting.tilter_backend import (
   TilterBackend,
@@ -25,12 +28,17 @@ class HamiltonTiltModuleBackend(TilterBackend):
     write_timeout: float = 10,
     timeout: float = 10,
   ):
+    super().__init__()
     if not HAS_SERIAL:
       raise RuntimeError(
         f"pyserial is required for the Hamilton tilt module backend. Import error: {_SERIAL_IMPORT_ERROR}"
       )
 
     self.com_port = com_port
+    self._command_timeout = write_timeout + timeout
+    # A cleanup may queue behind one complete exchange before running its own exchange.
+    self._cleanup_timeout = 2 * self._command_timeout + 4.0
+    self._command_lock = anyio.Lock()
     self.io = Serial(
       port=self.com_port,
       baudrate=1200,
@@ -42,42 +50,105 @@ class HamiltonTiltModuleBackend(TilterBackend):
       human_readable_device_name="Hamilton Tilt Module",
     )
 
-  async def setup(self, initial_offset: int = 0):
-    await self.io.setup()
+  @staticmethod
+  def _validate_initial_offset(initial_offset: object) -> int:
+    if isinstance(initial_offset, bool) or not isinstance(initial_offset, int):
+      raise TypeError("initial_offset must be an integer")
+    if not -100 <= initial_offset <= 100:
+      raise ValueError("initial_offset must be between -100 and 100")
+    return initial_offset
+
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    initial_offset: int = 0,
+  ) -> None:
+    await super()._enter_lifespan(stack)
+    initial_offset = self._validate_initial_offset(initial_offset)
+
+    self._command_lock = anyio.Lock()
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self.tilt_power_off, shield_timeout=self._cleanup_timeout)
+    stack.push_shielded_async_callback(
+      self.tilt_set_waste_pump_off, shield_timeout=self._cleanup_timeout
+    )
+    stack.push_shielded_async_callback(
+      self.tilt_switch_off_temperature_controller, shield_timeout=self._cleanup_timeout
+    )
     await self.tilt_initial_offset(initial_offset)
     await self.tilt_initialize()
 
-  async def stop(self):
-    await self.io.stop()
-
   async def send_command(self, command: str, parameter: Optional[str] = None) -> str:
-    """Send a command to the tilt module."""
+    """Send one serialized, finite command transaction to the tilt module."""
 
     if parameter is None:
       parameter = ""
 
-    await self.io.write(f"99{command}{parameter}\r\n".encode("utf-8"))
-    resp = ""
-    while not resp.startswith("T1" + command):
-      resp = (await self.io.read(128)).decode("utf-8")
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    with anyio.move_on_after(self._command_timeout) as lock_scope:
+      await self._command_lock.acquire()
+    if lock_scope.cancelled_caught:
+      raise TimeoutError(f"Timed out waiting for response to '{command}'")
 
-    # Check for error.
-    error_matches = re.search("er[0-9]{2}", resp)
-    if error_matches is not None:
-      err_code = int(error_matches.group(0)[2:])
-      if 1 <= err_code <= 7:
-        raise TiltModuleError(
-          {
-            1: "Init Position not found",
-            2: "**Step** loss",
-            3: "Not initialized",
-            5: "Stepper Motor end stage defective",
-            6: "Parameter out **of** Range",
-            7: "Undefined Command",
-          }[err_code]
-        )
-      if err_code != 0:
-        raise RuntimeError(f"Unexpected error code: {err_code}")
+    resp = ""
+    failure: Optional[BaseException] = None
+    try:
+      # This second checkpoint closes the cancellation window in anyio's uncontended-lock
+      # fast path. The zero-await window it protects is deliberately not timing-tested.
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      with anyio.CancelScope(shield=True):
+        try:
+          with anyio.CancelScope(deadline=lock_scope.deadline) as exchange_scope:
+            try:
+              await self.io.write(f"99{command}{parameter}\r\n".encode("utf-8"))
+            except Exception as error:
+              # A failed write may still have committed bytes. Keep its original error, but
+              # consume this command's reply so a later transaction cannot inherit it.
+              failure = error
+
+            try:
+              pending = bytearray()
+              while True:
+                delimiter = pending.find(b"\r\n")
+                if delimiter >= 0:
+                  line = bytes(pending[: delimiter + 2]).decode("utf-8")
+                  del pending[: delimiter + 2]
+                  if line.startswith("T1" + command):
+                    resp = line
+                    break
+                else:
+                  pending.extend(await self.io.read(128))
+
+              error_matches = re.search("er[0-9]{2}", resp)
+              if error_matches is not None:
+                err_code = int(error_matches.group(0)[2:])
+                if 1 <= err_code <= 7:
+                  raise TiltModuleError(
+                    {
+                      1: "Init Position not found",
+                      2: "**Step** loss",
+                      3: "Not initialized",
+                      5: "Stepper Motor end stage defective",
+                      6: "Parameter out **of** Range",
+                      7: "Undefined Command",
+                    }[err_code]
+                  )
+                if err_code != 0:
+                  raise RuntimeError(f"Unexpected error code: {err_code}")
+            except Exception as error:
+              if failure is None:
+                failure = error
+          if exchange_scope.cancelled_caught and failure is None:
+            failure = TimeoutError(f"Timed out waiting for response to '{command}'")
+        except BaseException as error:
+          failure = error
+    finally:
+      self._command_lock.release()
+
+    await anyio.lowlevel.checkpoint()
+    if failure is not None:
+      raise failure
 
     return resp
 
@@ -303,10 +374,18 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
 
 class HamiltonTiltModuleChatterboxBackend(HamiltonTiltModuleBackend):
-  async def setup(self, initial_offset=0):
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    initial_offset: int = 0,
+  ) -> None:
+    """Simulate entry without opening the parent's Serial or powering the module."""
+    initial_offset = self._validate_initial_offset(initial_offset)
+    stack.push_shielded_async_callback(self._print_stop_message)
     print(f"[tilter] setup initial offset {initial_offset}")
 
-  async def stop(self):
+  async def _print_stop_message(self) -> None:
     print("[tilter] stopping")
 
   async def send_command(self, command, parameter=None):

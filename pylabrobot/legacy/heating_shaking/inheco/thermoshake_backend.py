@@ -1,7 +1,10 @@
 import warnings
+from typing import Any
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.legacy.temperature_controlling.inheco.temperature_controller import (
+  _CLEANUP_TIMEOUT,
   InhecoTemperatureControllerBackend,
 )
 
@@ -12,9 +15,14 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, HeaterShakerB
   https://www.inheco.com/thermoshake-ac.html
   """
 
-  async def stop(self):
-    await self.stop_shaking()
-    await super().stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Borrow an active control box and own this device's shaking and temperature cleanup.
+
+    The inherited temperature cleanup is registered first, so reverse order stops shaking
+    before it stops temperature control.
+    """
+    await super()._enter_lifespan(stack, **kwargs)
+    stack.push_shielded_async_callback(self.stop_shaking, shield_timeout=_CLEANUP_TIMEOUT)
 
   async def _start_shaking_command(self):
     """Send the device command that starts shaking with the configured settings."""

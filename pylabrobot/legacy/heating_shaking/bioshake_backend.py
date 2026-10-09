@@ -1,9 +1,10 @@
-import asyncio
 import warnings
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
-from pylabrobot.legacy.machines.backend import MachineBackend
 
 try:
   import serial
@@ -13,6 +14,22 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+# Budget for waiting for the reset transcript after the `resetDevice` write. The poll
+# interval below only bounds how long one reply read waits before the loop tries again.
+_RESET_TIMEOUT = 30.0
+
+# How long one reply read waits during a reset before the loop polls again. Expiry is not a
+# failure: the reset keeps polling until its budget above runs out.
+_RESET_POLL_INTERVAL = 2.0
+
+# Pause between reset replies, so the loop does not poll the device continuously.
+_RESET_POLL_SLEEP = 0.1
+
+# The BioShake 3000 ELM firmware needs the motor to fully decelerate before the
+# edge-locking mechanism (ELM) can operate. Without this delay, subsequent
+# setElmUnlockPos commands return 'e' (error).
+_ELM_SETTLE_DELAY = 3.0
+
 
 class BioShake(HeaterShakerBackend):
   def __init__(self, port: str, timeout: int = 60):
@@ -21,9 +38,10 @@ class BioShake(HeaterShakerBackend):
         f"pyserial is required for the BioShake module backend. Import error: {_SERIAL_IMPORT_ERROR}"
       )
 
-    self.setup_finished = False
+    super().__init__()
     self.port = port
     self.timeout = timeout
+    self._command_lock = anyio.Lock()
     self.io = Serial(
       port=self.port,
       baudrate=9600,
@@ -35,21 +53,65 @@ class BioShake(HeaterShakerBackend):
       human_readable_device_name="BioShake",
     )
 
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, *, skip_home: bool = False
+  ) -> None:
+    """Own the Serial transport and optionally reset and home the device.
+
+    Stopping shaking, deactivating temperature control, and unlocking the plate are not
+    registered here: the `HeaterShaker` frontend already owns shaking and temperature
+    shutdown through `_pre_backend_stop`, and a clamped plate is the resting state.
+    """
+    await super()._enter_lifespan(stack)
+    if not isinstance(skip_home, bool):
+      raise TypeError(f"skip_home must be a bool, not {type(skip_home).__name__}")
+
+    await stack.enter_async_context(self.io.lifespan())
+    if not skip_home:
+      # Reset first before homing it to ensure the device is ready for run
+      await self.reset()
+      # Additional seconds until next command can be send after reset
+      await anyio.sleep(4)
+      # Now home the device
+      await self.home()
+
   async def _send_command(self, cmd: str, delay: float = 0.5, timeout: float = 2):
+    """Run one complete command exchange as a single serialized transaction.
+
+    Waiting for the transaction and the checkpoint before the write stay cancellable. Once
+    the write may have committed, the buffer flush, write, inter-command delay, and reply
+    read are shielded under one finite budget, so cancellation cannot abandon a command the
+    device has already received. The transaction is released before the final checkpoint, so
+    a pending external cancellation wins over a stored timeout.
+    """
     try:
-      # Flush serial buffers for a clean start
-      await self.io.reset_input_buffer()
-      await self.io.reset_output_buffer()
-
-      # Send the command
-      await self.io.write((cmd + "\r").encode("ascii"))
-      await asyncio.sleep(delay)
-
-      # Read and decode the response with a timeout
+      # Flush serial buffers for a clean start, send the command, and read the reply
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      await self._command_lock.acquire()
       try:
-        response = await asyncio.wait_for(self.io.readline(), timeout=timeout)
+        # Intentionally redundant with the cancellable acquire above on a contended lock, and
+        # the only stop on an uncontended one: anyio's fast-path `acquire` ends in a shielded
+        # checkpoint that swallows a cancellation arriving while the task waits there, so the
+        # pre-lock checkpoint cannot catch it. Nothing pins this line alone, so a green suite
+        # is not evidence it is dead; deleting it does cause a real post-cancellation write.
+        # Do not remove it, above all if the acquire is ever shielded.
+        await anyio.lowlevel.checkpoint_if_cancelled()
+        response = b""
+        with anyio.CancelScope(shield=True):
+          with anyio.move_on_after(delay + timeout) as exchange_scope:
+            await self.io.reset_input_buffer()
+            await self.io.reset_output_buffer()
 
-      except asyncio.TimeoutError:
+            await self.io.write((cmd + "\r").encode("ascii"))
+            await anyio.sleep(delay)
+
+            response = await self.io.readline()
+          exchange_timed_out = exchange_scope.cancelled_caught
+      finally:
+        self._command_lock.release()
+      await anyio.lowlevel.checkpoint()
+
+      if exchange_timed_out:
         raise RuntimeError(f"Timed out waiting for response to '{cmd}'")
 
       decoded = response.decode("ascii", errors="ignore").strip()
@@ -77,22 +139,38 @@ class BioShake(HeaterShakerBackend):
     except Exception as e:
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
-  async def setup(self, skip_home: bool = False):
-    await MachineBackend.setup(self)
-    await self.io.setup()
-    if not skip_home:
-      # Reset first before homing it to ensure the device is ready for run
-      await self.reset()
-      # Additional seconds until next command can be send after reset
-      await asyncio.sleep(4)
-      # Now home the device
-      await self.home()
-
-  async def stop(self):
-    await MachineBackend.stop(self)
-    await self.io.stop()
-
   async def reset(self):
+    """Reset the BioShake and wait for its initialization transcript.
+
+    The reset is one serialized transaction with the same ownership rules as an ordinary
+    command: waiting is cancellable, and the committed exchange is shielded under a finite
+    budget so cancellation cannot abandon a reset the device has already started.
+    """
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    await self._command_lock.acquire()
+    try:
+      # Intentionally redundant with the cancellable acquire above on a contended lock, and
+      # the only stop on an uncontended one: anyio's fast-path `acquire` ends in a shielded
+      # checkpoint that swallows a cancellation arriving while the task waits there, so the
+      # pre-lock checkpoint cannot catch it. Nothing pins this line alone, so a green suite
+      # is not evidence it is dead; deleting it does cause a real post-cancellation write.
+      # Do not remove it, above all if the acquire is ever shielded.
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      with anyio.CancelScope(shield=True):
+        reset_timed_out = await self._run_reset_exchange()
+    finally:
+      self._command_lock.release()
+    await anyio.lowlevel.checkpoint()
+
+    if reset_timed_out:
+      raise TimeoutError("Reset did not complete in time")
+
+  async def _run_reset_exchange(self) -> bool:
+    """Send the reset command and poll for its final message.
+
+    Returns:
+      Whether the reset budget ran out before the final message arrived.
+    """
     # Reset the BioShake if stuck in "e" state
     # Flush serial buffers for a clean start
     await self.io.reset_input_buffer()
@@ -101,28 +179,20 @@ class BioShake(HeaterShakerBackend):
     # Send the command
     await self.io.write(("resetDevice\r").encode("ascii"))
 
-    start = asyncio.get_event_loop().time()
-    max_seconds = 30  # How long a reset typically last
+    with anyio.move_on_after(_RESET_TIMEOUT) as reset_scope:
+      while True:
+        # Wait for each line with a poll interval
+        with anyio.move_on_after(_RESET_POLL_INTERVAL):
+          response = await self.io.readline()
+          decoded = response.decode("ascii", errors="ignore").strip()
+          await anyio.sleep(_RESET_POLL_SLEEP)
 
-    while True:
-      # Break the loop if process takes longer than 30 seconds
-      if asyncio.get_event_loop().time() - start > max_seconds:
-        raise TimeoutError("Reset did not complete in time")
+          if len(decoded) > 0:
+            # Stop when the final message arrives
+            if "Initialization complete" in decoded:
+              return False
 
-      try:
-        # Wait for each line with a timeout
-        response = await asyncio.wait_for(self.io.readline(), timeout=2)
-        decoded = response.decode("ascii", errors="ignore").strip()
-        await asyncio.sleep(0.1)
-
-        if len(decoded) > 0:
-          # Stop when the final message arrives
-          if "Initialization complete" in decoded:
-            break
-
-      except asyncio.TimeoutError:
-        # Keep polling if nothing arrives within timeout
-        continue
+    return reset_scope.cancelled_caught
 
   async def home(self):
     # Initialize the BioShake into home position
@@ -212,11 +282,8 @@ class BioShake(HeaterShakerBackend):
     # stop shaking
     await self._send_command(cmd="shakeOff", delay=0.2)
 
-    # The BioShake 3000 ELM firmware needs the motor to fully decelerate
-    # before the edge-locking mechanism (ELM) can operate. Without this
-    # delay, subsequent setElmUnlockPos commands return 'e' (error).
-    sleep_time_after_stop = 3
-    await asyncio.sleep(sleep_time_after_stop)
+    # Let the motor decelerate before the edge-locking mechanism is operated again.
+    await anyio.sleep(_ELM_SETTLE_DELAY)
 
   @property
   def supports_locking(self) -> bool:

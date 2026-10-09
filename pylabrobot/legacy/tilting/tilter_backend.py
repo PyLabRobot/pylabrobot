@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.legacy.machines.machine import MachineBackend
+from pylabrobot.legacy.machines.backend import MachineBackend
 
 
 class TiltModuleError(Exception):
