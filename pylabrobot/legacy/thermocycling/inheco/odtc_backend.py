@@ -1,13 +1,11 @@
-import asyncio
 import datetime
-import time
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
-from pylabrobot.legacy.storage.inheco.scila.inheco_sila_interface import (
-  InhecoSiLAInterface,
-  SiLAError,
-)
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.inheco.transport.sila import InhecoSiLAInterface, SiLAError
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
@@ -46,38 +44,42 @@ def _recursive_find_key(data: Any, key: str) -> Any:
 
 class ExperimentalODTCBackend(ThermocyclerBackend):
   def __init__(self, ip: str, client_ip: Optional[str] = None) -> None:
+    super().__init__()
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=ip)
     self._block_target_temp: Optional[float] = None
     self._lid_target_temp: Optional[float] = None
     self._current_sensors: Dict[str, float] = {}
     self._temp_update_time: float = 0
 
-  async def setup(self) -> None:
-    await self._sila_interface.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self._sila_interface.lifespan())
     await self._reset_and_initialize()
-
-  async def stop(self):
-    await self._sila_interface.close()
 
   async def _reset_and_initialize(self) -> None:
     try:
-      event_uri = f"http://{self._sila_interface._client_ip}:{self._sila_interface.bound_port}/"
+      event_uri = f"http://{self._sila_interface.client_ip}:{self._sila_interface.bound_port}/"
       await self._sila_interface.send_command(
         command="Reset", deviceId="ODTC", eventReceiverURI=event_uri, simulationMode=False
       )
       await self._sila_interface.send_command("Initialize")
+    except anyio.get_cancelled_exc_class():
+      raise
     except Exception as e:
       print(f"Warning during ODTC initialization: {e}")
 
   async def _wait_for_idle(self, timeout=30):
     """Wait until device state is not Busy."""
-    start = time.time()
-    while time.time() - start < timeout:
-      root = await self._sila_interface.send_command("GetStatus")
-      st = _recursive_find_key(root, "state")
-      if st and st in ["idle", "standby"]:
-        return
-      await asyncio.sleep(1)
+    if timeout is None:
+      raise TypeError("timeout must be a number")
+    with anyio.move_on_after(timeout) as scope:
+      while True:
+        root = await self._sila_interface.send_command("GetStatus")
+        st = _recursive_find_key(root, "state")
+        if st and st in ["idle", "standby"]:
+          return
+        await anyio.sleep(1)
+    assert scope.cancelled_caught
     raise RuntimeError("Timeout waiting for ODTC idle state")
 
   # -------------------------------------------------------------------------
@@ -107,7 +109,7 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
     'Ambient', 'PCB', 'Heatsink', 'Heatsink_TEC'.
     Values are in degrees Celsius.
     """
-    if time.time() - self._temp_update_time < 2.0 and self._current_sensors:
+    if anyio.current_time() - self._temp_update_time < 2.0 and self._current_sensors:
       return self._current_sensors
 
     try:
@@ -128,7 +130,7 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
               pass
 
         self._current_sensors = data
-        self._temp_update_time = time.time()
+        self._temp_update_time = anyio.current_time()
         return self._current_sensors
     except Exception as e:
       print(f"Error reading sensor data: {e}")

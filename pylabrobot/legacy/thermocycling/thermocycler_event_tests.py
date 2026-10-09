@@ -3,6 +3,9 @@ import unittest
 from typing import Any, Optional
 from unittest.mock import patch
 
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import (
@@ -15,6 +18,7 @@ from pylabrobot.legacy.thermocycling.standard import (
 from pylabrobot.legacy.thermocycling.thermocycler import Thermocycler
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class _RecordingThermocyclerBackend(ThermocyclerBackend):
@@ -32,11 +36,12 @@ class _RecordingThermocyclerBackend(ThermocyclerBackend):
       raise self.failure
     return self.result
 
-  async def setup(self, **backend_kwargs: Any) -> None:
-    pass
+  async def _cleanup(self) -> None:
+    """Release the resource-free recording backend."""
 
-  async def stop(self) -> None:
-    pass
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Own the recorder for the duration of the frontend lifespan."""
+    stack.push_shielded_async_callback(self._cleanup)
 
   async def open_lid(self, **backend_kwargs: Any) -> object:
     return self._record("open_lid", **backend_kwargs)
@@ -117,6 +122,38 @@ def _protocol() -> Protocol:
       ),
     ]
   )
+
+
+class TestThermocyclerScopedEvents(AnyioTestBase):
+  async def test_body_failure_exits_thermocycler_without_replacing_error(self) -> None:
+    backend = _RecordingThermocyclerBackend()
+    cycler = Thermocycler(
+      name="thermocycler",
+      size_x=1,
+      size_y=1,
+      size_z=1,
+      backend=backend,
+      child_location=Coordinate.zero(),
+    )
+    error = RuntimeError("body failed")
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      with pytest.raises(RuntimeError) as raised:
+        async with cycler:
+          assert backend.is_active
+          raise error
+
+    assert raised.value is error
+    assert not backend.is_active
+    assert [event.name for event in events] == [
+      "machine.setup.started",
+      "machine.setup.completed",
+      "machine.stop.started",
+      "machine.stop.completed",
+    ]
 
 
 class ThermocyclerEventTests(unittest.IsolatedAsyncioTestCase):

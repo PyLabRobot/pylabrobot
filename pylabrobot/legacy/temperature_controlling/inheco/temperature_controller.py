@@ -1,8 +1,18 @@
 import abc
 import warnings
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.temperature_controlling.backend import TemperatureControllerBackend
-from pylabrobot.legacy.temperature_controlling.inheco.control_box import InhecoTECControlBox
+from pylabrobot.legacy.temperature_controlling.inheco.control_box import (
+  _COMMAND_TIMEOUT,
+  InhecoTECControlBox,
+)
+
+# Bound for one registered cleanup command. A cleanup dispatches through the control box's
+# shared transaction, so it covers waiting behind one in-flight exchange, its own exchange,
+# and scheduling margin. It is a fixed budget for confirming one stop command and never
+# derives from a run duration, dwell, or hold parameter.
+_CLEANUP_TIMEOUT = 2 * _COMMAND_TIMEOUT + 4.0
 
 
 class InhecoTemperatureControllerBackend(TemperatureControllerBackend, metaclass=abc.ABCMeta):
@@ -14,14 +24,23 @@ class InhecoTemperatureControllerBackend(TemperatureControllerBackend, metaclass
 
   def __init__(self, index: int, control_box: InhecoTECControlBox):
     assert 1 <= index <= 6, "Index must be between 1 and 6 (inclusive)"
+    super().__init__()
     self.index = index
     self.interface = control_box
 
-  async def setup(self):
-    pass
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Borrow an active control box and own this device's temperature cleanup.
 
-  async def stop(self):
-    await self.stop_temperature_control()
+    The control box is borrowed, never entered, stopped, or closed here: it owns HID, and
+    several devices share one box, so a child that closed it would cut off its siblings.
+    """
+    await super()._enter_lifespan(stack)
+    if not self.interface.is_active:
+      raise RuntimeError("Inheco temperature backends require an active control box")
+
+    stack.push_shielded_async_callback(
+      self.stop_temperature_control, shield_timeout=_CLEANUP_TIMEOUT
+    )
 
   def serialize(self) -> dict:
     warnings.warn("The interface is not serialized.")

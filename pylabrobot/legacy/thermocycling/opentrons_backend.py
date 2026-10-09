@@ -1,7 +1,11 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
+from functools import partial
 from typing import List, Optional, cast
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
@@ -45,13 +49,11 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     self.opentrons_id = opentrons_id
     self._current_protocol: Optional[Protocol] = None
 
-  async def setup(self):
-    """No extra setup needed for HTTP-API thermocycler."""
-
-  async def stop(self):
-    """Gracefully deactivate both heaters."""
-    await self.deactivate_block()
-    await self.deactivate_lid()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Register independent, shielded block and lid deactivation callbacks."""
+    await super()._enter_lifespan(stack)
+    stack.push_shielded_async_callback(self.deactivate_lid)
+    stack.push_shielded_async_callback(self.deactivate_block)
 
   def serialize(self) -> dict:
     """Include the Opentrons module ID in serialized state."""
@@ -59,11 +61,13 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
 
   async def open_lid(self):
     """Open the thermocycler lid."""
-    return thermocycler_open_lid(module_id=self.opentrons_id)
+    open_lid = partial(thermocycler_open_lid, module_id=self.opentrons_id)
+    return await anyio.to_thread.run_sync(open_lid, abandon_on_cancel=False)
 
   async def close_lid(self):
     """Close the thermocycler lid."""
-    return thermocycler_close_lid(module_id=self.opentrons_id)
+    close_lid = partial(thermocycler_close_lid, module_id=self.opentrons_id)
+    return await anyio.to_thread.run_sync(close_lid, abandon_on_cancel=False)
 
   async def set_block_temperature(self, temperature: List[float]):
     """Set block temperature in °C. Only single unique temperature supported."""
@@ -72,7 +76,12 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
         f"Opentrons thermocycler only supports a single unique block temperature, got {set(temperature)}"
       )
     temp_value = temperature[0]
-    return thermocycler_set_block_temperature(celsius=temp_value, module_id=self.opentrons_id)
+    set_temperature = partial(
+      thermocycler_set_block_temperature,
+      celsius=temp_value,
+      module_id=self.opentrons_id,
+    )
+    return await anyio.to_thread.run_sync(set_temperature, abandon_on_cancel=False)
 
   async def set_lid_temperature(self, temperature: List[float]):
     """Set lid temperature in °C. Only single unique temperature supported."""
@@ -81,15 +90,22 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
         f"Opentrons thermocycler only supports a single unique lid temperature, got {set(temperature)}"
       )
     temp_value = temperature[0]
-    return thermocycler_set_lid_temperature(celsius=temp_value, module_id=self.opentrons_id)
+    set_temperature = partial(
+      thermocycler_set_lid_temperature,
+      celsius=temp_value,
+      module_id=self.opentrons_id,
+    )
+    return await anyio.to_thread.run_sync(set_temperature, abandon_on_cancel=False)
 
   async def deactivate_block(self):
     """Deactivate the block heater."""
-    return thermocycler_deactivate_block(module_id=self.opentrons_id)
+    deactivate = partial(thermocycler_deactivate_block, module_id=self.opentrons_id)
+    return await anyio.to_thread.run_sync(deactivate, abandon_on_cancel=False)
 
   async def deactivate_lid(self):
     """Deactivate the lid heater."""
-    return thermocycler_deactivate_lid(module_id=self.opentrons_id)
+    deactivate = partial(thermocycler_deactivate_lid, module_id=self.opentrons_id)
+    return await anyio.to_thread.run_sync(deactivate, abandon_on_cancel=False)
 
   async def run_protocol(self, protocol: Protocol, block_max_volume: float):
     """Enqueue and return immediately (no wait) the PCR profile command."""
@@ -108,45 +124,48 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
           celsius = step.temperature[0]
           ot_profile.append({"celsius": celsius, "holdSeconds": step.hold_seconds})
 
-    self._current_protocol = protocol
-
-    return thermocycler_run_profile_no_wait(
+    run_profile = partial(
+      thermocycler_run_profile_no_wait,
       profile=ot_profile,
       block_max_volume=block_max_volume,
       module_id=self.opentrons_id,
     )
+    result = await anyio.to_thread.run_sync(run_profile, abandon_on_cancel=False)
+    self._current_protocol = protocol
+    return result
 
-  def _find_module(self) -> dict:
+  async def _find_module(self) -> dict:
     """Helper to locate this module's live-data dict."""
-    for m in list_connected_modules():
+    modules = await anyio.to_thread.run_sync(list_connected_modules, abandon_on_cancel=False)
+    for m in modules:
       if m["id"] == self.opentrons_id:
         return cast(dict, m["data"])
     raise RuntimeError(f"Module '{self.opentrons_id}' not found")
 
   async def get_block_current_temperature(self) -> List[float]:
-    return [cast(float, self._find_module()["currentTemperature"])]
+    return [cast(float, (await self._find_module())["currentTemperature"])]
 
   async def get_block_target_temperature(self) -> List[float]:
-    target_temp = self._find_module().get("targetTemperature")
+    target_temp = (await self._find_module()).get("targetTemperature")
     if target_temp is None:
       raise RuntimeError("Block target temperature is not set. is a cycle running?")
     return [cast(float, target_temp)]
 
   async def get_lid_current_temperature(self) -> List[float]:
-    return [cast(float, self._find_module()["lidTemperature"])]
+    return [cast(float, (await self._find_module())["lidTemperature"])]
 
   async def get_lid_target_temperature(self) -> List[float]:
     """Get the lid target temperature in °C. Raises RuntimeError if no target is active."""
-    target_temp = self._find_module().get("lidTargetTemperature")
+    target_temp = (await self._find_module()).get("lidTargetTemperature")
     if target_temp is None:
       raise RuntimeError("Lid target temperature is not set. is a cycle running?")
     return [cast(float, target_temp)]
 
   async def get_lid_open(self) -> bool:
-    return cast(str, self._find_module()["lidStatus"]) == "open"
+    return cast(str, (await self._find_module())["lidStatus"]) == "open"
 
   async def get_lid_status(self) -> LidStatus:
-    status = cast(str, self._find_module()["lidTemperatureStatus"])
+    status = cast(str, (await self._find_module())["lidTemperatureStatus"])
     # Map Opentrons status strings to our enum
     if status == "holding at target":
       return LidStatus.HOLDING_AT_TARGET
@@ -154,7 +173,7 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
       return LidStatus.IDLE
 
   async def get_block_status(self) -> BlockStatus:
-    status = cast(str, self._find_module()["status"])
+    status = cast(str, (await self._find_module())["status"])
     # Map Opentrons status strings to our enum
     if status == "holding at target":
       return BlockStatus.HOLDING_AT_TARGET
@@ -162,7 +181,7 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
       return BlockStatus.IDLE
 
   async def get_hold_time(self) -> float:
-    hold_time = self._find_module().get("holdTime")
+    hold_time = (await self._find_module()).get("holdTime")
     if hold_time is None:
       raise RuntimeError("Hold time is not available. Is a profile running?")
     return cast(float, hold_time)
@@ -192,13 +211,13 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
   async def get_current_step_index(self) -> int:
     """Get the zero-based index of the current step from the Opentrons API."""
     # Opentrons API returns one-based, convert to zero-based
-    step_index = self._find_module().get("currentStepIndex")
+    step_index = (await self._find_module()).get("currentStepIndex")
     if step_index is None:
       raise RuntimeError("Current step index is not available. Is a profile running?")
     return cast(int, step_index) - 1
 
   async def get_total_step_count(self) -> int:
-    total_steps = self._find_module().get("totalStepCount")
+    total_steps = (await self._find_module()).get("totalStepCount")
     if total_steps is None:
       raise RuntimeError("Total step count is not available. Is a profile running?")
     return cast(int, total_steps)

@@ -1,8 +1,8 @@
 """High-level Thermocycler resource wrapping a backend."""
 
-import asyncio
-import time
 from typing import Any, List, Optional
+
+import anyio
 
 from pylabrobot.events import (
   event_operation,
@@ -292,33 +292,39 @@ class Thermocycler(ResourceHolder, Machine):
 
   async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5, **backend_kwargs):
     """Wait until block temp reaches target ± tolerance for all zones."""
+    if timeout is None:
+      # This wait has no unbounded form: it must fail fast rather than poll forever.
+      raise TypeError("wait_for_block() requires a numeric timeout, not None.")
     targets = await self.get_block_target_temperature(**backend_kwargs)
-    start = time.time()
-    while time.time() - start < timeout:
-      currents = await self.get_block_current_temperature(**backend_kwargs)
-      if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
-        return
-      await asyncio.sleep(1)
+    with anyio.move_on_after(timeout):
+      while True:
+        currents = await self.get_block_current_temperature(**backend_kwargs)
+        if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
+          return
+        await anyio.sleep(1)
     raise TimeoutError("Block temperature timeout.")
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5, **backend_kwargs):
     """Wait until the lid temperature reaches target ± ``tolerance`` or the lid temperature status is idle/holding at target."""
+    if timeout is None:
+      # This wait has no unbounded form: it must fail fast rather than poll forever.
+      raise TypeError("wait_for_lid() requires a numeric timeout, not None.")
     try:
       targets = await self.get_lid_target_temperature(**backend_kwargs)
     except RuntimeError:
       targets = None
-    start = time.time()
-    while time.time() - start < timeout:
-      if targets is not None:
-        currents = await self.get_lid_current_temperature(**backend_kwargs)
-        if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
-          return
-      else:
-        # If no target temperature, check status
-        status = await self.get_lid_status(**backend_kwargs)
-        if status in ["idle", "holding at target"]:
-          return
-      await asyncio.sleep(1)
+    with anyio.move_on_after(timeout):
+      while True:
+        if targets is not None:
+          currents = await self.get_lid_current_temperature(**backend_kwargs)
+          if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
+            return
+        else:
+          # If no target temperature, check status
+          status = await self.get_lid_status(**backend_kwargs)
+          if status in (LidStatus.IDLE, LidStatus.HOLDING_AT_TARGET):
+            return
+        await anyio.sleep(1)
     raise TimeoutError("Lid temperature timeout.")
 
   async def is_profile_running(self, **backend_kwargs) -> bool:
@@ -343,7 +349,7 @@ class Thermocycler(ResourceHolder, Machine):
   async def wait_for_profile_completion(self, poll_interval: float = 60.0, **backend_kwargs):
     """Block until the profile finishes, polling at `poll_interval` seconds."""
     while await self.is_profile_running(**backend_kwargs):
-      await asyncio.sleep(poll_interval)
+      await anyio.sleep(poll_interval)
 
   def serialize(self) -> dict:
     """JSON-serializable representation."""
