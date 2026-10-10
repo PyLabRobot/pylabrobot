@@ -39,6 +39,7 @@ class Tube(Container):
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones=None,
+    nominal_volume: Optional[float] = None,
   ):
     """Create a new tube.
 
@@ -49,6 +50,8 @@ class Tube(Container):
       size_z: Size of the tube in the z direction.
       material_z_thickness: Tube base to cavity base.
       max_volume: Maximum volume of the tube.
+      nominal_volume: Rated working volume of the tube (what it is sold and named as), in uL.
+        Defaults to `max_volume` when not given.
       category: Category of the tube.
       height_volume_data: Optional dict mapping height (mm) to volume (uL). See
         :class:`Container` for details.
@@ -64,6 +67,7 @@ class Tube(Container):
       material_z_thickness=material_z_thickness,
       category=category,
       max_volume=max_volume,
+      nominal_volume=nominal_volume,
       model=model,
       compute_volume_from_height=compute_volume_from_height,
       compute_height_from_volume=compute_height_from_volume,
