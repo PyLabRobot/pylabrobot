@@ -6904,7 +6904,7 @@ class Pipettes:
         cavity bottom plus the offset's z when None.
       transport_air_volumes: air drawn after each dispense, in uL, pushed out ahead of the next.
         The class's, else 0.0, when None.
-      cut_off_speeds: the flow each dispense ends at, in uL/s. 5.0 when None.
+      cut_off_speeds: the flow each dispense ends at, in uL/s. The class's, else 5.0, when None.
       stop_back_volumes: drawn back after each dispense, in uL. The class's, else 0.0, when None.
       surface_following_distances: how far each tip follows the rising surface, in mm. 0.0 when
         None.
@@ -7011,7 +7011,7 @@ class Pipettes:
     per_container_settings = {
       "flow_rates": by_class("flow_rates", flow_rates),
       "transport_air_volumes": by_class("transport_air_volumes", transport_air_volumes),
-      "cut_off_speeds": per_container("cut_off_speeds", cut_off_speeds, n),
+      "cut_off_speeds": by_class("cut_off_speeds", cut_off_speeds),
       "stop_back_volumes": by_class("stop_back_volumes", stop_back_volumes),
       "blow_out_air_volumes": by_class("blow_out_air_volumes", blow_out_air_volumes),
       "immersion_depths": per_container("immersion_depths", immersion_depths, n),

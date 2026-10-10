@@ -2744,7 +2744,7 @@ class Head96(Head):
         bottom when None.
       transport_air_volume: air pushed out before the liquid, in uL. The class's, else 0.0, when
         None.
-      cut_off_speed: the flow the dispense ends at, in uL/s. 5.0 when None.
+      cut_off_speed: the flow the dispense ends at, in uL/s. The class's, else 5.0, when None.
       stop_back_volume: drawn back after the dispense, in uL. The class's, else 0.0, when None.
       surface_following_distance: how far the tips follow the rising surface, in mm.
       auto_surface_following: follow by how far the dispensed liquid raises the surface found, or
@@ -2814,6 +2814,7 @@ class Head96(Head):
 
     flow_rate = by_class("flow_rates", flow_rate)
     transport_air = by_class("transport_air_volumes", transport_air_volume) or 0.0
+    cut_off_speed = by_class("cut_off_speeds", cut_off_speed)
     stop_back = by_class("stop_back_volumes", stop_back_volume) or 0.0
     blow_out_air = by_class("blow_out_air_volumes", blow_out_air_volume) or 0.0
     settling_time = by_class("settling_times", settling_time)

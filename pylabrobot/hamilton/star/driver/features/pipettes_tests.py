@@ -1746,6 +1746,25 @@ class TestEachTipsWaterClass(unittest.IsolatedAsyncioTestCase):
         ):
           self.assertEqual(self._field(sent[2], name), [round(value * 10)] * 2, name)
 
+  async def test_the_cut_off_speed_is_the_class_s_unless_given(self):
+    from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
+    from pylabrobot.resources.hamilton import hamilton_96_tiprack_1000uL
+    from pylabrobot.resources.liquid import Liquid
+
+    driver, plate, sent = await self._channels_carrying(hamilton_96_tiprack_1000uL)
+    pipettes = driver.pipettes
+    assert pipettes is not None
+    jet = get_star_liquid_class(1000.0, False, True, False, Liquid.WATER, True, True)
+    assert jet is not None and jet.dispense_stop_flow_rate != 5.0
+    wells = [plate.get_well("A1"), plate.get_well("B1")]
+    await pipettes.aspirate(wells, piston_volumes=[300.0, 300.0], liquid_heights=[3.0, 3.0])
+    await pipettes.dispense(wells, [50.0, 50.0], jet=[True, True], blow_out=[True, True])
+    self.assertEqual(self._field(sent[1], "ss"), [round(jet.dispense_stop_flow_rate * 10)] * 2)
+    await pipettes.dispense(
+      wells, [50.0, 50.0], jet=[True, True], blow_out=[True, True], cut_off_speeds=[4.5, 4.5]
+    )
+    self.assertEqual(self._field(sent[2], "ss"), [45, 45])
+
   async def test_a_50_uL_tip_has_no_class_without_blow_out(self):
     from pylabrobot.resources.hamilton import hamilton_96_tiprack_50uL
 
