@@ -87,6 +87,7 @@ def hamilton_96_tiprack_ntr(
       name_prefix=name,
     ),
     with_tips=with_tips,
+    frame_height=0.0,
   )
 
 
@@ -117,6 +118,7 @@ def _hamilton_96_tiprack_raised(
       name_prefix=name,
     ),
     with_tips=with_tips,
+    frame_height=0.0,
   )
 
 

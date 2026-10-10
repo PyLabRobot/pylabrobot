@@ -30,6 +30,10 @@ from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.features.head import Head, HeadConfiguration
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
+from pylabrobot.lib.liquid_handling.head_alignment import (
+  get_items_under_channels,
+  get_shift_with_channel_over,
+)
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -38,7 +42,7 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipRack, check_tip_racks_available, tip_origin
+from pylabrobot.resources.tip_rack import TipRack, TipSpot, check_tip_racks_available, tip_origin
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
 from pylabrobot.resources.well import Well
 
@@ -680,24 +684,30 @@ class Head96(Head):
     tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_start: Optional[float] = None,
+    *,
+    channel: str = "A1",
+    tip_spot: str = "A1",
   ) -> None:
-    """Pick up a rack of tips on the whole head, as legacy's `pick_up_tips96`. `C0 EP`.
+    """Pick up tips from a rack on the head, as legacy's `pick_up_tips96`. `C0 EP`.
 
-    Head channel A1 goes to the centre of spot A1, at the spot's Z. Once the device has picked them
-    up, the tip in each spot is mounted on the shaft of the channel with the spot's index.
+    Head channel `channel` goes to the centre of spot `tip_spot`, at the spot's Z. Once the device
+    has picked them up, each channel over a spot holding a tip has that tip on its shaft. Channels
+    past the rack's edge come down beside it: what stands there is the caller's to keep clear.
 
     Args:
       tip_rack: a 96 tip rack. Spots without a tip give none.
-      offset: added to spot A1's centre, in mm.
+      offset: added to the spot's centre, in mm.
       tip_pickup_method: `from_rack` sends the dispensing drive down first, since the device does
         not; `from_waste` and `full_blowout` move the plunger up before mounting.
       minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
       minimum_traverse_height_start: in mm.
         `configuration.traversal_z_position` when None.
+      channel: the head channel placed over `tip_spot`, A1 to H12.
+      tip_spot: the spot `channel` is placed over, A1 to H12.
 
     Raises:
-      ValueError: If the rack does not have 96 spots or holds no tips, or a position cannot be
-        reached.
+      ValueError: If the rack does not have 96 spots, no channel is over a tip, a position
+        cannot be reached, or a channel is past the edge of a rack with a frame.
       TypeError: If its tips are not Hamilton tips.
       RuntimeError: If the driver was given no deck, or the head already carries tips.
     """
@@ -711,19 +721,29 @@ class Head96(Head):
     if tip_rack.num_items != 96:
       raise ValueError("Tip rack must have 96 tips")
     check_tip_racks_available(tip_rack.get_all_items()[:1], "pick up tips from")
+    tip_spots_under_channels = get_items_under_channels(tip_rack, channel, tip_spot)
+    # Past the rack's edge the head's body comes down over the rack's frame.
+    if None in tip_spots_under_channels and tip_rack.frame_height != 0:
+      raise ValueError(
+        f"{tip_rack.name!r} has a frame the head would hit unless channel A1 is over spot A1"
+      )
     tips = [
-      spot.tip_for_pickup() if not spot.tracks_tips or spot.tip is not None else None
-      for spot in tip_rack.get_all_items()
+      spot.tip_for_pickup()
+      if spot is not None and (not spot.tracks_tips or spot.tip is not None)
+      else None
+      for spot in tip_spots_under_channels
     ]
     prototypical_tip = next((tip for tip in tips if tip is not None), None)
     if prototypical_tip is None:
-      raise ValueError("No tips found in the tip rack.")
+      raise ValueError("No tips found under the head.")
     if not isinstance(prototypical_tip, HamiltonTip):
       raise TypeError("Tip type must be HamiltonTip.")
     tip_type_index = await self._driver.get_or_assign_tip_type_index(prototypical_tip)
 
-    location = tip_rack.get_item("A1").get_location_wrt(deck, x="c", y="c", z="b") + (
-      offset or Coordinate.zero()
+    location = (
+      tip_rack.get_item("A1").get_location_wrt(deck, x="c", y="c", z="b")
+      + get_shift_with_channel_over(tip_rack, channel, tip_spot, deck)
+      + (offset or Coordinate.zero())
     )
     traverse_z, end_z = self._resolve_tip_command_heights(
       minimum_traverse_height_start, minimum_height_command_end
@@ -772,12 +792,15 @@ class Head96(Head):
     offset: Optional[Coordinate] = None,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_start: Optional[float] = None,
+    *,
+    channel: str = "A1",
+    tip_spot: str = "A1",
   ) -> None:
     """Drop the head's tips into a tip rack or anywhere else, as legacy's `drop_tips96`. `C0 ER`.
 
-    Into a tip rack, head channel A1 goes to the centre of spot A1, at the spot's Z, and each
-    channel's tip goes into the spot with its index. Anywhere else, the head is centred over the
-    resource, and the tips belong to nothing afterwards.
+    Into a tip rack, head channel `channel` goes to the centre of spot `tip_spot`, at the spot's
+    Z, and each channel's tip goes into the spot under it. Anywhere else, the head is centred over
+    the resource, and the tips belong to nothing afterwards.
 
     Args:
       resource: a 96 tip rack, or anything else, such as the trash.
@@ -785,19 +808,38 @@ class Head96(Head):
       minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
       minimum_traverse_height_start: in mm.
         `configuration.traversal_z_position` when None.
+      channel: the head channel placed over `tip_spot`, A1 to H12. A tip rack only.
+      tip_spot: the spot `channel` is placed over, A1 to H12. A tip rack only.
 
     Raises:
-      ValueError: If a tip rack does not have 96 spots, or a position cannot be reached.
+      ValueError: If a tip rack does not have 96 spots, a channel carrying a tip is not over a
+        spot, a position cannot be reached, or a channel is past the edge of a rack with a frame.
       RuntimeError: If the driver was given no deck.
     """
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    tip_spots_under_channels: List[Optional[TipSpot]] = []
     if isinstance(resource, TipRack):
       if resource.num_items != 96:
         raise ValueError("Tip rack must have 96 tips")
       check_tip_racks_available(resource.get_all_items()[:1], "drop tips into")
+      tip_spots_under_channels = get_items_under_channels(resource, channel, tip_spot)
+      # Past the rack's edge the head's body comes down over the rack's frame.
+      if None in tip_spots_under_channels and resource.frame_height != 0:
+        raise ValueError(
+          f"{resource.name!r} has a frame the head would hit unless channel A1 is over spot A1"
+        )
+      if self.resource is not None:
+        beside = [
+          shaft.name
+          for shaft, spot in zip(self.resource.get_all_items(), tip_spots_under_channels)
+          if shaft.has_tip() and spot is None
+        ]
+        if beside:
+          raise ValueError(f"channels {beside} carry a tip but are not over a spot of the rack")
       location = resource.get_item("A1").get_location_wrt(deck, x="c", y="c", z="b")
+      location += get_shift_with_channel_over(resource, channel, tip_spot, deck)
     else:
       location = self._position_centred_in(resource)
     location += offset or Coordinate.zero()
@@ -833,8 +875,8 @@ class Head96(Head):
             continue
           tip = shaft.release_tip()
           if isinstance(resource, TipRack) and isinstance(tip, Tip):
-            spot = resource.get_item(i)
-            if spot.tracks_tips:
+            spot = tip_spots_under_channels[i]
+            if spot is not None and spot.tracks_tips:
               spot.assign_tip(tip)
       await self._record_after_tip_command(command_error)
     await self.dispensing_drive_request_uL_position()
@@ -842,38 +884,41 @@ class Head96(Head):
   async def return_tips(self, **kwargs) -> None:
     """Put the head's tips back in the tip rack they were picked up from.
 
-    The rack is found from each tip's origin. Channels without a tip are skipped.
+    The rack, and the spot each channel stood over, are found from each tip's origin. Channels
+    without a tip are skipped.
 
     Args:
       kwargs: passed on to `drop_tips`.
 
     Raises:
       RuntimeError: If the driver was given no deck, the head is not modelled or carries no tips,
-        or a tip does not come from the spot with its channel's index in one tip rack on the deck.
+        or its tips did not all stand under their channels in one tip rack on the deck.
     """
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("tip commands are placed from the deck; this driver was given none")
     if self.resource is None:
       raise RuntimeError("the head is not modelled, so where its tips came from is not known")
-    tip_rack: Optional[TipRack] = None
-    for index, shaft in enumerate(self.resource.get_all_items()):
-      tip = shaft.tip
-      if not isinstance(tip, Tip):
-        continue
-      spot = tip_origin(tip, deck)
-      if spot is None or not isinstance(spot.parent, TipRack):
-        raise RuntimeError(f"{tip.name} on {shaft.name} did not come from a tip rack on the deck")
-      if tip_rack is None:
-        tip_rack = spot.parent
-      if spot.parent is not tip_rack or tip_rack.get_item(index) is not spot:
-        raise RuntimeError(
-          f"{shaft.name}'s tip {tip.name} is not from spot {index} of {tip_rack.name}; the head "
-          "returns tips only to the one rack they were picked up from"
-        )
-    if tip_rack is None:
+    shafts = self.resource.get_all_items()
+    carrying = next((shaft for shaft in shafts if isinstance(shaft.tip, Tip)), None)
+    if carrying is None:
       raise RuntimeError("No tips have been picked up.")
-    await self.drop_tips(tip_rack, **kwargs)
+    origin = tip_origin(cast(Tip, carrying.tip), deck)
+    if origin is None or not isinstance(origin.parent, TipRack):
+      raise RuntimeError(f"the tip on {carrying.name} did not come from a tip rack on the deck")
+    tip_rack = origin.parent
+    # Any one tip names the pick-up: its channel stood over the spot it came from.
+    channel = self.resource.get_child_identifier(carrying)
+    tip_spot = tip_rack.get_child_identifier(origin)
+    tip_spots_under_channels = get_items_under_channels(tip_rack, channel, tip_spot)
+    for shaft, spot in zip(shafts, tip_spots_under_channels):
+      tip = shaft.tip
+      if isinstance(tip, Tip) and tip_origin(tip, deck) is not spot:
+        raise RuntimeError(
+          f"{shaft.name}'s tip {tip.name} did not stand under it in {tip_rack.name}; the head "
+          "returns tips only as it picked them up from one rack"
+        )
+    await self.drop_tips(tip_rack, channel=channel, tip_spot=tip_spot, **kwargs)
 
   async def discard_tips(self, **kwargs) -> None:
     """Drop the head's tips into the deck's 96-head trash, whatever the model says it carries.

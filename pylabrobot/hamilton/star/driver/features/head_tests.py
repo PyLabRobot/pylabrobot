@@ -178,7 +178,12 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     from pylabrobot.resources import set_tip_tracking
-    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL_filter
+    from pylabrobot.resources.hamilton import (
+      TIP_CAR_480_A00,
+      hamilton_96_tiprack_300uL_filter,
+      hamilton_96_tiprack_raised_core_ii,
+      hamilton_tip_300uL_filter,
+    )
 
     set_tip_tracking(True)
     self.addCleanup(set_tip_tracking, False)
@@ -191,6 +196,10 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     self.head_resource = cast(NChannelPipette, self.head.resource)
     tip_car = TIP_CAR_480_A00(name="tip carrier")
     tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    # A rack without a frame, which the head may be placed past the edge of.
+    tip_car[3] = self.frameless_tip_rack = hamilton_96_tiprack_raised_core_ii(
+      name="frameless_tip_rack", make_tip=hamilton_tip_300uL_filter
+    )
     self.deck.assign_child_resource(tip_car, track=1)
     self.sent: List[str] = []
     log = self.driver._log_exchange
@@ -264,6 +273,25 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(shaft.has_tip() for shaft in shafts))
         self.tip_rack.fill()
 
+  async def test_a_channel_placed_over_a_spot_takes_only_the_tips_under_the_head(self):
+    # Channel H12 over spot D6: channels E7 to H12 stand over spots A1 to D6, the rest past the rack.
+    rack, shafts = self.frameless_tip_rack, self.head_resource
+    rack.get_item("A2").unassign_tip()
+    under = {
+      f"{'EFGH'[row]}{column + 7}": rack.get_item(f"{'ABCD'[row]}{column + 1}")
+      for row in range(4)
+      for column in range(6)
+    }
+    tips = {channel: spot.tip for channel, spot in under.items()}
+
+    await self.head.pick_up_tips(rack, channel="H12", tip_spot="D6")
+
+    # Channel A1 ends 6 columns left and 4 rows behind spot A1 (xs01179 yh4338): -54 mm X, +36 mm Y.
+    self.assertEqual(self.sent[-1], "C0EPxs00639xd0yh4698tt01wu0za2310zh2450ze2450")
+    for shaft in shafts.get_all_items():
+      channel = shafts.get_child_identifier(shaft)
+      self.assertIs(shaft.tip, tips.get(channel), channel)
+
   async def test_tips_dropped_in_the_trash_belong_to_nothing(self):
     await self.head.pick_up_tips(self.tip_rack)
     tips = [shaft.tip for shaft in self.head_resource.get_all_items()]
@@ -331,6 +359,33 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([spot.tip for spot in self.tip_rack.get_all_items()], tips)
     self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
 
+  async def test_a_drop_that_would_let_a_tip_go_beside_the_rack_is_refused(self):
+    await self.head.pick_up_tips(self.tip_rack)
+    self.sent.clear()
+    with self.assertRaisesRegex(ValueError, "carry a tip but are not over a spot"):
+      await self.head.drop_tips(self.frameless_tip_rack, channel="A1", tip_spot="A10")
+    self.assertEqual(self.sent, [])
+
+  async def test_a_rack_with_a_frame_takes_the_head_only_channel_a1_over_spot_a1(self):
+    with self.assertRaisesRegex(ValueError, "'tip_rack_01' has a frame the head would hit"):
+      await self.head.pick_up_tips(self.tip_rack, channel="H12", tip_spot="D6")
+    self.assertEqual(self.sent, [])
+    await self.head.pick_up_tips(self.frameless_tip_rack, channel="H12", tip_spot="D6")
+    self.sent.clear()
+    with self.assertRaisesRegex(ValueError, "'tip_rack_01' has a frame the head would hit"):
+      await self.head.drop_tips(self.tip_rack, channel="H12", tip_spot="D6")
+    self.assertEqual(self.sent, [])
+
+  async def test_return_tips_puts_them_back_under_the_channels_that_took_them(self):
+    rack = self.frameless_tip_rack
+    rack.get_item("A2").unassign_tip()
+    tips = [spot.tip for spot in rack.get_all_items()]
+    await self.head.pick_up_tips(rack, channel="H12", tip_spot="D6")
+    self.sent.clear()
+    await self.head.return_tips()
+    self.assertEqual(self.sent, ["C0ERxs00639xd0yh4698za2310zh2450ze2450"])
+    self.assertEqual([spot.tip for spot in rack.get_all_items()], tips)
+
   async def test_discard_tips_drops_them_in_the_96_trash(self):
     await self.head.pick_up_tips(self.tip_rack)
     self.sent.clear()
@@ -353,7 +408,7 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     shaft.release_tip()
     shaft.mount_tip(other_rack.get_item(5).tip_for_pickup())
     self.sent.clear()
-    with self.assertRaisesRegex(RuntimeError, "not from spot 5 of tip_rack_01"):
+    with self.assertRaisesRegex(RuntimeError, "did not stand under it in tip_rack_01"):
       await self.head.return_tips()
     self.assertEqual(self.sent, [])
 
