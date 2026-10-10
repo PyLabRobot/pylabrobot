@@ -88,8 +88,6 @@ class Head96Configuration(HeadConfiguration):
   first_documented_firmware_year: int = 2010
 
   # As on the base: what the head reported, standing in front of the derived values below.
-  dispensing_drive_speed_firmware_reported: Optional[float] = None
-  dispensing_drive_acceleration_firmware_reported: Optional[float] = None
   squeezer_drive_speed_firmware_reported: Optional[float] = None
   squeezer_drive_acceleration_firmware_reported: Optional[float] = None
 
@@ -224,13 +222,6 @@ class Head96Configuration(HeadConfiguration):
     )
 
   @property
-  def dispensing_drive_speed_default(self) -> float:
-    """Dispensing-drive default speed (uL/s); constant across firmware."""
-    if self.dispensing_drive_speed_firmware_reported is not None:
-      return self.dispensing_drive_speed_firmware_reported
-    return 261.1
-
-  @property
   def dispensing_drive_acceleration_range(self) -> Tuple[float, float]:
     """Dispensing-drive acceleration window (uL/s2); its max is the default 2013 firmware raised."""
     max_inc = 900000 if self.firmware_year >= 2010 else 150000
@@ -238,14 +229,6 @@ class Head96Configuration(HeadConfiguration):
       self.dispensing_drive_increments_to_uL(5000),
       self.dispensing_drive_increments_to_uL(max_inc),
     )
-
-  @property
-  def dispensing_drive_acceleration_default(self) -> float:
-    """Dispensing-drive default acceleration (uL/s2); 2013 firmware raised it."""
-    if self.dispensing_drive_acceleration_firmware_reported is not None:
-      return self.dispensing_drive_acceleration_firmware_reported
-    increments = 900000 if self.firmware_year >= 2010 else 150000
-    return self.dispensing_drive_increments_to_uL(increments)
 
   @property
   def squeezer_drive_speed_default(self) -> float:
@@ -295,6 +278,9 @@ class Head96(Head):
   default_mix_position_from_liquid_surface: float = 2.0
   # Aspirate under cLLD: how far below the surface found the tips draw, in mm.
   default_aspirate_immersion_depth: float = 2.0
+  # Behind the properties of the same names, which check a value against its range when assigned.
+  _default_dispensing_drive_speed: float = 250.0
+  _default_dispensing_drive_acceleration: float = 17000.0
   # How far above a container's top a liquid search starts, in mm.
   search_start_clearance: float = 5.0
 
@@ -308,6 +294,34 @@ class Head96(Head):
     # Where the piston stands, in uL, as last read or moved; 0.0 at rest.
     self.piston_position: float = 0.0
 
+  @property
+  def default_dispensing_drive_speed(self) -> float:
+    """In uL/s. Not read from the head, which answers with the speed its last command set."""
+    return self._default_dispensing_drive_speed
+
+  @default_dispensing_drive_speed.setter
+  def default_dispensing_drive_speed(self, speed: float) -> None:
+    low, high = self.configuration.dispensing_drive_speed_range
+    if not low <= speed <= high:
+      raise ValueError(
+        f"default_dispensing_drive_speed must be between {low} and {high}, is {speed}"
+      )
+    self._default_dispensing_drive_speed = speed
+
+  @property
+  def default_dispensing_drive_acceleration(self) -> float:
+    """In uL/s2. A head with firmware from before 2010 gets 2900.0 at setup."""
+    return self._default_dispensing_drive_acceleration
+
+  @default_dispensing_drive_acceleration.setter
+  def default_dispensing_drive_acceleration(self, acceleration: float) -> None:
+    low, high = self.configuration.dispensing_drive_acceleration_range
+    if not low <= acceleration <= high:
+      raise ValueError(
+        f"default_dispensing_drive_acceleration must be between {low} and {high}, is {acceleration}"
+      )
+    self._default_dispensing_drive_acceleration = acceleration
+
   # -- session / discovery -------------------------------------------------------------------------
 
   def _apply_firmware_generation(self) -> None:
@@ -320,17 +334,16 @@ class Head96(Head):
     c = self.configuration
     if c.firmware_year >= 2010:
       return
+    self.default_dispensing_drive_acceleration = 2900.0
     c.y_drive_acceleration_mm_per_increment = c.y_drive_mm_per_increment * 1000
     c.z_drive_acceleration_mm_per_increment = c.z_drive_mm_per_increment * 1000
     c.drive_parameters = {"yv": 5, "yr": 3, "zv": 5, "zr": 3, "dv": 5, "dr": 4, "sv": 5, "sr": 3}
     c.z_acceleration_range_increments = (5, 100)
 
   async def discover(self):
-    """Read what head this is, then take its dispensing and squeezer defaults from the head."""
+    """Read what head this is, then take its squeezer defaults from the head."""
     await super().discover()
     c = self.configuration
-    c.dispensing_drive_speed_firmware_reported = await self._reported_drive_parameter("dv")
-    c.dispensing_drive_acceleration_firmware_reported = await self._reported_drive_parameter("dr")
     c.squeezer_drive_speed_firmware_reported = await self._reported_drive_parameter("sv")
     c.squeezer_drive_acceleration_firmware_reported = await self._reported_drive_parameter("sr")
 
@@ -387,10 +400,9 @@ class Head96(Head):
 
     Args:
       volume: where to send the piston, as the volume it would hold, in uL.
-      speed: how fast, in uL/s. Defaults to `configuration.dispensing_drive_speed_default`.
+      speed: how fast, in uL/s. Defaults to `default_dispensing_drive_speed`.
       stop_speed: what to slow to at the end, in uL/s.
-      acceleration: how hard, in uL/s2. Defaults to
-        `configuration.dispensing_drive_acceleration_default`.
+      acceleration: how hard, in uL/s2. Defaults to `default_dispensing_drive_acceleration`.
       current_limit: the motor current limit.
       read_timeout: how long to wait for the device to answer, in seconds.
 
@@ -399,9 +411,9 @@ class Head96(Head):
     """
     c = self.configuration
     if speed is None:
-      speed = c.dispensing_drive_speed_default
+      speed = self.default_dispensing_drive_speed
     if acceleration is None:
-      acceleration = c.dispensing_drive_acceleration_default
+      acceleration = self.default_dispensing_drive_acceleration
 
     for value, (low, high), name in (
       (volume, c.dispensing_drive_range, "volume"),
@@ -1397,7 +1409,7 @@ class Head96(Head):
 
     Args:
       volume: per channel, in uL.
-      flow_rate: in uL/s. `dispensing_drive_speed_default` when None.
+      flow_rate: in uL/s. `default_dispensing_drive_speed` when None.
       surface_following_distance: how far down it follows the surface, in mm.
       minimum_height: lowest tip bottom height, in mm. The lowest reachable when None.
 
@@ -1406,7 +1418,7 @@ class Head96(Head):
     """
     c = self.configuration
     if flow_rate is None:
-      flow_rate = c.dispensing_drive_speed_default
+      flow_rate = self.default_dispensing_drive_speed
     following_max = c.z_drive_increments_to_mm(9999)
     for checked, (low, high), name in (
       (volume, c.dispensing_drive_range, "volume"),
@@ -1448,7 +1460,7 @@ class Head96(Head):
 
     Args:
       volume: per channel, in uL.
-      flow_rate: in uL/s. `dispensing_drive_speed_default` when None.
+      flow_rate: in uL/s. `default_dispensing_drive_speed` when None.
       stop_flow_rate: in uL/s.
       stop_back_volume: drawn back at the end, in uL.
       surface_following_distance: how far up it follows the surface, in mm.
@@ -1459,7 +1471,7 @@ class Head96(Head):
     """
     c = self.configuration
     if flow_rate is None:
-      flow_rate = c.dispensing_drive_speed_default
+      flow_rate = self.default_dispensing_drive_speed
     speed_max = c.dispensing_drive_speed_range[1]
     following_max = c.z_drive_increments_to_mm(9999)
     for checked, (low, high), name in (
