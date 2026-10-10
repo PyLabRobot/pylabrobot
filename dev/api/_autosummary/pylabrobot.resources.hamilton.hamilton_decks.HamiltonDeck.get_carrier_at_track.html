@@ -589,7 +589,7 @@
 <h1>pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track<a class="headerlink" href="#pylabrobot-resources-hamilton-hamilton-decks-hamiltondeck-get-carrier-at-track" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track">
-<span class="sig-prename descclassname"><span class="pre">HamiltonDeck.</span></span><span class="sig-name descname"><span class="pre">get_carrier_at_track</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">track</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="pylabrobot.resources.Carrier.html#pylabrobot.resources.Carrier" title="pylabrobot.resources.carrier.Carrier"><span class="pre">Carrier</span></a></span></span><a class="headerlink" href="#pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">HamiltonDeck.</span></span><span class="sig-name descname"><span class="pre">get_carrier_at_track</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">track</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="pylabrobot.resources.Carrier.html#pylabrobot.resources.Carrier" title="pylabrobot.resources.carrier.Carrier"><span class="pre">Carrier</span></a></span></span><a class="headerlink" href="#pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_carrier_at_track" title="Link to this definition">#</a></dt>
 <dd><p>The carrier covering a track, from where the carriers sit on this deck.</p>
 <p>A carrier covers every track from the one it is placed at to
 <code class="code docutils literal notranslate"><span class="pre">compute_right_track_of_carrier</span></code>, so a six-track carrier at track 15 answers for 15 to 20. This
@@ -597,13 +597,13 @@ finds it from any of them, which is what lets a caller name a carrier by the tra
 at while the autoload addresses it by its rightmost.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>track</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – any track the carrier covers, counted from 1.</p>
+<dd class="field-odd"><p><strong>track</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – any track the carrier covers, counted from 1.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The carrier there.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If no carrier on this deck covers that track.</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If no carrier on this deck covers that track.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference internal" href="pylabrobot.resources.Carrier.html#pylabrobot.resources.Carrier" title="pylabrobot.resources.carrier.Carrier"><em>Carrier</em></a></p>
