@@ -20,6 +20,7 @@ import websockets
 from websockets.typing import Origin
 
 from pylabrobot.resources import does_volume_tracking, set_volume_tracking
+from pylabrobot.resources.collision import Collision
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import hamilton_96_tiprack_1000uL
@@ -851,6 +852,66 @@ class AccessTests(unittest.IsolatedAsyncioTestCase):
     """A page served by an earlier run keeps that run's token, and it must not open this one."""
     other = Viewer3D(self.facility, open_browser=False)
     await self.assert_refused(self.ws(other.token))
+
+
+class ShowCollisionsTests(unittest.IsolatedAsyncioTestCase):
+  """What a refused command would hit is said to the pages, one box per resource."""
+
+  async def asyncSetUp(self):
+    self.facility = empty_facility()
+    self.plate = cor_96_wellplate_360uL_Fb("plate")
+    self.facility.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
+    self.mover = Resource("mover", 10, 10, 10)
+    self.facility.assign_child_resource(self.mover, location=Coordinate(0, 0, 0))
+    self.viewer = Viewer3D(
+      self.facility,
+      open_browser=False,
+      fs_port=FS_PORT,
+      ws_port=WS_PORT,
+      name="tests",
+      raise_on_collision=True,
+    )
+    await self.viewer.start()
+
+  async def asyncTearDown(self):
+    await self.viewer.stop()
+
+  def ws(self) -> str:
+    return f"ws://127.0.0.1:{self.viewer.ws_port}/?token={self.viewer.token}"
+
+  @staticmethod
+  def collision(obstacle: Resource) -> Collision:
+    return Collision(mover=obstacle, obstacle=obstacle, group="test", segment=0, gap=0.0)
+
+  async def test_a_page_is_told_what_was_hit_and_where_it_stands(self):
+    async with websockets.connect(self.ws(), max_size=None) as ws:
+      self.assertEqual(json.loads(await ws.recv())["event"], "scene")
+      hit = self.collision(self.plate)
+      await self.viewer.show_collisions([hit])
+      # State may be published in between; what was hit is said when it is said.
+      while True:
+        said = json.loads(await ws.recv())
+        if said["event"] == "collisions":
+          break
+      self.assertEqual(
+        said["data"]["collisions"],
+        [{"index": self.viewer._index_of["plate"], "resource": "plate", "group": "test"}],
+      )
+
+  async def test_nothing_is_sent_for_what_the_scene_does_not_name(self):
+    async with websockets.connect(self.ws(), max_size=None) as ws:
+      self.assertEqual(json.loads(await ws.recv())["event"], "scene")
+      elsewhere = Resource("elsewhere", 10, 10, 10)
+      await self.viewer.show_collisions([self.collision(elsewhere)])
+      await ws.send(json.dumps({"event": "hello", "data": {"backend": "WebGL2"}}))
+      await (await ws.ping())  # answered once everything sent before it has been read
+
+  async def test_with_no_page_connected_nothing_is_sent(self):
+    await self.viewer.show_collisions([self.collision(self.plate)])
+
+  async def test_the_flag_is_the_viewer_configuration_saying_whether_checks_may_refuse(self):
+    self.assertTrue(self.viewer.raise_on_collision)
+    self.assertFalse(Viewer3D(empty_facility(), open_browser=False).raise_on_collision)
 
 
 if __name__ == "__main__":

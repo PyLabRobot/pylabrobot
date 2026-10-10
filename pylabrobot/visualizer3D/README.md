@@ -254,6 +254,8 @@ ports while the bind fails with `EADDRINUSE`; any other error is raised.
 | `scene` | the first message to a new client (the kept scene, not a rebuild); broadcast, with a full `state` after it, when a name appears in or disappears from the tree | `protocol`, `epoch`, `stats`, `models`, `instances` |
 | `state` | a snapshot after every `scene`; a delta whenever a batch of tracker updates holds something that looks different from what was last sent | `epoch`, `states`, `of`, `locations` |
 | `moves` | the tree changed shape but holds the same names: a reparent or a relocation, applied to the scene the page has | `epoch`, `moves` |
+| `motion` | a command the device is carrying out, acted out by the page, which answers `motion_done` | the command's motion, or a `command` alone |
+| `collisions` | what a refused command would hit, drawn over the scene until the next word about collisions or a rebuild | `collisions`: `{index, resource, group}` per resource hit |
 | `hello` | page to server, once per socket: what it draws with, or from `boot.js` why it could not; the first without an `error` ends `wait_for_browser` | `backend`, `renderer`, `software`, `quality`, `userAgent`, `error` |
 
 **`scene`.** `protocol` is `PROTOCOL` in `server.py`, currently 1, and the page holds its own

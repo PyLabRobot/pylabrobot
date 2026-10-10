@@ -9,7 +9,20 @@ import dataclasses
 import datetime
 import json
 import logging
-from typing import Any, Dict, FrozenSet, List, Literal, Optional, Tuple, Union, cast, overload
+from typing import (
+  Any,
+  Awaitable,
+  Callable,
+  Dict,
+  FrozenSet,
+  List,
+  Literal,
+  Optional,
+  Tuple,
+  Union,
+  cast,
+  overload,
+)
 
 from pylabrobot.events import emit_event
 from pylabrobot.hamilton.protocol.text.framing import (
@@ -153,6 +166,11 @@ class STARDriver:
     # Coordinates commands on the shared link: one at a time per module, and a C0 master
     # command alone. Read-only requests are exempt, see `send_command`.
     self._lock = _FirmwareLock()
+
+    # Handed every command that moves something, before it is sent, with its module, command and
+    # parameters. Set by whoever judges what a command's movers would sweep through; a raise here
+    # refuses the command before the device hears it. Reads are never handed over.
+    self.collision_listener: Optional[Callable[[str, str, Dict[str, Any]], Awaitable[None]]] = None
     self._replies = ReplyRouter(
       io=self.io,
       module_id_length=STAR_MODULE_ID_LENGTH,
@@ -583,6 +601,10 @@ class STARDriver:
     )
     if command[0] in ("R", "Q"):
       return await self._send(module, command, **kwargs_)
+    # Judged where it stands, before any lock is taken: a refused command never reaches the device,
+    # and refusing does not hold a subsystem back.
+    if self.collision_listener is not None:
+      await self.collision_listener(module, command, kwargs)
     key = subsystem or (_FirmwareLock.EVERY_SUBSYSTEM if module == "C0" else module)
     async with self._lock.subsystem(key):
       return await self._send(module, command, **kwargs_)
