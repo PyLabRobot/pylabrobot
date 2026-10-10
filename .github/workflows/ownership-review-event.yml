@@ -1,0 +1,15 @@
+name: Ownership review event
+
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+# This workflow runs from the PR merge ref and must never receive App credentials.
+# Its completion wakes the trusted main-branch workflow, which reads live API data.
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Refresh ownership authorization from the live GitHub API.'

@@ -10,6 +10,43 @@ If this is your first time contributing to open source, check out [How to Open S
 
 It's highly appreciated by the PyLabRobot developers if you communicate what you want to work on, to minimize any duplicate work. You can do this on [discuss.pylabrobot.org](https://discuss.pylabrobot.org).
 
+## Ownership and merging
+
+The `ownership-policy` check uses `.github/CODEOWNERS` from `main`. Owners with repository write
+access can merge their own changes in their assigned paths without a second person's approval.
+For someone else's PR, approve the current commit through GitHub's normal review interface. A PR
+touching multiple owners' paths needs authorization covering every path, including both paths of a
+rename. Core-team members can authorize changes anywhere. The normal Merge button remains available
+once required checks pass.
+
+Self-authorization is tied to an authenticated action by the PR author on the exact commit: opening,
+reopening, marking the PR ready, or pushing it. Another collaborator's push does not inherit that
+authorization. PRs predating the integration need one such author action or an owner review. Approvals
+on older commits and dismissed reviews do not count. Outstanding changes-requested reviews from
+writers block authorization. Reviews trigger a refresh; the scheduled run also refreshes access and
+team membership every 30 minutes (subject to GitHub Actions scheduling delays).
+
+The checker uses Python's standard library. Its supported CODEOWNERS patterns are `*` for the
+default, root-anchored paths, trailing-slash directories, and `*` or `?` within a path component.
+Use `@username` or `@organization/team` owners. Unanchored patterns, `**`, character classes,
+escapes, negation, and email owners cause the check to fail instead of silently weakening access.
+Paths without owners require core-team authorization.
+
+The trusted workflow runs only from `main`, never executes PR code, and publishes checks as the
+dedicated ownership GitHub App. Its key belongs in the `ownership-policy` environment, restricted
+to the `main` **branch** (no tag or PR-ref exceptions). The App needs Checks write, Contents read,
+Pull requests read, and organization Members read, installed only on this repository. Store its ID
+as the environment variable `OWNERSHIP_APP_ID` and its key as the environment secret
+`OWNERSHIP_APP_PRIVATE_KEY`. Branch protection must require `ownership-policy` from that specific
+App, require PRs with zero native approvals, disable native required CODEOWNER reviews, and require
+branches to be up to date. Keep existing CI requirements. Do not grant maintainers check bypass.
+
+Run the policy's regression tests with:
+
+```bash
+python3 -m unittest discover -s .github/ownership -p '*_tests.py'
+```
+
 ## Development Tips
 
 It is recommend that you use VSCode, as we provide a workspace config in `/.vscode/settings.json`, but you can use any editor you like, of course.
