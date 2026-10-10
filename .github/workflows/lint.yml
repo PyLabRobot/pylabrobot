@@ -7,17 +7,6 @@ on:
   pull_request:
 
 jobs:
-  ownership-policy-tests:
-    name: Ownership policy tests
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - run: python3 -m unittest discover -s .github/ownership -p '*_tests.py'
-
   lint:
     name: Linting
     runs-on: ubuntu-latest

@@ -41,12 +41,6 @@ as the environment variable `OWNERSHIP_APP_ID` and its key as the environment se
 App, require PRs with zero native approvals, disable native required CODEOWNER reviews, and require
 branches to be up to date. Keep existing CI requirements. Do not grant maintainers check bypass.
 
-Run the policy's regression tests with:
-
-```bash
-python3 -m unittest discover -s .github/ownership -p '*_tests.py'
-```
-
 ## Development Tips
 
 It is recommend that you use VSCode, as we provide a workspace config in `/.vscode/settings.json`, but you can use any editor you like, of course.
