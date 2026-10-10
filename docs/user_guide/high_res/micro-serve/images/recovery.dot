@@ -1,0 +1,37 @@
+digraph microserve_recovery {
+  graph [bgcolor="#f8fafc", pad=0.25, rankdir=TB, ranksep=0.65, nodesep=0.6,
+         outputorder=edgesfirst];
+  node [shape=box, style="rounded,filled", fillcolor="#fef3c7", color="#d97706",
+        fontcolor="#0f172a", fontname="Helvetica", fontsize=14, margin="0.17,0.12"];
+  edge [color="#475569", fontcolor="#475569", fontname="Helvetica", fontsize=12,
+        arrowsize=0.8];
+
+  preparing [label="PREPARATION IN FLIGHT\nload/unload has been attempted",
+             fillcolor="#ede9fe", color="#8b5cf6"];
+  disconnected [label="DISCONNECTED\nunresolved preparation retained",
+                fillcolor="#fee2e2", color="#dc2626"];
+  pending [label="UNRESOLVED / CONNECTED\nnew preparation and most motion blocked",
+           penwidth=2];
+  checking [label="RECONCILING\nread command record + status",
+            fillcolor="#e0f2fe", color="#0284c7"];
+  retracting [label="EXPLICIT RETRACTION\ninspect machine · clear robot\nhomed · idle · ready mode"];
+  prepared [label="OWNED HANDOFF RESTORED\nexpected direction + stacker",
+            fillcolor="#dcfce7", color="#16a34a"];
+  cleared [label="HANDOFF CLEARED\nloader home sensors confirmed",
+           fillcolor="#dcfce7", color="#16a34a"];
+
+  preparing -> disconnected [label="timeout / cancellation /\nincomplete exchange",
+                             color="#dc2626", fontcolor="#dc2626"];
+  preparing -> pending [label="ERROR / WARNING / ABORTED\nor final state not confirmed",
+                        color="#d97706", fontcolor="#d97706"];
+  disconnected -> pending [label="inspect, then setup()\npending record is preserved"];
+  pending -> checking [label="reconcile_preparation()\nsame controller boot · no other client moves"];
+  checking -> pending [label="missing / running / failed /\nmismatched result", constraint=false,
+                       color="#d97706", fontcolor="#d97706"];
+  checking -> prepared [label="exact command succeeded\ntarget + extension confirmed"];
+  pending -> retracting [label="retract()\nafter inspection"];
+  retracting -> cleared [label="both home sensors ON\nlock released"];
+
+  {rank=same; checking; retracting;}
+  {rank=same; prepared; cleared;}
+}

@@ -1,9 +1,6 @@
-from pylabrobot.high_res.lid_valet import (
-  HighResLidValet,
-  HighResLidValetError,
-  LidValetState,
-)
-from pylabrobot.high_res.micro_serve import (
+"""HighRes MicroServe controller and stacker operations."""
+
+from .micro_serve import (
   HighResMicroServe,
   MicroServeCommandStatus,
   MicroServeError,
@@ -14,13 +11,8 @@ from pylabrobot.high_res.micro_serve import (
   MicroServeStatus,
   MicroServeUnresolvedPreparation,
 )
-from pylabrobot.high_res.settings import HighResLidValetSettings
 
 __all__ = [
-  "HighResLidValet",
-  "HighResLidValetError",
-  "HighResLidValetSettings",
-  "LidValetState",
   "HighResMicroServe",
   "MicroServeCommandStatus",
   "MicroServeError",
