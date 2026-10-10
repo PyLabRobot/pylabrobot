@@ -59,10 +59,13 @@ class HeadConfiguration:
   initialize_command: str
   tip_presence_command: str
   position_command: str
-  # What the master's commands for this head call its Y, its Z, and the height it leaves the head
-  # at. Shared by the commands that move it and by the query that reports where it is.
+  defined_position_command: str
+  # What the master's commands for this head call its Y, its Z, the height it travels at and the
+  # height it leaves the head at. Shared by the commands that move it and by the query that
+  # reports where it is.
   y_parameter: str
   z_parameter: str
+  traverse_z_parameter: str
   z_end_parameter: str
   x_offset_parameter: str
   head_types: Dict[int, str]
@@ -174,6 +177,12 @@ class HeadConfiguration:
   """How high the head travels when a command is not told otherwise, in mm. Not a device fact: a
   height chosen to clear what sits on the deck, which is why every command that uses it takes it as
   an argument too."""
+
+  defined_position_minimum_height_default: float = 342.5
+  """The height `_unchecked_fw_move_to_coordinate` travels at when the caller names none, in mm.
+
+  A device fact rather than a choice: it is the top of what that command's own height field
+  accepts, which is not the same as what the Z drive reaches, and differs between the heads."""
 
   # What the driver sends when a move names no current limit, and what the drives accept.
   y_drive_current_limit_default: int = 15
@@ -1212,27 +1221,36 @@ class Head:
   async def _unchecked_fw_move_to_coordinate(
     self,
     coordinate: Coordinate,
-    minimum_height_at_beginning_of_a_command: float = 342.5,
+    minimum_height_at_beginning_of_a_command: Optional[float] = None,
   ):
     """Move the head to a defined coordinate. Nothing is guarded and nothing is recorded.
 
     One command for all three axes, where this driver sends one per axis. Kept for cross-testing
-    the two against each other on a device.
+    the two against each other on a device. `C0 EM` on the 96-head and `C0 EN` on the 384-head:
+    the same command down to the order its parameters are written in, so what differs is four
+    names the configuration states.
 
     Args:
       coordinate: coordinate of A1 in mm - the tip bottom on a head carrying tips, the channel
         bottom on one that is not.
       minimum_height_at_beginning_of_a_command: the height every channel is at before it travels,
-        in mm, whatever the tip pattern says.
+        in mm, whatever the tip pattern says. Defaults to
+        `configuration.defined_position_minimum_height_default`.
     """
+    c = self.configuration
+    if minimum_height_at_beginning_of_a_command is None:
+      minimum_height_at_beginning_of_a_command = c.defined_position_minimum_height_default
+    parameters: Dict[str, Any] = {
+      "xs": f"{abs(round(coordinate.x * 10)):05}",
+      "xd": "0" if coordinate.x >= 0 else "1",
+      c.y_parameter: f"{round(coordinate.y * 10):04}",
+      c.z_parameter: f"{round(coordinate.z * 10):04}",
+      c.traverse_z_parameter: f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
+    }
     return await self._driver.send_command(
       module="C0",
-      command="EM",
-      xs=f"{abs(round(coordinate.x * 10)):05}",
-      xd="0" if coordinate.x >= 0 else "1",
-      yh=f"{round(coordinate.y * 10):04}",
-      za=f"{round(coordinate.z * 10):04}",
-      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
+      command=c.defined_position_command,
+      **parameters,
     )
 
   async def park(

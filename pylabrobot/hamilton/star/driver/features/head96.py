@@ -66,8 +66,10 @@ class Head96Configuration(HeadConfiguration):
   initialize_command: str = "EI"
   tip_presence_command: str = "QH"
   position_command: str = "QI"
+  defined_position_command: str = "EM"
   y_parameter: str = "yh"
   z_parameter: str = "za"
+  traverse_z_parameter: str = "zh"
   z_end_parameter: str = "ze"
   x_offset_parameter: str = "kf"
   head_types: Dict[int, str] = field(
