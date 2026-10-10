@@ -53,7 +53,7 @@ from pylabrobot.hamilton.liquid_class_resolver import (
   get_volumes_and_classes,
 )
 from pylabrobot.hamilton.liquid_classes import HamiltonLiquidClass
-from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
+from pylabrobot.hamilton.transport.tcp.commands import HoiEntryError, TCPCommand
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.messages import HoiParamsParser, parse_into_struct
 from pylabrobot.hamilton.transport.tcp.packets import Address
@@ -69,6 +69,12 @@ from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import (
   validate_channel_selections,
 )
 from pylabrobot.lib.liquid_handling.tip_consolidation import plan_tip_consolidation
+from pylabrobot.lib.liquid_handling.tip_presence_probing import (
+  probe_tip_inventory as _probe_tip_inventory,
+)
+from pylabrobot.lib.liquid_handling.tip_presence_probing import (
+  probe_tip_presence_via_pickup as _probe_tip_presence_via_pickup,
+)
 from pylabrobot.resources import Container, Coordinate, Tip, TipRack, does_volume_tracking
 from pylabrobot.resources.errors import (
   HasTipError,
@@ -1100,6 +1106,23 @@ class _ChannelContext(Generic[_OpT]):
   z_minimum: List[float]
   z_fluid: List[float]
   z_air: List[float]
+
+
+# What a channel answers when the spot under it held no tip: "A tip is not held." (the front) or
+# "Wrong type of tip detected." (the rear), both measured over empty spots on the device.
+_NO_TIP_RESULTS = (0x0F08, 0x0F0A)
+
+
+def _channels_that_met_no_tip(error: Exception) -> Optional[List[int]]:
+  """The channels a pick-up's error says met no tip; None when any channel failed otherwise."""
+  if not isinstance(error, ChannelizedError):
+    return None
+  for cause in error.errors.values():
+    if isinstance(cause, NoTipError):
+      continue
+    if not isinstance(cause, HoiEntryError) or cause.entry.result not in _NO_TIP_RESULTS:
+      return None
+  return sorted(error.errors)
 
 
 class Pipettes:
@@ -5041,6 +5064,116 @@ class Pipettes:
     for batch in batches:
       await self.pick_up_tips(batch.origin_tip_spots, use_channels=batch.use_channels)
       await self.drop_tips(batch.target_tip_spots, use_channels=batch.use_channels)
+
+  async def _require_emptied(self, use_channels: Sequence[int]) -> None:
+    """Refuse to end a probe with a channel still sensing a tip: one the device said met none."""
+    sensed = await self.sense_tip_presence()
+    holding = [ch for ch in use_channels if sensed[ch]]
+    if holding:
+      raise HasTipError(f"{channels_named(holding)} still senses a tip after probing")
+
+  async def probe_tip_presence_via_pickup(
+    self,
+    tip_spots: List[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_during: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> Dict[str, bool]:
+    """Find which spots hold a tip by picking each up and putting it back, as legacy's.
+
+    After a pick-up that fails, a channel that answers `0x0F08` or `0x0F0A` found no tip; any
+    other error is raised, and so is a channel still sensing a tip at the end. The tips taken go
+    back into their own spots; the trackers are left as the pick-up and the drop leave them.
+
+    Args:
+      tip_spots: the spots to probe.
+      use_channels: the channel for each spot, 0-indexed from the back. The first ones when None.
+      minimum_traverse_height_start: the height each pick-up and each drop travels to its spots
+        at, in mm. As `pick_up_tips` and `drop_tips` take it when None.
+      minimum_traverse_height_during: the height between groups of spots within one pick-up or
+        drop, in mm. As they take it when None.
+      minimum_traverse_height_end: the height each pick-up and each drop leaves the channels at,
+        in mm. `default_minimum_traverse_height` when None.
+
+    Returns:
+      Each spot's name, and whether it held a tip.
+
+    Raises:
+      ValueError: If the counts differ, or a channel is given twice.
+      HasTipError: If a channel still senses a tip at the end.
+    """
+    tip_spots = list(tip_spots)
+    use_channels = list(range(len(tip_spots))) if use_channels is None else list(use_channels)
+    found = await _probe_tip_presence_via_pickup(
+      tip_spots,
+      use_channels,
+      pick_up_tips=functools.partial(
+        self.pick_up_tips,
+        minimum_traverse_height_start=minimum_traverse_height_start,
+        minimum_traverse_height_during=minimum_traverse_height_during,
+        minimum_traverse_height_end=minimum_traverse_height_end,
+      ),
+      drop_tips=functools.partial(
+        self.drop_tips,
+        minimum_traverse_height_start=minimum_traverse_height_start,
+        minimum_traverse_height_during=minimum_traverse_height_during,
+        minimum_traverse_height_end=minimum_traverse_height_end,
+      ),
+      missed_channels=_channels_that_met_no_tip,
+    )
+    await self._require_emptied(use_channels)
+    return found
+
+  async def probe_tip_inventory(
+    self,
+    tip_spots: List[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_during: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ) -> Dict[str, bool]:
+    """Probe any number of spots in any order, dealt a column at a time as `plan_tip_inventory`.
+
+    As `probe_tip_presence_via_pickup`.
+
+    Args:
+      tip_spots: the spots to probe, in any order; the result keeps it.
+      use_channels: the channels to probe with, 0-indexed from the back. Every channel when None.
+      minimum_traverse_height_start: as `probe_tip_presence_via_pickup`.
+      minimum_traverse_height_during: as `probe_tip_presence_via_pickup`.
+      minimum_traverse_height_end: as `probe_tip_presence_via_pickup`.
+
+    Returns:
+      Each spot's name, and whether it held a tip.
+
+    Raises:
+      ValueError: If a channel is given twice.
+      HasTipError: If a channel still senses a tip at the end.
+    """
+    tip_spots = list(tip_spots)
+    use_channels = list(range(self.num_channels)) if use_channels is None else list(use_channels)
+    found = await _probe_tip_inventory(
+      tip_spots,
+      use_channels,
+      pick_up_tips=functools.partial(
+        self.pick_up_tips,
+        minimum_traverse_height_start=minimum_traverse_height_start,
+        minimum_traverse_height_during=minimum_traverse_height_during,
+        minimum_traverse_height_end=minimum_traverse_height_end,
+      ),
+      drop_tips=functools.partial(
+        self.drop_tips,
+        minimum_traverse_height_start=minimum_traverse_height_start,
+        minimum_traverse_height_during=minimum_traverse_height_during,
+        minimum_traverse_height_end=minimum_traverse_height_end,
+      ),
+      missed_channels=_channels_that_met_no_tip,
+    )
+    await self._require_emptied(use_channels)
+    return found
 
   async def _move_relative_and_check(
     self, command: PrepCmd.PrepCommand, expected: Dict[int, Coordinate], tolerance: float = 1.0
