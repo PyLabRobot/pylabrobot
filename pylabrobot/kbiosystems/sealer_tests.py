@@ -1,7 +1,8 @@
 import unittest
-from typing import Dict, List
-from unittest.mock import AsyncMock, patch
+from typing import Dict, Optional, cast
+from unittest.mock import AsyncMock, NonCallableMagicMock, call, patch
 
+from pylabrobot.io.testing import fake_serial
 from pylabrobot.kbiosystems import (
   KBiosystemsError,
   KBiosystemsUltrasealEPRO,
@@ -13,41 +14,17 @@ from pylabrobot.kbiosystems import (
 )
 
 
-class FakeSealerSerial:
-  """In-memory serial stand-in that mimics the sealer's echo protocol.
+def sealer_io(responses: Dict[str, str]) -> NonCallableMagicMock:
+  """Create a serial transport that echoes commands before their configured replies."""
 
-  On ``write(command + "\\r")`` it records the command and, if a reply body is
-  configured for it, queues ``command + body + "\\r"`` to be read back - exactly
-  like the device, which echoes the command in front of its reply.
-  """
-
-  def __init__(self, responses: Dict[str, str]) -> None:
-    self.responses = responses
-    self.port = "FAKE"
-    self.written: List[str] = []
-    self._rx = bytearray()
-
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
-    pass
-
-  async def reset_input_buffer(self) -> None:
-    self._rx.clear()
-
-  async def write(self, data: bytes) -> None:
+  def reply(data: bytes) -> Optional[bytes]:
+    """Return an echoed ASCII reply, or no response for an unmapped command."""
     command = data.decode("ascii").rstrip("\r")
-    self.written.append(command)
-    if command in self.responses:
-      self._rx += (command + self.responses[command] + "\r").encode("ascii")
+    if command in responses:
+      return (command + responses[command] + "\r").encode("ascii")
+    return None
 
-  async def read(self, num_bytes: int = 1) -> bytes:
-    if not self._rx:
-      return b""
-    out = bytes(self._rx[:num_bytes])
-    del self._rx[:num_bytes]
-    return out
+  return fake_serial(on_write=reply)
 
 
 class KBiosystemsSealerTestBase(unittest.IsolatedAsyncioTestCase):
@@ -60,17 +37,20 @@ class KBiosystemsSealerTestBase(unittest.IsolatedAsyncioTestCase):
 
 class TestUltrasealEPRO(KBiosystemsSealerTestBase):
   def _make(self, responses: Dict[str, str]) -> KBiosystemsUltrasealEPRO:
+    """Create an ePRO with configured serial replies."""
     sealer = KBiosystemsUltrasealEPRO(port="FAKE")
-    sealer.io = FakeSealerSerial(responses)  # type: ignore[assignment]
+    sealer.io = sealer_io(responses)  # type: ignore[assignment]
     return sealer
 
   async def test_setup_sequence(self):
     sealer = self._make({"I": "ok", "?": "00", "V": "1.2\rboardA", "A100": "ok"})
     await sealer.setup()
     self.assertEqual(sealer.firmware_version, "1.2 | boardA")
-    self.assertIn("I", sealer.io.written)  # type: ignore[attr-defined]
-    self.assertIn("V", sealer.io.written)  # type: ignore[attr-defined]
-    self.assertIn("A100", sealer.io.written)  # type: ignore[attr-defined]
+    write = cast(AsyncMock, sealer.io.write)
+    self.assertEqual(
+      write.await_args_list, [call(b"I\r"), call(b"?\r"), call(b"V\r"), call(b"A100\r")]
+    )
+    self.assertEqual(write.call_count, write.await_count)
 
   async def test_seal_distance_mode_wire_bytes(self):
     sealer = self._make(
@@ -87,11 +67,24 @@ class TestUltrasealEPRO(KBiosystemsSealerTestBase):
       }
     )
     await sealer.seal(temperature=170, duration=2.5)
-    written = sealer.io.written  # type: ignore[attr-defined]
-    for expected in ["ECO_OFF", "B25", "A170", "L=120", "FS=0", "DO=25", "S", "A100"]:
-      self.assertIn(expected, written)
-    # Distance mode must not touch the force commands.
-    self.assertFalse(any(w.startswith("PS=") or w == "FS=1" for w in written))
+    write = cast(AsyncMock, sealer.io.write)
+    self.assertEqual(
+      write.await_args_list,
+      [
+        call(b"ECO_OFF\r"),
+        call(b"?\r"),
+        call(b"B25\r"),
+        call(b"A170\r"),
+        call(b"L=120\r"),
+        call(b"FS=0\r"),
+        call(b"DO=25\r"),
+        call(b"?\r"),
+        call(b"S\r"),
+        call(b"?\r"),
+        call(b"A100\r"),
+      ],
+    )
+    self.assertEqual(write.call_count, write.await_count)
 
   async def test_seal_force_mode_wire_bytes(self):
     sealer = self._make(
@@ -107,10 +100,24 @@ class TestUltrasealEPRO(KBiosystemsSealerTestBase):
       }
     )
     await sealer.seal(temperature=170, duration=2.5, force_mode=True, sealing_force=30)
-    written = sealer.io.written  # type: ignore[attr-defined]
-    self.assertIn("FS=1", written)
-    self.assertIn("PS=30", written)  # sent with no reply
-    self.assertFalse(any(w.startswith("DO=") for w in written))
+    write = cast(AsyncMock, sealer.io.write)
+    self.assertEqual(
+      write.await_args_list,
+      [
+        call(b"ECO_OFF\r"),
+        call(b"?\r"),
+        call(b"B25\r"),
+        call(b"A170\r"),
+        call(b"L=120\r"),
+        call(b"FS=1\r"),
+        call(b"PS=30\r"),
+        call(b"?\r"),
+        call(b"S\r"),
+        call(b"?\r"),
+        call(b"A100\r"),
+      ],
+    )
+    self.assertEqual(write.call_count, write.await_count)
 
   async def test_status_decode(self):
     sealer = self._make({"?": "a4"})
@@ -129,23 +136,35 @@ class TestUltrasealEPRO(KBiosystemsSealerTestBase):
 
 class TestUltrasealXTPro(KBiosystemsSealerTestBase):
   def _make(self, responses: Dict[str, str]) -> KBiosystemsUltrasealXTPro:
+    """Create an XT Pro with configured serial replies."""
     sealer = KBiosystemsUltrasealXTPro(port="FAKE")
-    sealer.io = FakeSealerSerial(responses)  # type: ignore[assignment]
+    sealer.io = sealer_io(responses)  # type: ignore[assignment]
     return sealer
 
   async def test_setup_sequence(self):
     sealer = self._make({"?": "00", "A100": "ok"})
     await sealer.setup()
-    self.assertEqual(sealer.io.written, ["?", "A100"])  # type: ignore[attr-defined]
+    write = cast(AsyncMock, sealer.io.write)
+    self.assertEqual(write.await_args_list, [call(b"?\r"), call(b"A100\r")])
+    self.assertEqual(write.call_count, write.await_count)
 
   async def test_seal_wire_bytes(self):
     sealer = self._make({"?": "00", "B30": "ok", "A180": "ok", "A100": "ok", "S": "ok"})
     await sealer.seal(temperature=180, duration=3.0)
-    written = sealer.io.written  # type: ignore[attr-defined]
-    for expected in ["B30", "A180", "S", "A100"]:
-      self.assertIn(expected, written)
-    # The XT Pro has no foil/force/distance/eco commands.
-    self.assertFalse(any(w.startswith(("L=", "DO=", "PS=", "FS=", "ECO_")) for w in written))
+    write = cast(AsyncMock, sealer.io.write)
+    self.assertEqual(
+      write.await_args_list,
+      [
+        call(b"?\r"),
+        call(b"B30\r"),
+        call(b"A180\r"),
+        call(b"?\r"),
+        call(b"S\r"),
+        call(b"?\r"),
+        call(b"A100\r"),
+      ],
+    )
+    self.assertEqual(write.call_count, write.await_count)
 
   async def test_shuttle_commands(self):
     sealer = self._make({"P": "ok", "U": "ok", "R": "ok"})
@@ -174,27 +193,35 @@ class TestUltrasealXTPro(KBiosystemsSealerTestBase):
 
 class TestUltrasealPRO(KBiosystemsSealerTestBase):
   def _make(self, responses: Dict[str, str]) -> KBiosystemsUltrasealPRO:
+    """Create a PRO with configured serial replies."""
     sealer = KBiosystemsUltrasealPRO(port="FAKE")
-    sealer.io = FakeSealerSerial(responses)  # type: ignore[assignment]
+    sealer.io = sealer_io(responses)  # type: ignore[assignment]
     return sealer
 
   async def test_setup_sequence(self):
     sealer = self._make({"?": "00", "A100": "ok"})
     await sealer.setup()
-    self.assertEqual(sealer.io.written, ["?", "A100"])  # type: ignore[attr-defined]
+    write = cast(AsyncMock, sealer.io.write)
+    self.assertEqual(write.await_args_list, [call(b"?\r"), call(b"A100\r")])
+    self.assertEqual(write.call_count, write.await_count)
 
   async def test_seal_wire_bytes(self):
     sealer = self._make({"?": "00", "B30": "ok", "A180": "ok", "A100": "ok", "S": "ok"})
     await sealer.seal(temperature=180, duration=3.0)
-    written = sealer.io.written  # type: ignore[attr-defined]
-    for expected in ["B30", "A180", "S", "A100"]:
-      self.assertIn(expected, written)
-    # The Ultraseal PRO has no foil/force/distance/eco or shuttle commands.
-    self.assertFalse(
-      any(
-        w.startswith(("L=", "DO=", "PS=", "FS=", "ECO_")) or w in ("P", "U", "R") for w in written
-      )
+    write = cast(AsyncMock, sealer.io.write)
+    self.assertEqual(
+      write.await_args_list,
+      [
+        call(b"?\r"),
+        call(b"B30\r"),
+        call(b"A180\r"),
+        call(b"?\r"),
+        call(b"S\r"),
+        call(b"?\r"),
+        call(b"A100\r"),
+      ],
     )
+    self.assertEqual(write.call_count, write.await_count)
 
   async def test_park_mode_is_bit_7(self):
     # The Ultraseal PRO reports Park Mode at 0x80 (bit 6 is spare) - unlike the
