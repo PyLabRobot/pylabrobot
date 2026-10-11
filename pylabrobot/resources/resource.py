@@ -253,6 +253,10 @@ class Resource(SerializableMixin):
       "when it is created. Create the resource with the name you want instead."
     )
 
+  def _comparable_children(self) -> List["Resource"]:
+    """The children compared in equality: all of them, unless a subclass holds some as state."""
+    return self.children
+
   def __eq__(self, other):
     return (
       isinstance(other, Resource)
@@ -262,7 +266,7 @@ class Resource(SerializableMixin):
       and self.get_absolute_size_z() == other.get_absolute_size_z()
       and self.location == other.location
       and self.category == other.category
-      and self.children == other.children
+      and self._comparable_children() == other._comparable_children()
       and self.metadata == other.metadata
     )
 
@@ -391,7 +395,7 @@ class Resource(SerializableMixin):
   def get_location_wrt(
     self, other: Resource, x: str = "l", y: str = "f", z: str = "b"
   ) -> Coordinate:
-    """Get the location of this resource with respect to another resource.
+    """Get the location of this resource with respect to another, along the other's axes.
 
     Args:
       other: The resource to get the location with respect to.
@@ -411,7 +415,13 @@ class Resource(SerializableMixin):
       if other.location is not None
       else Coordinate(0, 0, 0)
     )
-    return self.get_absolute_location(x=x, y=y, z=z) - other_absolute_lfb
+    offset = self.get_absolute_location(x=x, y=y, z=z) - other_absolute_lfb
+    rotation = other.get_absolute_rotation()
+    if rotation._quaternion == (1.0, 0.0, 0.0, 0.0):
+      return offset
+    # Along `other`'s axes: its rotation matrix is orthonormal, so the transpose undoes it.
+    inverse = list(zip(*rotation.get_rotation_matrix()))
+    return Coordinate(*matrix_vector_multiply_3x3(inverse, offset.vector()))
 
   def _get_rotated_corners(self) -> List[Coordinate]:
     absolute_rotation = self.get_absolute_rotation()

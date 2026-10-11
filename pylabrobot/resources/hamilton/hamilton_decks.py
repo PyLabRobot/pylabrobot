@@ -4,7 +4,7 @@ import importlib
 import logging
 import warnings
 from abc import ABCMeta
-from typing import Optional, cast
+from typing import Optional, Tuple, cast
 
 from pylabrobot.resources.carrier import Carrier, ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
@@ -60,6 +60,18 @@ AUTOLOAD_BELT_MODEL = "{frame}_autoload_tray_belt_frame"
 # must not be treated as though they do - a fitted autoload otherwise makes rail 1 unassignable,
 # because the sled's box reaches over the deck's front edge and up past a carrier's height.
 _DEVICE_PARTS = frozenset({"autoload_sled", "autoload_loading_tray"})
+
+
+def _get_size_on_deck(resource: Resource) -> Tuple[float, float, float]:
+  """A resource's extent along the deck's axes: its own box, turned as it stands on the deck."""
+  corners = [
+    Coordinate(x, y, z).rotated(resource.rotation)
+    for x in (0, resource.get_size_x())
+    for y in (0, resource.get_size_y())
+    for z in (0, resource.get_size_z())
+  ]
+  xs, ys, zs = [c.x for c in corners], [c.y for c in corners], [c.z for c in corners]
+  return max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)
 
 
 def track_for_x_coordinate(x: float) -> int:
@@ -123,6 +135,11 @@ def _resolve_num_tracks(num_tracks: Optional[int], num_rails: Optional[int]) -> 
 
 class HamiltonDeck(Deck, metaclass=ABCMeta):
   """Hamilton decks. Currently only STARLet, STAR and Vantage are supported."""
+
+  safe_deck_height: float = 245.0
+  """Up to this height, in mm of the deck's frame (145 above its surface), a resource is under a
+  traversing channel whatever tip it carries: the stop discs at Z safety, 334.7, less the 87.1 mm a
+  1000 uL tip reaches below them, with margin. Higher may be safe, depending on the tip."""
 
   def __init__(
     self,
@@ -233,7 +250,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Returns:
       The track, counted from 1.
     """
-    end_x = carrier.get_location_wrt(self).x + carrier.get_absolute_size_x()
+    end_x = carrier.get_location_wrt(self).x + _get_size_on_deck(carrier)[0]
     return track_for_x_coordinate(end_x) - 1
 
   def get_carrier_at_track(self, track: int) -> Carrier:
@@ -319,7 +336,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     if device is None:
       y = self.get_absolute_size_y() - size_y
     else:
-      back_of_device = (device.get_absolute_size_y() - self.location.y) if self.location else 0.0
+      back_of_device = (device.get_size_y() - self.location.y) if self.location else 0.0
       y = back_of_device - ARM_BACK_FROM_DEVICE_BACK - size_y
     self.assign_child_resource(x_arm, location=Coordinate(x - reference_point_from_left, y, arm_z))
     return x_arm
@@ -333,9 +350,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     do not duplicate it.
 
     Args:
-      name: where the carrier-handling wheel is, in mm, on this deck. The wheel is the point the
+      name: what to call it.
+      x: where the carrier-handling wheel is, in mm, on this deck. The wheel is the point the
         drive reports, so the sled is placed around it.
-      x: where the wheel is, in mm, on this deck.
       reference_point_from_left: how far the point the drive reports - the carrier-handling
         wheel - sits from the sled's left edge, in mm.
 
@@ -410,7 +427,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     frame = FRAME_BY_NUM_TRACKS.get(self.num_tracks)
     tray = Resource(
       name=name,
-      size_x=self.get_absolute_size_x() - from_first_carrier_x - left,
+      size_x=self.get_size_x() - from_first_carrier_x - left,
       size_y=front_ahead_y - back_ahead_y,
       size_z=size_z,
       category="autoload_loading_tray",
@@ -453,8 +470,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
   def _check_safe_z_height(self, resource: Resource):
     """Check for this resource, and all its children, that the z location is not too high."""
 
-    # TODO: maybe these are parameters per HamiltonDeck that we can take as attributes.
-    Z_MOVEMENT_LIMIT = 245
+    # TODO: a per-deck attribute, as `safe_deck_height` is.
     Z_GRAB_LIMIT = 285
 
     def check_z_height(resource: Resource):
@@ -469,7 +485,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         # this is fine, because it's a convenience feature and not critical
         return
 
-      if z_top > Z_MOVEMENT_LIMIT:
+      if z_top > self.safe_deck_height:
         logger.warning(
           "Resource '%s' is very high on the deck: %s mm. Be careful when traversing the deck.",
           resource.name,
@@ -486,7 +502,29 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       for child in resource.children:
         check_z_height(child)
 
+    # Hanging from what the device carries, e.g. a plate in the grippers' jaws, it rides with that.
+    up: Optional[Resource] = resource.parent
+    while up is not None and up is not self:
+      if up.category in ("x_arm", "head96") or isinstance(up, HeadTool):
+        return
+      up = up.parent
     check_z_height(resource)
+
+  def _update_safe_deck_height_from_tips(
+    self, stop_disc_z_max: float, margin: float = 5.0
+  ) -> float:
+    """Set `safe_deck_height` from the longest tip this deck holds, then check what stands on it.
+
+    Called only when wanted: the class default holds for the longest tip the device can use. See
+    `get_safe_deck_height_from_tips` for the arguments. The height set, in mm.
+    """
+    # Here, not at the top: lib/spatial imports resources, whose package imports this deck.
+    from pylabrobot.lib.spatial.clearance import get_safe_deck_height_from_tips
+
+    self.safe_deck_height = get_safe_deck_height_from_tips(self, stop_disc_z_max, margin)
+    for child in self.children:
+      self._check_safe_z_height(child)
+    return self.safe_deck_height
 
   def assign_child_resource(
     self,
@@ -575,14 +613,12 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     if not ignore_collision and should_check_collision(resource):
       if resource_location is not None:  # collision detection
+        size_x, size_y, size_z = _get_size_on_deck(resource)
         if (
-          resource_location.x + resource.get_absolute_size_x()
-          > self.track_to_location(self.num_tracks + 1 + beyond).x
+          resource_location.x + size_x > self.track_to_location(self.num_tracks + 1 + beyond).x
           and track is not None
         ):
-          raise ValueError(
-            f"Resource with width {resource.get_absolute_size_x()} does not fit at track {track}."
-          )
+          raise ValueError(f"Resource with width {size_x} does not fit at track {track}.")
 
         # Check if there is space for this new resource.
         for og_resource in self.children:
@@ -591,30 +627,24 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
           og_x = cast(Coordinate, og_resource.location).x
           og_y = cast(Coordinate, og_resource.location).y
           og_z = cast(Coordinate, og_resource.location).z
+          og_size_x, og_size_y, og_size_z = _get_size_on_deck(og_resource)
 
           # A resource is not allowed to overlap with another resource. Resources overlap when
           # their bounding boxes intersect on all three axes. The z axis is included so a resource
           # above the deck plane does not block placement beneath it.
           x_overlap = any(
             [
-              og_x <= resource_location.x < og_x + og_resource.get_absolute_size_x(),
-              og_x
-              < resource_location.x + resource.get_absolute_size_x()
-              < og_x + og_resource.get_absolute_size_x(),
+              og_x <= resource_location.x < og_x + og_size_x,
+              og_x < resource_location.x + size_x < og_x + og_size_x,
             ]
           )
           y_overlap = any(
             [
-              og_y <= resource_location.y < og_y + og_resource.get_absolute_size_y(),
-              og_y
-              < resource_location.y + resource.get_absolute_size_y()
-              < og_y + og_resource.get_absolute_size_y(),
+              og_y <= resource_location.y < og_y + og_size_y,
+              og_y < resource_location.y + size_y < og_y + og_size_y,
             ]
           )
-          z_overlap = (
-            og_z < resource_location.z + resource.get_absolute_size_z()
-            and resource_location.z < og_z + og_resource.get_absolute_size_z()
-          )
+          z_overlap = og_z < resource_location.z + size_z and resource_location.z < og_z + og_size_z
           if x_overlap and y_overlap and z_overlap:
             raise ValueError(
               f"Location {resource_location} is already occupied by resource '{og_resource.name}'."
@@ -658,7 +688,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       new_depth = depth + 1 if resource.category not in exclude_categories else depth
       return max(
         [(longest + longest_depth * depth_weight)]
-        + [find_longest_child_name(c, new_depth) for c in resource.children]
+        + [find_longest_child_name(c, new_depth) for c in resource._comparable_children()]
       )
 
     def find_longest_type_name(resource: Resource):
@@ -666,7 +696,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       longest = (
         len(resource.__class__.__name__) if resource.category not in exclude_categories else 0
       )
-      return max([longest] + [find_longest_type_name(child) for child in resource.children])
+      return max(
+        [longest] + [find_longest_type_name(child) for child in resource._comparable_children()]
+      )
 
     # Calculate the maximum lengths of the resource name and type for proper alignment
     max_name_length = find_longest_child_name(self)
@@ -735,7 +767,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     def print_tree(resource: Resource, depth=0):
       r_summary = print_resource_line(resource, depth=depth)
 
-      for child in resource.children:
+      for child in resource._comparable_children():
         if isinstance(child, ResourceHolder):
           r_summary += "\n"
           if child.resource is not None:

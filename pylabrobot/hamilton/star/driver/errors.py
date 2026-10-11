@@ -1,5 +1,5 @@
 from abc import ABCMeta
-from typing import Dict, Optional, Type
+from typing import Dict, Optional, Set, Type
 
 from pylabrobot.hamilton.protocol.text.framing import find_error_fields
 from pylabrobot.resources.errors import (
@@ -806,10 +806,10 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       61: "Z-drive not initialized",
       62: "Z-drive movement error: drive locked or incremental sensor fault",
       63: "Z-drive movement error: position counter over/underflow",
-      70: "Rotation-drive initialization failed",
-      71: "Rotation-drive not initialized",
-      72: "Rotation-drive movement error: drive locked or incremental sensor fault",
-      73: "Rotation-drive movement error: position counter over/underflow",
+      70: "Elbow drive initialization failed",
+      71: "Elbow drive not initialized",
+      72: "Elbow drive movement error: drive locked or incremental sensor fault",
+      73: "Elbow drive movement error: position counter over/underflow",
       80: "Wrist twist drive initialization failed",
       81: "Wrist twist drive not initialized",
       82: "Wrist twist drive movement error: drive locked or incremental sensor fault",
@@ -870,6 +870,26 @@ class STARFirmwareError(Exception):
     self.errors = errors
     self.raw_response = raw_response
     super().__init__(f"{errors}, {raw_response}")
+
+
+def channels_that_faulted(error: BaseException) -> Set[int]:
+  """Which pipetting channels a firmware error names, 0-indexed from the back.
+
+  A command over several channels is answered per module, so the error says which of them faulted
+  and which carried it out. Anything else - a cancellation, a master-only error, a lost connection -
+  names none.
+
+  Args:
+    error: what the command raised.
+
+  Returns:
+    The channels the error names.
+  """
+  if not isinstance(error, STARFirmwareError):
+    return set()
+  prefix = "Pipetting channel "
+  numbers = (name[len(prefix) :] for name in error.errors if name.startswith(prefix))
+  return {int(number) - 1 for number in numbers if number.isdigit()}
 
 
 def star_firmware_string_to_error(

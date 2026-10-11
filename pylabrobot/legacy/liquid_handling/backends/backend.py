@@ -19,11 +19,11 @@ from pylabrobot.legacy.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.legacy.machines.backend import MachineBackend
+from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.lib.liquid_handling.channel_positioning import (
   GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
 )
 from pylabrobot.resources import Deck, Tip
-from pylabrobot.resources.tip_tracker import TipTracker
 
 
 class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):

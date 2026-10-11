@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Dict, Tuple
 
-# Generated from Hamilton.Module.MLPrep.Service.dll (MLPrepSystem.RegisterErrors).
 # Node IDs: 0x00e8=FrontChannel, 0x00ec=RearChannel, 0x00ee=Pipettor.
 # Object IDs: 0x0100=Pipettor, 0x0101=Dispenser, 0x0200-0x0205=drives/calibration,
 #   0x0107=TADM, 0x1000=MLPrep, 0x1100=MPH, 0x1300-0x1304=Calibration,
@@ -473,7 +472,7 @@ PREP_ERROR_CODES: Dict[Tuple[int, int, int, int, int], str] = {
   (0x0001, 0x0001, 0x3100, 1, 0x0F13): "Could Not Start Due To Dynamic Position Error.",
   (0x0001, 0x0001, 0x3100, 1, 0x0F14): "Could Not Start Due To Static Position Error.",
   (0x0001, 0x0001, 0x3100, 1, 0x0F15): "Could Not Start Due To Sequencer Exception.",
-  (0x0001, 0x0001, 0x3100, 1, 0x0F16): "Could Not Start Due To Zero Vel Or Acc.",
+  (0x0001, 0x0001, 0x3100, 1, 0x0F16): "Could Not Start Due To Zero Speed Or Acc.",
   (0x0001, 0x0001, 0x3100, 1, 0x0F17): "Servo Loop Overrun.",
   (
     0x0001,
@@ -481,7 +480,7 @@ PREP_ERROR_CODES: Dict[Tuple[int, int, int, int, int], str] = {
     0x4000,
     1,
     0x0F01,
-  ): "Cannot start a trajectory with zero velocity or acceleration.",
+  ): "Cannot start a trajectory with zero speed or acceleration.",
   (0x0001, 0x0001, 0x4000, 1, 0x0F02): "The requested motion would exceed a Travel Limit.",
   (0x0001, 0x0001, 0x4000, 1, 0x0F03): "The Static Position Error Limit was exceeded.",
   (0x0001, 0x0001, 0x4000, 1, 0x0F04): "The Dynamic Position Error Limit was exceeded.",
@@ -504,14 +503,14 @@ PREP_ERROR_CODES: Dict[Tuple[int, int, int, int, int], str] = {
     0x4300,
     1,
     0x0F01,
-  ): "Cannot start a trajectory with zero velocity or acceleration.",
+  ): "Cannot start a trajectory with zero speed or acceleration.",
   (
     0x0001,
     0x0001,
     0x4310,
     1,
     0x0F01,
-  ): "Cannot start a trajectory with zero velocity or acceleration.",
+  ): "Cannot start a trajectory with zero speed or acceleration.",
   (0x0001, 0x0001, 0x1000, 1, 0x0F01): "No Pipettor is present at the provided index.",
   (0x0001, 0x0001, 0x1000, 1, 0x0F02): "Command not valid when tips are held.",
   (0x0001, 0x0001, 0x1000, 1, 0x0F03): "Command not valid when no tips are held.",
@@ -549,3 +548,20 @@ PREP_ERROR_CODES: Dict[Tuple[int, int, int, int, int], str] = {
   ): "Unable to command an Individual Channel from this interface, please use the Pipettor interface.",
   (0x0001, 0x0001, 0x1100, 1, 0x0F06): "The MPH head is not installed.",
 }
+
+# The Pipettor answers from module 0xE000 (57344:1:4096), not 0x0001: its codes under both.
+PREP_ERROR_CODES.update(
+  {
+    (0xE000, node, obj, interface, code): text
+    for (module, node, obj, interface, code), text in list(PREP_ERROR_CODES.items())
+    if (module, node, obj) == (0x0001, 0x0001, 0x1000)
+  }
+)
+
+
+class PrepMethodNotFoundError(RuntimeError):
+  """The firmware has no method of the name asked for on that object.
+
+  Which methods a Prep exposes, and at which ids, differs between firmware versions, so a method
+  looked up by name can be missing on one instrument and present on another.
+  """

@@ -11,6 +11,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:
+  from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
   from pylabrobot.hamilton.star.driver.features.head96 import Head96
   from pylabrobot.hamilton.star.driver.features.head384 import Head384
   from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
@@ -18,11 +19,6 @@ if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.master import STARDriver
 
 logger = logging.getLogger(__name__)
-
-# The command set splits at firmware 5.0: the ranges and encodings below were recorded from an arm
-# below it, which is the generation this driver has been driven against. A 5.0 or higher arm takes
-# a wider current limiter, written in two digits rather than one, and has moves this one does not.
-RECORDED_FIRMWARE_BELOW_MAJOR = 5
 
 
 @dataclass
@@ -74,8 +70,16 @@ class XArmConfiguration:
   x_range_increments: Tuple[int, int] = (0, 30_000)  # what the move accepts; x_range is narrower
   acceleration_level_range: Tuple[int, int] = (1, 5)  # index into five curves, not a rate
   acceleration_level_default: int = 4
-  current_limit_range: Tuple[int, int] = (0, 7)
   current_limit_default: int = 7
+
+  @property
+  def current_limit_digits(self) -> int:
+    major = (self.firmware_version or "").split(".", 1)[0]
+    return 2 if major.isdigit() and int(major) >= 5 else 1
+
+  @property
+  def current_limit_range(self) -> Tuple[int, int]:
+    return (0, 15) if self.current_limit_digits == 2 else (0, 7)
 
   def with_device_facts_of(self, other: "XArmConfiguration") -> "XArmConfiguration":
     """This configuration, with the device facts of another in place of its own.
@@ -95,7 +99,6 @@ class XArmConfiguration:
       x_range_increments=other.x_range_increments,
       acceleration_level_range=other.acceleration_level_range,
       acceleration_level_default=other.acceleration_level_default,
-      current_limit_range=other.current_limit_range,
       current_limit_default=other.current_limit_default,
     )
 
@@ -236,6 +239,7 @@ class XArm:
     self.head96: Optional["Head96"] = None
     self.head384: Optional["Head384"] = None
     self.iswap: Optional["iSWAP"] = None
+    self.core_grippers: Optional["CoreGrippers"] = None
     self.side = side
     if configuration is not None:
       self.configuration = configuration
@@ -317,15 +321,6 @@ class XArm:
     """Read what this arm is. Read-only: nothing moves."""
     version, _ = await self.request_firmware_version()
     self.configuration.firmware_version = version
-    major = version.split(".", 1)[0]
-    if major.isdigit() and int(major) >= RECORDED_FIRMWARE_BELOW_MAJOR:
-      logger.warning(
-        "this X-arm reports firmware %s; the ranges and encodings here were recorded from an arm "
-        "below %d.0, so its current limiter and the moves it accepts may differ. Set them on "
-        "XArmConfiguration to correct it.",
-        version,
-        RECORDED_FIRMWARE_BELOW_MAJOR,
-      )
 
   def narrow_travel_for_left_side_panel(self) -> None:
     """Take the left side panel out of this arm's travel, if one is fitted.
@@ -372,7 +367,9 @@ class XArm:
     if not low <= current_limit <= high:
       raise ValueError(f"current_limit must be between {low} and {high}, is {current_limit}")
 
-    parameters: Dict[str, Any] = {f"{self.parameter_prefix}w": f"{current_limit:01}"}
+    parameters: Dict[str, Any] = {
+      f"{self.parameter_prefix}w": f"{current_limit:0{c.current_limit_digits}}"
+    }
     return await self._driver.send_command(
       module="X0", command="XI" if self.side == "left" else "SI", **parameters
     )
@@ -478,7 +475,7 @@ class XArm:
     except Exception:
       logger.warning("could not read where the %s X-arm stopped; its model is stale", self.side)
 
-  async def move_x(
+  async def move_to_x_position(
     self,
     x: float,
     acceleration_level: int = 3,
@@ -521,7 +518,7 @@ class XArm:
       parameters: Dict[str, Any] = {
         f"{p}a": f"{c.x_mm_to_increments(x):05}",
         f"{p}r": f"{acceleration_level:01}",
-        f"{p}w": f"{current_limit:01}",
+        f"{p}w": f"{current_limit:0{c.current_limit_digits}}",
       }
       resp = await self._driver.send_command(
         module="X0", command="XP" if self.side == "left" else "SP", **parameters
@@ -553,8 +550,8 @@ class XArm:
     """Move this arm to an X position with all attached components in Z-safety position. Nothing is
     guarded and nothing is recorded.
 
-    The master raises what the arm carries before it travels, where `move_x` travels with the arm
-    as it stands and leaves getting to Z safety to the caller.
+    The master raises what the arm carries before it travels, where `move_to_x_position` travels
+    with the arm as it stands and leaves getting to Z safety to the caller.
 
     Args:
       x: where to send the arm, in mm at its reference point.
@@ -590,7 +587,7 @@ class XArm:
         the drive accepts.
       RuntimeError: If the arm's geometry was not resolved.
     """
-    return await self.move_x(
+    return await self.move_to_x_position(
       await self.request_position() + distance,
       acceleration_level=acceleration_level,
       current_limit=current_limit,

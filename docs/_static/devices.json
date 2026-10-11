@@ -478,6 +478,7 @@
       "liquid handling"
     ],
     "status": "wip",
+    "doc_slug": "hamilton/prep/index",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.hamiltoncompany.com/microlab-prep"
   },
@@ -1697,6 +1698,21 @@
     "doc_slug": "molecular_devices/spectramax/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers"
+  },
+  {
+    "id": "opentrons-flex",
+    "vendor": "Opentrons",
+    "name": "Flex",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling"
+    ],
+    "status": "basic",
+    "api": "pylabrobot.opentrons.Flex",
+    "api_version": "v1",
+    "code_slug": "opentrons/flex",
+    "doc_slug": "opentrons/flex/hello-world",
+    "notes": "Hardware verification is operation-specific; 1-channel and 96-channel heads remain unverified."
   },
   {
     "id": "opentrons-heater-shaker",

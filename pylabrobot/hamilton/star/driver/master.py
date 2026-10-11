@@ -27,15 +27,17 @@ from pylabrobot.hamilton.star.driver.errors import (
   check_fw_string_error,
 )
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
+from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.star.driver.features.cover import FrontCover
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.features.head384 import Head384
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPConfiguration
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfiguration
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.hamilton.star.resource_model import (
-  ROTATION_DRIVE_COLUMN_ABOVE_REPORTED_Z,
+  ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z,
   iswap_gripper,
   iswap_head,
   iswap_link_1,
@@ -48,6 +50,7 @@ from pylabrobot.io.usb import USB
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
+from pylabrobot.resources.hamilton.star_decks import HamiltonSTARDeck
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.manipulator import LinkBody
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
@@ -55,6 +58,9 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import serialize
 
 logger = logging.getLogger(__name__)
+
+# What the firmware's tip type table calls the CO-RE grip tool (cat. 186100).
+CORE_GRIPPER_TIP_TYPE_INDEX = 14
 
 # What a declaration and a device have to agree on for the one to stand for the other: what is
 # fitted and how much of it. Everything else is either identity, which is the device's own, or
@@ -82,6 +88,23 @@ def _range(values: Optional[Tuple[float, float]]) -> str:
 
 class STARDriver:
   """Interface for the Hamilton STARDriver."""
+
+  # How a channel or a head senses the liquid: `star.driver.LLDMode.CAPACITIVE`.
+  LLDMode = LLDMode
+
+  def _deck_component_name(self, name: str) -> str:
+    """Resolve a built-in deck resource without changing its existing name."""
+    if isinstance(self.deck, HamiltonSTARDeck):
+      return self.deck.get_component_name(name)
+    return name
+
+  def _component_name(self, name: str) -> str:
+    """Name discovered components after the device carrying the deck, or the standalone deck."""
+    if self.deck is not None and self.deck.parent is not None:
+      device = self.deck.parent
+      if device.category == "device":
+        return f"{device.name}_{name}"
+    return self._deck_component_name(name)
 
   def __init__(
     self,
@@ -318,7 +341,7 @@ class STARDriver:
         else:
           low += [
             f"{arm.side} channel {channel} at {z:.1f} mm, safe is {safe:.1f} mm"
-            for channel, z in positions.items()
+            for channel, z in enumerate(positions)
             if z < safe - tolerance
           ]
       for head, name in ((arm.head96, "head96"), (arm.head384, "head384")):
@@ -334,9 +357,9 @@ class STARDriver:
             low.append(f"{arm.side} {name} at {z:.1f} mm, safe is {safe:.1f} mm")
       iswap = arm.iswap
       if iswap is not None:
-        safe = iswap.configuration.rotation_drive_z_range[1]
+        safe = iswap.configuration.elbow_z_range[1]
         try:
-          z = await iswap.rotation_drive_request_z_position()
+          z = await iswap.elbow_request_z_position()
         except Exception:
           low.append(f"{arm.side} iSWAP (where it is could not be read)")
         else:
@@ -346,7 +369,7 @@ class STARDriver:
     autoload = self.autoload
     if autoload is not None:
       try:
-        at_safe_z = await autoload.wheel_is_at_safe_z()
+        at_safe_z = await autoload.wheel_is_at_safe_z(tolerance=tolerance)
       except Exception:
         low.append("autoload wheel (where it is could not be read)")
       else:
@@ -391,7 +414,7 @@ class STARDriver:
         # The arm is the same hazard as the rest: parking retracts it, and an arm left low is
         # driven through whatever it is over on the way home.
         if arm.iswap is not None:
-          safe_z_moves.append(arm.iswap.rotation_drive_move_to_safe_z_height())
+          safe_z_moves.append(arm.iswap.elbow_move_to_safe_z_height())
       if self.autoload is not None:
         safe_z_moves.append(self.autoload.wheel_move_to_safe_z())
 
@@ -735,6 +758,12 @@ class STARDriver:
     return arm.iswap if arm is not None else None
 
   @property
+  def core_grippers(self) -> Optional[CoreGrippers]:
+    """The CoRe grippers, on a device with one arm."""
+    arm = self._require_one_arm("core_grippers")
+    return arm.core_grippers if arm is not None else None
+
+  @property
   def x_arm(self) -> XArm:
     """The device's X-arm, on a device that has only one.
 
@@ -1050,9 +1079,14 @@ class STARDriver:
     if model is None:
       raise ValueError("Tip model must be defined to assign a tip type index.")
     if model not in self._tip_type_indices:
-      index = len(self._tip_type_indices) + 1
-      if index > 99:
-        raise ValueError("the tip type table is full: 99 tip types have already been defined.")
+      # The first free entry, skipping the grip tool's: a tip written there would overwrite it.
+      taken = set(self._tip_type_indices.values()) | {CORE_GRIPPER_TIP_TYPE_INDEX}
+      index = next((i for i in range(1, 100) if i not in taken), None)
+      if index is None:
+        raise ValueError(
+          f"the tip type table is full: {len(self._tip_type_indices)} tip types have already "
+          "been defined."
+        )
       await self.define_tip_needle(
         tip_type_table_index=index,
         has_filter=tip.has_filter,
@@ -1160,6 +1194,8 @@ class STARDriver:
         arm.head384 = Head384(self)
       if a.iswap_installed and arm.iswap is None:
         arm.iswap = iSWAP(self)
+      if arm.pipettes is not None and self._num_channels >= 2 and arm.core_grippers is None:
+        arm.core_grippers = CoreGrippers(self)
     if self.configuration.autoload_installed and self.autoload is None:
       self.autoload = Autoload(self)
     if self.configuration.main_front_cover_monitoring_installed and self.front_cover is None:
@@ -1240,7 +1276,7 @@ class STARDriver:
           # head's does.
           reached = await arm.pipettes.probe_z_max()
           c = arm.pipettes.configuration
-          c.z_range = (c.z_range[0], min(reached.values()))
+          c.z_range = (c.z_range[0], min(reached))
         # A head is retracted whatever its own status says: the retract is what keeps it clear
         # of the iSWAP, which shares the arm's X drive and moves while features initialize.
         for head in (arm.head96, arm.head384):
@@ -1360,13 +1396,17 @@ class STARDriver:
         await arm.pipettes.initialize()
       else:
         logger.debug("channels: already up and nothing mounted - skipped")
+        # Initialization reads the pistons; skipped, they are read here, as they stand.
+        await arm.pipettes.dispensing_drives_request_uL_positions()
       # Probing how high the channels reach raises them, so it doubles as the safety raise and
       # runs on every setup rather than only the first.
       reached = await arm.pipettes.probe_z_max()
       # One ceiling for all of them, since one window is what `_check_reachable` holds every
       # channel to. The floor is left as it stands: nothing here measures how low they go.
       c = arm.pipettes.configuration
-      c.z_range = (c.z_range[0], min(reached.values()))
+      c.z_range = (c.z_range[0], min(reached))
+      # The drives keep what an earlier session wrote until a power cycle; every run starts here.
+      await arm.pipettes._set_default_drive_parameters()
 
     if arm.iswap is not None and "iswap" in skipped:
       logger.debug("iSWAP: initializing it was skipped")
@@ -1383,15 +1423,15 @@ class STARDriver:
         logger.debug("%s: initializing it was skipped", name)
         continue
       # A STAR deck carries a trash for the 96-head. A head told nowhere else to eject ejects there,
-      # centred over it, as legacy does.
+      # the channel array centred over it.
       if (
         name == "head96"
         and head.configuration.tip_discard_location is None
         and self.deck is not None
-        and self.deck.has_resource("trash_core96")
+        and self.deck.has_resource(self._deck_component_name("trash_core96"))
       ):
         head.configuration.tip_discard_location = cast(Head96, head)._position_centred_in(
-          self.deck.get_resource("trash_core96")
+          self.deck.get_resource(self._deck_component_name("trash_core96"))
         )
       if not await self.request_initialization_status(head.configuration.module):
         if head.configuration.tip_discard_location is None:
@@ -1405,6 +1445,9 @@ class STARDriver:
         else:
           logger.debug("%s reports itself uninitialized - initializing", name)
           await head.initialize()
+      elif isinstance(head, Head96):
+        # Initialization reads the piston; skipped, it is read here, as it stands.
+        await head._record_piston_position()
       # Probing how far a head reaches retracts it, so it doubles as the safety retract and
       # runs on every setup rather than only the first. The floor is what the drive documents.
       retracted = await head.probe_z_max()
@@ -1553,7 +1596,7 @@ class STARDriver:
         logger.warning("the %s X-arm reported no width, so it is not modelled", arm.side)
         continue
       arm.resource = self.deck.get_or_create_x_arm(
-        name=f"{arm.side}_x_arm",
+        name=self._component_name(f"{arm.side}_x_arm"),
         x=await arm.request_position(),
         size_x=a.size_x,
         reference_point_from_left=a.reference_point_from_left,
@@ -1573,6 +1616,9 @@ class STARDriver:
 
     Each carries a `TipMountingShaft` at its lower end. A collected tip becomes a child of the
     shaft, not of the channel.
+
+    Raises:
+      RuntimeError: If a channel to be modelled has no width read.
     """
     if self.deck is None:
       return
@@ -1591,13 +1637,14 @@ class STARDriver:
     zs = await arm.pipettes._unchecked_fw_request_lowest_z_positions()
 
     for channel in range(len(c.channels)):
-      name = f"pipette_channel_{channel}"
+      name = self._component_name(f"pipette_channel_{channel}")
       resource = next((r for r in arm.resource.children if r.name == name), None)
       if resource is None:
         width = c.channels[channel].width
         if width is None:
-          logger.warning("channel %d reported no width, so it is not modelled", channel)
-          continue
+          # Skipping it would leave the list one short and every later channel's resource one out
+          # of step with its channel.
+          raise RuntimeError(f"channel {channel} has no width read yet; run discovery first")
         resource = Resource(
           name=name,
           size_x=width,
@@ -1644,6 +1691,7 @@ class STARDriver:
       ):
         if head is None:
           continue
+        name = self._component_name(name)
         c = head.configuration
         # Where the head is, read before it has a resource to read from: the drive answers on a
         # device, and a simulated one falls back to where it rests rather than reporting back the
@@ -1676,7 +1724,7 @@ class STARDriver:
         head.update_location_by_reference_point(y=y, z=z)
 
   async def _create_iswap_resource(self) -> None:
-    """Put each iSWAP's rotation drive on the arm it rides, where it is.
+    """Put each iSWAP's elbow on the arm it rides, where it is.
 
     A child of the arm's resource, not of the deck, so it follows the arm in X with nothing keeping
     the two in step. One already on the arm is reused, and repeated setups do not duplicate it.
@@ -1696,17 +1744,16 @@ class STARDriver:
       iswap = arm.iswap
       c = iswap.configuration
       # Read before it has a resource to read into, as the head's are.
-      y = await iswap.rotation_drive_request_y_position()
-      z = await iswap.rotation_drive_request_z_position()
-      angle = await iswap.rotation_drive_request_angle()
-      existing = next(
-        (child for child in arm.resource.children if child.name == "iswap_head"), None
-      )
+      y = await iswap.elbow_request_y_position()
+      z = await iswap.elbow_request_z_position()
+      angle = await iswap.elbow_drive_request_angle()
+      name = self._component_name("iswap_head")
+      existing = next((child for child in arm.resource.children if child.name == name), None)
       resource = existing if isinstance(existing, iSWAPHead) else None
       if resource is None:
-        if c.rotation_drive_x_offset is None:
+        if c.elbow_x_offset is None:
           raise RuntimeError(
-            "the iSWAP rotation drive's X offset was not read; have you called `star.setup()`?"
+            "the iSWAP elbow's X offset was not read; have you called `star.setup()`?"
           )
         # How tall to model the column: nothing reports it, and what the device shows is its top
         # standing level with the tops of the channel bodies when the drive is fully retracted.
@@ -1718,22 +1765,22 @@ class STARDriver:
         ]
         retracted_base = (
           c.z_increments_to_mm(c.z_range_increments[1])
-          + c.rotation_drive_z_offset_above_finger
-          + ROTATION_DRIVE_COLUMN_ABOVE_REPORTED_Z
+          + c.elbow_z_offset_above_finger
+          + ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z
         )
         resource = iswap_head(
-          name="iswap_head",
-          diameter=c.rotation_drive_diameter,
-          size_z=round(max(tops) - retracted_base, 1) if tops else c.rotation_drive_size_z,
+          name=name,
+          diameter=c.elbow_drive_diameter,
+          size_z=round(max(tops) - retracted_base, 1) if tops else c.elbow_drive_size_z,
         )
-        # The drive sits `rotation_drive_x_offset` left of the point the drive tracks the arm by,
+        # The drive sits `elbow_x_offset` left of the point the drive tracks the arm by,
         # and the arm is located by its own left edge, so it lands that far left of the reference
         # point.
         anchor = resource.reference_point
         arm.resource.assign_child_resource(
           resource,
           location=Coordinate(
-            arm.configuration.reference_point_from_left - c.rotation_drive_x_offset - anchor.x,
+            arm.configuration.reference_point_from_left - c.elbow_x_offset - anchor.x,
             0.0,
             0.0,
           ),
@@ -1741,21 +1788,20 @@ class STARDriver:
       iswap.resource = resource
       iswap.link_1, iswap.gripper = self._create_iswap_arm(resource, c)
       iswap.update_location_by_reference_point(y=y, z=z)
-      iswap.rotation_drive_update_angle(angle)
+      iswap.elbow_drive_update_angle(angle)
       iswap.wrist_drive_update_angle(await iswap.wrist_drive_request_angle())
       # And how far the jaws stand open, which the read records, so the model starts in step with
       # the arm rather than at whatever width the gripper was built holding.
       await iswap.gripper_request_width()
 
-  @staticmethod
   def _create_iswap_arm(
-    resource: iSWAPHead, c: iSWAPConfiguration
+    self, resource: iSWAPHead, c: iSWAPConfiguration
   ) -> Tuple[Optional[LinkBody], Optional[MechanicalGripper]]:
     """Hang the arm off the carriage: one link, and the gripper it carries.
 
-    Link 1 turns on the rotation drive; the gripper turns on the wrist that link 1 carries, so it
+    Link 1 turns on the elbow drive; the gripper turns on the wrist that link 1 carries, so it
     is a child of link 1 and its angle is measured from it. Where each points is written by
-    `rotation_drive_update_angle` and `wrist_drive_update_angle`. What is already there is reused.
+    `elbow_drive_update_angle` and `wrist_drive_update_angle`. What is already there is reused.
 
     Args:
       resource: the carriage they hang from.
@@ -1769,7 +1815,7 @@ class STARDriver:
       return None, None
     link_1 = next((child for child in resource.children if isinstance(child, LinkBody)), None)
     if link_1 is None:
-      link_1 = iswap_link_1(name="iswap_link_1", length=c.link_1_length)
+      link_1 = iswap_link_1(name=self._component_name("iswap_link_1"), length=c.link_1_length)
       # A member's origin is a corner, so it is placed by where its joint has to land: the joint
       # goes on the drive's reference point, and the corner falls wherever that puts it.
       resource.assign_child_resource(
@@ -1782,10 +1828,10 @@ class STARDriver:
       # How far the jaws travel is the gripper drive's own window, converted, rather than a
       # measurement of the fingers: what the drive accepts is what the jaws do.
       gripper = iswap_gripper(
-        name="iswap_gripper",
+        name=self._component_name("iswap_gripper"),
         # The Z drive is calibrated to the finger plane and reports its own bottom, so the grip
         # centre is that far below the wrist the gripper hangs from.
-        tool_center_point=Coordinate(c.tool_length, 0.0, -c.rotation_drive_z_offset_above_finger),
+        tool_center_point=Coordinate(c.tool_length, 0.0, -c.elbow_z_offset_above_finger),
         jaw_range=(
           c.gripper_increments_to_mm(c.gripper_range_increments[0]),
           c.gripper_increments_to_mm(c.gripper_range_increments[1]),
@@ -1814,9 +1860,11 @@ class STARDriver:
       return
     x = await self.autoload.request_x_position()
     self.autoload.resource = self.deck.get_or_create_autoload_sled(
-      name="autoload_sled",
+      name=self._component_name("autoload_sled"),
       x=x,
       reference_point_from_left=self.autoload.configuration.reference_point_from_sled_left_edge,
     )
     self.autoload.update_location_by_reference_point(x)
-    self.deck.get_or_create_autoload_loading_tray(name="autoload_loading_tray")
+    self.deck.get_or_create_autoload_loading_tray(
+      name=self._component_name("autoload_loading_tray")
+    )

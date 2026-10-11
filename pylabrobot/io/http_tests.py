@@ -14,6 +14,7 @@ from pylabrobot.io.http import HTTP, HTTPError
 class _Response:
   def __init__(self, body: bytes):
     self.body = body
+    self.status = 200
 
   def __enter__(self):
     return self

@@ -1,7 +1,10 @@
 import unittest
 from unittest.mock import AsyncMock
 
-from pylabrobot.opentrons.labware import LabwareRegistry, build_tip_rack_definition
+from pylabrobot.opentrons.labware import (
+  LabwareRegistry,
+  build_tip_rack_definition,
+)
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import LabwareIdentity
 from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_20ul
@@ -13,6 +16,14 @@ class LabwareRegistryTests(unittest.IsolatedAsyncioTestCase):
     self.registry = LabwareRegistry(self.protocol_run)
     self.rack = opentrons_96_filtertiprack_20ul("rack")
     self.identity = LabwareIdentity("opentrons", "opentrons_96_filtertiprack_20ul", 1)
+
+  async def test_confirmed_move_updates_binding_and_removal_forgets_it(self):
+    await self.registry.load(self.rack, "1", self.identity)
+    self.registry.record_location(self.rack, "5")
+    await self.registry.load(self.rack, "5", self.identity)
+    self.protocol_run.load_labware.assert_awaited_once()
+    self.registry.remove(self.rack)
+    self.assertFalse(self.registry.is_loaded(self.rack))
 
   async def test_lookup_does_not_load_or_allocate_missing_labware(self) -> None:
     self.assertFalse(self.registry.is_loaded(self.rack))

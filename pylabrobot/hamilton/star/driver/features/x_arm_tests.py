@@ -95,7 +95,7 @@ class TestPerDriveCommands(unittest.IsolatedAsyncioTestCase):
     arm = cast(XArm, driver.left_x_arm)
     sent = record(arm)
     await XArm.initialize(arm)
-    await XArm.move_x(arm, 500.0)
+    await XArm.move_to_x_position(arm, 500.0)
     await XArm.move_x_relative(arm, -12.5)
     await XArm._switch_drive_power_off(arm)
     self.assertEqual(
@@ -103,12 +103,29 @@ class TestPerDriveCommands(unittest.IsolatedAsyncioTestCase):
       ["X0XIlw7", "X0XPla05000lr3lw7", "X0XPla04875lr3lw7", "X0XO"],
     )
 
+  async def test_a_firmware_5_drive_takes_a_two_digit_current_limit(self):
+    """From X0 firmware 5.0 the limiter is `lw##`, 00..15."""
+    left = dataclasses.replace(
+      cast(XArmConfiguration, RECORDED_DEVICE.left_arm), firmware_version="5.0S 2012"
+    )
+    device = dataclasses.replace(RECORDED_DEVICE, left_arm=left)
+    driver = STARSimulationDriver(
+      deck=STARDeck(), declared_configuration_json=declaring(device=device)
+    )
+    await driver.setup()
+    arm = cast(XArm, driver.left_x_arm)
+    sent = record(arm)
+    await XArm.initialize(arm)
+    await XArm.move_to_x_position(arm, 500.0, current_limit=15)
+    self.assertEqual(sent, ["X0XIlw07", "X0XPla05000lr3lw15"])
+    self.assertEqual(arm.configuration.current_limit_range, (0, 15))
+
   async def test_right_drive(self):
     driver = await _both_arms()
     arm = cast(XArm, driver.right_x_arm)
     sent = record(arm)
     await XArm.initialize(arm)
-    await XArm.move_x(arm, 500.0)
+    await XArm.move_to_x_position(arm, 500.0)
     await XArm.move_x_relative(arm, -12.5)
     await XArm._switch_drive_power_off(arm)
     self.assertEqual(
@@ -134,16 +151,16 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
   async def test_a_move_moves_the_model(self):
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     self.assertEqual(await arm.request_position(), 500.0)
 
   async def test_a_refused_target_sends_nothing_and_moves_nothing(self):
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     sent = record(arm)
     with self.assertRaises(ValueError):
-      await arm.move_x(5_000.0)
+      await arm.move_to_x_position(5_000.0)
     self.assertEqual(sent, [])
     self.assertEqual(await arm.request_position(), 500.0)
 
@@ -175,7 +192,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
     )
     arm.resource = resource
     with self.assertRaises(RuntimeError):
-      await arm.move_x(900.0)
+      await arm.move_to_x_position(900.0)
     seated = cast(Coordinate, resource.location)
     self.assertEqual(seated.x + arm.configuration.reference_point_from_left, 640.0)
 
@@ -194,7 +211,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
       side="left",
     )
     with self.assertRaises(RuntimeError) as raised:
-      await arm.move_x(900.0)
+      await arm.move_to_x_position(900.0)
     self.assertIn("drive blocked", str(raised.exception))
 
   async def test_a_relative_move_is_bounded_like_an_absolute_one(self):
@@ -202,7 +219,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
     before anything reaches the wire."""
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     sent = record(arm)
     with self.assertRaises(ValueError):
       await arm.move_x_relative(5_000.0)
@@ -237,7 +254,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
       side="left",
     )
     arm.resource = resource
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     self.assertEqual(sent.count("X0RX"), 4)
     seated = cast(Coordinate, resource.location)
     self.assertEqual(seated.x + arm.configuration.reference_point_from_left, 500.0)
@@ -271,7 +288,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
       side="left",
     )
     arm.resource = cast(HamiltonDeck, driver.deck).get_resource("left_x_arm")
-    await arm.move_x(500.0)
+    await arm.move_to_x_position(500.0)
     self.assertEqual(reads, 5)
     seated = cast(Coordinate, arm.resource.location)
     self.assertEqual(seated.x + arm.configuration.reference_point_from_left, 500.0)
@@ -295,7 +312,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
     )
     arm.resource = cast(HamiltonDeck, driver.deck).get_resource("left_x_arm")
     with self.assertLogs("pylabrobot.hamilton.star.driver.features.x_arm", level="WARNING"):
-      await arm.move_x(500.0, settle_reads=3)
+      await arm.move_to_x_position(500.0, settle_reads=3)
     self.assertEqual(reads, 3)
     seated = cast(Coordinate, arm.resource.location)
     self.assertEqual(seated.x + arm.configuration.reference_point_from_left, 498.0)
@@ -309,11 +326,11 @@ class TestConfiguringAnArm(unittest.IsolatedAsyncioTestCase):
   async def test_what_is_written_is_where_the_device_holds_it(self):
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    corrected = dataclasses.replace(arm.configuration, current_limit_range=(0, 15))
+    corrected = dataclasses.replace(arm.configuration, current_limit_default=3)
 
     arm.configuration = corrected
 
-    self.assertEqual(arm.configuration.current_limit_range, (0, 15))
+    self.assertEqual(arm.configuration.current_limit_default, 3)
     self.assertIs(cast(DeviceConfiguration, driver.configuration).left_arm, corrected)
 
   async def test_the_constructor_takes_one_too(self):
@@ -350,14 +367,11 @@ class TestConfiguringAnArm(unittest.IsolatedAsyncioTestCase):
     """What a physical device's discovery does with a configured arm. It rebuilds one from the
     reply, then takes the device facts off the arm as it was configured: those are what no device
     answers, so a re-read must not put them back to what this generation documents."""
-    configured = dataclasses.replace(
-      BARE_X_ARM, current_limit_range=(0, 15), current_limit_default=15
-    )
+    configured = dataclasses.replace(BARE_X_ARM, current_limit_default=15)
     answered = dataclasses.replace(BARE_X_ARM, width=354.0, x_range=(95.0, 1340.2))
 
     kept = answered.with_device_facts_of(configured)
 
-    self.assertEqual(kept.current_limit_range, (0, 15))
     self.assertEqual(kept.current_limit_default, 15)
     self.assertEqual(kept.width, 354.0)
     self.assertEqual(kept.x_range, (95.0, 1340.2))

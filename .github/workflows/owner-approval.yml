@@ -1,0 +1,35 @@
+name: Ownership evaluation
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [Unit Tests]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evaluate:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request_review'
+    concurrency:
+      group: ownership-evaluation
+      queue: max
+    runs-on: ubuntu-latest
+    environment: ownership-policy
+    steps:
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        id: app
+        with:
+          app-id: ${{ vars.OWNERSHIP_APP_ID }}
+          private-key: ${{ secrets.OWNERSHIP_APP_PRIVATE_KEY }}
+          permission-checks: write
+          permission-contents: read
+          permission-pull-requests: read
+          permission-members: read
+      - uses: rickwierenga/codeowners-self-approval@733faf66a2755aa4de95f5625144f717ea2c9b9f
+        with:
+          app-token: ${{ steps.app.outputs.token }}
+          app-id: ${{ vars.OWNERSHIP_APP_ID }}

@@ -3,17 +3,19 @@ import json
 import pathlib
 import tempfile
 import unittest
-from typing import cast
+from typing import Callable, Optional, Tuple, cast
 
 from pylabrobot.hamilton.star.conftest import BARE_X_ARM
 from pylabrobot.hamilton.star.device import (
   EXTENSION_HOUSING_SIZE_X,
   RECORDING_STAR,
+  RECORDING_STAR_HEAD384,
   STAR,
   STAR_DECK_LOCATION,
   STAR_SIZE_X,
   STARDevice,
-  STARLet,
+  STARlet,
+  STARPlus,
 )
 from pylabrobot.hamilton.star.driver.configuration import (
   DeviceConfiguration,
@@ -23,6 +25,8 @@ from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck
 from pylabrobot.resources.hamilton.hamilton_decks import STAR_NUM_TRACKS, STARLET_NUM_TRACKS
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import serialize
 
 # The device this package ships a recording of, read through the one reader there is: tests need a
@@ -81,7 +85,7 @@ class TestFactories(unittest.IsolatedAsyncioTestCase):
 
   def test_each_factory_builds_its_own_deck(self):
     self.assertEqual(STAR(simulation=True).deck.num_tracks, STAR_NUM_TRACKS)
-    self.assertEqual(STARLet(simulation=True).deck.num_tracks, STARLET_NUM_TRACKS)
+    self.assertEqual(STARlet(simulation=True).deck.num_tracks, STARLET_NUM_TRACKS)
 
   def test_extension_housing_stands_to_the_left(self):
     """The housing is a resource beside the chassis, not something that grows the device.
@@ -93,16 +97,28 @@ class TestFactories(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(star.get_absolute_size_x(), STAR_SIZE_X)
     self.assertEqual(cast(Coordinate, star.deck.location).x, STAR_DECK_LOCATION.x)
 
-    housing = star.get_resource("left_extension_housing")
+    housing = star.get_resource(f"{star.name}_left_extension_housing")
     self.assertEqual(cast(Coordinate, housing.location).x, -EXTENSION_HOUSING_SIZE_X)
     self.assertEqual(housing.get_absolute_size_x(), EXTENSION_HOUSING_SIZE_X)
 
   def test_extension_housing_is_fitted_unless_declined(self):
     def fitted(star):
-      return any(child.name == "left_extension_housing" for child in star.children)
+      return any(child.name == f"{star.name}_left_extension_housing" for child in star.children)
 
     self.assertTrue(fitted(STAR(simulation=True)))
     self.assertFalse(fitted(STAR(simulation=True, extension_housing=False)))
+
+  def test_default_names_and_left_side_accessors(self):
+    star = STAR(simulation=True)
+    self.assertEqual(star.name, "STAR")
+    self.assertEqual(STARlet(simulation=True).name, "STARlet")
+    self.assertEqual(STARPlus(simulation=True).name, "STARplus")
+    self.assertIs(star.left_extension_housing, star.get_resource("STAR_left_extension_housing"))
+    self.assertIsNone(star.left_side_panel)
+
+    paneled = STAR(simulation=True, extension_housing=False, left_side_panel_installed=True)
+    self.assertIs(paneled.left_side_panel, paneled.get_resource("STAR_left_side_panel"))
+    self.assertIsNone(paneled.left_extension_housing)
 
 
 class TestCapabilities(unittest.IsolatedAsyncioTestCase):
@@ -144,3 +160,98 @@ class TestCapabilities(unittest.IsolatedAsyncioTestCase):
     await star.setup()
     for name in ("pipettes", "head96", "head384", "autoload", "right_x_arm", "front_cover"):
       self.assertIsNone(getattr(star, name), name)
+
+
+class TestComponentNames(unittest.IsolatedAsyncioTestCase):
+  """Named devices can share a tree before and after discovery."""
+
+  async def test_device_components_are_unique_and_reused(self):
+    """Every built-in component, including nested head and iSWAP parts, belongs to its name."""
+    bench = Resource(name="bench", size_x=10000, size_y=2000, size_z=2000)
+    cases: Tuple[Tuple[Callable[..., STARDevice], str, Optional[str], bool], ...] = (
+      (STAR, "star_a", None, False),
+      (STAR, "star_b", RECORDING_STAR_HEAD384, False),
+      (STARlet, "starlet", None, True),
+      (STARPlus, "starplus", None, False),
+    )
+    for index, (factory, name, recording, side_panel) in enumerate(cases):
+      with self.subTest(name=name):
+        star = factory(
+          name=name,
+          simulation=True,
+          declared_configuration_json=recording,
+          extension_housing=not side_panel,
+          left_side_panel_installed=side_panel,
+        )
+        self.assertEqual(star.deck.name, f"{name}_deck")
+        self.assertTrue(all(child.name.startswith(f"{name}_") for child in star.get_all_children()))
+        bench.assign_child_resource(star, location=Coordinate(index * 2500, 0, 0))
+        try:
+          await star.setup()
+          components = star.get_all_children()
+          self.assertTrue(all(child.name.startswith(f"{name}_") for child in components))
+          for child in components:
+            self.assertIs(bench.get_resource(child.name), child)
+          assert star.pipettes is not None
+          self.assertEqual(star.pipettes.resources[0].name, f"{name}_pipette_channel_0")
+          if star.head96 is not None:
+            self.assertEqual(
+              star.head96.configuration.tip_discard_location,
+              star.head96._position_centred_in(star.deck.get_trash_area96()),
+            )
+          await star.stop()
+          await star.setup()
+          self.assertEqual(
+            [id(child) for child in star.get_all_children()], [id(child) for child in components]
+          )
+        finally:
+          await star.stop()
+
+  async def test_supplied_deck_and_labware_keep_their_names(self):
+    """Discovery uses the device name without renaming caller-owned deck resources."""
+    deck = STARDeck(name="custom_deck")
+    labware = Resource(name="user_labware", size_x=100, size_y=100, size_z=10)
+    deck.assign_child_resource(labware, track=1)
+    existing_names = [child.name for child in deck.get_all_children()]
+    star = STAR(name="star_a", deck=deck, simulation=True)
+    try:
+      await star.setup()
+      self.assertIs(star.deck, deck)
+      self.assertIs(star.get_resource("user_labware"), labware)
+      for name in existing_names:
+        self.assertTrue(star.has_resource(name))
+      assert star.x_arm.resource is not None
+      self.assertEqual(star.x_arm.resource.name, "star_a_left_x_arm")
+      self.assertEqual(star.deck.get_trash_area96().name, "custom_deck_trash_core96")
+    finally:
+      await star.stop()
+
+
+class TestTurnedDevice(unittest.IsolatedAsyncioTestCase):
+  """A device turned in the room sets up as one standing square."""
+
+  async def test_a_turned_device_puts_its_parts_where_an_upright_one_does(self):
+    for factory in (STARlet, STARPlus):
+      for angle in (90, -90, 37.5):
+        with self.subTest(device=factory.__name__, angle=angle):
+          placed = []
+          for rotation in (0, angle):
+            room = Resource(name="room", size_x=9000, size_y=9000, size_z=3000)
+            room.location = Coordinate.zero()
+            device = factory(simulation=True, name="device")
+            device.rotation = Rotation(z=rotation)
+            room.assign_child_resource(device, location=Coordinate(4000, 4000, 0))
+            await device.setup()
+            placed.append(
+              {
+                r.name: (*r.location.vector(), r.get_size_x(), r.get_size_y(), r.get_size_z())
+                for r in device.get_all_children()
+                if r.location
+              }
+            )
+            await device.stop()
+          upright, turned = placed
+          self.assertEqual(turned.keys(), upright.keys())
+          for name, where in upright.items():
+            for got, expected in zip(turned[name], where):
+              self.assertAlmostEqual(got, expected, 3, name)
