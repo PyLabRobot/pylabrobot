@@ -61,6 +61,8 @@ Do not use reflective attribute access. `getattr`, `setattr`, `hasattr`, `delatt
 
 Define explicit, typed methods and properties instead. When a value or callable must be selected by name, use a typed mapping with a fixed set of keys. Model behavioral differences with normal control flow or polymorphism so static analysis and readers can see every supported path.
 
+Define before use. Within a module, a function, class or constant comes above the code that uses it; within a class, a method comes above the methods that call it. A file then reads top to bottom, each part building only on what is already written above it.
+
 ## API conventions
 
 Use PyLabRobot's [default units](../user_guide/getting-started/units.md) in public APIs. Omit the unit from a parameter or attribute name when it uses the PyLabRobot default—for example, use `temperature`, not `temperature_celsius`. Deviate from the default only for a compelling reason, make the alternative unit explicit, and document why it is necessary. Convert device-native units internally.
@@ -77,6 +79,11 @@ saving generated SVG files in the documentation source tree.
 To build the documentation, run `make docs` in the root directory. The documentation will be built in `docs/build`. Run `open docs/build/index.html` to open the documentation in your browser.
 
 ## Common Tasks
+
+### Testing a device
+
+You can contribute by testing PyLabRobot on hardware you have access to and reporting successful
+runs or failures. See {doc}`/user_guide/needs-testing` for the device table and reporting process.
 
 ### Fixing a bug
 

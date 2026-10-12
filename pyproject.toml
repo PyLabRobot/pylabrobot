@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["typing_extensions", "websockets"]
+dependencies = ["typing_extensions", "websockets>=14"]
 
 [project.optional-dependencies]
 serial = ["pyserial"]
@@ -18,12 +18,13 @@ ftdi = ["pylibftdi", "pyusb"]
 hid = ["hid"]
 btx = ["pyserial", "numpy>=1.26", "Pillow"]
 modbus = ["pymodbus>=3.0.0,<3.7.0"]
-opentrons = ["opentrons-http-api-client==0.2.1"]
+opentrons = ["opentrons-http-api-client==0.2.1", "httpx", "zeroconf>=0.131.0"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
 cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm]"]
+odyssey = ["Pillow"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
 test = [
   "pytest",
 ]
@@ -50,11 +51,28 @@ Homepage = "https://github.com/pylabrobot/pylabrobot"
 version = {file = "pylabrobot/version.txt"}
 
 [tool.setuptools.packages.find]
-namespaces = false
-exclude = ["tools*", "docs*"]
+namespaces = true
+include = ["pylabrobot", "pylabrobot.*"]
+exclude = ["*.__pycache__"]
 
 [tool.setuptools.package-data]
-pylabrobot = ["visualizer/*", "visualizer/img/*", "version.txt"]
+"*" = [
+  "*.css",
+  "*.csv",
+  "*.glb",
+  "*.html",
+  "*.js",
+  "*.json",
+  "*.md",
+  "*.pdf",
+  "*.png",
+  "*.stl",
+  "*.ts",
+  "*.txt",
+  "*.wasm",
+  "LICENSE",
+  "NOTICE",
+]
 
 [tool.ruff]
 line-length = 100

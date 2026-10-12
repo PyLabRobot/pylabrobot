@@ -136,7 +136,10 @@ class BioShake(PlateHolder):
         await asyncio.sleep(0.1)
 
         if len(decoded) > 0:
-          if "Initialization complete" in decoded:
+          if (
+            "Initialization complete" in decoded
+            or "Initialization successfully completed" in decoded
+          ):
             break
 
       except asyncio.TimeoutError:

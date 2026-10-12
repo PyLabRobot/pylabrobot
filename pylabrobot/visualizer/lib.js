@@ -2284,7 +2284,7 @@ function buildChannelAttrs(ch, headState) {
     attrs.push({ key: "tip_size", value: (tipData.tip_size || "").replace(/_/g, " ") });
     attrs.push({ key: "max_volume", value: (tipData.maximal_volume || "?") + " \u00B5L" });
     attrs.push({ key: "has_filter", value: tipData.has_filter ? "Yes" : "No" });
-    attrs.push({ key: "tip_length", value: (tipData.total_tip_length || "?") + " mm" });
+    attrs.push({ key: "tip_length", value: (tipData.size_z || "?") + " mm" });
   } else {
     attrs.push({ key: "has_tip", value: "false" });
   }
@@ -2300,7 +2300,7 @@ function buildTipAttrs(ch, headState) {
     { key: "name", value: tipData.name || "Unknown" },
     { key: "type", value: tipData.type || "Unknown" },
     { key: "tip_size", value: (tipData.tip_size || "").replace(/_/g, " ") },
-    { key: "total_tip_length", value: (tipData.total_tip_length || "?") + " mm" },
+    { key: "size_z", value: (tipData.size_z || "?") + " mm" },
     { key: "has_filter", value: tipData.has_filter ? "Yes" : "No" },
     { key: "maximal_volume", value: (tipData.maximal_volume || "?") + " \u00B5L" },
     { key: "pickup_method", value: (tipData.pickup_method || "").replace(/_/g, " ") },
@@ -2436,10 +2436,10 @@ function fillHeadIcons(panel, headState) {
     var ch = channels[ci];
     var tipData = headState[ch] && headState[ch].tip;
     var hasTip = tipData !== null && tipData !== undefined;
-    // Scale tip length: total_tip_length in mm, map to px (0.8 px/mm, clamp 10mm–80mm)
+    // Scale tip length: size_z in mm, map to px (0.8 px/mm, clamp 10mm–80mm)
     var tipLenPx = 0;
-    if (hasTip && tipData.total_tip_length) {
-      var clampedMm = Math.max(10, Math.min(80, tipData.total_tip_length));
+    if (hasTip && tipData.size_z) {
+      var clampedMm = Math.max(10, Math.min(80, tipData.size_z));
       tipLenPx = clampedMm * 0.8;
     }
     var col = document.createElement("div");
@@ -2525,7 +2525,7 @@ function fillHeadIcons(panel, headState) {
         tipG.addEventListener("mouseenter", function () { this.setAttribute("filter", "url(#tipGlow" + idx + ")"); });
         tipG.addEventListener("mouseleave", function () { this.removeAttribute("filter"); });
       })(ci);
-      var botW = (tipData.total_tip_length > 50) ? 2 : 1;
+      var botW = (tipData.size_z > 50) ? 2 : 1;
       var botL = 7 - botW / 2;
       var botR = 7 + botW / 2;
       var tipShapes =

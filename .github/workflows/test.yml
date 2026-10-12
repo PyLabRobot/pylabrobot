@@ -5,17 +5,19 @@ on:
     branches:
      - main
   pull_request:
+  pull_request_review:
   workflow_dispatch:
 
 jobs:
   test-all:
+    if: github.event_name != 'pull_request_review'
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
         version: [3.9, "3.10", 3.11, 3.12, 3.13, 3.14]
 
-    name: Tests (all, py${{ matrix.version }})
+    name: ${{ github.event_name == 'pull_request_review' && 'Review notification' || 'Tests' }} (all, py${{ matrix.version }})
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -28,13 +30,14 @@ jobs:
           extra: all
 
   test-extras:
+    if: github.event_name != 'pull_request_review'
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
         extra: ["<none>", serial, usb, ftdi, hid, btx, modbus, opentrons, sila, cytation-microscopy, pico]
 
-    name: Tests (${{ matrix.extra }}, py3.12)
+    name: ${{ github.event_name == 'pull_request_review' && 'Review notification' || 'Tests' }} (${{ matrix.extra }}, py3.12)
     runs-on: ${{ matrix.os }}
 
     steps:

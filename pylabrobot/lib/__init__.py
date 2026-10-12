@@ -1,1 +1,1 @@
-"""Small, dependency-free helpers used by PyLabRobot."""
+"""Device-agnostic logic on the resource model."""

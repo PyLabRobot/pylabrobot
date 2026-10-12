@@ -18,7 +18,11 @@ from pylabrobot.legacy.liquid_handling.standard import (
 )
 from pylabrobot.resources import Coordinate, Tip, no_volume_tracking
 from pylabrobot.resources.celltreat import celltreat_96_wellplate_350uL_Fb
-from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
+from pylabrobot.resources.opentrons import (
+  OTDeck,
+  opentrons_96_filtertiprack_20ul,
+  opentrons_96_tiprack_300ul,
+)
 from pylabrobot.resources.well import Well
 
 
@@ -284,17 +288,19 @@ class OpentronsSharedHelperTests(unittest.TestCase):
     self.tip_spot = self.tip_rack.get_item("A1")
     self.tip_20 = Tip(
       has_filter=True,
-      total_tip_length=39.2,
       maximal_volume=20,
       fitting_depth=8.25,
       name="test_tip_20",
+      diameter=self.tip_spot.get_tip().get_size_x(),
+      size_z=39.2,
     )
     self.tip_300 = Tip(
       has_filter=False,
-      total_tip_length=51.0,
       maximal_volume=300,
       fitting_depth=8.0,
       name="test_tip_300",
+      diameter=opentrons_96_tiprack_300ul("tip_rack_300").get_tip("A1").get_size_x(),
+      size_z=51.0,
     )
 
   # -- _get_pickup_pipette --

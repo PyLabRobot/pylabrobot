@@ -90,7 +90,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>│   ├── <a href="itemized-resource/plate/plate.html">Plate</a></td></tr>
   <tr><td>│   ├── <a href="itemized-resource/tiprack/tiprack.html">TipRack</a></td></tr>
   <tr><td>│   └── <a href="itemized-resource/container-rack/container-rack.html">ContainerRack</a></td></tr>
-  <tr><td>│       └── TubeRack</td></tr>
+  <tr><td>│       └── <a href="itemized-resource/tube-rack/tube-rack.html">TubeRack</a></td></tr>
 
   <!-- ResourceHolder subtree -->
   <tr><td>├── <a href="resource-holder/resource-holder.html">ResourceHolder</a></td></tr>
@@ -130,6 +130,7 @@ carrier/carrier
 container/container
 deck/deck
 itemized-resource/itemized-resource
+itemized-resource/tube-rack/tube-rack
 resource-holder/resource-holder
 plate-adapter/plate-adapter
 resource-stack/resource-stack
