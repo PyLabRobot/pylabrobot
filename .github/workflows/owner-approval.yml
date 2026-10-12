@@ -31,7 +31,7 @@ jobs:
           permission-contents: read
           permission-pull-requests: read
           permission-members: read
-      - uses: rickwierenga/codeowners-self-approval@733faf66a2755aa4de95f5625144f717ea2c9b9f
+      - uses: rickwierenga/codeowners-self-approval@84135ccdd97269c76befc81a455cd54a3c0b831b
         with:
           app-token: ${{ steps.app.outputs.token }}
           app-id: ${{ vars.OWNERSHIP_APP_ID }}
