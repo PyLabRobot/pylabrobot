@@ -70,10 +70,6 @@
         5
       ],
       "acceleration_level_default": 4,
-      "current_limit_range": [
-        0,
-        7
-      ],
       "current_limit_default": 7
     },
     "right_arm": null,

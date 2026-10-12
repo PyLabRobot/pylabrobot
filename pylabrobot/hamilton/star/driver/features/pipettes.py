@@ -70,7 +70,12 @@ from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipDropMetho
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMountingShaft
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipRack, TipSpot, tip_origin
+from pylabrobot.resources.tip_rack import (
+  TipRack,
+  TipSpot,
+  check_tip_racks_available,
+  tip_origin,
+)
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
 from pylabrobot.resources.well import Well
 
@@ -4270,6 +4275,7 @@ class Pipettes:
 
     if not tip_spots:
       return
+    check_tip_racks_available(tip_spots, "pick up tips from")
     tips = [spot.tip_for_pickup() for spot in tip_spots]
     if not all(isinstance(tip, HamiltonTip) for tip in tips):
       raise TypeError("the STAR picks up Hamilton tips")
@@ -4540,6 +4546,7 @@ class Pipettes:
     offsets = [Coordinate.zero()] * len(destinations) if offsets is None else list(offsets)
 
     spots = [place for place in destinations if isinstance(place, TipSpot)]
+    check_tip_racks_available(spots, "drop tips into")
     if len({id(spot) for spot in spots}) != len(spots):
       raise ValueError("each tip must go into a spot of its own")
     for spot in spots:

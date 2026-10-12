@@ -166,10 +166,14 @@ class TipRackLidTests(unittest.TestCase):
 
   def test_a_lid_seats_on_the_top_face_and_covers_the_rack(self):
     rack = StandingTipRack("rack", size_x=10, size_y=10, size_z=55, ordered_items={})
-    self.assertTrue(rack._available_for_tip_handling)
+    self.assertFalse(rack.available_for_tip_handling)  # placed nowhere
+    Resource("root", size_x=100, size_y=100, size_z=100).assign_child_resource(
+      rack, location=Coordinate(0, 0, 0)
+    )
+    self.assertTrue(rack.available_for_tip_handling)
     rack.lid = self._lid()
     self.assertEqual(rack.lid.location, Coordinate(0, 0, 53))
-    self.assertFalse(rack._available_for_tip_handling)
+    self.assertFalse(rack.available_for_tip_handling)
     with self.assertRaisesRegex(ValueError, "already has a lid"):
       rack.lid = self._lid("lid_2")
 
@@ -179,8 +183,8 @@ class TipRackLidTests(unittest.TestCase):
     stack = ResourceStack("stack", "z")
     stack.assign_child_resource(lower)
     stack.assign_child_resource(upper)
-    self.assertFalse(lower._available_for_tip_handling)
-    self.assertTrue(upper._available_for_tip_handling)
+    self.assertFalse(lower.available_for_tip_handling)
+    self.assertTrue(upper.available_for_tip_handling)
 
   def test_a_nested_tip_rack_takes_a_lid(self):
     with self.assertWarns(DeprecationWarning):

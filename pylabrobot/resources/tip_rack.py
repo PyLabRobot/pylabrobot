@@ -353,14 +353,18 @@ class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
     )
 
   @property
-  def _available_for_tip_handling(self) -> bool:
-    """Whether nothing, a lid or another rack in its stack, sits on top of this rack."""
+  def available_for_tip_handling(self) -> bool:
+    """Whether a head can reach this rack's tips: it is placed, has no lid on, and no other rack
+    stands on it in its stack."""
+    if self.location is None:
+      return False
     if self.lid is not None:
       return False
-    stack = self.parent
-    return not (
-      isinstance(stack, ResourceStack) and stack.direction == "z" and stack.children[-1] is not self
-    )
+    parent = self.parent
+    if isinstance(parent, ResourceStack) and parent.direction == "z":
+      return parent.children[-1] is self
+    # TODO: build gating logic for placement in a storage unit such as a carousel or hotel
+    return True
 
   @staticmethod
   def _occupied_func(item: TipSpot):
@@ -451,6 +455,22 @@ class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
   def get_all_tips(self) -> List[Tip]:
     """Get all tips in the tip rack."""
     return [ts.get_tip() for ts in self.get_all_items()]
+
+
+def check_tip_racks_available(tip_spots: Sequence[TipSpot], action: str) -> None:
+  """Raise if a head cannot reach a rack behind `tip_spots`, asking each rack once.
+
+  Args:
+    tip_spots: the spots a tip command is about.
+    action: what the command does with the rack, for the error, e.g. "pick up tips from".
+
+  Raises:
+    ValueError: If a rack is not available for tip handling.
+  """
+  racks = {id(spot.parent): spot.parent for spot in tip_spots if isinstance(spot.parent, TipRack)}
+  for rack in racks.values():
+    if not rack.available_for_tip_handling:
+      raise ValueError(f"Cannot {action} {rack.name!r}: it is not available for tip handling.")
 
 
 class EmbeddedTipRack(TipRack):
