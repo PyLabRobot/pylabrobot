@@ -18,7 +18,9 @@ jobs:
       group: ownership-evaluation
       queue: max
     runs-on: ubuntu-latest
-    environment: ownership-policy
+    environment:
+      name: ownership-policy
+      deployment: false
     steps:
       - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         id: app
