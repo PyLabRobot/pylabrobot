@@ -30,6 +30,7 @@ Manufacturers
     pylabrobot.curiox
     pylabrobot.hamilton
     pylabrobot.high_res
+    pylabrobot.hse
     pylabrobot.inheco
     pylabrobot.kbioscience
     pylabrobot.kbiosystems
