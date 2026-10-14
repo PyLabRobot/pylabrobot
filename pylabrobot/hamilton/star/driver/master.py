@@ -9,7 +9,20 @@ import dataclasses
 import datetime
 import json
 import logging
-from typing import Any, Dict, FrozenSet, List, Literal, Optional, Tuple, Union, cast, overload
+from contextlib import asynccontextmanager
+from typing import (
+  Any,
+  AsyncIterator,
+  Dict,
+  FrozenSet,
+  List,
+  Literal,
+  Optional,
+  Tuple,
+  Union,
+  cast,
+  overload,
+)
 
 from pylabrobot.events import emit_event
 from pylabrobot.hamilton.protocol.text.framing import (
@@ -153,6 +166,7 @@ class STARDriver:
     # Coordinates commands on the shared link: one at a time per module, and a C0 master
     # command alone. Read-only requests are exempt, see `send_command`.
     self._lock = _FirmwareLock()
+    self._firmware_update_task: Optional[asyncio.Task[Any]] = None
     self._replies = ReplyRouter(
       io=self.io,
       module_id_length=STAR_MODULE_ID_LENGTH,
@@ -506,6 +520,30 @@ class STARDriver:
   # Low-level I/O
   # ----------------------------------------
 
+  @asynccontextmanager
+  async def _firmware_update_session(self) -> AsyncIterator[None]:
+    """Hold all motion locks throughout a download and reject other tasks' commands.
+
+    The owning task can call the normal command methods without acquiring the same locks twice.
+    """
+    self._require_connection()
+    if self._firmware_update_task is not None:
+      raise RuntimeError("A firmware update is already in progress")
+    async with self._lock.subsystem(_FirmwareLock.EVERY_SUBSYSTEM):
+      self._firmware_update_task = asyncio.current_task()
+      try:
+        yield
+      finally:
+        self._firmware_update_task = None
+
+  def _check_firmware_update_access(self) -> None:
+    """Reject commands from another task while firmware is being programmed."""
+    if (
+      self._firmware_update_task is not None
+      and asyncio.current_task() is not self._firmware_update_task
+    ):
+      raise RuntimeError("Cannot send commands while a firmware update is in progress")
+
   @overload
   async def send_command(
     self,
@@ -573,6 +611,7 @@ class STARDriver:
     Raises:
       RuntimeError: If the link is not open.
     """
+    self._check_firmware_update_access()
     kwargs_ = dict(
       auto_id=auto_id,
       tip_pattern=tip_pattern,
@@ -581,7 +620,7 @@ class STARDriver:
       fmt=fmt,
       **kwargs,
     )
-    if command[0] in ("R", "Q"):
+    if self._firmware_update_task is not None or command[0] in ("R", "Q"):
       return await self._send(module, command, **kwargs_)
     key = subsystem or (_FirmwareLock.EVERY_SUBSYSTEM if module == "C0" else module)
     async with self._lock.subsystem(key):
@@ -662,6 +701,7 @@ class STARDriver:
     Raises:
       RuntimeError: If the link is not open.
     """
+    self._check_firmware_update_access()
     self._require_connection()
     return await self._replies.send_raw(
       command=command,

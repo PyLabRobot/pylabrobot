@@ -11,6 +11,7 @@ import re
 import warnings
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import (
   TYPE_CHECKING,
   Any,
@@ -46,6 +47,14 @@ from pylabrobot.hamilton.star.driver.errors import (
   NoTeachInSignalError,
   STARFirmwareError,
   channels_that_faulted,
+)
+from pylabrobot.hamilton.star.driver.firmware_update import (
+  PipetteFirmwareUpdateResult,
+  _firmware_reply_body,
+  _PipetteFirmwareImage,
+  _PipetteFirmwareState,
+  _require_firmware_acknowledgement,
+  _validate_ach_record,
 )
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.lock import CHANNEL_MODULE_LETTERS, _FirmwareLock
@@ -95,6 +104,16 @@ ChannelType = Literal["ML_STAR", "ML_STAR_RPC"]
 HeadType = Literal["ML_STAR", "ML_STAR_PLE", "ML_STAR_RPC"]
 StopDiscType = Literal["core_i", "core_ii"]
 PressureADC = Literal["Renesas_X9268", "Analog_Devices_AD5263"]
+
+
+@dataclass(frozen=True)
+class PipetteCycleCounts:
+  """The channel's reported lifetime tip and pipetting cycle counters."""
+
+  tip_pickups: int
+  tip_discards: int
+  aspirations: int
+  dispenses: int
 
 
 @dataclass
@@ -610,6 +629,231 @@ class Pipettes:
     self.configuration.resolve_channels(self.num_channels)
     await asyncio.gather(*(self._discover_channel(ch) for ch in range(self.num_channels)))
     self.configuration.check_channels_agree()
+
+  # -- firmware download -----------------------------------------------------
+
+  async def request_status(self, channel: int) -> int:
+    """Read RQ's status bitmask; zero is clear and 0x0800 is download mode."""
+    self._require_channel(channel)
+    reply = await self._driver.send_command(
+      module=self.channel_id(channel), command="RQ", fmt="rq****"
+    )
+    return cast(int, reply["rq"])
+
+  async def request_eeprom_status(self, channel: int) -> int:
+    """Read QV's EEPROM validity bitmask; every set bit identifies corrupt stored data."""
+    self._require_channel(channel)
+    reply = await self._driver.send_command(
+      module=self.channel_id(channel), command="QV", fmt="qv****"
+    )
+    return cast(int, reply["qv"])
+
+  async def request_plunger_capacity(self, channel: int) -> int:
+    """Read QG's plunger type and return its capacity in uL."""
+    self._require_channel(channel)
+    reply = await self._driver.send_command(
+      module=self.channel_id(channel), command="QG", fmt="qg#"
+    )
+    if reply["qg"] not in (0, 1):
+      raise ValueError(f"Unknown pipette plunger type: {reply['qg']}")
+    return 1000 if reply["qg"] == 1 else 300
+
+  async def request_cycle_counts(self, channel: int) -> PipetteCycleCounts:
+    """Read the four ten-digit RV cycle counters without changing them."""
+    self._require_channel(channel)
+    reply = await self._driver.send_command(
+      module=self.channel_id(channel),
+      command="RV",
+      fmt="na##########nb##########nc##########nd##########",
+    )
+    return PipetteCycleCounts(reply["na"], reply["nb"], reply["nc"], reply["nd"])
+
+  async def _request_adjustment_values(self, channel: int) -> str:
+    """Read RK calibration fields verbatim for comparison across a firmware update."""
+    self._require_channel(channel)
+    module = self.channel_id(channel)
+    reply = await self._driver.send_command(module=module, command="RK")
+    return _firmware_reply_body(reply, module, "RK")
+
+  async def _request_extended_adjustment_values(self, channel: int) -> str:
+    """Read QX extended calibration fields verbatim for comparison."""
+    self._require_channel(channel)
+    module = self.channel_id(channel)
+    reply = await self._driver.send_command(module=module, command="QX")
+    return _firmware_reply_body(reply, module, "QX")
+
+  async def _request_adjustment_status(self, channel: int) -> str:
+    """Read RJ's adjustment date and completion flag verbatim for comparison."""
+    self._require_channel(channel)
+    module = self.channel_id(channel)
+    reply = await self._driver.send_command(module=module, command="RJ")
+    return _firmware_reply_body(reply, module, "RJ")
+
+  async def _request_technical_status(self, channel: int) -> str:
+    """Read QT's assembly part numbers, revisions, and serial numbers for comparison."""
+    self._require_channel(channel)
+    module = self.channel_id(channel)
+    reply = await self._driver.send_command(module=module, command="QT")
+    return _firmware_reply_body(reply, module, "QT")
+
+  async def _request_monitoring_configuration(self, channel: int) -> str:
+    """Read the au configuration through RA for comparison across a firmware update."""
+    self._require_channel(channel)
+    module = self.channel_id(channel)
+    reply = await self._driver.send_command(module=module, command="RA", ra="au")
+    return _firmware_reply_body(reply, module, "RA")
+
+  async def _request_firmware_state(self, channel: int) -> _PipetteFirmwareState:
+    """Capture persistent channel settings through their individual request methods."""
+    return _PipetteFirmwareState(
+      adjustments=await self._request_adjustment_values(channel),
+      extended_adjustments=await self._request_extended_adjustment_values(channel),
+      adjustment_status=await self._request_adjustment_status(channel),
+      technical_status=await self._request_technical_status(channel),
+      monitoring_configuration=await self._request_monitoring_configuration(channel),
+      plunger_capacity=await self.request_plunger_capacity(channel),
+    )
+
+  async def _switch_firmware_mode(self, channel: int) -> None:
+    """Send AP to switch between the application and downloader; AP has no reply."""
+    self._require_channel(channel)
+    await self._driver.send_raw_command(f"{self.channel_id(channel)}AP", wait=False)
+
+  async def _erase_firmware(self, channel: int) -> None:
+    """Erase application flash with DE while the channel is in download mode."""
+    self._require_channel(channel)
+    module = self.channel_id(channel)
+    reply = await self._driver.send_command(module=module, command="DE", read_timeout=90)
+    _require_firmware_acknowledgement(reply, module, "DE")
+
+  async def _program_firmware_record(self, channel: int, record: str) -> None:
+    """Program one validated ACH record with DP, requiring acknowledgement without retry."""
+    self._require_channel(channel)
+    _validate_ach_record(record)
+    module = self.channel_id(channel)
+    reply = await self._driver.send_command(module=module, command="DP", dp=record, read_timeout=30)
+    _require_firmware_acknowledgement(reply, module, "DP")
+
+  async def update_firmware(
+    self,
+    channel: int,
+    firmware_file: Union[str, Path],
+    *,
+    expected_version: str,
+    allow_downgrade: bool = False,
+  ) -> PipetteFirmwareUpdateResult:
+    """Download a compatible GRUPXS ACH image to one standard 1000 uL STAR channel.
+
+    Validate the entire image before entering download mode, then erase, program, restart, and
+    verify the application and saved calibration. Other tasks cannot send commands during the
+    update. An interrupted or rejected write is never retried and does not restart the channel.
+
+    The caller must supply an image suitable for the installed hardware and keep power and the
+    connection stable. After success, power-cycle the instrument and initialize it normally.
+    Cycle-counter differences are returned and logged; counters and download dates are not written.
+
+    Args:
+      channel: channel index, starting at zero (P1).
+      firmware_file: path to the manufacturer's GRUPXS .ACH image.
+      expected_version: complete embedded version, for example ``4.0S j 2022-03-16``.
+      allow_downgrade: explicitly allow an image with an older build date.
+
+    Returns:
+      The verified firmware version, image digest, record count, and before/after cycle counts.
+
+    Raises:
+      ValueError: Invalid image, channel, unsupported hardware, or an unapproved downgrade.
+      RuntimeError: Invalid device state, missing acknowledgement, or failed verification.
+      TimeoutError: A command was not acknowledged; no retry or application restart follows.
+    """
+    self._require_channel(channel)
+    if isinstance(channel, bool):
+      raise ValueError("channel must be an integer index, not a boolean")
+    image = _PipetteFirmwareImage.from_file(Path(firmware_file), expected_version)
+    async with self._driver._firmware_update_session():
+      versions_before = [await self.request_firmware_version(ch) for ch in range(self.num_channels)]
+      previous_version, previous_date = versions_before[channel]
+      if image.build_date < previous_date and not allow_downgrade:
+        raise ValueError("An older firmware image requires allow_downgrade=True")
+      if await self.request_status(channel) != 0 or await self.request_eeprom_status(channel) != 0:
+        raise RuntimeError(
+          "Channel status and EEPROM checks must be clear before a firmware update"
+        )
+      hardware = await self.request_pipette_configuration(channel)
+      if (
+        await self.request_plunger_capacity(channel) != 1000
+        or hardware.channel_type != "ML_STAR"
+        or hardware.head_type != "ML_STAR"
+      ):
+        raise ValueError("Firmware updates support standard 1000 uL STAR channels only")
+      master_before = await self._driver.request_firmware_version()
+      state_before = await self._request_firmware_state(channel)
+      counts_before = await self.request_cycle_counts(channel)
+      logger.info(
+        "Updating %s from %s to %s (sha256 %s)",
+        self.channel_id(channel),
+        previous_version,
+        image.version,
+        image.sha256,
+      )
+      if channel < len(self.configuration.channels):
+        self.configuration.channels[channel].firmware_version = None
+      if channel == 0:
+        self._driver.firmware.pop("pipettes", None)
+      await self._switch_firmware_mode(channel)
+      await asyncio.sleep(15)
+      if await self.request_status(channel) != 0x0800:
+        raise RuntimeError("Channel did not enter download mode with clear error bits")
+      await self._erase_firmware(channel)
+      for index, record in enumerate(image.records, 1):
+        await self._program_firmware_record(channel, record)
+        if index % 100 == 0 or index == len(image.records):
+          logger.info(
+            "%s: %s/%s firmware records acknowledged",
+            self.channel_id(channel),
+            index,
+            len(image.records),
+          )
+      await self._switch_firmware_mode(channel)
+      await asyncio.sleep(18)
+      if await self.request_status(channel) != 0:
+        raise RuntimeError("Channel status is not clear after the firmware restart")
+      version, _ = await self.request_firmware_version(channel)
+      if version != image.version:
+        raise RuntimeError(f"Expected firmware {image.version!r}, received {version!r}")
+      if await self.request_eeprom_status(channel) != 0:
+        raise RuntimeError("Channel EEPROM verification failed after the firmware update")
+      state_after = await self._request_firmware_state(channel)
+      if state_after != state_before:
+        raise RuntimeError(
+          "Channel calibration, identity, or configuration changed during the update: "
+          f"{state_before} -> {state_after}"
+        )
+      for peer, version_before in enumerate(versions_before):
+        if peer != channel and await self.request_firmware_version(peer) != version_before:
+          raise RuntimeError(f"Another channel's firmware changed during the update: {peer}")
+      if await self._driver.request_firmware_version() != master_before:
+        raise RuntimeError("Master firmware changed during the channel update")
+      counts_after = await self.request_cycle_counts(channel)
+      if counts_after != counts_before:
+        logger.warning(
+          "%s cycle counts changed across the firmware restart: %s -> %s",
+          self.channel_id(channel),
+          counts_before,
+          counts_after,
+        )
+      if channel < len(self.configuration.channels):
+        self.configuration.channels[channel].firmware_version = version
+      if channel == 0:
+        self._driver.firmware["pipettes"] = version
+      return PipetteFirmwareUpdateResult(
+        previous_version=previous_version,
+        version=version,
+        sha256=image.sha256,
+        records_programmed=len(image.records),
+        cycle_counts_before=counts_before,
+        cycle_counts_after=counts_after,
+      )
 
   # -- where the channels are ------------------------------------------------
 
