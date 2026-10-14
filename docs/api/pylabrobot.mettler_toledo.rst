@@ -11,5 +11,8 @@ pylabrobot.mettler_toledo package
   :recursive:
 
     MTSICSDriver
+    MettlerToledoOPCUAServer
+    BalanceClient
+    BalanceInfo
     MettlerToledoResponse
     MettlerToledoError
