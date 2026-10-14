@@ -4,9 +4,14 @@ import dataclasses
 import datetime
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, cast
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
+from pylabrobot.hamilton.star.driver.firmware_update import (
+  FirmwareUpdateResult,
+  _FirmwareDownloader,
+)
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -305,6 +310,51 @@ class XArm:
     """
     resp = await self._driver.send_command(module="X0", command="RF")
     return resp.split("rf")[-1], parse_firmware_version_date(resp)
+
+  def _invalidate_firmware_version(self) -> None:
+    """Clear cached versions before the board leaves its application."""
+    configuration = self._driver.configuration
+    if configuration is not None:
+      for arm in (configuration.left_arm, configuration.right_arm):
+        if arm is not None:
+          arm.firmware_version = None
+    self._driver.firmware.pop("x_arm", None)
+
+  async def update_firmware(
+    self,
+    firmware_file: Union[str, Path],
+    *,
+    expected_version: str,
+    allow_downgrade: bool = False,
+  ) -> FirmwareUpdateResult:
+    """Update the shared X-drive board with a compatible manufacturer ACH image.
+
+    Validates the entire file, requires the same controller generation, and checks saved
+    calibration and identity after programming. An older build date requires allow_downgrade.
+    No movement or initialization is commanded. Power-cycle and initialize after success.
+    A failed transfer is not retried or restarted. Keep power and the connection stable.
+
+    Args:
+      firmware_file: path to the manufacturer's component-specific .ACH file.
+      expected_version: complete embedded version, including date and any hardware suffix.
+      allow_downgrade: explicitly allow an older build within the same controller generation.
+
+    Returns:
+      Verified version, image digest, record count, and before/after cycle counts.
+    """
+    result = await _FirmwareDownloader(self._driver, "X0").update_component(
+      firmware_file,
+      expected_version=expected_version,
+      allow_downgrade=allow_downgrade,
+      invalidate_version=self._invalidate_firmware_version,
+    )
+    configuration = self._driver.configuration
+    if configuration is not None:
+      for arm in (configuration.left_arm, configuration.right_arm):
+        if arm is not None:
+          arm.firmware_version = result.version
+    self._driver.firmware["x_arm"] = result.version
+    return result
 
   async def request_initialization_status(self) -> bool:
     """Request whether this arm's drive reports itself initialized.

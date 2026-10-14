@@ -51,10 +51,9 @@ from pylabrobot.hamilton.star.driver.errors import (
 from pylabrobot.hamilton.star.driver.firmware_update import (
   PipetteFirmwareUpdateResult,
   _firmware_reply_body,
-  _PipetteFirmwareImage,
+  _FirmwareDownloader,
+  _FirmwareImage,
   _PipetteFirmwareState,
-  _require_firmware_acknowledgement,
-  _validate_ach_record,
 )
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.lock import CHANNEL_MODULE_LETTERS, _FirmwareLock
@@ -714,26 +713,6 @@ class Pipettes:
       plunger_capacity=await self.request_plunger_capacity(channel),
     )
 
-  async def _switch_firmware_mode(self, channel: int) -> None:
-    """Send AP to switch between the application and downloader; AP has no reply."""
-    self._require_channel(channel)
-    await self._driver.send_raw_command(f"{self.channel_id(channel)}AP", wait=False)
-
-  async def _erase_firmware(self, channel: int) -> None:
-    """Erase application flash with DE while the channel is in download mode."""
-    self._require_channel(channel)
-    module = self.channel_id(channel)
-    reply = await self._driver.send_command(module=module, command="DE", read_timeout=90)
-    _require_firmware_acknowledgement(reply, module, "DE")
-
-  async def _program_firmware_record(self, channel: int, record: str) -> None:
-    """Program one validated ACH record with DP, requiring acknowledgement without retry."""
-    self._require_channel(channel)
-    _validate_ach_record(record)
-    module = self.channel_id(channel)
-    reply = await self._driver.send_command(module=module, command="DP", dp=record, read_timeout=30)
-    _require_firmware_acknowledgement(reply, module, "DP")
-
   async def update_firmware(
     self,
     channel: int,
@@ -769,12 +748,13 @@ class Pipettes:
     self._require_channel(channel)
     if isinstance(channel, bool):
       raise ValueError("channel must be an integer index, not a boolean")
-    image = _PipetteFirmwareImage.from_file(Path(firmware_file), expected_version)
+    image = _FirmwareImage.from_file(
+      Path(firmware_file), expected_version, self.channel_id(channel)
+    )
     async with self._driver._firmware_update_session():
       versions_before = [await self.request_firmware_version(ch) for ch in range(self.num_channels)]
-      previous_version, previous_date = versions_before[channel]
-      if image.build_date < previous_date and not allow_downgrade:
-        raise ValueError("An older firmware image requires allow_downgrade=True")
+      previous_version, _ = versions_before[channel]
+      image.check_compatible(previous_version, allow_downgrade)
       if await self.request_status(channel) != 0 or await self.request_eeprom_status(channel) != 0:
         raise RuntimeError(
           "Channel status and EEPROM checks must be clear before a firmware update"
@@ -800,29 +780,8 @@ class Pipettes:
         self.configuration.channels[channel].firmware_version = None
       if channel == 0:
         self._driver.firmware.pop("pipettes", None)
-      await self._switch_firmware_mode(channel)
-      await asyncio.sleep(15)
-      if await self.request_status(channel) != 0x0800:
-        raise RuntimeError("Channel did not enter download mode with clear error bits")
-      await self._erase_firmware(channel)
-      for index, record in enumerate(image.records, 1):
-        await self._program_firmware_record(channel, record)
-        if index % 100 == 0 or index == len(image.records):
-          logger.info(
-            "%s: %s/%s firmware records acknowledged",
-            self.channel_id(channel),
-            index,
-            len(image.records),
-          )
-      await self._switch_firmware_mode(channel)
-      await asyncio.sleep(18)
-      if await self.request_status(channel) != 0:
-        raise RuntimeError("Channel status is not clear after the firmware restart")
-      version, _ = await self.request_firmware_version(channel)
-      if version != image.version:
-        raise RuntimeError(f"Expected firmware {image.version!r}, received {version!r}")
-      if await self.request_eeprom_status(channel) != 0:
-        raise RuntimeError("Channel EEPROM verification failed after the firmware update")
+      await _FirmwareDownloader(self._driver, self.channel_id(channel)).program(image)
+      version = image.version
       state_after = await self._request_firmware_state(channel)
       if state_after != state_before:
         raise RuntimeError(

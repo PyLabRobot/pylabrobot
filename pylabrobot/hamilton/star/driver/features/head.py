@@ -21,9 +21,15 @@ initialization command needs, is a constant. Thirty is a different command.
 import datetime
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
+from pylabrobot.hamilton.star.driver.firmware_update import (
+  FirmwareUpdateResult,
+  _firmware_version_parts,
+  _FirmwareDownloader,
+)
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 
@@ -546,6 +552,48 @@ class Head:
     Called once the version is known and before any drive is read, since a generation can change
     what an increment is worth and how wide a parameter is written.
     """
+
+  def _invalidate_firmware_version(self) -> None:
+    """Clear cached versions before the board leaves its application."""
+    self.configuration.firmware_version = None
+    self.configuration.firmware_date = None
+    key = "head96" if self.configuration.module == "H0" else "head384"
+    self._driver.firmware.pop(key, None)
+
+  async def update_firmware(
+    self,
+    firmware_file: Union[str, Path],
+    *,
+    expected_version: str,
+    allow_downgrade: bool = False,
+  ) -> FirmwareUpdateResult:
+    """Update the 96- or 384-channel head with a compatible manufacturer ACH image.
+
+    Validates the entire file, requires the same controller generation, and checks saved
+    calibration and identity after programming. An older build date requires allow_downgrade.
+    No movement or initialization is commanded. Power-cycle and initialize after success.
+    A failed transfer is not retried or restarted. Keep power and the connection stable.
+
+    Args:
+      firmware_file: path to the manufacturer's component-specific .ACH file.
+      expected_version: complete embedded version, including date and any hardware suffix.
+      allow_downgrade: explicitly allow an older build within the same controller generation.
+
+    Returns:
+      Verified version, image digest, record count, and before/after cycle counts.
+    """
+    result = await _FirmwareDownloader(self._driver, self.configuration.module).update_component(
+      firmware_file,
+      expected_version=expected_version,
+      allow_downgrade=allow_downgrade,
+      invalidate_version=self._invalidate_firmware_version,
+    )
+    self.configuration.firmware_version = result.version
+    _, self.configuration.firmware_date = _firmware_version_parts(result.version)
+    self._apply_firmware_generation()
+    key = "head96" if self.configuration.module == "H0" else "head384"
+    self._driver.firmware[key] = result.version
+    return result
 
   def _record_hardware(self, hardware: List[str]) -> None:
     """Record what this head's configuration bytes mean, past the clot-monitoring flag at index 0.

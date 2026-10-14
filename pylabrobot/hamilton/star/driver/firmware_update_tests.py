@@ -7,9 +7,15 @@ from pathlib import Path
 from typing import Optional
 from unittest.mock import AsyncMock, Mock, patch
 
+from pylabrobot.hamilton.star.driver.configuration import DeviceConfiguration
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
+from pylabrobot.hamilton.star.driver.features.autoload import Autoload
+from pylabrobot.hamilton.star.driver.features.head96 import Head96
+from pylabrobot.hamilton.star.driver.features.head384 import Head384
+from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
-from pylabrobot.hamilton.star.driver.firmware_update import _PipetteFirmwareImage
+from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfiguration
+from pylabrobot.hamilton.star.driver.firmware_update import _FirmwareDownloader, _FirmwareImage
 from pylabrobot.hamilton.star.driver.master import STARDriver
 from pylabrobot.io.io import IOBase
 
@@ -55,20 +61,20 @@ class TestFirmwareImage(unittest.TestCase):
         path = Path(directory) / "GRUPXS_test.ACH"
         path.write_text("\r\n".join(records) + "\r\n")
         if label == "valid":
-          image = _PipetteFirmwareImage.from_file(path, VERSION)
+          image = _FirmwareImage.from_file(path, VERSION, "P1")
           self.assertEqual(image.records, tuple(valid))
           self.assertEqual(image.version, VERSION)
           self.assertEqual(len(image.sha256), 64)
         else:
           with self.assertRaises(ValueError):
-            _PipetteFirmwareImage.from_file(path, VERSION)
+            _FirmwareImage.from_file(path, VERSION, "P1")
 
   def test_other_module_filename_is_rejected(self):
     with tempfile.TemporaryDirectory() as directory:
       path = Path(directory) / "GRUC0_test.ACH"
       path.write_text("\n".join(image_records()))
       with self.assertRaisesRegex(ValueError, "GRUPXS"):
-        _PipetteFirmwareImage.from_file(path, VERSION)
+        _FirmwareImage.from_file(path, VERSION, "P1")
 
 
 class FirmwareInstrument:
@@ -185,7 +191,7 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
     self.driver._num_channels = 12
     self.pipettes = Pipettes(self.driver)
     self.pipettes.configuration.resolve_channels(12)
-    patcher = patch("pylabrobot.hamilton.star.driver.features.pipettes.asyncio", wraps=asyncio)
+    patcher = patch("pylabrobot.hamilton.star.driver.firmware_update.asyncio", wraps=asyncio)
     patched = patcher.start()
     self.addCleanup(patcher.stop)
     patched.sleep = AsyncMock()
@@ -310,3 +316,231 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
       self.instrument.continue_programming.set()
       await task
     await self.driver.send_command("P1", "RF")
+
+
+# Synthetic versions exercise each controller generation without including vendor firmware.
+COMPONENT_IMAGES = (
+  ("X0", "GRUX0S", "1.4S 2020-01-01"),
+  ("X0", "GRUX0S", "5.1S 2020-01-01 (X0 XE167)"),
+  ("R0", "GRUR0S", "3.1S 2020-01-01"),
+  ("R0", "GRUR0S", "4.1S 2020-01-01"),
+  ("I0", "GRUALS", "3.4S e 2020-01-01"),
+  ("H0", "GRUH0S", "2.3S 2020-01-01"),
+  ("H0", "GRUH0S", "5.0S e 2020-01-01 (H0 XE167)"),
+  ("D0", "GRUD0S", "1.4S b 2020-01-01"),
+)
+
+
+class ComponentFirmwareInstrument(FirmwareInstrument):
+  """Standard component variants sharing the downloader but differing in application reads."""
+
+  def __init__(self, module: str, version: str, fault: Optional[str] = None):
+    """Configure a component's version and documented head variant."""
+    super().__init__(module, fault)
+    self.version = version
+    self.previous_version = version.replace("2020", "2019")
+    self.head_type = 2 if module == "H0" and version.startswith("5.") else 0
+
+  async def send(self, cmd: str, id_: Optional[int], **kwargs) -> Optional[str]:
+    """Supply component-specific reads; all writes pass through the shared fake downloader."""
+    module, command = cmd[:2], cmd[2:4]
+    if module != self.target or command not in ("RF", "RV", "QG", "QU", "QX", "RA"):
+      return await super().send(cmd, id_, **kwargs)
+    self.commands.append(cmd)
+    prefix = module + command + f"id{id_:04}"
+    restarted = self.programmed > 0 and not self.download
+    if command == "RF":
+      if self.fault == "malformed_version":
+        return prefix + "rf" + self.previous_version + prefix + "rf4."
+      return prefix + "rf" + (self.version if restarted else self.previous_version)
+    if command == "RV":
+      assert module != "X0", "Legacy X0 has no documented RV command"
+      body = "na0000000001" if restarted and self.fault == "counters" else "na0000000010"
+      if module in ("H0", "D0"):
+        body += "nb0000000020nc0000000030nd0000000040"
+      return prefix + body
+    if command == "QG":
+      return prefix + f"qg{self.head_type}"
+    if command == "QU":
+      return prefix + ("au1 0 0 0" if restarted and self.fault == "configuration" else "au0 0 0 0")
+    if command == "RA":
+      assert module == "I0" and cmd.endswith("raau")
+      return prefix + ("au1 1 0 0" if restarted and self.fault == "configuration" else "au0 1 0 0")
+    assert module == "I0", "QX has different meanings on other components"
+    return prefix + ("bx02" if restarted and self.fault == "init_track" else "bx01")
+
+
+class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
+  """Exercise every public component API through the command assembler and verification."""
+
+  async def asyncSetUp(self):
+    """Create a driver with both X configurations and skip only reboot delays."""
+    self.directory = tempfile.TemporaryDirectory()
+    self.addCleanup(self.directory.cleanup)
+    self.driver = STARDriver(io=Mock(spec=IOBase))
+    self.driver._connected = True
+    self.driver.configuration = DeviceConfiguration(
+      left_arm=XArmConfiguration(), right_arm=XArmConfiguration()
+    )
+    self.features: dict[str, XArm | iSWAP | Autoload | Head96 | Head384] = {
+      "X0": XArm(self.driver),
+      "R0": iSWAP(self.driver),
+      "I0": Autoload(self.driver),
+      "H0": Head96(self.driver),
+      "D0": Head384(self.driver),
+    }
+    patcher = patch("pylabrobot.hamilton.star.driver.firmware_update.asyncio", wraps=asyncio)
+    patched = patcher.start()
+    self.addCleanup(patcher.stop)
+    patched.sleep = AsyncMock()
+
+  def prepare(self, module: str, family: str, version: str, fault: Optional[str] = None) -> Path:
+    """Create a synthetic image and configure its matching responder."""
+    self.instrument = ComponentFirmwareInstrument(module, version, fault)
+    self.driver._replies.send = AsyncMock(side_effect=self.instrument.send)  # type: ignore[method-assign]
+    path = Path(self.directory.name) / (family + "_test.ACH")
+    path.write_text("\n".join(image_records(version)))
+    return path
+
+  def mutations(self) -> list[str]:
+    """Return writes so failure tests can prove that programming stopped at the boundary."""
+    return [cmd for cmd in self.instrument.commands if cmd[2:4] in ("AP", "DE", "DP", "AV", "AO")]
+
+  async def test_all_component_generations(self):
+    for module, family, version in COMPONENT_IMAGES:
+      with self.subTest(module=module, version=version):
+        path = self.prepare(module, family, version)
+        feature = self.features[module]
+        result = await feature.update_firmware(path, expected_version=version)
+        self.assertEqual(result.module, module)
+        self.assertEqual(result.version, version)
+        self.assertEqual(result.cycle_counts_before, result.cycle_counts_after)
+        self.assertEqual(feature.configuration.firmware_version, version)
+        changes = self.mutations()
+        self.assertTrue(all(cmd.startswith(module) for cmd in changes))
+        self.assertEqual([cmd[2:4] for cmd in changes], ["AP", "DE", "DP", "DP", "DP", "DP", "AP"])
+        if module == "X0":
+          assert self.driver.configuration and self.driver.configuration.right_arm
+          self.assertEqual(self.driver.configuration.right_arm.firmware_version, version)
+          self.assertEqual(result.cycle_counts_before, {})
+        elif module == "R0":
+          self.assertEqual(result.cycle_counts_before, {"gripping_cycles": 10})
+        elif module == "I0":
+          self.assertEqual(result.cycle_counts_before, {"barcode_scans": 10})
+        else:
+          self.assertEqual(
+            result.cycle_counts_before,
+            dict(tip_pickups=10, tip_discards=20, aspirations=30, dispenses=40),
+          )
+        if module != "I0":
+          self.assertFalse(any(cmd[2:4] == "QX" for cmd in self.instrument.commands))
+
+  async def test_wrong_family_and_unsupported_targets_send_nothing(self):
+    for module, family, version in COMPONENT_IMAGES:
+      with self.subTest(module=module):
+        path = self.prepare(module, "GRUPXS", version)
+        with self.assertRaisesRegex(ValueError, family):
+          await self.features[module].update_firmware(path, expected_version=version)
+        self.assertEqual(self.instrument.commands, [])
+    for module in ("C0", "PX", "WX", "H1", "P0"):
+      with self.subTest(module=module), self.assertRaisesRegex(ValueError, "Unsupported"):
+        _FirmwareDownloader(self.driver, module)
+
+  async def test_incompatible_generation_cannot_be_overridden(self):
+    for module, family, version in (COMPONENT_IMAGES[0], COMPONENT_IMAGES[2], COMPONENT_IMAGES[5]):
+      with self.subTest(module=module):
+        path = self.prepare(module, family, version)
+        self.instrument.previous_version = "5.0S 2020-01-01"
+        with self.assertRaisesRegex(ValueError, "controller generations"):
+          await self.features[module].update_firmware(
+            path, expected_version=version, allow_downgrade=True
+          )
+        self.assertEqual(self.mutations(), [])
+
+  async def test_preflight_errors_prevent_mode_switch(self):
+    module, family, version = COMPONENT_IMAGES[6]
+    for fault in ("malformed_version", "status", "eeprom", "empty_calibration", "head_type"):
+      with self.subTest(fault=fault):
+        path = self.prepare(module, family, version, fault)
+        if fault == "head_type":
+          self.instrument.head_type = 0  # Legacy head with an XE167 image.
+        with self.assertRaises((ValueError, RuntimeError)):
+          await self.features[module].update_firmware(path, expected_version=version)
+        self.assertEqual(self.mutations(), [])
+
+  async def test_downgrade_requires_opt_in(self):
+    module, family, version = COMPONENT_IMAGES[4]
+    path = self.prepare(module, family, version)
+    self.instrument.previous_version = version.replace("2020", "2021")
+    with self.assertRaisesRegex(ValueError, "allow_downgrade"):
+      await self.features[module].update_firmware(path, expected_version=version)
+    self.assertEqual(self.mutations(), [])
+    result = await self.features[module].update_firmware(
+      path, expected_version=version, allow_downgrade=True
+    )
+    self.assertEqual(result.version, version)
+
+  async def test_heads_never_send_application_motion_opcodes(self):
+    for module, family, version in COMPONENT_IMAGES[5:]:
+      with self.subTest(module=module):
+        path = self.prepare(module, family, version, "download")
+        with self.assertRaisesRegex(RuntimeError, "download mode"):
+          await self.features[module].update_firmware(path, expected_version=version)
+        self.assertEqual(self.mutations(), [module + "AP"])
+
+  async def test_uncertain_write_leaves_no_cached_version_or_restart(self):
+    for module, family, version in COMPONENT_IMAGES:
+      for fault in ("erase", "timeout", "error", "cancel", "missing_ack", "wrong_ack"):
+        with self.subTest(module=module, fault=fault):
+          path = self.prepare(module, family, version, fault)
+          feature = self.features[module]
+          feature.configuration.firmware_version = "old"
+          with self.assertRaises(
+            (RuntimeError, TimeoutError, STARFirmwareError, asyncio.CancelledError)
+          ):
+            await feature.update_firmware(path, expected_version=version)
+          self.assertEqual(sum(cmd[2:4] == "AP" for cmd in self.mutations()), 1)
+          self.assertIsNone(feature.configuration.firmware_version)
+          self.assertIsNone(self.driver._firmware_update_task)
+          if module == "X0":
+            assert self.driver.configuration and self.driver.configuration.right_arm
+            self.assertIsNone(self.driver.configuration.right_arm.firmware_version)
+
+  async def test_persistent_state_and_master_are_verified(self):
+    for module, family, version in COMPONENT_IMAGES[4:]:
+      for fault in ("calibration", "configuration", "eeprom_after", "master"):
+        with self.subTest(module=module, fault=fault):
+          path = self.prepare(module, family, version, fault)
+          with self.assertRaises(RuntimeError):
+            await self.features[module].update_firmware(path, expected_version=version)
+          self.assertIsNone(self.features[module].configuration.firmware_version)
+    module, family, version = COMPONENT_IMAGES[4]
+    path = self.prepare(module, family, version, "init_track")
+    with self.assertRaisesRegex(RuntimeError, "configuration changed"):
+      await self.features[module].update_firmware(path, expected_version=version)
+
+  async def test_counter_changes_are_reported_without_writes(self):
+    for module, family, version in COMPONENT_IMAGES[2:]:
+      with self.subTest(module=module):
+        path = self.prepare(module, family, version, "counters")
+        with self.assertLogs("pylabrobot.hamilton.star.driver.firmware_update", level="WARNING"):
+          result = await self.features[module].update_firmware(path, expected_version=version)
+        self.assertNotEqual(result.cycle_counts_before, result.cycle_counts_after)
+        self.assertFalse(any(cmd[2:4] in ("AV", "AO") for cmd in self.instrument.commands))
+
+  async def test_component_update_owns_device_lock(self):
+    module, family, version = COMPONENT_IMAGES[4]
+    path = self.prepare(module, family, version, "pause")
+    async with self.driver._lock.subsystem("X0"):
+      task = asyncio.create_task(
+        self.features[module].update_firmware(path, expected_version=version)
+      )
+      await asyncio.sleep(0)
+      self.assertEqual(self.instrument.commands, [])
+    await asyncio.wait_for(self.instrument.program_started.wait(), timeout=2)
+    try:
+      with self.assertRaisesRegex(RuntimeError, "firmware update"):
+        await self.driver.send_command("H0", "DP")
+    finally:
+      self.instrument.continue_programming.set()
+      await task
