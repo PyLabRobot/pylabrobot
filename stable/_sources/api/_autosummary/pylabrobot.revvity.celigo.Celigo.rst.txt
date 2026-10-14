@@ -41,6 +41,7 @@ pylabrobot.revvity.celigo.Celigo
       ~Celigo.__init__
       ~Celigo.abort_controller_operation
       ~Celigo.acquire
+      ~Celigo.acquire_scan_position
       ~Celigo.auto_exposure
       ~Celigo.autofocus
       ~Celigo.capture_frame
@@ -48,6 +49,7 @@ pylabrobot.revvity.celigo.Celigo
       ~Celigo.close_drawer_to_sample_mm
       ~Celigo.execute
       ~Celigo.home_imaging_axes
+      ~Celigo.move_to_scan_block
       ~Celigo.move_to_well
       ~Celigo.open_drawer
       ~Celigo.plan
