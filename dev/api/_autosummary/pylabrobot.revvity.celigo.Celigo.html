@@ -651,26 +651,32 @@ barcode reader. Load an instrument’s configuration with
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.acquire.html#pylabrobot.revvity.celigo.Celigo.acquire" title="pylabrobot.revvity.celigo.Celigo.acquire"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acquire</span></code></a>(well, channel[, exposure_ms, gain, ...])</p></td>
 <td><p>Acquire one FOV and extinguish illumination before returning.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.auto_exposure.html#pylabrobot.revvity.celigo.Celigo.auto_exposure" title="pylabrobot.revvity.celigo.Celigo.auto_exposure"><code class="xref py py-obj docutils literal notranslate"><span class="pre">auto_exposure</span></code></a>([candidates_ms, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.acquire_scan_position.html#pylabrobot.revvity.celigo.Celigo.acquire_scan_position" title="pylabrobot.revvity.celigo.Celigo.acquire_scan_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acquire_scan_position</span></code></a>(position, label, ...)</p></td>
+<td><p>Acquire one compiled scan position and extinguish illumination afterward.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.auto_exposure.html#pylabrobot.revvity.celigo.Celigo.auto_exposure" title="pylabrobot.revvity.celigo.Celigo.auto_exposure"><code class="xref py py-obj docutils literal notranslate"><span class="pre">auto_exposure</span></code></a>([candidates_ms, ...])</p></td>
 <td><p>Select the longest candidate exposure that is bright but not saturated.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.autofocus.html#pylabrobot.revvity.celigo.Celigo.autofocus" title="pylabrobot.revvity.celigo.Celigo.autofocus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">autofocus</span></code></a>([autofocus_method, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.autofocus.html#pylabrobot.revvity.celigo.Celigo.autofocus" title="pylabrobot.revvity.celigo.Celigo.autofocus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">autofocus</span></code></a>([autofocus_method, ...])</p></td>
 <td><p>Find focus by host-side Z stepping, as observed in the Celigo captures.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.capture_frame.html#pylabrobot.revvity.celigo.Celigo.capture_frame" title="pylabrobot.revvity.celigo.Celigo.capture_frame"><code class="xref py py-obj docutils literal notranslate"><span class="pre">capture_frame</span></code></a>([exposure_ms, gain, flush_frames])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.capture_frame.html#pylabrobot.revvity.celigo.Celigo.capture_frame" title="pylabrobot.revvity.celigo.Celigo.capture_frame"><code class="xref py py-obj docutils literal notranslate"><span class="pre">capture_frame</span></code></a>([exposure_ms, gain, flush_frames])</p></td>
 <td><p>Capture one image from the configured camera.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.close_drawer.html#pylabrobot.revvity.celigo.Celigo.close_drawer" title="pylabrobot.revvity.celigo.Celigo.close_drawer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">close_drawer</span></code></a>(well)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.close_drawer.html#pylabrobot.revvity.celigo.Celigo.close_drawer" title="pylabrobot.revvity.celigo.Celigo.close_drawer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">close_drawer</span></code></a>(well)</p></td>
 <td><p>Move the stage under the optics using calibrated plate/well coordinates.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.close_drawer_to_sample_mm.html#pylabrobot.revvity.celigo.Celigo.close_drawer_to_sample_mm" title="pylabrobot.revvity.celigo.Celigo.close_drawer_to_sample_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">close_drawer_to_sample_mm</span></code></a>(x_mm, y_mm)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.close_drawer_to_sample_mm.html#pylabrobot.revvity.celigo.Celigo.close_drawer_to_sample_mm" title="pylabrobot.revvity.celigo.Celigo.close_drawer_to_sample_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">close_drawer_to_sample_mm</span></code></a>(x_mm, y_mm)</p></td>
 <td><p>Safely close the drawer to a calibrated sample-relative X/Y coordinate.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.execute.html#pylabrobot.revvity.celigo.Celigo.execute" title="pylabrobot.revvity.celigo.Celigo.execute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">execute</span></code></a>(plan)</p></td>
-<td><p>Execute the exact frame operations in a compiled scan plan.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.execute.html#pylabrobot.revvity.celigo.Celigo.execute" title="pylabrobot.revvity.celigo.Celigo.execute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">execute</span></code></a>(plan, *[, on_frame, ...])</p></td>
+<td><p>Execute a compiled scan plan, optionally reporting each completed frame.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.home_imaging_axes.html#pylabrobot.revvity.celigo.Celigo.home_imaging_axes" title="pylabrobot.revvity.celigo.Celigo.home_imaging_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home_imaging_axes</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.home_imaging_axes.html#pylabrobot.revvity.celigo.Celigo.home_imaging_axes" title="pylabrobot.revvity.celigo.Celigo.home_imaging_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home_imaging_axes</span></code></a>()</p></td>
 <td><p>Home Z for clearance, synchronize magnification, then home X, Y, and dichroic.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.move_to_scan_block.html#pylabrobot.revvity.celigo.Celigo.move_to_scan_block" title="pylabrobot.revvity.celigo.Celigo.move_to_scan_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to_scan_block</span></code></a>(block)</p></td>
+<td><p>Extinguish illumination, retract focus, and move XY to a compiled block.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.revvity.celigo.Celigo.move_to_well.html#pylabrobot.revvity.celigo.Celigo.move_to_well" title="pylabrobot.revvity.celigo.Celigo.move_to_well"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to_well</span></code></a>(well[, retract_z, safe_z_mm])</p></td>
 <td><p>Move the stage to a calibrated well center and return settled X/Y millimeters.</p></td>

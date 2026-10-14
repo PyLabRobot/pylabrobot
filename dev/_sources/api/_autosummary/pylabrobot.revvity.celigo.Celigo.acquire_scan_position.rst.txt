@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.acquire\_scan\_position
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.acquire_scan_position
