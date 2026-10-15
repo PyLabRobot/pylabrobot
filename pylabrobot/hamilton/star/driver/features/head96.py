@@ -2891,7 +2891,7 @@ class Head96(Head):
     if not await self.request_tip_presence():
       raise RuntimeError("the head reports no tips; pick up tips first")
     await self.move_to_xy_position(
-      a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start, z_speed=descent_speed
+      a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start
     )
 
     async def strokes() -> None:
