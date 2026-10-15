@@ -125,9 +125,8 @@ class HeadConfiguration:
   y_drive_acceleration_mm_per_increment: float = 0.015625
   z_drive_acceleration_mm_per_increment: float = 0.005
   dispensing_drive_mm_per_increment: float = 0.001025641026
-  # How many increments one unit of a dispensing-drive speed or acceleration field counts: a drive
-  # that counts its speed in tens of increments per second, or its acceleration in thousands per
-  # second squared, says so here.
+  # How many increments one unit of a `DQ` speed or acceleration field counts; a drive that counts
+  # in tens or thousands of increments says so here.
   dispensing_drive_speed_increments_per_unit: int = 1
   dispensing_drive_acceleration_increments_per_unit: int = 1
 
