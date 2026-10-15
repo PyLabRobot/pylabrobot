@@ -425,7 +425,7 @@ class Head96(Head):
   async def initialize(
     self,
     tip_discard_location: Optional[Coordinate] = None,
-    z_position_at_the_command_end: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
     read_timeout: int = 60,
   ):
     """Initialize the head, discarding whatever is mounted on it, and read where its piston stands.
@@ -433,16 +433,14 @@ class Head96(Head):
     Args:
       tip_discard_location: where to eject, in deck mm, at head channel A1. Defaults to
         `configuration.tip_discard_location`.
-      z_position_at_the_command_end: Z to leave the head at, in mm. Defaults to
+      minimum_traverse_height_end: Z to leave the head at, in mm. Defaults to
         `configuration.traversal_z_position`.
       read_timeout: how long to wait for the device to answer, in seconds.
 
     Raises:
       ValueError: If no position was given and none is configured.
     """
-    resp = await super().initialize(
-      tip_discard_location, z_position_at_the_command_end, read_timeout
-    )
+    resp = await super().initialize(tip_discard_location, minimum_traverse_height_end, read_timeout)
     # Initialization homes the piston; the first read of where it stands comes here.
     self.piston_position = 0.0
     await self._record_piston_position()
@@ -538,7 +536,7 @@ class Head96(Head):
     tip_rack: TipRack,
     offset: Optional[Coordinate] = None,
     tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
-    minimum_height_command_end: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
     minimum_traverse_height_start: Optional[float] = None,
   ) -> None:
     """Pick up a rack of tips on the whole head, as legacy's `pick_up_tips96`. `C0 EP`.
@@ -551,7 +549,7 @@ class Head96(Head):
       offset: added to spot A1's centre, in mm.
       tip_pickup_method: `from_rack` sends the dispensing drive down first, since the device does
         not; `from_waste` and `full_blowout` move the plunger up before mounting.
-      minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
+      minimum_traverse_height_end: in mm. `configuration.traversal_z_position` when None.
       minimum_traverse_height_start: in mm.
         `configuration.traversal_z_position` when None.
 
@@ -586,7 +584,7 @@ class Head96(Head):
       offset or Coordinate.zero()
     )
     traverse_z, end_z = self._resolve_tip_command_heights(
-      minimum_traverse_height_start, minimum_height_command_end
+      minimum_traverse_height_start, minimum_traverse_height_end
     )
     self._check_tip_command(location, traverse_z, end_z, skip_z=True)
 
@@ -630,7 +628,7 @@ class Head96(Head):
     self,
     resource: Resource,
     offset: Optional[Coordinate] = None,
-    minimum_height_command_end: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
     minimum_traverse_height_start: Optional[float] = None,
   ) -> None:
     """Drop the head's tips into a tip rack or anywhere else, as legacy's `drop_tips96`. `C0 ER`.
@@ -642,7 +640,7 @@ class Head96(Head):
     Args:
       resource: a 96 tip rack, or anything else, such as the trash.
       offset: added to where the head goes, in mm.
-      minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
+      minimum_traverse_height_end: in mm. `configuration.traversal_z_position` when None.
       minimum_traverse_height_start: in mm.
         `configuration.traversal_z_position` when None.
 
@@ -662,7 +660,7 @@ class Head96(Head):
       location = self._position_centred_in(resource)
     location += offset or Coordinate.zero()
     traverse_z, end_z = self._resolve_tip_command_heights(
-      minimum_traverse_height_start, minimum_height_command_end
+      minimum_traverse_height_start, minimum_traverse_height_end
     )
     self._check_tip_command(location, traverse_z, end_z, skip_z=True)
 
