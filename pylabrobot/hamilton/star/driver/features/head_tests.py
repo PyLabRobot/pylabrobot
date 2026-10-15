@@ -689,6 +689,14 @@ class TestHead96InSimulation(unittest.IsolatedAsyncioTestCase):
     await self.head.move_to_xy_position(a1.x, a1.y, minimum_traverse_height_start=top - 40.0)
     self.assertAlmostEqual((await self.head.request_location()).z, top - 20.0, delta=0.05)
 
+  async def test_an_unreachable_y_is_refused_before_the_head_is_raised(self):
+    a1 = self.head._get_target(self.plate, None)[1]
+    top = self.head.configuration.z_range[1] - await self.head.request_tip_overhang()
+    await self.head.move_tool_bottom_to_z_position(top - 50.0)
+    with self.assertRaises(ValueError):
+      await self.head.move_to_xy_position(a1.x, 10_000.0, minimum_traverse_height_start=top - 20.0)
+    self.assertAlmostEqual((await self.head.request_location()).z, top - 50.0, delta=0.05)
+
   async def test_without_tips_probing_and_mixing_are_refused_before_moving(self):
     await self.head.discard_tips()
     x, y = await self.head.request_x_position(), await self.head.request_y_position()

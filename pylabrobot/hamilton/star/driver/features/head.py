@@ -1084,9 +1084,12 @@ class Head:
 
     Raises:
       RuntimeError: If the iSWAP is not parked.
-      ValueError: If the head cannot put its lowest point at `minimum_traverse_height_start`.
+      ValueError: If X or Y is out of reach, or the head cannot put its lowest point at
+        `minimum_traverse_height_start`; before anything moves.
     """
     await self._require_iswap_parked()
+    self._check_reachable("x", x)
+    self._check_reachable("y", y)
     if minimum_traverse_height_start is None:
       await self.move_to_safe_z(speed=z_speed)
     elif (await self.request_location()).z < minimum_traverse_height_start:
