@@ -1156,13 +1156,20 @@ class Head:
     if minimum_traverse_height_start is None:
       await self.move_to_safe_z(speed=z_speed, acceleration=z_acceleration)
     else:
+      tips = await self.request_tip_presence()
       stop_disc = minimum_traverse_height_start
-      if await self.request_tip_presence():
+      if tips:
         stop_disc += await self.request_tip_overhang()
       if await self.request_z_position() < stop_disc:
-        await self.move_stop_disc_to_z_position(
-          stop_disc, speed=z_speed, acceleration=z_acceleration
-        )
+        # With tips, the move names the tip bottom, so a refusal says what the caller asked for.
+        if tips:
+          await self.move_tool_bottom_to_z_position(
+            minimum_traverse_height_start, speed=z_speed, acceleration=z_acceleration
+          )
+        else:
+          await self.move_stop_disc_to_z_position(
+            stop_disc, speed=z_speed, acceleration=z_acceleration
+          )
     if self.arm is not None and self.arm.pipettes is not None:
       await self.arm.pipettes.move_to_safe_z()
     await asyncio.gather(

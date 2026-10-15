@@ -768,6 +768,16 @@ class TestHead96InSimulation(unittest.IsolatedAsyncioTestCase):
       a1.y, speed=100.0, acceleration=200.0, current_limit=10
     )
 
+  async def test_an_unreachable_traverse_height_is_refused_as_a_tip_bottom(self):
+    a1 = self.head._get_target(self.plate, None)[1]
+    with self.assertRaisesRegex(ValueError, "the tool bottom reaches .* not 1000.0"):
+      await self.head.move_to_xy_position(a1.x, a1.y, minimum_traverse_height_start=1000.0)
+
+  async def test_mix_rises_at_the_drive_default_not_its_descent_speed(self):
+    with patch.object(self.head, "move_to_safe_z", AsyncMock()) as raised:
+      await self.head.mix(self.plate, Mix(volume=50.0, repetitions=1, flow_rate=100.0))
+    self.assertEqual(raised.await_args_list[0].kwargs, {"speed": None, "acceleration": None})
+
   async def test_an_unreachable_y_is_refused_before_the_head_is_raised(self):
     a1 = self.head._get_target(self.plate, None)[1]
     top = self.head.configuration.z_range[1] - await self.head.request_tip_overhang()
