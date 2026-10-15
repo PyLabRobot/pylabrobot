@@ -2,9 +2,11 @@
 
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from pylabrobot.hamilton.star.driver.master import STARDriver
+from pylabrobot.io import usb as usb_module
 from pylabrobot.io.usb import USB
 
 
@@ -13,6 +15,12 @@ class USBReadTests(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self) -> None:
     """Attach a mock device and an executor without device discovery."""
+    backend = SimpleNamespace(
+      util=SimpleNamespace(find_descriptor=Mock()), core=SimpleNamespace(USBError=OSError)
+    )
+    patcher = patch.object(usb_module, "usb", backend, create=True)
+    patcher.start()
+    self.addCleanup(patcher.stop)
     self.io = USB(1, 2, "mock USB")
     self.device = Mock()
     self.io.dev = self.device
