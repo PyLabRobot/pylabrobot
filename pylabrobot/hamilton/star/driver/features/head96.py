@@ -30,6 +30,10 @@ from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.features.head import Head, HeadConfiguration
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
+from pylabrobot.lib.liquid_handling.head_alignment import (
+  get_items_under_channels,
+  get_shift_with_channel_over,
+)
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
@@ -38,7 +42,7 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipRack, check_tip_racks_available, tip_origin
+from pylabrobot.resources.tip_rack import TipRack, TipSpot, check_tip_racks_available, tip_origin
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
 from pylabrobot.resources.well import Well
 
@@ -94,8 +98,8 @@ class Head96Configuration(HeadConfiguration):
   stop_disc_type: Optional[StopDiscType] = None
   instrument_type: Optional[InstrumentType] = None
 
-  # Encoder resolutions of the 2013-or-later generation; a 2008-era head's differ, and nothing
-  # resolves them per generation, so they are left settable.
+  # Encoder resolutions of the 96 Head II and the TADM head. A first-generation high volume head
+  # is bored and geared differently, and `_apply_head_type` puts its own in place.
   dispensing_drive_uL_per_increment: float = 0.019340933  # type: ignore[assignment]
   squeezer_drive_mm_per_increment: float = 0.0002086672009  # type: ignore[assignment]
 
@@ -223,8 +227,8 @@ class Head96Configuration(HeadConfiguration):
 
   @property
   def dispensing_drive_acceleration_range(self) -> Tuple[float, float]:
-    """Dispensing-drive acceleration window (uL/s2); its max is the default 2013 firmware raised."""
-    max_inc = 900000 if self.firmware_year >= 2010 else 150000
+    """Dispensing-drive acceleration window (uL/s2); 2013 firmware raised the 411000 inc max."""
+    max_inc = 900000 if self.firmware_year >= 2010 else 411000
     return (
       self.dispensing_drive_increments_to_uL(5000),
       self.dispensing_drive_increments_to_uL(max_inc),
@@ -278,9 +282,9 @@ class Head96(Head):
   default_mix_position_from_liquid_surface: float = 2.0
   # Aspirate under cLLD: how far below the surface found the tips draw, in mm.
   default_aspirate_immersion_depth: float = 2.0
-  # Behind the properties of the same names, which check a value against its range when assigned.
-  _default_dispensing_drive_speed: float = 250.0
-  _default_dispensing_drive_acceleration: float = 17000.0
+  # Where `default_dispensing_drive_speed` and `default_dispensing_drive_acceleration` start.
+  _default_dispensing_drive_speed: Optional[float] = 250.0
+  _default_dispensing_drive_acceleration: Optional[float] = 17000.0
   # How far above a container's top a liquid search starts, in mm.
   search_start_clearance: float = 5.0
 
@@ -291,36 +295,6 @@ class Head96(Head):
       configuration: the head's device facts. Defaults to `Head96Configuration()`.
     """
     super().__init__(driver, configuration or Head96Configuration())
-    # Where the piston stands, in uL, as last read or moved; 0.0 at rest.
-    self.piston_position: float = 0.0
-
-  @property
-  def default_dispensing_drive_speed(self) -> float:
-    """In uL/s. Not read from the head, which answers with the speed its last command set."""
-    return self._default_dispensing_drive_speed
-
-  @default_dispensing_drive_speed.setter
-  def default_dispensing_drive_speed(self, speed: float) -> None:
-    low, high = self.configuration.dispensing_drive_speed_range
-    if not low <= speed <= high:
-      raise ValueError(
-        f"default_dispensing_drive_speed must be between {low} and {high}, is {speed}"
-      )
-    self._default_dispensing_drive_speed = speed
-
-  @property
-  def default_dispensing_drive_acceleration(self) -> float:
-    """In uL/s2. A head with firmware from before 2010 gets 2900.0 at setup."""
-    return self._default_dispensing_drive_acceleration
-
-  @default_dispensing_drive_acceleration.setter
-  def default_dispensing_drive_acceleration(self, acceleration: float) -> None:
-    low, high = self.configuration.dispensing_drive_acceleration_range
-    if not low <= acceleration <= high:
-      raise ValueError(
-        f"default_dispensing_drive_acceleration must be between {low} and {high}, is {acceleration}"
-      )
-    self._default_dispensing_drive_acceleration = acceleration
 
   # -- session / discovery -------------------------------------------------------------------------
 
@@ -339,10 +313,29 @@ class Head96(Head):
     c.z_drive_acceleration_mm_per_increment = c.z_drive_mm_per_increment * 1000
     c.drive_parameters = {"yv": 5, "yr": 3, "zv": 5, "zr": 3, "dv": 5, "dr": 4, "sv": 5, "sr": 3}
     c.z_acceleration_range_increments = (5, 100)
+    c.dispensing_drive_acceleration_increments_per_unit = 1000
+    c.dispensing_drive_current_limit_range = (0, 7)
+
+  def _apply_head_type(self) -> None:
+    """Put a first-generation high volume head's resolutions in place.
+
+    That head is bored and geared differently from the 96 Head II and the TADM head, which the
+    configuration's resolutions are for; the type the head reports decides. It also starts its
+    default dispensing acceleration from the one it documents, 150000 increments/s2.
+    """
+    c = self.configuration
+    if c.head_type != "High volume head":
+      return
+    c.dispensing_drive_uL_per_increment = 0.018509877
+    c.dispensing_drive_mm_per_increment = 0.0009815705
+    c.squeezer_drive_mm_per_increment = 0.000459073
+    self.default_dispensing_drive_acceleration = c.dispensing_drive_increments_to_uL(150000)
 
   async def discover(self):
-    """Read what head this is, then take its squeezer defaults from the head."""
+    """Read what head this is, put its resolutions in place, then take its squeezer defaults."""
     await super().discover()
+    # Before the squeezer reads below, which convert with the resolutions the head type decides.
+    self._apply_head_type()
     c = self.configuration
     c.squeezer_drive_speed_firmware_reported = await self._reported_drive_parameter("sv")
     c.squeezer_drive_acceleration_firmware_reported = await self._reported_drive_parameter("sr")
@@ -364,103 +357,6 @@ class Head96(Head):
   # ----------------------------------------
   # Movement
   # ----------------------------------------
-
-  # -- dispensing drive position -------------------------------------------------------------------
-
-  async def dispensing_drive_request_uL_position(self) -> float:
-    """Read where the head's dispensing drive stands, in uL, and record it. `H0 RD`.
-
-    Returns:
-      The piston's position in uL, 0.0 at rest; air and liquid alike. Kept on `piston_position`.
-    """
-    resp = await self._driver.send_command(
-      module=self.configuration.module, command="RD", fmt="rd##### (n)"
-    )
-    increments = cast(List[int], resp["rd"])[1]  # [0] = firmware counter, [1] = hardware counter
-    self.piston_position = self.configuration.dispensing_drive_increments_to_uL(increments)
-    return self.piston_position
-
-  async def _record_piston_position(self) -> None:
-    """Read where the piston came to rest, and record it; a failed read is logged and swallowed."""
-    try:
-      await self.dispensing_drive_request_uL_position()
-    except Exception:
-      logger.warning("could not read where the 96-head's piston stopped; its model is stale")
-
-  async def move_dispensing_drive_to_position(
-    self,
-    volume: float,
-    speed: Optional[float] = None,
-    stop_speed: float = 0.0,
-    acceleration: Optional[float] = None,
-    current_limit: int = 15,
-    read_timeout: int = 30,
-  ):
-    """Move the dispensing drive to an absolute piston position, and record it on `piston_position`.
-
-    Args:
-      volume: where to send the piston, as the volume it would hold, in uL.
-      speed: how fast, in uL/s. Defaults to `default_dispensing_drive_speed`.
-      stop_speed: what to slow to at the end, in uL/s.
-      acceleration: how hard, in uL/s2. Defaults to `default_dispensing_drive_acceleration`.
-      current_limit: the motor current limit.
-      read_timeout: how long to wait for the device to answer, in seconds.
-
-    Raises:
-      ValueError: If an argument is outside what the drive accepts.
-    """
-    c = self.configuration
-    if speed is None:
-      speed = self.default_dispensing_drive_speed
-    if acceleration is None:
-      acceleration = self.default_dispensing_drive_acceleration
-
-    for value, (low, high), name in (
-      (volume, c.dispensing_drive_range, "volume"),
-      (speed, c.dispensing_drive_speed_range, "speed"),
-      (stop_speed, (0.0, c.dispensing_drive_speed_range[1]), "stop_speed"),
-      (acceleration, c.dispensing_drive_acceleration_range, "acceleration"),
-    ):
-      if not low <= value <= high:
-        raise ValueError(f"{name} must be between {low} and {high}, is {value}")
-    low_limit, high_limit = c.current_limit_range
-    if not low_limit <= current_limit <= high_limit:
-      raise ValueError(
-        f"current_limit must be between {low_limit} and {high_limit}, is {current_limit}"
-      )
-
-    increments = c.dispensing_drive_uL_to_increments(volume)
-    try:
-      resp = await self._driver.send_command(
-        module=c.module,
-        command="DQ",
-        dq=f"{increments:05}",
-        dv=f"{c.dispensing_drive_uL_to_increments(speed):05}",
-        du=f"{c.dispensing_drive_uL_to_increments(stop_speed):05}",
-        dr=f"{c.dispensing_drive_uL_to_increments(acceleration):06}",
-        dw=f"{current_limit:02}",
-        read_timeout=read_timeout,
-      )
-    except BaseException:
-      await self._record_piston_position()
-      raise
-    self.piston_position = c.dispensing_drive_increments_to_uL(increments)
-    return resp
-
-  # -- x and y together ----------------------------------------------------------------------------
-
-  async def _require_iswap_parked(self) -> None:
-    """Raise unless the iSWAP on this head's arm is parked; nothing to check without one.
-
-    Raises:
-      RuntimeError: If it is not parked.
-    """
-    iswap = None if self.arm is None else self.arm.iswap
-    if iswap is not None and not await iswap.request_is_parked():
-      raise RuntimeError(
-        "the iSWAP is not parked, and the head moves where it stands. "
-        "Call `await star.iswap.park()` first."
-      )
 
   def _position_centred_in(self, resource: Resource) -> Coordinate:
     """Where head channel A1 lands with the channel array centred over a resource, in deck mm.
@@ -527,38 +423,6 @@ class Head96(Head):
     a1 += offset or Coordinate.zero()
     top = anchor.get_location_wrt(deck, x="c", y="c", z="t").z
     return anchor, a1, bottom, top
-
-  async def _move_over(
-    self,
-    a1: Coordinate,
-    minimum_traverse_height_start: Optional[float],
-    descent_speed: Optional[float],
-  ) -> None:
-    """Bring the head, with tips, over a position: the channels up, the head up, then X and Y.
-
-    Args:
-      a1: where head channel A1 goes, in deck mm; its Z is not used.
-      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
-      descent_speed: to that height, in mm/s.
-
-    Raises:
-      RuntimeError: If the head carries no tips or the iSWAP is not parked.
-    """
-    await self._require_iswap_parked()
-    if not await self.request_tip_presence():
-      raise RuntimeError("the head reports no tips; pick up tips first")
-    # The head's own moves leave the channels where they are, so they go up first.
-    if self.arm is not None and self.arm.pipettes is not None:
-      await self.arm.pipettes.move_to_safe_z()
-    if minimum_traverse_height_start is None:
-      await self.move_to_safe_z()
-    else:
-      await self.move_tool_bottom_to_z_position(minimum_traverse_height_start, speed=descent_speed)
-    # Gentler X acceleration at low Y, where the head stands furthest out from the X drive.
-    await asyncio.gather(
-      self.move_to_x_position(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3),
-      self.move_to_y_position(a1.y),
-    )
 
   # -- head initialization -------------------------------------------------------------------------
 
@@ -680,24 +544,30 @@ class Head96(Head):
     tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_start: Optional[float] = None,
+    *,
+    channel: str = "A1",
+    tip_spot: str = "A1",
   ) -> None:
-    """Pick up a rack of tips on the whole head, as legacy's `pick_up_tips96`. `C0 EP`.
+    """Pick up tips from a rack on the head, as legacy's `pick_up_tips96`. `C0 EP`.
 
-    Head channel A1 goes to the centre of spot A1, at the spot's Z. Once the device has picked them
-    up, the tip in each spot is mounted on the shaft of the channel with the spot's index.
+    Head channel `channel` goes to the centre of spot `tip_spot`, at the spot's Z. Once the device
+    has picked them up, each channel over a spot holding a tip has that tip on its shaft. Channels
+    past the rack's edge come down beside it: what stands there is the caller's to keep clear.
 
     Args:
       tip_rack: a 96 tip rack. Spots without a tip give none.
-      offset: added to spot A1's centre, in mm.
+      offset: added to the spot's centre, in mm.
       tip_pickup_method: `from_rack` sends the dispensing drive down first, since the device does
         not; `from_waste` and `full_blowout` move the plunger up before mounting.
       minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
       minimum_traverse_height_start: in mm.
         `configuration.traversal_z_position` when None.
+      channel: the head channel placed over `tip_spot`, A1 to H12.
+      tip_spot: the spot `channel` is placed over, A1 to H12.
 
     Raises:
-      ValueError: If the rack does not have 96 spots or holds no tips, or a position cannot be
-        reached.
+      ValueError: If the rack does not have 96 spots, no channel is over a tip, a position
+        cannot be reached, or a channel is past the edge of a rack with a frame.
       TypeError: If its tips are not Hamilton tips.
       RuntimeError: If the driver was given no deck, or the head already carries tips.
     """
@@ -711,19 +581,29 @@ class Head96(Head):
     if tip_rack.num_items != 96:
       raise ValueError("Tip rack must have 96 tips")
     check_tip_racks_available(tip_rack.get_all_items()[:1], "pick up tips from")
+    tip_spots_under_channels = get_items_under_channels(tip_rack, channel, tip_spot)
+    # Past the rack's edge the head's body comes down over the rack's frame.
+    if None in tip_spots_under_channels and tip_rack.frame_height != 0:
+      raise ValueError(
+        f"{tip_rack.name!r} has a frame the head would hit unless channel A1 is over spot A1"
+      )
     tips = [
-      spot.tip_for_pickup() if not spot.tracks_tips or spot.tip is not None else None
-      for spot in tip_rack.get_all_items()
+      spot.tip_for_pickup()
+      if spot is not None and (not spot.tracks_tips or spot.tip is not None)
+      else None
+      for spot in tip_spots_under_channels
     ]
     prototypical_tip = next((tip for tip in tips if tip is not None), None)
     if prototypical_tip is None:
-      raise ValueError("No tips found in the tip rack.")
+      raise ValueError("No tips found under the head.")
     if not isinstance(prototypical_tip, HamiltonTip):
       raise TypeError("Tip type must be HamiltonTip.")
     tip_type_index = await self._driver.get_or_assign_tip_type_index(prototypical_tip)
 
-    location = tip_rack.get_item("A1").get_location_wrt(deck, x="c", y="c", z="b") + (
-      offset or Coordinate.zero()
+    location = (
+      tip_rack.get_item("A1").get_location_wrt(deck, x="c", y="c", z="b")
+      + get_shift_with_channel_over(tip_rack, channel, tip_spot, deck)
+      + (offset or Coordinate.zero())
     )
     traverse_z, end_z = self._resolve_tip_command_heights(
       minimum_traverse_height_start, minimum_height_command_end
@@ -772,12 +652,15 @@ class Head96(Head):
     offset: Optional[Coordinate] = None,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_start: Optional[float] = None,
+    *,
+    channel: str = "A1",
+    tip_spot: str = "A1",
   ) -> None:
     """Drop the head's tips into a tip rack or anywhere else, as legacy's `drop_tips96`. `C0 ER`.
 
-    Into a tip rack, head channel A1 goes to the centre of spot A1, at the spot's Z, and each
-    channel's tip goes into the spot with its index. Anywhere else, the head is centred over the
-    resource, and the tips belong to nothing afterwards.
+    Into a tip rack, head channel `channel` goes to the centre of spot `tip_spot`, at the spot's
+    Z, and each channel's tip goes into the spot under it. Anywhere else, the head is centred over
+    the resource, and the tips belong to nothing afterwards.
 
     Args:
       resource: a 96 tip rack, or anything else, such as the trash.
@@ -785,19 +668,38 @@ class Head96(Head):
       minimum_height_command_end: in mm. `configuration.traversal_z_position` when None.
       minimum_traverse_height_start: in mm.
         `configuration.traversal_z_position` when None.
+      channel: the head channel placed over `tip_spot`, A1 to H12. A tip rack only.
+      tip_spot: the spot `channel` is placed over, A1 to H12. A tip rack only.
 
     Raises:
-      ValueError: If a tip rack does not have 96 spots, or a position cannot be reached.
+      ValueError: If a tip rack does not have 96 spots, a channel carrying a tip is not over a
+        spot, a position cannot be reached, or a channel is past the edge of a rack with a frame.
       RuntimeError: If the driver was given no deck.
     """
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    tip_spots_under_channels: List[Optional[TipSpot]] = []
     if isinstance(resource, TipRack):
       if resource.num_items != 96:
         raise ValueError("Tip rack must have 96 tips")
       check_tip_racks_available(resource.get_all_items()[:1], "drop tips into")
+      tip_spots_under_channels = get_items_under_channels(resource, channel, tip_spot)
+      # Past the rack's edge the head's body comes down over the rack's frame.
+      if None in tip_spots_under_channels and resource.frame_height != 0:
+        raise ValueError(
+          f"{resource.name!r} has a frame the head would hit unless channel A1 is over spot A1"
+        )
+      if self.resource is not None:
+        beside = [
+          shaft.name
+          for shaft, spot in zip(self.resource.get_all_items(), tip_spots_under_channels)
+          if shaft.has_tip() and spot is None
+        ]
+        if beside:
+          raise ValueError(f"channels {beside} carry a tip but are not over a spot of the rack")
       location = resource.get_item("A1").get_location_wrt(deck, x="c", y="c", z="b")
+      location += get_shift_with_channel_over(resource, channel, tip_spot, deck)
     else:
       location = self._position_centred_in(resource)
     location += offset or Coordinate.zero()
@@ -833,8 +735,8 @@ class Head96(Head):
             continue
           tip = shaft.release_tip()
           if isinstance(resource, TipRack) and isinstance(tip, Tip):
-            spot = resource.get_item(i)
-            if spot.tracks_tips:
+            spot = tip_spots_under_channels[i]
+            if spot is not None and spot.tracks_tips:
               spot.assign_tip(tip)
       await self._record_after_tip_command(command_error)
     await self.dispensing_drive_request_uL_position()
@@ -842,38 +744,41 @@ class Head96(Head):
   async def return_tips(self, **kwargs) -> None:
     """Put the head's tips back in the tip rack they were picked up from.
 
-    The rack is found from each tip's origin. Channels without a tip are skipped.
+    The rack, and the spot each channel stood over, are found from each tip's origin. Channels
+    without a tip are skipped.
 
     Args:
       kwargs: passed on to `drop_tips`.
 
     Raises:
       RuntimeError: If the driver was given no deck, the head is not modelled or carries no tips,
-        or a tip does not come from the spot with its channel's index in one tip rack on the deck.
+        or its tips did not all stand under their channels in one tip rack on the deck.
     """
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("tip commands are placed from the deck; this driver was given none")
     if self.resource is None:
       raise RuntimeError("the head is not modelled, so where its tips came from is not known")
-    tip_rack: Optional[TipRack] = None
-    for index, shaft in enumerate(self.resource.get_all_items()):
-      tip = shaft.tip
-      if not isinstance(tip, Tip):
-        continue
-      spot = tip_origin(tip, deck)
-      if spot is None or not isinstance(spot.parent, TipRack):
-        raise RuntimeError(f"{tip.name} on {shaft.name} did not come from a tip rack on the deck")
-      if tip_rack is None:
-        tip_rack = spot.parent
-      if spot.parent is not tip_rack or tip_rack.get_item(index) is not spot:
-        raise RuntimeError(
-          f"{shaft.name}'s tip {tip.name} is not from spot {index} of {tip_rack.name}; the head "
-          "returns tips only to the one rack they were picked up from"
-        )
-    if tip_rack is None:
+    shafts = self.resource.get_all_items()
+    carrying = next((shaft for shaft in shafts if isinstance(shaft.tip, Tip)), None)
+    if carrying is None:
       raise RuntimeError("No tips have been picked up.")
-    await self.drop_tips(tip_rack, **kwargs)
+    origin = tip_origin(cast(Tip, carrying.tip), deck)
+    if origin is None or not isinstance(origin.parent, TipRack):
+      raise RuntimeError(f"the tip on {carrying.name} did not come from a tip rack on the deck")
+    tip_rack = origin.parent
+    # Any one tip names the pick-up: its channel stood over the spot it came from.
+    channel = self.resource.get_child_identifier(carrying)
+    tip_spot = tip_rack.get_child_identifier(origin)
+    tip_spots_under_channels = get_items_under_channels(tip_rack, channel, tip_spot)
+    for shaft, spot in zip(shafts, tip_spots_under_channels):
+      tip = shaft.tip
+      if isinstance(tip, Tip) and tip_origin(tip, deck) is not spot:
+        raise RuntimeError(
+          f"{shaft.name}'s tip {tip.name} did not stand under it in {tip_rack.name}; the head "
+          "returns tips only as it picked them up from one rack"
+        )
+    await self.drop_tips(tip_rack, channel=channel, tip_spot=tip_spot, **kwargs)
 
   async def discard_tips(self, **kwargs) -> None:
     """Drop the head's tips into the deck's 96-head trash, whatever the model says it carries.
@@ -1135,7 +1040,7 @@ class Head96(Head):
     c = self.configuration
     await self._require_tips_feeding(lld_sensor)
     if tip_overhang is None:
-      tip_overhang = await self._overhang_that_probes()
+      tip_overhang = await self.request_tip_overhang()
     if search_start_position is None:
       search_start_position = round(c.z_range[1] - tip_overhang, 2)
     if search_end_position is None:
@@ -1191,7 +1096,7 @@ class Head96(Head):
     Returns:
       The surface's height, tip bottom on the deck in mm; None when nothing was found.
     """
-    overhang = await self._overhang_that_probes()
+    overhang = await self.request_tip_overhang()
     try:
       await self._clld_search(
         round(bottom + overhang, 2),
@@ -1232,7 +1137,7 @@ class Head96(Head):
       lld_sensor: which cLLD sensors trigger.
       search_speed: in mm/s. `default_clld_search_speed` when None.
       n_replicates: how many searches; the heights are averaged.
-      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      minimum_traverse_height_start: tip bottom raised to before the move, in mm. Safe Z when None.
       minimum_traverse_height_end: where the tips are left, in mm. Safe Z when None.
 
     Returns:
@@ -1246,7 +1151,11 @@ class Head96(Head):
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be at least 1, is {n_replicates}")
     anchor, a1, bottom, top = self._get_target(resource, offset)
-    await self._move_over(a1, minimum_traverse_height_start, None)
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips; pick up tips first")
+    await self.move_to_xy_position(
+      a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start
+    )
     try:
       rounds = [
         await self._search_surface(bottom, top, lld_sensor, search_speed)
@@ -1387,7 +1296,7 @@ class Head96(Head):
     c = self.configuration
     overhang = 0.0
     if await self.request_tip_presence():
-      overhang = await self._overhang_that_probes()
+      overhang = await self.request_tip_overhang()
     low = max(c.z_range[0] - overhang, c.min_tool_bottom_z)
     high = c.z_range[1] - overhang
     if minimum_height is None:
@@ -2033,7 +1942,7 @@ class Head96(Head):
     )
     following = c.surface_following_distance_range_increments
     self._check_pipetting_fields(
-      await self._overhang_that_probes(),
+      await self.request_tip_overhang(),
       location,
       {
         "the liquid surface": location.z,
@@ -2263,7 +2172,9 @@ class Head96(Head):
       await self._require_iswap_parked()
     try:
       if searched:
-        await self._move_over(a1, minimum_traverse_height_start, None)
+        await self.move_to_xy_position(
+          a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start
+        )
         if air_beforehand:
           await self._aspirate_in_place(air_beforehand, flow_rate, minimum_height=bottom)
           standing = round(standing + air_beforehand, 1)
@@ -2610,7 +2521,7 @@ class Head96(Head):
     )
     following = c.surface_following_distance_range_increments
     self._check_pipetting_fields(
-      await self._overhang_that_probes(),
+      await self.request_tip_overhang(),
       location,
       {
         "the liquid surface": location.z,
@@ -2856,7 +2767,9 @@ class Head96(Head):
       await self._require_iswap_parked()
     try:
       if searched:
-        await self._move_over(a1, minimum_traverse_height_start, None)
+        await self.move_to_xy_position(
+          a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start
+        )
         found = await self._search_surface(bottom, top, lld_sensor, search_speed, approach_speed)
         if found is None:
           raise RuntimeError(f"no liquid found in {anchor.name} down to its cavity bottom")
@@ -2962,7 +2875,7 @@ class Head96(Head):
       resource: a plate (well A1, or its one well), a container, or wells (the first).
       mix: volume, repetitions, flow rate and surface following distance.
       offset: added to where head channel A1 goes, in mm. Its z is ignored under CAPACITIVE.
-      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      minimum_traverse_height_start: tip bottom raised to before the move, in mm. Safe Z when None.
       lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other. OFF when
         None; CAPACITIVE under `mix.auto_surface_following`, which OFF refuses.
       lld_sensor: which cLLD sensors trigger, under CAPACITIVE.
@@ -3020,7 +2933,11 @@ class Head96(Head):
       return max(-self._get_surface_change(anchor, max(height, 0.0), -per_draw), 0.0)
 
     following = 0.0
-    await self._move_over(a1, minimum_traverse_height_start, descent_speed)
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips; pick up tips first")
+    await self.move_to_xy_position(
+      a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start
+    )
 
     async def strokes() -> None:
       for _ in range(mix.repetitions):
