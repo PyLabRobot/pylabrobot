@@ -161,6 +161,8 @@ class STARDriver:
       device_address=device_address,
       write_timeout=write_timeout,
       serial_number=serial_number,
+      # Keep packet-boundary replies and their terminating zero-length packet in one transfer.
+      read_transfer_size=4000,
     )
 
     # Coordinates commands on the shared link: one at a time per module, and a C0 master

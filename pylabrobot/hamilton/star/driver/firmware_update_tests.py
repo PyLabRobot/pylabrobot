@@ -376,12 +376,6 @@ class ComponentFirmwareInstrument(FirmwareInstrument):
     if command == "QU":
       return prefix + ("au1 0 0 0" if restarted and self.fault == "configuration" else "au0 0 0 0")
     if command == "RA":
-      if module == "X0":
-        parameter = cmd[-2:]
-        if self.fault == "missing_parameter":
-          return prefix + parameter
-        value = "+0002" if restarted and self.fault == "calibration" else "+0001"
-        return prefix + parameter + value
       assert module == "I0" and cmd.endswith("raau")
       return prefix + ("au1 1 0 0" if restarted and self.fault == "configuration" else "au0 1 0 0")
     assert module == "I0", "QX has different meanings on other components"
@@ -453,19 +447,15 @@ class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
         if module != "I0":
           self.assertFalse(any(cmd[2:4] == "QX" for cmd in self.instrument.commands))
 
-  async def test_legacy_x_calibration_is_read_completely_without_bulk_reply(self):
+  async def test_legacy_x_calibration_uses_standard_adjustment_query(self):
+    """Read X calibration with RK and reject missing or changed calibration."""
     module, family, version = COMPONENT_IMAGES[0]
     path = self.prepare(module, family, version)
     await self.features[module].update_firmware(path, expected_version=version)
-    parameters = [cmd[-2:] for cmd in self.instrument.commands if cmd[2:4] == "RA"]
-    expected = (
-      "kx kp kd ki il le qp qd qi ql qe px ks mp md mi ml me np nd ni nl ne ps "
-      "kc up ud ui ul ue tp td ti tl te pc ax as"
-    ).split()
-    self.assertEqual(parameters, expected * 2)
-    self.assertFalse(any(cmd[2:4] == "RK" for cmd in self.instrument.commands))
-    path = self.prepare(module, family, version, "missing_parameter")
-    with self.assertRaisesRegex(ValueError, "Missing X-drive calibration"):
+    self.assertEqual(sum(cmd[2:4] == "RK" for cmd in self.instrument.commands), 2)
+    self.assertFalse(any(cmd[2:4] == "RA" for cmd in self.instrument.commands))
+    path = self.prepare(module, family, version, "empty_calibration")
+    with self.assertRaisesRegex(ValueError, "Empty X0 RK reply"):
       await self.features[module].update_firmware(path, expected_version=version)
     self.assertEqual(self.mutations(), [])
     path = self.prepare(module, family, version, "calibration")

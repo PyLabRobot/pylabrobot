@@ -57,6 +57,7 @@ class USB(IOBase):
     max_workers: int = 1,
     read_endpoint_address: Optional[int] = None,
     write_endpoint_address: Optional[int] = None,
+    read_transfer_size: Optional[int] = None,
   ):
     """Initialize an io.USB object.
 
@@ -75,6 +76,8 @@ class USB(IOBase):
       configuration_callback: A callback that takes the device object as an argument and performs
         any necessary configuration. If `None`, `dev.set_configuration()` is called.
       max_workers: The maximum number of worker threads for USB I/O operations.
+      read_transfer_size: Default buffer size for a USB read transfer, rounded up to an endpoint
+        packet-size multiple. If `None`, request one endpoint packet per transfer.
     """
 
     super().__init__()
@@ -98,6 +101,9 @@ class USB(IOBase):
     self.write_endpoint_address = write_endpoint_address
     self.configuration_callback = configuration_callback
     self.max_workers = max_workers
+    if read_transfer_size is not None and read_transfer_size <= 0:
+      raise ValueError("read_transfer_size must be positive")
+    self.read_transfer_size = read_transfer_size
 
     self.dev: Optional[usb.core.Device] = None  # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
@@ -168,16 +174,33 @@ class USB(IOBase):
       data=data.decode("utf-8", errors="backslashreplace"),
     )
 
+  def _read_size(self, size: Optional[int], endpoint: Optional[int]) -> int:
+    """Resolve the requested transfer size independently of the USB packet size."""
+    if size is not None:
+      return size
+    if self.dev is None or self.read_endpoint is None:
+      raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
+    packet_size: int = self.read_endpoint.wMaxPacketSize
+    if endpoint is not None:
+      interface = self.dev.get_active_configuration()[(0, 0)]
+      ep = usb.util.find_descriptor(interface, bEndpointAddress=endpoint)
+      if ep is None:
+        raise ValueError(f"Endpoint 0x{endpoint:02x} not found.")
+      packet_size = ep.wMaxPacketSize
+    if self.read_transfer_size is None:
+      return packet_size
+    return ((self.read_transfer_size + packet_size - 1) // packet_size) * packet_size
+
   def _read_packet(
     self,
     size: Optional[int] = None,
     timeout: Optional[float] = None,
     endpoint: Optional[int] = None,
   ) -> Optional[bytearray]:
-    """Read a packet from the machine.
+    """Read one USB transfer, which can contain multiple endpoint packets.
 
     Args:
-      size: The maximum number of bytes to read. If `None`, read up to wMaxPacketSize bytes.
+      size: The maximum number of bytes to read. If `None`, use the configured transfer size.
       timeout: The timeout for reading from the device in seconds. If `None`, use the default
         timeout (specified by the `packet_read_timeout` attribute).
       endpoint: The endpoint address to read from. If `None`, use the default read endpoint.
@@ -193,23 +216,7 @@ class USB(IOBase):
     if ep is None:
       raise RuntimeError("Read endpoint not found. Call setup() first.")
 
-    # Get max packet size if size is not provided
-    if size is None:
-      if isinstance(ep, int):
-        # Find endpoint object to get max packet size
-        cfg = self.dev.get_active_configuration()
-        intf = cfg[(0, 0)]
-        ep_obj = usb.util.find_descriptor(
-          intf,
-          custom_match=lambda e: e.bEndpointAddress == ep,
-        )
-        if ep_obj is None:
-          raise ValueError(f"Endpoint 0x{ep:02x} not found.")
-        read_size = ep_obj.wMaxPacketSize
-      else:
-        read_size = ep.wMaxPacketSize
-    else:
-      read_size = size
+    read_size = self._read_size(size, endpoint)
 
     if timeout is None:
       timeout = self.packet_read_timeout
@@ -251,22 +258,21 @@ class USB(IOBase):
       timeout = self.read_timeout
 
     def read_or_timeout() -> bytes:
-      # Attempt to read packets until timeout, or when we identify the right id.
+      """Read through the terminating short packet or the caller's explicit byte limit."""
       timeout_time = time.time() + timeout
+      transfer_size = self._read_size(size, endpoint)
 
       while time.time() < timeout_time:
-        # read response from endpoint, and keep reading until the packet is smaller than the max
-        # packet size: if the packet is that size, it means that there may be more data to read.
         resp = bytearray()
         last_packet: Optional[bytearray] = None
-        while True:  # read while we have data, and while the last packet is the max size.
-          remaining = size - len(resp) if size is not None else None
+        while True:
+          remaining = size - len(resp) if size is not None else transfer_size
           last_packet = self._read_packet(size=remaining, endpoint=endpoint)
           if last_packet is not None:
             resp += last_packet
-          if self.read_endpoint is None:
-            raise RuntimeError("Read endpoint is None. Call setup() first.")
-          if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
+          # A transfer shorter than requested has consumed the short packet (including a ZLP).
+          # Its data length can still be an exact multiple of the endpoint packet size.
+          if last_packet is None or len(last_packet) < remaining:
             break
           if size is not None and len(resp) >= size:
             break
@@ -570,6 +576,8 @@ class USB(IOBase):
       d["read_endpoint_address"] = self.read_endpoint_address
     if self.write_endpoint_address is not None:
       d["write_endpoint_address"] = self.write_endpoint_address
+    if self.read_transfer_size is not None:
+      d["read_transfer_size"] = self.read_transfer_size
     return d
 
 
@@ -589,6 +597,7 @@ class USBValidator(USB):
     write_endpoint_address: Optional[int] = None,
     configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
     max_workers: int = 1,
+    read_transfer_size: Optional[int] = None,
   ):
     super().__init__(
       human_readable_device_name=human_readable_device_name,
@@ -603,6 +612,7 @@ class USBValidator(USB):
       write_endpoint_address=write_endpoint_address,
       configuration_callback=configuration_callback,
       max_workers=max_workers,
+      read_transfer_size=read_transfer_size,
     )
     self.cr = cr
 
