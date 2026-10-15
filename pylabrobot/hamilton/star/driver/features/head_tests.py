@@ -574,7 +574,7 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
   async def test_under_clld_the_air_goes_in_first_and_the_head_rises_once(self):
     well = self.plate.get_item("A1")
     bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    overhang = await self.head._overhang_that_probes()
+    overhang = await self.head.request_tip_overhang()
     c = self.head.configuration
     order = await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 5.0 + overhang))
     await self.head.mix(
@@ -608,7 +608,7 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
   async def test_probe_liquid_height_averages_the_rounds_from_the_cavity_bottom(self):
     well = self.plate.get_item("A1")
     bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    overhang = await self.head._overhang_that_probes()
+    overhang = await self.head.request_tip_overhang()
     c = self.head.configuration
     order = await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 4.0 + overhang))
     height = await self.head.probe_liquid_height(self.plate, n_replicates=2)
@@ -625,7 +625,7 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
   async def test_probe_liquid_volume_is_the_volume_at_the_height(self):
     well = self.plate.get_item("A1")
     bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    overhang = await self.head._overhang_that_probes()
+    overhang = await self.head.request_tip_overhang()
     c = self.head.configuration
     await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 4.0 + overhang))
     volume = await self.head.probe_liquid_volume(self.plate)

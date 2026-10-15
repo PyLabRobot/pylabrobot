@@ -1135,7 +1135,7 @@ class Head96(Head):
     c = self.configuration
     await self._require_tips_feeding(lld_sensor)
     if tip_overhang is None:
-      tip_overhang = await self._overhang_that_probes()
+      tip_overhang = await self.request_tip_overhang()
     if search_start_position is None:
       search_start_position = round(c.z_range[1] - tip_overhang, 2)
     if search_end_position is None:
@@ -1191,7 +1191,7 @@ class Head96(Head):
     Returns:
       The surface's height, tip bottom on the deck in mm; None when nothing was found.
     """
-    overhang = await self._overhang_that_probes()
+    overhang = await self.request_tip_overhang()
     try:
       await self._clld_search(
         round(bottom + overhang, 2),
@@ -1387,7 +1387,7 @@ class Head96(Head):
     c = self.configuration
     overhang = 0.0
     if await self.request_tip_presence():
-      overhang = await self._overhang_that_probes()
+      overhang = await self.request_tip_overhang()
     low = max(c.z_range[0] - overhang, c.min_tool_bottom_z)
     high = c.z_range[1] - overhang
     if minimum_height is None:
@@ -2033,7 +2033,7 @@ class Head96(Head):
     )
     following = c.surface_following_distance_range_increments
     self._check_pipetting_fields(
-      await self._overhang_that_probes(),
+      await self.request_tip_overhang(),
       location,
       {
         "the liquid surface": location.z,
@@ -2610,7 +2610,7 @@ class Head96(Head):
     )
     following = c.surface_following_distance_range_increments
     self._check_pipetting_fields(
-      await self._overhang_that_probes(),
+      await self.request_tip_overhang(),
       location,
       {
         "the liquid surface": location.z,
