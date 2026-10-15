@@ -908,7 +908,7 @@ class Head:
     be offset by for the tip end, rather than the head, to land where it is wanted.
 
     Returns:
-      The overhang in mm, to 0.1 mm. Legacy's tip length is this plus the tip's fitting depth.
+      The overhang in mm, to 0.1 mm.
 
     Raises:
       RuntimeError: If the head is carrying no tips, so there is nothing to measure.
