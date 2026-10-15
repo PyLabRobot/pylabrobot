@@ -223,8 +223,8 @@ class Head96Configuration(HeadConfiguration):
 
   @property
   def dispensing_drive_acceleration_range(self) -> Tuple[float, float]:
-    """Dispensing-drive acceleration window (uL/s2); its max is the default 2013 firmware raised."""
-    max_inc = 900000 if self.firmware_year >= 2010 else 150000
+    """Dispensing-drive acceleration window (uL/s2); 2013 firmware raised the 411000 inc max."""
+    max_inc = 900000 if self.firmware_year >= 2010 else 411000
     return (
       self.dispensing_drive_increments_to_uL(5000),
       self.dispensing_drive_increments_to_uL(max_inc),
@@ -316,7 +316,8 @@ class Head96(Head):
     """Put a first-generation high volume head's resolutions in place.
 
     That head is bored and geared differently from the 96 Head II and the TADM head, which the
-    configuration's resolutions are for; the type the head reports decides.
+    configuration's resolutions are for; the type the head reports decides. It also starts its
+    default dispensing acceleration from the one it documents, 150000 increments/s2.
     """
     c = self.configuration
     if c.head_type != "High volume head":
@@ -324,6 +325,7 @@ class Head96(Head):
     c.dispensing_drive_uL_per_increment = 0.018509877
     c.dispensing_drive_mm_per_increment = 0.0009815705
     c.squeezer_drive_mm_per_increment = 0.000459073
+    self.default_dispensing_drive_acceleration = c.dispensing_drive_increments_to_uL(150000)
 
   async def discover(self):
     """Read what head this is, put its resolutions in place, then take its squeezer defaults."""

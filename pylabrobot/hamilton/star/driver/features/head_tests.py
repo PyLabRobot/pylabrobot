@@ -947,6 +947,9 @@ class TestDispensingDriveUnits(unittest.IsolatedAsyncioTestCase):
     head._apply_firmware_generation()
     await head.move_dispensing_drive_to_position(100.0, speed=200.0, current_limit=7)
     self.assertEqual(driver.sent, ["H0DQdq05170dv10341du00000dr150dw7"])
+    # Its window reaches 411 thousands, the same field width.
+    top = configuration.dispensing_drive_acceleration_range[1]
+    self.assertEqual(configuration.dispensing_drive_acceleration_uL_to_increments(top), 411)
 
   def test_the_384_head_has_no_default_until_its_type_is_known(self):
     head = Head384(cast(Any, _WireOnly()))
@@ -954,16 +957,21 @@ class TestDispensingDriveUnits(unittest.IsolatedAsyncioTestCase):
       head.default_dispensing_drive_speed
 
   def test_a_first_generation_head_takes_its_own_resolutions(self):
-    for head_type, uL, squeezer in (
-      ("High volume head", 0.018509877, 0.000459073),
-      ("96 head II", 0.019340933, 0.0002086672009),
-      ("96 head TADM", 0.019340933, 0.0002086672009),
+    for head_type, year, uL, squeezer, acceleration in (
+      ("High volume head", 2008, 0.018509877, 0.000459073, 2776.48),
+      ("96 head II", 2021, 0.019340933, 0.0002086672009, 17000.0),
+      ("96 head TADM", 2021, 0.019340933, 0.0002086672009, 17000.0),
     ):
       with self.subTest(head_type=head_type):
-        head = Head96(cast(Any, _WireOnly()), Head96Configuration(head_type=head_type))
+        configuration = Head96Configuration(
+          head_type=head_type, firmware_date=datetime.date(year, 6, 1)
+        )
+        head = Head96(cast(Any, _WireOnly()), configuration)
+        head._apply_firmware_generation()
         head._apply_head_type()
-        self.assertEqual(head.configuration.dispensing_drive_uL_per_increment, uL)
-        self.assertEqual(head.configuration.squeezer_drive_mm_per_increment, squeezer)
+        self.assertEqual(configuration.dispensing_drive_uL_per_increment, uL)
+        self.assertEqual(configuration.squeezer_drive_mm_per_increment, squeezer)
+        self.assertEqual(head.default_dispensing_drive_acceleration, acceleration)
 
 
 class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
