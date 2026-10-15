@@ -49,11 +49,6 @@ and applicable hardware variant, then captures calibration, identity, configurat
 cycle counters. Malformed version or concatenated stored-state replies stop the update before
 entering download mode.
 
-The default STAR USB connection uses a 4,000-byte read buffer, rounded up to 4,032 bytes
-for its 64-byte endpoint. This receives the tested packet-boundary replies and their USB
-terminators together. When supplying your own `USB` instance, set `read_transfer_size=4000`
-to use the same transfer behavior.
-
 The boards share this transfer sequence in `firmware_update.py`:
 
 1. `_switch_firmware_mode()` sends AP without waiting for a reply. After 15 seconds,
