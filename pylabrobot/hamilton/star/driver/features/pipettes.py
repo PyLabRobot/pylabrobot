@@ -70,7 +70,12 @@ from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipDropMetho
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMountingShaft
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_rack import TipRack, TipSpot, tip_origin
+from pylabrobot.resources.tip_rack import (
+  TipRack,
+  TipSpot,
+  check_tip_racks_available,
+  tip_origin,
+)
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
 from pylabrobot.resources.well import Well
 
@@ -985,7 +990,7 @@ class Pipettes:
       channel: which channel, 0-indexed from the back.
 
     Returns:
-      The overhang in mm.
+      The overhang in mm, to 0.1 mm.
 
     Raises:
       RuntimeError: If the channel carries no tip, so there is nothing to measure.
@@ -995,7 +1000,7 @@ class Pipettes:
       raise RuntimeError(f"channel {channel} reports no tip, so there is no overhang to measure")
     stop_disc = await self.request_stop_disc_z_position(channel)
     tip_bottom = (await self._unchecked_fw_request_lowest_z_positions())[channel]
-    return round(stop_disc - tip_bottom, 2)
+    return round(stop_disc - tip_bottom, 1)
 
   async def _record_where_they_stopped(
     self, axis: Literal["y", "z"], channels: Optional[Iterable[int]] = None
@@ -2329,28 +2334,6 @@ class Pipettes:
       )
     return tip_bottom_diameter if has_tip else stop_disc_diameter
 
-  async def _overhang_that_probes(self, channel: int, allow_without_tip: bool) -> float:
-    """How far below the stop disc the channel probes: the tip's overhang, or 0 when bare and
-    allowed.
-
-    Args:
-      channel: the probing channel.
-      allow_without_tip: whether a channel with no tip on it may probe.
-
-    Returns:
-      The mounted tip's overhang in mm, to 0.1 mm, or 0.0 for a bare channel.
-
-    Raises:
-      RuntimeError: If the channel holds no tip and `allow_without_tip` is False.
-    """
-    if not (await self.sense_tip_presence())[channel]:
-      if not allow_without_tip:
-        raise RuntimeError(
-          f"no tip on channel {channel}; pass allow_without_tip=True to probe without one"
-        )
-      return 0.0
-    return round(await self.request_tip_overhang(channel), 1)
-
   async def probe_x_using_clld(
     self,
     channel: int,
@@ -2744,7 +2727,12 @@ class Pipettes:
     """
     self._require_channel(channel)
     # The search runs on the stop disc, which sits the overhang above the tip bottom.
-    overhang = await self._overhang_that_probes(channel, allow_without_tip)
+    has_tip = (await self.sense_tip_presence())[channel]
+    if not has_tip and not allow_without_tip:
+      raise RuntimeError(
+        f"no tip on channel {channel}; pass allow_without_tip=True to probe without one"
+      )
+    overhang = await self.request_tip_overhang(channel) if has_tip else 0.0
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
     top, floor = highest - overhang, round(lowest - overhang, 2)
@@ -3096,7 +3084,12 @@ class Pipettes:
       ValueError: If an argument is out of range.
     """
     self._require_channel(channel)
-    overhang = await self._overhang_that_probes(channel, allow_without_tip)
+    has_tip = (await self.sense_tip_presence())[channel]
+    if not has_tip and not allow_without_tip:
+      raise RuntimeError(
+        f"no tip on channel {channel}; pass allow_without_tip=True to probe without one"
+      )
+    overhang = await self.request_tip_overhang(channel) if has_tip else 0.0
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
     top, floor = highest - overhang, round(lowest - overhang, 2)
@@ -3302,7 +3295,12 @@ class Pipettes:
     self._require_channel(channel)
     self._require_ztouch_firmware(channel)
     self._warn_ztouch_on_soft_tips([channel])
-    overhang = await self._overhang_that_probes(channel, allow_without_tip)
+    has_tip = (await self.sense_tip_presence())[channel]
+    if not has_tip and not allow_without_tip:
+      raise RuntimeError(
+        f"no tip on channel {channel}; pass allow_without_tip=True to probe without one"
+      )
+    overhang = await self.request_tip_overhang(channel) if has_tip else 0.0
     c = self.configuration
     lowest, highest = (c.z_drive_increments_to_mm(i) for i in c.z_range_increments)
     top, floor = highest - overhang, round(lowest - overhang, 2)
@@ -4270,6 +4268,7 @@ class Pipettes:
 
     if not tip_spots:
       return
+    check_tip_racks_available(tip_spots, "pick up tips from")
     tips = [spot.tip_for_pickup() for spot in tip_spots]
     if not all(isinstance(tip, HamiltonTip) for tip in tips):
       raise TypeError("the STAR picks up Hamilton tips")
@@ -4540,6 +4539,7 @@ class Pipettes:
     offsets = [Coordinate.zero()] * len(destinations) if offsets is None else list(offsets)
 
     spots = [place for place in destinations if isinstance(place, TipSpot)]
+    check_tip_racks_available(spots, "drop tips into")
     if len({id(spot) for spot in spots}) != len(spots):
       raise ValueError("each tip must go into a spot of its own")
     for spot in spots:
