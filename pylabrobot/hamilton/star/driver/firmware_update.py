@@ -25,6 +25,46 @@ _FIRMWARE_FAMILIES = {
   "D0": ("GRUD0S", (1,)),
 }
 _VERSION_PATTERN = rb"\d+\.\d+S(?: [a-z])? \d{4}-\d{2}-\d{2}(?: \([XH]0 XE167\))?"
+_X_DRIVE_ADJUSTMENT_PARAMETERS = (
+  "kx",
+  "kp",
+  "kd",
+  "ki",
+  "il",
+  "le",
+  "qp",
+  "qd",
+  "qi",
+  "ql",
+  "qe",
+  "px",
+  "ks",
+  "mp",
+  "md",
+  "mi",
+  "ml",
+  "me",
+  "np",
+  "nd",
+  "ni",
+  "nl",
+  "ne",
+  "ps",
+  "kc",
+  "up",
+  "ud",
+  "ui",
+  "ul",
+  "ue",
+  "tp",
+  "td",
+  "ti",
+  "tl",
+  "te",
+  "pc",
+  "ax",
+  "as",
+)
 
 
 def _firmware_version_parts(version: str) -> Tuple[int, datetime.date]:
@@ -44,6 +84,8 @@ def _firmware_reply_body(response: str, module: str, command: str) -> str:
   body = match[1].removeprefix("er00")
   if not body:
     raise ValueError(f"Empty {module} {command} reply: {response!r}")
+  if re.search(r"[A-Z][0-9A-Z][A-Z]{2}id", body):
+    raise ValueError(f"Concatenated {module} {command} reply: {response!r}")
   return body
 
 
@@ -258,6 +300,25 @@ class _FirmwareDownloader:
     reply = await self._driver.send_command(self.module, "RK")
     return _firmware_reply_body(reply, self.module, "RK")
 
+  async def _request_x_drive_adjustment_parameter(self, parameter: str) -> str:
+    """Read one legacy X-drive calibration field, including its complete array when applicable."""
+    if parameter not in _X_DRIVE_ADJUSTMENT_PARAMETERS:
+      raise ValueError(f"Not an X-drive calibration parameter: {parameter}")
+    reply = await self._driver.send_command("X0", "RA", ra=parameter)
+    body = _firmware_reply_body(reply, "X0", "RA")
+    if not body.startswith(parameter) or len(body) == len(parameter):
+      raise ValueError(f"Missing X-drive calibration parameter {parameter}: {reply!r}")
+    return body
+
+  async def _request_x_drive_adjustment_values(self) -> str:
+    """Read every legacy RK field separately, avoiding its USB packet-boundary reply."""
+    return "".join(
+      [
+        await self._request_x_drive_adjustment_parameter(parameter)
+        for parameter in _X_DRIVE_ADJUSTMENT_PARAMETERS
+      ]
+    )
+
   async def _request_adjustment_status(self) -> str:
     """Read RJ's adjustment date and completion status."""
     reply = await self._driver.send_command(self.module, "RJ")
@@ -290,8 +351,13 @@ class _FirmwareDownloader:
 
   async def _request_component_state(self, version: str) -> Dict[str, str]:
     """Capture identity, calibration, and the settings specific to this component."""
+    generation, _ = _firmware_version_parts(version)
     state = {
-      "adjustments": await self._request_adjustment_values(),
+      "adjustments": (
+        await self._request_x_drive_adjustment_values()
+        if self.module == "X0" and generation == 1
+        else await self._request_adjustment_values()
+      ),
       "adjustment_status": await self._request_adjustment_status(),
       "technical_status": await self._request_technical_status(),
     }
@@ -301,7 +367,6 @@ class _FirmwareDownloader:
     elif self.module in ("H0", "D0"):
       state["configuration"] = await self._request_head_configuration()
       head_type = await self._request_head_type()
-      generation, _ = _firmware_version_parts(version)
       allowed_types = (0, 1, 2) if self.module == "D0" else (2, 3) if generation == 5 else (0, 1)
       if head_type not in allowed_types:
         raise ValueError(f"Unsupported {self.module} head type {head_type} for {version}")

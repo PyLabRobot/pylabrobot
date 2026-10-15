@@ -4,14 +4,14 @@ The STAR driver can download manufacturer-supplied ACH images to individual stan
 boards. Firmware images are supplied separately from PyLabRobot. Use an image intended for the
 installed hardware; matching a filename and version alone does not establish compatibility.
 
-| Component API | Board | Image family | Supported firmware major versions |
-| --- | --- | --- | --- |
-| `star.pipettes.update_firmware(channel=0, ...)` | P1–PG | `GRUPXS*.ACH` | 4, standard 1000 uL channels |
-| `star.left_x_arm.update_firmware(...)` | X0 | `GRUX0S*.ACH` | 1, 5 |
-| `star.iswap.update_firmware(...)` | R0 | `GRUR0S*.ACH` | 3, 4 |
-| `star.autoload.update_firmware(...)` | I0 | `GRUALS*.ACH` | 3 |
-| `star.head96.update_firmware(...)` | H0 | `GRUH0S*.ACH` | 2, 5 |
-| `star.head384.update_firmware(...)` | D0 | `GRUD0S*.ACH` | 1 |
+| Component API | Board | Image family | Supported firmware major versions | Hardware transfer tested |
+| --- | --- | --- | --- | --- |
+| `star.pipettes.update_firmware(channel=0, ...)` | P1–PG | `GRUPXS*.ACH` | 4, standard 1000 uL channels | 4, on P1 |
+| `star.left_x_arm.update_firmware(...)` | X0 | `GRUX0S*.ACH` | 1, 5 | 1 |
+| `star.iswap.update_firmware(...)` | R0 | `GRUR0S*.ACH` | 3, 4 | 4 |
+| `star.autoload.update_firmware(...)` | I0 | `GRUALS*.ACH` | 3 | 3 |
+| `star.head96.update_firmware(...)` | H0 | `GRUH0S*.ACH` | 2, 5 | 5 |
+| `star.head384.update_firmware(...)` | D0 | `GRUD0S*.ACH` | 1 | None |
 
 Channel indices start at zero: channel `0` addresses P1. Both X arms share X0: updating through
 either arm updates the same board and refreshes both cached versions. On a two-arm instrument,
@@ -46,7 +46,8 @@ example, X0 1.x and 5.x images target different controllers, as do H0 2.x and 5.
 Before changing device state, the updater reads the entire file and checks its family, record types,
 lengths, checksums, final EOF, and embedded version. It checks the target's version, status, EEPROM,
 and applicable hardware variant, then captures calibration, identity, configuration, and supported
-cycle counters. Malformed version replies stop the update before entering download mode.
+cycle counters. Malformed version or concatenated stored-state replies stop the update before
+entering download mode.
 
 The boards share this transfer sequence in `firmware_update.py`:
 
@@ -77,5 +78,7 @@ Counter differences are logged and returned; neither counters nor download dates
 
 The master controller (C0), PLE pipetting head, and accessories such as pumps and temperature
 controllers are not supported by these update APIs. Their formats or download protocols require
-separate handling. The X-drive, iSWAP, autoload, and 96/384-head paths have offline protocol coverage;
-their complete transfers have not yet been verified on hardware.
+separate handling. All supported generations have offline protocol coverage. Hardware transfer tests
+cover programming, restart, and stored-state checks for the generations marked above; they do not
+validate mechanical operation. The 384-head and other controller generations remain unverified on
+hardware.

@@ -4,7 +4,7 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 from unittest.mock import AsyncMock, Mock, patch
 
 from pylabrobot.hamilton.star.driver.configuration import DeviceConfiguration
@@ -167,6 +167,10 @@ class FirmwareInstrument:
     if command == "QX":
       return prefix + "ke-0002 +5000 +0082 +0007 +0000"
     if command == "RJ":
+      if self.fault == "repeated_calibration":
+        return (prefix + "jd2025-09-30js1") * 2
+      if self.fault == "concatenated_calibration":
+        return prefix + "jd2025-09-30js1X0QTid123"
       return prefix + "jd2025-09-30js1"
     if command == "QT":
       return prefix + "qt173305/0310897 173304/0522421"
@@ -232,7 +236,15 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.instrument.commands, [])
 
   async def test_preflight_errors_send_no_mutations(self):
-    for fault in ("status", "eeprom", "hardware", "plunger", "empty_calibration"):
+    for fault in (
+      "status",
+      "eeprom",
+      "hardware",
+      "plunger",
+      "empty_calibration",
+      "repeated_calibration",
+      "concatenated_calibration",
+    ):
       with self.subTest(fault=fault):
         self.instrument.fault = fault
         with self.assertRaises((ValueError, RuntimeError)):
@@ -364,6 +376,12 @@ class ComponentFirmwareInstrument(FirmwareInstrument):
     if command == "QU":
       return prefix + ("au1 0 0 0" if restarted and self.fault == "configuration" else "au0 0 0 0")
     if command == "RA":
+      if module == "X0":
+        parameter = cmd[-2:]
+        if self.fault == "missing_parameter":
+          return prefix + parameter
+        value = "+0002" if restarted and self.fault == "calibration" else "+0001"
+        return prefix + parameter + value
       assert module == "I0" and cmd.endswith("raau")
       return prefix + ("au1 1 0 0" if restarted and self.fault == "configuration" else "au0 1 0 0")
     assert module == "I0", "QX has different meanings on other components"
@@ -382,7 +400,7 @@ class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
     self.driver.configuration = DeviceConfiguration(
       left_arm=XArmConfiguration(), right_arm=XArmConfiguration()
     )
-    self.features: dict[str, XArm | iSWAP | Autoload | Head96 | Head384] = {
+    self.features: dict[str, Union[XArm, iSWAP, Autoload, Head96, Head384]] = {
       "X0": XArm(self.driver),
       "R0": iSWAP(self.driver),
       "I0": Autoload(self.driver),
@@ -435,6 +453,25 @@ class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
         if module != "I0":
           self.assertFalse(any(cmd[2:4] == "QX" for cmd in self.instrument.commands))
 
+  async def test_legacy_x_calibration_is_read_completely_without_bulk_reply(self):
+    module, family, version = COMPONENT_IMAGES[0]
+    path = self.prepare(module, family, version)
+    await self.features[module].update_firmware(path, expected_version=version)
+    parameters = [cmd[-2:] for cmd in self.instrument.commands if cmd[2:4] == "RA"]
+    expected = (
+      "kx kp kd ki il le qp qd qi ql qe px ks mp md mi ml me np nd ni nl ne ps "
+      "kc up ud ui ul ue tp td ti tl te pc ax as"
+    ).split()
+    self.assertEqual(parameters, expected * 2)
+    self.assertFalse(any(cmd[2:4] == "RK" for cmd in self.instrument.commands))
+    path = self.prepare(module, family, version, "missing_parameter")
+    with self.assertRaisesRegex(ValueError, "Missing X-drive calibration"):
+      await self.features[module].update_firmware(path, expected_version=version)
+    self.assertEqual(self.mutations(), [])
+    path = self.prepare(module, family, version, "calibration")
+    with self.assertRaisesRegex(RuntimeError, "calibration"):
+      await self.features[module].update_firmware(path, expected_version=version)
+
   async def test_wrong_family_and_unsupported_targets_send_nothing(self):
     for module, family, version in COMPONENT_IMAGES:
       with self.subTest(module=module):
@@ -459,7 +496,15 @@ class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
 
   async def test_preflight_errors_prevent_mode_switch(self):
     module, family, version = COMPONENT_IMAGES[6]
-    for fault in ("malformed_version", "status", "eeprom", "empty_calibration", "head_type"):
+    for fault in (
+      "malformed_version",
+      "status",
+      "eeprom",
+      "empty_calibration",
+      "head_type",
+      "repeated_calibration",
+      "concatenated_calibration",
+    ):
       with self.subTest(fault=fault):
         path = self.prepare(module, family, version, fault)
         if fault == "head_type":
