@@ -1155,14 +1155,13 @@ class Head:
     self._check_move("y", y, y_speed, y_acceleration, y_current_limit)
     if minimum_traverse_height_start is None:
       await self.move_to_safe_z(speed=z_speed, acceleration=z_acceleration)
-    elif (await self.request_location()).z < minimum_traverse_height_start:
+    else:
+      stop_disc = minimum_traverse_height_start
       if await self.request_tip_presence():
-        await self.move_tool_bottom_to_z_position(
-          minimum_traverse_height_start, speed=z_speed, acceleration=z_acceleration
-        )
-      else:
+        stop_disc += await self.request_tip_overhang()
+      if await self.request_z_position() < stop_disc:
         await self.move_stop_disc_to_z_position(
-          minimum_traverse_height_start, speed=z_speed, acceleration=z_acceleration
+          stop_disc, speed=z_speed, acceleration=z_acceleration
         )
     if self.arm is not None and self.arm.pipettes is not None:
       await self.arm.pipettes.move_to_safe_z()
