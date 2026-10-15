@@ -1,8 +1,10 @@
-import asyncio
 import warnings
 from abc import ABC
 from typing import Dict, List, Literal, Optional, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.socket import Socket
 from pylabrobot.legacy.arms.backend import (
   AccessPattern,
@@ -52,12 +54,33 @@ class PreciseFlexBackend(SCARABackend, ABC):
     self.horizontal_compliance: bool = False
     self.horizontal_compliance_torque: int = 0
     self.timeout = timeout
+    self._command_transaction_lock = anyio.Lock()
     self._has_rail = has_rail
     self._is_dual_gripper = is_dual_gripper
     if is_dual_gripper:
       warnings.warn(
         "Dual gripper support is experimental and may not work as expected.", UserWarning
       )
+
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_home: bool = False,
+  ) -> None:
+    await super()._enter_lifespan(stack)
+    if not isinstance(skip_home, bool):
+      raise TypeError("skip_home must be a bool")
+
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self.exit)
+    await self.set_response_mode("pc")
+    await self.power_on_robot()
+    stack.push_shielded_async_callback(self.power_off_robot)
+    await self.attach(1)
+    stack.push_shielded_async_callback(self.detach)
+    if not skip_home:
+      await self.home()
 
   def _convert_to_cartesian_space(
     self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
@@ -89,43 +112,6 @@ class PreciseFlexBackend(SCARABackend, ABC):
       orientation_int,
     )
     return arr
-
-  async def setup(self, skip_home: bool = False):
-    """Bring the arm up: link, power, control, and (unless skipped) home."""
-    await self.connect()
-    await self.initialize()
-    if not skip_home:
-      await self.home()
-
-  async def connect(self):
-    """Open the link and agree the response protocol. Powers nothing, moves nothing."""
-    await self.io.setup()
-    await self.set_response_mode("pc")
-
-  async def initialize(self):
-    """Raise high power and take control, so the arm accepts commands. Moves nothing.
-
-    Homing stays separate because it is the only step that moves: it sweeps the
-    arm through its whole envelope, which is far too much to do just to read a
-    position or check what the controller reports.
-    """
-    await self.power_on_robot()
-    await self.attach(1)
-
-  async def stop(self):
-    """Release the arm."""
-    await self.disconnect()
-
-  async def disconnect(self):
-    """Drop high power and release the link, moving nothing.
-
-    Powers down as well as disconnecting, because ``initialize`` is what raised
-    high power.
-    """
-    await self.detach()
-    await self.power_off_robot()
-    await self.exit()
-    await self.io.stop()
 
   async def set_speed(self, speed_percent: float):
     """Set the speed percentage of the arm's movement (0-100)."""
@@ -401,8 +387,20 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return self._convert_to_cartesian_space(position=(x, y, z, yaw, pitch, roll, enum_thing))
 
   async def send_command(self, command: str) -> str:
+    await self._command_transaction_lock.acquire()
+    try:
+      await anyio.lowlevel.checkpoint()
+      response = await self._send_command_locked(command)
+    finally:
+      self._command_transaction_lock.release()
+    await anyio.lowlevel.checkpoint()
+    return response
+
+  async def _send_command_locked(self, command: str) -> str:
+    """Send one command while the caller owns the transaction lock."""
     await self.io.write(command.encode("utf-8") + b"\n")
-    reply = await self.io.readline()
+    with anyio.CancelScope(shield=True):
+      reply = await self.io.readline()
 
     return self._parse_reply_ensure_successful(reply)
 
@@ -1612,7 +1610,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     some other means. Does not reply until the robot has stopped.
     """
     await self.send_command("waitForEom")
-    await asyncio.sleep(0.2)  # Small delay to ensure command is fully processed
+    await anyio.sleep(0.2)  # Small delay to ensure command is fully processed
 
   async def zero_torque(self, enable: bool, axis_mask: int = 1) -> None:
     """Sets or clears zero torque mode for the selected robot.
@@ -2283,8 +2281,22 @@ class PreciseFlexBackend(SCARABackend, ABC):
     Args:
       free_axes: List of joint indices to free. Use [0] for all axes.
     """
-    for axis in free_axes:
-      await self.send_command(f"freemode {axis}")
+    await self._command_transaction_lock.acquire()
+    mutation_attempted = False
+    try:
+      await anyio.lowlevel.checkpoint()
+      try:
+        for axis in free_axes:
+          mutation_attempted = True
+          await self._send_command_locked(f"freemode {axis}")
+          await anyio.lowlevel.checkpoint()
+      except BaseException:
+        if mutation_attempted:
+          with anyio.CancelScope(shield=True):
+            await self._send_command_locked("freemode -1")
+        raise
+    finally:
+      self._command_transaction_lock.release()
 
   async def end_freedrive_mode(self) -> None:
     """Exit freedrive mode for all axes."""

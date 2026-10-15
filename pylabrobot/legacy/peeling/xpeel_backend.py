@@ -1,7 +1,8 @@
 import logging
-import time
 from dataclasses import dataclass
 from typing import List, Literal, Tuple
+
+import anyio
 
 try:
   import serial  # type: ignore
@@ -11,6 +12,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.peeling.backend import PeelerBackend
 
@@ -54,9 +56,11 @@ class XPeelBackend(PeelerBackend):
         "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
         f"Import error: {_SERIAL_IMPORT_ERROR}"
       )
+    super().__init__()
     self.logger = logger or logging.getLogger(__name__)
     self.port = port
     self.response_timeout = timeout if timeout is not None else self.RESPONSE_TIMEOUT
+    self._command_lock = anyio.Lock()
 
     self._serial_timeout = timeout if timeout is not None else self.response_timeout
     self.io = Serial(
@@ -71,12 +75,10 @@ class XPeelBackend(PeelerBackend):
       rtscts=False,
     )
 
-  async def setup(self):
-    await self.io.setup()
-
-  async def stop(self):
-    await self.io.stop()
-    self.logger.info("Serial interface closed.")
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport for the backend lifespan."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
 
   @classmethod
   def describe_error(cls, code: int) -> str:
@@ -104,6 +106,49 @@ class XPeelBackend(PeelerBackend):
     except Exception:
       return None
 
+  async def _read_command_response(
+    self, full_cmd: str, expect_ack: bool, wait_for_ready: bool
+  ) -> List[str]:
+    """Collect command responses until the expected finite boundary or timeout."""
+    responses: List[str] = []
+    with anyio.move_on_after(self.response_timeout) as response_scope:
+      while True:
+        raw = await self.io.readline()
+        line = raw.decode("ascii", errors="ignore").strip()
+        if not line:
+          continue
+
+        display_line = line
+        if line.startswith("*ready:"):
+          parsed = self.parse_ready_line(line)
+          if parsed:
+            code, desc = parsed
+            display_line = f"{line} [{desc}]"
+
+        responses.append(display_line)
+        self.logger.info(f"Received: {display_line}")
+        print(f"Received: {display_line}")
+
+        if line.startswith("*ack"):
+          if not wait_for_ready:
+            break
+          continue
+
+        if wait_for_ready and line.startswith("*ready"):
+          break
+
+        if not wait_for_ready and not expect_ack:
+          break
+
+    if response_scope.cancelled_caught:
+      self.logger.warning(
+        "Timed out waiting for response to %s after %.2fs",
+        full_cmd.strip(),
+        self.response_timeout,
+      )
+
+    return responses
+
   async def _send_command(
     self, cmd, expect_ack=False, wait_for_ready=False, clear_buffer=True
   ) -> List[str]:
@@ -118,48 +163,15 @@ class XPeelBackend(PeelerBackend):
       raise RuntimeError("Serial interface not initialized; call setup() first.")
 
     self.logger.debug(f"Sending command: {full_cmd.strip()}")
-    if clear_buffer:
-      await self.io.reset_input_buffer()
-    await self.io.write(full_cmd.encode("ascii"))
-
-    responses: List[str] = []
-    start = time.time()
-    while time.time() - start < self.response_timeout:
-      raw = await self.io.readline()
-      line = raw.decode("ascii", errors="ignore").strip()
-      if not line:
-        continue
-
-      display_line = line
-      if line.startswith("*ready:"):
-        parsed = self.parse_ready_line(line)
-        if parsed:
-          code, desc = parsed
-          display_line = f"{line} [{desc}]"
-
-      responses.append(display_line)
-      self.logger.info(f"Received: {display_line}")
-      print(f"Received: {display_line}")
-
-      if line.startswith("*ack"):
-        if not wait_for_ready:
-          break
-        continue
-
-      if wait_for_ready and line.startswith("*ready"):
-        break
-
-      if not wait_for_ready and not expect_ack:
-        break
-
-    if time.time() - start >= self.response_timeout:
-      self.logger.warning(
-        "Timed out waiting for response to %s after %.2fs",
-        full_cmd.strip(),
-        self.response_timeout,
-      )
-
-    return responses
+    async with self._command_lock:
+      if clear_buffer:
+        await self.io.reset_input_buffer()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self.io.write(full_cmd.encode("ascii"))
+        responses = await self._read_command_response(full_cmd, expect_ack, wait_for_ready)
+      await anyio.lowlevel.checkpoint()
+      return responses
 
   async def get_status(self) -> Tuple[int, int, int]:
     """

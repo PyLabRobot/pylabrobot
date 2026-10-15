@@ -1,32 +1,573 @@
-import unittest
-from typing import Dict
+from typing import Any, Dict, List, Optional, cast
 from unittest.mock import AsyncMock, patch
 
+import anyio
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.socket import Socket  # Import Socket for mocking
 from pylabrobot.legacy.arms.backend import HorizontalAccess, VerticalAccess
 from pylabrobot.legacy.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
 from pylabrobot.legacy.arms.precise_flex.joints import PFAxis
+from pylabrobot.legacy.arms.precise_flex.pf_400 import PreciseFlex400Backend
+from pylabrobot.legacy.arms.precise_flex.pf_3400 import PreciseFlex3400Backend
 from pylabrobot.legacy.arms.precise_flex.precise_flex_backend import (
   PreciseFlexBackend,
   PreciseFlexError,
 )
+from pylabrobot.legacy.arms.scara import ExperimentalSCARA
+from pylabrobot.legacy.machines.backend import MachineBackend
 from pylabrobot.resources import Coordinate, Rotation
+from pylabrobot.testing.concurrency import AnyioTestBase
+from pylabrobot.testing.mock_io import MockIO
 
 
-class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
+class TestPreciseFlexBackendHardware:
   """Integration tests for PreciseFlex robot - RUNS ON ACTUAL HARDWARE"""
 
 
-class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
+class RecordingSocket(MockIO):
+  """Record PreciseFlex commands and lifecycle events without opening hardware."""
+
+  def __init__(
+    self,
+    events: list[str],
+    *,
+    fail_command: Optional[str] = None,
+    block_command: Optional[str] = None,
+    command_started: Optional[anyio.Event] = None,
+    entry_error: Optional[BaseException] = None,
+    exit_error: Optional[BaseException] = None,
+  ) -> None:
+    super().__init__()
+    self.events = events
+    self.fail_command = fail_command
+    self.block_command = block_command
+    self.command_started = command_started
+    self.entry_error = entry_error
+    self.exit_error = exit_error
+    self.last_command: Optional[str] = None
+
+  async def write(self, data: bytes, timeout: Optional[float] = None) -> None:  # type: ignore[override]
+    del timeout
+    command = data.decode("ascii").rstrip()
+    self.last_command = command
+    await anyio.lowlevel.checkpoint()
+    self.events.append(f"write:{command}")
+    if command == self.fail_command:
+      raise RuntimeError(f"failed at {command}")
+    if command == self.block_command:
+      if self.command_started is not None:
+        self.command_started.set()
+      await anyio.sleep_forever()
+
+  async def readline(self, timeout: Optional[float] = None) -> bytes:
+    del timeout
+    await anyio.lowlevel.checkpoint()
+    return b"0 OK\r\n"
+
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    **kwargs: Any,
+  ) -> None:
+    if kwargs:
+      raise TypeError("RecordingSocket does not accept lifespan options")
+    self.events.append("socket.enter")
+    if self.entry_error is not None:
+      raise self.entry_error
+    stack.push_shielded_async_callback(self._exit_socket)
+
+  async def _exit_socket(self) -> None:
+    await anyio.lowlevel.checkpoint()
+    self.events.append("socket.exit")
+    if self.exit_error is not None:
+      raise self.exit_error
+
+
+def make_lifecycle_backend(
+  events: list[str],
+  **socket_kwargs: Any,
+) -> tuple[PreciseFlexBackend, RecordingSocket]:
+  backend = PreciseFlexBackend(has_rail=False, host="ignored", port=0)
+  recording_socket = RecordingSocket(events, **socket_kwargs)
+  backend.io = cast(Socket, recording_socket)
+  return backend, recording_socket
+
+
+class BlockingReplySocket(RecordingSocket):
+  """Pause one reply so cancellation can target a committed command."""
+
+  def __init__(self, events: list[str]) -> None:
+    super().__init__(events)
+    self.reply_started = anyio.Event()
+    self.release_reply = anyio.Event()
+
+  async def readline(self, timeout: Optional[float] = None) -> bytes:
+    if self.last_command == "freemode 1":
+      self.reply_started.set()
+      await self.release_reply.wait()
+      self.events.append("reply:freemode 1")
+    return await super().readline(timeout)
+
+
+class BlockingPrecommitSocket(RecordingSocket):
+  """Pause an axis write before the recording socket mutates."""
+
+  def __init__(self, events: list[str]) -> None:
+    super().__init__(events)
+    self.write_started = anyio.Event()
+    self.release_write = anyio.Event()
+
+  async def write(  # type: ignore[override]
+    self, data: bytes, timeout: Optional[float] = None
+  ) -> None:
+    if data == b"freemode 1\n":
+      self.write_started.set()
+      await self.release_write.wait()
+    await super().write(data, timeout)
+
+
+class CancellationObservingPreciseFlexBackend(PreciseFlexBackend):
+  """Expose when frontend cancellation reaches backend freedrive entry."""
+
+  def __init__(self) -> None:
+    super().__init__(has_rail=False, host="ignored", port=0)
+    self.freedrive_started = anyio.Event()
+    self.freedrive_cancelled = anyio.Event()
+
+  async def freedrive_mode(self, free_axes: List[int]) -> None:
+    self.freedrive_started.set()
+    try:
+      await super().freedrive_mode(free_axes)
+    except anyio.get_cancelled_exc_class():
+      self.freedrive_cancelled.set()
+      raise
+
+
+@pytest.mark.parametrize(
+  "backend_type",
+  [PreciseFlexBackend, PreciseFlex3400Backend, PreciseFlex400Backend],
+)
+def test_native_backend_uses_managed_lifecycle_methods(
+  backend_type: type[MachineBackend],
+) -> None:
+  assert backend_type.setup is HasLifespan.setup
+  assert backend_type.stop is HasLifespan.stop
+
+
+class TestPreciseFlexLifespan(AnyioTestBase):
+  async def test_entry_and_exit_order(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(events)
+
+    async with backend:
+      events.append("body")
+
+    assert events == [
+      "socket.enter",
+      "write:mode 0",
+      "write:hp 1 20",
+      "write:attach 1",
+      "write:home",
+      "body",
+      "write:attach 0",
+      "write:hp 0",
+      "write:exit",
+      "socket.exit",
+    ]
+    assert not backend.is_active
+
+  async def test_skip_home_omits_only_home(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(events)
+
+    async with backend.lifespan(skip_home=True):
+      events.append("body")
+
+    assert events == [
+      "socket.enter",
+      "write:mode 0",
+      "write:hp 1 20",
+      "write:attach 1",
+      "body",
+      "write:attach 0",
+      "write:hp 0",
+      "write:exit",
+      "socket.exit",
+    ]
+
+  @pytest.mark.parametrize("backend_type", [PreciseFlex3400Backend, PreciseFlex400Backend])
+  async def test_model_inherits_native_lifespan(
+    self, backend_type: type[PreciseFlexBackend]
+  ) -> None:
+    events: list[str] = []
+    backend = backend_type(host="ignored", port=0)
+    backend.io = cast(Socket, RecordingSocket(events))
+
+    assert backend_type._enter_lifespan is PreciseFlexBackend._enter_lifespan
+    async with backend.lifespan(skip_home=True):
+      assert backend.is_active
+
+  @pytest.mark.parametrize(
+    ("fail_command", "expected_suffix"),
+    (
+      ("mode 0", ["write:exit", "socket.exit"]),
+      ("hp 1 20", ["write:exit", "socket.exit"]),
+      ("attach 1", ["write:hp 0", "write:exit", "socket.exit"]),
+      ("home", ["write:attach 0", "write:hp 0", "write:exit", "socket.exit"]),
+    ),
+  )
+  async def test_partial_entry_rollback(
+    self,
+    fail_command: str,
+    expected_suffix: list[str],
+  ) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(events, fail_command=fail_command)
+
+    with pytest.raises(RuntimeError, match=f"failed at {fail_command}"):
+      async with backend:
+        pytest.fail("failed entry must not reach the body")
+
+    assert events[-len(expected_suffix) :] == expected_suffix
+    assert not backend.is_active
+
+  async def test_socket_entry_failure_issues_no_commands_or_exit(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(
+      events,
+      entry_error=RuntimeError("socket open failed"),
+    )
+
+    with pytest.raises(RuntimeError, match="socket open failed"):
+      async with backend:
+        pytest.fail("failed entry must not reach the body")
+
+    assert events == ["socket.enter"]
+    assert not backend.is_active
+
+  async def test_cancellation_during_home_completes_all_cleanup(self) -> None:
+    events: list[str] = []
+    home_started = anyio.Event()
+    backend, _ = make_lifecycle_backend(
+      events,
+      block_command="home",
+      command_started=home_started,
+    )
+
+    async def run_backend() -> None:
+      try:
+        async with backend:
+          pytest.fail("cancelled entry must not reach the body")
+      except anyio.get_cancelled_exc_class():
+        events.append("cancelled")
+        raise
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(run_backend)
+      await home_started.wait()
+      task_group.cancel_scope.cancel()
+
+    assert events[-5:] == [
+      "write:attach 0",
+      "write:hp 0",
+      "write:exit",
+      "socket.exit",
+      "cancelled",
+    ]
+    assert not backend.is_active
+
+  async def test_cancellation_from_body_completes_all_cleanup(self) -> None:
+    events: list[str] = []
+    body_started = anyio.Event()
+    backend, _ = make_lifecycle_backend(events)
+
+    async def run_backend() -> None:
+      try:
+        async with backend:
+          body_started.set()
+          await anyio.sleep_forever()
+      except anyio.get_cancelled_exc_class():
+        events.append("cancelled")
+        raise
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(run_backend)
+      await body_started.wait()
+      task_group.cancel_scope.cancel()
+
+    assert events[-5:] == [
+      "write:attach 0",
+      "write:hp 0",
+      "write:exit",
+      "socket.exit",
+      "cancelled",
+    ]
+    assert not backend.is_active
+
+  async def test_detach_failure_does_not_suppress_later_cleanup(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(events, fail_command="attach 0")
+
+    with pytest.raises(RuntimeError, match="failed at attach 0"):
+      async with backend.lifespan(skip_home=True):
+        pass
+
+    assert events[-4:] == ["write:attach 0", "write:hp 0", "write:exit", "socket.exit"]
+    assert not backend.is_active
+
+  async def test_cleanup_failures_remain_in_exception_chain(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(
+      events,
+      fail_command="attach 0",
+      exit_error=RuntimeError("socket close failed"),
+    )
+
+    with pytest.raises(RuntimeError, match="socket close failed") as error_info:
+      async with backend.lifespan(skip_home=True):
+        pass
+
+    messages: list[str] = []
+    error: Optional[BaseException] = error_info.value
+    while error is not None:
+      messages.append(str(error))
+      error = error.__context__
+    assert "failed at attach 0" in messages
+    assert "socket close failed" in messages
+    assert events[-4:] == ["write:attach 0", "write:hp 0", "write:exit", "socket.exit"]
+
+  async def test_sequential_reuse_runs_two_complete_cycles(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(events)
+
+    async with backend.lifespan(skip_home=True):
+      pass
+    async with backend.lifespan(skip_home=True):
+      pass
+
+    cycle = [
+      "socket.enter",
+      "write:mode 0",
+      "write:hp 1 20",
+      "write:attach 1",
+      "write:attach 0",
+      "write:hp 0",
+      "write:exit",
+      "socket.exit",
+    ]
+    assert events == cycle + cycle
+
+  async def test_rejects_unknown_lifespan_options_before_socket_entry(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(events)
+
+    with pytest.raises(
+      TypeError,
+      match="unexpected keyword argument 'unknown'",
+    ):
+      async with backend.lifespan(unknown=True):
+        pytest.fail("invalid options must not reach the body")
+    assert events == []
+
+  async def test_rejects_non_boolean_skip_home_before_socket_entry(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(events)
+
+    with pytest.raises(TypeError, match="skip_home must be a bool"):
+      async with backend.lifespan(skip_home=1):
+        pytest.fail("invalid options must not reach the body")
+    assert events == []
+
+
+class TestPreciseFlexFreedriveTransactions(AnyioTestBase):
+  async def test_partial_axis_failure_rolls_back_all_freedrive(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(events, fail_command="freemode 2")
+
+    with pytest.raises(RuntimeError, match="failed at freemode 2"):
+      await backend.freedrive_mode([1, 2, 3])
+
+    assert events == [
+      "write:freemode 1",
+      "write:freemode 2",
+      "write:freemode -1",
+    ]
+
+  async def test_cancellation_waiting_for_transaction_lock_writes_nothing(self) -> None:
+    events: list[str] = []
+    backend, _ = make_lifecycle_backend(events)
+    started = anyio.Event()
+    finished = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def enter_freedrive() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        started.set()
+        await backend.freedrive_mode([1])
+      finished.set()
+
+    await backend._command_transaction_lock.acquire()
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(enter_freedrive)
+      await started.wait()
+      await anyio.sleep(0)
+      scopes[0].cancel()
+      await finished.wait()
+    backend._command_transaction_lock.release()
+
+    assert events == []
+
+  async def test_partial_axis_cancellation_reconciles_reply_before_rollback(self) -> None:
+    events: list[str] = []
+    backend = PreciseFlexBackend(has_rail=False, host="ignored", port=0)
+    socket = BlockingReplySocket(events)
+    backend.io = cast(Socket, socket)
+    finished = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def enter_freedrive() -> None:
+      try:
+        with anyio.CancelScope() as scope:
+          scopes.append(scope)
+          await backend.freedrive_mode([1, 2])
+      finally:
+        finished.set()
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(enter_freedrive)
+      await socket.reply_started.wait()
+      scopes[0].cancel()
+      await anyio.sleep(0)
+      assert not finished.is_set()
+      assert events == ["write:freemode 1"]
+      socket.release_reply.set()
+      await finished.wait()
+
+    assert events == [
+      "write:freemode 1",
+      "reply:freemode 1",
+      "write:freemode -1",
+    ]
+
+
+class TestExperimentalSCARAPreciseFlexCancellation(AnyioTestBase):
+  async def test_scoped_entry_cancellation_reaches_backend_lock_waiter(self) -> None:
+    events: list[str] = []
+    backend = CancellationObservingPreciseFlexBackend()
+    backend.io = cast(Socket, RecordingSocket(events))
+    scara = ExperimentalSCARA(backend)
+    entry_started = anyio.Event()
+    finished = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def enter_freedrive() -> None:
+      try:
+        with anyio.CancelScope() as scope:
+          scopes.append(scope)
+          entry_started.set()
+          async with scara.freedrive([1]):
+            pytest.fail("cancelled entry reached the scope body")
+      finally:
+        finished.set()
+
+    async with scara.lifespan(skip_home=True):
+      await backend._command_transaction_lock.acquire()
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(enter_freedrive)
+        await entry_started.wait()
+        await backend.freedrive_started.wait()
+        scopes[0].cancel()
+        with anyio.move_on_after(0.05):
+          await backend.freedrive_cancelled.wait()
+        cancellation_reached_waiter = backend.freedrive_cancelled.is_set()
+        writes_before_release = list(events)
+        backend._command_transaction_lock.release()
+        await finished.wait()
+
+      assert cancellation_reached_waiter
+      assert "write:freemode 1" not in writes_before_release
+      assert "write:freemode 1" not in events
+
+  async def test_durable_entry_cancellation_interrupts_precommit_write(self) -> None:
+    events: list[str] = []
+    backend = CancellationObservingPreciseFlexBackend()
+    socket = BlockingPrecommitSocket(events)
+    backend.io = cast(Socket, socket)
+    scara = ExperimentalSCARA(backend)
+    finished = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def enter_freedrive() -> None:
+      try:
+        with anyio.CancelScope() as scope:
+          scopes.append(scope)
+          await scara.freedrive_mode([1])
+      finally:
+        finished.set()
+
+    async with scara.lifespan(skip_home=True):
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(enter_freedrive)
+        await socket.write_started.wait()
+        scopes[0].cancel()
+        with anyio.move_on_after(0.05):
+          await backend.freedrive_cancelled.wait()
+        cancellation_reached_write = backend.freedrive_cancelled.is_set()
+        socket.release_write.set()
+        await finished.wait()
+
+      assert cancellation_reached_write
+      assert "write:freemode 1" not in events
+      assert scara._in_freedrive
+
+
+class TestPreciseFlexSetupCompatibility(AnyioTestBase):
+  _anyio_backends = ["asyncio"]
+
+  async def test_setup_forwards_skip_home_to_native_lifespan(self) -> None:
+    backend, _ = make_lifecycle_backend([])
+
+    with pytest.warns(DeprecationWarning):
+      await backend.setup(skip_home=True)
+    assert backend.is_active
+
+    await backend.stop()
+    assert not backend.is_active
+
+
+class PreciseFlexBackendTests(AnyioTestBase):
   """Unit tests for PreciseFlexBackend"""
 
-  def setUp(self):
+  def assertEqual(self, actual: Any, expected: Any) -> None:
+    assert actual == expected
+
+  def assertFalse(self, value: Any) -> None:
+    assert not value
+
+  def assertIsNone(self, value: Any) -> None:
+    assert value is None
+
+  def assertNotIn(self, member: Any, container: Any) -> None:
+    assert member not in container
+
+  def assertRaisesRegex(self, exception: type[BaseException], match: str) -> Any:
+    return pytest.raises(exception, match=match)
+
+  def assertTrue(self, value: Any) -> None:
+    assert value
+
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    **kwargs: Any,
+  ) -> None:
     self.mock_socket_instance = AsyncMock(spec=Socket)
     self.mock_socket_instance.read.return_value = b""
     self.mock_socket_instance.readline.return_value = b""
     self.mock_socket_instance.write.return_value = None
-    self.mock_socket_instance.setup.return_value = None  # Configure setup to return None
-    self.mock_socket_instance._writer = AsyncMock()  # Mock the _writer attribute
 
     # Patch the Socket class where it's used in PreciseFlexBackend
     patcher = patch(
@@ -34,7 +575,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       return_value=self.mock_socket_instance,
     )
     self.MockSocketClass = patcher.start()  # Store the mock of the class
-    self.addCleanup(patcher.stop)
+    stack.callback(patcher.stop)
 
     self.backend = PreciseFlexBackend(has_rail=False, host="localhost", port=10100)
     # self.backend.io is already self.mock_socket_instance because of the patch
@@ -88,77 +629,6 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     )
     cartesian_array = self.backend._convert_to_cartesian_array(cartesian_coords)
     self.assertEqual(cartesian_array, (1.0, 2.0, 3.0, 6.0, 5.0, 4.0, 2))
-
-  async def test_setup(self):
-    self.mock_socket_instance.readline.side_effect = [
-      b"0 OK\r\n",  # set_mode
-      b"0 OK\r\n",  # power_on_robot
-      b"0 OK\r\n",  # attach
-      b"0 OK\r\n",  # home
-    ]
-    await self.backend.setup()
-    self.mock_socket_instance.setup.assert_called_once()
-    self.mock_socket_instance.write.assert_any_call(b"mode 0\n")
-    self.mock_socket_instance.write.assert_any_call(b"hp 1 20\n")
-    self.mock_socket_instance.write.assert_any_call(b"attach 1\n")
-    self.mock_socket_instance.write.assert_any_call(b"home\n")
-
-  async def test_stop(self):
-    self.mock_socket_instance.readline.side_effect = [
-      b"0 attach\r\n",  # detach
-      b"0 hp\r\n",  # power_off_robot
-      b"0 exit\r\n",  # exit
-    ]
-    await self.backend.stop()
-    self.mock_socket_instance.write.assert_any_call(b"attach 0\n")
-    self.mock_socket_instance.write.assert_any_call(b"hp 0\n")
-    self.mock_socket_instance.write.assert_any_call(b"exit\n")
-    self.mock_socket_instance.stop.assert_called_once()
-
-  async def test_connect_opens_the_link_without_powering_or_homing(self):
-    self.mock_socket_instance.readline.side_effect = [b"0 OK\r\n"]  # set_mode
-    await self.backend.connect()
-    self.mock_socket_instance.setup.assert_called_once()
-    self.mock_socket_instance.write.assert_any_call(b"mode 0\n")
-    written = [call.args[0] for call in self.mock_socket_instance.write.call_args_list]
-    self.assertNotIn(b"hp 1 20\n", written)
-    self.assertNotIn(b"home\n", written)
-
-  async def test_initialize_raises_power_without_homing(self):
-    self.mock_socket_instance.readline.side_effect = [
-      b"0 OK\r\n",  # power_on_robot
-      b"0 OK\r\n",  # attach
-    ]
-    await self.backend.initialize()
-    self.mock_socket_instance.write.assert_any_call(b"hp 1 20\n")
-    self.mock_socket_instance.write.assert_any_call(b"attach 1\n")
-    written = [call.args[0] for call in self.mock_socket_instance.write.call_args_list]
-    self.assertNotIn(b"home\n", written)
-
-  async def test_disconnect_drops_power_and_releases_the_link(self):
-    self.mock_socket_instance.readline.side_effect = [
-      b"0 attach\r\n",  # detach
-      b"0 hp\r\n",  # power_off_robot
-      b"0 exit\r\n",  # exit
-    ]
-    await self.backend.disconnect()
-    self.mock_socket_instance.write.assert_any_call(b"attach 0\n")
-    self.mock_socket_instance.write.assert_any_call(b"hp 0\n")
-    self.mock_socket_instance.write.assert_any_call(b"exit\n")
-    self.mock_socket_instance.stop.assert_called_once()
-
-  async def test_setup_skips_only_the_home_when_asked(self):
-    self.mock_socket_instance.readline.side_effect = [
-      b"0 OK\r\n",  # set_mode
-      b"0 OK\r\n",  # power_on_robot
-      b"0 OK\r\n",  # attach
-    ]
-    await self.backend.setup(skip_home=True)
-    self.mock_socket_instance.write.assert_any_call(b"mode 0\n")
-    self.mock_socket_instance.write.assert_any_call(b"hp 1 20\n")
-    self.mock_socket_instance.write.assert_any_call(b"attach 1\n")
-    written = [call.args[0] for call in self.mock_socket_instance.write.call_args_list]
-    self.assertNotIn(b"home\n", written)
 
   async def test_set_speed(self):
     self.mock_socket_instance.readline.return_value = b"0 Speed 1 50.0\r\n"
