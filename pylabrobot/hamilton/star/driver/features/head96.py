@@ -94,8 +94,8 @@ class Head96Configuration(HeadConfiguration):
   stop_disc_type: Optional[StopDiscType] = None
   instrument_type: Optional[InstrumentType] = None
 
-  # Encoder resolutions of the 2013-or-later generation; a 2008-era head's differ, and nothing
-  # resolves them per generation, so they are left settable.
+  # Encoder resolutions of the 96 Head II and the TADM head. A first-generation high volume head
+  # is bored and geared differently, and `_apply_head_type` puts its own in place.
   dispensing_drive_uL_per_increment: float = 0.019340933  # type: ignore[assignment]
   squeezer_drive_mm_per_increment: float = 0.0002086672009  # type: ignore[assignment]
 
@@ -223,8 +223,8 @@ class Head96Configuration(HeadConfiguration):
 
   @property
   def dispensing_drive_acceleration_range(self) -> Tuple[float, float]:
-    """Dispensing-drive acceleration window (uL/s2); its max is the default 2013 firmware raised."""
-    max_inc = 900000 if self.firmware_year >= 2010 else 150000
+    """Dispensing-drive acceleration window (uL/s2); 2013 firmware raised the 411000 inc max."""
+    max_inc = 900000 if self.firmware_year >= 2010 else 411000
     return (
       self.dispensing_drive_increments_to_uL(5000),
       self.dispensing_drive_increments_to_uL(max_inc),
@@ -278,9 +278,9 @@ class Head96(Head):
   default_mix_position_from_liquid_surface: float = 2.0
   # Aspirate under cLLD: how far below the surface found the tips draw, in mm.
   default_aspirate_immersion_depth: float = 2.0
-  # Behind the properties of the same names, which check a value against its range when assigned.
-  _default_dispensing_drive_speed: float = 250.0
-  _default_dispensing_drive_acceleration: float = 17000.0
+  # Where `default_dispensing_drive_speed` and `default_dispensing_drive_acceleration` start.
+  _default_dispensing_drive_speed: Optional[float] = 250.0
+  _default_dispensing_drive_acceleration: Optional[float] = 17000.0
   # How far above a container's top a liquid search starts, in mm.
   search_start_clearance: float = 5.0
 
@@ -291,36 +291,6 @@ class Head96(Head):
       configuration: the head's device facts. Defaults to `Head96Configuration()`.
     """
     super().__init__(driver, configuration or Head96Configuration())
-    # Where the piston stands, in uL, as last read or moved; 0.0 at rest.
-    self.piston_position: float = 0.0
-
-  @property
-  def default_dispensing_drive_speed(self) -> float:
-    """In uL/s. Not read from the head, which answers with the speed its last command set."""
-    return self._default_dispensing_drive_speed
-
-  @default_dispensing_drive_speed.setter
-  def default_dispensing_drive_speed(self, speed: float) -> None:
-    low, high = self.configuration.dispensing_drive_speed_range
-    if not low <= speed <= high:
-      raise ValueError(
-        f"default_dispensing_drive_speed must be between {low} and {high}, is {speed}"
-      )
-    self._default_dispensing_drive_speed = speed
-
-  @property
-  def default_dispensing_drive_acceleration(self) -> float:
-    """In uL/s2. A head with firmware from before 2010 gets 2900.0 at setup."""
-    return self._default_dispensing_drive_acceleration
-
-  @default_dispensing_drive_acceleration.setter
-  def default_dispensing_drive_acceleration(self, acceleration: float) -> None:
-    low, high = self.configuration.dispensing_drive_acceleration_range
-    if not low <= acceleration <= high:
-      raise ValueError(
-        f"default_dispensing_drive_acceleration must be between {low} and {high}, is {acceleration}"
-      )
-    self._default_dispensing_drive_acceleration = acceleration
 
   # -- session / discovery -------------------------------------------------------------------------
 
@@ -339,10 +309,29 @@ class Head96(Head):
     c.z_drive_acceleration_mm_per_increment = c.z_drive_mm_per_increment * 1000
     c.drive_parameters = {"yv": 5, "yr": 3, "zv": 5, "zr": 3, "dv": 5, "dr": 4, "sv": 5, "sr": 3}
     c.z_acceleration_range_increments = (5, 100)
+    c.dispensing_drive_acceleration_increments_per_unit = 1000
+    c.dispensing_drive_current_limit_range = (0, 7)
+
+  def _apply_head_type(self) -> None:
+    """Put a first-generation high volume head's resolutions in place.
+
+    That head is bored and geared differently from the 96 Head II and the TADM head, which the
+    configuration's resolutions are for; the type the head reports decides. It also starts its
+    default dispensing acceleration from the one it documents, 150000 increments/s2.
+    """
+    c = self.configuration
+    if c.head_type != "High volume head":
+      return
+    c.dispensing_drive_uL_per_increment = 0.018509877
+    c.dispensing_drive_mm_per_increment = 0.0009815705
+    c.squeezer_drive_mm_per_increment = 0.000459073
+    self.default_dispensing_drive_acceleration = c.dispensing_drive_increments_to_uL(150000)
 
   async def discover(self):
-    """Read what head this is, then take its squeezer defaults from the head."""
+    """Read what head this is, put its resolutions in place, then take its squeezer defaults."""
     await super().discover()
+    # Before the squeezer reads below, which convert with the resolutions the head type decides.
+    self._apply_head_type()
     c = self.configuration
     c.squeezer_drive_speed_firmware_reported = await self._reported_drive_parameter("sv")
     c.squeezer_drive_acceleration_firmware_reported = await self._reported_drive_parameter("sr")
@@ -364,88 +353,6 @@ class Head96(Head):
   # ----------------------------------------
   # Movement
   # ----------------------------------------
-
-  # -- dispensing drive position -------------------------------------------------------------------
-
-  async def dispensing_drive_request_uL_position(self) -> float:
-    """Read where the head's dispensing drive stands, in uL, and record it. `H0 RD`.
-
-    Returns:
-      The piston's position in uL, 0.0 at rest; air and liquid alike. Kept on `piston_position`.
-    """
-    resp = await self._driver.send_command(
-      module=self.configuration.module, command="RD", fmt="rd##### (n)"
-    )
-    increments = cast(List[int], resp["rd"])[1]  # [0] = firmware counter, [1] = hardware counter
-    self.piston_position = self.configuration.dispensing_drive_increments_to_uL(increments)
-    return self.piston_position
-
-  async def _record_piston_position(self) -> None:
-    """Read where the piston came to rest, and record it; a failed read is logged and swallowed."""
-    try:
-      await self.dispensing_drive_request_uL_position()
-    except Exception:
-      logger.warning("could not read where the 96-head's piston stopped; its model is stale")
-
-  async def move_dispensing_drive_to_position(
-    self,
-    volume: float,
-    speed: Optional[float] = None,
-    stop_speed: float = 0.0,
-    acceleration: Optional[float] = None,
-    current_limit: int = 15,
-    read_timeout: int = 30,
-  ):
-    """Move the dispensing drive to an absolute piston position, and record it on `piston_position`.
-
-    Args:
-      volume: where to send the piston, as the volume it would hold, in uL.
-      speed: how fast, in uL/s. Defaults to `default_dispensing_drive_speed`.
-      stop_speed: what to slow to at the end, in uL/s.
-      acceleration: how hard, in uL/s2. Defaults to `default_dispensing_drive_acceleration`.
-      current_limit: the motor current limit.
-      read_timeout: how long to wait for the device to answer, in seconds.
-
-    Raises:
-      ValueError: If an argument is outside what the drive accepts.
-    """
-    c = self.configuration
-    if speed is None:
-      speed = self.default_dispensing_drive_speed
-    if acceleration is None:
-      acceleration = self.default_dispensing_drive_acceleration
-
-    for value, (low, high), name in (
-      (volume, c.dispensing_drive_range, "volume"),
-      (speed, c.dispensing_drive_speed_range, "speed"),
-      (stop_speed, (0.0, c.dispensing_drive_speed_range[1]), "stop_speed"),
-      (acceleration, c.dispensing_drive_acceleration_range, "acceleration"),
-    ):
-      if not low <= value <= high:
-        raise ValueError(f"{name} must be between {low} and {high}, is {value}")
-    low_limit, high_limit = c.current_limit_range
-    if not low_limit <= current_limit <= high_limit:
-      raise ValueError(
-        f"current_limit must be between {low_limit} and {high_limit}, is {current_limit}"
-      )
-
-    increments = c.dispensing_drive_uL_to_increments(volume)
-    try:
-      resp = await self._driver.send_command(
-        module=c.module,
-        command="DQ",
-        dq=f"{increments:05}",
-        dv=f"{c.dispensing_drive_uL_to_increments(speed):05}",
-        du=f"{c.dispensing_drive_uL_to_increments(stop_speed):05}",
-        dr=f"{c.dispensing_drive_uL_to_increments(acceleration):06}",
-        dw=f"{current_limit:02}",
-        read_timeout=read_timeout,
-      )
-    except BaseException:
-      await self._record_piston_position()
-      raise
-    self.piston_position = c.dispensing_drive_increments_to_uL(increments)
-    return resp
 
   def _position_centred_in(self, resource: Resource) -> Coordinate:
     """Where head channel A1 lands with the channel array centred over a resource, in deck mm.
