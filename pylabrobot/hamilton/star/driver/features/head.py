@@ -1068,7 +1068,13 @@ class Head:
     y: float,
     *,
     minimum_traverse_height_start: Optional[float] = None,
+    x_acceleration_level: Optional[int] = None,
+    x_current_limit: int = 7,
+    y_speed: Optional[float] = None,
+    y_acceleration: Optional[float] = None,
+    y_current_limit: Optional[int] = None,
     z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
   ) -> None:
     """Move head channel A1 over (x, y): the head up first, then X and Y together.
 
@@ -1080,29 +1086,51 @@ class Head:
       y: where head channel A1 goes, in deck mm.
       minimum_traverse_height_start: the height to raise the head's lowest point to first, in mm:
         the tip bottom with tips on, the stop disc without. The head's safe Z when None.
+      x_acceleration_level: the X acceleration curve, 1 to 4. 2 at a Y of 200 mm or less, where the
+        head stands furthest out from the X drive, else 3, when None.
+      x_current_limit: the X motor current limit, 1 to 7.
+      y_speed: in mm/s. `configuration.y_drive_speed_default` when None.
+      y_acceleration: in mm/s2. `configuration.y_drive_acceleration_default` when None.
+      y_current_limit: `configuration.y_drive_current_limit_default` when None.
       z_speed: how fast the head goes up, in mm/s. The drive's default when None.
+      z_acceleration: in mm/s2. The drive's default when None.
 
     Raises:
       RuntimeError: If the iSWAP is not parked.
       ValueError: If X or Y is out of reach, or the head cannot put its lowest point at
         `minimum_traverse_height_start`; before anything moves.
     """
+    c = self.configuration
+    y_speed = c.y_drive_speed_default if y_speed is None else y_speed
+    y_acceleration = c.y_drive_acceleration_default if y_acceleration is None else y_acceleration
+    y_current_limit = (
+      c.y_drive_current_limit_default if y_current_limit is None else y_current_limit
+    )
+    if x_acceleration_level is None:
+      x_acceleration_level = 2 if y <= 200.0 else 3
     await self._require_iswap_parked()
     self._check_reachable("x", x)
-    self._check_reachable("y", y)
+    self._check_move("y", y, y_speed, y_acceleration, y_current_limit)
     if minimum_traverse_height_start is None:
-      await self.move_to_safe_z(speed=z_speed)
+      await self.move_to_safe_z(speed=z_speed, acceleration=z_acceleration)
     elif (await self.request_location()).z < minimum_traverse_height_start:
       if await self.request_tip_presence():
-        await self.move_tool_bottom_to_z_position(minimum_traverse_height_start, speed=z_speed)
+        await self.move_tool_bottom_to_z_position(
+          minimum_traverse_height_start, speed=z_speed, acceleration=z_acceleration
+        )
       else:
-        await self.move_stop_disc_to_z_position(minimum_traverse_height_start, speed=z_speed)
+        await self.move_stop_disc_to_z_position(
+          minimum_traverse_height_start, speed=z_speed, acceleration=z_acceleration
+        )
     if self.arm is not None and self.arm.pipettes is not None:
       await self.arm.pipettes.move_to_safe_z()
-    # Gentler X acceleration at low Y, where the head stands furthest out from the X drive.
     await asyncio.gather(
-      self.move_to_x_position(x, acceleration_level=2 if y <= 200.0 else 3),
-      self.move_to_y_position(y),
+      self.move_to_x_position(
+        x, acceleration_level=x_acceleration_level, current_limit=x_current_limit
+      ),
+      self.move_to_y_position(
+        y, speed=y_speed, acceleration=y_acceleration, current_limit=y_current_limit
+      ),
     )
 
   # -- z position ----------------------------------------------------------------------------------
