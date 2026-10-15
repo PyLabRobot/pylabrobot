@@ -1062,20 +1062,38 @@ class Head:
         "Call `await star.iswap.park()` first."
       )
 
-  async def move_to_xy_position(self, x: float, y: float) -> None:
-    """Move head channel A1 over (x, y), X and Y together, at the height the head is at.
+  async def move_to_xy_position(
+    self,
+    x: float,
+    y: float,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    z_speed: Optional[float] = None,
+  ) -> None:
+    """Move head channel A1 over (x, y): the head up first, then X and Y together.
 
-    The caller moves the head to the height it travels at first. The arm's pipetting channels go
-    up to their safe Z before X and Y move, since the head's own moves leave them where they are.
+    The head's lowest point is raised to `minimum_traverse_height_start` if below it, and the arm's
+    pipetting channels go up to their safe Z, since the head's own moves leave them where they are.
 
     Args:
       x: where head channel A1 goes, in deck mm.
       y: where head channel A1 goes, in deck mm.
+      minimum_traverse_height_start: the height to raise the head's lowest point to first, in mm:
+        the tip bottom with tips on, the stop disc without. The head's safe Z when None.
+      z_speed: how fast the head goes up, in mm/s. The drive's default when None.
 
     Raises:
       RuntimeError: If the iSWAP is not parked.
+      ValueError: If the head cannot put its lowest point at `minimum_traverse_height_start`.
     """
     await self._require_iswap_parked()
+    if minimum_traverse_height_start is None:
+      await self.move_to_safe_z(speed=z_speed)
+    elif (await self.request_location()).z < minimum_traverse_height_start:
+      if await self.request_tip_presence():
+        await self.move_tool_bottom_to_z_position(minimum_traverse_height_start, speed=z_speed)
+      else:
+        await self.move_stop_disc_to_z_position(minimum_traverse_height_start, speed=z_speed)
     if self.arm is not None and self.arm.pipettes is not None:
       await self.arm.pipettes.move_to_safe_z()
     # Gentler X acceleration at low Y, where the head stands furthest out from the X drive.

@@ -1185,7 +1185,7 @@ class Head96(Head):
       lld_sensor: which cLLD sensors trigger.
       search_speed: in mm/s. `default_clld_search_speed` when None.
       n_replicates: how many searches; the heights are averaged.
-      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      minimum_traverse_height_start: tip bottom raised to before the move, in mm. Safe Z when None.
       minimum_traverse_height_end: where the tips are left, in mm. Safe Z when None.
 
     Returns:
@@ -1201,11 +1201,9 @@ class Head96(Head):
     anchor, a1, bottom, top = self._get_target(resource, offset)
     if not await self.request_tip_presence():
       raise RuntimeError("the head reports no tips; pick up tips first")
-    if minimum_traverse_height_start is None:
-      await self.move_to_safe_z()
-    else:
-      await self.move_tool_bottom_to_z_position(minimum_traverse_height_start)
-    await self.move_to_xy_position(a1.x, a1.y)
+    await self.move_to_xy_position(
+      a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start
+    )
     try:
       rounds = [
         await self._search_surface(bottom, top, lld_sensor, search_speed)
@@ -2222,11 +2220,9 @@ class Head96(Head):
       await self._require_iswap_parked()
     try:
       if searched:
-        if minimum_traverse_height_start is None:
-          await self.move_to_safe_z()
-        else:
-          await self.move_tool_bottom_to_z_position(minimum_traverse_height_start)
-        await self.move_to_xy_position(a1.x, a1.y)
+        await self.move_to_xy_position(
+          a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start
+        )
         if air_beforehand:
           await self._aspirate_in_place(air_beforehand, flow_rate, minimum_height=bottom)
           standing = round(standing + air_beforehand, 1)
@@ -2819,11 +2815,9 @@ class Head96(Head):
       await self._require_iswap_parked()
     try:
       if searched:
-        if minimum_traverse_height_start is None:
-          await self.move_to_safe_z()
-        else:
-          await self.move_tool_bottom_to_z_position(minimum_traverse_height_start)
-        await self.move_to_xy_position(a1.x, a1.y)
+        await self.move_to_xy_position(
+          a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start
+        )
         found = await self._search_surface(bottom, top, lld_sensor, search_speed, approach_speed)
         if found is None:
           raise RuntimeError(f"no liquid found in {anchor.name} down to its cavity bottom")
@@ -2929,7 +2923,7 @@ class Head96(Head):
       resource: a plate (well A1, or its one well), a container, or wells (the first).
       mix: volume, repetitions, flow rate and surface following distance.
       offset: added to where head channel A1 goes, in mm. Its z is ignored under CAPACITIVE.
-      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
+      minimum_traverse_height_start: tip bottom raised to before the move, in mm. Safe Z when None.
       lld_mode: OFF, or CAPACITIVE to find the surface first; the head has no other. OFF when
         None; CAPACITIVE under `mix.auto_surface_following`, which OFF refuses.
       lld_sensor: which cLLD sensors trigger, under CAPACITIVE.
@@ -2989,11 +2983,9 @@ class Head96(Head):
     following = 0.0
     if not await self.request_tip_presence():
       raise RuntimeError("the head reports no tips; pick up tips first")
-    if minimum_traverse_height_start is None:
-      await self.move_to_safe_z(speed=descent_speed)
-    else:
-      await self.move_tool_bottom_to_z_position(minimum_traverse_height_start, speed=descent_speed)
-    await self.move_to_xy_position(a1.x, a1.y)
+    await self.move_to_xy_position(
+      a1.x, a1.y, minimum_traverse_height_start=minimum_traverse_height_start, z_speed=descent_speed
+    )
 
     async def strokes() -> None:
       for _ in range(mix.repetitions):
