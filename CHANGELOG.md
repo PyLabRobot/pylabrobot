@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Azenta XPeel (`pylabrobot.azenta.XPeel` and the legacy `XPeelBackend`): `request_status()` / `get_status()` read the three error codes from a ready line that carries its error description (`*ready:00,00,00 [No error]`), and `peel()` sends `adhere_time` as the peeler's code 1-4 (`*xpeel:41` for 2.5 s), which it accepts.
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).
 - `HamiltonTCPClient` no longer retransmits a command after a failed read. A read timeout on a slow motion command previously re-sent it, which could execute the motion twice (#1195).
 - `HamiltonTCPClient.setup()` now resets all per-session state (client id, sequence numbers, instrument addresses, object registry) rather than carrying it into the new session, and refuses to run on an already-connected client instead of leaking the socket (#1195).

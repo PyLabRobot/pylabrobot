@@ -66,6 +66,23 @@ class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.device.channels[0].run_continuously(speed=101)
 
+  async def test_run_continuously_rejects_out_of_range_speed_before_writing(self):
+    """Reject invalid speeds without sending a command to the pump."""
+    for speed in (-0.1, -0.9, 100.1, 100.9, float("nan"), float("inf"), -float("inf")):
+      with self.subTest(speed=speed):
+        self.device.modbus.write_register.reset_mock()
+        with self.assertRaises(ValueError):
+          await self.device.channels[0].run_continuously(speed=speed)
+        self.device.modbus.write_register.assert_not_awaited()
+
+  async def test_run_continuously_valid_speed_conversion(self):
+    """Preserve integer conversion for valid fractional speeds and boundaries."""
+    for speed, expected in ((0.0, 0), (0.9, 0), (50.9, 50), (100.0, 100)):
+      with self.subTest(speed=speed):
+        self.device.modbus.write_register.reset_mock()
+        await self.device.channels[0].run_continuously(speed=speed)
+        self.device.modbus.write_register.assert_awaited_once_with(100, expected, unit=1)
+
   async def test_run_revolutions(self):
     with self.assertRaises(NotImplementedError):
       await self.device.channels[0].run_revolutions(num_revolutions=1.0)

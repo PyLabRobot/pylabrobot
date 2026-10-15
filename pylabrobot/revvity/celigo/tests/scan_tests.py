@@ -1,11 +1,13 @@
 """Tests for Celigo scan specifications, planning, and execution."""
 
+import asyncio
 import inspect
 import itertools
 import math
 import unittest
 from datetime import timedelta
 from types import SimpleNamespace
+from typing import List, Optional
 from unittest.mock import AsyncMock, patch
 
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
@@ -399,8 +401,8 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
       )
 
     with (
-      patch.object(self.celigo, "_move_to_scan_block", move_to_scan_block),
-      patch.object(self.celigo, "_acquire_scan_position", acquire_scan_position),
+      patch.object(self.celigo, "move_to_scan_block", move_to_scan_block),
+      patch.object(self.celigo, "acquire_scan_position", acquire_scan_position),
     ):
       result = await self.celigo.execute(plan)
 
@@ -436,7 +438,7 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
     self.celigo.config.magnification = 5
 
     with (
-      patch.object(self.celigo, "_move_to_scan_block", AsyncMock()) as move_to_scan_block,
+      patch.object(self.celigo, "move_to_scan_block", AsyncMock()) as move_to_scan_block,
       self.assertRaisesRegex(ValueError, "configuration does not match"),
     ):
       await self.celigo.execute(plan)
@@ -456,20 +458,21 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
 
     move_to_well.assert_not_awaited()
 
-  async def test_internal_execution_reports_frames_and_accepts_a_tuned_focus_seed(self):
+  async def test_execute_reports_frames_and_accepts_a_tuned_focus_seed(self):
     plan = self.celigo.plan(
       ScanSpec.points(
         [(25, 20)],
         captures=[Capture(channel="brightfield"), Capture(channel="green")],
       )
     )
-    z_targets = []
-    reported = []
+    z_targets: List[Optional[float]] = []
+    reported: List[FrameResult] = []
 
     async def move_to_scan_block(block):
       return block.stage_x_mm, block.stage_y_mm
 
     async def acquire_scan_position(**kwargs):
+      self.assertEqual(len(reported), len(z_targets))
       z_targets.append(kwargs["z_mm"])
       return SimpleNamespace(
         frame=_frame(),
@@ -480,14 +483,14 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
         focus=None,
       )
 
-    async def on_frame(frame):
+    async def on_frame(frame: FrameResult) -> None:
       reported.append(frame)
 
     with (
-      patch.object(self.celigo, "_move_to_scan_block", move_to_scan_block),
-      patch.object(self.celigo, "_acquire_scan_position", acquire_scan_position),
+      patch.object(self.celigo, "move_to_scan_block", move_to_scan_block),
+      patch.object(self.celigo, "acquire_scan_position", acquire_scan_position),
     ):
-      result = await self.celigo._execute_scan_plan(
+      result = await self.celigo.execute(
         plan,
         on_frame=on_frame,
         initial_brightfield_z_mm=2.5,
@@ -495,6 +498,67 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(z_targets, [2.5, 2.7])
     self.assertEqual(reported, list(result.frames))
+
+  async def test_execute_stops_when_frame_callback_fails_or_is_cancelled(self):
+    plan = self.celigo.plan(ScanSpec.points([(5, 5), (15, 15)], channel="brightfield"))
+    acquisition = SimpleNamespace(
+      frame=_frame(),
+      x_mm=1.0,
+      y_mm=2.0,
+      z_mm=2.5,
+      galvo_hardware_voltages=(0.1, 0.2),
+      focus=None,
+    )
+
+    for error in (RuntimeError("consumer failed"), asyncio.CancelledError()):
+      with (
+        self.subTest(error=type(error).__name__),
+        patch.object(
+          self.celigo, "move_to_scan_block", AsyncMock(return_value=(1.0, 2.0))
+        ) as move_to_scan_block,
+        patch.object(
+          self.celigo, "acquire_scan_position", AsyncMock(return_value=acquisition)
+        ) as acquire_scan_position,
+      ):
+        on_frame = AsyncMock(side_effect=error)
+        with self.assertRaises(type(error)) as raised:
+          await self.celigo.execute(plan, on_frame=on_frame)
+
+        self.assertIs(raised.exception, error)
+        move_to_scan_block.assert_awaited_once_with(plan.blocks[0])
+        acquire_scan_position.assert_awaited_once()
+        on_frame.assert_awaited_once()
+
+  async def test_acquire_scan_position_extinguishes_illumination_on_every_outcome(self):
+    plan = self.celigo.plan(ScanSpec.points([(5, 5)], channel="brightfield"))
+    acquisition = object()
+
+    for error in (None, RuntimeError("capture failed"), asyncio.CancelledError()):
+      with (
+        self.subTest(error=type(error).__name__),
+        patch.object(
+          self.celigo, "_acquire_field", AsyncMock(return_value=acquisition, side_effect=error)
+        ),
+        patch.object(self.celigo, "turn_off_illumination", AsyncMock()) as turn_off_illumination,
+      ):
+        capture = self.celigo.acquire_scan_position(
+          position=plan.frames[0].position,
+          label="preview",
+          channel="brightfield",
+          exposure_ms=1.0,
+          gain=1.0,
+          autofocus=None,
+          z_mm=2.5,
+          settled_stage_position_mm=(1.0, 2.0),
+        )
+        if error is None:
+          self.assertIs(await capture, acquisition)
+        else:
+          with self.assertRaises(type(error)) as raised:
+            await capture
+          self.assertIs(raised.exception, error)
+
+        turn_off_illumination.assert_awaited_once()
 
   async def test_scan_is_plan_followed_by_execute(self):
     spec = ScanSpec.points([(5, 5)], channel="brightfield")
