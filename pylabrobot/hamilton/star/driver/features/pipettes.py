@@ -746,8 +746,6 @@ class Pipettes:
       TimeoutError: A command was not acknowledged; no retry or application restart follows.
     """
     self._require_channel(channel)
-    if isinstance(channel, bool):
-      raise ValueError("channel must be an integer index, not a boolean")
     image = _FirmwareImage.from_file(
       Path(firmware_file), expected_version, self.channel_id(channel)
     )

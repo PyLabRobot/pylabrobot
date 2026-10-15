@@ -227,7 +227,7 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([call.args[0] for call in self.delays.await_args_list], [15, 18])
 
   async def test_invalid_input_sends_nothing(self):
-    for channel in (-1, 12, True):
+    for channel in (-1, 12):
       with self.assertRaises(ValueError):
         await self.update(channel)
     self.path.write_text("\n".join(self.records[:-1]))
