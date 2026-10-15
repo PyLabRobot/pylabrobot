@@ -447,21 +447,6 @@ class Head96(Head):
     self.piston_position = c.dispensing_drive_increments_to_uL(increments)
     return resp
 
-  # -- x and y together ----------------------------------------------------------------------------
-
-  async def _require_iswap_parked(self) -> None:
-    """Raise unless the iSWAP on this head's arm is parked; nothing to check without one.
-
-    Raises:
-      RuntimeError: If it is not parked.
-    """
-    iswap = None if self.arm is None else self.arm.iswap
-    if iswap is not None and not await iswap.request_is_parked():
-      raise RuntimeError(
-        "the iSWAP is not parked, and the head moves where it stands. "
-        "Call `await star.iswap.park()` first."
-      )
-
   def _position_centred_in(self, resource: Resource) -> Coordinate:
     """Where head channel A1 lands with the channel array centred over a resource, in deck mm.
 
@@ -527,38 +512,6 @@ class Head96(Head):
     a1 += offset or Coordinate.zero()
     top = anchor.get_location_wrt(deck, x="c", y="c", z="t").z
     return anchor, a1, bottom, top
-
-  async def _move_over(
-    self,
-    a1: Coordinate,
-    minimum_traverse_height_start: Optional[float],
-    descent_speed: Optional[float],
-  ) -> None:
-    """Bring the head, with tips, over a position: the channels up, the head up, then X and Y.
-
-    Args:
-      a1: where head channel A1 goes, in deck mm; its Z is not used.
-      minimum_traverse_height_start: tip bottom height before the XY move, in mm. Safe Z when None.
-      descent_speed: to that height, in mm/s.
-
-    Raises:
-      RuntimeError: If the head carries no tips or the iSWAP is not parked.
-    """
-    await self._require_iswap_parked()
-    if not await self.request_tip_presence():
-      raise RuntimeError("the head reports no tips; pick up tips first")
-    # The head's own moves leave the channels where they are, so they go up first.
-    if self.arm is not None and self.arm.pipettes is not None:
-      await self.arm.pipettes.move_to_safe_z()
-    if minimum_traverse_height_start is None:
-      await self.move_to_safe_z()
-    else:
-      await self.move_tool_bottom_to_z_position(minimum_traverse_height_start, speed=descent_speed)
-    # Gentler X acceleration at low Y, where the head stands furthest out from the X drive.
-    await asyncio.gather(
-      self.move_to_x_position(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3),
-      self.move_to_y_position(a1.y),
-    )
 
   # -- head initialization -------------------------------------------------------------------------
 
@@ -1246,7 +1199,13 @@ class Head96(Head):
     if n_replicates < 1:
       raise ValueError(f"n_replicates must be at least 1, is {n_replicates}")
     anchor, a1, bottom, top = self._get_target(resource, offset)
-    await self._move_over(a1, minimum_traverse_height_start, None)
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips; pick up tips first")
+    if minimum_traverse_height_start is None:
+      await self.move_to_safe_z()
+    else:
+      await self.move_tool_bottom_to_z_position(minimum_traverse_height_start)
+    await self.move_to_xy_position(a1.x, a1.y)
     try:
       rounds = [
         await self._search_surface(bottom, top, lld_sensor, search_speed)
@@ -2263,7 +2222,11 @@ class Head96(Head):
       await self._require_iswap_parked()
     try:
       if searched:
-        await self._move_over(a1, minimum_traverse_height_start, None)
+        if minimum_traverse_height_start is None:
+          await self.move_to_safe_z()
+        else:
+          await self.move_tool_bottom_to_z_position(minimum_traverse_height_start)
+        await self.move_to_xy_position(a1.x, a1.y)
         if air_beforehand:
           await self._aspirate_in_place(air_beforehand, flow_rate, minimum_height=bottom)
           standing = round(standing + air_beforehand, 1)
@@ -2856,7 +2819,11 @@ class Head96(Head):
       await self._require_iswap_parked()
     try:
       if searched:
-        await self._move_over(a1, minimum_traverse_height_start, None)
+        if minimum_traverse_height_start is None:
+          await self.move_to_safe_z()
+        else:
+          await self.move_tool_bottom_to_z_position(minimum_traverse_height_start)
+        await self.move_to_xy_position(a1.x, a1.y)
         found = await self._search_surface(bottom, top, lld_sensor, search_speed, approach_speed)
         if found is None:
           raise RuntimeError(f"no liquid found in {anchor.name} down to its cavity bottom")
@@ -3020,7 +2987,13 @@ class Head96(Head):
       return max(-self._get_surface_change(anchor, max(height, 0.0), -per_draw), 0.0)
 
     following = 0.0
-    await self._move_over(a1, minimum_traverse_height_start, descent_speed)
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips; pick up tips first")
+    if minimum_traverse_height_start is None:
+      await self.move_to_safe_z(speed=descent_speed)
+    else:
+      await self.move_tool_bottom_to_z_position(minimum_traverse_height_start, speed=descent_speed)
+    await self.move_to_xy_position(a1.x, a1.y)
 
     async def strokes() -> None:
       for _ in range(mix.repetitions):

@@ -671,12 +671,26 @@ class TestHead96InSimulation(unittest.IsolatedAsyncioTestCase):
   async def test_rh_is_the_stop_disc_zi_below_where_the_head_stops(self):
     self.plate.get_item("A1").tracker.set_volume(150.0)
     # The search does not move in X or Y: the head goes over the plate first.
-    await self.head._move_over(self.head._get_target(self.plate, None)[1], None, None)
+    a1 = self.head._get_target(self.plate, None)[1]
+    await self.head.move_to_xy_position(a1.x, a1.y)
     await self.head.probe_z_using_clld(post_detection_distance=4.0)
     self.assertAlmostEqual(
       await self.head.request_z_position(),
       await self.head.request_last_lld_z_position() + 4.0,
       delta=0.01,
+    )
+
+  async def test_without_tips_probing_and_mixing_are_refused_before_moving(self):
+    await self.head.discard_tips()
+    x, y = await self.head.request_x_position(), await self.head.request_y_position()
+    for command in (
+      self.head.probe_liquid_height(self.plate),
+      self.head.mix(self.plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0)),
+    ):
+      with self.assertRaisesRegex(RuntimeError, "pick up tips first"):
+        await command
+    self.assertEqual(
+      (await self.head.request_x_position(), await self.head.request_y_position()), (x, y)
     )
 
   async def test_an_empty_well_reads_zero(self):

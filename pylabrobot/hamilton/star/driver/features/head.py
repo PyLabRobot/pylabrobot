@@ -18,6 +18,7 @@ The line is roughly how much of a command has to be restated to share it. One or
 initialization command needs, is a constant. Thirty is a different command.
 """
 
+import asyncio
 import datetime
 import logging
 from dataclasses import dataclass
@@ -1045,6 +1046,43 @@ class Head:
       await self._record_where_it_stopped("y")
       await self._restore_drive_parameter("yv", speed, was_speed)
       await self._restore_drive_parameter("yr", acceleration, was_acceleration)
+
+  # -- x and y together ----------------------------------------------------------------------------
+
+  async def _require_iswap_parked(self) -> None:
+    """Raise unless the iSWAP on this head's arm is parked; nothing to check without one.
+
+    Raises:
+      RuntimeError: If it is not parked.
+    """
+    iswap = None if self.arm is None else self.arm.iswap
+    if iswap is not None and not await iswap.request_is_parked():
+      raise RuntimeError(
+        "the iSWAP is not parked, and the head moves where it stands. "
+        "Call `await star.iswap.park()` first."
+      )
+
+  async def move_to_xy_position(self, x: float, y: float) -> None:
+    """Move head channel A1 over (x, y), X and Y together, at the height the head is at.
+
+    The caller moves the head to the height it travels at first. The arm's pipetting channels go
+    up to their safe Z before X and Y move, since the head's own moves leave them where they are.
+
+    Args:
+      x: where head channel A1 goes, in deck mm.
+      y: where head channel A1 goes, in deck mm.
+
+    Raises:
+      RuntimeError: If the iSWAP is not parked.
+    """
+    await self._require_iswap_parked()
+    if self.arm is not None and self.arm.pipettes is not None:
+      await self.arm.pipettes.move_to_safe_z()
+    # Gentler X acceleration at low Y, where the head stands furthest out from the X drive.
+    await asyncio.gather(
+      self.move_to_x_position(x, acceleration_level=1 if y <= 200.0 else 3),
+      self.move_to_y_position(y),
+    )
 
   # -- z position ----------------------------------------------------------------------------------
 
