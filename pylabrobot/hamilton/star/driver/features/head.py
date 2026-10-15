@@ -125,6 +125,10 @@ class HeadConfiguration:
   y_drive_acceleration_mm_per_increment: float = 0.015625
   z_drive_acceleration_mm_per_increment: float = 0.005
   dispensing_drive_mm_per_increment: float = 0.001025641026
+  # How many increments one unit of a `DQ` speed or acceleration field counts; a drive that counts
+  # in tens or thousands of increments says so here.
+  dispensing_drive_speed_increments_per_unit: int = 1
+  dispensing_drive_acceleration_increments_per_unit: int = 1
 
   # The Z windows both heads share. The Y ones differ, so each head states its own.
   z_speed_range_increments: Tuple[int, int] = (50, 20000)
@@ -179,6 +183,7 @@ class HeadConfiguration:
   y_drive_current_limit_default: int = 15
   z_drive_current_limit_default: int = 15
   current_limit_range: Tuple[int, int] = (0, 15)
+  dispensing_drive_current_limit_range: Tuple[int, int] = (0, 15)
 
   # What each drive starts from, in the increments it is written in. A head that documents
   # something else states its own.
@@ -225,6 +230,21 @@ class HeadConfiguration:
   def squeezer_drive_mm_per_increment(self) -> float:
     """How far one increment of the squeezer drive travels, in mm."""
     raise NotImplementedError("a head states how far one squeezer increment travels")
+
+  @property
+  def dispensing_drive_range(self) -> Tuple[float, float]:
+    """Dispensing-drive position window, as the volume the piston holds (uL)."""
+    raise NotImplementedError("a head states the positions its dispensing drive accepts")
+
+  @property
+  def dispensing_drive_speed_range(self) -> Tuple[float, float]:
+    """Dispensing-drive speed window (uL/s)."""
+    raise NotImplementedError("a head states the speeds its dispensing drive accepts")
+
+  @property
+  def dispensing_drive_acceleration_range(self) -> Tuple[float, float]:
+    """Dispensing-drive acceleration window (uL/s2)."""
+    raise NotImplementedError("a head states the accelerations its dispensing drive accepts")
 
   # -- conversions: the wire counts in increments, the driver speaks mm and uL -------------------
 
@@ -275,6 +295,21 @@ class HeadConfiguration:
   def dispensing_drive_mm_to_increments(self, mm: float) -> int:
     """A dispensing-drive position in increments, from how far the piston should travel."""
     return round(mm / self.dispensing_drive_mm_per_increment)
+
+  def dispensing_drive_speed_uL_to_increments(self, uL: float) -> int:
+    """A dispensing-drive speed in the units the drive counts it in, from uL/s."""
+    per_unit = (
+      self.dispensing_drive_uL_per_increment * self.dispensing_drive_speed_increments_per_unit
+    )
+    return round(uL / per_unit)
+
+  def dispensing_drive_acceleration_uL_to_increments(self, uL: float) -> int:
+    """A dispensing-drive acceleration in the units the drive counts it in, from uL/s2."""
+    per_unit = (
+      self.dispensing_drive_uL_per_increment
+      * self.dispensing_drive_acceleration_increments_per_unit
+    )
+    return round(uL / per_unit)
 
   def squeezer_drive_increments_to_mm(self, increments: int) -> float:
     """A squeezer-drive position in mm, from increments."""
@@ -384,6 +419,11 @@ class Head:
   level and are not the same between the two, so each head carries its own.
   """
 
+  # Behind `default_dispensing_drive_speed` and `default_dispensing_drive_acceleration`, in uL. Each
+  # head starts them; None until it has.
+  _default_dispensing_drive_speed: Optional[float] = None
+  _default_dispensing_drive_acceleration: Optional[float] = None
+
   configuration: HeadConfiguration
   """The head's device facts. Each head narrows this to its own, so a subclass reads and writes
   what only it has without anything having to be cast."""
@@ -399,6 +439,8 @@ class Head:
     # arm it rides; moves keep it in step. Without a deck it stays None and nothing is modelled.
     self.resource: Optional[NChannelPipette] = None
     self.configuration = configuration
+    # Where the piston stands, in uL, as last read or moved; 0.0 at rest.
+    self.piston_position: float = 0.0
 
   # -- the raw register access these share ---------------------------------------------------------
 
@@ -1195,6 +1237,141 @@ class Head:
     return await self.request_z_position()
 
   # -- dispensing drive position -------------------------------------------------------------------
+
+  @property
+  def default_dispensing_drive_speed(self) -> float:
+    """In uL/s: how fast the dispensing drive moves when a move names no speed.
+
+    Not read from the head, which answers with the speed its last command set. Checked against
+    `configuration.dispensing_drive_speed_range` when assigned.
+
+    Raises:
+      RuntimeError: If the head has not set one; the 384-head sets it at setup, from its type.
+    """
+    if self._default_dispensing_drive_speed is None:
+      raise RuntimeError("the head's default dispensing speed is not set; call `star.setup()`")
+    return self._default_dispensing_drive_speed
+
+  @default_dispensing_drive_speed.setter
+  def default_dispensing_drive_speed(self, speed: float) -> None:
+    low, high = self.configuration.dispensing_drive_speed_range
+    if not low <= speed <= high:
+      raise ValueError(
+        f"default_dispensing_drive_speed must be between {low} and {high}, is {speed}"
+      )
+    self._default_dispensing_drive_speed = speed
+
+  @property
+  def default_dispensing_drive_acceleration(self) -> float:
+    """In uL/s2: how hard the dispensing drive accelerates when a move names no acceleration.
+
+    Checked against `configuration.dispensing_drive_acceleration_range` when assigned.
+
+    Raises:
+      RuntimeError: If the head has not set one; the 384-head sets it at setup, from its type.
+    """
+    if self._default_dispensing_drive_acceleration is None:
+      raise RuntimeError(
+        "the head's default dispensing acceleration is not set; call `star.setup()`"
+      )
+    return self._default_dispensing_drive_acceleration
+
+  @default_dispensing_drive_acceleration.setter
+  def default_dispensing_drive_acceleration(self, acceleration: float) -> None:
+    low, high = self.configuration.dispensing_drive_acceleration_range
+    if not low <= acceleration <= high:
+      raise ValueError(
+        f"default_dispensing_drive_acceleration must be between {low} and {high}, is {acceleration}"
+      )
+    self._default_dispensing_drive_acceleration = acceleration
+
+  async def dispensing_drive_request_uL_position(self) -> float:
+    """Read where the head's dispensing drive stands, in uL, and record it. `RD`.
+
+    Returns:
+      The piston's position in uL, 0.0 at rest; air and liquid alike. Kept on `piston_position`.
+    """
+    resp = await self._driver.send_command(
+      module=self.configuration.module, command="RD", fmt="rd##### (n)"
+    )
+    increments = cast(List[int], resp["rd"])[1]  # [0] = firmware counter, [1] = hardware counter
+    self.piston_position = self.configuration.dispensing_drive_increments_to_uL(increments)
+    return self.piston_position
+
+  async def _record_piston_position(self) -> None:
+    """Read where the piston came to rest, and record it; a failed read is logged and swallowed."""
+    try:
+      await self.dispensing_drive_request_uL_position()
+    except Exception:
+      logger.warning("could not read where the head's piston stopped; its model is stale")
+
+  async def move_dispensing_drive_to_position(
+    self,
+    volume: float,
+    speed: Optional[float] = None,
+    stop_speed: float = 0.0,
+    acceleration: Optional[float] = None,
+    current_limit: int = 15,
+    read_timeout: int = 30,
+  ):
+    """Move the dispensing drive to an absolute piston position, and record it. `DQ`.
+
+    Where it was sent is kept on `piston_position`; after a failed move, it is read back.
+
+    Args:
+      volume: where to send the piston, as the volume it would hold, in uL.
+      speed: how fast, in uL/s. Defaults to `default_dispensing_drive_speed`.
+      stop_speed: what to slow to at the end, in uL/s.
+      acceleration: how hard, in uL/s2. Defaults to `default_dispensing_drive_acceleration`.
+      current_limit: the motor current limit.
+      read_timeout: how long to wait for the device to answer, in seconds.
+
+    Raises:
+      ValueError: If an argument is outside what the drive accepts.
+    """
+    c = self.configuration
+    if speed is None:
+      speed = self.default_dispensing_drive_speed
+    if acceleration is None:
+      acceleration = self.default_dispensing_drive_acceleration
+
+    for value, (low, high), name in (
+      (volume, c.dispensing_drive_range, "volume"),
+      (speed, c.dispensing_drive_speed_range, "speed"),
+      (stop_speed, (0.0, c.dispensing_drive_speed_range[1]), "stop_speed"),
+      (acceleration, c.dispensing_drive_acceleration_range, "acceleration"),
+    ):
+      if not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {value}")
+    low_limit, high_limit = c.dispensing_drive_current_limit_range
+    if not low_limit <= current_limit <= high_limit:
+      raise ValueError(
+        f"current_limit must be between {low_limit} and {high_limit}, is {current_limit}"
+      )
+
+    # Each field is as wide as the largest value it takes.
+    dr_width = len(
+      str(
+        c.dispensing_drive_acceleration_uL_to_increments(c.dispensing_drive_acceleration_range[1])
+      )
+    )
+    increments = c.dispensing_drive_uL_to_increments(volume)
+    try:
+      resp = await self._driver.send_command(
+        module=c.module,
+        command="DQ",
+        dq=f"{increments:05}",
+        dv=f"{c.dispensing_drive_speed_uL_to_increments(speed):05}",
+        du=f"{c.dispensing_drive_speed_uL_to_increments(stop_speed):05}",
+        dr=f"{c.dispensing_drive_acceleration_uL_to_increments(acceleration):0{dr_width}}",
+        dw=f"{current_limit:0{len(str(high_limit))}}",
+        read_timeout=read_timeout,
+      )
+    except BaseException:
+      await self._record_piston_position()
+      raise
+    self.piston_position = c.dispensing_drive_increments_to_uL(increments)
+    return resp
 
   # -- x, y and z together -------------------------------------------------------------------------
 
