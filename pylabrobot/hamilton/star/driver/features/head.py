@@ -908,7 +908,7 @@ class Head:
     be offset by for the tip end, rather than the head, to land where it is wanted.
 
     Returns:
-      The overhang in mm. Legacy's tip length is this plus the tip's fitting depth.
+      The overhang in mm, to 0.1 mm. Legacy's tip length is this plus the tip's fitting depth.
 
     Raises:
       RuntimeError: If the head is carrying no tips, so there is nothing to measure.
@@ -917,18 +917,7 @@ class Head:
       raise RuntimeError("the head reports no tips mounted, so there is no overhang to measure")
     reference = await self.request_z_position()
     tip_bottom = (await self.request_location()).z
-    return round(reference - tip_bottom, 2)
-
-  async def _overhang_that_probes(self) -> float:
-    """How far below the stop disc the head probes: the tips' overhang, to 0.1 mm.
-
-    Raises:
-      RuntimeError: If the head reports no tips.
-    """
-    if not await self.request_tip_presence():
-      raise RuntimeError("the head reports no tips, so there is no overhang to measure")
-    reference = await self.request_z_position()
-    return round(reference - (await self.request_location()).z, 1)
+    return round(reference - tip_bottom, 1)
 
   async def _record_where_it_stopped(self, axis: Literal["y", "z"]) -> None:
     """Read where this head came to rest along one axis, and record it.
@@ -1163,7 +1152,7 @@ class Head:
         "the head carries no tips, so it has no tool bottom to place; "
         "`move_stop_disc_to_z_position` is the move for a head with nothing on it"
       )
-    overhang = await self._overhang_that_probes()
+    overhang = await self.request_tip_overhang()
 
     # The drive works in stop-disc terms over `z_range`, so what the tip bottom reaches is that
     # window shifted down by the overhang, and no lower than the head may put one.
