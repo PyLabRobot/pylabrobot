@@ -5,8 +5,9 @@ from unittest.mock import AsyncMock, patch
 
 from pylabrobot.opentrons import FlexHead8
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
-from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb, no_volume_tracking
+from pylabrobot.resources import Coordinate, Resource, cor_96_wellplate_360uL_Fb, no_volume_tracking
 from pylabrobot.resources.opentrons import flex_96_filtertiprack_50ul
+from pylabrobot.resources.rotation import Rotation
 
 
 class PipettingPrimitivesTests(unittest.IsolatedAsyncioTestCase):
@@ -42,8 +43,7 @@ class PipettingPrimitivesTests(unittest.IsolatedAsyncioTestCase):
       [
         "moveToCoordinates",
         "prepareToAspirate",
-        "savePosition",
-        "moveRelative",
+        "moveToCoordinates",
         "aspirateInPlace",
         "savePosition",
         "moveRelative",
@@ -51,9 +51,9 @@ class PipettingPrimitivesTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(commands[0].args[2]["coordinates"], {"x": 178.3, "y": 181.2, "z": 109.0})
     self.assertEqual(commands[0].args[2]["minimumZHeight"], 109.0)
-    self.assertAlmostEqual(commands[3].args[2]["distance"], 16.2 - 100)
-    self.assertEqual(commands[3].args[2]["axis"], "z")
-    self.assertEqual(commands[4].args[2]["volume"], 1)
+    self.assertEqual(commands[2].args[2]["coordinates"], {"x": 178.3, "y": 181.2, "z": 16.2})
+    self.assertEqual(commands[2].args[2]["minimumZHeight"], 16.2)
+    self.assertEqual(commands[3].args[2]["volume"], 1)
     self.assertEqual(commands[-1].args[2]["axis"], "z")
 
   async def test_dispense_uses_updated_plr_location_and_cavity_floor(self):
@@ -67,15 +67,14 @@ class PipettingPrimitivesTests(unittest.IsolatedAsyncioTestCase):
       [c.args[1] for c in commands],
       [
         "moveToCoordinates",
-        "savePosition",
-        "moveRelative",
+        "moveToCoordinates",
         "dispenseInPlace",
         "savePosition",
         "moveRelative",
       ],
     )
     self.assertEqual(commands[0].args[2]["coordinates"], {"x": 189.3, "y": 180.2, "z": 109.0})
-    self.assertAlmostEqual(commands[2].args[2]["distance"], 60 + 3.53 + 1 + 0.5 - 100)
+    self.assertAlmostEqual(commands[1].args[2]["coordinates"]["z"], 60 + 3.53 + 1 + 0.5)
 
   async def test_missing_cavity_floor_is_rejected_before_motion(self):
     """Never guess a cavity floor from an Opentrons load name."""
@@ -84,3 +83,26 @@ class PipettingPrimitivesTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(ValueError, "material_z_thickness"), no_volume_tracking():
       await self.head.aspirate(self.plate.column(0), 1)
     self.assertEqual(self.api.submit_command.await_args_list, [])
+
+  async def test_facility_placement_does_not_change_robot_commands(self):
+    """Facility translations and rotations must not reach robot motion commands."""
+    with no_volume_tracking():
+      await self.head.aspirate(self.plate.column(0), 1, liquid_height=4)
+    expected = self.api.submit_command.await_args_list[:]
+    facility = Resource("facility", 2400, 1000, 0)
+    facility.assign_child_resource(self.flex.deck, location=Coordinate(-900, 200, 300))
+    for angle in (0, 90):
+      with self.subTest(angle=angle):
+        facility.rotation = Rotation(z=angle)
+        self.api.submit_command.reset_mock()
+        with no_volume_tracking():
+          await self.head.aspirate(self.plate.column(0), 1, liquid_height=4)
+        self.assertEqual(self.api.submit_command.await_args_list, expected)
+
+  async def test_single_nozzle_reach_ignores_facility_translation(self):
+    """The reach envelope is fixed to the deck, including its front row."""
+    expected = self.head.reachable_single_nozzles(self.rack, "H1")
+    self.assertEqual(expected, ("H1",))
+    facility = Resource("facility", 2400, 1000, 0)
+    facility.assign_child_resource(self.flex.deck, location=Coordinate(-900, 1000, 300))
+    self.assertEqual(self.head.reachable_single_nozzles(self.rack, "H1"), expected)

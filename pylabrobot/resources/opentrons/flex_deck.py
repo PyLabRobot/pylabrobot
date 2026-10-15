@@ -87,11 +87,7 @@ class FlexDeck(Deck):
       deck.check_single_nozzle_clearance("C3", primary_nozzle="H1")
   """
 
-  def __init__(
-    self,
-    with_trash_bin: bool = True,
-    name: str = "flex_deck",
-  ) -> None:
+  def __init__(self, name: str = "flex_deck") -> None:
     super().__init__(size_x=_DECK_SIZE_X, size_y=_DECK_SIZE_Y, size_z=0.0, name=name)
 
     self._slot_holders: Dict[str, ResourceHolder] = {}
@@ -104,10 +100,6 @@ class FlexDeck(Deck):
       )
       self._slot_holders[slot_id] = holder
       super().assign_child_resource(holder, location=Coordinate(x=loc["x"], y=loc["y"], z=loc["z"]))
-
-    if with_trash_bin:
-      trash = Trash(name="trash", size_x=SLOT_WIDTH, size_y=SLOT_DEPTH, size_z=82.0)
-      self.assign_child_at_slot(trash, "A3")
 
   # --- Slot Validation ---
 
@@ -249,7 +241,7 @@ class FlexDeck(Deck):
     return self._slot_holders[slot].resource
 
   def get_trash_area(self) -> Trash:
-    """Return the trash resource (default at A3)."""
+    """Return the configured trash resource."""
     for holder in self._slot_holders.values():
       if isinstance(holder.resource, Trash):
         return holder.resource
@@ -331,7 +323,12 @@ class FlexDeck(Deck):
       )
 
     # Rule 2: Other labware — check against operation Z
-    resource_z = resource.get_absolute_location().z + resource.get_absolute_size_z()
+    resource_z = max(
+      resource.get_location_wrt(self, x=x, y=y, z=z).z
+      for x in ("l", "r")
+      for y in ("f", "b")
+      for z in ("b", "t")
+    )
 
     clearance_z = operation_z if operation_z is not None else _DEFAULT_CLEARANCE_Z
 

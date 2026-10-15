@@ -1,5 +1,5 @@
 from abc import ABCMeta
-from typing import Dict, Optional, Type
+from typing import Dict, Optional, Set, Type
 
 from pylabrobot.hamilton.protocol.text.framing import find_error_fields
 from pylabrobot.resources.errors import (
@@ -870,6 +870,26 @@ class STARFirmwareError(Exception):
     self.errors = errors
     self.raw_response = raw_response
     super().__init__(f"{errors}, {raw_response}")
+
+
+def channels_that_faulted(error: BaseException) -> Set[int]:
+  """Which pipetting channels a firmware error names, 0-indexed from the back.
+
+  A command over several channels is answered per module, so the error says which of them faulted
+  and which carried it out. Anything else - a cancellation, a master-only error, a lost connection -
+  names none.
+
+  Args:
+    error: what the command raised.
+
+  Returns:
+    The channels the error names.
+  """
+  if not isinstance(error, STARFirmwareError):
+    return set()
+  prefix = "Pipetting channel "
+  numbers = (name[len(prefix) :] for name in error.errors if name.startswith(prefix))
+  return {int(number) - 1 for number in numbers if number.isdigit()}
 
 
 def star_firmware_string_to_error(

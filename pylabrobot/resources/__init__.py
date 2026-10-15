@@ -63,8 +63,7 @@ from .sergi import *
 from .tecan import *
 from .thermo_fisher import *
 from .tip_rack import EmbeddedTipRack, NestedTipRack, StandingTipRack, TipRack, TipSpot
-from .tip_tracker import (
-  TipTracker,
+from .tip_tracking import (
   does_tip_tracking,
   no_tip_tracking,
   set_tip_tracking,
@@ -87,3 +86,12 @@ from .volume_tracker import (
 )
 from .vwr import *
 from .well import CrossSectionType, Well, WellBottomType
+
+
+def __getattr__(name: str):
+  # TODO: Remove in v1
+  if name == "TipTracker":
+    from .tip_tracker import __getattr__ as deprecated
+
+    return deprecated(name)
+  raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

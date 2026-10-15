@@ -145,6 +145,43 @@ class TestSimulation(unittest.IsolatedAsyncioTestCase):
       STARSimulationDriver()
 
 
+class TestTipTypeTable(unittest.IsolatedAsyncioTestCase):
+  """Each tip model gets one entry in the device's tip type table, never the grip tool's."""
+
+  def setUp(self):
+    self.driver = master.STARDriver.__new__(master.STARDriver)
+    self.driver._tip_type_indices = {}
+    self.define = unittest.mock.AsyncMock()
+    self.driver.define_tip_needle = self.define  # type: ignore[method-assign]
+
+  async def test_tips_of_one_kind_share_one_index(self):
+    from pylabrobot.resources.hamilton import hamilton_tip_10uL, hamilton_tip_300uL
+
+    assign = self.driver.get_or_assign_tip_type_index
+    a = await assign(hamilton_tip_300uL(name="rack_A1#0"))
+    b = await assign(hamilton_tip_300uL(name="rack_B1#0"))
+    c = await assign(hamilton_tip_10uL(name="rack_C1#0"))
+    self.assertEqual((a, b, c), (1, 1, 2))
+    self.assertEqual(self.define.await_count, 2)
+
+  async def test_the_grip_tool_s_entry_is_skipped(self):
+    from pylabrobot.resources.hamilton import hamilton_tip_300uL
+
+    self.driver._tip_type_indices = {f"model_{i}": i for i in range(1, 14)}
+    index = await self.driver.get_or_assign_tip_type_index(hamilton_tip_300uL(name="tip"))
+    self.assertEqual(index, 15)
+    self.assertEqual(self.define.await_args_list[0].kwargs["tip_type_table_index"], 15)
+
+  async def test_a_full_table_is_refused_before_anything_is_written(self):
+    from pylabrobot.resources.hamilton import hamilton_tip_300uL
+
+    free = [i for i in range(1, 100) if i != master.CORE_GRIPPER_TIP_TYPE_INDEX]
+    self.driver._tip_type_indices = {f"model_{i}": i for i in free}
+    with self.assertRaisesRegex(ValueError, "the tip type table is full: 98 tip types"):
+      await self.driver.get_or_assign_tip_type_index(hamilton_tip_300uL(name="tip"))
+    self.define.assert_not_awaited()
+
+
 def keys_no_field_reads(saved: dict, configuration: object) -> List[str]:
   """What a saved configuration holds that reading it back leaves out, nested ones included.
 
@@ -282,7 +319,13 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
     )
     with recorded_moves() as moves:
       await star.setup()
-    return list(moves)
+    # The autoload is its own unit and comes up alongside the arm's features, so where its two
+    # steps fall among theirs is the event loop's business; that it homes after the device is not.
+    autoload = [move for move in moves if "autoload" in move]
+    self.assertEqual(autoload, ["II autoload", "autoload park"])
+    if "VI device" in moves:
+      self.assertGreater(moves.index("II autoload"), moves.index("VI device"))
+    return [move for move in moves if "autoload" not in move]
 
   async def test_everything_already_up(self):
     self.assertEqual(
@@ -293,8 +336,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "ZA channels to safe Z",
         "iSWAP park",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 
@@ -308,8 +349,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "iSWAP park",
         "EI 96-head",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 
@@ -325,8 +364,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "ZA channels to safe Z",
         "iSWAP park",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 
@@ -338,6 +375,18 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         device_up=True, head_up=head_up, eject_position=eject_position, trash96=trash96
       )
     return [call.args[0] % call.args[1:] for call in warning.call_args_list]
+
+  async def test_channels_left_as_they_are_still_have_their_pistons_read(self):
+    """A device already up with nothing mounted skips the channels' initialization."""
+    star = simulator.STARSimulationDriver(
+      deck=STARDeck(), initialized=True, declared_configuration_json=RECORDING_STAR
+    )
+    with recorded_moves() as moves:
+      await star.setup()
+    self.assertNotIn("DI channels", moves)
+    pipettes = star.pipettes
+    assert pipettes is not None
+    self.assertEqual(pipettes.piston_positions, [0.0] * pipettes.num_channels)
 
   async def test_a_head_told_nowhere_to_eject_ejects_at_the_decks_trash(self):
     """A STAR deck carries a trash for the 96-head, and a head with no eject location of its own is
@@ -387,10 +436,31 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "iSWAP park",
         "EI 96-head",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
+
+
+class TestChannelResources(unittest.IsolatedAsyncioTestCase):
+  """A channel is modelled by a resource of its own, and the list of them runs channel by channel."""
+
+  async def test_a_channel_without_a_width_is_refused_rather_than_skipped(self):
+    """Skipping one would put every later channel's resource one out of step with its channel."""
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    await driver.setup()
+    pipettes = driver.pipettes
+    assert pipettes is not None
+    channels = [resource.name for resource in pipettes.resources]
+    self.assertEqual(
+      channels,
+      [driver._component_name(f"pipette_channel_{channel}") for channel in range(len(channels))],
+    )
+
+    pipettes.configuration.channels[2].width = None
+    for resource in list(pipettes.resources):
+      resource.parent.unassign_child_resource(resource)  # type: ignore[union-attr]
+    with self.assertRaises(RuntimeError):
+      await driver._create_pipette_resources()
+    await driver.stop()
 
 
 class TestEveryConfiguration(unittest.IsolatedAsyncioTestCase):

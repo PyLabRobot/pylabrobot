@@ -60,7 +60,7 @@ class HamiltonTip(Tip, HamiltonTool):
     nominal_volume: Optional[float] = None,
     collar_height: Optional[float] = None,
     diameter: Optional[float] = None,
-    category: Optional[str] = None,
+    category: str = "tip",
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
   ):

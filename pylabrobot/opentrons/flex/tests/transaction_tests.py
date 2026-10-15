@@ -2,10 +2,11 @@
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from pylabrobot.opentrons import FlexHead8
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
+from pylabrobot.opentrons.tracking import validate_liquid_transfer
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.errors import TooLittleLiquidError
 from pylabrobot.resources.opentrons import (
@@ -40,6 +41,22 @@ class FlexTransactionTests(unittest.IsolatedAsyncioTestCase):
     await self.flex.disconnect()
     set_tip_tracking(False)
     set_volume_tracking(False)
+
+  async def test_validation_does_not_mutate_or_notify_live_trackers(self):
+    """Successful and failed validation preserve pending volumes and emit no callbacks."""
+    source = self.plate.column(0)[0].tracker
+    destination = self.plate.column(1)[0].tracker
+    source.remove_liquid(10)
+    changed = Mock()
+    source.register_callback(changed)
+    destination.register_callback(changed)
+    validate_liquid_transfer([source], [destination], 20)
+    with self.assertRaises(TooLittleLiquidError):
+      validate_liquid_transfer([source], [destination], 95)
+    self.assertEqual(source.volume, 100)
+    self.assertEqual(source.get_used_volume(), 90)
+    self.assertEqual(destination.get_used_volume(), 0)
+    changed.assert_not_called()
 
   async def test_transfer_tracks_wells_and_tips(self):
     """Both sides of a successful transfer change by the same volume."""

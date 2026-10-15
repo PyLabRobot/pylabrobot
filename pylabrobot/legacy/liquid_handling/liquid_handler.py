@@ -12,6 +12,7 @@ from typing import (
   Any,
   Awaitable,
   Callable,
+  Collection,
   Dict,
   List,
   Literal,
@@ -33,10 +34,14 @@ from pylabrobot.legacy.liquid_handling.strictness import (
 from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading import PlateReader
 from pylabrobot.legacy.tilting.tilter import Tilter
+from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.lib.liquid_handling.channel_positioning import (
   compute_channel_offsets,
 )
 from pylabrobot.lib.liquid_handling.tip_consolidation import plan_tip_consolidation
+from pylabrobot.lib.liquid_handling.tip_presence_probing import (
+  probe_tip_presence_via_pickup as _probe_tip_presence_via_pickup,
+)
 from pylabrobot.resources import (
   Container,
   Coordinate,
@@ -52,7 +57,6 @@ from pylabrobot.resources import (
   Tip,
   TipRack,
   TipSpot,
-  TipTracker,
   Trash,
   Well,
   does_tip_tracking,
@@ -326,12 +330,12 @@ def _check_no_lid(resource: Resource, action: str) -> None:
 
 
 def _check_tip_racks_available(resources: Sequence[TipSpot], action: str) -> None:
-  """Raise if a lid or another tip rack sits on a rack behind ``resources``, checking each rack once.
-  ``action`` is a verb phrase for the error."""
+  """Raise if a rack behind ``resources`` is not available for tip handling, checking each rack
+  once. ``action`` is a verb phrase for the error."""
   racks = {id(r.parent): r.parent for r in resources if isinstance(r.parent, TipRack)}
   for rack in racks.values():
-    if not rack._available_for_tip_handling:
-      raise ValueError(f"Cannot {action} {rack.name!r}: something is stacked on top of it.")
+    if not rack.available_for_tip_handling:
+      raise ValueError(f"Cannot {action} {rack.name!r}: it is not available for tip handling.")
 
 
 class LiquidHandler(Resource, Machine):
@@ -1249,13 +1253,6 @@ class LiquidHandler(Resource, Machine):
       )
     ]
 
-    # queue the operations on the resource (source) and mounted tips (destination) trackers
-    for op in aspirations:
-      if does_volume_tracking():
-        if not op.resource.tracker.is_disabled:
-          op.resource.tracker.remove_liquid(op.volume)
-        op.tip.tracker.add_liquid(volume=op.volume)
-
     extras = self._check_args(
       self.backend.aspirate,
       backend_kwargs,
@@ -1265,9 +1262,15 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # actually aspirate the liquid
+    # actually aspirate the liquid. The trackers are queued inside the try, so a tracker that
+    # refuses an operation rolls every channel back below, just like a backend error.
     error: Optional[Exception] = None
     try:
+      for op in aspirations:
+        if does_volume_tracking():
+          if not op.resource.tracker.is_disabled:
+            op.resource.tracker.remove_liquid(op.volume)
+          op.tip.tracker.add_liquid(volume=op.volume)
       await self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
     except Exception as e:
       error = e
@@ -1450,13 +1453,6 @@ class LiquidHandler(Resource, Machine):
       )
     ]
 
-    # queue the operations on the resource (source) and mounted tips (destination) trackers
-    for op in dispenses:
-      if does_volume_tracking():
-        if not op.resource.tracker.is_disabled:
-          op.resource.tracker.add_liquid(volume=op.volume)
-        op.tip.tracker.remove_liquid(op.volume)
-
     # fix the backend kwargs
     extras = self._check_args(
       self.backend.dispense,
@@ -1467,9 +1463,15 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # actually dispense the liquid
+    # actually dispense the liquid. The trackers are queued inside the try, so a tracker that
+    # refuses an operation rolls every channel back below, just like a backend error.
     error: Optional[Exception] = None
     try:
+      for op in dispenses:
+        if does_volume_tracking():
+          if not op.resource.tracker.is_disabled:
+            op.resource.tracker.add_liquid(volume=op.volume)
+          op.tip.tracker.remove_liquid(op.volume)
       await self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
     except Exception as e:
       error = e
@@ -2824,6 +2826,9 @@ class LiquidHandler(Resource, Machine):
   ) -> Dict[str, bool]:
     """Probe tip presence by attempting pickup on each TipSpot.
 
+    Runs `pylabrobot.lib.liquid_handling.tip_presence_probing.probe_tip_presence_via_pickup` with
+    this handler's pick-up and drop: a channel a `ChannelizedError` names found no tip.
+
     Args:
       tip_spots: TipSpots to probe.
       use_channels: Channels to use (must match tip_spots length).
@@ -2847,54 +2852,32 @@ class LiquidHandler(Resource, Machine):
         f"Length mismatch: received {len(use_channels)} channels for "
         f"{len(tip_spots)} tip spots. One channel must be assigned per tip spot."
       )
+    if not tip_spots:
+      return {}
 
-    presence_flags = [True] * len(tip_spots)
     z_height = tip_spots[0].get_location_wrt(self.deck, z="top").z + 5
 
-    # Step 1: Cluster tip spots by x-coordinate
-    clusters_by_x: Dict[float, List[Tuple[TipSpot, int, int]]] = {}
-    for idx, tip_spot in enumerate(tip_spots):
-      assert tip_spot.location is not None, "TipSpot location must be at a location"
-      x = tip_spot.location.x
-      clusters_by_x.setdefault(x, []).append((tip_spot, use_channels[idx], idx))
+    async def pick_up(spots: List[TipSpot], channels: List[int]) -> None:
+      await self.pick_up_tips(
+        spots,
+        use_channels=channels,
+        minimum_traverse_height_at_beginning_of_a_command=z_height,
+        z_position_at_end_of_a_command=z_height,
+      )
 
-    sorted_clusters = [clusters_by_x[x] for x in sorted(clusters_by_x)]
-
-    # Step 2: Probe each cluster
-    for cluster in sorted_clusters:
-      tip_subset, channel_subset, index_subset = zip(*cluster)
-
+    async def drop(spots: List[TipSpot], channels: List[int]) -> None:
       try:
-        await self.pick_up_tips(
-          list(tip_subset),
-          use_channels=list(channel_subset),
-          minimum_traverse_height_at_beginning_of_a_command=z_height,
-          z_position_at_end_of_a_command=z_height,
-        )
-      except ChannelizedError as e:
-        for ch in e.errors:
-          if ch in channel_subset:
-            failed_local_idx = channel_subset.index(ch)
-            presence_flags[index_subset[failed_local_idx]] = False
-          else:
-            raise
+        await self.drop_tips(spots, use_channels=channels, z_position_at_end_of_a_command=z_height)
+      except Exception as e:
+        assert spots[0].location is not None, "TipSpot location must be at a location"
+        print(f"Warning: drop_tips failed for cluster at x={spots[0].location.x}: {e}")
 
-      # Step 3: Drop tips immediately after probing
-      if any(presence_flags[index] for index in index_subset):
-        spots = [ts for ts, _, i in cluster if presence_flags[i]]
-        use_channels = [uc for _, uc, i in cluster if presence_flags[i]]
-        try:
-          await self.drop_tips(
-            spots,
-            use_channels=use_channels,
-            # minimum_traverse_height_at_beginning_of_a_command=z_height,
-            z_position_at_end_of_a_command=z_height,
-          )
-        except Exception as e:
-          assert cluster[0][0].location is not None, "TipSpot location must be at a location"
-          print(f"Warning: drop_tips failed for cluster at x={cluster[0][0].location.x}: {e}")
+    def missed(error: Exception) -> Optional[Collection[int]]:
+      return list(error.errors) if isinstance(error, ChannelizedError) else None
 
-    return {ts.name: flag for ts, flag in zip(tip_spots, presence_flags)}
+    return await _probe_tip_presence_via_pickup(
+      tip_spots, use_channels, pick_up_tips=pick_up, drop_tips=drop, missed_channels=missed
+    )
 
   async def probe_tip_inventory(
     self,

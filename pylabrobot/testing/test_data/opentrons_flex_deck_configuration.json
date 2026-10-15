@@ -1,0 +1,55 @@
+{
+  "data": {
+    "cutoutFixtures": [
+      {
+        "cutoutFixtureId": "singleLeftSlot",
+        "cutoutId": "cutoutA1"
+      },
+      {
+        "cutoutFixtureId": "singleLeftSlot",
+        "cutoutId": "cutoutB1"
+      },
+      {
+        "cutoutFixtureId": "singleLeftSlot",
+        "cutoutId": "cutoutC1"
+      },
+      {
+        "cutoutFixtureId": "singleLeftSlot",
+        "cutoutId": "cutoutD1"
+      },
+      {
+        "cutoutFixtureId": "singleCenterSlot",
+        "cutoutId": "cutoutA2"
+      },
+      {
+        "cutoutFixtureId": "singleCenterSlot",
+        "cutoutId": "cutoutB2"
+      },
+      {
+        "cutoutFixtureId": "singleCenterSlot",
+        "cutoutId": "cutoutC2"
+      },
+      {
+        "cutoutFixtureId": "singleCenterSlot",
+        "cutoutId": "cutoutD2"
+      },
+      {
+        "cutoutFixtureId": "singleRightSlot",
+        "cutoutId": "cutoutA3"
+      },
+      {
+        "cutoutFixtureId": "singleRightSlot",
+        "cutoutId": "cutoutB3"
+      },
+      {
+        "cutoutFixtureId": "singleRightSlot",
+        "cutoutId": "cutoutC3"
+      },
+      {
+        "cutoutFixtureId": "trashBinAdapter",
+        "cutoutId": "cutoutD3"
+      }
+    ],
+    "lastModifiedAt": "2026-09-27T15:38:57.968539Z"
+  }
+}

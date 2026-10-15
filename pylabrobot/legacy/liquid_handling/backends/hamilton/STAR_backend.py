@@ -144,6 +144,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.barcode import Barcode, Barcode1DSymbology
 from pylabrobot.resources.hamilton import (
+  HamiltonSTARDeck,
   HamiltonTip,
   TipDropMethod,
   TipPickupMethod,
@@ -155,7 +156,7 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
-from pylabrobot.resources.tip_tracker import does_tip_tracking
+from pylabrobot.resources.tip_tracking import does_tip_tracking
 from pylabrobot.resources.trash import Trash
 
 # The name SubsystemError had before it moved here, kept so existing code still catches it.
@@ -6118,9 +6119,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
+  def _get_core_gripper_mount(self) -> HamiltonCoreGrippers:
+    """Find the CoRe gripper mount on a default or named STAR deck."""
+    name = (
+      self.deck.get_component_name("core_grippers")
+      if isinstance(self.deck, HamiltonSTARDeck)
+      else "core_grippers"
+    )
+    mount = self.deck.get_resource(name)
+    assert isinstance(mount, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    return mount
+
   def _get_core_front_back(self):
-    core_grippers = self.deck.get_resource("core_grippers")
-    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    core_grippers = self._get_core_gripper_mount()
     back_channel_y_center = int(
       (
         core_grippers.get_location_wrt(self.deck).y
@@ -6144,10 +6155,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return back_channel_y_center, front_channel_y_center
 
   def _get_core_x(self) -> float:
-    """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
-    core_grippers = self.deck.get_resource("core_grippers")
-    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
-    return core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x
+    """Get the X coordinate for the CoRe grippers: the holder's centre x, plus the adjustment."""
+    core_grippers = self._get_core_gripper_mount()
+    return core_grippers.get_location_wrt(self.deck, x="c").x + self.core_adjustment.x
 
   async def get_core(self, p1: int, p2: int):
     warnings.warn("Deprecated. Use pick_up_core_gripper_tools instead.", DeprecationWarning)
@@ -6185,8 +6195,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
 
-    core_grippers = self.deck.get_resource("core_grippers")
-    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    core_grippers = self._get_core_gripper_mount()
     front_tool, back_tool = core_grippers.front_tool, core_grippers.back_tool
     if front_tool.model != back_tool.model:
       raise ValueError("CO-RE gripper tools must have the same model.")

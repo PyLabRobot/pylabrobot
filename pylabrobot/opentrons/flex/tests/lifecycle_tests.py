@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, call, patch
 
 from pylabrobot.io.http import HTTP
 from pylabrobot.opentrons import Flex, OpentronsAPI
-from pylabrobot.opentrons.types import CommandInfo, InstrumentInfo, RobotInfo, RunInfo
+from pylabrobot.opentrons.errors import OpentronsError
+from pylabrobot.opentrons.types import CommandInfo, DeckFixture, InstrumentInfo, RobotInfo, RunInfo
+from pylabrobot.resources import Resource
 from pylabrobot.resources.opentrons import FlexDeck
 
 
@@ -17,6 +19,7 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.io = AsyncMock(spec=HTTP)
     self.api = AsyncMock(spec=OpentronsAPI)
     self.api.get_health.return_value = RobotInfo("test-flex", "OT-3 Standard", "9.1.2")
+    self.api.get_deck_configuration.return_value = (DeckFixture("cutoutA3", "trashBinAdapter"),)
     self.api.create_run.return_value = RunInfo("run")
     self.api.get_run.return_value = RunInfo("run", "stopped")
     self.api.get_instruments.return_value = (
@@ -32,6 +35,126 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
     await self.flex.setup()
     self.addAsyncCleanup(self.flex.disconnect)
 
+  async def test_setup_adds_trash_at_device_slot_and_stop_uses_it(self):
+    """An initially empty deck acquires the device's bin, including its discard address."""
+    await self.flex.disconnect()
+    deck = FlexDeck()
+    self.flex.attach_deck(deck)
+    with self.assertRaises(ValueError):
+      deck.get_trash_area()
+    self.api.get_deck_configuration.return_value = (DeckFixture("cutoutB3", "trashBinAdapter"),)
+    await self.flex.setup()
+    self.assertIsNone(deck.get_resource_at_slot("A3"))
+    self.assertEqual(deck.get_slot(deck.get_trash_area()), "B3")
+    head = self.flex.right_pipette
+    assert head is not None
+    self.api.submit_command.reset_mock()
+    with (
+      patch.object(head, "has_tip_on_hardware", AsyncMock(side_effect=[True, False])),
+      patch.object(head, "move_to_safe_z", AsyncMock()),
+    ):
+      await self.flex.stop()
+    move = self.api.submit_command.await_args_list[0]
+    self.assertEqual(move.args[1], "moveToAddressableAreaForDropTip")
+    self.assertEqual(move.args[2]["addressableAreaName"], "movableTrashB3")
+
+  async def test_setup_removes_stale_trash_when_device_has_none(self):
+    """A missing physical bin never falls back to a previously configured location."""
+    await self.flex.disconnect()
+    self.api.get_deck_configuration.return_value = ()
+    await self.flex.setup()
+    with self.assertRaises(ValueError):
+      self.flex.deck.get_trash_area()
+
+  async def test_setup_preserves_labware_in_device_trash_slot(self):
+    """A conflicting resource is rejected before a run or homing command starts."""
+    await self.flex.disconnect()
+    occupied = Resource("plate", 127, 85, 15)
+    self.flex.deck.assign_child_at_slot(occupied, "B3")
+    original_trash = self.flex.deck.get_trash_area()
+    self.api.get_deck_configuration.return_value = (DeckFixture("cutoutB3", "trashBinAdapter"),)
+    self.api.submit_command.reset_mock()
+    self.api.create_run.reset_mock()
+    with self.assertRaisesRegex(OpentronsError, "B3 is occupied"):
+      await self.flex.setup()
+    self.assertIs(self.flex.deck.get_resource_at_slot("B3"), occupied)
+    self.assertIs(self.flex.deck.get_trash_area(), original_trash)
+    self.api.create_run.assert_not_awaited()
+    self.api.submit_command.assert_not_awaited()
+
+  async def test_reconnect_refreshes_device_trash_slot(self):
+    """Reconnecting moves the same trash resource to the updated device configuration."""
+    trash = self.flex.deck.get_trash_area()
+    await self.flex.disconnect()
+    self.api.get_deck_configuration.return_value = (DeckFixture("cutoutD1", "trashBinAdapter"),)
+    await self.flex.setup()
+    self.assertIs(self.flex.deck.get_trash_area(), trash)
+    self.assertEqual(self.flex.deck.get_slot(trash), "D1")
+    self.assertIsNone(self.flex.deck.get_resource_at_slot("A3"))
+
+  async def test_repeated_setup_warns_and_preserves_session(self):
+    """Repeated setup leaves the existing run and instruments intact without IO."""
+    run = self.flex._require_run()
+    head, gripper = self.flex.right_pipette, self.flex.gripper
+    self.api.reset_mock()
+    self.io.reset_mock()
+    for skip_home in (False, True):
+      with self.subTest(skip_home=skip_home), self.assertWarnsRegex(UserWarning, "already set up"):
+        await self.flex.setup(skip_home=skip_home)
+      self.assertIs(self.flex._require_run(), run)
+      self.assertIs(self.flex.right_pipette, head)
+      self.assertIs(self.flex.gripper, gripper)
+      self.assertEqual(self.api.mock_calls, [])
+      self.assertEqual(self.io.mock_calls, [])
+
+  async def test_stop_discards_tips_reported_only_by_hardware(self):
+    """Tips from an earlier session are discarded before homing and releasing the run."""
+    head = self.flex.right_pipette
+    assert head is not None
+    self.assertTrue(all(tip is None for tip in head.get_mounted_tips()))
+    self.api.submit_command.reset_mock()
+    with (
+      patch.object(head, "has_tip_on_hardware", AsyncMock(side_effect=[True, False])),
+      patch.object(head, "move_to_safe_z", AsyncMock()),
+    ):
+      await self.flex.stop()
+    self.assertEqual(
+      [c.args[1] for c in self.api.submit_command.await_args_list],
+      ["moveToAddressableAreaForDropTip", "dropTipInPlace", "home"],
+    )
+    self.assertIsNone(self.flex.run_id)
+    self.assertFalse(self.flex._connected)
+
+  async def test_stop_skips_empty_or_unknown_heads(self):
+    """Absent or unknown hardware tip state does not trigger an empty discard."""
+    for presence in (False, None):
+      with self.subTest(presence=presence):
+        head = self.flex.right_pipette
+        assert head is not None
+        with (
+          patch.object(head, "has_tip_on_hardware", AsyncMock(return_value=presence)),
+          patch.object(head, "discard_tips", AsyncMock()) as discard,
+        ):
+          await self.flex.stop()
+        discard.assert_not_awaited()
+        await self.flex.setup()
+
+  async def test_stop_keeps_releasing_after_tip_discard_failure(self):
+    """A failed tip drop is logged without preventing run release."""
+    head = self.flex.right_pipette
+    assert head is not None
+    with (
+      patch.object(head, "has_tip_on_hardware", AsyncMock(return_value=True)),
+      patch.object(
+        head, "discard_tips", AsyncMock(side_effect=RuntimeError("drop failed"))
+      ) as discard,
+      self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING"),
+    ):
+      await self.flex.stop()
+    discard.assert_awaited_once_with(self.flex.deck.get_trash_area())
+    self.assertIsNone(self.flex.run_id)
+    self.assertFalse(self.flex._connected)
+
   async def test_stale_instruments_cannot_use_a_replacement_run(self):
     head, gripper = self.flex.right_pipette, self.flex.gripper
     assert head is not None and gripper is not None
@@ -39,7 +162,9 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
     await self.flex.setup()
     self.api.submit_command.reset_mock()
     with self.assertRaises(RuntimeError):
-      await head.position()
+      await head.request_position()
+    with self.assertRaises(RuntimeError):
+      await head.move_to_safe_z()
     with self.assertRaises(RuntimeError):
       await gripper.open_jaw()
     self.api.submit_command.assert_not_awaited()

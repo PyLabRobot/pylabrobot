@@ -79,6 +79,19 @@ class ModuleInfo:
 
 
 @dataclass(frozen=True)
+class DeckFixture:
+  """A fixture installed in a Flex deck cutout."""
+
+  cutout_id: str
+  fixture_id: Optional[str]
+
+  @classmethod
+  def from_response(cls, data: Dict[str, Any]) -> "DeckFixture":
+    """Parse one fixture from the robot's deck configuration."""
+    return cls(_string(data, "cutoutId"), _optional_string(data, "cutoutFixtureId"))
+
+
+@dataclass(frozen=True)
 class RunInfo:
   """A run's identity and reported execution status."""
 

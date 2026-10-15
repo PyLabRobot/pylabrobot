@@ -70,10 +70,6 @@
         5
       ],
       "acceleration_level_default": 4,
-      "current_limit_range": [
-        0,
-        7
-      ],
       "current_limit_default": 7
     },
     "right_arm": null,
@@ -279,8 +275,6 @@
         "y_drive_acceleration_firmware_reported": null,
         "z_drive_speed_firmware_reported": null,
         "z_drive_acceleration_firmware_reported": null,
-        "dispensing_drive_speed_firmware_reported": null,
-        "dispensing_drive_acceleration_firmware_reported": null,
         "squeezer_drive_speed_firmware_reported": null,
         "squeezer_drive_acceleration_firmware_reported": null,
         "stop_disc_type": "core_ii",
@@ -291,9 +285,6 @@
           108.0,
           560.0
         ],
-        "tip_engage_correction_low_volume": 2.0,
-        "tip_engage_correction_other": -2.0,
-        "tip_drop_clearance": 1.45,
         "dispensing_drive_position_before_rack_pickup": 218.19,
         "y_increment_floor": 6528
       },

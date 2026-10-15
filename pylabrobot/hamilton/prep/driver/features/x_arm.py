@@ -23,28 +23,34 @@ logger = logging.getLogger(__name__)
 class XArmConfiguration:
   """How the arm is modelled.
 
-  Measured on the arm rather than read off the device: the Prep reports no size for it.
+  Measured on the arm rather than read off the device: the Prep reports no size for it. X and Z are
+  the model's own, which is the measured part; the back shuttle reaches left of that width and below
+  that height, as it does on the arm.
   """
 
-  size_x: float = 66.0
-  """How wide the arm is, in mm."""
+  size_x: float = 66.5
+  """How wide the arm is, in mm: from the body's left face to the right face of its cable duct."""
   size_y: float = 532.0
   """How deep the arm is, in mm. Its back is flush with the back of the device."""
-  size_z: float = 69.0
-  """How tall the arm is, in mm."""
+  size_z: float = 70.0
+  """How tall the arm is, in mm, from the underside of its body to its top."""
+  ride_height: float = 248.5
+  """How high the arm rides, in mm on the deck, measured to the underside of its body. Measured on
+  the arm: what the channels report is how far they travel, not where the arm sits."""
   reference_point_from_left: float = -80.0
   """Where the gantry's x refers to, in mm from the arm's left edge. The channels hang to the arm's left,
   so their axis - which is what the Prep reports - sits about 80 mm left of that edge."""
   model: str = "hamilton_prep_x_arm"
-  """Which 3D model draws it. None ships yet, so the viewer draws a box of this size."""
+  """Which 3D model draws it. The model is measured off the arm, and stands where the arm does: its
+  right edge on this box's right edge, its front edge and the body's underside on its own origin.
+  The back shuttle reaches left of the box and below it, as the part does."""
   appearance: Dict[str, Any] = field(
     default_factory=lambda: {"color": 0xC0C4C8, "metalness": 0.6, "roughness": 0.35}
   )
   """How the viewer draws the arm: silver, and metallic."""
   speed_per_scale_percent: float = 6.0
-  """How fast the gantry may drive X per percent of MLPrep's X speed scale, in mm/s. Measured on
-  PRPAA1087 (V1.2.2): the X axis profile velocity is this times the scale, up to the top of
-  `speed_range`."""
+  """How fast the gantry may drive X per percent of MLPrep's X speed scale, in mm/s. Measured: the
+  X axis speed is this times the scale, up to the top of `speed_range`."""
   speed_range: Tuple[float, float] = (0.0, 400.0)
   """X speed window in mm/s: above the first, up to the second, the fastest the axis drives."""
 
@@ -95,9 +101,9 @@ class XArm:
     # The arm on the deck, when the driver was given one. Setup puts it there; reads and moves keep it
     # in step. Without a deck it stays None and nothing is modelled.
     self.resource: Optional[Resource] = None
-    # Speed (mm/s) and acceleration (mm/s2) `move_to_x_position` uses when none is given: PyLabRobot's
-    # defaults are 80 percent of the X axis profile read on PRPAA1087 (V1.2.2), 400 mm/s and 2250 mm/s2.
-    self.default_speed: float = 320.0
+    # Speed (mm/s) and acceleration (mm/s2) `move_to_x_position` uses when none is given: 60 and 80
+    # percent of the X axis profile read on a V1.2.2 Prep, 400 mm/s and 2250 mm/s2.
+    self.default_speed: float = 240.0
     self.default_acceleration: float = 1800.0
     # Speed (mm/s) `probe_home_flag` seeks at when none is given: what it was run with on PRPAA1087.
     self.default_probe_speed: float = 100.0
@@ -124,6 +130,16 @@ class XArm:
       self.resource.location.z,
     )
 
+  async def _request_axis_offset(self) -> float:
+    """Read the unrounded frame offset for internal motion calculations."""
+    response = await self._driver.send_command(PrepCmd.PrepGetPositions())
+    if not response or not response.positions:
+      raise RuntimeError("the channels reported no positions")
+    x = float(response.positions[0].position_x)
+    self.update_location_by_reference_point(x)
+    commanded = await self._driver.send_command(PrepCmd.PrepXAxisGetCommandedPosition())
+    return x - float(commanded.value)
+
   async def request_axis_offset(self) -> float:
     """Request how far the reported X is from the X axis's own position.
 
@@ -133,10 +149,7 @@ class XArm:
     Raises:
       RuntimeError: If the channels report no position.
     """
-    x = await self.request_position()
-    if x is None:
-      raise RuntimeError("the channels reported no positions")
-    return x - await self.request_commanded_position()
+    return round(await self._request_axis_offset(), 2)
 
   # -- requests --------------------------------------------------------------
 
@@ -154,17 +167,21 @@ class XArm:
       return None
     x = float(response.positions[0].position_x)
     self.update_location_by_reference_point(x)
-    return x
+    return round(x, 2)
 
   async def _record_where_it_stopped(self) -> None:
-    """Read where the arm came to rest, and record it.
+    """Read where the arm and the channels on it came to rest, and record it.
 
     For a move's `finally`. A move that failed part way left the arm somewhere no target describes.
     Its own failure is logged and swallowed: it must not replace the move's exception, which is the
     one that says what went wrong.
     """
     try:
-      await self.request_position()
+      pipettes = self._driver.pipettes
+      if pipettes is not None:
+        await pipettes.request_locations()  # the arm's X and each channel's Y and Z, in one read
+      else:
+        await self.request_position()
     except Exception:
       logger.warning("could not read where the X-arm stopped; its model is stale")
 
@@ -175,17 +192,17 @@ class XArm:
       The commanded position in mm.
     """
     response = await self._driver.send_command(PrepCmd.PrepXAxisGetCommandedPosition())
-    return float(response.value)
+    return round(float(response.value), 2)
 
-  async def request_velocity(self) -> float:
-    """Request the X axis velocity.
+  async def request_speed(self) -> float:
+    """Request the speed the X axis drives at (`XAxis.GetVelocity`).
 
     Returns:
-      The velocity in mm/s.
+      The speed in mm/s.
     """
-    return float((await self._driver.send_command(PrepCmd.PrepXAxisGetVelocity())).value)
+    return round(float((await self._driver.send_command(PrepCmd.PrepXAxisGetVelocity())).value), 2)
 
-  # manage velocity and acceleration ----------------------------------------------
+  # manage speed and acceleration -------------------------------------------------
 
   async def request_acceleration(self) -> float:
     """Request the X axis acceleration.
@@ -193,15 +210,17 @@ class XArm:
     Returns:
       The acceleration in mm/s2.
     """
-    return float((await self._driver.send_command(PrepCmd.PrepXAxisGetAcceleration())).value)
+    return round(
+      float((await self._driver.send_command(PrepCmd.PrepXAxisGetAcceleration())).value), 2
+    )
 
-  async def _unchecked_fw_set_velocity(self, velocity: float) -> None:
+  async def _unchecked_fw_set_speed(self, speed: float) -> None:
     """Send `XAxis.SetVelocity` without checks.
 
     Args:
-      velocity: velocity in mm/s.
+      speed: speed in mm/s.
     """
-    await self._driver.send_command(PrepCmd.PrepXAxisSetVelocity(value=velocity))
+    await self._driver.send_command(PrepCmd.PrepXAxisSetVelocity(value=speed))
 
   async def _unchecked_fw_set_acceleration(self, acceleration: float) -> None:
     """Send `XAxis.SetAcceleration` without checks.
@@ -213,30 +232,30 @@ class XArm:
 
   @asynccontextmanager
   async def _temporary_x_axis_profile(
-    self, velocity: Optional[float] = None, acceleration: Optional[float] = None
+    self, speed: Optional[float] = None, acceleration: Optional[float] = None
   ) -> AsyncIterator[None]:
-    """Set the X axis velocity and acceleration for the enclosed block, then restore each.
+    """Set the X axis speed and acceleration for the enclosed block, then restore each.
 
     A value that cannot be restored is logged, not raised.
 
     Args:
-      velocity: velocity in mm/s, or None to leave it.
+      speed: speed in mm/s, or None to leave it.
       acceleration: acceleration in mm/s2, or None to leave it.
     """
-    velocity_before = None if velocity is None else await self.request_velocity()
+    speed_before = None if speed is None else await self.request_speed()
     acceleration_before = None if acceleration is None else await self.request_acceleration()
     try:
-      if velocity is not None:
-        await self._unchecked_fw_set_velocity(velocity)
+      if speed is not None:
+        await self._unchecked_fw_set_speed(speed)
       if acceleration is not None:
         await self._unchecked_fw_set_acceleration(acceleration)
       yield
     finally:
-      if velocity_before is not None:
+      if speed_before is not None:
         try:
-          await self._unchecked_fw_set_velocity(velocity_before)
+          await self._unchecked_fw_set_speed(speed_before)
         except Exception:
-          logger.warning("could not restore the X axis velocity to %s", velocity_before)
+          logger.warning("could not restore the X axis speed to %s", speed_before)
       if acceleration_before is not None:
         try:
           await self._unchecked_fw_set_acceleration(acceleration_before)
@@ -254,7 +273,13 @@ class XArm:
     await self._driver.send_command(PrepCmd.PrepXAxisMoveAbsolute(position=position))
 
   async def move_to_x_position(
-    self, x: float, speed: Optional[float] = None, acceleration: Optional[float] = None
+    self,
+    x: float,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
   ) -> None:
     """Move the arm along X with `XAxis.MoveAbsolute`.
 
@@ -262,6 +287,9 @@ class XArm:
       x: target x in mm.
       speed: speed in mm/s. Defaults to `default_speed`.
       acceleration: acceleration in mm/s2. Defaults to `default_acceleration`.
+      minimum_traverse_height_start: raise every channel standing below this height, in mm, before
+        the arm travels. The pipettes' `default_minimum_traverse_height` when None; 0 raises nothing,
+        so the channels travel at the height they stand at.
 
     Raises:
       ValueError: If `x`, `speed` or `acceleration` is out of range.
@@ -282,9 +310,30 @@ class XArm:
         raise ValueError(
           f"x={x} outside the channels' range [{channel.x_range[0]:.1f}, {channel.x_range[1]:.1f}]"
         )
-    offset = await self.request_axis_offset()
+    traverse = (
+      pipettes.default_minimum_traverse_height
+      if minimum_traverse_height_start is None
+      else minimum_traverse_height_start
+    )
+    below = {}
+    for index, at in enumerate(await pipettes.request_locations()):
+      window = (
+        pipettes.configuration.channels[index].z_range
+        if index < len(pipettes.configuration.channels)
+        else None
+      )
+      # The device reports each channel's Z window for whatever is attached to it, so a channel
+      # carrying something travels as high as it goes rather than to the traverse height.
+      ceiling = traverse if window is None else min(traverse, window[1])
+      if at.z < ceiling:
+        below[index] = ceiling
+    if below:
+      await pipettes.move_tool_bottom_to_z_positions(
+        below, speed=z_speed, acceleration=z_acceleration
+      )
+    offset = await self._request_axis_offset()
     try:
-      async with self._temporary_x_axis_profile(velocity=speed, acceleration=acceleration):
+      async with self._temporary_x_axis_profile(speed=speed, acceleration=acceleration):
         await self._unchecked_fw_move_absolute(x - offset)
         self.update_location_by_reference_point(x)
     finally:
@@ -351,12 +400,12 @@ class XArm:
           f"the seek could end at x={end}, outside the channels' range "
           f"[{channel.x_range[0]:.1f}, {channel.x_range[1]:.1f}]"
         )
-    offset = await self.request_axis_offset()
+    offset = await self._request_axis_offset()
     try:
-      async with self._temporary_x_axis_profile(velocity=speed):
+      async with self._temporary_x_axis_profile(speed=speed):
         tripped = await self._unchecked_fw_seek_to_home_flag(
           distance, travel_limits_enable, trip_sense
         )
     finally:
       await self._record_where_it_stopped()
-    return tripped + offset
+    return round(tripped + offset, 2)

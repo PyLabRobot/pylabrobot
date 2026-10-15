@@ -44,6 +44,8 @@ from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
+  TooLittleLiquidError,
+  TooLittleVolumeError,
 )
 from pylabrobot.resources.hamilton import (
   STARLetDeck,
@@ -520,6 +522,27 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
+
+  async def test_probe_tip_presence_via_pickup(self):
+    """Probed through the library's runner: a channel the ChannelizedError names found no tip."""
+    self.backend.request_tip_presence.side_effect = NotImplementedError()
+    # Unspecced, so they take the STAR's heights the probe passes, as the STAR backend does.
+    self.backend.pick_up_tips = unittest.mock.AsyncMock(
+      side_effect=[ChannelizedError(errors={1: RuntimeError("no tip")}), None]
+    )
+    self.backend.drop_tips = unittest.mock.AsyncMock()
+    spots = [self.tip_rack.get_item(well) for well in ("A1", "B1", "A2")]
+    found = await self.lh.probe_tip_presence_via_pickup(spots, use_channels=[0, 1, 2])
+    self.assertEqual(found, {spots[0].name: True, spots[1].name: False, spots[2].name: True})
+    self.assertEqual(
+      [call.kwargs["use_channels"] for call in self.backend.pick_up_tips.call_args_list],
+      [[0, 1], [2]],
+    )
+    self.assertEqual(
+      [call.kwargs["use_channels"] for call in self.backend.drop_tips.call_args_list],
+      [[0], [2]],
+    )
+    self.assertFalse(any(tracker.has_tip for tracker in self.lh.head.values()))
 
   async def test_consolidate_tip_inventory(self):
     """Execute library-planned transfers through the normal tracked tip operations."""
@@ -1380,22 +1403,22 @@ class TestCoveredTipRacks(unittest.IsolatedAsyncioTestCase):
     await self.lh.setup()
 
   async def test_only_the_top_rack_of_a_stack_can_be_picked_up_from(self):
-    with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'bottom': it is not available for tip handling"):
       await self.lh.pick_up_tips([self.bottom.get_item("A1")])
     self.backend.pick_up_tips.assert_not_called()
     await self.lh.pick_up_tips([self.top.get_item("A1")])
     self.backend.pick_up_tips.assert_called_once()
 
   async def test_tips_are_not_dropped_into_a_covered_rack(self):
-    with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'bottom': it is not available for tip handling"):
       await self.lh.drop_tips([self.bottom.get_item("A1")])
     self.backend.drop_tips.assert_not_called()
 
   async def test_a_lid_covers_a_rack_for_the_96_head(self):
     self.top.lid = Lid("lid", size_x=127.76, size_y=85.48, size_z=10.0, nesting_z_height=2.0)
-    with self.assertRaisesRegex(ValueError, "'top': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'top': it is not available for tip handling"):
       await self.lh.pick_up_tips96(self.top)
-    with self.assertRaisesRegex(ValueError, "'top': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'top': it is not available for tip handling"):
       await self.lh.drop_tips96(self.top)
     self.backend.pick_up_tips96.assert_not_called()
     self.backend.drop_tips96.assert_not_called()
@@ -1425,6 +1448,38 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     await self.lh.aspirate([well], vols=[10])
     await self.lh.dispense([well], vols=[10])
     self.assertEqual(well.tracker.volume, 10)
+
+  async def test_aspirate_refused_by_one_tracker_leaves_no_channel_queued(self):
+    wells = self.plate["A1:D1"]
+    for well, volume in zip(wells, [30, 30, 30, 21]):
+      well.tracker.set_volume(volume)
+    await self.lh.pick_up_tips(self.tip_rack["A1:D1"], use_channels=[0, 1, 2, 3])
+
+    with self.assertRaises(TooLittleLiquidError):
+      await self.lh.aspirate(wells, vols=[10, 10, 10, 21.5], use_channels=[0, 1, 2, 3])
+
+    self.assertEqual([w.tracker.get_used_volume() for w in wells], [30, 30, 30, 21])
+    self.assertEqual(
+      [self.lh.head[c].get_tip().tracker.get_used_volume() for c in range(4)], [0] * 4
+    )
+    self.backend.aspirate.assert_not_called()
+
+  async def test_dispense_refused_by_one_tracker_leaves_no_channel_queued(self):
+    sources, destinations = self.plate["A1:D1"], self.plate["A2:D2"]
+    for well in sources:
+      well.tracker.set_volume(30)
+    destinations[3].tracker.set_volume(355)
+    await self.lh.pick_up_tips(self.tip_rack["A1:D1"], use_channels=[0, 1, 2, 3])
+    await self.lh.aspirate(sources, vols=[10] * 4, use_channels=[0, 1, 2, 3])
+
+    with self.assertRaises(TooLittleVolumeError):
+      await self.lh.dispense(destinations, vols=[10] * 4, use_channels=[0, 1, 2, 3])
+
+    self.assertEqual([w.tracker.get_used_volume() for w in destinations], [0, 0, 0, 355])
+    self.assertEqual(
+      [self.lh.head[c].get_tip().tracker.get_used_volume() for c in range(4)], [10] * 4
+    )
+    self.backend.dispense.assert_not_called()
 
   async def test_mix_volume_tracking(self):
     for i in range(8):

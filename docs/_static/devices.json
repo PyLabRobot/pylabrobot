@@ -478,6 +478,7 @@
       "liquid handling"
     ],
     "status": "wip",
+    "doc_slug": "hamilton/prep/index",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.hamiltoncompany.com/microlab-prep"
   },

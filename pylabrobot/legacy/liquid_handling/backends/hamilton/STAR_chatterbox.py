@@ -17,7 +17,7 @@ from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import (
   iSWAPInformation,
 )
 from pylabrobot.resources.container import Container
-from pylabrobot.resources.tip_tracker import does_tip_tracking
+from pylabrobot.resources.tip_tracking import does_tip_tracking
 from pylabrobot.resources.well import Well
 
 logger = logging.getLogger("pylabrobot")

@@ -31,11 +31,15 @@ class EmbeddedTipRackHolder(ResourceHolder):
     if not isinstance(resource, EmbeddedTipRack):
       raise ValueError("Can only hold EmbeddedTipRack resources.")
     # the rack's frame might be larger (and sometimes smaller) than the opening it sinks into, and sits centered over it
+    # Its footprint as it stands in this holder, wherever it is now: turned a quarter, sides swap.
+    rack_x, rack_y = resource.get_size_x(), resource.get_size_y()
+    if round(resource.rotation.z / 90) % 2:
+      rack_x, rack_y = rack_y, rack_x
     return (
       get_child_location(resource)
       + Coordinate(
-        x=(self.get_absolute_size_x() - resource.get_absolute_size_x()) / 2,
-        y=(self.get_absolute_size_y() - resource.get_absolute_size_y()) / 2,
+        x=(self.get_size_x() - rack_x) / 2,
+        y=(self.get_size_y() - rack_y) / 2,
         z=-resource.sinking_depth,
       )
       + self.child_location
