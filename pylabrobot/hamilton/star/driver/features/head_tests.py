@@ -13,6 +13,7 @@ from pylabrobot.hamilton.star.device import RECORDING_STAR, RECORDING_STARLET
 from pylabrobot.hamilton.star.driver.configuration import read_configuration
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.head96 import Head96, Head96Configuration
+from pylabrobot.hamilton.star.driver.features.head384 import Head384, Head384Configuration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
@@ -925,6 +926,44 @@ class TestHead96PistonModel(unittest.IsolatedAsyncioTestCase):
           await move()
         expected = self.head.configuration.dispensing_drive_increments_to_uL(1234)
         self.assertEqual(self.head.piston_position, expected)
+
+
+class TestDispensingDriveUnits(unittest.IsolatedAsyncioTestCase):
+  """`DQ` is written in the units and field widths each head's drive counts in."""
+
+  async def test_the_384_head_counts_speed_in_tens_and_acceleration_in_thousands(self):
+    driver = _WireOnly()
+    head = Head384(cast(Any, driver), Head384Configuration(head_type="High volume head"))
+    with patch("pylabrobot.hamilton.star.driver.features.head.Head.discover", AsyncMock()):
+      await head.discover()
+    await head.move_dispensing_drive_to_position(10.0)
+    increments = head.configuration.dispensing_drive_uL_to_increments(10.0)
+    self.assertEqual(driver.sent, [f"D0DQdq{increments:05}dv05000du00000dr9000dw15"])
+
+  async def test_a_2008_96_head_counts_acceleration_in_thousands_in_narrower_fields(self):
+    driver = _WireOnly()
+    configuration = Head96Configuration(firmware_date=datetime.date(2008, 6, 1))
+    head = Head96(cast(Any, driver), configuration)
+    head._apply_firmware_generation()
+    await head.move_dispensing_drive_to_position(100.0, speed=200.0, current_limit=7)
+    self.assertEqual(driver.sent, ["H0DQdq05170dv10341du00000dr150dw7"])
+
+  def test_the_384_head_has_no_default_until_its_type_is_known(self):
+    head = Head384(cast(Any, _WireOnly()))
+    with self.assertRaises(RuntimeError):
+      head.default_dispensing_drive_speed
+
+  def test_a_first_generation_head_takes_its_own_resolutions(self):
+    for head_type, uL, squeezer in (
+      ("High volume head", 0.018509877, 0.000459073),
+      ("96 head II", 0.019340933, 0.0002086672009),
+      ("96 head TADM", 0.019340933, 0.0002086672009),
+    ):
+      with self.subTest(head_type=head_type):
+        head = Head96(cast(Any, _WireOnly()), Head96Configuration(head_type=head_type))
+        head._apply_head_type()
+        self.assertEqual(head.configuration.dispensing_drive_uL_per_increment, uL)
+        self.assertEqual(head.configuration.squeezer_drive_mm_per_increment, squeezer)
 
 
 class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
