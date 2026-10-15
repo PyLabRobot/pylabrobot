@@ -18,6 +18,7 @@ The line is roughly how much of a command has to be restated to share it. One or
 initialization command needs, is a constant. Thirty is a different command.
 """
 
+import asyncio
 import datetime
 import logging
 from dataclasses import dataclass
@@ -1087,6 +1088,91 @@ class Head:
       await self._record_where_it_stopped("y")
       await self._restore_drive_parameter("yv", speed, was_speed)
       await self._restore_drive_parameter("yr", acceleration, was_acceleration)
+
+  # -- x and y together ----------------------------------------------------------------------------
+
+  async def _require_iswap_parked(self) -> None:
+    """Raise unless the iSWAP on this head's arm is parked; nothing to check without one.
+
+    Raises:
+      RuntimeError: If it is not parked.
+    """
+    iswap = None if self.arm is None else self.arm.iswap
+    if iswap is not None and not await iswap.request_is_parked():
+      raise RuntimeError(
+        "the iSWAP is not parked, and the head moves where it stands. "
+        "Call `await star.iswap.park()` first."
+      )
+
+  async def move_to_xy_position(
+    self,
+    x: float,
+    y: float,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    x_acceleration_level: Optional[int] = None,
+    x_current_limit: int = 7,
+    y_speed: Optional[float] = None,
+    y_acceleration: Optional[float] = None,
+    y_current_limit: Optional[int] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
+  ) -> None:
+    """Move head channel A1 over (x, y): the head up first, then X and Y together.
+
+    The head's lowest point is raised to `minimum_traverse_height_start` if below it, and the arm's
+    pipetting channels go up to their safe Z, since the head's own moves leave them where they are.
+
+    Args:
+      x: where head channel A1 goes, in deck mm.
+      y: where head channel A1 goes, in deck mm.
+      minimum_traverse_height_start: the height to raise the head's lowest point to first, in mm:
+        the tip bottom with tips on, the stop disc without. The head's safe Z when None.
+      x_acceleration_level: the X acceleration curve, 1 to 4. 2 at a Y of 200 mm or less, where the
+        head stands furthest out from the X drive, else 3, when None.
+      x_current_limit: the X motor current limit, 1 to 7.
+      y_speed: in mm/s. `configuration.y_drive_speed_default` when None.
+      y_acceleration: in mm/s2. `configuration.y_drive_acceleration_default` when None.
+      y_current_limit: `configuration.y_drive_current_limit_default` when None.
+      z_speed: how fast the head goes up, in mm/s. The drive's default when None.
+      z_acceleration: in mm/s2. The drive's default when None.
+
+    Raises:
+      RuntimeError: If the iSWAP is not parked.
+      ValueError: If X or Y is out of reach, or the head cannot put its lowest point at
+        `minimum_traverse_height_start`; before anything moves.
+    """
+    c = self.configuration
+    y_speed = c.y_drive_speed_default if y_speed is None else y_speed
+    y_acceleration = c.y_drive_acceleration_default if y_acceleration is None else y_acceleration
+    y_current_limit = (
+      c.y_drive_current_limit_default if y_current_limit is None else y_current_limit
+    )
+    if x_acceleration_level is None:
+      x_acceleration_level = 2 if y <= 200.0 else 3
+    await self._require_iswap_parked()
+    self._check_reachable("x", x)
+    self._check_move("y", y, y_speed, y_acceleration, y_current_limit)
+    if minimum_traverse_height_start is None:
+      await self.move_to_safe_z(speed=z_speed, acceleration=z_acceleration)
+    else:
+      stop_disc = minimum_traverse_height_start
+      if await self.request_tip_presence():
+        stop_disc += await self.request_tip_overhang()
+      if await self.request_z_position() < stop_disc:
+        await self.move_stop_disc_to_z_position(
+          stop_disc, speed=z_speed, acceleration=z_acceleration
+        )
+    if self.arm is not None and self.arm.pipettes is not None:
+      await self.arm.pipettes.move_to_safe_z()
+    await asyncio.gather(
+      self.move_to_x_position(
+        x, acceleration_level=x_acceleration_level, current_limit=x_current_limit
+      ),
+      self.move_to_y_position(
+        y, speed=y_speed, acceleration=y_acceleration, current_limit=y_current_limit
+      ),
+    )
 
   # -- z position ----------------------------------------------------------------------------------
 

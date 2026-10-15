@@ -6,7 +6,7 @@ import random
 import tempfile
 import unittest
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
-from unittest.mock import AsyncMock, patch
+from unittest.mock import DEFAULT, AsyncMock, patch
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR, RECORDING_STARLET
@@ -672,12 +672,66 @@ class TestHead96InSimulation(unittest.IsolatedAsyncioTestCase):
   async def test_rh_is_the_stop_disc_zi_below_where_the_head_stops(self):
     self.plate.get_item("A1").tracker.set_volume(150.0)
     # The search does not move in X or Y: the head goes over the plate first.
-    await self.head._move_over(self.head._get_target(self.plate, None)[1], None, None)
+    a1 = self.head._get_target(self.plate, None)[1]
+    await self.head.move_to_xy_position(a1.x, a1.y)
     await self.head.probe_z_using_clld(post_detection_distance=4.0)
     self.assertAlmostEqual(
       await self.head.request_z_position(),
       await self.head.request_last_lld_z_position() + 4.0,
       delta=0.01,
+    )
+
+  async def test_the_traverse_height_raises_a_lower_head_and_leaves_a_higher_one(self):
+    a1 = self.head._get_target(self.plate, None)[1]
+    top = self.head.configuration.z_range[1] - await self.head.request_tip_overhang()
+    await self.head.move_tool_bottom_to_z_position(top - 50.0)
+    await self.head.move_to_xy_position(a1.x, a1.y, minimum_traverse_height_start=top - 20.0)
+    self.assertAlmostEqual((await self.head.request_location()).z, top - 20.0, delta=0.05)
+    await self.head.move_to_xy_position(a1.x, a1.y, minimum_traverse_height_start=top - 40.0)
+    self.assertAlmostEqual((await self.head.request_location()).z, top - 20.0, delta=0.05)
+
+  async def test_every_drive_setting_reaches_its_move(self):
+    a1 = self.head._get_target(self.plate, None)[1]
+    moves = dict.fromkeys(("move_to_safe_z", "move_to_x_position", "move_to_y_position"), DEFAULT)
+    with patch.multiple(self.head, new_callable=AsyncMock, **moves) as mocked:
+      await self.head.move_to_xy_position(
+        a1.x,
+        a1.y,
+        x_acceleration_level=4,
+        x_current_limit=5,
+        y_speed=100.0,
+        y_acceleration=200.0,
+        y_current_limit=10,
+        z_speed=50.0,
+        z_acceleration=300.0,
+      )
+    mocked["move_to_safe_z"].assert_awaited_once_with(speed=50.0, acceleration=300.0)
+    mocked["move_to_x_position"].assert_awaited_once_with(
+      a1.x, acceleration_level=4, current_limit=5
+    )
+    mocked["move_to_y_position"].assert_awaited_once_with(
+      a1.y, speed=100.0, acceleration=200.0, current_limit=10
+    )
+
+  async def test_an_unreachable_y_is_refused_before_the_head_is_raised(self):
+    a1 = self.head._get_target(self.plate, None)[1]
+    top = self.head.configuration.z_range[1] - await self.head.request_tip_overhang()
+    await self.head.move_tool_bottom_to_z_position(top - 50.0)
+    with self.assertRaises(ValueError):
+      await self.head.move_to_xy_position(a1.x, 10_000.0, minimum_traverse_height_start=top - 20.0)
+    self.assertAlmostEqual((await self.head.request_location()).z, top - 50.0, delta=0.05)
+
+  async def test_without_tips_probing_and_mixing_are_refused_before_moving(self):
+    await self.head.discard_tips()
+    x, y = await self.head.request_x_position(), await self.head.request_y_position()
+    for command in (
+      self.head.probe_liquid_height(self.plate),
+      self.head.mix(self.plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0)),
+    ):
+      with self.assertRaisesRegex(RuntimeError, "pick up tips first"):
+        await command
+    self.assertEqual(
+      (await self.head.request_x_position(), await self.head.request_y_position()), (x, y)
     )
 
   async def test_an_empty_well_reads_zero(self):
