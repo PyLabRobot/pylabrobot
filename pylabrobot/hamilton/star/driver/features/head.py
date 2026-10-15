@@ -1101,7 +1101,7 @@ class Head:
       await self.arm.pipettes.move_to_safe_z()
     # Gentler X acceleration at low Y, where the head stands furthest out from the X drive.
     await asyncio.gather(
-      self.move_to_x_position(x, acceleration_level=1 if y <= 200.0 else 3),
+      self.move_to_x_position(x, acceleration_level=2 if y <= 200.0 else 3),
       self.move_to_y_position(y),
     )
 
