@@ -65,23 +65,23 @@ then instantiate the appropriate model. Stacker numbers may be sparse. For examp
 from pylabrobot.high_res.sample_storage import SteriStore
 
 racks = {1: rack_1, 3: rack_3}
-store = SteriStore(host="192.168.127.60", name="steristore", racks=racks)
-await store.setup()
+async with SteriStore(host="192.168.127.60", name="steristore", racks=racks) as store:
+  plate = await store.fetch_plate_to_loading_tray("plate_1", tray_index=0)
 ```
 
 Each mapping key is the rack's one-based device stacker number. Within a rack, the zero-based
 carrier `spot` maps to the one-based physical slot: spot 0 is device slot 1, spot 1 is slot 2, and
 so on. Mapping insertion order does not affect this relationship.
 
-Alternatively, omit `racks` to select device-discovery mode. During `setup()`, the driver reads the
+Alternatively, omit `racks` to select device-discovery mode. During lifespan entry, the driver reads the
 configured zero offset, slot height, and slot count with the read-only `getstackerdimensions`
 command and creates empty stacker resources. Passing `racks={}` explicitly represents a store with
 no configured racks and does not enable discovery.
 
-During setup, the device-reported transfer nests become `store.nests`. Their locations relative to
-the store are left undefined because they depend on the surrounding robot installation. Setup does
-not invent plate resources for occupied nests; assign any already-present plates to the matching
-nest after setup.
+During lifespan entry, the device-reported transfer nests become `store.nests`. Their locations
+relative to the store are left undefined because they depend on the surrounding robot installation.
+Lifespan entry does not invent plate resources for occupied nests; assign any already-present plates
+to the matching nest after entry.
 
 ## Plate transfers
 

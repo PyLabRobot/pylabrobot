@@ -20,8 +20,9 @@ event_bus = EventBus()
 event_bus.subscribe(lambda event: print(event.as_dict()))
 
 with use_event_bus(event_bus):
-  await machine.setup()
-  # Other instrumented PLR operations emit events in this scope.
+  async with machine:
+    # Other instrumented PLR operations emit events in this scope.
+    pass
 ```
 
 Use `set_default_event_bus()` when one process-wide bus is appropriate. `use_event_bus()` is
