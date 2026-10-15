@@ -6,6 +6,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.pumps.backend import PumpBackend
 
@@ -35,6 +36,7 @@ class MasterflexBackend(PumpBackend):
         "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
         f"Import error: {_SERIAL_IMPORT_ERROR}"
       )
+    super().__init__()
     self.com_port = com_port
     self.io = Serial(
       port=self.com_port,
@@ -46,22 +48,20 @@ class MasterflexBackend(PumpBackend):
       human_readable_device_name="Masterflex Pump",
     )
 
-  async def setup(self):
-    await self.io.setup()
-
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport and initialize pump communications."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
     await self.io.write(b"\x05")  # Enquiry; ready to send.
     await self.io.write(b"\x05P02\r")
 
   def serialize(self):
     return {**super().serialize(), "com_port": self.com_port}
 
-  async def stop(self):
-    await self.io.stop()
-
-  async def send_command(self, command: str):
+  async def send_command(self, command: str) -> bytes:
     command = "\x02P02" + command + "\x0d"
     await self.io.write(command.encode())
-    return self.io.read()
+    return await self.io.read()
 
   async def run_revolutions(self, num_revolutions: float):
     num_revolutions = round(num_revolutions, 2)
@@ -70,7 +70,7 @@ class MasterflexBackend(PumpBackend):
 
   async def run_continuously(self, speed: float):
     if speed == 0:
-      self.halt()
+      await self.halt()
       return
 
     direction = "+" if speed > 0 else "-"
