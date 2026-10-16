@@ -38,7 +38,8 @@ xarm = ["xarm-python-sdk"]
 odyssey = ["Pillow"]
 all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
 test = [
-  "pytest",
+  "pytest>=9.1",
+  "pytest-xdist",
 ]
 dev = [
   "PyLabRobot[all,test,celigo,rpc-dev]",
