@@ -69,8 +69,6 @@ class XArmConfiguration:
   x_mm_per_increment: float = 0.1
   x_range_increments: Tuple[int, int] = (0, 30_000)  # what the move accepts; x_range is narrower
   acceleration_level_range: Tuple[int, int] = (1, 5)  # index into five curves, not a rate
-  acceleration_level_default: int = 4
-  current_limit_default: int = 7
 
   @property
   def current_limit_digits(self) -> int:
@@ -98,8 +96,6 @@ class XArmConfiguration:
       x_mm_per_increment=other.x_mm_per_increment,
       x_range_increments=other.x_range_increments,
       acceleration_level_range=other.acceleration_level_range,
-      acceleration_level_default=other.acceleration_level_default,
-      current_limit_default=other.current_limit_default,
     )
 
   # -- conversions: the wire counts in steps, the driver speaks mm ---------------------------
@@ -211,6 +207,9 @@ class XArm:
   slice of what the driver read off the device at setup: what is mounted on the arm, how wide it
   is, how far it travels, and how far along X what it carries reaches.
   """
+
+  default_acceleration_level: int = 3
+  default_current_limit: int = 7
 
   def __init__(
     self,
@@ -354,15 +353,14 @@ class XArm:
     """Initialize this arm's drive. This moves it.
 
     Args:
-      current_limit: the motor current limit. Defaults to
-        `configuration.current_limit_default`.
+      current_limit: the motor current limit. Defaults to `default_current_limit`.
     Raises:
       ValueError: If the current limit is outside what the drive accepts.
     """
     c = self.configuration
     # The parameter is sent, so what the drive does is written here rather than left to the drive's
     # own default, which nothing would record.
-    current_limit = c.current_limit_default if current_limit is None else current_limit
+    current_limit = self.default_current_limit if current_limit is None else current_limit
     low, high = c.current_limit_range
     if not low <= current_limit <= high:
       raise ValueError(f"current_limit must be between {low} and {high}, is {current_limit}")
@@ -478,8 +476,8 @@ class XArm:
   async def move_to_x_position(
     self,
     x: float,
-    acceleration_level: int = 3,
-    current_limit: int = 7,
+    acceleration_level: Optional[int] = None,
+    current_limit: Optional[int] = None,
     settle_reads: int = 20,
   ):
     """Move the arm to an absolute X position.
@@ -490,12 +488,12 @@ class XArm:
     Args:
       x: target X position in mm, at the arm's reference point. Must lie within the arm's travel
         range (`configuration.x_range`).
-      acceleration_level: which acceleration curve to use. The drive's own default is
-        `configuration.acceleration_level_default`; this is the gentler one legacy sends. The
-        hardest curve leaves the arm oscillating about its target rather than approaching it, so it
-        takes longer to come to rest and further still with a 96-head parked forward - it arrives
-        either way, but the settling read below has more to wait for.
-      current_limit: the motor current limit.
+      acceleration_level: which acceleration curve to use. Defaults to
+        `default_acceleration_level`, gentler than the drive's own 4. The hardest curve leaves the
+        arm oscillating about its target rather than approaching it, so it takes longer to come to
+        rest and further still with a 96-head parked forward - it arrives either way, but the
+        settling read below has more to wait for.
+      current_limit: the motor current limit. Defaults to `default_current_limit`.
       settle_reads: how many reads to spend waiting for the arm to come to rest. Each is a command
         round trip, about 10 ms, against a settle of 27 to 90 ms where this was measured.
     Raises:
@@ -504,6 +502,10 @@ class XArm:
     """
     c = self.configuration
     self._check_reachable(x)
+    if acceleration_level is None:
+      acceleration_level = self.default_acceleration_level
+    if current_limit is None:
+      current_limit = self.default_current_limit
     low, high = c.acceleration_level_range
     if not low <= acceleration_level <= high:
       raise ValueError(
@@ -565,8 +567,8 @@ class XArm:
   async def move_x_relative(
     self,
     distance: float,
-    acceleration_level: int = 3,
-    current_limit: int = 7,
+    acceleration_level: Optional[int] = None,
+    current_limit: Optional[int] = None,
   ):
     """Move the arm by a distance from where it is now.
 
