@@ -1,6 +1,7 @@
 """PreciseFlex driver: the controller link, its lifecycle, and the configuration."""
 
 import asyncio
+import json
 import logging
 import warnings
 from typing import (
@@ -13,8 +14,10 @@ from typing import (
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.driver.configuration import (
+  DEVICE_FEATURE_CONFIGURATIONS,
   Axis,
   PreciseFlexConfiguration,
+  to_jsonable,
 )
 from pylabrobot.brooks.precise_flex.kinematics import JointState
 from pylabrobot.events import emit_event, evented_operation
@@ -863,6 +866,42 @@ class PreciseFlexDriver:
       config.arm.kinematics.l2,
       ", ".join(config.modules),
     )
+
+  # -- configuration system -----------------------------------------------------------------
+
+  def _saved_configuration(self) -> Dict[str, Any]:
+    """Every configuration this device holds, shaped as the device is.
+
+    The device's own configuration, then whatever is fitted to it, each under its feature's name.
+
+    Returns:
+      What `save_configuration` writes.
+
+    Raises:
+      RuntimeError: If nothing has been read off the device yet.
+    """
+    device = to_jsonable(self.configuration)
+    saved: Dict[str, Any] = {
+      "device": {n: v for n, v in device.items() if n not in DEVICE_FEATURE_CONFIGURATIONS}
+    }
+    for name, feature in (("arm", self.arm), ("gripper", self.gripper), ("rail", self.rail)):
+      if feature is not None and feature.configuration is not None:
+        saved[name] = to_jsonable(feature.configuration)
+    return saved
+
+  def save_configuration(self, path: str, indent: Optional[int] = 2) -> None:
+    """Write what this device reported to a file, to be declared from later.
+
+    Args:
+      path: where to write it.
+      indent: how far to indent the JSON, or None to write it on one line.
+
+    Raises:
+      RuntimeError: If nothing has been read off the device yet.
+    """
+    saved = self._saved_configuration()  # before the file is opened, so a refusal leaves none
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump(saved, f, indent=indent)
 
   # -- homing & range recovery --------------------------------------------------------------
 

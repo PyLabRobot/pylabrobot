@@ -1,12 +1,16 @@
-"""An arm's configuration: what its controller reports.
+"""An arm's configuration: what its controller reports, written to a file and read back from one.
 
 `PreciseFlexConfiguration` holds the arm's identity and nests each feature's own configuration. The
 driver builds one at setup and holds it, and `None` before.
 """
 
+import dataclasses
+import enum
+import json
+import typing
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from pylabrobot.brooks.precise_flex.kinematics import Axis
 
@@ -237,3 +241,98 @@ class PreciseFlexConfiguration:
       stacklevel=2,
     )
     return self.has_vision_gripper
+
+
+# -- writing a configuration to a file, and reading it back --------------------------------------
+
+
+def to_jsonable(value: Any) -> Any:
+  """The value as JSON holds it.
+
+  Args:
+    value: what to convert - a configuration, or anything one holds.
+
+  Returns:
+    The same value in types `json.dump` accepts. Live state, in fields named `_...`, is left out.
+  """
+  if dataclasses.is_dataclass(value) and not isinstance(value, type):
+    return {
+      field.name: to_jsonable(getattr(value, field.name))
+      for field in dataclasses.fields(value)
+      if not field.name.startswith("_")
+    }
+  if isinstance(value, enum.Enum):
+    return value.name
+  if isinstance(value, (list, tuple)):
+    return [to_jsonable(item) for item in value]
+  if isinstance(value, dict):
+    # Keys are written as text because JSON has no other kind. What they were is on the field.
+    return {to_jsonable(key): to_jsonable(item) for key, item in value.items()}
+  return value
+
+
+def _restore(hint: Any, value: Any) -> Any:
+  """One value, back in the type its field is declared to hold.
+
+  Args:
+    hint: the declared type.
+    value: the value as JSON held it.
+
+  Returns:
+    The value in the declared type.
+  """
+  if value is None:
+    return None
+  origin = typing.get_origin(hint)
+  args = typing.get_args(hint)
+  if origin is Union:  # Optional[X] is Union[X, None]; the None case returned above.
+    declared = [arg for arg in args if arg is not type(None)]
+    return _restore(declared[0], value) if len(declared) == 1 else value
+  if hint is tuple or origin is tuple:
+    # A range or a list of modules: JSON holds a list, and the field says it was a tuple.
+    return tuple(tuple(item) if isinstance(item, list) else item for item in value)
+  if origin is dict:
+    key_hint, value_hint = args
+    return {_restore(key_hint, key): _restore(value_hint, item) for key, item in value.items()}
+  if isinstance(hint, type) and issubclass(hint, enum.Enum):
+    return hint[value]
+  if dataclasses.is_dataclass(hint) and isinstance(hint, type):
+    # Names the class does not have are left out, so a file written by a driver that has since
+    # dropped a field still loads.
+    field_types = typing.get_type_hints(hint)
+    named = {field.name for field in dataclasses.fields(hint)}
+    return hint(**{n: _restore(field_types[n], v) for n, v in value.items() if n in named})
+  return value
+
+
+# Each feature's configuration, saved beside the device's own under the feature's name.
+DEVICE_FEATURE_CONFIGURATIONS: Dict[str, type] = {
+  "arm": PreciseFlexArmConfiguration,
+  "gripper": PreciseFlexGripperConfiguration,
+  "rail": PreciseFlexRailConfiguration,
+}
+
+
+def read_configuration(path: str) -> Dict[str, Any]:
+  """Read a saved configuration back into the dataclasses it was written from.
+
+  Shaped as the device is: the device's own configuration, and each feature's beside it. The
+  device's is returned with each feature's nested in it, as setup builds it.
+
+  Args:
+    path: a file `PreciseFlexDriver.save_configuration` wrote.
+
+  Returns:
+    `{"device": PreciseFlexConfiguration, <name>: configuration}`. Names this driver does not know
+    are left out.
+  """
+  with open(path, encoding="utf-8") as f:
+    saved = json.load(f)
+
+  features = {name: saved[name] for name in DEVICE_FEATURE_CONFIGURATIONS if name in saved}
+  read: Dict[str, Any] = {
+    name: _restore(DEVICE_FEATURE_CONFIGURATIONS[name], value) for name, value in features.items()
+  }
+  if "device" in saved:
+    read["device"] = _restore(PreciseFlexConfiguration, {**saved["device"], **features})
+  return read
