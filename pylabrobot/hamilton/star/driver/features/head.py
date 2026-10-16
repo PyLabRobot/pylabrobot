@@ -1054,8 +1054,8 @@ class Head:
   async def move_to_x_position(
     self,
     x: float,
-    acceleration_level: int = 3,
-    current_limit: int = 7,
+    acceleration_level: Optional[int] = None,
+    current_limit: Optional[int] = None,
     settle_reads: int = 20,
   ):
     """Move channel A1 along X. The whole arm travels, with everything else it carries.
@@ -1065,8 +1065,8 @@ class Head:
 
     Args:
       x: where to put channel A1, in mm.
-      acceleration_level: how hard to accelerate, 1 to 4.
-      current_limit: the motor current limit, 1 to 7.
+      acceleration_level: how hard to accelerate. Defaults to the X-arm that holds the head.
+      current_limit: the motor current limit. Defaults to the X-arm that holds the head.
       settle_reads: how many reads to take before calling the arm stopped.
 
     Raises:
@@ -1571,7 +1571,7 @@ class Head:
   async def initialize(
     self,
     tip_discard_location: Optional[Coordinate] = None,
-    z_position_at_the_command_end: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
     read_timeout: int = 60,
   ):
     """Initialize the head, discarding whatever is mounted on it.
@@ -1582,20 +1582,20 @@ class Head:
     Args:
       tip_discard_location: where to eject, in deck mm, at head channel A1. Defaults to
         `configuration.tip_discard_location`.
-      z_position_at_the_command_end: Z to leave the head at, in mm. Defaults to
+      minimum_traverse_height_end: Z to leave the head at, in mm. Defaults to
         `configuration.traversal_z_position`.
     Raises:
       ValueError: If no position was given and none is configured.
     """
-    if z_position_at_the_command_end is None:
-      z_position_at_the_command_end = self.configuration.traversal_z_position
+    if minimum_traverse_height_end is None:
+      minimum_traverse_height_end = self.configuration.traversal_z_position
     tip_discard_location = self.require_tip_discard_location(tip_discard_location)
     parameters: Dict[str, Any] = {
       "xs": f"{abs(round(tip_discard_location.x * 10)):05}",
       "xd": 0 if tip_discard_location.x >= 0 else 1,
       self.configuration.y_parameter: f"{abs(round(tip_discard_location.y * 10)):04}",
       self.configuration.z_parameter: f"{round(tip_discard_location.z * 10):04}",
-      self.configuration.z_end_parameter: f"{round(z_position_at_the_command_end * 10):04}",
+      self.configuration.z_end_parameter: f"{round(minimum_traverse_height_end * 10):04}",
     }
     return await self._driver.send_command(
       module="C0",

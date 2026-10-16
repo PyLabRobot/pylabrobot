@@ -103,6 +103,16 @@ class TestPerDriveCommands(unittest.IsolatedAsyncioTestCase):
       ["X0XIlw7", "X0XPla05000lr3lw7", "X0XPla04875lr3lw7", "X0XO"],
     )
 
+  async def test_the_defaults_are_the_arms(self):
+    driver = await _both_arms()
+    arm = cast(XArm, driver.left_x_arm)
+    sent = record(arm)
+    arm.default_acceleration_level = 2
+    arm.default_current_limit = 5
+    await XArm.initialize(arm)
+    await XArm.move_to_x_position(arm, 500.0)
+    self.assertEqual(sent, ["X0XIlw5", "X0XPla05000lr2lw5"])
+
   async def test_a_firmware_5_drive_takes_a_two_digit_current_limit(self):
     """From X0 firmware 5.0 the limiter is `lw##`, 00..15."""
     left = dataclasses.replace(
@@ -326,23 +336,23 @@ class TestConfiguringAnArm(unittest.IsolatedAsyncioTestCase):
   async def test_what_is_written_is_where_the_device_holds_it(self):
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    corrected = dataclasses.replace(arm.configuration, current_limit_default=3)
+    corrected = dataclasses.replace(arm.configuration, acceleration_level_range=(1, 3))
 
     arm.configuration = corrected
 
-    self.assertEqual(arm.configuration.current_limit_default, 3)
+    self.assertEqual(arm.configuration.acceleration_level_range, (1, 3))
     self.assertIs(cast(DeviceConfiguration, driver.configuration).left_arm, corrected)
 
   async def test_the_constructor_takes_one_too(self):
     """The same write, done where every other feature takes its configuration."""
     driver = await _both_arms()
     corrected = dataclasses.replace(
-      cast(XArm, driver.left_x_arm).configuration, current_limit_default=3
+      cast(XArm, driver.left_x_arm).configuration, acceleration_level_range=(1, 3)
     )
 
     arm = XArm(driver, side="left", configuration=corrected)
 
-    self.assertEqual(arm.configuration.current_limit_default, 3)
+    self.assertEqual(arm.configuration.acceleration_level_range, (1, 3))
     self.assertIs(cast(DeviceConfiguration, driver.configuration).left_arm, corrected)
 
   async def test_it_refuses_before_the_device_has_been_read(self):
@@ -357,27 +367,27 @@ class TestConfiguringAnArm(unittest.IsolatedAsyncioTestCase):
     arm's device facts across a re-read as a physical device's does - so what was written stays."""
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
-    arm.configuration = dataclasses.replace(arm.configuration, current_limit_default=3)
+    arm.configuration = dataclasses.replace(arm.configuration, acceleration_level_range=(1, 3))
 
     await driver.discover()
 
-    self.assertEqual(arm.configuration.current_limit_default, 3)
+    self.assertEqual(arm.configuration.acceleration_level_range, (1, 3))
 
   def test_device_facts_carry_over_and_readings_do_not(self):
     """What a physical device's discovery does with a configured arm. It rebuilds one from the
     reply, then takes the device facts off the arm as it was configured: those are what no device
     answers, so a re-read must not put them back to what this generation documents."""
-    configured = dataclasses.replace(BARE_X_ARM, current_limit_default=15)
+    configured = dataclasses.replace(BARE_X_ARM, acceleration_level_range=(1, 3))
     answered = dataclasses.replace(BARE_X_ARM, width=354.0, x_range=(95.0, 1340.2))
 
     kept = answered.with_device_facts_of(configured)
 
-    self.assertEqual(kept.current_limit_default, 15)
+    self.assertEqual(kept.acceleration_level_range, (1, 3))
     self.assertEqual(kept.width, 354.0)
     self.assertEqual(kept.x_range, (95.0, 1340.2))
     # Neither of the two it was worked out from is changed.
     self.assertEqual(configured.width, BARE_X_ARM.width)
-    self.assertEqual(answered.current_limit_default, BARE_X_ARM.current_limit_default)
+    self.assertEqual(answered.acceleration_level_range, BARE_X_ARM.acceleration_level_range)
 
 
 class TestGeometryDoesNotFollowTheReportedWidth(unittest.TestCase):
