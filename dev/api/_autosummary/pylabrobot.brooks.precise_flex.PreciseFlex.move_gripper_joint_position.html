@@ -593,6 +593,12 @@
 <dd><p>Move the gripper to a controller-native joint position.</p>
 <p>This is the counterpart to <a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.move_gripper.html#pylabrobot.brooks.precise_flex.PreciseFlex.move_gripper" title="pylabrobot.brooks.precise_flex.PreciseFlex.move_gripper"><code class="xref py py-meth docutils literal notranslate"><span class="pre">move_gripper()</span></code></a> for integrations with
 taught joint-space routes. The caller owns the joint calibration.</p>
+<p>A target outside the axis is held to the nearest end rather than refused,
+which is the opposite of <a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.move_gripper.html#pylabrobot.brooks.precise_flex.PreciseFlex.move_gripper" title="pylabrobot.brooks.precise_flex.PreciseFlex.move_gripper"><code class="xref py py-meth docutils literal notranslate"><span class="pre">move_gripper()</span></code></a>. A width in mm that lands
+out of range means <code class="docutils literal notranslate"><span class="pre">closed_gripper_position</span></code> is wrong, which is worth
+raising on; a taught joint position that does is a route reaching a little
+past the stop, and holding it there is what the route wanted. Either way
+the arm never receives a target past the end, which is what strands it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

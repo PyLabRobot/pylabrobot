@@ -611,13 +611,16 @@ home, response mode).  Exposes <code class="docutils literal notranslate"><span 
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.configuration.html#pylabrobot.brooks.precise_flex.PreciseFlex.configuration" title="pylabrobot.brooks.precise_flex.PreciseFlex.configuration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">configuration</span></code></a></p></td>
 <td><p>The device configuration resolved at setup.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.max_gripper_width.html#pylabrobot.brooks.precise_flex.PreciseFlex.max_gripper_width" title="pylabrobot.brooks.precise_flex.PreciseFlex.max_gripper_width"><code class="xref py py-obj docutils literal notranslate"><span class="pre">max_gripper_width</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.gripper_joint_range.html#pylabrobot.brooks.precise_flex.PreciseFlex.gripper_joint_range" title="pylabrobot.brooks.precise_flex.PreciseFlex.gripper_joint_range"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gripper_joint_range</span></code></a></p></td>
+<td><p>The gripper axis' soft limits in controller units, None at either end the arm has not read.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.max_gripper_width.html#pylabrobot.brooks.precise_flex.PreciseFlex.max_gripper_width" title="pylabrobot.brooks.precise_flex.PreciseFlex.max_gripper_width"><code class="xref py py-obj docutils literal notranslate"><span class="pre">max_gripper_width</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width.html#pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width" title="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width"><code class="xref py py-obj docutils literal notranslate"><span class="pre">min_gripper_width</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width.html#pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width" title="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width"><code class="xref py py-obj docutils literal notranslate"><span class="pre">min_gripper_width</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.parking_position.html#pylabrobot.brooks.precise_flex.PreciseFlex.parking_position" title="pylabrobot.brooks.precise_flex.PreciseFlex.parking_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parking_position</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.parking_position.html#pylabrobot.brooks.precise_flex.PreciseFlex.parking_position" title="pylabrobot.brooks.precise_flex.PreciseFlex.parking_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parking_position</span></code></a></p></td>
 <td><p>The pose <code class="docutils literal notranslate"><span class="pre">park()</span></code> moves to.</p></td>
 </tr>
 </tbody>
@@ -632,14 +635,20 @@ home, response mode).  Exposes <code class="docutils literal notranslate"><span 
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.are_grippers_closed.html#pylabrobot.brooks.precise_flex.PreciseFlex.are_grippers_closed" title="pylabrobot.brooks.precise_flex.PreciseFlex.are_grippers_closed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">are_grippers_closed</span></code></a>()</p></td>
 <td><p>(Dual Gripper Only) Tests if each gripper is fully closed by checking the end-of-travel sensors.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.attach.html#pylabrobot.brooks.precise_flex.PreciseFlex.attach" title="pylabrobot.brooks.precise_flex.PreciseFlex.attach"><code class="xref py py-obj docutils literal notranslate"><span class="pre">attach</span></code></a>([attach_state])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.at_speed.html#pylabrobot.brooks.precise_flex.PreciseFlex.at_speed" title="pylabrobot.brooks.precise_flex.PreciseFlex.at_speed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">at_speed</span></code></a>(speed_pct)</p></td>
+<td><p>Run a move at its own speed, then put the profile speed back.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.attach.html#pylabrobot.brooks.precise_flex.PreciseFlex.attach" title="pylabrobot.brooks.precise_flex.PreciseFlex.attach"><code class="xref py py-obj docutils literal notranslate"><span class="pre">attach</span></code></a>([attach_state])</p></td>
 <td><p>Attach or release the robot, or get attachment state.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.change_config.html#pylabrobot.brooks.precise_flex.PreciseFlex.change_config" title="pylabrobot.brooks.precise_flex.PreciseFlex.change_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">change_config</span></code></a>([grip_mode])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.change_config.html#pylabrobot.brooks.precise_flex.PreciseFlex.change_config" title="pylabrobot.brooks.precise_flex.PreciseFlex.change_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">change_config</span></code></a>([grip_mode])</p></td>
 <td><p>Change Robot configuration from Righty to Lefty or vice versa using customizable locations.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.change_config2.html#pylabrobot.brooks.precise_flex.PreciseFlex.change_config2" title="pylabrobot.brooks.precise_flex.PreciseFlex.change_config2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">change_config2</span></code></a>([grip_mode])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.change_config2.html#pylabrobot.brooks.precise_flex.PreciseFlex.change_config2" title="pylabrobot.brooks.precise_flex.PreciseFlex.change_config2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">change_config2</span></code></a>([grip_mode])</p></td>
 <td><p>Change Robot configuration from Righty to Lefty or vice versa using algorithm.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.connect.html#pylabrobot.brooks.precise_flex.PreciseFlex.connect" title="pylabrobot.brooks.precise_flex.PreciseFlex.connect"><code class="xref py py-obj docutils literal notranslate"><span class="pre">connect</span></code></a>()</p></td>
+<td><p>Open the link and agree the response protocol.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.dest_c.html#pylabrobot.brooks.precise_flex.PreciseFlex.dest_c" title="pylabrobot.brooks.precise_flex.PreciseFlex.dest_c"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dest_c</span></code></a>([arg1])</p></td>
 <td><p>Get the destination or current Cartesian location of the robot.</p></td>
@@ -650,26 +659,32 @@ home, response mode).  Exposes <code class="docutils literal notranslate"><span 
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.detach.html#pylabrobot.brooks.precise_flex.PreciseFlex.detach" title="pylabrobot.brooks.precise_flex.PreciseFlex.detach"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detach</span></code></a>()</p></td>
 <td><p>Detach the robot.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_joint_position.html#pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_joint_position" title="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_joint_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_at_joint_position</span></code></a>(position, resource_width)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.disconnect.html#pylabrobot.brooks.precise_flex.PreciseFlex.disconnect" title="pylabrobot.brooks.precise_flex.PreciseFlex.disconnect"><code class="xref py py-obj docutils literal notranslate"><span class="pre">disconnect</span></code></a>()</p></td>
+<td><p>Hand the arm back and close the link.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_joint_position.html#pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_joint_position" title="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_joint_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_at_joint_position</span></code></a>(position, resource_width)</p></td>
 <td><p>Drop at the specified joint position.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_location.html#pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_location" title="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_location"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_at_location</span></code></a>(location, direction, ...[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_location.html#pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_location" title="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_location"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_at_location</span></code></a>(location, direction, ...[, ...])</p></td>
 <td><p>Drop at the specified Cartesian location.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.halt.html#pylabrobot.brooks.precise_flex.PreciseFlex.halt" title="pylabrobot.brooks.precise_flex.PreciseFlex.halt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">halt</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.halt.html#pylabrobot.brooks.precise_flex.PreciseFlex.halt" title="pylabrobot.brooks.precise_flex.PreciseFlex.halt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">halt</span></code></a>()</p></td>
 <td><p>Stops the current robot immediately but leaves power on.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.here_c.html#pylabrobot.brooks.precise_flex.PreciseFlex.here_c" title="pylabrobot.brooks.precise_flex.PreciseFlex.here_c"><code class="xref py py-obj docutils literal notranslate"><span class="pre">here_c</span></code></a>(location_index)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.here_c.html#pylabrobot.brooks.precise_flex.PreciseFlex.here_c" title="pylabrobot.brooks.precise_flex.PreciseFlex.here_c"><code class="xref py py-obj docutils literal notranslate"><span class="pre">here_c</span></code></a>(location_index)</p></td>
 <td><p>Record the current position of the selected robot into the specified Location as Cartesian.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.here_j.html#pylabrobot.brooks.precise_flex.PreciseFlex.here_j" title="pylabrobot.brooks.precise_flex.PreciseFlex.here_j"><code class="xref py py-obj docutils literal notranslate"><span class="pre">here_j</span></code></a>(location_index)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.here_j.html#pylabrobot.brooks.precise_flex.PreciseFlex.here_j" title="pylabrobot.brooks.precise_flex.PreciseFlex.here_j"><code class="xref py py-obj docutils literal notranslate"><span class="pre">here_j</span></code></a>(location_index)</p></td>
 <td><p>Record the current position of the selected robot into the specified Location as angles.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.home.html#pylabrobot.brooks.precise_flex.PreciseFlex.home" title="pylabrobot.brooks.precise_flex.PreciseFlex.home"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.home.html#pylabrobot.brooks.precise_flex.PreciseFlex.home" title="pylabrobot.brooks.precise_flex.PreciseFlex.home"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home</span></code></a>()</p></td>
 <td><p>Home the robot associated with this thread.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.home_all.html#pylabrobot.brooks.precise_flex.PreciseFlex.home_all" title="pylabrobot.brooks.precise_flex.PreciseFlex.home_all"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home_all</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.home_all.html#pylabrobot.brooks.precise_flex.PreciseFlex.home_all" title="pylabrobot.brooks.precise_flex.PreciseFlex.home_all"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home_all</span></code></a>()</p></td>
 <td><p>Home all robots.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.initialize.html#pylabrobot.brooks.precise_flex.PreciseFlex.initialize" title="pylabrobot.brooks.precise_flex.PreciseFlex.initialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize</span></code></a>()</p></td>
+<td><p>Raise high power, take control, and adopt the controller's own configuration.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.is_gripper_closed.html#pylabrobot.brooks.precise_flex.PreciseFlex.is_gripper_closed" title="pylabrobot.brooks.precise_flex.PreciseFlex.is_gripper_closed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_gripper_closed</span></code></a>()</p></td>
 <td><p>(Single Gripper Only) Tests if the gripper is fully closed by checking the end-of-travel sensor.</p></td>
@@ -915,7 +930,7 @@ home, response mode).  Exposes <code class="docutils literal notranslate"><span 
 <td><p>Set the specified digital input or output signal.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.setup.html#pylabrobot.brooks.precise_flex.PreciseFlex.setup" title="pylabrobot.brooks.precise_flex.PreciseFlex.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>([skip_home])</p></td>
-<td><p>Initialize the PreciseFlex driver.</p></td>
+<td><p>Bring the arm fully up: link, control, and (unless skipped) home.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.start_freedrive_mode.html#pylabrobot.brooks.precise_flex.PreciseFlex.start_freedrive_mode" title="pylabrobot.brooks.precise_flex.PreciseFlex.start_freedrive_mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_freedrive_mode</span></code></a>([free_axes])</p></td>
 <td><p>Enter freedrive mode, allowing manual movement of the specified joints.</p></td>

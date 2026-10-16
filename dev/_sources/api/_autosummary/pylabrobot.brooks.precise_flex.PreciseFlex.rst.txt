@@ -20,6 +20,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlex
       ~PreciseFlex.PARKING_POSITION_RIGHT
       ~PreciseFlex.ResponseMode
       ~PreciseFlex.configuration
+      ~PreciseFlex.gripper_joint_range
       ~PreciseFlex.max_gripper_width
       ~PreciseFlex.min_gripper_width
       ~PreciseFlex.parking_position
@@ -35,12 +36,15 @@ pylabrobot.brooks.precise\_flex.PreciseFlex
    
       ~PreciseFlex.__init__
       ~PreciseFlex.are_grippers_closed
+      ~PreciseFlex.at_speed
       ~PreciseFlex.attach
       ~PreciseFlex.change_config
       ~PreciseFlex.change_config2
+      ~PreciseFlex.connect
       ~PreciseFlex.dest_c
       ~PreciseFlex.dest_j
       ~PreciseFlex.detach
+      ~PreciseFlex.disconnect
       ~PreciseFlex.drop_at_joint_position
       ~PreciseFlex.drop_at_location
       ~PreciseFlex.halt
@@ -48,6 +52,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlex
       ~PreciseFlex.here_j
       ~PreciseFlex.home
       ~PreciseFlex.home_all
+      ~PreciseFlex.initialize
       ~PreciseFlex.is_gripper_closed
       ~PreciseFlex.move_gripper
       ~PreciseFlex.move_gripper_joint_position
