@@ -85,7 +85,11 @@ It confirms download mode before sending DE or DP, since these commands have mov
 some applications. It does not retry uncertain writes or restart partially programmed firmware.
 Cached versions are cleared before the mode switch and restored after successful verification.
 
-Cycle counts are compared, logged, and returned without rewriting them. Pipette results contain
-`PipetteCycleCounts`; other targets return dictionaries when counters are available. X0 5.x returns
-the documented `na`, `nb`, `nc`, and `nf` fields; iSWAP returns gripping cycles, autoload returns
-barcode scans, and heads return tip and liquid cycles.
+Channel type is recorded as `PipetteConfiguration.pip_type_1000ul`. Discovery checks it against the
+master's configuration, and firmware updates repeat the channel query and comparison before flashing.
+
+Cycle counts are compared, logged, and returned without rewriting them. Pipette and head results
+contain `PipetteCycleCounts`, also returned by their `request_cycle_counts()` methods.
+`star.pipettes.request_all_cycle_counts()` returns these values in channel-index order.
+Other targets return dictionaries when counters are available: X0 5.x uses the documented
+`na`, `nb`, `nc`, and `nf` fields; iSWAP returns gripping cycles and autoload returns barcode scans.

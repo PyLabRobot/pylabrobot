@@ -14,7 +14,7 @@ from pylabrobot.hamilton.star.driver.features.autoload import Autoload
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.features.head384 import Head384
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
-from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
+from pylabrobot.hamilton.star.driver.features.pipettes import PipetteCycleCounts, Pipettes
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfiguration
 from pylabrobot.hamilton.star.driver.firmware_update import _FirmwareDownloader, _FirmwareImage
 from pylabrobot.hamilton.star.driver.master import STARDriver
@@ -165,7 +165,7 @@ class FirmwareInstrument:
     if command == "VW":
       return prefix + ("vw1 0" if self.fault == "hardware" else "vw0 0 0 0")
     if command == "QG":
-      return prefix + ("qg0" if self.fault == "plunger" else "qg1")
+      return prefix + ("qg0" if self.fault == "pipette_type" else "qg1")
     if command == "RV":
       return (
         prefix
@@ -205,6 +205,7 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
     self.driver = STARDriver(io=Mock(spec=IOBase))
     self.driver._connected = True
     self.driver._num_channels = 12
+    self.driver.configuration = DeviceConfiguration(pip_type_1000ul=True)
     self.pipettes = Pipettes(self.driver)
     self.pipettes.configuration.resolve_channels(12)
     patcher = patch("pylabrobot.hamilton.star.driver.firmware_update.asyncio", wraps=asyncio)
@@ -256,7 +257,7 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
       "status",
       "eeprom",
       "hardware",
-      "plunger",
+      "pipette_type",
       "empty_calibration",
       "repeated_calibration",
       "concatenated_calibration",
@@ -274,6 +275,22 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.mutations(), [])
     result = await self.update(allow_downgrade=True)
     self.assertEqual(result.version, VERSION)
+
+  async def test_master_channel_type_disagreement_prevents_update(self):
+    """The channel and master must agree before the downloader is entered."""
+    self.driver.configuration = DeviceConfiguration(pip_type_1000ul=False)
+    with self.assertRaisesRegex(ValueError, "P1.*master"):
+      await self.update()
+    self.assertEqual(self.mutations(), [])
+
+  async def test_update_reads_channel_type_instead_of_trusting_discovery(self):
+    """A stale cached 1000 uL type cannot authorize a different channel for flashing."""
+    self.pipettes.configuration.channels[0].pip_type_1000ul = True
+    self.instrument.fault = "pipette_type"
+    with self.assertRaises(ValueError):
+      await self.update()
+    self.assertTrue(any(cmd.startswith("P1QG") for cmd in self.instrument.commands))
+    self.assertEqual(self.mutations(), [])
 
   async def test_download_status_is_checked_before_erase(self):
     self.instrument.fault = "download"
@@ -479,7 +496,7 @@ class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
         else:
           self.assertEqual(
             result.cycle_counts_before,
-            dict(tip_pickups=10, tip_discards=20, aspirations=30, dispenses=40),
+            PipetteCycleCounts(tip_pickups=10, tip_discards=20, aspirations=30, dispenses=40),
           )
         if module != "I0":
           self.assertFalse(any(cmd[2:4] == "QX" for cmd in self.instrument.commands))

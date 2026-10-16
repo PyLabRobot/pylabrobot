@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
+from pylabrobot.hamilton.star.driver.features.pipettes import PipetteCycleCounts
 from pylabrobot.hamilton.star.driver.firmware_update import (
   FirmwareUpdateResult,
   _firmware_reply_body,
@@ -629,17 +630,12 @@ class Head:
     state["head_type"] = str(head_type)
     return state
 
-  async def _request_firmware_cycle_counts(self) -> Dict[str, int]:
-    """Read tip and liquid cycle counts for comparison across an update."""
+  async def request_cycle_counts(self) -> PipetteCycleCounts:
+    """Read the head's lifetime tip pickup, discard, aspiration, and dispense counters."""
     reply = await self._driver.send_command(
       self.configuration.module, "RV", fmt="na##########nb##########nc##########nd##########"
     )
-    return dict(
-      zip(
-        ("tip_pickups", "tip_discards", "aspirations", "dispenses"),
-        (reply["na"], reply["nb"], reply["nc"], reply["nd"]),
-      )
-    )
+    return PipetteCycleCounts(reply["na"], reply["nb"], reply["nc"], reply["nd"])
 
   async def update_firmware(
     self,
@@ -669,7 +665,7 @@ class Head:
       allow_downgrade=allow_downgrade,
       invalidate_version=self._invalidate_firmware_version,
       read_state=self._request_firmware_state,
-      read_cycle_counts=self._request_firmware_cycle_counts,
+      read_cycle_counts=self.request_cycle_counts,
     )
     self.configuration.firmware_version = result.version
     _, self.configuration.firmware_date = _firmware_version_parts(result.version)

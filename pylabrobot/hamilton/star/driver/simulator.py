@@ -490,6 +490,12 @@ class SimulatedPipettes(_Simulated, Pipettes):
     if channel is None or channel >= self.num_channels:
       return None
 
+    if command == "QG":
+      pip_type = self._declared_channel(channel).pip_type_1000ul
+      if pip_type is None:
+        pip_type = self.device.simulated_configuration.pip_type_1000ul
+      return {"qg": int(pip_type)}, f"channel {channel}'s declared type"
+
     if command == "VY":
       width = self._declared_channel(channel).width
       if width is None:
@@ -730,6 +736,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
       head_type=declared.head_type,
       stop_disc_type=declared.stop_disc_type,
       pressure_adc=declared.pressure_adc,
+      pip_type_1000ul=await self._request_pip_type_1000ul(channel),
     )
 
 

@@ -13,6 +13,8 @@ if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.features.pipettes import PipetteCycleCounts
   from pylabrobot.hamilton.star.driver.master import STARDriver
 
+_FirmwareCycleCounts = Union["PipetteCycleCounts", Dict[str, int], None]
+
 logger = logging.getLogger(__name__)
 
 # Major versions distinguish incompatible controller generations.
@@ -189,15 +191,15 @@ class _PipetteFirmwareState:
   adjustment_status: str
   technical_status: str
   monitoring_configuration: str
-  plunger_capacity: int
+  pip_type_1000ul: bool
 
 
 @dataclass(frozen=True)
 class FirmwareUpdateResult:
   """A verified component transfer; power cycling and initialization are still required.
 
-  Cycle counts are None when the controller has no cycle-counter query. X0 5.x returns the
-  firmware's na/nb/nc/nf fields; other components use descriptive counter names.
+  Heads return PipetteCycleCounts; other components return counter dictionaries, or None
+  when the controller has no cycle-counter query. X0 5.x uses the firmware's na/nb/nc/nf keys.
   """
 
   module: str
@@ -205,8 +207,8 @@ class FirmwareUpdateResult:
   version: str
   sha256: str
   records_programmed: int
-  cycle_counts_before: Optional[Dict[str, int]]
-  cycle_counts_after: Optional[Dict[str, int]]
+  cycle_counts_before: _FirmwareCycleCounts
+  cycle_counts_after: _FirmwareCycleCounts
   download_date: datetime.date
 
 
@@ -350,7 +352,7 @@ class _FirmwareDownloader:
     allow_downgrade: bool,
     invalidate_version: Callable[[], None],
     read_state: Callable[[], Awaitable[Dict[str, str]]],
-    read_cycle_counts: Optional[Callable[[], Awaitable[Optional[Dict[str, int]]]]] = None,
+    read_cycle_counts: Optional[Callable[[], Awaitable[_FirmwareCycleCounts]]] = None,
   ) -> FirmwareUpdateResult:
     """Validate, transfer, and verify a non-pipette component under the device-wide lock."""
     if self.module.startswith("P"):

@@ -107,7 +107,7 @@ PressureADC = Literal["Renesas_X9268", "Analog_Devices_AD5263"]
 
 @dataclass(frozen=True)
 class PipetteCycleCounts:
-  """The channel's reported lifetime tip and pipetting cycle counters."""
+  """Lifetime tip and pipetting cycle counters reported by a channel or head."""
 
   tip_pickups: int
   tip_discards: int
@@ -126,6 +126,8 @@ class PipetteConfiguration:
   head_type: Optional[HeadType] = None
   stop_disc_type: Optional[StopDiscType] = None
   pressure_adc: Optional[PressureADC] = None
+  pip_type_1000ul: Optional[bool] = None
+  """QG channel type: False = 300 uL piston, True = 1000 uL piston; None until read."""
   firmware_version: Optional[str] = None
   width: Optional[float] = None
   """How wide the pipette is, in mm. Two channels cannot sit closer than this in Y."""
@@ -572,10 +574,22 @@ class Pipettes:
     increments = cast(List[int], resp["yc"])[1]
     return self.configuration.y_drive_increments_to_mm(increments)
 
+  async def _request_pip_type_1000ul(self, channel: int) -> bool:
+    """Read QG: 0 denotes a 300 uL channel and 1 a 1000 uL channel."""
+    self._require_channel(channel)
+    reply = await self._driver.send_command(
+      module=self.channel_id(channel), command="QG", fmt="qg#"
+    )
+    pip_type = cast(int, reply["qg"])
+    if pip_type not in (0, 1):
+      raise ValueError(f"Unknown pipetting channel type: {pip_type}")
+    return pip_type == 1
+
   async def request_pipette_configuration(self, channel: int) -> PipetteConfiguration:
     """Request what hardware is fitted to a pipette.
 
-    Firmware from 2016 or older does not carry it.
+    Reads hardware fields with VW and channel type with QG. Firmware from 2016 or older
+    does not carry VW; discovery reads just QG for those channels.
 
     Args:
       channel: which channel to ask, 0-indexed from the back.
@@ -606,16 +620,29 @@ class Pipettes:
       ),
       stop_disc_type="core_i" if field_at(2) in ("0", None) else "core_ii",
       pressure_adc="Analog_Devices_AD5263" if field_at(3) == "1" else "Renesas_X9268",
+      pip_type_1000ul=await self._request_pip_type_1000ul(channel),
     )
+
+  def _check_pipette_type(self, channel: int, pipette: PipetteConfiguration) -> None:
+    """Require the channel's reported type to agree with the master's configuration."""
+    device = self._driver.configuration
+    if device is None:
+      raise RuntimeError("Read the master configuration before checking pipette types")
+    if pipette.pip_type_1000ul != device.pip_type_1000ul:
+      raise ValueError(
+        f"{self.channel_id(channel)} reports pip_type_1000ul={pipette.pip_type_1000ul}, "
+        f"but the master reports pip_type_1000ul={device.pip_type_1000ul}"
+      )
 
   async def _discover_channel(self, channel: int):
     version, build_date = await self.request_firmware_version(channel)
-    # On older firmware the hardware fields simply stay unread, rather than the query failing.
+    # Older firmware supports QG but not the VW hardware fields.
     pipette = (
       await self.request_pipette_configuration(channel)
       if build_date.year >= self.configuration.hardware_query_first_year
-      else PipetteConfiguration()
+      else PipetteConfiguration(pip_type_1000ul=await self._request_pip_type_1000ul(channel))
     )
+    self._check_pipette_type(channel, pipette)
     pipette.firmware_version = version
     pipette.width = await self.request_min_pipette_width(channel)
     self.configuration.channels[channel] = pipette
@@ -647,16 +674,6 @@ class Pipettes:
     )
     return cast(int, reply["qv"])
 
-  async def request_plunger_capacity(self, channel: int) -> int:
-    """Read QG's plunger type and return its capacity in uL."""
-    self._require_channel(channel)
-    reply = await self._driver.send_command(
-      module=self.channel_id(channel), command="QG", fmt="qg#"
-    )
-    if reply["qg"] not in (0, 1):
-      raise ValueError(f"Unknown pipette plunger type: {reply['qg']}")
-    return 1000 if reply["qg"] == 1 else 300
-
   async def request_cycle_counts(self, channel: int) -> PipetteCycleCounts:
     """Read the four ten-digit RV cycle counters without changing them."""
     self._require_channel(channel)
@@ -666,6 +683,12 @@ class Pipettes:
       fmt="na##########nb##########nc##########nd##########",
     )
     return PipetteCycleCounts(reply["na"], reply["nb"], reply["nc"], reply["nd"])
+
+  async def request_all_cycle_counts(self) -> List[PipetteCycleCounts]:
+    """Read every channel's cycle counters, returning them in channel-index order."""
+    return list(
+      await asyncio.gather(*(self.request_cycle_counts(ch) for ch in range(self.num_channels)))
+    )
 
   async def _request_adjustment_values(self, channel: int) -> str:
     """Read RK calibration fields verbatim for comparison across a firmware update."""
@@ -710,7 +733,7 @@ class Pipettes:
       adjustment_status=await self._request_adjustment_status(channel),
       technical_status=await self._request_technical_status(channel),
       monitoring_configuration=await self._request_monitoring_configuration(channel),
-      plunger_capacity=await self.request_plunger_capacity(channel),
+      pip_type_1000ul=await self._request_pip_type_1000ul(channel),
     )
 
   async def update_firmware(
@@ -758,8 +781,9 @@ class Pipettes:
           "Channel status and EEPROM checks must be clear before a firmware update"
         )
       hardware = await self.request_pipette_configuration(channel)
+      self._check_pipette_type(channel, hardware)
       if (
-        await self.request_plunger_capacity(channel) != 1000
+        not hardware.pip_type_1000ul
         or hardware.channel_type != "ML_STAR"
         or hardware.head_type != "ML_STAR"
       ):
