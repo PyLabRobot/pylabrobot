@@ -1,1 +1,1 @@
-from .precise_flex import PreciseFlex
+from .precise_flex import PreciseFlex, PreciseFlexDriver
