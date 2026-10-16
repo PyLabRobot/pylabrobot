@@ -36,6 +36,7 @@ _PF400_REPLIES: Dict[str, str] = {
     "PARobot Module 3.0D4 10-25-2024, SSGrip Module 3.0D4 10-25-2024, "
     "PARobot Auto Center Module 3.0D3 10-23-2024, IntelliGuide 1.0 05-22-2024"
   ),
+  "VToolProperty System CameraCount": "2",  # the relay answers the bare value
   "pd 2700": "0 500, 360, 720, 720, 400",
   "pd 2702": "0 3500, 600, 920, 4000, 10000",
   "pd 2704": "0 150",
@@ -1319,6 +1320,7 @@ _SETUP = [
   "pd 2003",
   "pd 2002",
   "version",
+  "VToolProperty System CameraCount",
   "pd 2700",
   "pd 2702",
   "pd 2704",
@@ -1357,6 +1359,7 @@ _SETUP_SKIP_HOME = [
   "pd 2003",
   "pd 2002",
   "version",
+  "VToolProperty System CameraCount",
   "pd 2700",
   "pd 2702",
   "pd 2704",
@@ -1394,6 +1397,7 @@ _RAIL_SETUP = [
   "pd 2003",
   "pd 2002",
   "version",
+  "VToolProperty System CameraCount",
   "pd 2700",
   "pd 2702",
   "pd 2704",
@@ -1501,6 +1505,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
           "gripper_width_range": config.gripper.soft_limit_range,
           "is_dual_gripper": config.gripper.is_dual_gripper,
           "power_state": await arm.request_system_state(),
+          "is_vision_gripper": config.has_vision_gripper,
         }
         for name, value in expected.items():
           with self.subTest(name), self.assertWarns(DeprecationWarning):
@@ -1527,7 +1532,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     await arm.arm._handle_out_of_range_axes()
     self.assertEqual(fake.sent, whole.sent)
     self.assertTrue(
-      all(c.split()[0] in ("pd", "version", "sysState") for c in discovery),
+      all(c.split()[0] in ("pd", "version", "VToolProperty", "sysState") for c in discovery),
       discovery,
     )
 

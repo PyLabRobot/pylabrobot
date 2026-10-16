@@ -654,15 +654,25 @@ class PreciseFlexDriver:
 
     Read-only (no motion, no homing required), so it is safe to call at setup.
     Link lengths and tool length are read from the controller; per-arm flags are
-    derived from the joint set, the axis mask, and the model name.
+    derived from the joint set, the axis mask, and the camera count.
     """
     soft_limits = await self.arm.request_joint_limits()
     axis_mask = await self.request_axis_mask()
     robot_name = await self.request_robot_name()
-    name_tokens = robot_name.split()
-    suffix = name_tokens[-1].upper().lstrip("0123456789") if name_tokens else ""
     # The version command reports the TCS app version then its loaded modules.
     tcs_version, *modules = (seg.strip() for seg in (await self.request_version()).split(","))
+    # A vision gripper is its cameras: counted through the controller, where its vision module is
+    # loaded. An arm that will not say has none.
+    camera_count = 0
+    if any("intelliguide" in module.lower() for module in modules):
+      try:
+        camera_count = max(0, int(await self._locked_exchange("VToolProperty System CameraCount")))
+      except Exception as exc:
+        logger.warning(
+          "[PreciseFlex %s] the controller did not say how many cameras it has: %s",
+          self.io._host,
+          exc,
+        )
 
     # Combine the per-axis 100% references with the global percent caps into the
     # effective per-joint maxima, so consumers get usable limits, not raw factors.
@@ -767,7 +777,7 @@ class PreciseFlexDriver:
         is_dual_gripper=bool(axis_mask & 0x80),
       ),
       rail=rail,
-      is_vision_gripper=suffix[:1] == "V",
+      camera_count=camera_count,
       _power_state=power_state,
     )
 
@@ -830,7 +840,7 @@ class PreciseFlexDriver:
       label
       for present, label in (
         (config.gripper.is_dual_gripper, "dual gripper"),
-        (config.is_vision_gripper, "vision gripper"),
+        (config.has_vision_gripper, "vision gripper"),
       )
       if present
     ]
