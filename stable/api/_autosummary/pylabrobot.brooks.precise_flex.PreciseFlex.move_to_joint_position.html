@@ -597,7 +597,8 @@ the move is guarded against out-of-range axes (see <code class="docutils literal
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>position</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><em>Dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em>) – Target joint pose. Omitted axes keep their live values.</p></li>
 <li><p><strong>speed_pct</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em> | </em><em>None</em>) – Movement speed override as a percentage (0-100). If None, uses the current
-speed setting.</p></li>
+speed setting. This STICKS: it is not restored afterwards. Wrap a call in
+<code class="docutils literal notranslate"><span class="pre">at_speed</span></code> instead to scope a speed to one move.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>

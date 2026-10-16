@@ -613,9 +613,11 @@ autonomous motion - an out-of-range axis then raises instead, carrying recovery 
 Every recovery is logged.</p></li>
 <li><p><strong>closed_gripper_position</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – firmware-unit value (passed to <code class="docutils literal notranslate"><span class="pre">GripClosePos</span></code> /
 <code class="docutils literal notranslate"><span class="pre">GripOpenPos</span></code>) at which the jaws are at <a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width.html#pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width" title="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width"><code class="xref py py-attr docutils literal notranslate"><span class="pre">min_gripper_width</span></code></a>.
-Depends on the mounted gripper. The conversion mm → firmware units is
-linear with slope 1: <code class="docutils literal notranslate"><span class="pre">units</span> <span class="pre">=</span> <span class="pre">closed_gripper_position</span> <span class="pre">+</span> <span class="pre">(width_mm</span> <span class="pre">-</span>
-<span class="pre">min_gripper_width)</span></code>.</p></li>
+Depends on the mounted gripper. That pairing is the anchor for the
+mm → firmware unit conversion, which is linear with slope 1, and it is
+frozen at construction: setup discovers the axis limits and rewrites
+<a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width.html#pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width" title="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width"><code class="xref py py-attr docutils literal notranslate"><span class="pre">min_gripper_width</span></code></a>, so reading it later would move what a width
+means.</p></li>
 <li><p><strong>parking_position</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><em>Dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>] </em><em>| </em><em>None</em>) – initial value for the public, runtime-settable <code class="docutils literal notranslate"><span class="pre">parking_position</span></code> that
 <code class="docutils literal notranslate"><span class="pre">park()</span></code> moves to. Leave None (the default) and setup fills the generic default RIGHT pose
 (planar fold, Z column at 3/4 of the discovered travel); reassign it any time to park
