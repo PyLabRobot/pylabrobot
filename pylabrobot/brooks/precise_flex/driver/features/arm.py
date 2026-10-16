@@ -231,8 +231,9 @@ class PreciseFlexArm:
   ) -> None:
     """Wait until the arm has stopped moving, leaving the connection free.
 
-    Polls ``wherej`` and returns once two samples in a row agree within ``settle``. An arm already
-    stopped, also one stopped short of its target, returns at once.
+    Polls ``wherej`` and returns once three samples in a row agree within ``settle``. Two are not
+    enough: after a ``moveJ`` is accepted the arm creeps under ``settle`` for about 0.1 s (IO logs).
+    An arm already stopped, also one stopped short of its target, returns at once.
 
     The firmware's ``waitForEom`` is not used: it makes the controller ignore everything else on the
     connection, ``halt`` included, until the move ends (hardware-verified). Every command that
@@ -251,11 +252,13 @@ class PreciseFlexArm:
     async with halt_on_interrupt(lambda: halt_and_resync(self._driver.io, b"halt")):
       previous = _floats(await self._driver.send_command("wherej"))
       deadline = time.monotonic() + timeout
+      still = 0
       while True:
         await asyncio.sleep(poll_interval)
         current = _floats(await self._driver.send_command("wherej"))
-        if all(abs(c - p) < settle for c, p in zip(current, previous)):
-          return  # stopped moving
+        still = still + 1 if all(abs(c - p) < settle for c, p in zip(current, previous)) else 0
+        if still == 2:
+          return  # three samples agree: stopped moving
         if time.monotonic() > deadline:
           raise TimeoutError(f"motion did not settle within {timeout:.0f}s (current={current})")
         previous = current
