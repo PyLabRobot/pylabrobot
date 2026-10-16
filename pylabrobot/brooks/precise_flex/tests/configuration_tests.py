@@ -16,6 +16,14 @@ from pylabrobot.brooks.precise_flex.driver.features.rail import PreciseFlexRailC
 from pylabrobot.brooks.precise_flex.driver.master import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.tests.wire_tests import _FakeController, _make_arm
 
+# What an extended-reach PreciseFlex 400 with 400 mm of Z travel reported about itself.
+RECORDING_PF400 = os.path.join(
+  os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+  "driver",
+  "recordings",
+  "pf400_extended_400mm.json",
+)
+
 
 def configuration(rail=None) -> PreciseFlexConfiguration:
   per_axis = {axis: float(axis) for axis in (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST)}
@@ -137,6 +145,36 @@ class TestSavedConfiguration(unittest.IsolatedAsyncioTestCase):
       with self.assertRaises(RuntimeError):
         driver.save_configuration(path)
       self.assertFalse(os.path.exists(path))
+
+
+class TestTheRecordedPF400(unittest.IsolatedAsyncioTestCase):
+  """The recording shipped with the driver: what one extended-reach PF400 answered."""
+
+  def setUp(self):
+    self.recorded = read_configuration(RECORDING_PF400)["device"]
+
+  def test_it_is_the_arm_it_is_named_for(self):
+    self.assertEqual(self.recorded.robot_name, "PreciseFlex 400SX")
+    self.assertEqual(self.recorded.arm.reach_class, "extended")
+    self.assertEqual(self.recorded.arm.z_range, (1.5, 401.5))
+    self.assertEqual(self.recorded.arm.soft_limits[Axis.WRIST], (-960.0, 960.0))
+    self.assertEqual(self.recorded.arm.kinematics.gripper_length, 162.0)
+    self.assertEqual(self.recorded.gripper.soft_limit_range, (69.0, 134.0))
+    self.assertEqual(self.recorded.camera_count, 2)
+    self.assertTrue(self.recorded.has_vision_gripper)
+    self.assertFalse(self.recorded.has_rail)
+
+  def test_it_does_not_say_which_arm_it_was(self):
+    self.assertEqual(self.recorded.controller_serial, "")
+
+  def test_it_is_as_the_driver_writes_it(self):
+    driver = PreciseFlexDriver(
+      host="localhost", gripper_length=162.0, gripper_z_offset=0.0, closed_gripper_position=80.0
+    )
+    driver._configuration = self.recorded
+    driver._adopt_configuration(self.recorded)
+    with open(RECORDING_PF400, encoding="utf-8") as f:
+      self.assertEqual(json.load(f), driver._saved_configuration())
 
 
 class TestAVisionGripperIsItsCameras(unittest.IsolatedAsyncioTestCase):
