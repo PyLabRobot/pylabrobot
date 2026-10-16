@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Uni
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.firmware_update import (
   FirmwareUpdateResult,
+  _firmware_reply_body,
   _firmware_version_parts,
   _FirmwareDownloader,
 )
@@ -603,6 +604,43 @@ class Head:
     key = "head96" if self.configuration.module == "H0" else "head384"
     self._driver.firmware.pop(key, None)
 
+  async def _request_head_type_code(self) -> int:
+    """Read the numeric head variant reported by QG."""
+    reply = await self._driver.send_command(self.configuration.module, "QG", fmt="qg#")
+    return cast(int, reply["qg"])
+
+  async def _request_firmware_configuration(self) -> str:
+    """Read the complete head configuration array for update verification."""
+    module = self.configuration.module
+    reply = await self._driver.send_command(module, "QU")
+    return _firmware_reply_body(reply, module, "QU")
+
+  async def _request_firmware_state(self) -> Dict[str, str]:
+    """Capture head calibration and configuration, checking the controller/head pairing."""
+    module = self.configuration.module
+    state = await _FirmwareDownloader(self._driver, module)._request_stored_state()
+    state["configuration"] = await self._request_firmware_configuration()
+    version, _ = await self.request_firmware_version()
+    generation, _ = _firmware_version_parts(version)
+    head_type = await self._request_head_type_code()
+    allowed_types = (0, 1, 2) if module == "D0" else (2, 3) if generation == 5 else (0, 1)
+    if head_type not in allowed_types:
+      raise ValueError(f"Unsupported {module} head type {head_type} for {version}")
+    state["head_type"] = str(head_type)
+    return state
+
+  async def _request_firmware_cycle_counts(self) -> Dict[str, int]:
+    """Read tip and liquid cycle counts for comparison across an update."""
+    reply = await self._driver.send_command(
+      self.configuration.module, "RV", fmt="na##########nb##########nc##########nd##########"
+    )
+    return dict(
+      zip(
+        ("tip_pickups", "tip_discards", "aspirations", "dispenses"),
+        (reply["na"], reply["nb"], reply["nc"], reply["nd"]),
+      )
+    )
+
   async def update_firmware(
     self,
     firmware_file: Union[str, Path],
@@ -630,6 +668,8 @@ class Head:
       expected_version=expected_version,
       allow_downgrade=allow_downgrade,
       invalidate_version=self._invalidate_firmware_version,
+      read_state=self._request_firmware_state,
+      read_cycle_counts=self._request_firmware_cycle_counts,
     )
     self.configuration.firmware_version = result.version
     _, self.configuration.firmware_date = _firmware_version_parts(result.version)
@@ -652,10 +692,7 @@ class Head:
     Returns:
       The head type, or "unknown" for a code this driver does not know.
     """
-    resp = await self._driver.send_command(
-      module=self.configuration.module, command="QG", fmt="qg#"
-    )
-    return self.configuration.head_types.get(cast(int, resp["qg"]), "unknown")
+    return self.configuration.head_types.get(await self._request_head_type_code(), "unknown")
 
   async def request_x_offset(self) -> float:
     """Request the X distance from the X-arm carriage center to head channel A1.

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Uni
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.firmware_update import (
   FirmwareUpdateResult,
+  _firmware_reply_body,
   _firmware_version_parts,
   _FirmwareDownloader,
 )
@@ -287,6 +288,28 @@ class Autoload:
     self.configuration.firmware_date = None
     self._driver.firmware.pop("autoload", None)
 
+  async def _request_firmware_configuration(self) -> str:
+    """Read the complete autoload configuration for update verification."""
+    reply = await self._driver.send_command("I0", "RA", ra="au")
+    return _firmware_reply_body(reply, "I0", "RA")
+
+  async def _request_firmware_initialization_track(self) -> str:
+    """Read the stored scanner initialization track for update verification."""
+    reply = await self._driver.send_command("I0", "QX")
+    return _firmware_reply_body(reply, "I0", "QX")
+
+  async def _request_firmware_state(self) -> Dict[str, str]:
+    """Capture the autoload's calibration, identity, and persistent configuration."""
+    state = await _FirmwareDownloader(self._driver, "I0")._request_stored_state()
+    state["configuration"] = await self._request_firmware_configuration()
+    state["initialization_track"] = await self._request_firmware_initialization_track()
+    return state
+
+  async def _request_firmware_cycle_counts(self) -> Dict[str, int]:
+    """Read the barcode scan count for comparison across an update."""
+    reply = await self._driver.send_command("I0", "RV", fmt="na##########")
+    return {"barcode_scans": reply["na"]}
+
   async def update_firmware(
     self,
     firmware_file: Union[str, Path],
@@ -314,6 +337,8 @@ class Autoload:
       expected_version=expected_version,
       allow_downgrade=allow_downgrade,
       invalidate_version=self._invalidate_firmware_version,
+      read_state=self._request_firmware_state,
+      read_cycle_counts=self._request_firmware_cycle_counts,
     )
     self.configuration.firmware_version = result.version
     _, self.configuration.firmware_date = _firmware_version_parts(result.version)

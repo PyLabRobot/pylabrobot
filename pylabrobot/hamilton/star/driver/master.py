@@ -9,7 +9,9 @@ import dataclasses
 import datetime
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import (
   Any,
   AsyncIterator,
@@ -47,6 +49,12 @@ from pylabrobot.hamilton.star.driver.features.head384 import Head384
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPConfiguration
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfiguration
+from pylabrobot.hamilton.star.driver.firmware_update import (
+  FirmwareUpdateResult,
+  _firmware_reply_body,
+  _firmware_version_parts,
+  _FirmwareDownloader,
+)
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.hamilton.star.resource_model import (
@@ -869,6 +877,133 @@ class STARDriver:
     resp = await self.send_command(module="C0", command="RF")
     return resp.split("rf")[-1], parse_firmware_version_date(resp)
 
+  async def request_electronic_board_type(self) -> int:
+    """Read the master board type: 0/1 are C167 boards, 2 is LPC2468/XE167."""
+    reply = await self.send_command("C0", "QB", fmt="qb#")
+    return cast(int, reply["qb"])
+
+  async def _request_firmware_configuration(self) -> str:
+    """Read the master's configuration and installed-node status list."""
+    reply = await self.send_command("C0", "RM")
+    return _firmware_reply_body(reply, "C0", "RM")
+
+  async def _request_firmware_extended_configuration(self) -> str:
+    """Read all stored extended configuration fields for update verification."""
+    reply = await self.send_command("C0", "QM")
+    return _firmware_reply_body(reply, "C0", "QM")
+
+  async def _request_firmware_installation_data(self) -> str:
+    """Read the installation date and instrument serial number together."""
+    reply = await self.send_command("C0", "RI")
+    return _firmware_reply_body(reply, "C0", "RI")
+
+  async def _request_firmware_node_names(self) -> str:
+    """Read the persisted mapping from CAN nodes to module names."""
+    reply = await self.send_command("C0", "RK")
+    return _firmware_reply_body(reply, "C0", "RK")
+
+  async def _request_firmware_validation_status(self) -> str:
+    """Read stored pipetting-channel validation flags."""
+    reply = await self.send_command("C0", "RJ")
+    return _firmware_reply_body(reply, "C0", "RJ")
+
+  async def _request_firmware_additional_timestamp(self) -> str:
+    """Read the stored service timestamp for update verification."""
+    reply = await self.send_command("C0", "RS")
+    return _firmware_reply_body(reply, "C0", "RS")
+
+  async def _request_firmware_peer_version(self, module: str) -> str:
+    """Read an installed slave's application version without changing it."""
+    reply = await self.send_command(module, "RF")
+    body = _firmware_reply_body(reply, module, "RF")
+    if not body.startswith("rf") or len(body) == 2:
+      raise ValueError(f"Malformed {module} firmware version: {body!r}")
+    return body[2:]
+
+  async def _request_firmware_state(self) -> Dict[str, str]:
+    """Capture the master's stored settings and installed slaves' firmware versions."""
+    if await self.request_electronic_board_type() != 1:
+      raise ValueError("C0 firmware updates support the C167 dual-processor board only")
+    configuration = await self._request_firmware_configuration()
+    parts = configuration.split()
+    if not parts or re.fullmatch(r"kb[0-9A-Fa-f]{2}kp\d{2}", parts[0]) is None:
+      raise ValueError(f"Malformed C0 configuration: {configuration!r}")
+    nodes = []
+    for part in parts[1:]:
+      if re.fullmatch(r"[A-Z][0-9A-Z][0-9A-Fa-f]{4}", part) is None:
+        raise ValueError(f"Malformed C0 node status: {part!r}")
+      nodes.append(part[:2])
+    if not nodes or nodes[0] != "C0" or len(set(nodes)) != len(nodes):
+      raise ValueError("C0 configuration has no valid installed-node list")
+    state = {
+      "configuration": parts[0],
+      "installed_nodes": " ".join(nodes),
+      "extended_configuration": await self._request_firmware_extended_configuration(),
+      "installation": await self._request_firmware_installation_data(),
+      "technical_status": await _FirmwareDownloader(self, "C0")._request_technical_status(),
+      "node_names": await self._request_firmware_node_names(),
+      "validation": await self._request_firmware_validation_status(),
+      "timestamp": await self._request_firmware_additional_timestamp(),
+    }
+    for module in nodes[1:]:
+      state["firmware_" + module] = await self._request_firmware_peer_version(module)
+    return state
+
+  def _invalidate_firmware_version(self) -> None:
+    """Clear the cached master version before it leaves application mode."""
+    if self.configuration is not None:
+      self.configuration.firmware_version = None
+      self.configuration.firmware_date = None
+    self.firmware.pop("master", None)
+
+  async def _reconnect_after_firmware_restart(self) -> None:
+    """Reopen C0's link after its mode switch disconnects the USB device."""
+    self._replies.stop()
+    try:
+      if isinstance(self.io, USB):
+        await self.io.reconnect()
+      else:
+        await self.io.stop()
+        await self.io.setup()
+    except BaseException:
+      self._connected = False
+      raise
+    self._replies.start()
+
+  async def update_firmware(
+    self,
+    firmware_file: Union[str, Path],
+    *,
+    expected_version: str,
+    allow_downgrade: bool = False,
+  ) -> FirmwareUpdateResult:
+    """Update C0 on a C167 dual-processor board using a standard 7.x ACH image.
+
+    Verifies the complete file before erasing, then checks the application, stored settings,
+    and slave versions and records the download date. Power-cycle and initialize after success.
+    Keep power and the connection stable; an uncertain write is not retried.
+
+    Args:
+      firmware_file: manufacturer's GRUC0S image, retaining its original versioned filename.
+      expected_version: full C0 RF version, including revision, build date, and controller tag.
+      allow_downgrade: allow an older build within the same controller generation.
+
+    Returns:
+      Verified version, image digest, record count, and download date.
+    """
+    result = await _FirmwareDownloader(self, "C0").update_component(
+      firmware_file,
+      expected_version=expected_version,
+      allow_downgrade=allow_downgrade,
+      invalidate_version=self._invalidate_firmware_version,
+      read_state=self._request_firmware_state,
+    )
+    if self.configuration is not None:
+      self.configuration.firmware_version = result.version
+      _, self.configuration.firmware_date = _firmware_version_parts(result.version)
+    self.firmware["master"] = result.version
+    return result
+
   async def request_cover_input_status(self) -> Tuple[bool, bool, bool]:
     """Read the three inputs on the cover connector.
 
@@ -1242,7 +1377,7 @@ class STARDriver:
       self.front_cover = FrontCover(self)
 
     # Each feature reads its own modules, and they are different modules, so they read at
-    # once. Both arms run off the same X-drive board, so only one of them asks it.
+    # once. Both arms query X0, so only one of them asks for its firmware version.
     arms = [arm for arm in (self.left_x_arm, self.right_x_arm) if arm is not None]
     # Through the arms, not through the accessors above: those refuse on a device with two, and
     # setup has to reach every feature the device has whichever arm holds it.

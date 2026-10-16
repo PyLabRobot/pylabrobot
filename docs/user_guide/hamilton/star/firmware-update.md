@@ -1,23 +1,23 @@
-# Updating component firmware
+# Updating firmware
 
-The STAR driver can download manufacturer-supplied ACH images to individual standard component
-boards. Firmware images are supplied separately from PyLabRobot. Use an image intended for the
-installed hardware; matching a filename and version alone does not establish compatibility.
+## Guide
 
-| Component API | Board | Image family | Supported firmware major versions | Hardware transfer tested |
-| --- | --- | --- | --- | --- |
-| `star.pipettes.update_firmware(channel=0, ...)` | P1–PG | `GRUPXS*.ACH` | 4, standard 1000 uL channels | 4, on P1 |
-| `star.left_x_arm.update_firmware(...)` | X0 | `GRUX0S*.ACH` | 1, 5 | 1 |
-| `star.iswap.update_firmware(...)` | R0 | `GRUR0S*.ACH` | 3, 4 | 4 |
-| `star.autoload.update_firmware(...)` | I0 | `GRUALS*.ACH` | 3 | 3 |
-| `star.head96.update_firmware(...)` | H0 | `GRUH0S*.ACH` | 2, 5 | 5 |
-| `star.head384.update_firmware(...)` | D0 | `GRUD0S*.ACH` | 1 | None |
+Use a manufacturer-supplied ACH image intended for the installed controller. Firmware images are
+supplied separately from PyLabRobot. Connect to an idle STAR and update one target at a time.
 
-Channel indices start at zero: channel `0` addresses P1. Both X arms share X0: updating through
-either arm updates the same board and refreshes both cached versions. On a two-arm instrument,
-address mounted features through their arm, such as `star.left_x_arm.head96`.
+| API | Target | Image family | Supported firmware |
+| --- | --- | --- | --- |
+| `star.update_firmware(...)` | C0 master | `GRUC0S*.ACH` | 7.x, C167 dual-processor board |
+| `star.pipettes.update_firmware(channel=0, ...)` | P1–PG | `GRUPXS*.ACH` | 4.x, standard 1000 uL channels |
+| `star.left_x_arm.update_firmware(...)` | X0 | `GRUX0S*.ACH` | 1.x, 5.x |
+| `star.iswap.update_firmware(...)` | R0 | `GRUR0S*.ACH` | 3.x, 4.x |
+| `star.autoload.update_firmware(...)` | I0 | `GRUALS*.ACH` | 3.x |
+| `star.head96.update_firmware(...)` | H0 | `GRUH0S*.ACH` | 2.x, 5.x |
+| `star.head384.update_firmware(...)` | D0 | `GRUD0S*.ACH` | 1.x |
 
-With an already connected, idle STAR, update one component at a time:
+Channel indices start at zero: channel `0` addresses P1. Both X arms use the X0 firmware target;
+updating through either arm updates that target and refreshes both cached versions. On a two-arm
+instrument, address mounted features through their arm, such as `star.left_x_arm.head96`.
 
 ```python
 result = await star.pipettes.update_firmware(
@@ -25,60 +25,67 @@ result = await star.pipettes.update_firmware(
   firmware_file="GRUPXS40 j 2022-03-16.ACH",
   expected_version="4.0S j 2022-03-16",
 )
-print(result.version, result.sha256, result.records_programmed)
+print(result.version, result.sha256, result.records_programmed, result.download_date)
 print(result.cycle_counts_before, result.cycle_counts_after)
 ```
 
-The other components take the same arguments without `channel`. For example, with a compatible
-96-head image:
+The other targets take the same arguments without `channel`. For example, on a compatible C0
+controller, retaining the image's original filename:
 
 ```python
-result = await star.head96.update_firmware(
-  firmware_file="GRUH0S50e.ACH",
-  expected_version="5.0S e 2017-03-16 (H0 XE167)",
+result = await star.update_firmware(
+  firmware_file="GRUC0S75_0_2017_02_02.ACH",
+  expected_version="7.5S 00 2017_02_02 (GRU C0 PLE)",
 )
 ```
 
-Supply the complete embedded version, including any hardware suffix. An older build date requires
-`allow_downgrade=True`. Changing controller generations is rejected even with that option: for
-example, X0 1.x and 5.x images target different controllers, as do H0 2.x and 5.x images.
+Supply the complete expected version, including the build date and hardware suffix. Updating to an
+older build requires `allow_downgrade=True`.
 
-Before changing device state, the updater reads the entire file and checks its family, record types,
-lengths, checksums, final EOF, and embedded version. It checks the target's version, status, EEPROM,
-and applicable hardware variant, then captures calibration, identity, configuration, and supported
-cycle counters. Malformed version or concatenated stored-state replies stop the update before
-entering download mode.
+Keep power and the connection stable during the update. After success, power-cycle the instrument,
+reconnect, and initialize it normally before use. A timeout, rejected record, or cancellation stops
+the update; an interrupted transfer requires recovery before using that target.
 
-The boards share this transfer sequence in `firmware_update.py`:
+Not supported:
+
+- C0 single-processor and LPC2468/XE167 boards, including C0 8.x images.
+- C0 updates over USB backends that cannot report the device's bus and physical port numbers.
+- Engineering (`GRUC0E`), installer, and bootloader images.
+- PLE heads, XL or robotic channels, and pipetting channels other than the standard 1000 uL type.
+- Accessories such as pumps, wash stations, temperature controllers, and Seyonic modules.
+- Broadcast updates such as PX, or changes between controller generations.
+- Cycle-count reporting on C0 and X0 1.x, which have no cycle-counter query. Their result fields
+  `cycle_counts_before` and `cycle_counts_after` are `None`.
+
+## Background
+
+The updater validates every ACH record's length, type, and checksum before changing device state.
+It checks the image family, controller generation, version, status, EEPROM, and applicable hardware
+variant, then captures stored settings and cycle counts. C0 7.x stores its build date and controller
+tag as separate strings; those and the versioned filename are checked before transfer, and the full
+reported version is checked after restart.
+
+The shared transfer in `firmware_update.py` follows this sequence:
 
 1. `_switch_firmware_mode()` sends AP without waiting for a reply. After 15 seconds,
    `request_status()` must report download mode with clear error bits.
-2. `_erase_firmware()` sends DE and requires an explicit success reply.
-3. `_program_firmware_record()` sends each ACH record with DP and waits for its explicit
-   success reply, including the EOF record.
-4. `_switch_firmware_mode()` starts the application. After 18 seconds, the updater checks
-   its version, status, EEPROM, saved settings, and the master firmware version. Pipette updates
-   also verify the other pipetting channels' versions.
+2. `_erase_firmware()` sends DE and requires a success acknowledgement.
+3. `_program_firmware_record()` sends each ACH record with DP and requires a success
+   acknowledgement, including for the EOF record.
+4. `_switch_firmware_mode()` starts the application. After 18 seconds, the updater checks its
+   version, status, EEPROM, and stored settings. C0 updates also compare every installed slave's
+   firmware version; pipette updates compare the other pipetting channels' versions.
+5. `_record_download_date()` writes today's date with AO and reads it back with RO.
 
-Download-mode verification matters especially for heads: DE/DP can mean movement commands in
-the application. Every command has a named Python method; erase, record programming, and mode
-switching remain private steps of the complete update. The driver holds its motion locks throughout
-and rejects commands from other tasks. Cached versions are cleared before switching modes and
-restored only after successful verification.
+C0 restarts its USB connection when switching modes. The updater reconnects to the same physical
+USB port after each restart, even if its device address changes.
 
-Keep power and the connection stable. A timeout, rejected record, or cancellation stops the update
-without retrying the write or restarting partially programmed firmware. Such a failure requires
-recovery before using the component.
+The driver holds its motion locks throughout the update and rejects commands from other tasks.
+It confirms download mode before sending DE or DP, since these commands have movement meanings in
+some applications. It does not retry uncertain writes or restart partially programmed firmware.
+Cached versions are cleared before the mode switch and restored after successful verification.
 
-After success, power-cycle the instrument, reconnect, and initialize it normally before use. The
-update commands do not initialize or move the instrument. Pipette results contain
-`PipetteCycleCounts`; other components return counter dictionaries (gripping cycles, barcode scans,
-or head tip and liquid cycles). X-drive counters are not read and return empty dictionaries.
-Counter differences are logged and returned; neither counters nor download dates are rewritten.
-
-The master controller (C0), PLE pipetting head, and accessories such as pumps and temperature
-controllers are not supported by these update APIs. Their formats or download protocols require
-separate handling. All supported generations have offline protocol coverage. Hardware transfer tests
-cover programming, restart, and stored-state checks for the generations marked above; they do not
-validate mechanical operation. The 384-head and other controller generations remain unverified on
-hardware.
+Cycle counts are compared, logged, and returned without rewriting them. Pipette results contain
+`PipetteCycleCounts`; other targets return dictionaries when counters are available. X0 5.x returns
+the documented `na`, `nb`, `nc`, and `nf` fields; iSWAP returns gripping cycles, autoload returns
+barcode scans, and heads return tip and liquid cycles.

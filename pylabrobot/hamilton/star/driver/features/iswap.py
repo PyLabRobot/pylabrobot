@@ -775,6 +775,11 @@ class iSWAP:
     self.configuration.firmware_date = None
     self._driver.firmware.pop("iswap", None)
 
+  async def _request_firmware_cycle_counts(self) -> Dict[str, int]:
+    """Read the gripping cycle count for comparison across an update."""
+    reply = await self._driver.send_command("R0", "RV", fmt="na##########")
+    return {"gripping_cycles": reply["na"]}
+
   async def update_firmware(
     self,
     firmware_file: Union[str, Path],
@@ -797,11 +802,14 @@ class iSWAP:
     Returns:
       Verified version, image digest, record count, and before/after cycle counts.
     """
-    result = await _FirmwareDownloader(self._driver, "R0").update_component(
+    downloader = _FirmwareDownloader(self._driver, "R0")
+    result = await downloader.update_component(
       firmware_file,
       expected_version=expected_version,
       allow_downgrade=allow_downgrade,
       invalidate_version=self._invalidate_firmware_version,
+      read_state=downloader._request_stored_state,
+      read_cycle_counts=self._request_firmware_cycle_counts,
     )
     self.configuration.firmware_version = result.version
     _, self.configuration.firmware_date = _firmware_version_parts(result.version)

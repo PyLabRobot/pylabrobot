@@ -1,6 +1,7 @@
 """Firmware download boundaries, exercised through the real STAR command assembler."""
 
 import asyncio
+import datetime
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +19,7 @@ from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfigurati
 from pylabrobot.hamilton.star.driver.firmware_update import _FirmwareDownloader, _FirmwareImage
 from pylabrobot.hamilton.star.driver.master import STARDriver
 from pylabrobot.io.io import IOBase
+from pylabrobot.io.usb import USB
 
 VERSION = "4.0S j 2022-03-16"
 PREVIOUS_VERSION = "4.0S a 2017-04-24"
@@ -90,6 +92,7 @@ class FirmwareInstrument:
     self.previous_version = PREVIOUS_VERSION
     self.program_started = asyncio.Event()
     self.continue_programming = asyncio.Event()
+    self.download_date = "2009-05-28"
 
   async def send(self, cmd: str, id_: Optional[int], **kwargs) -> Optional[str]:
     """Answer assembled protocol commands, enforcing AP's no-response behavior."""
@@ -102,6 +105,15 @@ class FirmwareInstrument:
       return None
     assert id_ is not None
     prefix = module + command + f"id{id_:04}"
+    if command == "AO":
+      assert target and self.programmed > 0 and not self.download
+      if self.fault == "date_ack":
+        return prefix
+      self.download_date = cmd.split("ao")[1]
+      return prefix + ("er00/00" if module == "C0" else "er00")
+    if command == "RO":
+      date = "2009-05-28" if self.fault == "date_readback" else self.download_date
+      return prefix + ("er00/00" if module == "C0" else "") + "ao" + date
     if command in ("DE", "DP"):
       assert target and self.download
       if command == "DE" and self.fault == "erase":
@@ -218,11 +230,15 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
     result = await self.update(channel=10)
     changes = self.mutations()
     self.assertTrue(all(cmd.startswith("PB") for cmd in changes))
-    self.assertEqual([cmd[2:4] for cmd in changes], ["AP", "DE", "DP", "DP", "DP", "DP", "AP"])
+    self.assertEqual(
+      [cmd[2:4] for cmd in changes], ["AP", "DE", "DP", "DP", "DP", "DP", "AP", "AO"]
+    )
     self.assertEqual([cmd[12:] for cmd in changes if cmd[2:4] == "DP"], self.records)
     self.assertEqual(result.version, VERSION)
     self.assertEqual(result.records_programmed, len(self.records))
     self.assertEqual(result.cycle_counts_before, result.cycle_counts_after)
+    self.assertEqual(result.download_date, datetime.date.today())
+    self.assertEqual(self.instrument.download_date, result.download_date.isoformat())
     self.assertEqual(self.pipettes.configuration.channels[10].firmware_version, VERSION)
     self.assertEqual([call.args[0] for call in self.delays.await_args_list], [15, 18])
 
@@ -293,6 +309,18 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RuntimeError):
           await self.update()
         self.assertEqual(sum(cmd[2:4] == "AP" for cmd in self.mutations()), 2)
+        self.assertFalse(any(cmd[2:4] == "AO" for cmd in self.mutations()))
+
+  async def test_download_date_failure_prevents_success(self):
+    """The date must be acknowledged and read back before the update succeeds."""
+    for fault in ("date_ack", "date_readback"):
+      with self.subTest(fault=fault):
+        self.instrument = FirmwareInstrument(fault=fault)
+        self.driver._replies.send = AsyncMock(side_effect=self.instrument.send)  # type: ignore[method-assign]
+        with self.assertRaises(RuntimeError):
+          await self.update()
+        self.assertIsNone(self.pipettes.configuration.channels[0].firmware_version)
+        self.assertEqual(sum(cmd[2:4] == "AO" for cmd in self.mutations()), 1)
 
   async def test_counter_changes_are_reported_without_rewriting_them(self):
     self.instrument.fault = "counters"
@@ -300,7 +328,7 @@ class TestFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
       result = await self.update()
     self.assertEqual(result.cycle_counts_before.tip_pickups, 6426)
     self.assertEqual(result.cycle_counts_after.tip_pickups, 6357)
-    self.assertFalse(any(cmd[2:4] in ("AV", "AO") for cmd in self.instrument.commands))
+    self.assertFalse(any(cmd[2:4] == "AV" for cmd in self.instrument.commands))
     self.assertEqual(self.driver.firmware["pipettes"], VERSION)
 
   async def test_update_waits_for_motion_already_in_progress(self):
@@ -366,10 +394,12 @@ class ComponentFirmwareInstrument(FirmwareInstrument):
         return prefix + "rf" + self.previous_version + prefix + "rf4."
       return prefix + "rf" + (self.version if restarted else self.previous_version)
     if command == "RV":
-      assert module != "X0", "Legacy X0 has no documented RV command"
+      assert module != "X0" or self.version.startswith("5."), "Legacy X0 has no RV command"
       body = "na0000000001" if restarted and self.fault == "counters" else "na0000000010"
       if module in ("H0", "D0"):
         body += "nb0000000020nc0000000030nd0000000040"
+      elif module == "X0":
+        body += "nb0000000020nc0000000030nf0000000040"
       return prefix + body
     if command == "QG":
       return prefix + f"qg{self.head_type}"
@@ -430,11 +460,18 @@ class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(feature.configuration.firmware_version, version)
         changes = self.mutations()
         self.assertTrue(all(cmd.startswith(module) for cmd in changes))
-        self.assertEqual([cmd[2:4] for cmd in changes], ["AP", "DE", "DP", "DP", "DP", "DP", "AP"])
+        self.assertEqual(
+          [cmd[2:4] for cmd in changes], ["AP", "DE", "DP", "DP", "DP", "DP", "AP", "AO"]
+        )
+        self.assertEqual(result.download_date, datetime.date.today())
         if module == "X0":
           assert self.driver.configuration and self.driver.configuration.right_arm
           self.assertEqual(self.driver.configuration.right_arm.firmware_version, version)
-          self.assertEqual(result.cycle_counts_before, {})
+          if version.startswith("1."):
+            self.assertIsNone(result.cycle_counts_before)
+            self.assertFalse(any(cmd[2:4] == "RV" for cmd in self.instrument.commands))
+          else:
+            self.assertEqual(result.cycle_counts_before, dict(na=10, nb=20, nc=30, nf=40))
         elif module == "R0":
           self.assertEqual(result.cycle_counts_before, {"gripping_cycles": 10})
         elif module == "I0":
@@ -469,7 +506,7 @@ class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, family):
           await self.features[module].update_firmware(path, expected_version=version)
         self.assertEqual(self.instrument.commands, [])
-    for module in ("C0", "PX", "WX", "H1", "P0"):
+    for module in ("PX", "WX", "H1", "P0"):
       with self.subTest(module=module), self.assertRaisesRegex(ValueError, "Unsupported"):
         _FirmwareDownloader(self.driver, module)
 
@@ -561,7 +598,7 @@ class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
         with self.assertLogs("pylabrobot.hamilton.star.driver.firmware_update", level="WARNING"):
           result = await self.features[module].update_firmware(path, expected_version=version)
         self.assertNotEqual(result.cycle_counts_before, result.cycle_counts_after)
-        self.assertFalse(any(cmd[2:4] in ("AV", "AO") for cmd in self.instrument.commands))
+        self.assertFalse(any(cmd[2:4] == "AV" for cmd in self.instrument.commands))
 
   async def test_component_update_owns_device_lock(self):
     module, family, version = COMPONENT_IMAGES[4]
@@ -579,3 +616,194 @@ class TestComponentFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
     finally:
       self.instrument.continue_programming.set()
       await task
+
+
+MASTER_VERSION = "7.5S 00 2017_02_02 (GRU C0 PLE)"
+MASTER_FILENAME = "GRUC0S75_0_2017_02_02.ACH"
+
+
+def master_image_records(date: str = "2017_02_02", controller: str = "(GRU C0 PLE)") -> list[str]:
+  """Build synthetic C0 records with separate date and controller metadata strings."""
+  payload = b"\x00" + controller.encode() + b"\x00" + date.encode() + b"\x00synthetic firmware"
+  return (
+    [ach_record(4, b"\x00\x00")]
+    + [ach_record(0, payload[i : i + 32], address=i) for i in range(0, len(payload), 32)]
+    + [ach_record(1, address=65535)]
+  )
+
+
+class MasterFirmwareInstrument(FirmwareInstrument):
+  """A master whose USB handle becomes invalid on each mode switch."""
+
+  def __init__(self, target: str, fault: Optional[str] = None):
+    """Start with a connected application and the requested protocol fault."""
+    super().__init__(target, fault)
+    self.connected = True
+
+  async def send(self, cmd: str, id_: Optional[int], **kwargs) -> Optional[str]:
+    """Model C0's stored settings, board identity, and download acknowledgements."""
+    if not self.connected:
+      raise OSError("C0 USB handle disconnected during restart")
+    module, command = cmd[:2], cmd[2:4]
+    restarted = self.programmed > 0 and not self.download
+    if module != "C0" or command in ("AP", "DE", "DP", "RQ", "AO", "RO"):
+      reply = await super().send(cmd, id_, **kwargs)
+      if module == "C0" and command == "AP":
+        self.connected = False
+      if (
+        module == "C0" and command in ("DE", "DP") and reply is not None and reply.endswith("er00")
+      ):
+        reply += "/01" if self.fault == "trace_ack" else "/00"
+      if module != "C0" and command == "RF" and restarted and self.fault == "peer":
+        assert reply is not None
+        return reply + " changed"
+      return reply
+    self.commands.append(cmd)
+    assert id_ is not None
+    prefix = "C0" + command + f"id{id_:04}"
+    if command == "RF":
+      return (
+        prefix
+        + "er00/00rf"
+        + (
+          MASTER_VERSION
+          if restarted and self.fault != "version"
+          else "7.5S 00 2016_02_02 (GRU C0 PLE)"
+        )
+      )
+    if command == "QV":
+      invalid = self.fault == "eeprom_high_bit" or (restarted and self.fault == "eeprom_after")
+      return prefix + ("qv8000000000000000" if invalid else "qv0000000000000000")
+    fields = {
+      "QB": "qb2" if self.fault == "board" else "qb1",
+      "RM": "kb0Bkp01 C00000 X00000 P10000",
+      "QM": "ka010003xt54xa54"
+      + ("xw00000" if restarted and self.fault == "configuration" else "xw13400"),
+      "RI": "si2009-05-28snA083",
+      "QT": "qt186882/04/3210 173000/00/0000",
+      "RK": "xkC0 X0 I0 W1 W2 T1 T2 R0 P1",
+      "RJ": "tq1",
+      "RS": "ts2026-04-01 12:01",
+    }
+    if command not in fields:
+      raise AssertionError(f"Unexpected master command: {cmd}")
+    if command == "RM" and self.fault == "nodes":
+      return prefix + "er00/00kb0Bkp01"
+    return prefix + "er00/00" + fields[command]
+
+
+class TestMasterFirmwareUpdate(unittest.IsolatedAsyncioTestCase):
+  """Exercise master-only compatibility, acknowledgements, settings, and date handling."""
+
+  async def asyncSetUp(self) -> None:
+    """Use a synthetic master image and the real command assembler, with reboot delays skipped."""
+    self.directory = tempfile.TemporaryDirectory()
+    self.addCleanup(self.directory.cleanup)
+    self.path = Path(self.directory.name) / MASTER_FILENAME
+    self.records = master_image_records()
+    self.path.write_text("\n".join(self.records))
+    self.io = Mock(spec=USB)
+    self.io.reconnect = AsyncMock(side_effect=self.reconnect)
+    self.driver = STARDriver(io=self.io)
+    self.driver._connected = True
+    self.driver.configuration = DeviceConfiguration()
+    self.instrument = MasterFirmwareInstrument("C0")
+    self.driver._replies.start = Mock()  # type: ignore[method-assign]
+    self.driver._replies.stop = Mock()  # type: ignore[method-assign]
+    self.driver._replies.send = AsyncMock(side_effect=self.instrument.send)  # type: ignore[method-assign]
+    patcher = patch("pylabrobot.hamilton.star.driver.firmware_update.asyncio", wraps=asyncio)
+    patched = patcher.start()
+    self.addCleanup(patcher.stop)
+    patched.sleep = AsyncMock()
+
+  async def reconnect(self) -> None:
+    """Make the replacement USB handle usable after C0's mode switch."""
+    self.assertFalse(self.instrument.connected)
+    self.instrument.connected = True
+
+  async def update(self):
+    """Run the public master API with its complete expected version."""
+    return await self.driver.update_firmware(self.path, expected_version=MASTER_VERSION)
+
+  def mutations(self) -> list[str]:
+    """Select writes capable of changing firmware or stored state."""
+    return [cmd for cmd in self.instrument.commands if cmd[2:4] in ("AP", "DE", "DP", "AO", "AV")]
+
+  async def test_master_programs_verifies_peers_and_records_date(self):
+    result = await self.update()
+    self.assertEqual(result.version, MASTER_VERSION)
+    self.assertEqual(result.records_programmed, len(self.records))
+    self.assertEqual(
+      [cmd[2:4] for cmd in self.mutations()], ["AP", "DE", "DP", "DP", "DP", "DP", "AP", "AO"]
+    )
+    self.assertTrue(all(cmd.startswith("C0") for cmd in self.mutations()))
+    self.assertEqual(sum(cmd.startswith("P1RF") for cmd in self.instrument.commands), 2)
+    self.assertEqual(sum(cmd.startswith("X0RF") for cmd in self.instrument.commands), 2)
+    self.assertEqual(result.download_date, datetime.date.today())
+    self.assertIsNone(result.cycle_counts_before)
+    self.assertIsNone(result.cycle_counts_after)
+    self.assertEqual(self.driver.firmware["master"], MASTER_VERSION)
+    self.assertFalse(any(cmd.startswith("C0RV") for cmd in self.instrument.commands))
+    self.assertEqual(self.io.reconnect.await_count, 2)
+
+  async def test_failed_reconnect_does_not_erase_or_retry_mode_switch(self):
+    """A missing replacement device leaves the original application untouched."""
+    self.io.reconnect.side_effect = RuntimeError("USB device not found")
+    with self.assertRaisesRegex(RuntimeError, "USB device not found"):
+      await self.update()
+    self.assertEqual(self.mutations(), ["C0AP"])
+
+  async def test_master_rejects_wrong_image_metadata_before_io(self):
+    for date, controller in (("2018_02_02", "(GRU C0 PLE)"), ("2017_02_02", "(OTHER C0)")):
+      with self.subTest(date=date, controller=controller):
+        self.path.write_text("\n".join(master_image_records(date, controller)))
+        with self.assertRaisesRegex(ValueError, "build date or controller"):
+          await self.update()
+        self.assertEqual(self.instrument.commands, [])
+    self.path.write_text("\n".join(self.records))
+    wrong_name = self.path.with_name("GRUC0S75_14_2017_09_26.ACH")
+    wrong_name.write_text(self.path.read_text())
+    with self.assertRaisesRegex(ValueError, "original versioned filename"):
+      await self.driver.update_firmware(wrong_name, expected_version=MASTER_VERSION)
+    self.assertEqual(self.instrument.commands, [])
+
+  async def test_master_rejects_lpc_and_installer_formats_before_io(self):
+    self.path.write_text("f0lBUgAAAAAACPA5")
+    with self.assertRaises(ValueError):
+      await self.update()
+    with self.assertRaises(ValueError):
+      await self.driver.update_firmware(
+        self.path, expected_version="8.5S 00 2017_02_02 (GRU C0 PLE)"
+      )
+    self.assertEqual(self.instrument.commands, [])
+
+  async def test_master_preflight_checks_board_entire_eeprom_and_node_list(self):
+    for fault in ("board", "eeprom_high_bit", "nodes", "status"):
+      with self.subTest(fault=fault):
+        self.instrument = MasterFirmwareInstrument("C0", fault)
+        self.driver._replies.send = AsyncMock(side_effect=self.instrument.send)  # type: ignore[method-assign]
+        with self.assertRaises((ValueError, RuntimeError)):
+          await self.update()
+        self.assertEqual(self.mutations(), [])
+
+  async def test_master_uncertain_write_does_not_restart_or_date(self):
+    for fault in ("timeout", "cancel", "missing_ack", "wrong_ack", "trace_ack"):
+      with self.subTest(fault=fault):
+        self.instrument = MasterFirmwareInstrument("C0", fault)
+        self.driver._replies.send = AsyncMock(side_effect=self.instrument.send)  # type: ignore[method-assign]
+        with self.assertRaises((RuntimeError, TimeoutError, asyncio.CancelledError)):
+          await self.update()
+        self.assertEqual(sum(cmd[2:4] == "AP" for cmd in self.mutations()), 1)
+        self.assertFalse(any(cmd[2:4] == "AO" for cmd in self.mutations()))
+        self.assertNotIn("master", self.driver.firmware)
+
+  async def test_master_verification_precedes_date_write(self):
+    for fault in ("version", "configuration", "peer", "eeprom_after"):
+      with self.subTest(fault=fault):
+        self.instrument = MasterFirmwareInstrument("C0", fault)
+        self.driver._replies.send = AsyncMock(side_effect=self.instrument.send)  # type: ignore[method-assign]
+        with self.assertRaises(RuntimeError):
+          await self.update()
+        self.assertEqual(sum(cmd[2:4] == "AP" for cmd in self.mutations()), 2)
+        self.assertFalse(any(cmd[2:4] == "AO" for cmd in self.mutations()))
+        self.assertNotIn("master", self.driver.firmware)

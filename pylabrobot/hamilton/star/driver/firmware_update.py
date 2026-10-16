@@ -7,7 +7,7 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Dict, Tuple, Union, cast
+from typing import TYPE_CHECKING, Awaitable, Callable, Dict, Optional, Tuple, Union, cast
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.features.pipettes import PipetteCycleCounts
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Major versions distinguish incompatible controller generations.
 _FIRMWARE_FAMILIES = {
+  "C0": ("GRUC0S", (7,)),
   "PX": ("GRUPXS", (4,)),
   "X0": ("GRUX0S", (1, 5)),
   "R0": ("GRUR0S", (3, 4)),
@@ -25,11 +26,21 @@ _FIRMWARE_FAMILIES = {
   "D0": ("GRUD0S", (1,)),
 }
 _VERSION_PATTERN = rb"\d+\.\d+S(?: [a-z])? \d{4}-\d{2}-\d{2}(?: \([XH]0 XE167\))?"
+_MASTER_VERSION_PATTERN = (
+  rb"(?P<major>7)\.(?P<minor>\d+)S (?P<revision>\d+) "
+  rb"(?P<date>\d{4}_\d{2}_\d{2}) (?P<controller>\(GRU C0 PLE\))"
+)
 
 
 def _firmware_version_parts(version: str) -> Tuple[int, datetime.date]:
-  """Require a complete standard-board version and extract its generation and date."""
-  if re.fullmatch(_VERSION_PATTERN, version.encode("ascii")) is None:
+  """Require a complete supported version and extract its generation and build date."""
+  raw = version.encode("ascii")
+  master = re.fullmatch(_MASTER_VERSION_PATTERN, raw)
+  if master is not None:
+    return int(master["major"]), datetime.date.fromisoformat(
+      master["date"].decode().replace("_", "-")
+    )
+  if re.fullmatch(_VERSION_PATTERN, raw) is None:
     raise ValueError(f"Unsupported firmware version: {version!r}")
   date = re.search(r"\d{4}-\d{2}-\d{2}", version)
   assert date is not None
@@ -41,7 +52,10 @@ def _firmware_reply_body(response: str, module: str, command: str) -> str:
   match = re.fullmatch(re.escape(module + command) + r"id\d{4}(.*)", response)
   if match is None:
     raise ValueError(f"Malformed {module} {command} reply: {response!r}")
-  body = match[1].removeprefix("er00")
+  body = match[1]
+  if module == "C0":
+    body = body.removeprefix("er00/00")
+  body = body.removeprefix("er00")
   if not body:
     raise ValueError(f"Empty {module} {command} reply: {response!r}")
   if re.search(r"[A-Z][0-9A-Z][A-Z]{2}id", body):
@@ -51,7 +65,8 @@ def _firmware_reply_body(response: str, module: str, command: str) -> str:
 
 def _require_firmware_acknowledgement(response: str, module: str, command: str) -> None:
   """Require an explicit success reply before continuing an erase or program operation."""
-  if re.fullmatch(re.escape(module + command) + r"id\d{4}er00", response) is None:
+  success = r"er00(?:/00)?" if module == "C0" else "er00"
+  if re.fullmatch(re.escape(module + command) + r"id\d{4}" + success, response) is None:
     raise RuntimeError(f"Missing successful {module} {command} acknowledgement: {response!r}")
 
 
@@ -114,9 +129,23 @@ class _FirmwareImage:
         raise ValueError("ACH EOF record must be last")
     if bytes.fromhex(records[-1][1:])[3] != 1 or not payload:
       raise ValueError("ACH image requires data and a final EOF record")
-    versions = set(re.findall(_VERSION_PATTERN, payload))
-    if versions != {expected_version.encode("ascii")}:
-      raise ValueError("ACH embedded version does not match expected_version")
+    if module == "C0":
+      version = re.fullmatch(_MASTER_VERSION_PATTERN, expected_version.encode("ascii"))
+      if version is None:
+        raise ValueError("Unsupported C0 firmware version")
+      name = (
+        f"GRUC0S{version['major'].decode()}{version['minor'].decode()}_"
+        f"{int(version['revision'])}_{version['date'].decode()}.ACH"
+      )
+      if path.name.upper() != name.upper():
+        raise ValueError(f"C0 firmware requires the original versioned filename: {name}")
+      # C0 formats RF at runtime; its date and controller tag are separate strings in the image.
+      if any(b"\x00" + version[field] + b"\x00" not in payload for field in ("date", "controller")):
+        raise ValueError("C0 image build date or controller does not match expected_version")
+    else:
+      versions = set(re.findall(_VERSION_PATTERN, payload))
+      if versions != {expected_version.encode("ascii")}:
+        raise ValueError("ACH embedded version does not match expected_version")
     return cls(
       module=module,
       records=records,
@@ -148,6 +177,7 @@ class PipetteFirmwareUpdateResult:
   records_programmed: int
   cycle_counts_before: "PipetteCycleCounts"
   cycle_counts_after: "PipetteCycleCounts"
+  download_date: datetime.date
 
 
 @dataclass(frozen=True)
@@ -166,8 +196,8 @@ class _PipetteFirmwareState:
 class FirmwareUpdateResult:
   """A verified component transfer; power cycling and initialization are still required.
 
-  Counter keys are gripping_cycles for iSWAP, barcode_scans for autoload, and tip_pickups,
-  tip_discards, aspirations, dispenses for heads. X-drive counters are not read and return {}.
+  Cycle counts are None when the controller has no cycle-counter query. X0 5.x returns the
+  firmware's na/nb/nc/nf fields; other components use descriptive counter names.
   """
 
   module: str
@@ -175,16 +205,19 @@ class FirmwareUpdateResult:
   version: str
   sha256: str
   records_programmed: int
-  cycle_counts_before: Dict[str, int]
-  cycle_counts_after: Dict[str, int]
+  cycle_counts_before: Optional[Dict[str, int]]
+  cycle_counts_after: Optional[Dict[str, int]]
+  download_date: datetime.date
 
 
 class _FirmwareDownloader:
   """Named commands and the shared AP/DE/DP transfer for standard component boards."""
 
   def __init__(self, driver: "STARDriver", module: str):
-    """Bind one individual board; broadcast and master targets are not supported."""
-    if module not in ("X0", "R0", "I0", "H0", "D0") and not re.fullmatch(r"P[1-9A-G]", module):
+    """Bind one supported board; broadcast targets are not supported."""
+    if module not in ("C0", "X0", "R0", "I0", "H0", "D0") and not re.fullmatch(
+      r"P[1-9A-G]", module
+    ):
       raise ValueError(f"Unsupported firmware target: {module}")
     self._driver = driver
     self.module = module
@@ -196,8 +229,35 @@ class _FirmwareDownloader:
 
   async def request_eeprom_status(self) -> int:
     """Read the EEPROM validity bitmask; zero denotes valid stored data."""
+    if self.module == "C0":
+      response = await self._driver.send_command("C0", "QV")
+      body = _firmware_reply_body(response, "C0", "QV")
+      if re.fullmatch(r"qv(?:[0-9A-Fa-f]{10}|[0-9A-Fa-f]{16})", body) is None:
+        raise ValueError(f"Malformed C0 EEPROM status: {body!r}")
+      return int(body[2:], 16)
     reply = await self._driver.send_command(self.module, "QV", fmt="qv****")
     return cast(int, reply["qv"])
+
+  async def request_download_date(self) -> datetime.date:
+    """Read the date stored by the last successful firmware download."""
+    reply = await self._driver.send_command(self.module, "RO")
+    body = _firmware_reply_body(reply, self.module, "RO")
+    if re.fullmatch(r"ao\d{4}-\d{2}-\d{2}", body) is None:
+      raise ValueError(f"Malformed {self.module} download date: {body!r}")
+    return datetime.date.fromisoformat(body[2:])
+
+  async def _set_download_date(self, date: datetime.date) -> None:
+    """Record the successful download date and require an explicit acknowledgement."""
+    reply = await self._driver.send_command(self.module, "AO", ao=date.isoformat())
+    _require_firmware_acknowledgement(reply, self.module, "AO")
+
+  async def _record_download_date(self) -> datetime.date:
+    """Save today's date after update verification and check the stored value."""
+    date = datetime.date.today()
+    await self._set_download_date(date)
+    if await self.request_download_date() != date:
+      raise RuntimeError(f"{self.module} download date verification failed")
+    return date
 
   async def request_firmware_version(self) -> str:
     """Read the complete application version, rejecting malformed responses."""
@@ -236,6 +296,8 @@ class _FirmwareDownloader:
       raise ValueError("Firmware image was validated for another module")
     await self._switch_firmware_mode()
     await asyncio.sleep(15)
+    if self.module == "C0":
+      await self._driver._reconnect_after_firmware_restart()
     if await self.request_status() != 0x0800:
       raise RuntimeError(f"{self.module} did not enter download mode with clear error bits")
     await self._erase_firmware()
@@ -247,6 +309,8 @@ class _FirmwareDownloader:
         )
     await self._switch_firmware_mode()
     await asyncio.sleep(18)
+    if self.module == "C0":
+      await self._driver._reconnect_after_firmware_restart()
     if await self.request_status() != 0:
       raise RuntimeError(f"{self.module} status is not clear after the firmware restart")
     version = await self.request_firmware_version()
@@ -270,65 +334,13 @@ class _FirmwareDownloader:
     reply = await self._driver.send_command(self.module, "QT")
     return _firmware_reply_body(reply, self.module, "QT")
 
-  async def _request_autoload_configuration(self) -> str:
-    """Read the autoload's complete configuration array."""
-    reply = await self._driver.send_command("I0", "RA", ra="au")
-    return _firmware_reply_body(reply, "I0", "RA")
-
-  async def _request_autoload_initialization_track(self) -> str:
-    """Read the autoload's stored scanner initialization track."""
-    reply = await self._driver.send_command("I0", "QX")
-    return _firmware_reply_body(reply, "I0", "QX")
-
-  async def _request_head_configuration(self) -> str:
-    """Read the head's complete hardware configuration array."""
-    reply = await self._driver.send_command(self.module, "QU")
-    return _firmware_reply_body(reply, self.module, "QU")
-
-  async def _request_head_type(self) -> int:
-    """Read the head variant for the controller-generation compatibility check."""
-    reply = await self._driver.send_command(self.module, "QG", fmt="qg#")
-    return cast(int, reply["qg"])
-
-  async def _request_component_state(self, version: str) -> Dict[str, str]:
-    """Capture identity, calibration, and the settings specific to this component."""
-    generation, _ = _firmware_version_parts(version)
-    state = {
+  async def _request_stored_state(self) -> Dict[str, str]:
+    """Capture the identity and calibration fields shared by standard slave boards."""
+    return {
       "adjustments": await self._request_adjustment_values(),
       "adjustment_status": await self._request_adjustment_status(),
       "technical_status": await self._request_technical_status(),
     }
-    if self.module == "I0":
-      state["configuration"] = await self._request_autoload_configuration()
-      state["initialization_track"] = await self._request_autoload_initialization_track()
-    elif self.module in ("H0", "D0"):
-      state["configuration"] = await self._request_head_configuration()
-      head_type = await self._request_head_type()
-      allowed_types = (0, 1, 2) if self.module == "D0" else (2, 3) if generation == 5 else (0, 1)
-      if head_type not in allowed_types:
-        raise ValueError(f"Unsupported {self.module} head type {head_type} for {version}")
-      state["head_type"] = str(head_type)
-    return state
-
-  async def _request_component_cycle_counts(self) -> Dict[str, int]:
-    """Read documented counters, without sending RV to legacy X-drive firmware."""
-    if self.module == "X0":
-      return {}
-    if self.module in ("R0", "I0"):
-      reply = await self._driver.send_command(self.module, "RV", fmt="na##########")
-      name = "gripping_cycles" if self.module == "R0" else "barcode_scans"
-      return {name: reply["na"]}
-    if self.module in ("H0", "D0"):
-      reply = await self._driver.send_command(
-        self.module, "RV", fmt="na##########nb##########nc##########nd##########"
-      )
-      return dict(
-        zip(
-          ("tip_pickups", "tip_discards", "aspirations", "dispenses"),
-          (reply["na"], reply["nb"], reply["nc"], reply["nd"]),
-        )
-      )
-    raise ValueError("Pipette counters must be read through Pipettes.request_cycle_counts")
 
   async def update_component(
     self,
@@ -337,6 +349,8 @@ class _FirmwareDownloader:
     expected_version: str,
     allow_downgrade: bool,
     invalidate_version: Callable[[], None],
+    read_state: Callable[[], Awaitable[Dict[str, str]]],
+    read_cycle_counts: Optional[Callable[[], Awaitable[Optional[Dict[str, int]]]]] = None,
   ) -> FirmwareUpdateResult:
     """Validate, transfer, and verify a non-pipette component under the device-wide lock."""
     if self.module.startswith("P"):
@@ -347,9 +361,9 @@ class _FirmwareDownloader:
       image.check_compatible(previous_version, allow_downgrade)
       if await self.request_status() != 0 or await self.request_eeprom_status() != 0:
         raise RuntimeError("Component status and EEPROM must be clear before a firmware update")
-      master_before = await self._driver.request_firmware_version()
-      state_before = await self._request_component_state(previous_version)
-      counts_before = await self._request_component_cycle_counts()
+      master_before = await self._driver.request_firmware_version() if self.module != "C0" else None
+      state_before = await read_state()
+      counts_before = await read_cycle_counts() if read_cycle_counts is not None else None
       logger.info(
         "Updating %s from %s to %s (sha256 %s)",
         self.module,
@@ -359,13 +373,15 @@ class _FirmwareDownloader:
       )
       invalidate_version()
       await self.program(image)
-      if await self._request_component_state(image.version) != state_before:
+      if await read_state() != state_before:
         raise RuntimeError(
           "Component calibration, identity, or configuration changed during update"
         )
-      if await self._driver.request_firmware_version() != master_before:
+      if (
+        master_before is not None and await self._driver.request_firmware_version() != master_before
+      ):
         raise RuntimeError("Master firmware changed during the component update")
-      counts_after = await self._request_component_cycle_counts()
+      counts_after = await read_cycle_counts() if read_cycle_counts is not None else None
       if counts_after != counts_before:
         logger.warning(
           "%s cycle counts changed across the firmware restart: %s -> %s",
@@ -373,6 +389,7 @@ class _FirmwareDownloader:
           counts_before,
           counts_after,
         )
+      download_date = await self._record_download_date()
       return FirmwareUpdateResult(
         self.module,
         previous_version,
@@ -381,4 +398,5 @@ class _FirmwareDownloader:
         len(image.records),
         counts_before,
         counts_after,
+        download_date,
       )

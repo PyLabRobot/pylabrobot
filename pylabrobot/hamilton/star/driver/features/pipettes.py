@@ -729,7 +729,7 @@ class Pipettes:
 
     The caller must supply an image suitable for the installed hardware and keep power and the
     connection stable. After success, power-cycle the instrument and initialize it normally.
-    Cycle-counter differences are returned and logged; counters and download dates are not written.
+    Cycle-counter differences are returned and logged. Successful updates record the download date.
 
     Args:
       channel: channel index, starting at zero (P1).
@@ -778,7 +778,8 @@ class Pipettes:
         self.configuration.channels[channel].firmware_version = None
       if channel == 0:
         self._driver.firmware.pop("pipettes", None)
-      await _FirmwareDownloader(self._driver, self.channel_id(channel)).program(image)
+      downloader = _FirmwareDownloader(self._driver, self.channel_id(channel))
+      await downloader.program(image)
       version = image.version
       state_after = await self._request_firmware_state(channel)
       if state_after != state_before:
@@ -799,6 +800,7 @@ class Pipettes:
           counts_before,
           counts_after,
         )
+      download_date = await downloader._record_download_date()
       if channel < len(self.configuration.channels):
         self.configuration.channels[channel].firmware_version = version
       if channel == 0:
@@ -810,6 +812,7 @@ class Pipettes:
         records_programmed=len(image.records),
         cycle_counts_before=counts_before,
         cycle_counts_after=counts_after,
+        download_date=download_date,
       )
 
   # -- where the channels are ------------------------------------------------
