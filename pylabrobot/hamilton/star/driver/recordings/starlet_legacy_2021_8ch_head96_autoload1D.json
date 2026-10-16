@@ -68,9 +68,7 @@
       "acceleration_level_range": [
         1,
         5
-      ],
-      "acceleration_level_default": 4,
-      "current_limit_default": 7
+      ]
     },
     "right_arm": null,
     "min_iswap_collision_free_position": 350.0,
