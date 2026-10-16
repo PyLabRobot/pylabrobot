@@ -30,8 +30,8 @@ class PreciseFlexConfiguration:
 
   The identity fields are read from the controller (`pd <DataID>` and the ``version`` command);
   limits, maxima and kinematics are on ``arm``, ``gripper`` and ``rail``. Derived: ``has_rail`` from
-  the joint set, ``is_dual_gripper`` from the axis mask's ``&H80`` bit, ``is_vision_gripper`` from
-  the model name, and ``reach_class`` from the link lengths the controller reports.
+  the joint set, ``is_dual_gripper`` from the axis mask's ``&H80`` bit, ``has_vision_gripper`` from
+  the camera count, and ``reach_class`` from the link lengths the controller reports.
   """
 
   # --- identity / version (DataIDs 100-110, 2002, 116; version command) ---
@@ -52,14 +52,19 @@ class PreciseFlexConfiguration:
   arm: PreciseFlexArmConfiguration
   gripper: PreciseFlexGripperConfiguration
   rail: Optional[PreciseFlexRailConfiguration] = None
-  # --- derived from the model name ---
-  is_vision_gripper: bool = False
+  # --- vision ---
+  # How many cameras the controller counts through its vision module; 0 without the module.
+  camera_count: int = 0
   # Live state, not a fact; kept for the deprecated `power_state` until it is removed.
   _power_state: Optional[int] = None
 
   @property
   def has_rail(self) -> bool:
     return self.rail is not None
+
+  @property
+  def has_vision_gripper(self) -> bool:
+    return self.camera_count > 0
 
   # -- deprecated: moved to the arm, gripper and rail configurations --
 
@@ -222,3 +227,13 @@ class PreciseFlexConfiguration:
       stacklevel=2,
     )
     return self._power_state
+
+  @property
+  def is_vision_gripper(self) -> bool:
+    """Deprecated: use ``has_vision_gripper``."""
+    warnings.warn(
+      "`is_vision_gripper` is deprecated, use `has_vision_gripper`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.has_vision_gripper
