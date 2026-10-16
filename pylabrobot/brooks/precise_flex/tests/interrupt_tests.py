@@ -45,6 +45,23 @@ class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
     d.send_command = AsyncMock(side_effect=lambda cmd: next(wherej))  # type: ignore[method-assign]
     await d.arm._wait_for_eom(poll_interval=0)  # no error == returned at the settled sample
 
+  async def test_a_move_creeping_off_does_not_count_as_stopped(self):
+    """Right after moveJ the arm creeps under the settle threshold (as logged), then moves."""
+    # The arm's first four reads after a logged moveJ, then the three it settled on.
+    replies = [
+      "301.022 33.703 242.82 141.894 74.8",
+      "301.022 33.694 242.807 141.909 74.8",
+      "301.022 33.667 242.74 141.942 74.8",
+      "301.038 33.586 242.595 142.024 74.8",
+      "301.123 0.002 179.998 179.996 74.777",
+      "301.124 0.002 179.999 180 74.777",
+      "301.125 0.001 179.999 180.002 74.777",
+    ]
+    d = _make_arm()
+    d.send_command = AsyncMock(side_effect=replies)  # type: ignore[method-assign]
+    await d.arm._wait_for_eom(poll_interval=0)
+    self.assertEqual(mocked(d.send_command).await_count, len(replies))
+
   async def test_returns_immediately_when_already_stationary(self):
     """An idle arm (e.g. halted short of its last target) returns at once, never hangs to reach it."""
     d = _make_arm()

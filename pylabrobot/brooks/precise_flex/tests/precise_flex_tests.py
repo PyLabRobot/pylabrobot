@@ -160,7 +160,7 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
     ]
     self.assertEqual(
       [event.data["command"] for event in firmware_events],
-      ["wherej", "wherej", "GripOpenPos 520.0", "gripper 1"],
+      ["wherej", "wherej", "wherej", "GripOpenPos 520.0", "gripper 1"],
     )
     self.assertTrue(
       all(event.context["resources"] == [{"name": "sample_plate"}] for event in firmware_events)
