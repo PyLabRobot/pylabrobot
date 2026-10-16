@@ -248,7 +248,8 @@ class PreciseFlexArm:
     def _floats(reply: str) -> list[float]:
       return [float(x) for x in reply.split()]
 
-    # On interrupt, `halt` stops the move and the link is resynchronised and kept.
+    # On interrupt, `halt` stops the move and the link is resynchronised and kept. It is sent
+    # outside `_io_lock`: an emergency halt must not wait on another caller's read.
     async with halt_on_interrupt(lambda: halt_and_resync(self._driver.io, b"halt")):
       previous = _floats(await self._driver.send_command("wherej"))
       deadline = time.monotonic() + timeout

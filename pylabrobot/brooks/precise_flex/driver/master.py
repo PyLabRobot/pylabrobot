@@ -1,5 +1,6 @@
 """PreciseFlex driver: the controller link, its lifecycle, and the configuration."""
 
+import asyncio
 import logging
 import warnings
 from typing import (
@@ -92,6 +93,9 @@ class PreciseFlexDriver:
     super().__init__()
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
     self.timeout = timeout
+    # Serializes each request->reply exchange over the single shared controller socket; the
+    # rationale (and why it is kept though uncontended today) is in _locked_exchange.
+    self._io_lock = asyncio.Lock()
     # Built only on an arm that has a rail; discovery decides at setup.
     self.rail: Optional[PreciseFlexRail] = PreciseFlexRail(self) if has_rail else None
     self.arm = PreciseFlexArm(self)
@@ -125,17 +129,62 @@ class PreciseFlexDriver:
       "port": self.io._port,
     }
 
+  async def _locked_exchange(self, command: str) -> str:
+    """Write one command and read its one reply line, with the lock held.
+
+    The controller takes one connection (port 10100 refuses a second), and a reply is matched to its
+    command only by order, so two interleaved exchanges would read each other's replies. The lock is
+    held per exchange, not across a move's wait; the interrupt halt bypasses it (see
+    ``_wait_for_eom``). The newline is added here; the reply is decoded and stripped.
+    """
+    async with self._io_lock:
+      await self.io.write(command.encode("utf-8") + b"\n")
+      return (await self.io.readline()).decode("utf-8").strip()
+
+  def _ensure_successful(self, reply: str) -> str:
+    """Return the data of a ``<code> <data>`` reply, raising unless the code is 0.
+
+    Args:
+      reply: one decoded, stripped reply line.
+
+    Returns:
+      The line with its leading reply code removed.
+
+    Raises:
+      PreciseFlexError: on an empty reply or a non-zero reply code.
+    """
+    if not reply:
+      raise PreciseFlexError(-1, "Empty reply from device.")
+    code, _, data = reply.partition(" ")
+    replycode = int(code)
+    if replycode != 0:
+      raise PreciseFlexError(replycode, data)
+    return data
+
   async def send_command(self, command: str) -> str:
-    """Send one firmware command while retaining its enclosing operation context."""
+    """Send a command and return the accepted ``<code> <data>`` payload.
+
+    Writes the command and reads one reply line (as one locked exchange), then applies the standard
+    acceptance gate (``_ensure_successful``): a non-zero reply code raises, otherwise the data
+    payload is returned. A reply in a different grammar goes through the same ``_locked_exchange``
+    and is parsed by the caller instead.
+
+    The exchange is wrapped in the firmware-command events so a command keeps its enclosing
+    operation context.
+
+    Args:
+      command: the command line, without its line ending.
+
+    Raises:
+      PreciseFlexError: on an empty reply or a non-zero reply code.
+    """
     event_data = {
       "device": self._controller_reference(),
       "command": command,
     }
     emit_event("precise_flex.firmware_command.started", **event_data)
     try:
-      await self.io.write(command.encode("utf-8") + b"\n")
-      reply = await self.io.readline()
-      result = self._parse_reply_ensure_successful(reply)
+      result = self._ensure_successful(await self._locked_exchange(command))
     except BaseException as error:
       emit_event(
         "precise_flex.firmware_command.failed",
@@ -146,26 +195,6 @@ class PreciseFlexDriver:
       raise
     emit_event("precise_flex.firmware_command.completed", **event_data, response=result)
     return result
-
-  def _parse_reply_ensure_successful(self, reply: bytes) -> str:
-    """Parse reply from Precise Flex.
-
-    Expected format: b'replycode data message\r\n'
-    - replycode is an integer at the beginning
-    - data is rest of the line (excluding CRLF)
-    """
-    text = reply.decode().strip()
-    if not text:
-      raise PreciseFlexError(-1, "Empty reply from device.")
-    parts = text.split(" ", 1)
-    if len(parts) == 1:
-      replycode = int(parts[0])
-      data = ""
-    else:
-      replycode, data = int(parts[0]), parts[1]
-    if replycode != 0:
-      raise PreciseFlexError(replycode, data)
-    return data
 
   # -- lifecycle -------------------------------------------------------------
 
