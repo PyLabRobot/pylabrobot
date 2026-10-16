@@ -61,8 +61,7 @@ def setup_logger(log_dir: Optional[Union[Path, str]], level: int):
     else:
       now = datetime.datetime.now().strftime("%Y%m%d")
       log_path = log_dir / f"pylabrobot-{now}.log"
-    if not log_dir.exists():
-      log_dir.mkdir(parents=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
 
   logger = logging.getLogger("pylabrobot")
   logger.setLevel(level)
