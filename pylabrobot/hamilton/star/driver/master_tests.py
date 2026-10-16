@@ -19,7 +19,7 @@ from pylabrobot.hamilton.star.driver.features.autoload import Autoload
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.resources.hamilton import STARDeck, STARLetDeck
 from pylabrobot.serializer import serialize
 
 # The device this package ships a recording of, read through the one reader there is: tests need a
@@ -251,6 +251,31 @@ class TestDeclaredConfiguration(unittest.IsolatedAsyncioTestCase):
     )
     with self.assertRaisesRegex(ValueError, "autoload_installed"):
       await star.setup()
+
+
+class TestDeckSize(unittest.IsolatedAsyncioTestCase):
+  """Discovery refuses a deck built for another frame before anything moves."""
+
+  async def test_a_starlet_deck_on_a_star_is_refused_before_initialization(self):
+    star = STARSimulationDriver(deck=STARLetDeck(), declared_configuration_json=RECORDING_STAR)
+    sent: List[str] = []
+    sent_before_stop: List[List[str]] = []
+    send, stop = star.send_command, star.stop
+
+    async def sending(module: str, command: str, *args, **kwargs):
+      sent.append(module + command)
+      return await send(module, command, *args, **kwargs)
+
+    # The simulator builds its features up front, so the failure path's stop has them to raise.
+    async def stopping():
+      sent_before_stop.append(list(sent))
+      await stop()
+
+    with unittest.mock.patch.object(star, "send_command", sending):
+      with unittest.mock.patch.object(star, "stop", stopping):
+        with self.assertRaisesRegex(ValueError, "54 slots, the deck is built for 30"):
+          await star.setup()
+    self.assertEqual(sent_before_stop, [["C0RM", "C0QM", "C0RU", "C0UA"]])
 
 
 class TestRepeatedSetup(unittest.IsolatedAsyncioTestCase):
