@@ -1337,7 +1337,9 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
   """Each public method sends exactly the commands it sends today."""
 
   def setUp(self) -> None:
-    sleep = patch("pylabrobot.brooks.precise_flex.precise_flex.asyncio.sleep", new=AsyncMock())
+    sleep = patch(
+      "pylabrobot.brooks.precise_flex.driver.features.arm.asyncio.sleep", new=AsyncMock()
+    )
     sleep.start()
     self.addCleanup(sleep.stop)
 

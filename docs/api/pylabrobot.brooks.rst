@@ -13,7 +13,10 @@ PreciseFlex
   :nosignatures:
   :recursive:
 
-    PreciseFlex
+    PreciseFlexDriver
+    PreciseFlexArm
+    PreciseFlexGripper
+    PreciseFlexRail
     PreciseFlexConfiguration
     PreciseFlexCartesianPose
     WorkEnvelope

@@ -3,13 +3,13 @@ import unittest
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.brooks.precise_flex.errors import (
+from pylabrobot.brooks.precise_flex.driver.errors import (
   OperationInterrupted,
   PreciseFlexError,
   is_collision,
 )
+from pylabrobot.brooks.precise_flex.driver.master import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.interrupt import halt_and_resync, halt_on_interrupt
-from pylabrobot.brooks.precise_flex.precise_flex import PreciseFlex
 
 
 def mocked(method: object) -> AsyncMock:
@@ -21,9 +21,9 @@ def mocked(method: object) -> AsyncMock:
   return cast(AsyncMock, method)
 
 
-def _make_arm() -> PreciseFlex:
+def _make_arm() -> PreciseFlexDriver:
   """An arm whose socket is mocked: writes recorded, reads drain immediately (TimeoutError)."""
-  d = PreciseFlex(
+  d = PreciseFlexDriver(
     host="localhost",
     gripper_length=162.0,
     gripper_z_offset=0.0,
@@ -39,19 +39,18 @@ class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
   """The non-blocking motion-wait: polls wherej and returns once the arm stops moving."""
 
   async def test_returns_when_motion_stops(self):
-    """Returns at the first sample where the position stopped changing between polls."""
-    wherej = iter(
-      ["0 0 0 0 0", "5 5 5 5 5", "9.9 9.9 9.9 9.9 9.9", "10 10 10 10 10", "10 10 10 10 10"]
-    )
+    """Returns once three samples in a row agree."""
+    wherej = iter(["0 0 0 0 0", "5 5 5 5 5", "9.9 9.9 9.9 9.9 9.9"] + ["10 10 10 10 10"] * 3)
     d = _make_arm()
     d.send_command = AsyncMock(side_effect=lambda cmd: next(wherej))  # type: ignore[method-assign]
-    await d._wait_for_eom(poll_interval=0)  # no error == returned at the settled sample
+    await d.arm._wait_for_eom(poll_interval=0)  # no error == returned at the settled sample
 
   async def test_returns_immediately_when_already_stationary(self):
     """An idle arm (e.g. halted short of its last target) returns at once, never hangs to reach it."""
     d = _make_arm()
-    d.send_command = AsyncMock(return_value="113 81 218 64 70")  # type: ignore[method-assign]  # stable every poll
-    await d._wait_for_eom(poll_interval=0)
+    idle = "269.908 81.507 218.952 113.977 70.685"  # as the arm answered, poll after poll
+    d.send_command = AsyncMock(return_value=idle)  # type: ignore[method-assign]
+    await d.arm._wait_for_eom(poll_interval=0)
 
   async def test_keyboard_interrupt_halts_and_raises_operation_interrupted(self):
     """A user interrupt mid-wait sends halt on the connection and surfaces OperationInterrupted."""
@@ -66,7 +65,7 @@ class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
     d = _make_arm()
     d.send_command = AsyncMock(side_effect=fake)  # type: ignore[method-assign]
     with self.assertRaises(OperationInterrupted):
-      await d._wait_for_eom(poll_interval=0)
+      await d.arm._wait_for_eom(poll_interval=0)
     self.assertTrue(any(b"halt" in c.args[0] for c in mocked(d.io.write).call_args_list))
 
   async def test_cancelled_error_halts_and_reraises(self):
@@ -82,7 +81,7 @@ class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
     d = _make_arm()
     d.send_command = AsyncMock(side_effect=fake)  # type: ignore[method-assign]
     with self.assertRaises(asyncio.CancelledError):
-      await d._wait_for_eom(poll_interval=0)
+      await d.arm._wait_for_eom(poll_interval=0)
     self.assertTrue(any(b"halt" in c.args[0] for c in mocked(d.io.write).call_args_list))
 
   async def test_timeout_when_never_settles(self):
@@ -91,7 +90,7 @@ class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
     d = _make_arm()
     d.send_command = AsyncMock(side_effect=lambda cmd: f"{next(n)} 0 0 0 0")  # type: ignore[method-assign]  # always changing
     with self.assertRaises(TimeoutError):
-      await d._wait_for_eom(poll_interval=0, timeout=0)
+      await d.arm._wait_for_eom(poll_interval=0, timeout=0)
 
 
 class TestInterruptHelpers(unittest.IsolatedAsyncioTestCase):
@@ -154,7 +153,7 @@ class TestRequestSystemState(unittest.IsolatedAsyncioTestCase):
 
 
 class TestCollisionDetectionAndRecovery(unittest.IsolatedAsyncioTestCase):
-  """Crash interrupts: recognise envelope errors, and recover (re-power + attach + home)."""
+  """Crash interrupts: recognise envelope errors, and recover (re-power, attach, home if lost)."""
 
   def test_is_collision_recognises_collision_codes_only(self):
     """Envelope (-3100/-3122) and torque-saturation (-3101/-3105) errors are collisions; an E-stop,
@@ -170,7 +169,8 @@ class TestCollisionDetectionAndRecovery(unittest.IsolatedAsyncioTestCase):
   async def test_recover_repowers_attaches_and_homes(self):
     """Recovery from a non-E-stop fault re-enables power, re-attaches, and re-homes."""
     d = _make_arm()
-    d.request_system_state = AsyncMock(return_value=7)  # type: ignore[method-assign]  # off, waiting for enable (not E-stop)
+    not_estop = AsyncMock(return_value=7)
+    d.request_system_state = not_estop  # type: ignore[method-assign]
     d.power_on_robot = AsyncMock()  # type: ignore[method-assign]
     d.attach = AsyncMock()  # type: ignore[method-assign]
     d.home = AsyncMock()  # type: ignore[method-assign]
