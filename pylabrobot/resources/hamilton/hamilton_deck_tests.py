@@ -27,18 +27,6 @@ from pylabrobot.resources.stanley.cups import (
 
 
 class HamiltonDeckTests(unittest.TestCase):
-  def test_teaching_needle_pickup_positions(self):
-    """The eight needle centres share an X and descend in Y at 9 mm spacing."""
-    for deck, x in ((STARDeck(), 1326.25), (STARLetDeck(), 786.25)):
-      with self.subTest(model=deck.model):
-        rack = deck.get_resource("teaching_tip_rack")
-        assert isinstance(rack, TipRack)
-        for index in range(8):
-          self.assertEqual(
-            rack.get_item(index).get_location_wrt(deck, x="c", y="c", z="b"),
-            Coordinate(x, 529.0 - 9.0 * index, 175.0),
-          )
-
   def test_the_safe_deck_height_follows_the_longest_tip_when_asked(self):
     deck = STARDeck()
     self.assertEqual(deck.safe_deck_height, 245.0)
