@@ -27,6 +27,7 @@ odyssey = ["Pillow"]
 all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
 test = [
   "pytest",
+  "pytest-xdist",
 ]
 dev = [
   "PyLabRobot[all,test]",
