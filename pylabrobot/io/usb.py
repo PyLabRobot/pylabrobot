@@ -3,7 +3,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 
 from pylabrobot.events import emit_event
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
@@ -92,6 +92,7 @@ class USB(IOBase):
     self._id_product = id_product
     self._device_address = device_address
     self._serial_number = serial_number
+    self._reconnect_location: Optional[Tuple[int, Tuple[int, ...]]] = None
 
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
@@ -336,7 +337,10 @@ class USB(IOBase):
     )
     devices: List["usb.core.Device"] = []
     for dev in found_devices:
-      if self._device_address is not None:
+      if self._reconnect_location is not None:
+        if (dev.bus, dev.port_numbers) != self._reconnect_location:
+          continue
+      elif self._device_address is not None:
         if dev.address is None:
           raise RuntimeError(
             f"A device address was specified for '{self.human_readable_device_name}', but the backend used for PyUSB does "
@@ -440,6 +444,8 @@ class USB(IOBase):
     if len(devices) > 1:
       logger.warning("Multiple devices found. Using the first one.")
     self.dev = devices[0]
+    if self._reconnect_location is not None and self._device_address is not None:
+      self._device_address = self.dev.address
 
     logger.info("Found USB device.")
 
@@ -551,6 +557,21 @@ class USB(IOBase):
     self.dev = None
 
     self._shutdown_executors()
+
+  async def reconnect(self) -> None:
+    """Reopen the same physical USB port after the device has re-enumerated.
+
+    Call after the device has finished restarting, with all reads and writes stopped. The
+    bus and port path identify it even when its device address changes or its serial number
+    is not unique. Discovery never falls back to another port.
+    """
+    if self.dev is None:
+      raise RuntimeError("Cannot reconnect a USB device without an existing handle")
+    if self.dev.bus is None or not self.dev.port_numbers:
+      raise RuntimeError("USB backend must provide bus and port numbers to reconnect")
+    self._reconnect_location = (self.dev.bus, self.dev.port_numbers)
+    await self.stop()
+    await self.setup()
 
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""

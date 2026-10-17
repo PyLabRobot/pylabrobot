@@ -7,5 +7,6 @@
 :maxdepth: 1
 
 debug
+firmware-update
 hardware/index
 ```
