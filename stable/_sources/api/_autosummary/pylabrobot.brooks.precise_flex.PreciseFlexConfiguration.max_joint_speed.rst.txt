@@ -3,4 +3,4 @@ pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.max\_joint\_speed
 
 .. currentmodule:: pylabrobot.brooks.precise_flex
 
-.. autoattribute:: PreciseFlexConfiguration.max_joint_speed
+.. autoproperty:: PreciseFlexConfiguration.max_joint_speed

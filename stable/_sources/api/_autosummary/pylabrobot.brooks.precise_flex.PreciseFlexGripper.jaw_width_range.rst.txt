@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexGripper.jaw\_width\_range
+====================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexGripper.jaw_width_range

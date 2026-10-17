@@ -1,0 +1,95 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexArm
+==============================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexArm
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexArm.PARKING_POSITION_BACK
+      ~PreciseFlexArm.PARKING_POSITION_FRONT
+      ~PreciseFlexArm.PARKING_POSITION_RIGHT
+      ~PreciseFlexArm.default_recovery_speed_percent
+      ~PreciseFlexArm.parking_position
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexArm.__init__
+      ~PreciseFlexArm.at_speed
+      ~PreciseFlexArm.change_elbow_orientation
+      ~PreciseFlexArm.change_elbow_orientation_by_algorithm
+      ~PreciseFlexArm.drop_at_joint_state
+      ~PreciseFlexArm.drop_at_location
+      ~PreciseFlexArm.halt
+      ~PreciseFlexArm.move_through_cartesian_poses
+      ~PreciseFlexArm.move_to_joint_state
+      ~PreciseFlexArm.move_to_location
+      ~PreciseFlexArm.park
+      ~PreciseFlexArm.pick_up_at_joint_state
+      ~PreciseFlexArm.pick_up_at_location
+      ~PreciseFlexArm.recover_axes_within_limits
+      ~PreciseFlexArm.reengage_brake
+      ~PreciseFlexArm.release_brake
+      ~PreciseFlexArm.request_base
+      ~PreciseFlexArm.request_destination_joint_state
+      ~PreciseFlexArm.request_gripper_pose
+      ~PreciseFlexArm.request_joint_limits
+      ~PreciseFlexArm.request_joint_state
+      ~PreciseFlexArm.request_kinematic_parameters
+      ~PreciseFlexArm.request_link_lengths
+      ~PreciseFlexArm.request_max_acceleration_percent
+      ~PreciseFlexArm.request_max_deceleration_percent
+      ~PreciseFlexArm.request_max_speed_percent
+      ~PreciseFlexArm.request_monitor_speed
+      ~PreciseFlexArm.request_motion_profile_values
+      ~PreciseFlexArm.request_payload
+      ~PreciseFlexArm.request_profile_acceleration
+      ~PreciseFlexArm.request_profile_acceleration_ramp
+      ~PreciseFlexArm.request_profile_deceleration
+      ~PreciseFlexArm.request_profile_deceleration_ramp
+      ~PreciseFlexArm.request_profile_in_range
+      ~PreciseFlexArm.request_profile_speed
+      ~PreciseFlexArm.request_profile_speed2
+      ~PreciseFlexArm.request_profile_straight
+      ~PreciseFlexArm.request_reference_acceleration
+      ~PreciseFlexArm.request_reference_cartesian_acceleration
+      ~PreciseFlexArm.request_reference_cartesian_speed
+      ~PreciseFlexArm.request_reference_speed
+      ~PreciseFlexArm.request_state
+      ~PreciseFlexArm.request_tool_length
+      ~PreciseFlexArm.request_tool_transformation_values
+      ~PreciseFlexArm.set_base
+      ~PreciseFlexArm.set_monitor_speed
+      ~PreciseFlexArm.set_motion_profile_values
+      ~PreciseFlexArm.set_payload
+      ~PreciseFlexArm.set_profile_acceleration
+      ~PreciseFlexArm.set_profile_acceleration_ramp
+      ~PreciseFlexArm.set_profile_deceleration
+      ~PreciseFlexArm.set_profile_deceleration_ramp
+      ~PreciseFlexArm.set_profile_in_range
+      ~PreciseFlexArm.set_profile_speed
+      ~PreciseFlexArm.set_profile_speed2
+      ~PreciseFlexArm.set_profile_straight
+      ~PreciseFlexArm.set_station_to_current_joint_state
+      ~PreciseFlexArm.start_freedrive_mode
+      ~PreciseFlexArm.start_zero_torque
+      ~PreciseFlexArm.stop_freedrive_mode
+      ~PreciseFlexArm.stop_zero_torque
+   
+   

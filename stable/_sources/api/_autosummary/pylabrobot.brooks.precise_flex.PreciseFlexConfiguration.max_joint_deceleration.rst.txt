@@ -3,4 +3,4 @@ pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.max\_joint\_deceleratio
 
 .. currentmodule:: pylabrobot.brooks.precise_flex
 
-.. autoattribute:: PreciseFlexConfiguration.max_joint_deceleration
+.. autoproperty:: PreciseFlexConfiguration.max_joint_deceleration

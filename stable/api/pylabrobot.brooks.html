@@ -63,7 +63,7 @@
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="pylabrobot.brooks.precise_flex.PreciseFlex" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlex.html" />
+    <link rel="next" title="pylabrobot.brooks.precise_flex.PreciseFlexDriver" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexDriver.html" />
     <link rel="prev" title="pylabrobot.big_bear.orbital_shaker.BigBearError" href="_autosummary/pylabrobot.big_bear.orbital_shaker.BigBearError.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
@@ -585,34 +585,43 @@
 <h2>PreciseFlex<a class="headerlink" href="#preciseflex" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlex.html#pylabrobot.brooks.precise_flex.PreciseFlex" title="pylabrobot.brooks.precise_flex.PreciseFlex"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlex</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexDriver.html#pylabrobot.brooks.precise_flex.PreciseFlexDriver" title="pylabrobot.brooks.precise_flex.PreciseFlexDriver"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexDriver</span></code></a></p></td>
 <td><p>Driver for PreciseFlex robotic arms.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.html#pylabrobot.brooks.precise_flex.PreciseFlexConfiguration" title="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexConfiguration</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexArm.html#pylabrobot.brooks.precise_flex.PreciseFlexArm" title="pylabrobot.brooks.precise_flex.PreciseFlexArm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexArm</span></code></a></p></td>
+<td><p>The arm of a PreciseFlex: its joints, read and moved through the controller.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexGripper.html#pylabrobot.brooks.precise_flex.PreciseFlexGripper" title="pylabrobot.brooks.precise_flex.PreciseFlexGripper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexGripper</span></code></a></p></td>
+<td><p>The gripper fitted to a PreciseFlex arm: a servoed single gripper, or a dual one.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexRail.html#pylabrobot.brooks.precise_flex.PreciseFlexRail" title="pylabrobot.brooks.precise_flex.PreciseFlexRail"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexRail</span></code></a></p></td>
+<td><p>The linear rail a PreciseFlex arm rides on (<code class="code docutils literal notranslate"><span class="pre">Axis.RAIL</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.html#pylabrobot.brooks.precise_flex.PreciseFlexConfiguration" title="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexConfiguration</span></code></a></p></td>
 <td><p>Device configuration resolved once at setup; immutable afterwards.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexCartesianPose.html#pylabrobot.brooks.precise_flex.PreciseFlexCartesianPose" title="pylabrobot.brooks.precise_flex.PreciseFlexCartesianPose"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexCartesianPose</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexCartesianPose.html#pylabrobot.brooks.precise_flex.PreciseFlexCartesianPose" title="pylabrobot.brooks.precise_flex.PreciseFlexCartesianPose"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexCartesianPose</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.WorkEnvelope.html#pylabrobot.brooks.precise_flex.WorkEnvelope" title="pylabrobot.brooks.precise_flex.WorkEnvelope"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WorkEnvelope</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.WorkEnvelope.html#pylabrobot.brooks.precise_flex.WorkEnvelope" title="pylabrobot.brooks.precise_flex.WorkEnvelope"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WorkEnvelope</span></code></a></p></td>
 <td><p>Reachable tool-tip envelope: an annulus about the shoulder, over a Z range (mm).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.MotionProfile.html#pylabrobot.brooks.precise_flex.MotionProfile" title="pylabrobot.brooks.precise_flex.MotionProfile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MotionProfile</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.MotionProfile.html#pylabrobot.brooks.precise_flex.MotionProfile" title="pylabrobot.brooks.precise_flex.MotionProfile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MotionProfile</span></code></a></p></td>
 <td><p>A controller motion profile, as reported by <code class="docutils literal notranslate"><span class="pre">Profile</span> <span class="pre">&lt;n&gt;</span></code> (field order matches the wire).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.Axis.html#pylabrobot.brooks.precise_flex.Axis" title="pylabrobot.brooks.precise_flex.Axis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Axis</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.Axis.html#pylabrobot.brooks.precise_flex.Axis" title="pylabrobot.brooks.precise_flex.Axis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Axis</span></code></a></p></td>
+<td><p>The arm's axes, numbered as the firmware numbers them.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.Wrist.html#pylabrobot.brooks.precise_flex.Wrist" title="pylabrobot.brooks.precise_flex.Wrist"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Wrist</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.Wrist.html#pylabrobot.brooks.precise_flex.Wrist" title="pylabrobot.brooks.precise_flex.Wrist"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Wrist</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.ElbowOrientation.html#pylabrobot.brooks.precise_flex.ElbowOrientation" title="pylabrobot.brooks.precise_flex.ElbowOrientation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ElbowOrientation</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.ElbowOrientation.html#pylabrobot.brooks.precise_flex.ElbowOrientation" title="pylabrobot.brooks.precise_flex.ElbowOrientation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ElbowOrientation</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexError.html#pylabrobot.brooks.precise_flex.PreciseFlexError" title="pylabrobot.brooks.precise_flex.PreciseFlexError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexError</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexError.html#pylabrobot.brooks.precise_flex.PreciseFlexError" title="pylabrobot.brooks.precise_flex.PreciseFlexError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreciseFlexError</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.OutOfRangeOfMotionError.html#pylabrobot.brooks.precise_flex.OutOfRangeOfMotionError" title="pylabrobot.brooks.precise_flex.OutOfRangeOfMotionError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OutOfRangeOfMotionError</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.brooks.precise_flex.OutOfRangeOfMotionError.html#pylabrobot.brooks.precise_flex.OutOfRangeOfMotionError" title="pylabrobot.brooks.precise_flex.OutOfRangeOfMotionError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OutOfRangeOfMotionError</span></code></a></p></td>
 <td><p>An axis's current position is outside its soft limits, so the controller rejects every commanded move (-1012) until it is driven back into range.</p></td>
 </tr>
 </tbody>
@@ -641,11 +650,11 @@
       </div>
     </a>
     <a class="right-next"
-       href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlex.html"
+       href="_autosummary/pylabrobot.brooks.precise_flex.PreciseFlexDriver.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.brooks.precise_flex.PreciseFlex</p>
+        <p class="prev-next-title">pylabrobot.brooks.precise_flex.PreciseFlexDriver</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

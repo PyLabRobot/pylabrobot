@@ -1,0 +1,147 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexDriver
+=================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexDriver
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexDriver.PARKING_POSITION_BACK
+      ~PreciseFlexDriver.PARKING_POSITION_FRONT
+      ~PreciseFlexDriver.PARKING_POSITION_RIGHT
+      ~PreciseFlexDriver.ResponseMode
+      ~PreciseFlexDriver.closed_gripper_position
+      ~PreciseFlexDriver.configuration
+      ~PreciseFlexDriver.horizontal_compliance
+      ~PreciseFlexDriver.horizontal_compliance_torque
+      ~PreciseFlexDriver.location_index
+      ~PreciseFlexDriver.max_gripper_width
+      ~PreciseFlexDriver.min_gripper_width
+      ~PreciseFlexDriver.parking_position
+      ~PreciseFlexDriver.profile_index
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexDriver.__init__
+      ~PreciseFlexDriver.are_grippers_closed
+      ~PreciseFlexDriver.attach
+      ~PreciseFlexDriver.change_config
+      ~PreciseFlexDriver.change_config2
+      ~PreciseFlexDriver.connect
+      ~PreciseFlexDriver.dest_c
+      ~PreciseFlexDriver.dest_j
+      ~PreciseFlexDriver.detach
+      ~PreciseFlexDriver.disconnect
+      ~PreciseFlexDriver.discover
+      ~PreciseFlexDriver.drop_at_joint_position
+      ~PreciseFlexDriver.drop_at_location
+      ~PreciseFlexDriver.halt
+      ~PreciseFlexDriver.here_c
+      ~PreciseFlexDriver.here_j
+      ~PreciseFlexDriver.home
+      ~PreciseFlexDriver.home_all
+      ~PreciseFlexDriver.initialize
+      ~PreciseFlexDriver.is_gripper_closed
+      ~PreciseFlexDriver.move_gripper
+      ~PreciseFlexDriver.move_gripper_joint_position
+      ~PreciseFlexDriver.move_rail
+      ~PreciseFlexDriver.move_through_cartesian_poses
+      ~PreciseFlexDriver.move_to_joint_position
+      ~PreciseFlexDriver.move_to_location
+      ~PreciseFlexDriver.nop
+      ~PreciseFlexDriver.park
+      ~PreciseFlexDriver.pick_up_at_joint_position
+      ~PreciseFlexDriver.pick_up_at_location
+      ~PreciseFlexDriver.power_off_robot
+      ~PreciseFlexDriver.power_on_robot
+      ~PreciseFlexDriver.recover_axes_within_limits
+      ~PreciseFlexDriver.recover_from_fault
+      ~PreciseFlexDriver.release_brake
+      ~PreciseFlexDriver.request_axis_count
+      ~PreciseFlexDriver.request_axis_mask
+      ~PreciseFlexDriver.request_base
+      ~PreciseFlexDriver.request_controller_model
+      ~PreciseFlexDriver.request_controller_serial
+      ~PreciseFlexDriver.request_extra_axis_count
+      ~PreciseFlexDriver.request_gpl_version
+      ~PreciseFlexDriver.request_gripper_pose
+      ~PreciseFlexDriver.request_hardware_version
+      ~PreciseFlexDriver.request_joint_limits
+      ~PreciseFlexDriver.request_joint_position
+      ~PreciseFlexDriver.request_kinematic_parameters
+      ~PreciseFlexDriver.request_link_lengths
+      ~PreciseFlexDriver.request_manufacturer
+      ~PreciseFlexDriver.request_max_acceleration_percent
+      ~PreciseFlexDriver.request_max_deceleration_percent
+      ~PreciseFlexDriver.request_max_speed_percent
+      ~PreciseFlexDriver.request_mode
+      ~PreciseFlexDriver.request_monitor_speed
+      ~PreciseFlexDriver.request_motion_profile_values
+      ~PreciseFlexDriver.request_parameter
+      ~PreciseFlexDriver.request_payload
+      ~PreciseFlexDriver.request_power_state
+      ~PreciseFlexDriver.request_profile_acceleration
+      ~PreciseFlexDriver.request_profile_acceleration_ramp
+      ~PreciseFlexDriver.request_profile_deceleration
+      ~PreciseFlexDriver.request_profile_deceleration_ramp
+      ~PreciseFlexDriver.request_profile_in_range
+      ~PreciseFlexDriver.request_profile_speed
+      ~PreciseFlexDriver.request_profile_speed2
+      ~PreciseFlexDriver.request_profile_straight
+      ~PreciseFlexDriver.request_reference_acceleration
+      ~PreciseFlexDriver.request_reference_cartesian_acceleration
+      ~PreciseFlexDriver.request_reference_cartesian_speed
+      ~PreciseFlexDriver.request_reference_speed
+      ~PreciseFlexDriver.request_robot_name
+      ~PreciseFlexDriver.request_robot_type
+      ~PreciseFlexDriver.request_selected_robot
+      ~PreciseFlexDriver.request_signal
+      ~PreciseFlexDriver.request_state
+      ~PreciseFlexDriver.request_system_state
+      ~PreciseFlexDriver.request_tool_length
+      ~PreciseFlexDriver.request_tool_transformation_values
+      ~PreciseFlexDriver.request_version
+      ~PreciseFlexDriver.reset
+      ~PreciseFlexDriver.select_robot
+      ~PreciseFlexDriver.send_command
+      ~PreciseFlexDriver.set_axis_parameter
+      ~PreciseFlexDriver.set_base
+      ~PreciseFlexDriver.set_brake
+      ~PreciseFlexDriver.set_monitor_speed
+      ~PreciseFlexDriver.set_motion_profile_values
+      ~PreciseFlexDriver.set_parameter
+      ~PreciseFlexDriver.set_payload
+      ~PreciseFlexDriver.set_power
+      ~PreciseFlexDriver.set_profile_acceleration
+      ~PreciseFlexDriver.set_profile_acceleration_ramp
+      ~PreciseFlexDriver.set_profile_deceleration
+      ~PreciseFlexDriver.set_profile_deceleration_ramp
+      ~PreciseFlexDriver.set_profile_in_range
+      ~PreciseFlexDriver.set_profile_speed
+      ~PreciseFlexDriver.set_profile_speed2
+      ~PreciseFlexDriver.set_profile_straight
+      ~PreciseFlexDriver.set_response_mode
+      ~PreciseFlexDriver.set_signal
+      ~PreciseFlexDriver.setup
+      ~PreciseFlexDriver.start_freedrive_mode
+      ~PreciseFlexDriver.stop
+      ~PreciseFlexDriver.stop_freedrive_mode
+      ~PreciseFlexDriver.zero_torque
+   
+   
