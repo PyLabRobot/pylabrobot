@@ -40,7 +40,8 @@ from pylabrobot.visualizer3D.server_tests import free_ports, track_volumes
 
 
 def _find_chrome() -> str:
-  """Where a headless Chrome is, or empty: `PLR_CHROME`, then the path, then the macOS install."""
+  """Where a headless Chrome is, or empty: `PLR_CHROME`, then the path, then the macOS and Windows
+  installs."""
   named = os.environ.get("PLR_CHROME", "")
   if named:
     return named
@@ -48,8 +49,14 @@ def _find_chrome() -> str:
     found = shutil.which(name)
     if found is not None:
       return found
-  installed = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-  return installed if os.path.isfile(installed) else ""
+  for installed in (
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+    os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+  ):
+    if os.path.isfile(installed):
+      return installed
+  return ""
 
 
 CHROME = _find_chrome()

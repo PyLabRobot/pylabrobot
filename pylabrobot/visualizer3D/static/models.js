@@ -21,6 +21,7 @@ import {
   travels,
 } from "./drawn.js";
 import { view } from "./renderer.js";
+import { send } from "./transport.js";
 import { modelOf, world } from "./world.js";
 
 // Geometry a resource declared for itself, drawn in place of its box.
@@ -40,6 +41,19 @@ export const dracoLoader = new DRACOLoader();
 
 // Counted up per rebuild, so a file that lands late is placed only by the scene that asked for it.
 let sceneGeneration = 0;
+
+// The server is told once per connection, when the first scene it sends has every model file on
+// screen: a run waiting for a page (a refresh, or a page whose socket dropped and came back) starts
+// on that, and not on the rebuilds its own moves cause.
+let toldDrawn = false;
+function tellDrawn() {
+  if (toldDrawn) return;
+  toldDrawn = true;
+  send("models_drawn", {});
+}
+window.addEventListener("plr:status", (event) => {
+  if (/** @type {CustomEvent} */ (event).detail?.connected) toldDrawn = false;
+});
 
 // Every file that has been fetched and parsed, by url. A tree that changes shape sends a whole
 // scene, and an instanced mesh cannot be resized - so the meshes are built again, from this,
@@ -225,6 +239,14 @@ export function buildDeclaredMeshes() {
   }
   for (const modelIndex of kept) modelIsDrawn(modelIndex);
 
+  // Files still being fetched for this scene. The server is told once none are, so a run can wait
+  // for the page to have every model on screen before it starts to move anything.
+  let loading = 0;
+  const loadingGeneration = sceneGeneration;
+  const settled = () => {
+    if (--loading === 0 && loadingGeneration === sceneGeneration) tellDrawn();
+  };
+
   for (const [modelIndex, instances] of byModel) {
     const declared = world.models[modelIndex].mesh;
     const scale = MESH_UNITS[declared.units] ?? 1;
@@ -310,10 +332,24 @@ export function buildDeclaredMeshes() {
       place(parsed);
       continue;
     }
-    gltfLoader.load(declared.url, place, undefined, (error) =>
-      console.warn(`could not load the mesh declared by ${world.names[instances[0]]}`, error),
+    loading++;
+    gltfLoader.load(
+      declared.url,
+      (gltf) => {
+        try {
+          place(gltf);
+        } finally {
+          settled();
+        }
+      },
+      undefined,
+      (error) => {
+        console.warn(`could not load the mesh declared by ${world.names[instances[0]]}`, error);
+        settled();
+      },
     );
   }
+  if (loading === 0) tellDrawn();
   // Whatever is left was drawn for a set of resources this scene does not have. Let go here, so a
   // file that lands later finds nothing to reuse and builds its meshes afresh.
   for (const built of instanced.values()) {
