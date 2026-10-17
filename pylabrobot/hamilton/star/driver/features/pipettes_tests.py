@@ -306,6 +306,151 @@ class TestPositionInZDirection(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(stop_discs[3], await pipettes.request_stop_disc_z_position(3))
 
 
+class TestChannelMaintenanceCommands(unittest.IsolatedAsyncioTestCase):
+  """Named diagnostic methods preserve firmware units and channel selection."""
+
+  async def asyncSetUp(self) -> None:
+    """Attach a native parameter store to simulated channels without opening hardware."""
+    self.pipettes = await simulated_channels()
+    self.sent: List[str] = []
+    self.parameters = {
+      "za": 31200,
+      "zh": 10001,
+      "zc": 31001,
+      "zi": 137,
+      "zj": 1,
+      "zv": 14999,
+      "zl": 99,
+      "zr": 149,
+      "zw": 7,
+      "gt": 1023,
+      "gl": 1001,
+      "dp": 26665,
+    }
+    self.detection = 0
+    self.z_reply = "P4RZid0001rz+31200 +18000"
+
+    async def recorded(module: str, command: str, fmt: Optional[Any] = None, **kwargs: Any) -> Any:
+      """Record exact encoded commands and emulate stored values and diagnostic replies."""
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      if command == "RA":
+        parameter = kwargs["ra"]
+        return {parameter: self.parameters[parameter]}
+      if command == "AA":
+        self.parameters.update({key: int(value) for key, value in kwargs.items()})
+      if command == "RN":
+        return {"rn": self.detection}
+      if command == "RD":
+        return {"rd": 10000}
+      if command == "RZ":
+        return self.z_reply
+      return None
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[method-assign,assignment]
+
+  async def test_named_snapshot_round_trips_every_increment(self) -> None:
+    """Unrounded pickup volume and non-round Z values restore exactly, not approximately."""
+    original = self.parameters.copy()
+    saved = await self.pipettes.request_channel_parameters(3)
+    self.assertEqual(self.sent, [f"P4RAra{key}" for key in original])
+    self.assertAlmostEqual(saved.z_target_position, 334.70268)
+    self.assertEqual(saved.lld_post_detection_direction, "up")
+    self.assertAlmostEqual(saved.tip_pickup_piston_position, 26665 * 0.046876)
+    self.assertEqual((saved.clld_detection_edge, saved.clld_detection_drop), (1023, 1001))
+    self.parameters = dict.fromkeys(original, 0)
+    await self.pipettes.restore_channel_parameters(3, saved)
+    self.assertEqual(self.parameters, original)
+    self.assertEqual(
+      self.sent[-1], "P4AAza31200zh10001zc31001zi0137zj1zv14999zl00099zr149zw7gt1023gl1001dp26665"
+    )
+
+  async def test_pressure_piston_and_lld_commands(self) -> None:
+    """Read non-default piston settings and pass them back without losing drive increments."""
+    self.parameters.update(dv=13499, dr=599, dw=0)
+    speed = await self.pipettes.request_dispensing_drive_speed_increments(3)
+    acceleration = await self.pipettes.request_dispensing_drive_acceleration_increments(3)
+    current_limit = await self.pipettes.request_dispensing_drive_current_limit(3)
+    await self.pipettes.adjust_pressure_sensor_for_measurement(3, "positive")
+    await self.pipettes.dispensing_drive_move(
+      3,
+      distance=-1250,
+      speed=speed,
+      acceleration=acceleration,
+      current_limit=current_limit,
+    )
+    await self.pipettes.adjust_pressure_sensor_for_measurement(3, "negative")
+    await self.pipettes.dispensing_drive_move(
+      3,
+      distance=800,
+      speed=speed,
+      acceleration=acceleration,
+      current_limit=current_limit,
+    )
+    await self.pipettes.set_lld_measurement(3, enabled=True, mode="capacitive")
+    await self.pipettes.set_lld_measurement(3, enabled=False)
+    await self.pipettes.initialize_dispensing_drive(3)
+    self.assertEqual(
+      self.sent,
+      [
+        "P4RAradv",
+        "P4RAradr",
+        "P4RAradw",
+        "P4BPbp0",
+        "P4DSds01250dt1dv13499dr599dw0",
+        "P4BPbp1",
+        "P4DSds00800dt0dv13499dr599dw0",
+        "P4ALal1lc0",
+        "P4ALal0",
+        "P4DI",
+        "P4RD",
+      ],
+    )
+
+  async def test_pickup_piston_position_sets_only_the_parameter(self) -> None:
+    """Setting the pickup preload performs no movement, and rejects unreachable positions."""
+    await self.pipettes.set_tip_pickup_piston_position(3, 937.52)
+    self.assertEqual(self.sent, ["P4AAdp20000"])
+    with self.assertRaises(ValueError):
+      await self.pipettes.set_tip_pickup_piston_position(3, -1)
+    self.assertEqual(self.sent, ["P4AAdp20000"])
+
+  async def test_relative_piston_move_rejects_invalid_settings_before_motion(self) -> None:
+    """Invalid stroke sizes and drive settings never reach the firmware."""
+    for invalid in (
+      {"distance": 26667},
+      {"speed": 0},
+      {"acceleration": 0},
+      {"current_limit": 8},
+    ):
+      parameters: Dict[str, Any] = {
+        "distance": 20,
+        "speed": 4267,
+        "acceleration": 64,
+        "current_limit": 5,
+      }
+      parameters.update(invalid)
+      with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+        await self.pipettes.dispensing_drive_move(3, **parameters)
+    self.assertEqual(self.sent, [])
+
+  async def test_clld_status_rejects_inactive_measurement(self) -> None:
+    """An inactive detector must not be mistaken for a valid no-detection result."""
+    self.assertFalse(await self.pipettes.request_clld_detection(3))
+    self.detection = 1
+    self.assertTrue(await self.pipettes.request_clld_detection(3))
+    self.detection = 2
+    with self.assertRaises(ValueError):
+      await self.pipettes.request_clld_detection(3)
+
+  async def test_both_native_z_counters_are_required(self) -> None:
+    """Do not replace a missing hardware counter with the commanded position."""
+    reading = await self.pipettes.request_z_counters(3)
+    self.assertEqual((reading.controller_counts, reading.hardware_counts), (31200, 18000))
+    self.z_reply = "P4RZid0001rz+31200"
+    with self.assertRaisesRegex(RuntimeError, "both Z counters"):
+      await self.pipettes.request_z_counters(3)
+
+
 class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
   """A channel's stored Y/Z speed and acceleration: read with `Px RA`, written with `Px AA`."""
 
@@ -772,10 +917,12 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
       await self.pipettes.probe_z_using_clld(0)
     self.moves.assert_awaited_once()
 
-  async def test_z_probe_that_finds_nothing_goes_to_safe_z_and_answers_none(self):
+  async def test_z_probe_that_finds_nothing_honors_requested_retraction(self):
     self._mount_a_tip(51.9)
     self._answer_the_search_with("ZL", "P2ZLid0001er70")
     self.assertIsNone(await self.pipettes.probe_z_using_clld(1))
+    self.moves.assert_not_awaited()
+    self.assertIsNone(await self.pipettes.probe_z_using_clld(1, move_to_safe_z_position_after=True))
     self.moves.assert_awaited_once()
     self.assertNotIn("C0RL", self.sent)
 
@@ -1134,10 +1281,16 @@ class TestLiquidProbingInSimulation(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(found, self._surface(self.a1), delta=0.1)
     self.assertAlmostEqual((await self.pipettes.request_last_lld_z_positions())[0], found)
 
-  async def test_a_clld_miss_answers_none_zeroes_the_latch_and_comes_up(self):
+  async def test_a_clld_miss_retracts_only_when_requested(self):
     floor = await self._over(self.d1)
     self.assertIsNone(await self.pipettes.probe_z_using_clld(0, search_end_position=floor))
     self.assertEqual((await self.pipettes.request_last_lld_z_positions())[0], 0.0)
+    self.assertAlmostEqual(await self.pipettes.request_tool_bottom_z_position(0), floor, delta=0.1)
+    self.assertIsNone(
+      await self.pipettes.probe_z_using_clld(
+        0, search_end_position=floor, move_to_safe_z_position_after=True
+      )
+    )
     top = self.pipettes.configuration.z_range[1]
     self.assertEqual((await self.pipettes.request_stop_disc_z_positions())[0], top)
 
@@ -3273,8 +3426,8 @@ class TestEmptyTip(unittest.IsolatedAsyncioTestCase):
     self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
 
   async def test_the_raw_move_carries_the_five_fields(self):
-    await self.pipettes._unchecked_fw_dispensing_drive_move(0, -960, 4267, 64, 5)
-    await self.pipettes._unchecked_fw_dispensing_drive_move(1, 960, 4267, 64, 5)
+    await self.pipettes.dispensing_drive_move(0, -960, 4267, 64, 5)
+    await self.pipettes.dispensing_drive_move(1, 960, 4267, 64, 5)
     self.assertEqual(self.sent, ["P1DSds00960dt1dv04267dr064dw5", "P2DSds00960dt0dv04267dr064dw5"])
 
   async def test_the_moves_are_the_ones_legacy_sends(self):
