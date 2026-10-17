@@ -7,6 +7,7 @@
 contributing
 how-to-open-source
 contributing-to-docs
+command-prefix-conventions
 ```
 <hr>
 
