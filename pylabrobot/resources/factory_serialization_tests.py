@@ -15,6 +15,19 @@ from pylabrobot.resources.resource import Resource
 # Packages that raise on import because they are deprecated aliases of another package.
 DEPRECATED_PACKAGES = {"pylabrobot.resources.falcon"}
 
+# Factories whose state does not survive deserialize and load_all_state. The CO-RE gripper tools
+# parked in a holder are left out of `HamiltonCoreGrippers.serialize()` as state, but its state does
+# not carry them either, so a rebuilt holder, or a deck with one, has no tools.
+STATE_NOT_RESTORED = {
+  "pylabrobot.resources.hamilton.core_grippers.hamilton_core_gripper_1000ul_5ml_on_waste",
+  "pylabrobot.resources.hamilton.core_grippers.hamilton_core_gripper_1000ul_at_waste",
+  "pylabrobot.resources.hamilton.core_grippers.prep_core_gripper_holder",
+  "pylabrobot.resources.hamilton.core_grippers.prep_core_gripper_mount",
+  "pylabrobot.resources.hamilton.star_decks.STARDeck",
+  "pylabrobot.resources.hamilton.star_decks.STARLetDeck",
+  "pylabrobot.resources.hamilton.star_decks.STARPlusDeck",
+}
+
 
 class _DownloadRefused(Exception):
   """Raised in place of fetching an Opentrons labware definition from GitHub."""
@@ -81,8 +94,8 @@ def _comparable(data: Any) -> Any:
 
 class FactorySerializationTests(unittest.TestCase):
   def test_factories_round_trip(self):
-    """Serializing is repeatable, and a resource rebuilt from its serialization serializes the
-    same as the original."""
+    """Serializing is repeatable, and a resource rebuilt from its serialization and state
+    serializes the same as the original."""
     built = 0
     with (
       warnings.catch_warnings(),
@@ -105,4 +118,11 @@ class FactorySerializationTests(unittest.TestCase):
           restored = Resource.deserialize(data, allow_marshal=True)
           self.assertIs(type(restored), type(resource))
           self.assertEqual(_comparable(restored.serialize()), _comparable(data))
+          state = resource.serialize_all_state()
+          restored.load_all_state(state)
+          if qualified_name in STATE_NOT_RESTORED:
+            # Fails once the state is restored: take it out of STATE_NOT_RESTORED then.
+            self.assertNotEqual(restored.serialize_all_state(), state)
+          else:
+            self.assertEqual(restored.serialize_all_state(), state)
     self.assertGreater(built, 0)
