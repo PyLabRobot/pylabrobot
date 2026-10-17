@@ -21,6 +21,7 @@ class TestPetriDish(unittest.TestCase):
         "type": "PetriDish",
         "category": "petri_dish",
         "max_volume": 121500.0,
+        "nominal_volume": 121500.0,
         "material_z_thickness": None,
         "compute_volume_from_height": None,
         "compute_height_from_volume": None,
