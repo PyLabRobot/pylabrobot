@@ -226,10 +226,14 @@ class TipSpot(Resource):
     _legacy_tracker(self).remove_tip()
 
   def serialize(self) -> dict:
-    """Serialize the tip spot. Its tip is state, not a serialized child."""
+    """Serialize the tip spot. Its tip is state, not a serialized child.
+
+    The prototype tip is named after the spot rather than drawn from :meth:`make_tip`, so
+    serializing does not use up a tip name and gives the same result every time.
+    """
     data = {
       **super().serialize(),
-      "prototype_tip": self.make_tip().serialize(),
+      "prototype_tip": self._make_tip_func(self.name).serialize(),
     }
     data.pop("children", None)
     return data

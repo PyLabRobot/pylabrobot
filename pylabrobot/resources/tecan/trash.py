@@ -1,5 +1,6 @@
-from typing import Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
 from pylabrobot.resources.trash import Trash
 
@@ -15,6 +16,12 @@ class TecanTrash(Trash, TecanResource):
     size_z: float,
     category: str = "tecan_trash",
     model: Optional[str] = None,
+    material_z_thickness: float = 0,
+    max_volume: float = float("inf"),
+    compute_volume_from_height: Optional[Callable[[float], float]] = None,
+    compute_height_from_volume: Optional[Callable[[float], float]] = None,
+    height_volume_data: Optional[Dict[float, float]] = None,
+    no_go_zones: Optional[List[Tuple[Coordinate, Coordinate]]] = None,
   ):
     super().__init__(
       name=name,
@@ -23,6 +30,12 @@ class TecanTrash(Trash, TecanResource):
       size_z=size_z,
       category=category,
       model=model,
+      material_z_thickness=material_z_thickness,
+      max_volume=max_volume,
+      compute_volume_from_height=compute_volume_from_height,
+      compute_height_from_volume=compute_height_from_volume,
+      height_volume_data=height_volume_data,
+      no_go_zones=no_go_zones,
     )
 
 

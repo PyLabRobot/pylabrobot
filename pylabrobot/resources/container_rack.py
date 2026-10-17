@@ -1,5 +1,6 @@
 """A movable rack of holders parameterized by container content type."""
 
+from collections import OrderedDict
 from typing import ClassVar, Dict, Generic, List, Optional, Sequence, TypeVar, Union, cast
 
 from pylabrobot.resources.itemized_resource import ItemizedResource
@@ -59,8 +60,9 @@ class ContainerRack(ItemizedResource[ResourceHolder], Generic[T]):
     ordered_items: Optional[Dict[str, ResourceHolder]] = None,
     model: Optional[str] = None,
     category: str = "container_rack",
+    ordering: Optional[OrderedDict[str, str]] = None,
   ):
-    if ordered_items is None or len(ordered_items) == 0:
+    if ordering is None and (ordered_items is None or len(ordered_items) == 0):
       raise ValueError("ordered_items must be provided and non-empty")
 
     super().__init__(
@@ -69,6 +71,7 @@ class ContainerRack(ItemizedResource[ResourceHolder], Generic[T]):
       size_y=size_y,
       size_z=size_z,
       ordered_items=ordered_items,
+      ordering=ordering,
       category=category,
       model=model,
     )
