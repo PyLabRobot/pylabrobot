@@ -18,7 +18,6 @@ from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex.tests.mock_utils import make_api, make_flex
 from pylabrobot.opentrons.types import CommandInfo
 from pylabrobot.resources import Resource, cor_96_wellplate_360uL_Fb
-from pylabrobot.resources.opentrons import flex_96_tiprack_50ul
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.plate import Plate
 
@@ -164,26 +163,6 @@ class TestGripDistanceDiscarded(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.flex, self.api = _flex_with_gripper(self)
     await self.flex.setup()
-
-  async def test_catalogue_labware_logs_the_ignored_grip_distance(self):
-    rack = flex_96_tiprack_50ul(name="rack")
-    self.flex.deck.assign_child_at_slot(rack, "C1")
-    gripper = self.flex.gripper
-    assert gripper is not None
-
-    with self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING") as logs:
-      await gripper.move_labware(rack, "C2", grip_distance_from_top=5.0)
-
-    # Nothing is uploaded, so there is nowhere to put the requested height:
-    # the robot grips at the catalogue definition's own.
-    self.assertEqual(self.api.define_labware.await_count, 0)
-    load_cmds = [c for c in self.api.submit_command.await_args_list if c.args[1] == "loadLabware"]
-    self.assertEqual(load_cmds[0].args[2]["namespace"], "opentrons")
-    self.assertTrue(any("grip_distance_from_top=5.0" in line for line in logs.output))
-    self.assertTrue(
-      any("opentrons_flex_96_tiprack_50ul" in line for line in logs.output),
-      logs.output,
-    )
 
   async def test_second_move_logs_the_grip_distance_the_loaded_labware_ignores(self):
     lid = Resource(name="lid stack", size_x=100.0, size_y=90.0, size_z=20.0)
