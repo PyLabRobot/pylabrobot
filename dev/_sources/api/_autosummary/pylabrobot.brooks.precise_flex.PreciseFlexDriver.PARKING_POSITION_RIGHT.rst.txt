@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDriver.PARKING\_POSITION\_RIGHT
+==========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexDriver.PARKING_POSITION_RIGHT

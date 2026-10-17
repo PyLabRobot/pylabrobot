@@ -64,7 +64,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.z_range" href="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.z_range.html" />
-    <link rel="prev" title="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.reach_class" href="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.reach_class.html" />
+    <link rel="prev" title="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.soft_limits" href="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.soft_limits.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
@@ -590,12 +590,12 @@
 <dl class="py property">
 <dt class="sig sig-object py" id="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.work_envelope">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexConfiguration.</span></span><span class="sig-name descname"><span class="pre">work_envelope</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="pylabrobot.brooks.precise_flex.WorkEnvelope.html#pylabrobot.brooks.precise_flex.WorkEnvelope" title="pylabrobot.brooks.precise_flex.kinematics.WorkEnvelope"><span class="pre">WorkEnvelope</span></a></span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.work_envelope" title="Link to this definition">#</a></dt>
-<dd><p>Reachable tool-tip annulus, swept from the shoulder/elbow soft limits.</p>
-<p>Sweeps the two planar joints across their soft-limit range (Z held constant -
-it is an independent axis on a SCARA), takes the base-&gt;wrist radius at each
-sample, and brackets it by +/- the tool length (the wrist can orient the tool
-radially either way). This respects the joint limits rather than assuming full
-extension, so the outer radius is the real reach, not l1 + l2 + tool.</p>
+<dd><p>use <code class="docutils literal notranslate"><span class="pre">arm.work_envelope</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Deprecated</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
@@ -611,12 +611,12 @@ extension, so the outer radius is the real reach, not l1 + l2 + tool.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.reach_class.html"
+       href="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.soft_limits.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.reach_class</p>
+        <p class="prev-next-title">pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.soft_limits</p>
       </div>
     </a>
     <a class="right-next"

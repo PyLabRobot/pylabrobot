@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDriver.request\_power\_state
+=======================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexDriver.request_power_state

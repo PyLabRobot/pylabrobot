@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexGripper.default\_grasp\_force
+========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexGripper.default_grasp_force

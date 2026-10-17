@@ -3,4 +3,4 @@ pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.max\_cartesian\_speed
 
 .. currentmodule:: pylabrobot.brooks.precise_flex
 
-.. autoattribute:: PreciseFlexConfiguration.max_cartesian_speed
+.. autoproperty:: PreciseFlexConfiguration.max_cartesian_speed

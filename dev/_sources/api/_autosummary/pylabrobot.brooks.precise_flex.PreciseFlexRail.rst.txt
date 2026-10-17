@@ -1,0 +1,25 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexRail
+===============================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexRail
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexRail.__init__
+      ~PreciseFlexRail.move_rail
+   
+   

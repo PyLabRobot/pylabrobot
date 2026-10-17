@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexGripper.default\_finger\_speed\_percent
+==================================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexGripper.default_finger_speed_percent

@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDriver.request\_reference\_cartesian\_acceleration
+=============================================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexDriver.request_reference_cartesian_acceleration

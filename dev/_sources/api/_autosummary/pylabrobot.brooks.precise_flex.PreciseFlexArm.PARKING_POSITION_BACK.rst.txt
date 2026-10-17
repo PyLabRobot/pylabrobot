@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexArm.PARKING\_POSITION\_BACK
+======================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexArm.PARKING_POSITION_BACK

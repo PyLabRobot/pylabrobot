@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexGripper
+==================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexGripper
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexGripper.default_finger_speed_percent
+      ~PreciseFlexGripper.default_grasp_force
+      ~PreciseFlexGripper.jaw_width_range
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexGripper.__init__
+      ~PreciseFlexGripper.move_to_jaw_position
+      ~PreciseFlexGripper.move_to_jaw_position_firmware_units
+      ~PreciseFlexGripper.sense_each_fully_closed
+      ~PreciseFlexGripper.sense_fully_closed
+   
+   

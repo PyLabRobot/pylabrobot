@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDriver.request\_kinematic\_parameters
+================================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexDriver.request_kinematic_parameters

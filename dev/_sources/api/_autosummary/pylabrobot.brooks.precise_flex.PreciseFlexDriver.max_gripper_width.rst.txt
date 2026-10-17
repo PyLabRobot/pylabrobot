@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDriver.max\_gripper\_width
+=====================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoproperty:: PreciseFlexDriver.max_gripper_width

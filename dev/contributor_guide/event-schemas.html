@@ -1430,13 +1430,13 @@ emit separate resource-transfer operations when it knows the moved PLR resource.
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_to_joint_position</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code>, optional <code class="docutils literal notranslate"><span class="pre">speed_pct</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code>, optional <code class="docutils literal notranslate"><span class="pre">speed_percent</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_to_location</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code>, optional <code class="docutils literal notranslate"><span class="pre">speed_pct</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code>, optional <code class="docutils literal notranslate"><span class="pre">speed_percent</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_through_cartesian_poses</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">waypoint_count</span></code>, optional <code class="docutils literal notranslate"><span class="pre">start_target</span></code>, optional <code class="docutils literal notranslate"><span class="pre">end_target</span></code>, optional <code class="docutils literal notranslate"><span class="pre">speed_pct</span></code>, <code class="docutils literal notranslate"><span class="pre">blend</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">waypoint_count</span></code>, optional <code class="docutils literal notranslate"><span class="pre">start_target</span></code>, optional <code class="docutils literal notranslate"><span class="pre">end_target</span></code>, optional <code class="docutils literal notranslate"><span class="pre">speed_percent</span></code>, <code class="docutils literal notranslate"><span class="pre">blend</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_gripper</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">width</span></code>, <code class="docutils literal notranslate"><span class="pre">force_sensing</span></code></p></td>
@@ -1448,13 +1448,13 @@ emit separate resource-transfer operations when it knows the moved PLR resource.
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">rail_position</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.pick_up_at_joint_position</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code>, <code class="docutils literal notranslate"><span class="pre">finger_speed_pct</span></code>, <code class="docutils literal notranslate"><span class="pre">grasp_force</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code>, <code class="docutils literal notranslate"><span class="pre">finger_speed_percent</span></code>, <code class="docutils literal notranslate"><span class="pre">grasp_force</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.drop_at_joint_position</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.pick_up_at_location</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code>, <code class="docutils literal notranslate"><span class="pre">finger_speed_pct</span></code>, <code class="docutils literal notranslate"><span class="pre">grasp_force</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code>, <code class="docutils literal notranslate"><span class="pre">finger_speed_percent</span></code>, <code class="docutils literal notranslate"><span class="pre">grasp_force</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.drop_at_location</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code></p></td>
@@ -1465,7 +1465,7 @@ emit separate resource-transfer operations when it knows the moved PLR resource.
 <p><code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code> maps axis names to positions. A Cartesian <code class="docutils literal notranslate"><span class="pre">target</span></code> contains a serialized
 <code class="docutils literal notranslate"><span class="pre">location</span></code>, approach <code class="docutils literal notranslate"><span class="pre">direction</span></code>, optional elbow <code class="docutils literal notranslate"><span class="pre">orientation</span></code>, optional <code class="docutils literal notranslate"><span class="pre">wrist</span></code>, and optional
 <code class="docutils literal notranslate"><span class="pre">rail_position</span></code>. Lengths use PLR’s default unit, <code class="docutils literal notranslate"><span class="pre">grasp_force</span></code> uses the default force unit, and
-percentage values use the <code class="docutils literal notranslate"><span class="pre">_pct</span></code> suffix.</p>
+percentage values use the <code class="docutils literal notranslate"><span class="pre">_percent</span></code> suffix.</p>
 </section>
 </section>
 <section id="diagnostic-transports-and-firmware">

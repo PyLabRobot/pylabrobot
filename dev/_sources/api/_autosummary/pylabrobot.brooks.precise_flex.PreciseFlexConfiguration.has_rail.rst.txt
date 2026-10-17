@@ -3,4 +3,4 @@ pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.has\_rail
 
 .. currentmodule:: pylabrobot.brooks.precise_flex
 
-.. autoattribute:: PreciseFlexConfiguration.has_rail
+.. autoproperty:: PreciseFlexConfiguration.has_rail

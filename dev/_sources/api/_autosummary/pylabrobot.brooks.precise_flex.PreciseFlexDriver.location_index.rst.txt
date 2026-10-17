@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDriver.location\_index
+=================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoproperty:: PreciseFlexDriver.location_index

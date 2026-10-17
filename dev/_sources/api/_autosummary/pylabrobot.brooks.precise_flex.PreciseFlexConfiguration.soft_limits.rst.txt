@@ -3,4 +3,4 @@ pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.soft\_limits
 
 .. currentmodule:: pylabrobot.brooks.precise_flex
 
-.. autoattribute:: PreciseFlexConfiguration.soft_limits
+.. autoproperty:: PreciseFlexConfiguration.soft_limits

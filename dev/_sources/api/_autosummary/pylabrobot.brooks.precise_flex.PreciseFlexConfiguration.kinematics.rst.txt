@@ -3,4 +3,4 @@ pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.kinematics
 
 .. currentmodule:: pylabrobot.brooks.precise_flex
 
-.. autoattribute:: PreciseFlexConfiguration.kinematics
+.. autoproperty:: PreciseFlexConfiguration.kinematics

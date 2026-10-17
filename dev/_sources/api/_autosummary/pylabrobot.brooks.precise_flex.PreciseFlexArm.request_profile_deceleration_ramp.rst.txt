@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexArm.request\_profile\_deceleration\_ramp
+===================================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexArm.request_profile_deceleration_ramp

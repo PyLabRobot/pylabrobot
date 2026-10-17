@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexRail.move\_rail
+==========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexRail.move_rail
