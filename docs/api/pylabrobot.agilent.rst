@@ -73,6 +73,31 @@ BioTek Cytation
     CytationImagingConfig
 
 
+BioTek PowerWaveX
+-----------------
+
+.. currentmodule:: pylabrobot.agilent.biotek.powerwave
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    PowerWaveX
+    AbsorbanceResult
+    SpectralScanResult
+    PowerWaveError
+    PowerWaveNakError
+    PowerWaveStatusError
+    PowerWaveBusyError
+    PowerWaveChecksumError
+    PowerWaveSelfTestError
+    PowerWaveFatalError
+    PowerWaveHaltedError
+    PowerWaveParseError
+    PowerWaveReadAbortedError
+
+
 BioTek Synergy H1
 ------------------
 
