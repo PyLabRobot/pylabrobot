@@ -47,7 +47,7 @@ format-js:
 	cd pylabrobot/visualizer3D && biome check --write .
 
 test:
-	$(BIN)python -m pytest -s -v
+	$(BIN)python -m pytest -n auto
 
 typecheck:
 	$(BIN)python -m mypy pylabrobot
