@@ -81,7 +81,7 @@ class PreciseFlexConfiguration:
   reach_class: Literal["standard", "extended", "unknown"] = "extended"
 
   @property
-  def gripper_width_range(self) -> tuple:
+  def gripper_width_range(self) -> tuple[float, float]:
     return self.soft_limits[Axis.GRIPPER]
 
   @property
