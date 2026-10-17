@@ -40,6 +40,7 @@ pylabrobot.agilent.biotek.synergy.SynergyH1
       ~SynergyH1.deactivate
       ~SynergyH1.home
       ~SynergyH1.open
+      ~SynergyH1.query_capability
       ~SynergyH1.read_absorbance
       ~SynergyH1.read_fluorescence
       ~SynergyH1.read_luminescence
