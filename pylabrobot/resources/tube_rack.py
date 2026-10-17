@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from typing import ClassVar, Dict, Optional, Union
 
 from .container_rack import ContainerRack
@@ -26,6 +27,7 @@ class TubeRack(ContainerRack[Tube]):
     ordered_items: Optional[Dict[str, ResourceHolder]] = None,
     model: Optional[str] = None,
     category: str = "tube_rack",
+    ordering: Optional[OrderedDict[str, str]] = None,
   ):
     super().__init__(
       name=name,
@@ -33,6 +35,7 @@ class TubeRack(ContainerRack[Tube]):
       size_y=size_y,
       size_z=size_z,
       ordered_items=ordered_items,
+      ordering=ordering,
       category=category,
       model=model,
     )
