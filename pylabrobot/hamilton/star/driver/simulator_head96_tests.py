@@ -52,7 +52,7 @@ class TestSimulatedHead96MasterCommands(unittest.IsolatedAsyncioTestCase):
     ]
 
   async def test_ep_leaves_a1_over_the_spot_and_the_stop_disc_a_tip_above_ze(self):
-    await self.head.pick_up_tips(self.tip_rack, minimum_height_command_end=245.0)
+    await self.head.pick_up_tips(self.tip_rack, minimum_traverse_height_end=245.0)
     spot = self.tip_rack.get_item("A1").get_location_wrt(self.deck, "c", "c", "b")
     x, y, z = await self.where()
     self.assertAlmostEqual(x, spot.x, delta=0.05)
@@ -61,7 +61,7 @@ class TestSimulatedHead96MasterCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_er_leaves_the_stop_disc_at_ze(self):
     await self.head.pick_up_tips(self.tip_rack)
-    await self.head.drop_tips(self.tip_rack, minimum_height_command_end=250.0)
+    await self.head.drop_tips(self.tip_rack, minimum_traverse_height_end=250.0)
     spot = self.tip_rack.get_item("A1").get_location_wrt(self.deck, "c", "c", "b")
     x, y, z = await self.where()
     self.assertAlmostEqual(x, spot.x, delta=0.05)

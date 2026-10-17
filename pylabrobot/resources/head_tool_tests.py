@@ -95,6 +95,7 @@ class HeadToolTests(unittest.TestCase):
         "fitting_depth": 8.0,
         "collar_height": 10.0,
         "pick_up_location": {"x": 18.0, "y": 4.25, "z": 32.0, "type": "Coordinate"},
+        "is_conductive": True,
       },
     )
 

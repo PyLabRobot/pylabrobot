@@ -149,6 +149,13 @@ class AgrowPump:
     )
 
   async def run_continuously(self, speed: float):
+    """Run at a speed from 0 to 100, truncating valid fractional speeds to integers.
+
+    Raises:
+      ValueError: Speed is outside the range 0 to 100 or is not finite.
+    """
+    if not 0 <= speed <= 100:
+      raise ValueError("Pump speed out of range. Value should be between 0 and 100.")
     logger.info(
       "[Agrow %s addr=%s] channel %d: run_continuously at speed %d",
       self.driver.port,

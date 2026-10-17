@@ -1010,9 +1010,10 @@ class SimulatedHead96(_SimulatedHead, Head96):
     # The dispensing and squeezer drives have no register to read, so they answer with what this
     # head's firmware documents.
     head = self._declared
+    newer = head.firmware_year >= 2010
     documented = {
-      "dv": head.dispensing_drive_speed_default,
-      "dr": head.dispensing_drive_acceleration_default,
+      "dv": 261.1,
+      "dr": head.dispensing_drive_increments_to_uL(900000 if newer else 150000),
       "sv": head.squeezer_drive_speed_default,
       "sr": head.squeezer_drive_acceleration_default,
     }
