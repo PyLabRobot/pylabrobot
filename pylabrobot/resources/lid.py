@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Tuple
 
 from pylabrobot.resources.resource_holder import get_child_location
 
+from .errors import NoLocationError
 from .resource import Coordinate, Resource
 
 # A lid may be modelled up to this much smaller than the resource it covers - its rim sits just
@@ -100,6 +101,50 @@ class Liddable(Resource):
       - lid.get_anchor(x="c", y="c", z="b")
       - Coordinate(0, 0, lid.nesting_z_height)
     )
+
+  def get_occupied_z_bounds(self) -> Tuple[float, float]:
+    """Return the lowest and highest Z of the body and its attached lid, in mm.
+
+    Both values are along this resource's local Z axis and relative to its origin, the bottom of the
+    body. A resource placed by its origin therefore occupies ``bottom`` to ``top`` relative to that
+    placement. The lid's actual location and rotation relative to
+    this resource are used; nesting is reflected in its seated location. Other children, including
+    children of the lid, are excluded. This resource's location and rotation, and those of its
+    ancestors, do not affect the result. Geometry is read on each call.
+
+    Returns:
+      ``(bottom, top)``. Without a lid this is ``(0, get_size_z())``. ``bottom`` is negative when
+      the lid extends below the body's origin, and ``top`` exceeds ``get_size_z()`` when the lid
+      rises above the body.
+
+    Raises:
+      NoLocationError: If the attached lid has no location.
+    """
+    lid = self.lid
+    if lid is None:
+      return 0.0, self.get_size_z()
+    if lid.location is None:
+      raise NoLocationError(f"Lid '{lid.name}' has no location.")
+    lid_zs = [
+      (lid.location + lid.get_anchor(x=x, y=y, z=z).rotated(lid.rotation)).z
+      for x in ("l", "r")
+      for y in ("f", "b")
+      for z in ("b", "t")
+    ]
+    return min(0.0, *lid_zs), max(self.get_size_z(), *lid_zs)
+
+  def get_occupied_size_z(self) -> float:
+    """Return the total extent of the body and its attached lid along the local Z axis, in mm.
+
+    This is ``top - bottom`` of :meth:`get_occupied_z_bounds`. It is not a height above the body's
+    origin: when the lid extends below that origin, the extent exceeds ``top``. It is not a stacking
+    pitch either.
+
+    Raises:
+      NoLocationError: If the attached lid has no location.
+    """
+    bottom, top = self.get_occupied_z_bounds()
+    return top - bottom
 
   def assign_child_resource(
     self,
