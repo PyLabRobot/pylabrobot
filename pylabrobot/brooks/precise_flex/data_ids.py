@@ -9,6 +9,9 @@ power/system-state word) so a reply can be decoded, not just located.
 """
 
 from enum import IntEnum
+from typing import Dict
+
+from .kinematics import Axis
 
 
 class DataID(IntEnum):
@@ -97,3 +100,25 @@ class PowerState(IntEnum):
   ON_VIRTUAL_MCP_JOG = 29
   ON_EXTERNAL_TRAJECTORY = 30
   ON_HARDWARE_MCP_JOG = 31
+
+
+def _parse_scalar(response: str) -> float:
+  """Parse the first numeric field of a DataID reply.
+
+  Some scalar DataIDs come back zero-padded (e.g. robot type as ``12, 0, 0, ...``)
+  and Cartesian references carry several components; take the leading value.
+  """
+  return float(response.split(",")[0])
+
+
+def _parse_per_axis(response: str) -> Dict[Axis, float]:
+  """Parse a comma-separated per-axis DataID reply into an {Axis: value} map."""
+  values = [float(v) for v in response.split(",")]
+  return {Axis(i + 1): values[i] for i in range(min(len(values), len(Axis)))}
+
+
+def _zip_axis_ranges(
+  low: Dict[Axis, float], high: Dict[Axis, float]
+) -> Dict[Axis, tuple[float, float]]:
+  """Combine min and max per-axis maps into an {Axis: (min, max)} map."""
+  return {axis: (low[axis], high[axis]) for axis in low.keys() & high.keys()}
