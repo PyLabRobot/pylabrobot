@@ -33,7 +33,7 @@ export function initCoords() {
     );
     const wrtName = refValue("coords-wrt-ref");
     if (wrtName === "root") return { from: null, to };
-    const wrtIndex = world.indexOfName.get(wrtName);
+    const wrtIndex = world.indexOfIdentifier.get(wrtName);
     if (wrtIndex === undefined) return { from: null, to };
     return {
       from: referencePoint(
@@ -60,7 +60,7 @@ export function initCoords() {
   function wrtPoint() {
     const wrtName = refValue("coords-wrt-ref");
     if (wrtName === "root") return null;
-    const wrtIndex = world.indexOfName.get(wrtName);
+    const wrtIndex = world.indexOfIdentifier.get(wrtName);
     if (wrtIndex === undefined) return null;
     return referencePoint(
       wrtIndex,

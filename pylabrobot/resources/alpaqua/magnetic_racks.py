@@ -1,11 +1,14 @@
 import warnings
+from typing import Optional
 
 # implemented as PlateAdapter to enable simple and fast assignment
 # of plates to them, with self-correcting location placement
 from pylabrobot.resources.plate_adapter import PlateAdapter
 
 
-def alpaqua_96_plateadapter_magnum_flx(name: str) -> PlateAdapter:
+def alpaqua_96_plateadapter_magnum_flx(
+  name: str, *, identifier: Optional[str] = None
+) -> PlateAdapter:
   """Alpaqua Engineering LLC cat. no.: A000400
   Magnetic rack for 96-well plates.
   implemented as PlateAdapter to enable simple and fast assignment of
@@ -24,6 +27,7 @@ def alpaqua_96_plateadapter_magnum_flx(name: str) -> PlateAdapter:
     adapter_hole_size_y=8.0,
     adapter_hole_size_z=8.0,  # guesstimate
     model=alpaqua_96_plateadapter_magnum_flx.__name__,
+    identifier=identifier,
   )
 
 
@@ -31,11 +35,11 @@ def alpaqua_96_plateadapter_magnum_flx(name: str) -> PlateAdapter:
 # TODO: Remove >2026-02
 
 
-def Alpaqua_96_magnum_flx(name: str) -> PlateAdapter:
+def Alpaqua_96_magnum_flx(name: str, *, identifier: Optional[str] = None) -> PlateAdapter:
   """Deprecated alias for `alpaqua_96_plateadapter_magnum_flx`."""
   warnings.warn(
     "Alpaqua_96_magnum_flx is deprecated. Use 'alpaqua_96_plateadapter_magnum_flx' instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return alpaqua_96_plateadapter_magnum_flx(name)
+  return alpaqua_96_plateadapter_magnum_flx(name, identifier=identifier)

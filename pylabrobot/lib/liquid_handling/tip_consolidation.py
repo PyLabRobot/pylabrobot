@@ -39,7 +39,7 @@ def _merge_sublists(lists: List[List[TipSpot]], max_len: int) -> List[List[TipSp
 def _column_key(tip_spot: TipSpot) -> Tuple[str, float]:
   """Group tip spots by parent rack name and local X coordinate."""
   assert tip_spot.parent is not None and tip_spot.location is not None
-  return (tip_spot.parent.name, round(tip_spot.location.x, 3))
+  return (tip_spot.parent.identifier, round(tip_spot.location.x, 3))
 
 
 def plan_tip_consolidation(

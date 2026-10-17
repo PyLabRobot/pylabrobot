@@ -114,7 +114,10 @@ class _Head8LiquidTargets(NamedTuple):
 
 
 def head8_pipette(
-  name: str = "head8", size_z: float = PipettesConfiguration.channel_size_z
+  name: str = "head8",
+  size_z: float = PipettesConfiguration.channel_size_z,
+  *,
+  identifier: Optional[str] = None,
 ) -> NChannelPipette:
   """The 8MPH as a resource: one column of eight tip mounting shafts, probe 0 at the back.
 
@@ -149,6 +152,7 @@ def head8_pipette(
       tip_pickup_mode="core",
     ),
     model="hamilton_prep_8mph",
+    identifier=identifier,
   )
 
 

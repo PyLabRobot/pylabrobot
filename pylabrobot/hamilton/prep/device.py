@@ -54,6 +54,9 @@ class PrepDevice(Resource):
     size_z: Optional[float] = None,
     deck_location: Optional[Coordinate] = None,
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """
     Args:
@@ -74,6 +77,8 @@ class PrepDevice(Resource):
       size_z=deck.get_absolute_size_z() if size_z is None else size_z,
       category="device",
       model=model if model is not None else self.__class__.__name__,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.deck = deck
@@ -230,6 +235,8 @@ def Prep(
   size_z: float = PREP_SIZE_Z,
   simulate_motion_time: bool = False,
   motion_time_scale: float = 0.25,
+  *,
+  identifier: Optional[str] = None,
 ) -> PrepDevice:
   """A Prep, on a Prep deck.
 
@@ -284,4 +291,5 @@ def Prep(
     size_z=size_z,
     deck_location=PREP_DECK_LOCATION,
     model=Prep.__name__,
+    identifier=identifier,
   )

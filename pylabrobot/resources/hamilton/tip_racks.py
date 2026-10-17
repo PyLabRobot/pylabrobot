@@ -1,4 +1,5 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.tip import TipCreator
 from pylabrobot.resources.tip_rack import (
@@ -28,7 +29,11 @@ from .tip_creators import (
 
 
 def hamilton_96_tiprack_standard(
-  name: str, make_tip: TipCreator, with_tips: bool = True
+  name: str,
+  make_tip: TipCreator,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
 ) -> EmbeddedTipRack:
   """Universal tip rack for Hamilton STAR systems."""
   return EmbeddedTipRack(
@@ -55,11 +60,16 @@ def hamilton_96_tiprack_standard(
     ),
     with_tips=with_tips,
     frame_height=10.0,
+    identifier=identifier,
   )
 
 
 def hamilton_96_tiprack_ntr(
-  name: str, make_tip: TipCreator, with_tips: bool = True
+  name: str,
+  make_tip: TipCreator,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
 ) -> StandingTipRack:
   """Nested tip rack (NTR) for Hamilton STAR systems: an SLAS footprint with SLAS tip positions."""
   return StandingTipRack(
@@ -88,11 +98,18 @@ def hamilton_96_tiprack_ntr(
     ),
     with_tips=with_tips,
     frame_height=0.0,
+    identifier=identifier,
   )
 
 
 def _hamilton_96_tiprack_raised(
-  name: str, model: str, size_z: float, make_tip: TipCreator, with_tips: bool
+  name: str,
+  model: str,
+  size_z: float,
+  make_tip: TipCreator,
+  with_tips: bool,
+  *,
+  identifier: Optional[str] = None,
 ) -> EmbeddedTipRack:
   """A rack that holds its tips on its top face, rather than down in wells as a standard rack does."""
   return EmbeddedTipRack(
@@ -119,11 +136,16 @@ def _hamilton_96_tiprack_raised(
     ),
     with_tips=with_tips,
     frame_height=0.0,
+    identifier=identifier,
   )
 
 
 def hamilton_96_tiprack_raised_core_ii(
-  name: str, make_tip: TipCreator, with_tips: bool = True
+  name: str,
+  make_tip: TipCreator,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
 ) -> EmbeddedTipRack:
   """Hamilton cat. no.: 6608647
   Raised CO-RE II tip rack: a thick, unbending body with no frame, holding its tips 16 mm above the
@@ -136,11 +158,16 @@ def hamilton_96_tiprack_raised_core_ii(
     size_z=25.5,
     make_tip=make_tip,
     with_tips=with_tips,
+    identifier=identifier,
   )
 
 
 def hamilton_96_tiprack_raised_core_i(
-  name: str, make_tip: TipCreator, with_tips: bool = True
+  name: str,
+  make_tip: TipCreator,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
 ) -> EmbeddedTipRack:
   """Hamilton cat. no.: 182040
   Raised CO-RE I tip rack: the generation before `hamilton_96_tiprack_raised_core_ii`, holding its
@@ -152,129 +179,251 @@ def hamilton_96_tiprack_raised_core_i(
     size_z=22.0,
     make_tip=make_tip,
     with_tips=with_tips,
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # 10 ul Tips # # # # # # # # # #
 
 
-def hamilton_96_tiprack_10uL_filter(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_10uL_filter(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235936 (sterile), 235901 (non-sterile)
   Hamilton name: 'LTF'
   Tip Rack with 96x 10ul Low Volume Tip with filter
   """
   return hamilton_96_tiprack_standard(
-    name=name, make_tip=hamilton_tip_10uL_filter, with_tips=with_tips
+    name=name,
+    make_tip=hamilton_tip_10uL_filter,
+    with_tips=with_tips,
+    identifier=identifier,
   )
 
 
-def hamilton_96_tiprack_10uL(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_10uL(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235900 (non-sterile) 235935 (sterile)
   Hamilton name: 'LT'
   Tip Rack with 96x 10ul Low Volume Tip"""
-  return hamilton_96_tiprack_standard(name=name, make_tip=hamilton_tip_10uL, with_tips=with_tips)
+  return hamilton_96_tiprack_standard(
+    name=name,
+    make_tip=hamilton_tip_10uL,
+    with_tips=with_tips,
+    identifier=identifier,
+  )
 
 
-def hamilton_96_tiprack_10uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
+def hamilton_96_tiprack_10uL_NTR(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> StandingTipRack:
   """Hamilton cat. no.: 235949 (non-sterile), 235971 (clear, non-sterile), 235983 (sterile)
   Hamilton name: 'LT_L_NE_stack'
   Nested Tip Rack with 96x 10ul Low Volume Tip"""
-  return hamilton_96_tiprack_ntr(name=name, make_tip=hamilton_tip_10uL, with_tips=with_tips)
+  return hamilton_96_tiprack_ntr(
+    name=name,
+    make_tip=hamilton_tip_10uL,
+    with_tips=with_tips,
+    identifier=identifier,
+  )
 
 
 # # # # # # # # # # 50 ul Tips # # # # # # # # # #
 
 
-def hamilton_96_tiprack_50uL_filter(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_50uL_filter(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235948 (non-sterile), 235979 (sterile), 235829 (clear, non-sterile)
   Hamilton name: 'TIP_50ul_w_filter'
   Tip Rack with 96x 50ul Tip"""
   return hamilton_96_tiprack_standard(
-    name=name, make_tip=hamilton_tip_50uL_filter, with_tips=with_tips
+    name=name,
+    make_tip=hamilton_tip_50uL_filter,
+    with_tips=with_tips,
+    identifier=identifier,
   )
 
 
-def hamilton_96_tiprack_50uL(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_50uL(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235966 (non-sterile) 235978 (sterile)
   Hamilton name: 'TIP_50ul'
   Tip Rack with 96x 50ul Tip no filter"""
-  return hamilton_96_tiprack_standard(name=name, make_tip=hamilton_tip_50uL, with_tips=with_tips)
+  return hamilton_96_tiprack_standard(
+    name=name,
+    make_tip=hamilton_tip_50uL,
+    with_tips=with_tips,
+    identifier=identifier,
+  )
 
 
-def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
+def hamilton_96_tiprack_50uL_NTR(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> StandingTipRack:
   """Hamilton cat. no.: 235947 (non-sterile), 235964 (clear, non-sterile), 235987 (sterile)
   Hamilton name: 'TIP_50ul_L_NE_stack'
   Nested Tip Rack with 96x 50ul Tip no filter"""
-  return hamilton_96_tiprack_ntr(name=name, make_tip=hamilton_tip_50uL, with_tips=with_tips)
+  return hamilton_96_tiprack_ntr(
+    name=name,
+    make_tip=hamilton_tip_50uL,
+    with_tips=with_tips,
+    identifier=identifier,
+  )
 
 
 # # # # # # # # # # 300 ul Tips # # # # # # # # # #
 
 
-def hamilton_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_300uL_filter(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235830 (clear, non-sterile), 235903 (non-sterile), 235938 (sterile)
   Hamilton name: 'STF'
   Tip Rack with 96x 300ul Standard Volume Tip with filter"""
   return hamilton_96_tiprack_standard(
-    name=name, make_tip=hamilton_tip_300uL_filter, with_tips=with_tips
+    name=name,
+    make_tip=hamilton_tip_300uL_filter,
+    with_tips=with_tips,
+    identifier=identifier,
   )
 
 
-def hamilton_96_tiprack_300uL(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_300uL(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235834 (clear, non-sterile), 235902 (non-sterile), 235937 (sterile)
   Hamilton name: 'ST'
   Tip Rack with 96x 300ul Standard Volume Tip"""
-  return hamilton_96_tiprack_standard(name=name, make_tip=hamilton_tip_300uL, with_tips=with_tips)
+  return hamilton_96_tiprack_standard(
+    name=name,
+    make_tip=hamilton_tip_300uL,
+    with_tips=with_tips,
+    identifier=identifier,
+  )
 
 
-def hamilton_96_tiprack_300uL_NTR(name: str, with_tips: bool = True) -> StandingTipRack:
+def hamilton_96_tiprack_300uL_NTR(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> StandingTipRack:
   """Hamilton cat. no.: 235950 (non-sterile), 235965 (clear, non-sterile), 235985 (sterile)
   Hamilton name: 'ST_L_NE_stack'
   Nested Tip Rack with 96x 300ul Standard Volume Tip"""
-  return hamilton_96_tiprack_ntr(name=name, make_tip=hamilton_tip_300uL, with_tips=with_tips)
+  return hamilton_96_tiprack_ntr(
+    name=name,
+    make_tip=hamilton_tip_300uL,
+    with_tips=with_tips,
+    identifier=identifier,
+  )
 
 
-def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_300uL_filter_slim(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235646 (CORE-II: conductive)
   Hamilton name: 'STF_Slim'
   Tip Rack with 96x 300ul Slim Standard Volume Tip with filter"""
   return hamilton_96_tiprack_standard(
-    name=name, make_tip=hamilton_tip_300uL_filter_slim, with_tips=with_tips
+    name=name,
+    make_tip=hamilton_tip_300uL_filter_slim,
+    with_tips=with_tips,
+    identifier=identifier,
   )
 
 
 def hamilton_96_tiprack_300uL_filter_ultrawide(
-  name: str, with_tips: bool = True
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
 ) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235449 (1.55 mm oriface, non-sterile)
   Hamilton name: 'STF'
   Tip Rack with 96x 300ul Wide Bore Standard Volume Tip with filter"""
   return hamilton_96_tiprack_standard(
-    name=name, make_tip=hamilton_tip_300uL_filter_ultrawide, with_tips=with_tips
+    name=name,
+    make_tip=hamilton_tip_300uL_filter_ultrawide,
+    with_tips=with_tips,
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # 1_000 uL Tips # # # # # # # # # #
 
 
-def hamilton_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_1000uL_filter(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235820 (clear, non-sterile), 235905 (non-sterile), 235940 (sterile)
   Hamilton name: 'HTF'
   Tip Rack with 96x 1000ul High Volume Tip with filter
   """
   return hamilton_96_tiprack_standard(
-    name=name, make_tip=hamilton_tip_1000uL_filter, with_tips=with_tips
+    name=name,
+    make_tip=hamilton_tip_1000uL_filter,
+    with_tips=with_tips,
+    identifier=identifier,
   )
 
 
-def hamilton_96_tiprack_1000uL(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_1000uL(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.: 235822 (clear, non-sterile), 235904 (non-sterile), 235939 (sterile)
   Hamilton name: 'HT'
   Tip Rack with 96x 1000ul High Volume Tip"""
-  return hamilton_96_tiprack_standard(name=name, make_tip=hamilton_tip_1000uL, with_tips=with_tips)
+  return hamilton_96_tiprack_standard(
+    name=name,
+    make_tip=hamilton_tip_1000uL,
+    with_tips=with_tips,
+    identifier=identifier,
+  )
 
 
-def hamilton_96_tiprack_1000uL_filter_wide(name: str, with_tips: bool = True) -> EmbeddedTipRack:
+def hamilton_96_tiprack_1000uL_filter_wide(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> EmbeddedTipRack:
   """Hamilton cat. no.:
 
   core-ii:
@@ -290,12 +439,18 @@ def hamilton_96_tiprack_1000uL_filter_wide(name: str, with_tips: bool = True) ->
   """
 
   return hamilton_96_tiprack_standard(
-    name=name, make_tip=hamilton_tip_1000uL_filter_wide, with_tips=with_tips
+    name=name,
+    make_tip=hamilton_tip_1000uL_filter_wide,
+    with_tips=with_tips,
+    identifier=identifier,
   )
 
 
 def hamilton_96_tiprack_1000uL_filter_ultrawide(
-  name: str, with_tips: bool = True
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
 ) -> EmbeddedTipRack:
   """Hamilton cat. no.:
 
@@ -312,14 +467,22 @@ def hamilton_96_tiprack_1000uL_filter_ultrawide(
   """
 
   return hamilton_96_tiprack_standard(
-    name=name, make_tip=hamilton_tip_1000uL_filter_ultrawide, with_tips=with_tips
+    name=name,
+    make_tip=hamilton_tip_1000uL_filter_ultrawide,
+    with_tips=with_tips,
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # 4 ml Tips # # # # # # # # # #
 
 
-def hamilton_24_tiprack_4000uL_filter(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_24_tiprack_4000uL_filter(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> TipRack:
   """Hamilton cat. no.: 184021 (non-sterile), 184023 (sterile)
   Hamilton name: 'FourmlTF'
   Tip Rack 24x 4ml Tip with Filter landscape oriented"""
@@ -344,13 +507,19 @@ def hamilton_24_tiprack_4000uL_filter(name: str, with_tips: bool = True) -> TipR
       name_prefix=name,
     ),
     with_tips=with_tips,
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # 5 ml Tips # # # # # # # # # #
 
 
-def hamilton_24_tiprack_5000uL(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_24_tiprack_5000uL(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> TipRack:
   """Hamilton cat. no.: 184020 (non-sterile), 184022 (sterile)
   Hamilton name: 'FivemlT'
   Tip Rack 24x 5ml Tip landscape oriented"""
@@ -375,6 +544,7 @@ def hamilton_24_tiprack_5000uL(name: str, with_tips: bool = True) -> TipRack:
       name_prefix=name,
     ),
     with_tips=with_tips,
+    identifier=identifier,
   )
 
 
@@ -382,7 +552,11 @@ def hamilton_24_tiprack_5000uL(name: str, with_tips: bool = True) -> TipRack:
 
 
 def hamilton_tiprack_standard(
-  name: str, make_tip: TipCreator, with_tips: bool = True
+  name: str,
+  make_tip: TipCreator,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
 ) -> EmbeddedTipRack:
   """Deprecated alias for `hamilton_96_tiprack_standard`."""
   warnings.warn(
@@ -390,47 +564,49 @@ def hamilton_tiprack_standard(
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_96_tiprack_standard(name=name, make_tip=make_tip, with_tips=with_tips)
+  return hamilton_96_tiprack_standard(
+    name=name, make_tip=make_tip, with_tips=with_tips, identifier=identifier
+  )
 
 
 # TODO: remove after December 2025 (giving approx. 3 month transition period)
 
 
-def LTF(name: str) -> EmbeddedTipRack:
+def LTF(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRack:
   raise NotImplementedError("LTF is deprecated. use hamilton_96_tiprack_10uL_filter instead")
 
 
-def LT(name: str) -> EmbeddedTipRack:
+def LT(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRack:
   raise NotImplementedError("LT is deprecated. use hamilton_96_tiprack_10uL instead")
 
 
-def TIP_50ul_w_filter(name: str) -> EmbeddedTipRack:
+def TIP_50ul_w_filter(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRack:
   raise NotImplementedError(
     "TIP_50ul_w_filter is deprecated. use hamilton_96_tiprack_50uL_filter instead"
   )
 
 
-def TIP_50ul(name: str) -> EmbeddedTipRack:
+def TIP_50ul(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRack:
   raise NotImplementedError("TIP_50ul is deprecated. use hamilton_96_tiprack_50uL instead")
 
 
-def STF(name: str) -> EmbeddedTipRack:
+def STF(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRack:
   raise NotImplementedError("STF is deprecated. use hamilton_96_tiprack_300uL_filter instead")
 
 
-def ST(name: str) -> EmbeddedTipRack:
+def ST(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRack:
   raise NotImplementedError("ST is deprecated. use hamilton_96_tiprack_300uL instead")
 
 
-def STF_Slim(name: str) -> EmbeddedTipRack:
+def STF_Slim(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRack:
   raise NotImplementedError(
     "STF_Slim is deprecated. use hamilton_96_tiprack_300uL_filter_slim instead"
   )
 
 
-def HTF(name: str) -> EmbeddedTipRack:
+def HTF(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRack:
   raise NotImplementedError("HTF is deprecated. use hamilton_96_tiprack_1000uL_filter instead")
 
 
-def HT(name: str) -> EmbeddedTipRack:
+def HT(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRack:
   raise NotImplementedError("HT is deprecated. use hamilton_96_tiprack_1000uL instead")

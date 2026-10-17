@@ -39,7 +39,7 @@ class DeckTests(unittest.TestCase):
     resource = Resource(name="resource", size_x=1, size_y=1, size_z=1)
     deck.assign_child_resource(resource, location=Coordinate.zero())
     with self.assertRaises(ValueError):
-      deck.assign_child_resource(resource, location=Coordinate.zero())
+      deck.assign_child_resource(resource, location=Coordinate.zero(), reassign=False)
 
   def test_clear(self):
     deck = _make_test_deck()

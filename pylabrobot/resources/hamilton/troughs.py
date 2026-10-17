@@ -1,6 +1,7 @@
 """Definitions for Hamilton-manufactured Troughs"""
 
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.trough import Trough, TroughBottomType
@@ -39,7 +40,7 @@ _hamilton_1_trough_60mL_Vb_height_volume_data = {
 }
 
 
-def hamilton_1_trough_60mL_Vb(name: str) -> Trough:
+def hamilton_1_trough_60mL_Vb(name: str, *, identifier: Optional[str] = None) -> Trough:
   """Hamilton cat. no.: 56694-01 (white/translucent), 56694-02 (black/conductive)
   Trough 60 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~80 mL.
@@ -62,6 +63,7 @@ def hamilton_1_trough_60mL_Vb(name: str) -> Trough:
     no_go_zones=[
       (Coordinate(0, 44.4, 5.0), Coordinate(19.0, 45.6, 60.25)),  # center divider
     ],
+    identifier=identifier,
   )
 
 
@@ -89,7 +91,7 @@ _hamilton_1_trough_120mL_Vb_height_volume_data = {
 }
 
 
-def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
+def hamilton_1_trough_120mL_Vb(name: str, *, identifier: Optional[str] = None) -> Trough:
   """Hamilton cat. no.: 194052 (white/translucent)
   Trough 120 mL, without lid, self standing (V-bottom).
   True maximal volume capacity ~120 mL.
@@ -114,6 +116,7 @@ def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
       (Coordinate(0, 73.5, 12.0), Coordinate(19.0, 76.0, 70.0)),  # beam 2
       (Coordinate(0, 107.3, 12.0), Coordinate(19.0, 109.8, 70.0)),  # beam 3
     ],
+    identifier=identifier,
   )
 
 
@@ -135,7 +138,7 @@ _hamilton_1_trough_200mL_Vb_height_volume_data = {
 }
 
 
-def hamilton_1_trough_200mL_Vb(name: str) -> Trough:
+def hamilton_1_trough_200mL_Vb(name: str, *, identifier: Optional[str] = None) -> Trough:
   """Hamilton cat. no.: 56695-01 (white/translucent), 56695-02 (black/conductive)
   Trough 200 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~300 mL.
@@ -156,6 +159,7 @@ def hamilton_1_trough_200mL_Vb(name: str) -> Trough:
     no_go_zones=[
       (Coordinate(0, 60, 8.0), Coordinate(37.0, 61.7, 60.0))  # center divider
     ],
+    identifier=identifier,
   )
 
 
@@ -164,7 +168,9 @@ def hamilton_1_trough_200mL_Vb(name: str) -> Trough:
 # --------------------------------------------------------------------------- #
 
 
-def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
+def Hamilton_1_trough_200ml_Vb(
+  name: str, *, identifier: Optional[str] = None
+) -> Trough:  # remove 2026-07
   """Deprecated alias for hamilton_1_trough_200mL_Vb().
 
   This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
@@ -176,10 +182,12 @@ def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_1_trough_200mL_Vb(name)
+  return hamilton_1_trough_200mL_Vb(name, identifier=identifier)
 
 
-def hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
+def hamilton_1_trough_200ml_Vb(
+  name: str, *, identifier: Optional[str] = None
+) -> Trough:  # remove 2026-07
   """Deprecated alias for hamilton_1_trough_200mL_Vb().
 
   This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
@@ -191,10 +199,12 @@ def hamilton_1_trough_200ml_Vb(name: str) -> Trough:  # remove 2026-07
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_1_trough_200mL_Vb(name)
+  return hamilton_1_trough_200mL_Vb(name, identifier=identifier)
 
 
-def hamilton_1_trough_60ml_Vb(name: str) -> Trough:  # remove 2026-07
+def hamilton_1_trough_60ml_Vb(
+  name: str, *, identifier: Optional[str] = None
+) -> Trough:  # remove 2026-07
   """Deprecated alias for hamilton_1_trough_60mL_Vb().
 
   This alias will be removed after 2026-07 in the dev branch and PLR v1 (whichever you are using).
@@ -206,4 +216,4 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:  # remove 2026-07
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_1_trough_60mL_Vb(name)
+  return hamilton_1_trough_60mL_Vb(name, identifier=identifier)

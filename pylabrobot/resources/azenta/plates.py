@@ -1,4 +1,5 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_volume_container_2segments_round_vbottom,
@@ -22,7 +23,9 @@ def _compute_volume_from_height_Azenta4titudeFrameStar_96_wellplate_200ul_Vb(
   )
 
 
-def azenta_96_wellplate_200uL_Vb_4titudeframestar(name: str) -> Plate:
+def azenta_96_wellplate_200uL_Vb_4titudeframestar(
+  name: str, *, identifier: Optional[str] = None
+) -> Plate:
   """Azenta cat. no.: 4ti-0960.
   - Material: Polypropylene wells, polycarbonate frame
   - Sterilization compatibility: ?
@@ -59,6 +62,7 @@ def azenta_96_wellplate_200uL_Vb_4titudeframestar(name: str) -> Plate:
       ),
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
@@ -68,7 +72,10 @@ def azenta_96_wellplate_200uL_Vb_4titudeframestar(name: str) -> Plate:
 
 
 def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(
-  name: str, with_lid: bool = False
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
 ) -> Plate:  # remove v1b1
   """Deprecated alias for azenta_96_wellplate_200uL_Vb_4titudeframestar().
 
@@ -81,4 +88,4 @@ def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(
     DeprecationWarning,
     stacklevel=2,
   )
-  return azenta_96_wellplate_200uL_Vb_4titudeframestar(name)
+  return azenta_96_wellplate_200uL_Vb_4titudeframestar(name, identifier=identifier)

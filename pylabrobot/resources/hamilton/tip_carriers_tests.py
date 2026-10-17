@@ -297,4 +297,7 @@ class NestedTipCarrierTests(unittest.TestCase):
   def test_the_old_carrier_name_still_works(self):
     with self.assertWarns(DeprecationWarning):
       old = TIP_CAR_NTR_A00("carrier")
-    self.assertEqual(old, hamilton_tip_carrier_L5_ntr_a00("carrier"))
+    replacement = hamilton_tip_carrier_L5_ntr_a00("carrier")
+    self.assertEqual(old.model, replacement.model)
+    self.assertEqual(old.get_size_z(), replacement.get_size_z())
+    self.assertEqual(len(old.sites), len(replacement.sites))

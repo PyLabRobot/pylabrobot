@@ -1,4 +1,5 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.carrier import (
   Coordinate,
@@ -8,7 +9,7 @@ from pylabrobot.resources.carrier import (
 )
 
 
-def Tube_CAR_24_A00(name: str) -> TubeCarrier:
+def Tube_CAR_24_A00(name: str, *, identifier: Optional[str] = None) -> TubeCarrier:
   """Hamilton cat. no.: 173400
   Hamilton name: 'SMP_CAR_24_A00'.
   'Sample' carrier for 24 tubes sizes 14.5x60 - 18x120mm.
@@ -29,20 +30,23 @@ def Tube_CAR_24_A00(name: str) -> TubeCarrier:
       name_prefix=name,
     ),
     model="Tube_CAR_24_A00",
+    identifier=identifier,
   )
 
 
-def Tube_CAR_32_A00(name: str) -> TubeCarrier:
+def Tube_CAR_32_A00(name: str, *, identifier: Optional[str] = None) -> TubeCarrier:
   warnings.warn(
     "The true dimensions of a Tube_CAR_32_A00 (SMP_CAR_32_A00) are not known. "
     "The hamilton definitions are with inserts. "
     "Do you want to use `hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL` instead?",
     DeprecationWarning,
   )
-  return hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL(name)
+  return hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL(name, identifier=identifier)
 
 
-def hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL(name: str) -> TubeCarrier:
+def hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeCarrier:
   """Hamilton cat. no.: 173410 with inserts cat no. 187350.
   Hamilton name: 'SMP_CAR_32_A00'.
   'Sample' carrier for 32 tubes
@@ -69,10 +73,11 @@ def hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL(name: str) -> TubeCarrie
       name_prefix=name,
     ),
     model=hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL.__name__,
+    identifier=identifier,
   )
 
 
-def hamilton_tube_carrier_12_b00(name: str) -> TubeCarrier:
+def hamilton_tube_carrier_12_b00(name: str, *, identifier: Optional[str] = None) -> TubeCarrier:
   """Hamilton cat. no.: 182045
   Hamilton name: 'SMP_CAR_12_B00'.
   'Sample' carrier for 12 50mL falcon tubes (cor_falcon_tube_50mL_Vb).
@@ -95,4 +100,5 @@ def hamilton_tube_carrier_12_b00(name: str) -> TubeCarrier:
       name_prefix=name,
     ),
     model=hamilton_tube_carrier_12_b00.__name__,
+    identifier=identifier,
   )

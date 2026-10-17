@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.legacy.temperature_controlling.inheco.control_box import InhecoTECControlBox
 from pylabrobot.legacy.temperature_controlling.inheco.cpac_backend import InhecoCPACBackend
 from pylabrobot.legacy.temperature_controlling.temperature_controller import TemperatureController
@@ -5,7 +7,11 @@ from pylabrobot.resources.coordinate import Coordinate
 
 
 def inheco_cpac_ultraflat(
-  name: str, control_box: InhecoTECControlBox, index: int
+  name: str,
+  control_box: InhecoTECControlBox,
+  index: int,
+  *,
+  identifier: Optional[str] = None,
 ) -> TemperatureController:
   """Inheco CPAC Ultraflat
   7000166, 7000190, 7000165
@@ -21,4 +27,5 @@ def inheco_cpac_ultraflat(
     size_z=129,  # from spec
     child_location=Coordinate(x=8, y=11, z=77),  # x from spec, y and z measured
     model=inheco_cpac_ultraflat.__name__,
+    identifier=identifier,
   )

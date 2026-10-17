@@ -380,11 +380,9 @@ class HamiltonDeckTests(unittest.TestCase):
           self.assertEqual(mount.back_tool.name, "custom_deck_core_grippers_back")
           restored = Resource.deserialize(deck.serialize())
           restored.load_all_state(deck.serialize_all_state())
-          # The tools parked in the mount are state, so the restored deck has everything but them.
-          parked = {mount.front_tool.name, mount.back_tool.name}
           self.assertEqual(
             sorted(child.name for child in restored.get_all_children()),
-            sorted(child.name for child in deck.get_all_children() if child.name not in parked),
+            sorted(child.name for child in deck.get_all_children()),
           )
           self.assertEqual(restored.get_resource(mount.name).serialize(), mount.serialize())
           plate = cor_96_wellplate_360uL_Fb("user_plate")

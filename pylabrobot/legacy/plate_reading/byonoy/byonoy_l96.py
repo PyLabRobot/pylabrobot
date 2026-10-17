@@ -19,6 +19,9 @@ class _ByonoyLuminescenceReaderPlateHolder(PlateHolder):
     child_location: Coordinate = Coordinate.zero(),
     category: str = "plate_holder",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -29,6 +32,8 @@ class _ByonoyLuminescenceReaderPlateHolder(PlateHolder):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self._byonoy_base: Optional["ByonoyLuminescenceBaseUnit"] = None
 
@@ -65,6 +70,9 @@ class ByonoyLuminescenceBaseUnit(Resource):
     category: Optional[str] = None,
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -75,6 +83,8 @@ class ByonoyLuminescenceBaseUnit(Resource):
       category=category,
       model=model,
       barcode=barcode,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.plate_holder = _ByonoyLuminescenceReaderPlateHolder(
@@ -121,6 +131,9 @@ class ByonoyLuminescence96Automate(PlateReader):
     size_y: float,
     size_z: float,
     preferred_pickup_location: Optional[Coordinate] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -130,10 +143,14 @@ class ByonoyLuminescence96Automate(PlateReader):
       backend=ByonoyLuminescence96AutomateBackend(),
       model="Byonoy L96 Reader Unit",
       preferred_pickup_location=preferred_pickup_location,
+      identifier=identifier,
+      metadata=metadata,
     )
 
 
-def byonoy_l96_reader_unit(name: str) -> ByonoyLuminescence96Automate:
+def byonoy_l96_reader_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyLuminescence96Automate:
   """Create a Byonoy L96 reader unit `PlateReader`.
 
   Note: L96 (non-automate) does not have a preferred pickup location.
@@ -144,10 +161,13 @@ def byonoy_l96_reader_unit(name: str) -> ByonoyLuminescence96Automate:
     size_y=97.5,  # caliper
     size_z=35,  # force z probing
     preferred_pickup_location=None,
+    identifier=identifier,
   )
 
 
-def byonoy_l96_base_unit(name: str) -> ByonoyLuminescenceBaseUnit:
+def byonoy_l96_base_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyLuminescenceBaseUnit:
   """Create a Byonoy L96 base unit."""
   return ByonoyLuminescenceBaseUnit(
     name=name,
@@ -155,7 +175,8 @@ def byonoy_l96_base_unit(name: str) -> ByonoyLuminescenceBaseUnit:
     size_y=97.5,  # caliper
     size_z=9.4,  # force z probing
     plate_holder_child_location=Coordinate(x=6.25, y=6.1, z=2.64),  # caliper
-    reader_unit_holder_child_location=Coordinate(x=0, y=0, z=7.2),  # z = 42.2 - 35
+    reader_unit_holder_child_location=Coordinate(x=0, y=0, z=7.2),  # z = 42.2 - 35,
+    identifier=identifier,
   )
 
 

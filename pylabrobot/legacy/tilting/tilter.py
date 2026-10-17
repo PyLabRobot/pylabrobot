@@ -23,6 +23,9 @@ class Tilter(ResourceHolder, Machine):
     child_location: Coordinate,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     ResourceHolder.__init__(
       self,
@@ -33,6 +36,8 @@ class Tilter(ResourceHolder, Machine):
       category=category,
       model=model,
       child_location=child_location,
+      identifier=identifier,
+      metadata=metadata,
     )
     Machine.__init__(self, backend=backend)
     self.backend: TilterBackend = backend  # fix type

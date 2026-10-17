@@ -1,7 +1,9 @@
+from typing import Optional
+
 from pylabrobot.resources.trough import Trough
 
 
-def ThermoFisherMatrixTrough8094(name: str) -> Trough:
+def ThermoFisherMatrixTrough8094(name: str, *, identifier: Optional[str] = None) -> Trough:
   """Thermo Fisher Trough 8094 - 25mL. Part number 8094.
   https://www.thermofisher.com/order/catalog/product/8094
   """
@@ -12,4 +14,5 @@ def ThermoFisherMatrixTrough8094(name: str) -> Trough:
     size_z=27,
     max_volume=25000,
     model="Thermo Fisher 8094",
+    identifier=identifier,
   )

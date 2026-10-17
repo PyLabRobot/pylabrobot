@@ -1,11 +1,14 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.carrier import Coordinate, PlateHolder
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
 
 
-def hamilton_mfx_tiprackholder_standard(name: str) -> EmbeddedTipRackHolder:
+def hamilton_mfx_tiprackholder_standard(
+  name: str, *, identifier: Optional[str] = None
+) -> EmbeddedTipRackHolder:
   """Hamilton cat. no.: 188160
   Hamilton name: 'MFX_TIP_module' or sometimes 'Tip Module BC'
   Module to position a high-, standard- or low volume tip rack (but not a 384 tip rack).
@@ -24,10 +27,11 @@ def hamilton_mfx_tiprackholder_standard(name: str) -> EmbeddedTipRackHolder:
     # Only the height: the holder centres a framed rack in X and Y and sinks it into its opening.
     child_location=Coordinate(x=0.0, y=0.0, z=top),
     model=hamilton_mfx_tiprackholder_standard.__name__,
+    identifier=identifier,
   )
 
 
-def MFX_TIP_module(name: str) -> EmbeddedTipRackHolder:
+def MFX_TIP_module(name: str, *, identifier: Optional[str] = None) -> EmbeddedTipRackHolder:
   """Deprecated: use `hamilton_mfx_tiprackholder_standard`."""
   warnings.warn(
     "MFX_TIP_module is deprecated and will be removed in the future. "
@@ -35,10 +39,12 @@ def MFX_TIP_module(name: str) -> EmbeddedTipRackHolder:
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_mfx_tiprackholder_standard(name=name)
+  return hamilton_mfx_tiprackholder_standard(name=name, identifier=identifier)
 
 
-def hamilton_mfx_resourceholder_ntr(name: str) -> ResourceHolder:
+def hamilton_mfx_resourceholder_ntr(
+  name: str, *, identifier: Optional[str] = None
+) -> ResourceHolder:
   """Hamilton cat. no.: 191425
   Hamilton name: '_NTR4' site of an MFX carrier.
   Module to position a stack of up to 4x 96 nested tip racks (NTR).
@@ -54,13 +60,16 @@ def hamilton_mfx_resourceholder_ntr(name: str) -> ResourceHolder:
     # The rack stands centred in the module's pocket, its SBS footprint on the module's centre.
     child_location=Coordinate(x=(135.0 - 127.76) / 2, y=(94.0 - 85.48) / 2, z=10.8),
     model=hamilton_mfx_resourceholder_ntr.__name__,
+    identifier=identifier,
   )
 
 
 # -- Plate storage ---------------------------------------------------------------------------
 
 
-def hamilton_mfx_plateholder_DWP_flat(name: str) -> PlateHolder:
+def hamilton_mfx_plateholder_DWP_flat(
+  name: str, *, identifier: Optional[str] = None
+) -> PlateHolder:
   """Hamilton cat. no.: 188229
   Hamilton name: 'MFX_DWP_rackbased_module'
   Module to position a Deep Well Plate / tube racks (MATRIX or MICRONICS) / NUNC reagent trough.
@@ -78,10 +87,13 @@ def hamilton_mfx_plateholder_DWP_flat(name: str) -> PlateHolder:
     child_location=Coordinate(4.0, 3.5, 178.0 - 18.2 - 100),
     model=hamilton_mfx_plateholder_DWP_flat.__name__,
     pedestal_size_z=0,
+    identifier=identifier,
   )
 
 
-def hamilton_mfx_plateholder_DWP_metal_tapped(name: str) -> PlateHolder:
+def hamilton_mfx_plateholder_DWP_metal_tapped(
+  name: str, *, identifier: Optional[str] = None
+) -> PlateHolder:
   """Hamilton MFX DWP Module (cat.-no. 188042 / 188042-00).
   Hamilton name: 'MFX_DWP_rackbased_module'
   It also contains metal clamps at the corners.
@@ -97,10 +109,11 @@ def hamilton_mfx_plateholder_DWP_metal_tapped(name: str) -> PlateHolder:
     child_location=Coordinate(4.0, 4.0, 183.95 - 18.2 - 100),  # measured
     pedestal_size_z=-4.74,
     model=hamilton_mfx_plateholder_DWP_metal_tapped.__name__,
+    identifier=identifier,
   )
 
 
-def MFX_DWP_module_flat(name: str) -> PlateHolder:
+def MFX_DWP_module_flat(name: str, *, identifier: Optional[str] = None) -> PlateHolder:
   """Hamilton cat. no.: 6601988-01
   Hamilton name: 'MFX_DWP_module_flat'
   Module to position a Deep Well Plate. Flat, metal base; no metal clamps.
@@ -121,6 +134,7 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
     child_location=Coordinate(x=(width - 127.76) / 2, y=(length - 85.48) / 2, z=66.4),
     model=MFX_DWP_module_flat.__name__,
     pedestal_size_z=0,
+    identifier=identifier,
   )
 
 
@@ -129,21 +143,23 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
 # TODO: Remove >2026-12
 
 
-def Hamilton_MFX_plateholder_DWP_metal_tapped(name: str) -> PlateHolder:
+def Hamilton_MFX_plateholder_DWP_metal_tapped(
+  name: str, *, identifier: Optional[str] = None
+) -> PlateHolder:
   """Deprecated alias for `hamilton_mfx_plateholder_DWP_metal_tapped`."""
   warnings.warn(
     "Hamilton_MFX_plateholder_DWP_metal_tapped is deprecated. Use 'hamilton_mfx_plateholder_DWP_metal_tapped' instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_mfx_plateholder_DWP_metal_tapped(name)
+  return hamilton_mfx_plateholder_DWP_metal_tapped(name, identifier=identifier)
 
 
-def MFX_DWP_rackbased_module(name: str) -> PlateHolder:
+def MFX_DWP_rackbased_module(name: str, *, identifier: Optional[str] = None) -> PlateHolder:
   """Deprecated alias for `hamilton_mfx_plateholder_DWP_flat`."""
   warnings.warn(
     "MFX_DWP_rackbased_module is deprecated. Use 'hamilton_mfx_plateholder_DWP_flat' instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_mfx_plateholder_DWP_flat(name)
+  return hamilton_mfx_plateholder_DWP_flat(name, identifier=identifier)

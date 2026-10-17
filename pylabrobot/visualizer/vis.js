@@ -49,33 +49,33 @@ function setRootResource(data) {
 // children are still intact. The serialized data is later used by buildSingleArm
 // to create a live Konva stage using the exact same draw() code as the main canvas.
 // Cost: one serialize() call per unassigned resource — negligible.
-function snapshotResource(resourceName) {
-  var res = resources[resourceName];
+function snapshotResource(resourceIdentifier) {
+  var res = resources[resourceIdentifier];
   if (!res) return;
   try {
-    resourceSnapshots[resourceName] = res.serialize();
+    resourceSnapshots[resourceIdentifier] = res.serialize();
   } catch (e) {
-    console.warn("[snapshot] failed for " + resourceName, e);
+    console.warn("[snapshot] failed for " + resourceIdentifier, e);
   }
 }
 
-function removeResource(resourceName) {
-  let resource = resources[resourceName];
+function removeResource(resourceIdentifier) {
+  let resource = resources[resourceIdentifier];
   resource.destroy();
 }
 
 function setState(allStates) {
-  for (let resourceName in allStates) {
-    let state = allStates[resourceName];
-    let resource = resources[resourceName];
+  for (let resourceIdentifier in allStates) {
+    let state = allStates[resourceIdentifier];
+    let resource = resources[resourceIdentifier];
     if (!resource) {
-      console.warn(`[setState] resource not found: ${resourceName}`);
+      console.warn(`[setState] resource not found: ${resourceIdentifier}`);
       continue;
     }
     try {
       resource.setState(state);
     } catch (e) {
-      console.error(`[setState] error for ${resourceName}:`, e);
+      console.error(`[setState] error for ${resourceIdentifier}:`, e);
     }
   }
 }
@@ -100,9 +100,9 @@ async function processCentralEvent(event, data) {
       // Snapshot the resource before destruction so the arm panel can show a
       // pixel-perfect replica. Done here (not in destroy()) because the Konva
       // group and all children are guaranteed intact at this point.
-      snapshotResource(data.resource_name);
-      removeResourceFromTree(data.resource_name);
-      removeResource(data.resource_name);
+      snapshotResource(data.resource_identifier);
+      removeResourceFromTree(data.resource_identifier);
+      removeResource(data.resource_identifier);
       break;
 
     case "set_state":
@@ -127,7 +127,7 @@ async function processCentralEvent(event, data) {
         let targetName = resourceName;
         if (target && (target instanceof TipSpot || target instanceof Well || target instanceof Tube)
             && target.parent) {
-          targetName = target.parent.name;
+          targetName = target.parent.identifier;
         }
         if (refreshedNodes.has(targetName)) continue;
         refreshedNodes.add(targetName);

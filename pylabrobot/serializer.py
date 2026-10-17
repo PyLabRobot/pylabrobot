@@ -105,6 +105,10 @@ def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
       klass = find_subclass(klass_type, cls=SerializableMixin)
       if klass is None:
         raise ValueError(f"Could not find class '{klass_type}'")
+      from pylabrobot.resources.resource import Resource
+
+      if issubclass(klass, Resource):
+        return klass.deserialize({"type": klass_type, **data}, allow_marshal=allow_marshal)
       params = {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
       if "deserialize" in klass.__dict__:
         return klass.deserialize(params)  # type: ignore[attr-defined]

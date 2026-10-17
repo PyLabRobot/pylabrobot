@@ -20,6 +20,9 @@ class InhecoCPAC(ResourceHolder, InhecoTemperatureController):
     child_location: Coordinate,
     category: str = "temperature_controller",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     ResourceHolder.__init__(
       self,
@@ -30,11 +33,19 @@ class InhecoCPAC(ResourceHolder, InhecoTemperatureController):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     InhecoTemperatureController.__init__(self, index=index, interface=control_box)
 
 
-def inheco_cpac_ultraflat(name: str, control_box: InhecoTECControlBox, index: int) -> InhecoCPAC:
+def inheco_cpac_ultraflat(
+  name: str,
+  control_box: InhecoTECControlBox,
+  index: int,
+  *,
+  identifier: Optional[str] = None,
+) -> InhecoCPAC:
   """Inheco CPAC Ultraflat
   7000166, 7000190, 7000165
 
@@ -58,4 +69,5 @@ def inheco_cpac_ultraflat(name: str, control_box: InhecoTECControlBox, index: in
     size_z=129,  # from spec
     child_location=Coordinate(x=8, y=11, z=77),  # x from spec, y and z measured
     model=inheco_cpac_ultraflat.__name__,
+    identifier=identifier,
   )

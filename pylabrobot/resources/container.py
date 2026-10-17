@@ -30,6 +30,8 @@ class Container(Liddable, Resource):
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones: Optional[List[Tuple[Coordinate, Coordinate]]] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     """Create a new container.
 
@@ -54,6 +56,7 @@ class Container(Liddable, Resource):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
     self._material_z_thickness = material_z_thickness
     self.height_volume_data = (

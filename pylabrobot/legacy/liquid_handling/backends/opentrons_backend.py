@@ -28,6 +28,7 @@ from pylabrobot.legacy.liquid_handling.standard import (
 from pylabrobot.resources import (
   Coordinate,
   Tip,
+  Trash,
 )
 from pylabrobot.resources.opentrons import OTDeck
 from pylabrobot.resources.tip_rack import TipRack
@@ -145,8 +146,8 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.right_pipette: Optional[Dict[str, str]] = None
 
     self.traversal_height = 120  # test
-    self._tip_racks: Dict[str, int] = {}  # tip_rack.name -> slot index
-    self._plr_name_to_load_name: Dict[str, str] = {}
+    self._tip_racks: Dict[str, int] = {}  # tip_rack.identifier -> slot index
+    self._plr_identifier_to_load_name: Dict[str, str] = {}
 
   def serialize(self) -> dict:
     return {
@@ -178,7 +179,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   async def stop(self):
     """Cancel any active OT run, then clear labware definitions."""
-    self._plr_name_to_load_name = {}
+    self._plr_identifier_to_load_name = {}
     self._tip_racks = {}
     self.left_pipette = None
     self.right_pipette = None
@@ -197,14 +198,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
           except Exception:
             pass
 
-  def get_ot_name(self, plr_resource_name: str) -> str:
+  def get_ot_name(self, plr_resource_identifier: str) -> str:
     """Opentrons only allows names in ^[a-z0-9._]+$, but in PLR we are flexible.
-    So we map PLR names to OT names here.
+    So we map PLR identifiers to OT names here.
     """
-    if plr_resource_name not in self._plr_name_to_load_name:
+    if plr_resource_identifier not in self._plr_identifier_to_load_name:
       ot_load_name = uuid.uuid4().hex
-      self._plr_name_to_load_name[plr_resource_name] = ot_load_name
-    return self._plr_name_to_load_name[plr_resource_name]
+      self._plr_identifier_to_load_name[plr_resource_identifier] = ot_load_name
+    return self._plr_identifier_to_load_name[plr_resource_identifier]
 
   def select_tip_pipette(self, tip: Tip, with_tip: bool) -> Optional[str]:
     """Select a pipette based on maximum tip volume for tip pick up or drop.
@@ -236,7 +237,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       "version": 1,
       "namespace": "pylabrobot",
       "metadata": {
-        "displayName": self.get_ot_name(tip_rack.name),
+        "displayName": self.get_ot_name(tip_rack.identifier),
         "displayCategory": "tipRack",
         "displayVolumeUnits": "µL",
       },
@@ -249,11 +250,11 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
         # should we get the tip length from calibration on the robot? /calibration/tip_length
         "tipLength": tip.get_size_z(),
         "tipOverlap": tip.fitting_depth,
-        "loadName": self.get_ot_name(tip_rack.name),
+        "loadName": self.get_ot_name(tip_rack.identifier),
         "isMagneticModuleCompatible": False,  # do we really care? If yes, store.
       },
       "ordering": utils.reshape_2d(
-        [self.get_ot_name(tip_spot.name) for tip_spot in tip_rack.get_all_items()],
+        [self.get_ot_name(tip_spot.identifier) for tip_spot in tip_rack.get_all_items()],
         (tip_rack.num_items_x, tip_rack.num_items_y),
       ),
       "cornerOffsetFromSlot": {
@@ -268,7 +269,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
         "zDimension": tip_rack.get_absolute_size_z(),
       },
       "wells": {
-        self.get_ot_name(child.name): {
+        self.get_ot_name(child.identifier): {
           "depth": child.get_absolute_size_z(),
           "x": cast(Coordinate, child.location).x + child.get_absolute_size_x() / 2,
           "y": cast(Coordinate, child.location).y + child.get_absolute_size_y() / 2,
@@ -281,7 +282,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       },
       "groups": [
         {
-          "wells": [self.get_ot_name(tip_spot.name) for tip_spot in tip_rack.get_all_items()],
+          "wells": [self.get_ot_name(tip_spot.identifier) for tip_spot in tip_rack.get_all_items()],
           "metadata": {
             "displayName": None,
             "displayCategory": "tipRack",
@@ -295,7 +296,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     namespace, definition, version = data["data"]["definitionUri"].split("/")
 
     # assign labware to robot
-    labware_uuid = self.get_ot_name(tip_rack.name)
+    labware_uuid = self.get_ot_name(tip_rack.identifier)
 
     deck = tip_rack.parent
     while deck is not None and not isinstance(deck, OTDeck):
@@ -310,10 +311,10 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       ot_location=slot,
       version=version,
       labware_id=labware_uuid,
-      display_name=self.get_ot_name(tip_rack.name),
+      display_name=self.get_ot_name(tip_rack.identifier),
     )
 
-    self._tip_racks[tip_rack.name] = slot
+    self._tip_racks[tip_rack.identifier] = slot
 
   def _get_pickup_pipette(self, ops: List[Pickup]) -> str:
     """Get the pipette for a tip pick-up, or raise."""
@@ -378,14 +379,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     # define tip rack JIT if it's not already assigned
     tip_rack = op.resource.parent
     assert isinstance(tip_rack, TipRack), "TipSpot's parent must be a TipRack."
-    if tip_rack.name not in self._tip_racks:
+    if tip_rack.identifier not in self._tip_racks:
       await self._assign_tip_rack(tip_rack, op.tip)
 
     offset_z += op.tip.get_size_z()
 
     self._ot.lh.pick_up_tip(
-      labware_id=self.get_ot_name(tip_rack.name),
-      well_name=self.get_ot_name(op.resource.name),
+      labware_id=self.get_ot_name(tip_rack.identifier),
+      well_name=self.get_ot_name(op.resource.identifier),
       pipette_id=pipette_id,
       offset_x=offset_x,
       offset_y=offset_y,
@@ -400,7 +401,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     pipette_id = self._get_drop_pipette(ops)
     op = ops[0]
 
-    use_fixed_trash = op.resource.name == "trash" and _fixed_trash_is_addressable(
+    use_fixed_trash = isinstance(op.resource, Trash) and _fixed_trash_is_addressable(
       cast(str, self.ot_api_version)
     )
     if use_fixed_trash:
@@ -408,9 +409,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     else:
       tip_rack = op.resource.parent
       assert isinstance(tip_rack, TipRack), "TipSpot's parent must be a TipRack."
-      if tip_rack.name not in self._tip_racks:
+      if tip_rack.identifier not in self._tip_racks:
         await self._assign_tip_rack(tip_rack, op.tip)
-      labware_id = self.get_ot_name(tip_rack.name)
+      labware_id = self.get_ot_name(tip_rack.identifier)
 
     offset_x, offset_y, offset_z = (
       op.offset.x,
@@ -432,7 +433,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     else:
       self._ot.lh.drop_tip(
         labware_id,
-        well_name=self.get_ot_name(op.resource.name),
+        well_name=self.get_ot_name(op.resource.identifier),
         pipette_id=pipette_id,
         offset_x=offset_x,
         offset_y=offset_y,

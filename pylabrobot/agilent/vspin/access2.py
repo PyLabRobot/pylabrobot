@@ -5,7 +5,7 @@ import dataclasses
 import logging
 import math
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Literal
+from typing import AsyncIterator, Literal, Optional
 
 from pylabrobot.agilent.vspin import _access2_protocol as protocol
 from pylabrobot.agilent.vspin._state import (
@@ -951,6 +951,9 @@ class Access2(ResourceHolder):
     size_x: float = 0.0,
     size_y: float = 0.0,
     size_z: float = 0.0,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """Create an Access2 loader paired with a VSpin centrifuge.
 
@@ -974,6 +977,8 @@ class Access2(ResourceHolder):
       model="Agilent Access2",
       category="loader",
       child_location=Coordinate.zero(),
+      identifier=identifier,
+      metadata=metadata,
     )
     self.driver: Access2Driver = driver
     self._vspin = vspin

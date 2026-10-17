@@ -152,6 +152,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     origin: Coordinate = Coordinate.zero(),
     num_rails: Optional[int] = None,
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     # What `@abstractmethod` refused before either could be left to the other: a deck with neither.
     if (
@@ -171,6 +174,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       size_z=size_z,
       category=category,
       origin=origin,
+      identifier=identifier,
+      metadata=metadata,
     )
     # `Deck` takes no model, so it is set here rather than passed up.
     self.model = model
@@ -306,8 +311,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Returns:
       The arm resource, whether it was just created or already there.
     """
-    if self.has_resource(name):
-      return self.get_resource(name)
+    for child in self.children:
+      if child.metadata.get("component") == name:
+        return child
     # The arm rides at the channel stop-disk safety height, level with the raised stop discs so it
     # clears them as it travels.
     arm_z, size_z, size_y = 334.7, 140.0, 712.0
@@ -317,6 +323,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       size_y=size_y,
       size_z=size_z,
       category="x_arm",
+      metadata={"component": name},
       model=model,
     )
     # What the drive's x actually refers to. Stated on the resource so anything reading it - the
@@ -359,8 +366,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Returns:
       The sled resource, whether it was just created or already there.
     """
-    if self.has_resource(name):
-      return self.get_resource(name)
+    for child in self.children:
+      if child.metadata.get("component") == name:
+        return child
     # The whole part, transport and barcode reader. The 316.2 this replaces came off the
     # manufacturer's model, whose left end carried a thin tab that the sled does not have; the
     # extra 35.3 mm put the part's own corner that far left of where it stands, and everything
@@ -374,6 +382,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       size_y=size_y,
       size_z=size_z,
       category="autoload_sled",
+      metadata={"component": name},
       model="hamilton_star_autoload_sled",
     )
     # What the drive's x actually refers to. The sled is placed around the carrier-handling wheel,
@@ -410,8 +419,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Returns:
       The tray resource, whether it was just created or already there.
     """
-    if self.has_resource(name):
-      return self.get_resource(name)
+    for child in self.children:
+      if child.metadata.get("component") == name:
+        return child
     # Measured against the two things on the deck it lines up with: where the first carrier starts,
     # and a carrier's front edge. It insets the same amount from the deck's right edge as from its
     # left, which is what sizes it.
@@ -431,6 +441,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       size_y=front_ahead_y - back_ahead_y,
       size_z=size_z,
       category="autoload_loading_tray",
+      metadata={"component": name},
       model=f"hamilton_{frame}_autoload_loading_tray" if frame else None,
     )
     # The tray's own track markings, stated rather than derived: they line up with the deck's, so
@@ -538,7 +549,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
   ):
     """Assign a new deck resource.
 
-    The identifier will be the Resource.name, which must be unique amongst previously assigned
+    The Resource.identifier must be unique amongst previously assigned
     resources.
 
     Note that some resources, such as tips on a tip carrier or plates on a plate carrier must
@@ -556,13 +567,13 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         are, and down to -4 for the supports left of the first one. Either this or `location`, not
         both.
       rails: Deprecated, use `track`.
-      replace: Replace the resource with the same name that was previously assigned, if it exists.
-        If a resource is assigned with the same name and replace is False, a ValueError
+      replace: Replace the resource with the same identifier that was previously assigned, if it exists.
+        If a resource is assigned with the same identifier and replace is False, a ValueError
         will be raised.
       ignore_collision: If True, ignore collision detection.
 
     Raises:
-      ValueError: If a resource is assigned with the same name and replace is `False`.
+      ValueError: If a resource is assigned with the same identifier and replace is `False`.
     """
 
     # TODO: many things here should be moved to Resource and Deck, instead of just STARLetDeck
@@ -585,12 +596,15 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       raise ValueError(f"Track must be between -4 and {self.num_tracks + beyond}.")
 
     # Check if resource exists.
-    if self.has_resource(resource.name):
+    if (
+      self.has_resource_by_identifier(resource.identifier)
+      and self.get_resource_by_identifier(resource.identifier) is not resource
+    ):
       if replace:
         # unassign first, so we don't have problems with location checking later.
-        cast(Resource, self.get_resource(resource.name)).unassign()
+        cast(Resource, self.get_resource_by_identifier(resource.identifier)).unassign()
       else:
-        raise ValueError(f"Resource with name '{resource.name}' already defined.")
+        raise ValueError(f"Resource with identifier '{resource.identifier}' already defined.")
 
     if track is not None:
       resource_location = self.track_to_location(track)

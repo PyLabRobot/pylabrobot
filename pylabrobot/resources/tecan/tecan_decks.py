@@ -7,6 +7,7 @@ from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
 from pylabrobot.resources.tecan.wash import (
+  TecanWashStation,
   Wash_Station,
   Wash_Station_Cleaner_deep,
   Wash_Station_Cleaner_shallow,
@@ -46,6 +47,9 @@ class TecanDeck(Deck):
     category: str = "deck",
     origin: Coordinate = Coordinate(0, 0, 0),
     with_wash_station: bool = True,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -54,6 +58,8 @@ class TecanDeck(Deck):
       size_z=size_z,
       category=category,
       origin=origin,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.num_rails = num_rails
 
@@ -65,7 +71,7 @@ class TecanDeck(Deck):
       self.assign_child_resource(wash, rails=1)
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "num_rails": self.num_rails}
+    return {**super().serialize(), "num_rails": self.num_rails, "with_wash_station": False}
 
   def assign_child_resource(
     self,
@@ -81,12 +87,12 @@ class TecanDeck(Deck):
       raise ValueError(f"Rails must be between 1 and {self.num_rails}.")
 
     # Check if resource exists.
-    if self.has_resource(resource.name):
+    if self.has_resource_by_identifier(resource.identifier):
       if replace:
         # unassign first, so we don't have problems with location checking later.
-        cast(Resource, self.get_resource(resource.name)).unassign()
+        cast(Resource, self.get_resource_by_identifier(resource.identifier)).unassign()
       else:
-        raise ValueError(f"Resource with name '{resource.name}' already defined.")
+        raise ValueError(f"Resource with identifier '{resource.identifier}' already defined.")
 
     if rails is not None:
       resource_location = self._coordinate_for_rails(rails, resource)
@@ -202,17 +208,19 @@ class TecanDeck(Deck):
 
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas."""
-    children_names = [child.name for child in self.children]
-    for resource_name in children_names:
-      resource = self.get_resource(resource_name)
+    for resource in self.children.copy():
       if isinstance(resource, Trash) and not include_trash:
         continue
-      if resource.name == "wash_station":
+      if isinstance(resource, TecanWashStation):
         continue
       resource.unassign()
 
 
-def EVO100Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
+def EVO100Deck(
+  origin: Coordinate = Coordinate(0, 0, 0),
+  *,
+  identifier: Optional[str] = None,
+) -> TecanDeck:
   """EVO100 deck.
 
   Sizes from operating manual
@@ -224,10 +232,15 @@ def EVO100Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
     size_y=EVO100_SIZE_Y,
     size_z=EVO100_SIZE_Z,
     origin=origin,
+    identifier=identifier,
   )
 
 
-def EVO150Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
+def EVO150Deck(
+  origin: Coordinate = Coordinate(0, 0, 0),
+  *,
+  identifier: Optional[str] = None,
+) -> TecanDeck:
   """EVO150 deck.
 
   Sizes from operating manual
@@ -239,10 +252,15 @@ def EVO150Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
     size_y=EVO150_SIZE_Y,
     size_z=EVO150_SIZE_Z,
     origin=origin,
+    identifier=identifier,
   )
 
 
-def EVO200Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
+def EVO200Deck(
+  origin: Coordinate = Coordinate(0, 0, 0),
+  *,
+  identifier: Optional[str] = None,
+) -> TecanDeck:
   """EVO200 deck.
 
   Sizes from operating manual
@@ -254,4 +272,5 @@ def EVO200Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
     size_y=EVO200_SIZE_Y,
     size_z=EVO200_SIZE_Z,
     origin=origin,
+    identifier=identifier,
   )

@@ -68,6 +68,9 @@ class TemperatureController(ResourceHolder, Machine):
     child_location: Coordinate,
     category: str = "temperature_controller",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     ResourceHolder.__init__(
       self,
@@ -78,6 +81,8 @@ class TemperatureController(ResourceHolder, Machine):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     Machine.__init__(self, backend=backend)
     self.backend: TemperatureControllerBackend = backend  # fix type

@@ -102,14 +102,14 @@ class TestStackingZHeight(unittest.TestCase):
         stacking_z_height=stacking_z_height,
       )
 
-    self.assertEqual(make(12.5), make(12.5))
+    self.assertNotEqual(make(12.5), make(12.5))
     self.assertNotEqual(make(12.5), make(13.0))
     self.assertNotEqual(make(12.5), make(None))
 
   def test_remains_hashable(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=15, ordered_items={}, stacking_z_height=12.5)
     # equal plates hash equally; the object stays usable in sets/dicts.
-    other = Plate("plate", size_x=1, size_y=1, size_z=15, ordered_items={}, stacking_z_height=12.5)
+    other = plate.copy()
     self.assertEqual(hash(plate), hash(other))
     self.assertIn(plate, {plate})
 

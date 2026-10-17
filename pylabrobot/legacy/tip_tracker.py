@@ -202,12 +202,19 @@ class TipTracker(SerializableMixin):
     """Load a saved tip tracker state."""
 
     tip_data, pending_tip_data = state.get("tip"), state.get("pending_tip")
-    tip = Tip.deserialize(tip_data) if tip_data is not None else None
-    pending_tip = Tip.deserialize(pending_tip_data) if pending_tip_data is not None else None
-    self._put(pending_tip)
-    same = (tip is None) == (pending_tip is None) and (
-      tip is None or tip.serialize() == cast(Tip, pending_tip).serialize()
+    same = tip_data == pending_tip_data or (
+      tip_data is not None
+      and pending_tip_data is not None
+      and tip_data.get("identifier") is not None
+      and tip_data["identifier"] == pending_tip_data.get("identifier")
     )
+    tip = Tip.deserialize(tip_data) if tip_data is not None else None
+    if tip is not None and state.get("tip_state") is not None:
+      tip.tracker.load_state(state["tip_state"])
+    pending_tip = (
+      tip if same else (Tip.deserialize(pending_tip_data) if pending_tip_data is not None else None)
+    )
+    self._put(pending_tip)
     self._before = _NOTHING_PENDING if same else tip
 
   def get_tip_origin(self) -> Optional["TipSpot"]:
@@ -225,8 +232,8 @@ class TipTracker(SerializableMixin):
 
 
 # One tracker per spot, so what an uncommitted operation remembers outlives any one lookup. Kept
-# here rather than on the spot, which holds no tracker. Keyed by identity: resources compare and hash
-# by value, and two spots can look alike. A spot that is gone takes its tracker along.
+# here rather than on the spot, which holds no tracker. Keyed by object identity so a transformed
+# copy has independent transaction state even when its resource identifier is preserved.
 _spot_trackers: Dict[int, TipTracker] = {}
 
 

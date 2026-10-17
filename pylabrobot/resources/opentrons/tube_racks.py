@@ -1,10 +1,14 @@
+from typing import Optional
+
 from pylabrobot.resources.opentrons.load import load_ot_tube_rack
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tube_rack import TubeRack
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
-def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack:
+def opentrons_24_tuberack_generic_1point5ml_snapcap_short(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
   """
   OpenTrons 24 well rack with the shorter stand; 30mm shorter than default stand.
   3D print available here: https://www.thingiverse.com/thing:3405002
@@ -36,116 +40,243 @@ def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack
       size_z=WELL_DEPTH,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical(name: str) -> TubeRack:
+def opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
   return load_ot_tube_rack(
-    "opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical", plr_resource_name=name
+    "opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical",
+    plr_resource_name=name,
+    identifier=identifier,
   )
 
 
-def opentrons_10_tuberack_nest_4x50ml_6x15ml_conical(name: str) -> TubeRack:
+def opentrons_10_tuberack_nest_4x50ml_6x15ml_conical(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
   return load_ot_tube_rack(
-    "opentrons_10_tuberack_nest_4x50ml_6x15ml_conical", plr_resource_name=name
+    "opentrons_10_tuberack_nest_4x50ml_6x15ml_conical",
+    plr_resource_name=name,
+    identifier=identifier,
   )
 
 
-def opentrons_15_tuberack_falcon_15ml_conical(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_15_tuberack_falcon_15ml_conical", plr_resource_name=name)
-
-
-def opentrons_15_tuberack_nest_15ml_conical(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_15_tuberack_nest_15ml_conical", plr_resource_name=name)
-
-
-def opentrons_24_tuberack_eppendorf_1_5ml_safelock_snapcap(name: str) -> TubeRack:
+def opentrons_15_tuberack_falcon_15ml_conical(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
   return load_ot_tube_rack(
-    "opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap", plr_resource_name=name
+    "opentrons_15_tuberack_falcon_15ml_conical",
+    plr_resource_name=name,
+    identifier=identifier,
   )
 
 
-def opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap(name: str) -> TubeRack:
+def opentrons_15_tuberack_nest_15ml_conical(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
   return load_ot_tube_rack(
-    "opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap", plr_resource_name=name
+    "opentrons_15_tuberack_nest_15ml_conical",
+    plr_resource_name=name,
+    identifier=identifier,
   )
 
 
-def opentrons_24_tuberack_generic_2ml_screwcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_tuberack_generic_2ml_screwcap", plr_resource_name=name)
-
-
-def opentrons_24_tuberack_nest_0_5ml_screwcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_tuberack_nest_0_5ml_screwcap", plr_resource_name=name)
-
-
-def opentrons_24_tuberack_nest_1_5ml_screwcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_tuberack_nest_1.5ml_screwcap", plr_resource_name=name)
-
-
-def opentrons_24_tuberack_nest_1_5ml_snapcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_tuberack_nest_1.5ml_snapcap", plr_resource_name=name)
-
-
-def opentrons_24_tuberack_nest_2ml_screwcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_tuberack_nest_2ml_screwcap", plr_resource_name=name)
-
-
-def opentrons_24_tuberack_nest_2ml_snapcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_tuberack_nest_2ml_snapcap", plr_resource_name=name)
-
-
-def opentrons_6_tuberack_falcon_50ml_conical(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_6_tuberack_falcon_50ml_conical", plr_resource_name=name)
-
-
-def opentrons_6_tuberack_nest_50ml_conical(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_6_tuberack_nest_50ml_conical", plr_resource_name=name)
-
-
-def opentrons_24_aluminumblock_generic_2ml_screwcap(name: str) -> TubeRack:
+def opentrons_24_tuberack_eppendorf_1_5ml_safelock_snapcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
   return load_ot_tube_rack(
-    "opentrons_24_aluminumblock_generic_2ml_screwcap", plr_resource_name=name
+    "opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap",
+    plr_resource_name=name,
+    identifier=identifier,
   )
 
 
-def opentrons_24_aluminumblock_nest_0_5ml_screwcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_aluminumblock_nest_0.5ml_screwcap", plr_resource_name=name)
-
-
-def opentrons_24_aluminumblock_nest_1_5ml_screwcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_aluminumblock_nest_1_5ml_screwcap", plr_resource_name=name)
-
-
-def opentrons_24_aluminumblock_nest_1_5ml_snapcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_aluminumblock_nest_1.5ml_snapcap", plr_resource_name=name)
-
-
-def opentrons_24_aluminumblock_nest_2ml_screwcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_aluminumblock_nest_2ml_screwcap", plr_resource_name=name)
-
-
-def opentrons_24_aluminumblock_nest_2ml_snapcap(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_24_aluminumblock_nest_2ml_snapcap", plr_resource_name=name)
-
-
-def opentrons_96_aluminumblock_biorad_wellplate_200ul(name: str) -> TubeRack:
+def opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
   return load_ot_tube_rack(
-    "opentrons_96_aluminumblock_biorad_wellplate_200ul", plr_resource_name=name
+    "opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap",
+    plr_resource_name=name,
+    identifier=identifier,
   )
 
 
-def opentrons_96_aluminumblock_generic_pcr_strip_200ul(name: str) -> TubeRack:
+def opentrons_24_tuberack_generic_2ml_screwcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
   return load_ot_tube_rack(
-    "opentrons_96_aluminumblock_generic_pcr_strip_200ul", plr_resource_name=name
+    "opentrons_24_tuberack_generic_2ml_screwcap",
+    plr_resource_name=name,
+    identifier=identifier,
   )
 
 
-def opentrons_96_aluminumblock_nest_wellplate_100ul(name: str) -> TubeRack:
+def opentrons_24_tuberack_nest_0_5ml_screwcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
   return load_ot_tube_rack(
-    "opentrons_96_aluminumblock_nest_wellplate_100ul", plr_resource_name=name
+    "opentrons_24_tuberack_nest_0_5ml_screwcap",
+    plr_resource_name=name,
+    identifier=identifier,
   )
 
 
-def opentrons_96_well_aluminum_block(name: str) -> TubeRack:
-  return load_ot_tube_rack("opentrons_96_well_aluminum_block", plr_resource_name=name)
+def opentrons_24_tuberack_nest_1_5ml_screwcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_tuberack_nest_1.5ml_screwcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_24_tuberack_nest_1_5ml_snapcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_tuberack_nest_1.5ml_snapcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_24_tuberack_nest_2ml_screwcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_tuberack_nest_2ml_screwcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_24_tuberack_nest_2ml_snapcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_tuberack_nest_2ml_snapcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_6_tuberack_falcon_50ml_conical(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_6_tuberack_falcon_50ml_conical",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_6_tuberack_nest_50ml_conical(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_6_tuberack_nest_50ml_conical",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_24_aluminumblock_generic_2ml_screwcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_aluminumblock_generic_2ml_screwcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_24_aluminumblock_nest_0_5ml_screwcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_aluminumblock_nest_0.5ml_screwcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_24_aluminumblock_nest_1_5ml_screwcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_aluminumblock_nest_1_5ml_screwcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_24_aluminumblock_nest_1_5ml_snapcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_aluminumblock_nest_1.5ml_snapcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_24_aluminumblock_nest_2ml_screwcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_aluminumblock_nest_2ml_screwcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_24_aluminumblock_nest_2ml_snapcap(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_24_aluminumblock_nest_2ml_snapcap",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_96_aluminumblock_biorad_wellplate_200ul(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_96_aluminumblock_biorad_wellplate_200ul",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_96_aluminumblock_generic_pcr_strip_200ul(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_96_aluminumblock_generic_pcr_strip_200ul",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_96_aluminumblock_nest_wellplate_100ul(
+  name: str, *, identifier: Optional[str] = None
+) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_96_aluminumblock_nest_wellplate_100ul",
+    plr_resource_name=name,
+    identifier=identifier,
+  )
+
+
+def opentrons_96_well_aluminum_block(name: str, *, identifier: Optional[str] = None) -> TubeRack:
+  return load_ot_tube_rack(
+    "opentrons_96_well_aluminum_block",
+    plr_resource_name=name,
+    identifier=identifier,
+  )

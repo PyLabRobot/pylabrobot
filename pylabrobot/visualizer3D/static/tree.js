@@ -4,7 +4,7 @@
 import { colorFor } from "./boxes.js";
 import { CONTENTS, HOLDERS, SEARCH_CONTAINERS, TREE_HIDDEN } from "./constants.js";
 import { input, query } from "./dom.js";
-import { hiddenNames, isVisible, stateOf, worldBox } from "./drawn.js";
+import { hiddenIdentifiers, isVisible, stateOf, worldBox } from "./drawn.js";
 import { escapeHtml, fmt, hexOf } from "./format.js";
 import { setHidden } from "./live.js";
 import {
@@ -127,8 +127,8 @@ function siteOrder(index) {
 export function rememberView() {
   if (!world) return null;
   return {
-    open: [...expanded].map((i) => world.names[i]),
-    selected: selected >= 0 ? world.names[selected] : null,
+    open: [...expanded].map((i) => world.identifiers[i]),
+    selected: selected >= 0 ? world.identifiers[selected] : null,
     panel: infoPanel?.isConnected === true,
   };
 }
@@ -168,7 +168,7 @@ function treeChildren(index) {
 function applyRowVisibility(index) {
   const entry = rowOf.get(index);
   if (!entry) return;
-  const own = hiddenNames.has(world.names[index]);
+  const own = hiddenIdentifiers.has(world.identifiers[index]);
   const inherited = !own && !isVisible(index);
   entry.row.classList.toggle("resource-hidden", !isVisible(index));
   // Parsing the eye's markup again on every message is what a refresh of the whole tree costs.
@@ -245,14 +245,14 @@ function addRow(index, depth, before) {
     e.stopPropagation();
     // Hidden by a parent, a plain click can do nothing and says so; alt-click clears the whole
     // chain above, as the existing visualizer's does.
-    if (!hiddenNames.has(world.names[index]) && !isVisible(index)) {
+    if (!hiddenIdentifiers.has(world.identifiers[index]) && !isVisible(index)) {
       if (!e.altKey) return;
       for (let i = index; i >= 0; i = world.parentOf[i]) {
-        if (hiddenNames.has(world.names[i])) setHidden(world.names[i], false);
+        if (hiddenIdentifiers.has(world.identifiers[i])) setHidden(world.identifiers[i], false);
       }
       return;
     }
-    setHidden(world.names[index], !hiddenNames.has(world.names[index]));
+    setHidden(world.identifiers[index], !hiddenIdentifiers.has(world.identifiers[index]));
   });
   row.appendChild(eye);
 
@@ -316,10 +316,10 @@ function openPathTo(index) {
 export function restoreView(kept) {
   if (!kept) return;
   for (const name of kept.open) {
-    const index = world.indexOfName.get(name);
+    const index = world.indexOfIdentifier.get(name);
     if (index !== undefined) openPathTo(index);
   }
-  const index = world.indexOfName.get(kept.selected);
+  const index = world.indexOfIdentifier.get(kept.selected);
   if (index !== undefined) restoreSelection(index, kept.panel);
 }
 

@@ -46,6 +46,8 @@ class ResourceHolder(Resource):
     child_location: Coordinate = Coordinate.zero(),
     preferred_pickup_location: Optional[Coordinate] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     Resource.__init__(
       self,
@@ -58,6 +60,7 @@ class ResourceHolder(Resource):
       model=model,
       preferred_pickup_location=preferred_pickup_location,
       metadata=metadata,
+      identifier=identifier,
     )
     self.child_location = child_location
 

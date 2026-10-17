@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources.hamilton.tip_creators import (
   TIP_DIAMETER,
   HamiltonTip,
@@ -8,7 +10,7 @@ from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
-def imcs_tip_1000uL(name: str) -> HamiltonTip:
+def imcs_tip_1000uL(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """IMCS tip. Same as "Hamilton High volume (1000 µL) tip without a filter", but tips are 14mm shorter."""
   return HamiltonTip(
     name=name,
@@ -20,10 +22,16 @@ def imcs_tip_1000uL(name: str) -> HamiltonTip:
     tip_size=TipSize.HIGH_VOLUME,
     # requires "full_blowout" pickup method from STARBackend.pick_up_tips96. Not available on pip channels.
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    identifier=identifier,
   )
 
 
-def imcs_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> TipRack:
+def imcs_96_tiprack_1000uL_filter(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> TipRack:
   """Tip racks for IMCS tips. Same as Hamilton 1000 µL filter tip racks, but tips are 14mm shorter.
 
   requires `"full_blowout"` pickup method from STARBackend.pick_up_tips96.
@@ -54,10 +62,11 @@ def imcs_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> TipRack:
       name_prefix=name,
     ),
     with_tips=with_tips,
+    identifier=identifier,
   )
 
 
-def imcs_tip_300uL(name: str) -> HamiltonTip:
+def imcs_tip_300uL(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """IMCS tip. Same as "Hamilton Standard volume (300 µL) tip without a filter", but tips are 6mm shorter."""
   return HamiltonTip(
     name=name,
@@ -69,10 +78,16 @@ def imcs_tip_300uL(name: str) -> HamiltonTip:
     tip_size=TipSize.STANDARD_VOLUME,
     # requires "full_blowout" pickup method from STARBackend.pick_up_tips96. Not available on pip channels.
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    identifier=identifier,
   )
 
 
-def imcs_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRack:
+def imcs_96_tiprack_300uL_filter(
+  name: str,
+  with_tips: bool = True,
+  *,
+  identifier: Optional[str] = None,
+) -> TipRack:
   """Tip racks for IMCS tips. Same as Hamilton 300 µL filter tip racks, but tips are 6mm shorter.
 
   requires `"full_blowout"` pickup method from STARBackend.pick_up_tips96.
@@ -132,4 +147,5 @@ def imcs_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRack:
       name_prefix=name,
     ),
     with_tips=with_tips,
+    identifier=identifier,
   )

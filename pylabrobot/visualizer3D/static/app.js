@@ -3,7 +3,7 @@ import { forgetDetail, updateDetail, updateEdgeMode } from "./appearance.js";
 import { buildMeshes } from "./boxes.js";
 import { PROTOCOL } from "./constants.js";
 import { initDeviceTools } from "./device_tools.js";
-import { hiddenNames, meshes, meshRoots, modelMeshes, stateOf, worldBox } from "./drawn.js";
+import { hiddenIdentifiers, meshes, meshRoots, modelMeshes, stateOf, worldBox } from "./drawn.js";
 import { niceNumber } from "./format.js";
 import {
   afterDraw,
@@ -172,8 +172,8 @@ function atBoundary(surface) {
 /** @type {any} */ (window).plrViewer = {
   // Changes something, so asking for a frame afterwards is not the caller's job.
   ...atBoundary({
-    focus(name, viewName) {
-      const index = world?.indexOfName.get(name);
+    focus(identifier, viewName) {
+      const index = world?.indexOfIdentifier.get(identifier);
       if (index === undefined) return false;
       select(index);
       if (viewName) setProjection(viewName === "iso" ? "perspective" : "orthographic");
@@ -185,8 +185,8 @@ function atBoundary(surface) {
       frame(VIEWS[name] ?? VIEWS.iso);
     },
     projection: (kind) => setProjection(kind),
-    hide: (name) => setHidden(name, true),
-    show: (name) => setHidden(name, false),
+    hide: (identifier) => setHidden(identifier, true),
+    show: (identifier) => setHidden(identifier, false),
     // Exposed so a benchmark can drive the same path a websocket message takes.
     applyState: (payload) => applyState(payload),
   }),
@@ -194,10 +194,10 @@ function atBoundary(surface) {
   // Only answers questions. Asking must not be a reason to redraw, or watching the viewer settle
   // is what stops it settling.
   stats: () => statsNow(),
-  resources: () => world?.names ?? [],
+  resources: () => world?.identifiers ?? [],
   // What a resource last published, as the page holds it: what its colour and panel are drawn from.
-  stateOf: (name) => {
-    const index = world?.indexOfName.get(name);
+  stateOf: (identifier) => {
+    const index = world?.indexOfIdentifier.get(identifier);
     return index === undefined ? null : (stateOf.get(index) ?? null);
   },
   // What the pointer at a point of the page would be over, by name.
@@ -207,8 +207,8 @@ function atBoundary(surface) {
   },
   // Where a resource is drawn, in facility coordinates. The one thing a test outside the page
   // cannot work out for itself, because it is the product of the whole parent chain.
-  worldOf: (name) => {
-    const index = world?.indexOfName.get(name);
+  worldOf: (identifier) => {
+    const index = world?.indexOfIdentifier.get(identifier);
     if (index === undefined) return null;
     const m = world.matrices[index].elements;
     return [m[12], m[13], m[14]];
@@ -454,7 +454,7 @@ function rebuildScene(data) {
   // off: the tree is rebuilt on every assignment while a deck is being laid out, and without
   // this, hiding a plate and then assigning anything at all put the plate and its wells back
   // on screen with the eye still showing them as hidden.
-  for (const name of [...hiddenNames]) setHidden(name, true);
+  for (const name of [...hiddenIdentifiers]) setHidden(name, true);
   deviceTools.rebuild();
   timings.treeMs = performance.now() - _tTree;
   timings.readyMs = performance.now();

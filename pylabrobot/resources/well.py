@@ -51,6 +51,9 @@ class Well(Container):
     cross_section_type: Union[CrossSectionType, str] = CrossSectionType.CIRCLE,
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones=None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """Create a new well.
 
@@ -101,6 +104,8 @@ class Well(Container):
       material_z_thickness=material_z_thickness,
       height_volume_data=height_volume_data,
       no_go_zones=no_go_zones,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.bottom_type = bottom_type
     self.cross_section_type = cross_section_type

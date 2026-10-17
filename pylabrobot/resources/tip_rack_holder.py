@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder, get_child_location
@@ -15,6 +17,9 @@ class EmbeddedTipRackHolder(ResourceHolder):
     category="embedded_tip_rack_holder",
     model=None,
     child_location: Coordinate = Coordinate.zero(),
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -25,6 +30,8 @@ class EmbeddedTipRackHolder(ResourceHolder):
       category=category,
       model=model,
       child_location=child_location,
+      identifier=identifier,
+      metadata=metadata,
     )
 
   def get_default_child_location(self, resource: Resource) -> Coordinate:

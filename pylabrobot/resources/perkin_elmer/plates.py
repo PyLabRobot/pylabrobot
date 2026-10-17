@@ -1,8 +1,10 @@
+from typing import Optional
+
 from pylabrobot.resources import CrossSectionType, Lid, Plate, Well, WellBottomType
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
-def PerkinElmer_96_wellplate_400ul_Fb(name: str) -> Plate:
+def PerkinElmer_96_wellplate_400ul_Fb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """Creates a PerkinElmer 96 well plate with 400 µL wells.
 
   Part number 6005680, 6005688, 6005689
@@ -41,4 +43,5 @@ def PerkinElmer_96_wellplate_400ul_Fb(name: str) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )

@@ -82,7 +82,7 @@ class TipRackNamingTests(unittest.TestCase):
     self.assertIsInstance(first, Tip)
     self.assertNotEqual(first.name, second.name)
     self.assertEqual(first.rotation.z, 90)
-    self.assertEqual(first.metadata, {"batch": "example"})
+    self.assertEqual(first.metadata, {"batch": "example", "name": first.name})
     self.assertIsNone(first.location)
 
 
@@ -245,7 +245,8 @@ class TipSpotHoldsItsTip(unittest.TestCase):
 
   def test_a_spot_with_a_tip_is_the_same_spot_without_one(self):
     """What a holder carries is state, so a deck round-trips to an equal deck."""
-    empty = NestedTipRackTests._rack("rack", with_tips=False)
+    empty = self.rack.copy()
+    empty.empty()
     self.assertEqual(self.rack, empty)
 
 

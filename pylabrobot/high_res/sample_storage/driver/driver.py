@@ -129,6 +129,8 @@ class HighResSampleStorage(Resource):
     barcode: Optional[Barcode] = None,
     preferred_pickup_location: Optional[Coordinate] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ) -> None:
     """Create a HighRes sample-store resource and configure its TCP transport.
 
@@ -164,6 +166,7 @@ class HighResSampleStorage(Resource):
       barcode=barcode,
       preferred_pickup_location=preferred_pickup_location,
       metadata=metadata,
+      identifier=identifier,
     )
 
     # The device reports its configured nest numbers during setup. Their
@@ -259,7 +262,8 @@ class HighResSampleStorage(Resource):
     barcode_data = cast(Optional[dict], data.get("barcode"))
     store = cls(
       host=cast(str, data["host"]),
-      name=cast(str, data["name"]),
+      name=data.get("metadata", {}).get("name", data.get("name", "")),
+      identifier=data.get("identifier"),
       racks=racks,
       size_x=cast(float, data.get("size_x", 0)),
       size_y=cast(float, data.get("size_y", 0)),
@@ -884,11 +888,18 @@ class HighResSampleStorage(Resource):
     return sum(len(rack.get_free_sites()) for rack in self._racks_by_number.values())
 
   def get_site_by_plate_name(self, plate_name: str) -> PlateHolder:
-    for rack in self._racks_by_number.values():
-      for site in rack.sites.values():
-        if site.resource is not None and site.resource.name == plate_name:
-          return site
-    raise ResourceNotFoundError(f"Plate {plate_name!r} not found in {self.name!r}.")
+    """Find the site holding an unambiguously named plate."""
+    matches = [
+      site
+      for rack in self._racks_by_number.values()
+      for site in rack.sites.values()
+      if site.resource is not None and site.resource.name == plate_name
+    ]
+    if not matches:
+      raise ResourceNotFoundError(f"Plate {plate_name!r} not found in {self.name!r}.")
+    if len(matches) > 1:
+      raise ValueError(f"Plate name {plate_name!r} is ambiguous; use the resource's identifier.")
+    return matches[0]
 
   def _find_available_sites_sorted(self, plate: Plate) -> List[PlateHolder]:
     plate_height = plate.get_size_z()

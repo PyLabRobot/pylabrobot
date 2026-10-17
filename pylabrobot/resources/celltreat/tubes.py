@@ -1,9 +1,10 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.tube import Tube, TubeBottomType
 
 
-def celltreat_tube_15mL_Vb(name: str) -> Tube:
+def celltreat_tube_15mL_Vb(name: str, *, identifier: Optional[str] = None) -> Tube:
   """CELLTREAT® Centrifuge Tubes-RackMaster 15mL Centrifuge Tube, Best Value - Paperboard Rack, Sterile
   Part no.: 229414
 
@@ -18,7 +19,8 @@ def celltreat_tube_15mL_Vb(name: str) -> Tube:
     model=celltreat_tube_15mL_Vb.__name__,
     bottom_type=TubeBottomType.V,
     max_volume=15_000,  # units: ul
-    material_z_thickness=0.8,  # measured
+    material_z_thickness=0.8,  # measured,
+    identifier=identifier,
   )
 
 
@@ -27,7 +29,9 @@ def celltreat_tube_15mL_Vb(name: str) -> Tube:
 # --------------------------------------------------------------------------- #
 
 
-def celltreat_15000ul_centrifuge_tube_Vb(name: str) -> Tube:  # remove v1b1
+def celltreat_15000ul_centrifuge_tube_Vb(
+  name: str, *, identifier: Optional[str] = None
+) -> Tube:  # remove v1b1
   """Deprecated alias for celltreat_tube_15mL_Vb().
 
   This alias will be removed in v1b1.
@@ -39,4 +43,4 @@ def celltreat_15000ul_centrifuge_tube_Vb(name: str) -> Tube:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return celltreat_tube_15mL_Vb(name)
+  return celltreat_tube_15mL_Vb(name, identifier=identifier)

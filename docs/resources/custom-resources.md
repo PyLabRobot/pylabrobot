@@ -23,9 +23,12 @@ If you want to instantiate many resources sharing the same properties, you can c
 
 ```python
 class BlueBucket(Resource):
-  def __init__(self, name: str):
+  def __init__(self, name: str, *, identifier=None, metadata=None, **kwargs):
     super().__init__(
       name=name,
+      identifier=identifier,
+      metadata=metadata,
+      **kwargs,
       size_x=123,
       size_y=86,
       size_z=75,
@@ -88,17 +91,17 @@ Resources in PyLabRobot should be able to serialize and deserialize themselves, 
 
 On a high level, the `serialize` method creates a dictionary containing all data necessary to reconstruct a resource. This dictionary is passed to a resource's initializer as kwargs, meaning keys in the dictionary must correspond to initializer arguments.
 
-The default Resource serializer encodes information for all resource properties, including the `size_x`, `size_y` and `size_z` attributes. Since we have these fixed for the `BlueBucket` class, we only have to serialize the name (the rest of the data is inferred by the type). So let's override the `serialize` method:
+The default Resource serializer encodes information for all resource properties, including the `size_x`, `size_y` and `size_z` attributes. Since the dimensions are fixed for `BlueBucket`, omit those constructor arguments while preserving the base serialization, including identity, metadata, and tree references:
 
 ```python
 class BlueBucket(Resource):
   ...
 
   def serialize(self) -> dict:
-    return {
-      "name": self.name,
-      "type": self.__class__.__name__,
-    }
+    data = super().serialize()
+    for key in ("size_x", "size_y", "size_z"):
+      data.pop(key)
+    return data
 ```
 
 ## Defining a custom plate
@@ -113,9 +116,12 @@ To define the custom "tube plate", we will create a subclass of {class}`pylabrob
 
 ```python
 class Tube(Container):
-  def __init__(self, name: str):
+  def __init__(self, name: str, *, identifier=None, metadata=None, **kwargs):
     super().__init__(
       name=name,
+      identifier=identifier,
+      metadata=metadata,
+      **kwargs,
       size_x=9,
       size_y=9,
       size_z=45,
@@ -128,9 +134,12 @@ Next, let's define the custom plate. The `Tube` class is passed as a type argume
 from pylabrobot.resources import ItemizedResource, create_equally_spaced_2d
 
 class TubePlate(ItemizedResource[Tube]):
-  def __init__(self, name: str):
+  def __init__(self, name: str, *, identifier=None, metadata=None, **kwargs):
     super().__init__(
       name=name,
+      identifier=identifier,
+      metadata=metadata,
+      **kwargs,
       size_x=127.0,
       size_y=86.0,
       size_z=45.0,

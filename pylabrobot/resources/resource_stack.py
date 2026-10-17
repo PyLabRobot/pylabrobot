@@ -62,9 +62,17 @@ class ResourceStack(Resource):
     direction: str,
     resources: Optional[List[Resource]] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
-      name, size_x=0, size_y=0, size_z=0, category="resource_group", metadata=metadata
+      name,
+      size_x=0,
+      size_y=0,
+      size_z=0,
+      category="resource_group",
+      metadata=metadata,
+      identifier=identifier,
     )
     assert direction in [
       "x",
@@ -77,6 +85,13 @@ class ResourceStack(Resource):
       resources = list(reversed(resources))
     for resource in resources:
       self.assign_child_resource(resource)
+
+  def serialize(self) -> dict:
+    """Serialize the stacking direction and children that define the stack's size."""
+    data = super().serialize()
+    for key in ("size_x", "size_y", "size_z", "category"):
+      data.pop(key, None)
+    return {**data, "direction": self.direction}
 
   def get_size_x(self) -> float:
     """Get local size in the x direction."""

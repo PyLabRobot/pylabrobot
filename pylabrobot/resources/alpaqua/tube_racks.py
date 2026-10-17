@@ -1,9 +1,11 @@
+from typing import Optional
+
 from pylabrobot.resources.container_rack import ContainerRack
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
-def alpaqua_12_tuberack_5mL_eppis(name: str) -> ContainerRack:
+def alpaqua_12_tuberack_5mL_eppis(name: str, *, identifier: Optional[str] = None) -> ContainerRack:
   """Alpaqua Engineering LLC cat. no.: A000080
   SLAS-compliant tube rack for use on liquid handlers to
   accommodate 5 mL Eppendorf Tubes with snap cap lids
@@ -30,4 +32,5 @@ def alpaqua_12_tuberack_5mL_eppis(name: str) -> ContainerRack:
       size_z=0.0,  # Holder height
       name_prefix=name,
     ),
+    identifier=identifier,
   )

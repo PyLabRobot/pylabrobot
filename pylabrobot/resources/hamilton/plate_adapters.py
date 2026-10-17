@@ -1,9 +1,11 @@
 """Hamilton PCR plate adapters."""
 
+from typing import Optional
+
 from pylabrobot.resources.plate_adapter import PlateAdapter
 
 
-def Hamilton_96_adapter_182531(name: str) -> PlateAdapter:
+def Hamilton_96_adapter_182531(name: str, *, identifier: Optional[str] = None) -> PlateAdapter:
   """Hamilton 182531 PCR insert for the 182070 landscape carrier.
 
   Geometry is derived from the five ``182531_RNO`` meshes in Hamilton's 3D model.
@@ -32,10 +34,11 @@ def Hamilton_96_adapter_182531(name: str) -> PlateAdapter:
     adapter_hole_dx=9.0,  # from the .x hole grid
     adapter_hole_dy=9.0,  # from the .x hole grid
     model="Hamilton_96_adapter_182531",
+    identifier=identifier,
   )
 
 
-def Hamilton_96_adapter_188182(name: str) -> PlateAdapter:
+def Hamilton_96_adapter_188182(name: str, *, identifier: Optional[str] = None) -> PlateAdapter:
   """Hamilton cat. no.: 188182
   Adapter for 96 well PCR plate, plunged.
   Does not have an ANSI/SLAS footprint -> requires assignment with specified location.
@@ -52,4 +55,5 @@ def Hamilton_96_adapter_188182(name: str) -> PlateAdapter:
     adapter_hole_size_y=7.4,
     adapter_hole_size_z=10.0,  # guesstimate
     model="Hamilton_96_adapter_188182",
+    identifier=identifier,
   )

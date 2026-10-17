@@ -15,7 +15,8 @@ python -m pylabrobot.visualizer3D.demo
 
 It opens a browser on `http://127.0.0.1:1338/#token=<token>`, the link it prints, in a top view;
 `?view=iso` or `?view=front` (before the `#`) picks another, and `?quality=low` pins the low-cost
-level. From the console, `plrViewer.focus("destination_0")` frames and selects a named resource.
+level. From the console, `plrViewer.focus(identifier)` frames and selects a resource by its
+identifier. `plrViewer.resources()` lists the identifiers in the scene.
 
 A simulated run is over in milliseconds, and a script that ends stops its viewer with it. Call
 `await viewer.wait_for_browser()` before the run, as `demo.py` does: it returns once a page says it

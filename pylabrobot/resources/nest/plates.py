@@ -1,5 +1,6 @@
-# https://cell-nest.oss-cn-zhangjiakou.aliyuncs.com/Resource/File/2022/11/24/NEST%20Reservoir.pdf
+from typing import Optional
 
+# https://cell-nest.oss-cn-zhangjiakou.aliyuncs.com/Resource/File/2022/11/24/NEST%20Reservoir.pdf
 from pylabrobot.resources.height_volume_functions import (
   compute_height_from_volume_rectangle,
   compute_volume_from_height_rectangle,
@@ -13,7 +14,7 @@ from pylabrobot.resources.well import (
 )
 
 
-def nest_1_troughplate_195000uL_Vb(name: str) -> Plate:
+def nest_1_troughplate_195000uL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """part no 360103. 96 tiny holes, but one container."""
   well_size_x = 127.76 - (14.38 - 9 / 2) * 2  # from datasheet
   well_size_y = 85.48 - (11.24 - 9 / 2) * 2  # from datasheet
@@ -51,10 +52,11 @@ def nest_1_troughplate_195000uL_Vb(name: str) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def nest_1_troughplate_185000uL_Vb(name: str) -> Plate:
+def nest_1_troughplate_185000uL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """NEST single-trough reagent reservoir plate, 185 mL, V-bottom (ANSI/SLAS footprint).
 
   cat. no.: 360104
@@ -100,10 +102,11 @@ def nest_1_troughplate_185000uL_Vb(name: str) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def nest_8_troughplate_22000uL_Vb(name: str) -> Plate:
+def nest_8_troughplate_22000uL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """NEST 8-trough reagent reservoir plate, 22 mL, V-bottom (ANSI/SLAS footprint).
 
   cat. no.: 360101
@@ -147,10 +150,11 @@ def nest_8_troughplate_22000uL_Vb(name: str) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def nest_12_troughplate_15000uL_Vb(name: str) -> Plate:
+def nest_12_troughplate_15000uL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """NEST 12-trough reagent reservoir plate, 15 mL, V-bottom (ANSI/SLAS footprint).
 
   cat. no.: 360102
@@ -192,10 +196,11 @@ def nest_12_troughplate_15000uL_Vb(name: str) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def NEST_96_wellplate_2200uL_Ub(name: str) -> Plate:
+def NEST_96_wellplate_2200uL_Ub(name: str, *, identifier: Optional[str] = None) -> Plate:
   """NEST Cat. No. 503062
   Spec: http://manage-en.nestscientificusa.com/Resource/File/2023/02/13/NEST-Deep-Well-Plates.pdf
   """
@@ -224,6 +229,7 @@ def NEST_96_wellplate_2200uL_Ub(name: str) -> Plate:
       max_volume=2200,  # from spec (2.2 mL)
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
@@ -237,7 +243,7 @@ _nest_96_wellplate_200uL_Fb_height_volume_data = {
 }
 
 
-def nest_96_wellplate_200uL_Fb(name: str) -> Plate:
+def nest_96_wellplate_200uL_Fb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """NEST Cat. No. 701011: 96 well cell culture plate, flat bottom, non-treated, polystyrene.
   Spec: NEST data sheet, "96 well cell culture plate, Flat bottom" technical drawing
   http://www.gzjetway.com/upload/pdf/202506/04a71256d0b04cf888df963be987194b.pdf
@@ -270,4 +276,5 @@ def nest_96_wellplate_200uL_Fb(name: str) -> Plate:
       height_volume_data=_nest_96_wellplate_200uL_Fb_height_volume_data,
       name_prefix=name,
     ),
+    identifier=identifier,
   )

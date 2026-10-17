@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
@@ -43,7 +45,7 @@ def _compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb(
 # }
 
 
-def Eppendorf_96_wellplate_250ul_Vb_Lid(name: str) -> Lid:
+def Eppendorf_96_wellplate_250ul_Vb_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -56,7 +58,12 @@ def Eppendorf_96_wellplate_250ul_Vb_Lid(name: str) -> Lid:
   # )
 
 
-def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
+def Eppendorf_96_wellplate_250ul_Vb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Eppendorf cat. no.: 0030133374
   - Material: polycarbonate (frame), polypropylene (wells).
   - part of the twin.tec(R) product line.
@@ -73,6 +80,7 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
   """
   return Plate(
     name=name,
+    identifier=identifier,
     size_x=123.0,
     size_y=81.0,
     size_z=20.3,
@@ -101,7 +109,7 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
   )
 
 
-def eppendorf_96_wellplate_500ul_Vb(name: str) -> Plate:
+def eppendorf_96_wellplate_500ul_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """Eppendorf Deepwell Plate 96/500uL, cat. no.: 951032107
 
   https://archive.vn/WCuMF
@@ -137,10 +145,11 @@ def eppendorf_96_wellplate_500ul_Vb(name: str) -> Plate:
       compute_height_from_volume=None,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def eppendorf_96_wellplate_1000ul_Vb(name: str) -> Plate:
+def eppendorf_96_wellplate_1000ul_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """Eppendorf Deepwell Plate 96/1000uL, cat. no.: 951032921
 
   https://archive.vn/uMRwv
@@ -176,10 +185,11 @@ def eppendorf_96_wellplate_1000ul_Vb(name: str) -> Plate:
       compute_height_from_volume=None,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def eppendorf_96_wellplate_2000ul_vb(name: str) -> Plate:
+def eppendorf_96_wellplate_2000ul_vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """Eppendorf Deepwell Plate 96/2000 µL
 
   https://archive.vn/wSbxT
@@ -215,4 +225,5 @@ def eppendorf_96_wellplate_2000ul_vb(name: str) -> Plate:
       compute_height_from_volume=None,
       name_prefix=name,
     ),
+    identifier=identifier,
   )

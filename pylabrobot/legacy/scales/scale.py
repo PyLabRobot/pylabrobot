@@ -21,6 +21,9 @@ class Scale(Resource, Machine):
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     Machine.__init__(self, backend=backend)
     Resource.__init__(
@@ -32,6 +35,8 @@ class Scale(Resource, Machine):
       rotation=rotation,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.backend: ScaleBackend = backend  # fix type
 

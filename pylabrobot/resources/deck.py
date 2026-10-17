@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Mapping, Optional, cast
+from typing import Any, List, Mapping, Optional
 
 from pylabrobot.resources.errors import ResourceNotFoundError
 
@@ -21,6 +21,8 @@ class Deck(Resource):
     origin: Coordinate = Coordinate(0, 0, 0),
     category: str = "deck",
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     """Initialize a new deck."""
 
@@ -31,6 +33,7 @@ class Deck(Resource):
       size_z=size_z,
       category=category,
       metadata=metadata,
+      identifier=identifier,
     )
     self.location = origin
 
@@ -57,18 +60,23 @@ class Deck(Resource):
       >>> lh.deck.clear(include_trash=True)
     """
 
-    children_names = [child.name for child in self.children]
-    for resource_name in children_names:
-      resource = self.get_resource(resource_name)
+    for resource in self.children.copy():
       if isinstance(resource, Trash) and not include_trash:
         continue
       resource.unassign()
 
   def get_trash_area(self) -> Trash:
     """Returns the trash area resource."""
-    if not self.has_resource("trash"):
+    matches = [
+      resource
+      for resource in self.get_all_resources()
+      if isinstance(resource, Trash) and resource.category not in {"trash96", "trash_container"}
+    ]
+    if not matches:
       raise ResourceNotFoundError("Trash area not found")
-    return cast(Trash, self.get_resource("trash"))
+    if len(matches) > 1:
+      raise ValueError("Multiple trash areas found; specify the resource explicitly.")
+    return matches[0]
 
   def summary(self) -> str:
     """Returns a summary of the deck layout."""

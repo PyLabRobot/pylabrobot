@@ -389,7 +389,13 @@ class TestCreateEquallySpaced(unittest.TestCase):
     correct_items[2][0].location = Coordinate(18, 9, 0)
     correct_items[2][1].location = Coordinate(18, 0, 0)
 
-    self.assertEqual(equally_spaced, correct_items)
+    for actual_column, expected_column in zip(equally_spaced, correct_items):
+      for actual, expected in zip(actual_column, expected_column):
+        self.assertEqual(actual.name, expected.name)
+        self.assertEqual(actual.location, expected.location)
+        self.assertEqual(actual.get_size_x(), expected.get_size_x())
+        self.assertEqual(actual.get_size_y(), expected.get_size_y())
+        self.assertEqual(actual.get_size_z(), expected.get_size_z())
 
 
 class TestItemizedResourceTraversal(unittest.TestCase):

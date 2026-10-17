@@ -86,7 +86,7 @@ def build_tip_rack_definition(
   if load_name is None:
     load_name = uuid.uuid4().hex
   tip_spots = tip_rack.get_all_items()
-  well_names = {spot.name: tip_rack.get_child_identifier(spot) for spot in tip_spots}
+  well_names = {spot.identifier: tip_rack.get_child_identifier(spot) for spot in tip_spots}
   for spot in tip_spots:
     _require_unrotated(spot)
     location = cast(Coordinate, spot.location)
@@ -117,7 +117,7 @@ def build_tip_rack_definition(
       "isMagneticModuleCompatible": False,
     },
     "ordering": reshape_2d(
-      [well_names[tip_spot.name] for tip_spot in tip_spots],
+      [well_names[tip_spot.identifier] for tip_spot in tip_spots],
       (tip_rack.num_items_x, tip_rack.num_items_y),
     ),
     "cornerOffsetFromSlot": {
@@ -131,7 +131,7 @@ def build_tip_rack_definition(
       "zDimension": tip_rack.get_absolute_size_z(),
     },
     "wells": {
-      well_names[child.name]: {
+      well_names[child.identifier]: {
         "depth": tip.get_size_z(),
         "x": cast(Coordinate, child.location).x + child.get_absolute_size_x() / 2,
         "y": cast(Coordinate, child.location).y + child.get_absolute_size_y() / 2,
@@ -149,7 +149,7 @@ def build_tip_rack_definition(
     },
     "groups": [
       {
-        "wells": [well_names[tip_spot.name] for tip_spot in tip_spots],
+        "wells": [well_names[tip_spot.identifier] for tip_spot in tip_spots],
         "metadata": (
           {"displayName": None, "displayCategory": "tipRack", "wellBottomShape": "flat"}
           if for_flex
@@ -180,16 +180,16 @@ class LabwareRegistry:
 
   def __init__(self, run: OpentronsRun, server_assigned_ids: bool = False) -> None:
     self._run = run
-    self._bindings: Dict[int, LabwareBinding] = {}
-    self._definitions: Dict[int, Tuple[Resource, LabwareIdentity]] = {}
+    self._bindings: Dict[str, LabwareBinding] = {}
+    self._definitions: Dict[str, Tuple[Resource, LabwareIdentity]] = {}
     self._server_assigned_ids = server_assigned_ids
 
   def is_loaded(self, resource: Resource) -> bool:
-    return id(resource) in self._bindings
+    return resource.identifier in self._bindings
 
   def get(self, resource: Resource) -> LabwareBinding:
     """Look up an existing binding without uploading, loading, or allocating an ID."""
-    return self._bindings[id(resource)]
+    return self._bindings[resource.identifier]
 
   async def load(
     self,
@@ -224,7 +224,7 @@ class LabwareRegistry:
     else:
       labware_id = uuid.uuid4().hex
       await self._run.load_labware(identity, slot, labware_id, resource.name)
-    self._bindings[id(resource)] = LabwareBinding(resource, labware_id, slot, identity)
+    self._bindings[resource.identifier] = LabwareBinding(resource, labware_id, slot, identity)
 
   async def define(self, resource: Resource, definition: Dict[str, Any]) -> LabwareIdentity:
     """Upload a resource definition once per run, retaining its server identity."""
@@ -233,22 +233,22 @@ class LabwareRegistry:
     if cached is not None:
       return cached
     identity = await self._run.define_labware(definition)
-    self._definitions[id(resource)] = (resource, identity)
+    self._definitions[resource.identifier] = (resource, identity)
     return identity
 
   def definition(self, resource: Resource) -> Optional[LabwareIdentity]:
     """Return a previously uploaded definition without communicating."""
-    cached = self._definitions.get(id(resource))
+    cached = self._definitions.get(resource.identifier)
     return cached[1] if cached is not None else None
 
   def record_location(self, resource: Resource, slot: str) -> None:
     """Update a binding after a confirmed server-side move."""
-    self._bindings[id(resource)] = replace(self.get(resource), slot=slot)
+    self._bindings[resource.identifier] = replace(self.get(resource), slot=slot)
 
   def remove(self, resource: Resource) -> None:
     """Forget a resource after its confirmed departure from the run's deck."""
-    self._bindings.pop(id(resource), None)
-    self._definitions.pop(id(resource), None)
+    self._bindings.pop(resource.identifier, None)
+    self._definitions.pop(resource.identifier, None)
 
 
 def _format_from_grid(num_items_x: int, num_items_y: int) -> str:

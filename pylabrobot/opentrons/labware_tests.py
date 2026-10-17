@@ -43,6 +43,13 @@ class LabwareRegistryTests(unittest.IsolatedAsyncioTestCase):
     self.protocol_run.load_labware.assert_awaited_once()
     self.assertEqual(binding.slot, "1")
 
+  async def test_transformed_resource_reuses_its_binding(self) -> None:
+    await self.registry.load(self.rack, "1", self.identity)
+    renamed = self.rack.named("renamed")
+    await self.registry.load(renamed, "1", self.identity)
+    self.assertIs(self.registry.get(renamed), self.registry.get(self.rack))
+    self.protocol_run.load_labware.assert_awaited_once()
+
   async def test_failed_load_does_not_publish_a_binding(self) -> None:
     self.protocol_run.load_labware.side_effect = RuntimeError("load failed")
     with self.assertRaisesRegex(RuntimeError, "load failed"):

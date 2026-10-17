@@ -21,7 +21,9 @@ from pylabrobot.serializer import serialize
 logger = logging.getLogger(__name__)
 
 
-def nimbus_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
+def nimbus_core_gripper_1000ul_at_waste(
+  *, identifier: Optional[str] = None
+) -> HamiltonCoreGrippers:
   """CORE gripper rack for Nimbus decks, co-located with the waste block.
 
   Derived from measured Hamilton coordinates on the default Nimbus8 deck:
@@ -37,6 +39,7 @@ def nimbus_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
     size_y=30.0,
     size_z=25.0,
     model="nimbus_core_gripper_1000ul_at_waste",
+    identifier=identifier,
   )
 
 
@@ -65,6 +68,9 @@ class NimbusDeck(HamiltonDeck):
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
     waste_type: Optional[Literal["default_long"]] = "default_long",
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ) -> None:
     """Create a new Nimbus deck.
 
@@ -97,6 +103,8 @@ class NimbusDeck(HamiltonDeck):
       name=name,
       category=category,
       origin=origin,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     # Store Hamilton origin for coordinate conversion
@@ -356,6 +364,9 @@ class NimbusDeck(HamiltonDeck):
     rail_width: Optional[float] = None,
     rail_y: Optional[float] = None,
     waste_type: Optional[Literal["default_long"]] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ) -> NimbusDeck:
     """Create a Nimbus deck by parsing config files.
 
@@ -635,6 +646,8 @@ class NimbusDeck(HamiltonDeck):
       raise ValueError("Could not extract track_y from config files and rail_y not provided")
 
     return cls(
+      identifier=identifier,
+      metadata=metadata,
       num_rails=num_rails_val,
       size_x=size_x_val,
       size_y=size_y_val,

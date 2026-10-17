@@ -76,6 +76,8 @@ class PlateAdapter(Resource):
     model: Optional[str] = None,
     adapter_hole_size_z=None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name=name,
@@ -85,6 +87,7 @@ class PlateAdapter(Resource):
       category=category or "plate_adapter",
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
 
     if adapter_hole_size_z is not None:

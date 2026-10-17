@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { placeEdges, showEdges } from "./boxes.js";
 import { LIQUID, MOVING_PARTS, VESSEL_EMPTY } from "./constants.js";
 import {
-  hiddenNames,
+  hiddenIdentifiers,
   isVisible,
   meshRoots,
   placeInstance,
@@ -250,7 +250,7 @@ export function applyState(payload) {
   const { states, of } = payload;
   if (!states || !of) return;
   for (const [name, slot] of Object.entries(of)) {
-    const index = world.indexOfName.get(name);
+    const index = world.indexOfIdentifier.get(name);
     if (index === undefined) continue;
     // Shared between every resource in the same state, and only ever read.
     stateOf.set(index, states[slot]);
@@ -262,21 +262,21 @@ export function applyState(payload) {
     applyJoints(index);
   }
   for (const [name, location] of Object.entries(payload.locations ?? {})) {
-    const index = world.indexOfName.get(name);
+    const index = world.indexOfIdentifier.get(name);
     if (index !== undefined) applyLocation(index, location);
   }
   for (const mesh of touched) {
     mesh.instanceMatrix.needsUpdate = true;
     mesh.boundingSphere = null;
   }
-  const changed = new Set(Object.keys(of).map((name) => world.indexOfName.get(name)));
+  const changed = new Set(Object.keys(of).map((name) => world.indexOfIdentifier.get(name)));
   announce({ kind: "state", changed });
 }
 
 export function setHidden(name, hidden) {
-  if (hidden) hiddenNames.add(name);
-  else hiddenNames.delete(name);
-  const root = world.indexOfName.get(name);
+  if (hidden) hiddenIdentifiers.add(name);
+  else hiddenIdentifiers.delete(name);
+  const root = world.indexOfIdentifier.get(name);
   if (root === undefined) return;
 
   const touched = new Set();
@@ -321,9 +321,9 @@ export function applyMoves(moves) {
   const touched = new Set();
   const rowsUnder = new Set();
   for (const move of moves) {
-    const index = world.indexOfName.get(move.name);
+    const index = world.indexOfIdentifier.get(move.identifier);
     if (index === undefined) continue;
-    const parent = move.parent === null ? -1 : (world.indexOfName.get(move.parent) ?? -1);
+    const parent = move.parent === null ? -1 : (world.indexOfIdentifier.get(move.parent) ?? -1);
     const was = world.parentOf[index];
     if (was !== parent) {
       if (was >= 0) {

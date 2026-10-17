@@ -1,10 +1,18 @@
+from typing import Optional
+
 from pylabrobot.legacy.heating_shaking.heater_shaker import HeaterShaker
 from pylabrobot.legacy.heating_shaking.inheco.thermoshake_backend import InhecoThermoshakeBackend
 from pylabrobot.legacy.temperature_controlling.inheco.control_box import InhecoTECControlBox
 from pylabrobot.resources.coordinate import Coordinate
 
 
-def inheco_thermoshake_ac(name: str, control_box: InhecoTECControlBox, index: int) -> HeaterShaker:
+def inheco_thermoshake_ac(
+  name: str,
+  control_box: InhecoTECControlBox,
+  index: int,
+  *,
+  identifier: Optional[str] = None,
+) -> HeaterShaker:
   """Inheco Thermoshake AC
 
   7100160, 7100161
@@ -22,10 +30,17 @@ def inheco_thermoshake_ac(name: str, control_box: InhecoTECControlBox, index: in
     size_z=115.9,  # from spec
     child_location=Coordinate(x=0, y=0, z=109.9),  # TODO
     model=inheco_thermoshake_ac.__name__,
+    identifier=identifier,
   )
 
 
-def inheco_thermoshake(name: str, control_box: InhecoTECControlBox, index: int) -> HeaterShaker:
+def inheco_thermoshake(
+  name: str,
+  control_box: InhecoTECControlBox,
+  index: int,
+  *,
+  identifier: Optional[str] = None,
+) -> HeaterShaker:
   """Inheco Thermoshake (7100146)
 
   https://www.inheco.com/thermoshake-classic.html
@@ -39,11 +54,18 @@ def inheco_thermoshake(name: str, control_box: InhecoTECControlBox, index: int) 
     size_z=118,  # from spec
     child_location=Coordinate(x=9.62, y=9.22, z=109.9),  # measured
     model=inheco_thermoshake.__name__,
-    # pedestal_size_z=-4.2,  # measured
+    # pedestal_size_z=-4.2,  # measured,
+    identifier=identifier,
   )
 
 
-def inheco_thermoshake_rm(name: str, control_box: InhecoTECControlBox, index: int) -> HeaterShaker:
+def inheco_thermoshake_rm(
+  name: str,
+  control_box: InhecoTECControlBox,
+  index: int,
+  *,
+  identifier: Optional[str] = None,
+) -> HeaterShaker:
   """Inheco Thermoshake RM (7100144)
 
   https://www.inheco.com/thermoshake-classic.html
@@ -59,4 +81,5 @@ def inheco_thermoshake_rm(name: str, control_box: InhecoTECControlBox, index: in
     size_z=116,  # from spec
     child_location=Coordinate(x=0, y=0, z=0),  # TODO
     model=inheco_thermoshake.__name__,
+    identifier=identifier,
   )

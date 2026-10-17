@@ -97,32 +97,26 @@ class TestResource(unittest.TestCase):
     self.assertEqual(parent.parent, deck)
     self.assertIsNone(deck.parent)
 
-  def test_assign_name_taken(self):
-    deck = _make_test_deck()
-    parent = Resource("parent", size_x=10, size_y=10, size_z=10)
-    deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
-    child = Resource("child", size_x=5, size_y=5, size_z=5)
-    parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
-
+  def test_assign_duplicate_identifier(self):
+    root = _make_test_deck()
+    first = Resource("first", 5, 5, 5, identifier="shared")
+    root.assign_child_resource(first, location=Coordinate.zero())
+    other = Resource("other", 5, 5, 5, identifier="shared")
     with self.assertRaises(ValueError):
-      other_child = Resource("child", size_x=5, size_y=5, size_z=5)
-      deck.assign_child_resource(other_child, location=Coordinate(5, 5, 5))
+      root.assign_child_resource(other, location=Coordinate.zero())
+    self.assertIsNone(other.parent)
+    self.assertIs(root.get_resource_by_identifier("shared"), first)
 
-  def test_assign_name_exists_in_tree(self):
-    root = Resource("root", size_x=10, size_y=10, size_z=10)
-    child1 = Resource("child", size_x=5, size_y=5, size_z=5)
-    root.assign_child_resource(child1, location=Coordinate(5, 5, 5))
-    child2 = Resource("child", size_x=5, size_y=5, size_z=5)
-    with self.assertRaises(ValueError):
-      root.assign_child_resource(child2, location=Coordinate(5, 5, 5))
-
-    grandchild1 = Resource("grandchild", size_x=5, size_y=5, size_z=5)
-    child1.assign_child_resource(grandchild1, location=Coordinate(5, 5, 5))
-    child3 = Resource("child3", size_x=5, size_y=5, size_z=5)
-    root.assign_child_resource(child3, location=Coordinate(5, 5, 5))
-    grandchild2 = Resource("grandchild", size_x=5, size_y=5, size_z=5)
-    with self.assertRaises(ValueError):
-      root.assign_child_resource(grandchild2, location=Coordinate(5, 5, 5))
+  def test_assign_duplicate_names(self):
+    root = Resource("root", 10, 10, 10)
+    first = Resource("child", 5, 5, 5)
+    second = Resource("child", 5, 5, 5)
+    root.assign_child_resource(first, location=Coordinate.zero())
+    root.assign_child_resource(second, location=Coordinate.zero())
+    self.assertIs(root.get_resource_by_identifier(first.identifier), first)
+    self.assertIs(root.get_resource_by_identifier(second.identifier), second)
+    with self.assertRaisesRegex(ValueError, "ambiguous"):
+      root.get_resource("child")
 
   def test_get_anchor(self):
     resource = Resource("test", size_x=12, size_y=12, size_z=12)
@@ -218,17 +212,11 @@ class TestResource(unittest.TestCase):
     self.assertEqual(deck.get_all_children(), [parent, child])
 
   def test_eq(self):
-    deck1 = _make_test_deck()
-    deck2 = _make_test_deck()
-    self.assertEqual(deck1, deck2)
-
-    parent1 = Resource("parent", size_x=10, size_y=10, size_z=10)
-    parent2 = Resource("parent", size_x=10, size_y=10, size_z=10)
-    self.assertEqual(parent1, parent2)
-
-    child1 = Resource("child", size_x=5, size_y=5, size_z=5)
-    child2 = Resource("child", size_x=5, size_y=5, size_z=5)
-    self.assertEqual(child1, child2)
+    first = Resource("same name", 10, 10, 10, identifier="first")
+    second = Resource("same name", 10, 10, 10, identifier="second")
+    self.assertNotEqual(first, second)
+    self.assertEqual(first, Resource("different name", 1, 2, 3, identifier="first"))
+    self.assertEqual(hash(first), hash(first.named("renamed")))
 
   def test_serialize(self):
     r = Resource(
@@ -241,7 +229,8 @@ class TestResource(unittest.TestCase):
     self.assertEqual(
       r.serialize(),
       {
-        "name": "test",
+        "identifier": r.identifier,
+        "metadata": {"name": "test"},
         "size_x": 10,
         "size_y": 10,
         "size_z": 10,
@@ -262,14 +251,16 @@ class TestResource(unittest.TestCase):
     self.assertEqual(
       r.serialize(),
       {
-        "name": "test",
+        "identifier": r.identifier,
+        "metadata": {"name": "test"},
         "size_x": 10,
         "size_y": 10,
         "size_z": 10,
         "type": "Resource",
         "children": [
           {
-            "name": "child",
+            "identifier": child.identifier,
+            "metadata": {"name": "child"},
             "location": {
               "type": "Coordinate",
               "x": 5,
@@ -280,7 +271,7 @@ class TestResource(unittest.TestCase):
             "size_y": 1,
             "size_z": 1,
             "type": "Resource",
-            "parent_name": "test",
+            "parent_identifier": r.identifier,
           }
         ],
       },
@@ -1176,16 +1167,16 @@ class TestResourceMetadata(unittest.TestCase):
     r2 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 1, "is_clean": True})
     r3 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 2, "is_clean": True})
 
-    self.assertEqual(r1.metadata, {"a": 1, "is_clean": True})
-    self.assertEqual(r1, r2)
+    self.assertEqual(r1.metadata, {"name": "r1", "a": 1, "is_clean": True})
+    self.assertNotEqual(r1, r2)
     self.assertNotEqual(r1, r3)
 
-  def test_metadata_default_is_empty_and_per_instance(self):
+  def test_metadata_default_contains_name_and_is_per_instance(self):
     r1 = Resource("r1", size_x=1, size_y=1, size_z=1)
     r2 = Resource("r2", size_x=1, size_y=1, size_z=1)
-    self.assertEqual(r1.metadata, {})
+    self.assertEqual(r1.metadata, {"name": "r1"})
     r1.metadata["k"] = "v"
-    self.assertEqual(r2.metadata, {})
+    self.assertEqual(r2.metadata, {"name": "r2"})
 
   def test_metadata_shallow_copy_semantics(self):
     # metadata.copy() decouples top-level keys from the caller's dict, but nested
@@ -1204,16 +1195,17 @@ class TestResourceMetadata(unittest.TestCase):
     factories = self._resource_factoryies_with_meta(meta)
     for name, make in factories.items():
       with self.subTest(name):
-        self.assertEqual(make().metadata, meta)
+        r = make()
+        self.assertEqual(r.metadata, {**meta, "name": r.name})
 
   def test_metadata_serialization_deserialization(self):
     meta = {"string": "hello", "int": 42, "bool": False, "list": [1, 2, 3], "nested": {"k": "v"}}
     r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
     serialized = r.serialize()
-    self.assertEqual(serialized["metadata"], meta)
+    self.assertEqual(serialized["metadata"], {**meta, "name": r.name})
 
     deserialized = Resource.deserialize(serialized)
-    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized.metadata, {**meta, "name": r.name})
     self.assertEqual(deserialized, r)
 
   def test_metadata_serialize_copy_isolation(self):
@@ -1247,24 +1239,24 @@ class TestResourceMetadata(unittest.TestCase):
     }
     r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
     serialized = r.serialize()
-    self.assertEqual(serialized["metadata"], meta)
+    self.assertEqual(serialized["metadata"], {**meta, "name": r.name})
 
     deserialized = Resource.deserialize(serialized)
-    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized.metadata, {**meta, "name": r.name})
     self.assertEqual(deserialized, r)
 
     r_copy = r.copy()
-    self.assertEqual(r_copy.metadata, meta)
+    self.assertEqual(r_copy.metadata, {**meta, "name": r.name})
     self.assertEqual(r_copy, r)
 
   def test_metadata_type_key_serialization_deserialization(self):
     meta = {"type": "reagent", "nested": {"type": "custom_type"}}
     r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
     serialized = r.serialize()
-    self.assertEqual(serialized["metadata"], meta)
+    self.assertEqual(serialized["metadata"], {**meta, "name": r.name})
 
     deserialized = Resource.deserialize(serialized)
-    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized.metadata, {**meta, "name": r.name})
     self.assertEqual(deserialized, r)
 
   def test_metadata_json_roundtrip(self):
@@ -1272,16 +1264,17 @@ class TestResourceMetadata(unittest.TestCase):
     r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
     serialized_json = json.dumps(r.serialize())
     deserialized = Resource.deserialize(json.loads(serialized_json))
-    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized.metadata, {**meta, "name": r.name})
     self.assertEqual(deserialized, r)
     self.assertIsNot(deserialized.metadata, meta)
 
   def test_deserialize_without_metadata_key_is_backward_compatible(self):
     # Resources serialized before metadata existed have no "metadata" key.
     data = Resource("r", size_x=1, size_y=1, size_z=1, metadata={"key": "value"}).serialize()
-    del data["metadata"]
+    data["name"] = data.pop("metadata")["name"]
+    data.pop("identifier")
     restored = Resource.deserialize(data)
-    self.assertEqual(restored.metadata, {})
+    self.assertEqual(restored.metadata, {"name": "r"})
 
   def test_deserialize_non_dict_metadata_raises(self):
     data = Resource("r", size_x=1, size_y=1, size_z=1).serialize()
@@ -1296,22 +1289,12 @@ class TestResourceMetadata(unittest.TestCase):
     for name, make in factories.items():
       with self.subTest(name):
         r = make()
-        self.assertEqual(r.metadata, meta)
-        if name == "Loader":
-          # Loader doesn't expose metadata at the top-level
-          self.assertEqual(r.serialize()["resource"]["metadata"], meta)
-        else:
-          self.assertEqual(r.serialize()["metadata"], meta)
-        if name == "ResourceStack":
-          with self.assertRaises(
-            TypeError
-          ):  # unrelated to metadata: ResourceStack.copy() is broken
-            r.copy()
-        else:
-          r_copy = r.copy()
-          self.assertEqual(r_copy.metadata, meta)
-          self.assertEqual(r_copy.name, r.name)
-          self.assertEqual(r_copy, r)
+        self.assertEqual(r.metadata, {**meta, "name": r.name})
+        self.assertEqual(r.serialize()["metadata"], {**meta, "name": r.name})
+        r_copy = r.copy()
+        self.assertEqual(r_copy.metadata, {**meta, "name": r.name})
+        self.assertEqual(r_copy.name, r.name)
+        self.assertEqual(r_copy, r)
 
   def test_deserialize_same_named_class_via_module_alias(self):
     # Simulate a class imported under two module paths: find_subclass returns a
@@ -1475,14 +1458,14 @@ class TestResourceMetadata(unittest.TestCase):
     self.assertEqual(deck.find_resources(recursive=False), [deck, plate, trough, waste])
 
 
-class TestNameIndex(unittest.TestCase):
+class TestIdentifierIndex(unittest.TestCase):
   """Names are unique across a tree, and the tree remembers which it holds rather than re-reading
   itself on every assignment. Anything remembered can go stale, so these check it does not."""
 
   def block(self, name: str) -> Resource:
-    return Resource(name=name, size_x=10, size_y=10, size_z=10)
+    return Resource(name=name, size_x=10, size_y=10, size_z=10, identifier=name)
 
-  def test_a_duplicate_name_is_refused(self):
+  def test_a_duplicate_identifier_is_refused(self):
     root = self.block("root")
     root.assign_child_resource(self.block("a"), location=Coordinate.zero())
     with self.assertRaises(ValueError):
@@ -1499,14 +1482,14 @@ class TestNameIndex(unittest.TestCase):
     with self.assertRaises(ValueError):
       root.assign_child_resource(other, location=Coordinate.zero())
 
-  def test_unassigning_frees_the_name(self):
+  def test_unassigning_frees_the_identifier(self):
     root = self.block("root")
     plate = self.block("plate")
     root.assign_child_resource(plate, location=Coordinate.zero())
     root.unassign_child_resource(plate)
     root.assign_child_resource(self.block("plate"), location=Coordinate.zero())
 
-  def test_a_subtree_takes_its_names_with_it(self):
+  def test_a_subtree_takes_its_identifiers_with_it(self):
     """The names beneath a resource leave the tree with it, and arrive in whatever tree takes it."""
     first, second = self.block("first"), self.block("second")
     holder = self.block("holder")
@@ -1521,25 +1504,18 @@ class TestNameIndex(unittest.TestCase):
     with self.assertRaises(ValueError):
       second.assign_child_resource(holder, location=Coordinate.zero())
 
-  def test_moving_between_parents_goes_through_the_old_one(self):
-    """A resource is moved by taking it off one parent and putting it on another, in that order.
-
-    Handing it straight to the new parent is refused, because the name is checked while the old
-    parent still holds it. Long-standing behaviour, unrelated to the index, and worth pinning: it is
-    why a plate changing carriers reaches a subscriber as an unassignment and an assignment.
-    """
+  def test_reparenting_preserves_identity_and_updates_the_index(self):
+    """Moving within a tree retains the identifier and announces both tree changes."""
     root = self.block("root")
     left, right = self.block("left"), self.block("right")
     root.assign_child_resource(left, location=Coordinate.zero())
     root.assign_child_resource(right, location=Coordinate.zero())
-
     plate = self.block("plate")
     left.assign_child_resource(plate, location=Coordinate.zero())
-
-    with self.assertRaises(ValueError):
-      right.assign_child_resource(plate, location=Coordinate.zero())
-
-    left.unassign_child_resource(plate)
+    changes = []
+    left.register_did_unassign_resource_callback(lambda child: changes.append(("remove", child)))
+    right.register_did_assign_resource_callback(lambda child: changes.append(("add", child)))
     right.assign_child_resource(plate, location=Coordinate.zero())
     self.assertIs(plate.parent, right)
-    self.assertEqual(root.get_resource("plate"), plate)
+    self.assertIs(root.get_resource_by_identifier(plate.identifier), plate)
+    self.assertEqual(changes, [("remove", plate), ("add", plate)])

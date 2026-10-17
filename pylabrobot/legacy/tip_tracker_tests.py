@@ -63,7 +63,7 @@ class TestTipTracker(unittest.TestCase):
     self.assertIsInstance(restored_tip, HamiltonTip)
     self.assertEqual(restored_tip.rotation.serialize(), tip.rotation.serialize())
     self.assertEqual(restored_tip.metadata, tip.metadata)
-    self.assertIsNone(restored_tip.location)
+    self.assertEqual(restored_tip.location, tip.location)
     restored.commit()
     self.assertEqual(restored.get_tip(), restored_tip)
 

@@ -19,7 +19,8 @@ class TestWell(unittest.TestCase):
     self.assertEqual(
       well.serialize(),
       {
-        "name": "well...",
+        "identifier": well.identifier,
+        "metadata": {"name": "well..."},
         "size_x": 1,
         "size_y": 2,
         "size_z": 3,

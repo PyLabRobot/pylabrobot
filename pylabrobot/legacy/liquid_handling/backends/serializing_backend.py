@@ -56,7 +56,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     serialized = [
       {
-        "resource_name": op.resource.name,
+        "resource_identifier": op.resource.identifier,
         "offset": serialize(op.offset),
         "tip": op.tip.serialize(),
       }
@@ -70,7 +70,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     serialized = [
       {
-        "resource_name": op.resource.name,
+        "resource_identifier": op.resource.identifier,
         "offset": serialize(op.offset),
         "tip": op.tip.serialize(),
       }
@@ -84,7 +84,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
     serialized = [
       {
-        "resource_name": op.resource.name,
+        "resource_identifier": op.resource.identifier,
         "offset": serialize(op.offset),
         "tip": serialize(op.tip),
         "volume": op.volume,
@@ -103,7 +103,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     serialized = [
       {
-        "resource_name": op.resource.name,
+        "resource_identifier": op.resource.identifier,
         "offset": serialize(op.offset),
         "tip": serialize(op.tip),
         "volume": op.volume,
@@ -123,7 +123,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.send_command(
       command="pick_up_tips96",
       data={
-        "resource_name": pickup.resource.name,
+        "resource_identifier": pickup.resource.identifier,
         "offset": serialize(pickup.offset),
       },
     )
@@ -132,7 +132,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.send_command(
       command="drop_tips96",
       data={
-        "resource_name": drop.resource.name,
+        "resource_identifier": drop.resource.identifier,
         "offset": serialize(drop.offset),
       },
     )
@@ -151,9 +151,9 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       }
     }
     if isinstance(aspiration, MultiHeadAspirationPlate):
-      data["aspiration"]["well_names"] = [well.name for well in aspiration.wells]
+      data["aspiration"]["well_identifiers"] = [well.identifier for well in aspiration.wells]
     else:
-      data["aspiration"]["trough"] = aspiration.container.name
+      data["aspiration"]["trough"] = aspiration.container.identifier
     await self.send_command(command="aspirate96", data=data)
 
   async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
@@ -168,16 +168,16 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       }
     }
     if isinstance(dispense, MultiHeadDispensePlate):
-      data["dispense"]["well_names"] = [well.name for well in dispense.wells]
+      data["dispense"]["well_identifiers"] = [well.identifier for well in dispense.wells]
     else:
-      data["dispense"]["trough"] = dispense.container.name
+      data["dispense"]["trough"] = dispense.container.identifier
     await self.send_command(command="dispense96", data=data)
 
   async def pick_up_resource(self, pickup: ResourcePickup, **backend_kwargs):
     await self.send_command(
       command="pick_up_resource",
       data={
-        "resource_name": pickup.resource.name,
+        "resource_identifier": pickup.resource.identifier,
         "offset": serialize(pickup.offset),
         "pickup_distance_from_top": pickup.pickup_distance_from_top,
         "direction": serialize(pickup.direction),
@@ -189,7 +189,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.send_command(
       command="move_picked_up_resource",
       data={
-        "resource_name": move.resource.name,
+        "resource_identifier": move.resource.identifier,
         "location": serialize(move.location),
         "gripped_direction": serialize(move.gripped_direction),
       },
@@ -200,7 +200,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.send_command(
       command="drop_resource",
       data={
-        "resource_name": drop.resource.name,
+        "resource_identifier": drop.resource.identifier,
         "destination": serialize(drop.destination),
         "offset": serialize(drop.offset),
         "pickup_distance_from_top": drop.pickup_distance_from_top,

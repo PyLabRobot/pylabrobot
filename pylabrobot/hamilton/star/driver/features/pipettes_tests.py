@@ -2336,7 +2336,7 @@ class TestProbeTipPresenceViaPickup(unittest.IsolatedAsyncioTestCase):
     pipettes, rack, sent = await channels_over_a_rack()
     spots = [rack.get_item(w) for w in ("A1", "B1")]
     found = await pipettes.probe_tip_presence_via_pickup(spots, use_channels=[0, 1])
-    self.assertEqual(found, {spot.name: True for spot in spots})
+    self.assertEqual(found, {spot.identifier: True for spot in spots})
     self.assertEqual([c[:4] for c in sent], ["C0TT", "C0TP", "C0TR"])
     self.assertTrue(all(spot.has_tip() for spot in spots))
     self.assertEqual([pipettes.get_mounted_tip(ch) for ch in (0, 1)], [None, None])
@@ -2346,7 +2346,7 @@ class TestProbeTipPresenceViaPickup(unittest.IsolatedAsyncioTestCase):
     spots = [rack.get_item(w) for w in ("A1", "B1")]
     _answer_pick_ups_as_the_device(pipettes, rack, empty=["rack_tipspot_B1"])
     found = await pipettes.probe_tip_presence_via_pickup(spots, use_channels=[0, 1])
-    self.assertEqual(found, {spots[0].name: True, spots[1].name: False})
+    self.assertEqual(found, {spots[0].identifier: True, spots[1].identifier: False})
     drop = [c for c in sent if c.startswith("C0TR")]
     self.assertEqual(len(drop), 1)
     self.assertEqual(drop[0].split("&tm")[1].split("&")[0].split()[:2], ["1", "0"])
@@ -2380,7 +2380,7 @@ class TestProbeTipPresenceViaPickup(unittest.IsolatedAsyncioTestCase):
     column = [rack.get_item(f"{row}1") for row in "ABCDEFGH"]
     _answer_pick_ups_as_the_device(pipettes, rack, empty=["rack_tipspot_F1"])
     found = await pipettes.probe_tip_inventory(column, use_channels=[0, 1])
-    self.assertEqual(found, {spot.name: spot.name != "rack_tipspot_F1" for spot in column})
+    self.assertEqual(found, {spot.identifier: spot.name != "rack_tipspot_F1" for spot in column})
     # Four pick-ups of two; the third's rear tip alone goes back. A refused command is not logged.
     drops = [c.split("&tm")[1].split("&")[0].split()[:2] for c in sent if c.startswith("C0TR")]
     self.assertEqual(drops, [["1", "1"], ["1", "1"], ["1", "0"], ["1", "1"]])

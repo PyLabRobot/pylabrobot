@@ -32,6 +32,8 @@ def MicroSpin(
   port: int = MicroSpinBackend.DEFAULT_PORT,
   timeout: float = 30.0,
   backend: Optional[MicroSpinBackend] = None,
+  *,
+  identifier: Optional[str] = None,
 ) -> Centrifuge:
   """Construct a HighRes Biosolutions MicroSpin centrifuge.
 
@@ -65,4 +67,5 @@ def MicroSpin(
     size_y=_MICROSPIN_DEPTH_MM,
     size_z=_MICROSPIN_HEIGHT_MM,
     model="HighRes Biosolutions MicroSpin",
+    identifier=identifier,
   )

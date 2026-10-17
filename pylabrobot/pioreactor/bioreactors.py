@@ -32,7 +32,7 @@ class Pioreactor(Resource):
     return vessel
 
 
-def pioreactor_20ml(name: str) -> Pioreactor:
+def pioreactor_20ml(name: str, *, identifier: Optional[str] = None) -> Pioreactor:
   """Pioreactor 20mL Vessel: https://pioreactor.com/products/pioreactor-20ml
 
   Geometry (mm):
@@ -55,6 +55,7 @@ def pioreactor_20ml(name: str) -> Pioreactor:
     size_z=outer_z,
     model=pioreactor_20ml.__name__,
     category="bioreactor",
+    identifier=identifier,
   )
 
   vessel = Container(

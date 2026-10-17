@@ -16,6 +16,7 @@ import { DEG } from "./constants.js";
 
 /**
  * @typedef {object} World
+ * @property {string[]} identifiers      stable identity of every instance
  * @property {string[]} names            every instance, in the order the scene emitted them
  * @property {number[]} modelOf          instance index -> index into `models`
  * @property {number[]} parentOf         instance index -> parent index, or -1 at the root
@@ -23,7 +24,7 @@ import { DEG } from "./constants.js";
  * @property {Float32Array} local        six floats per instance: position, then rotation
  * @property {number[][]} childrenOf     instance index -> its children
  * @property {any[]} models              each distinct shape, sent once
- * @property {Map<string, number>} indexOfName
+ * @property {Map<string, number>} indexOfIdentifier
  */
 
 /** @type {World | null} */
@@ -37,7 +38,7 @@ function decodeTransforms(b64) {
 }
 
 export function buildWorld(data) {
-  const { names, model, parent, transforms } = data.instances;
+  const { names, identifiers, model, parent, transforms } = data.instances;
   const xf = decodeTransforms(transforms);
   const n = names.length;
 
@@ -58,18 +59,19 @@ export function buildWorld(data) {
   const childrenOf = Array.from({ length: n }, () => []);
   for (let i = 0; i < n; i++) if (parent[i] >= 0) childrenOf[parent[i]].push(i);
 
-  const indexOfName = new Map();
-  for (let i = 0; i < n; i++) indexOfName.set(names[i], i);
+  const indexOfIdentifier = new Map();
+  for (let i = 0; i < n; i++) indexOfIdentifier.set(identifiers[i], i);
 
   return {
     names,
+    identifiers,
     modelOf: model,
     parentOf: parent,
     matrices,
     local: xf,
     childrenOf,
     models: data.models,
-    indexOfName,
+    indexOfIdentifier,
   };
 }
 

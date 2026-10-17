@@ -1,4 +1,5 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.carrier import (
   Coordinate,
@@ -9,7 +10,7 @@ from pylabrobot.resources.carrier import (
 from pylabrobot.resources.hamilton.plate_adapters import Hamilton_96_adapter_182531
 
 
-def PLT_CAR_L4_HHS_ALT_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L4_HHS_ALT_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Carrier with 4 Hamilton Heater Shakers 3.0mm with AutoLys adapters"""
   return PlateCarrier(
     name=name,
@@ -29,10 +30,11 @@ def PLT_CAR_L4_HHS_ALT_A00(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L4_HHS-ALT_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5_ALT_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L5_ALT_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Deep well carrier with five AutoLys tube racks"""
   return PlateCarrier(
     name=name,
@@ -53,10 +55,11 @@ def PLT_CAR_L5_ALT_A00(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L5_ALT_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L4HD(name: str) -> PlateCarrier:
+def PLT_CAR_L4HD(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """ """
   return PlateCarrier(
     name=name,
@@ -76,10 +79,11 @@ def PLT_CAR_L4HD(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L4HD",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5AC(name: str) -> PlateCarrier:
+def PLT_CAR_L5AC(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """ """
   return PlateCarrier(
     name=name,
@@ -100,10 +104,11 @@ def PLT_CAR_L5AC(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L5AC",
+    identifier=identifier,
   )
 
 
-def hamilton_plate_carrier_L5_ac(name: str) -> PlateCarrier:
+def hamilton_plate_carrier_L5_ac(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Hamilton cat. no.: 182090
   Hamilton name: 'PLT_CAR_L5AC_A00'.
   Carrier for 5 deep well 96 well PCR plates, landscape.
@@ -129,10 +134,11 @@ def hamilton_plate_carrier_L5_ac(name: str) -> PlateCarrier:
       pedestal_size_z=-4.74,
     ),
     model=hamilton_plate_carrier_L5_ac.__name__,
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5FLEX_AC(name: str) -> PlateCarrier:
+def PLT_CAR_L5FLEX_AC(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Plate carrier with 5 adjustable (height) portrait positions for archive plates"""
   return PlateCarrier(
     name=name,
@@ -153,10 +159,11 @@ def PLT_CAR_L5FLEX_AC(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L5FLEX_AC",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5FLEX_AC_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L5FLEX_AC_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Plate carrier with 5 adjustable (height) portrait positions for archive plates"""
   return PlateCarrier(
     name=name,
@@ -177,10 +184,11 @@ def PLT_CAR_L5FLEX_AC_A00(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L5FLEX_AC_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5FLEX_MD_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L5FLEX_MD_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Plate carrier with 5 adjustable (height) positions for MTP"""
   return PlateCarrier(
     name=name,
@@ -202,10 +210,11 @@ def PLT_CAR_L5FLEX_MD_A00(name: str) -> PlateCarrier:
       pedestal_size_z=-4.8,
     ),
     model="PLT_CAR_L5FLEX_MD_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5MD(name: str) -> PlateCarrier:
+def PLT_CAR_L5MD(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """ """
   return PlateCarrier(
     name=name,
@@ -227,10 +236,11 @@ def PLT_CAR_L5MD(name: str) -> PlateCarrier:
       pedestal_size_z=6.55,
     ),
     model="PLT_CAR_L5MD",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5MD_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L5MD_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Carrier for 5 96/384-Well Plates. pn: 182365/02"""
   return PlateCarrier(
     name=name,
@@ -252,10 +262,16 @@ def PLT_CAR_L5MD_A00(name: str) -> PlateCarrier:
       pedestal_size_z=6.55,
     ),
     model="PLT_CAR_L5MD_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5PCR(name: str, *, with_adapters: bool = False) -> PlateCarrier:
+def PLT_CAR_L5PCR(
+  name: str,
+  *,
+  with_adapters: bool = False,
+  identifier: Optional[str] = None,
+) -> PlateCarrier:
   """Hamilton 182070 carrier for five 96-well PCR plates in landscape orientation (6 tracks).
 
   https://www.hamiltoncompany.com/other-robotics/182070
@@ -323,6 +339,7 @@ def PLT_CAR_L5PCR(name: str, *, with_adapters: bool = False) -> PlateCarrier:
       pedestal_size_z=0.0,  # adapters rest on the support plane without sinking
     ),
     model="PLT_CAR_L5PCR",
+    identifier=identifier,
   )
   if with_adapters:
     for i in carrier.sites:
@@ -330,7 +347,7 @@ def PLT_CAR_L5PCR(name: str, *, with_adapters: bool = False) -> PlateCarrier:
   return carrier
 
 
-def PLT_CAR_L5PCR_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L5PCR_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Plate carrier for 5 PCR landscape plates [revision 00]"""
   return PlateCarrier(
     name=name,
@@ -351,10 +368,11 @@ def PLT_CAR_L5PCR_A00(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L5PCR_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5PCR_A01(name: str) -> PlateCarrier:
+def PLT_CAR_L5PCR_A01(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Plate carrier for 5 PCR landscape plates [revision 01]"""
   return PlateCarrier(
     name=name,
@@ -375,10 +393,11 @@ def PLT_CAR_L5PCR_A01(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L5PCR_A01",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_P3AC_A00(name: str) -> PlateCarrier:
+def PLT_CAR_P3AC_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Carrier for 3 96 Deep Well Plates (portrait). PN: 182065"""
   return PlateCarrier(
     name=name,
@@ -398,10 +417,11 @@ def PLT_CAR_P3AC_A00(name: str) -> PlateCarrier:
       pedestal_size_z=6.55,  # same as PLT_CAR_L5MD_A00
     ),
     model="PLT_CAR_P3AC_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_P3AC_A01(name: str) -> PlateCarrier:
+def PLT_CAR_P3AC_A01(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Carrier for 3 96 Deep Well Plates (portrait)"""
   return PlateCarrier(
     name=name,
@@ -421,10 +441,11 @@ def PLT_CAR_P3AC_A01(name: str) -> PlateCarrier:
       pedestal_size_z=6.55,  # same as PLT_CAR_L5MD_A00
     ),
     model="PLT_CAR_P3AC_A01",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_P3HD(name: str) -> PlateCarrier:
+def PLT_CAR_P3HD(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """ """
   return PlateCarrier(
     name=name,
@@ -443,10 +464,11 @@ def PLT_CAR_P3HD(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_P3HD",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_P3MD(name: str) -> PlateCarrier:
+def PLT_CAR_P3MD(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """ """
   return PlateCarrier(
     name=name,
@@ -465,10 +487,11 @@ def PLT_CAR_P3MD(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_P3MD",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_P3MD_A00(name: str) -> PlateCarrier:
+def PLT_CAR_P3MD_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Carrier for 3 96/384-Well Plates (Portrait)"""
   return PlateCarrier(
     name=name,
@@ -487,10 +510,11 @@ def PLT_CAR_P3MD_A00(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_P3MD_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_P3MD_A01(name: str) -> PlateCarrier:
+def PLT_CAR_P3MD_A01(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Carrier for 3 96/384-Well Plates (Portrait)"""
   return PlateCarrier(
     name=name,
@@ -509,10 +533,11 @@ def PLT_CAR_P3MD_A01(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_P3MD_A01",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5AC_P_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L5AC_P_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Carrier with pin for 5 Hamilton 96 Deep Well Plates"""
   return PlateCarrier(
     name=name,
@@ -534,10 +559,11 @@ def PLT_CAR_L5AC_P_A00(name: str) -> PlateCarrier:
       pedestal_size_z=-4.74,
     ),
     model="PLT_CAR_L5AC_P_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_P3LI_A00(name: str) -> PlateCarrier:
+def PLT_CAR_P3LI_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Carrier for 3 Limbro Plates portrait"""
   return PlateCarrier(
     name=name,
@@ -557,10 +583,11 @@ def PLT_CAR_P3LI_A00(name: str) -> PlateCarrier:
       pedestal_size_z=0,
     ),
     model="PLT_CAR_P3LI_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L4ST_B00(name: str) -> PlateCarrier:
+def PLT_CAR_L4ST_B00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Stack carrier with 4 empty plate stacks for 5 plates"""
   return PlateCarrier(
     name=name,
@@ -580,10 +607,11 @@ def PLT_CAR_L4ST_B00(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L4ST_B00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L4ST_B00_4x5_Nunc96(name: str) -> PlateCarrier:
+def PLT_CAR_L4ST_B00_4x5_Nunc96(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Stack carrier with 4 stacks, preloaded with 5 Nunc 96 plates per stack"""
   return PlateCarrier(
     name=name,
@@ -603,10 +631,11 @@ def PLT_CAR_L4ST_B00_4x5_Nunc96(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L4ST_B00_4x5_Nunc96",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L4ST_C00(name: str) -> PlateCarrier:
+def PLT_CAR_L4ST_C00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Stack carrier with 4 empty plate stacks for 4 plates on a platform"""
   return PlateCarrier(
     name=name,
@@ -626,10 +655,11 @@ def PLT_CAR_L4ST_C00(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L4ST_C00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L4ST_HIGH_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L4ST_HIGH_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Stack carrier with 4 stacks for 5 plates on a platform"""
   return PlateCarrier(
     name=name,
@@ -649,10 +679,13 @@ def PLT_CAR_L4ST_HIGH_A00(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L4ST_HIGH_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L4ST_HIGH_A00_4x5_Nunc96(name: str) -> PlateCarrier:
+def PLT_CAR_L4ST_HIGH_A00_4x5_Nunc96(
+  name: str, *, identifier: Optional[str] = None
+) -> PlateCarrier:
   """Stack carrier with 4 stacks, preloaded with 5 Nunc 96 plates per stack (on a platform)"""
   return PlateCarrier(
     name=name,
@@ -672,10 +705,11 @@ def PLT_CAR_L4ST_HIGH_A00_4x5_Nunc96(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L4ST_HIGH_A00_4x5_Nunc96",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L4ST_LOW_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L4ST_LOW_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Stack carrier with 4 stacks for 9 plates (platform removed)"""
   return PlateCarrier(
     name=name,
@@ -695,10 +729,11 @@ def PLT_CAR_L4ST_LOW_A00(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L4ST_LOW_A00",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L4ST_LOW_A00_4x9_Nunc96(name: str) -> PlateCarrier:
+def PLT_CAR_L4ST_LOW_A00_4x9_Nunc96(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Stack carrier with 4 stacks, preloaded with 9 Nunc 96 plates per stack"""
   return PlateCarrier(
     name=name,
@@ -718,10 +753,11 @@ def PLT_CAR_L4ST_LOW_A00_4x9_Nunc96(name: str) -> PlateCarrier:
       name_prefix=name,
     ),
     model="PLT_CAR_L4ST_LOW_A00_4x9_Nunc96",
+    identifier=identifier,
   )
 
 
-def PLT_CAR_L5_DWP(name: str) -> PlateCarrier:
+def PLT_CAR_L5_DWP(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Carrier with Molded Corner Locators for 5 Deep Well Plates (93522-01)"""
   return PlateCarrier(
     name=name,
@@ -743,17 +779,18 @@ def PLT_CAR_L5_DWP(name: str) -> PlateCarrier:
       pedestal_size_z=0,
     ),
     model="PLT_CAR_L5_DWP",
+    identifier=identifier,
   )
 
 
 # Deprecated names for backwards compatibility
 
 
-def PLT_CAR_L5AC_A00(name: str) -> PlateCarrier:
+def PLT_CAR_L5AC_A00(name: str, *, identifier: Optional[str] = None) -> PlateCarrier:
   """Deprecated alias for `hamilton_plate_carrier_L5_ac`."""
   warnings.warn(
     "PLT_CAR_L5AC_A00 is deprecated. Use 'hamilton_plate_carrier_L5_ac' instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_plate_carrier_L5_ac(name)
+  return hamilton_plate_carrier_L5_ac(name, identifier=identifier)

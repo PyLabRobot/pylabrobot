@@ -27,6 +27,9 @@ class HamiltonCoreGripperTool(HamiltonTool):
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
     is_conductive: Optional[bool] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """Initialize a CO-RE gripper tool.
 
@@ -44,20 +47,13 @@ class HamiltonCoreGripperTool(HamiltonTool):
       model=model,
       pick_up_location=pick_up_location,
       is_conductive=is_conductive,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.grip_line_height = grip_line_height
     self.collar_height = collar_height
     self.tip_size = TipSize.UNDEFINED
     self.pickup_method = TipPickupMethod.OUT_OF_RACK
-
-  def __eq__(self, other: object) -> bool:
-    """Compare resource geometry, grip line height, and collar height."""
-    return (
-      isinstance(other, HamiltonCoreGripperTool)
-      and super().__eq__(other)
-      and self.grip_line_height == other.grip_line_height
-      and self.collar_height == other.collar_height
-    )
 
   def serialize(self) -> dict:
     return {
@@ -67,7 +63,9 @@ class HamiltonCoreGripperTool(HamiltonTool):
     }
 
 
-def hamilton_core_gripper_tool(name: str) -> HamiltonCoreGripperTool:
+def hamilton_core_gripper_tool(
+  name: str, *, identifier: Optional[str] = None
+) -> HamiltonCoreGripperTool:
   """Hamilton CO-RE grip tool, for 1000 uL channels.
 
   Hamilton cat. no.: 186100 (firmware tip type 14)
@@ -86,4 +84,5 @@ def hamilton_core_gripper_tool(name: str) -> HamiltonCoreGripperTool:
     model=hamilton_core_gripper_tool.__name__,
     pick_up_location=Coordinate(x=18.0, y=4.25, z=32.0),
     is_conductive=True,
+    identifier=identifier,
   )

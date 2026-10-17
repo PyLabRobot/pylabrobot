@@ -43,6 +43,8 @@ class Plate(Liddable, ItemizedResource["Well"]):
     plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
     stacking_z_height: Optional[float] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     """Initialize a Plate resource.
 
@@ -68,6 +70,7 @@ class Plate(Liddable, ItemizedResource["Well"]):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
     self.plate_type = plate_type
     self.stacking_z_height = stacking_z_height
@@ -92,19 +95,6 @@ class Plate(Liddable, ItemizedResource["Well"]):
     if self.stacking_z_height is not None:
       data["stacking_z_height"] = self.stacking_z_height
     return data
-
-  def __eq__(self, other) -> bool:
-    # `stacking_z_height` is a physical dimension (the pitch a plate adds to a stack), so plates
-    # that differ in it are different labware and must not compare equal.
-    return (
-      super().__eq__(other)
-      and isinstance(other, Plate)
-      and self.stacking_z_height == other.stacking_z_height
-    )
-
-  # Defining `__eq__` sets `__hash__` to None; restore the `Resource` (repr-based) hash. Equal
-  # plates share the same repr, so the hash/eq invariant holds.
-  __hash__ = Resource.__hash__
 
   def __repr__(self) -> str:
     return (

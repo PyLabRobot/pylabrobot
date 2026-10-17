@@ -163,7 +163,7 @@ def test_every_spot_full_picks_up_and_drops_back_each_column_once():
   spots = _spots(_rack(), "A1 B1 A2 B2")
   device = _Device()
   found = _probe(device, spots, [0, 1, 2, 3])
-  assert all(found.values()) and list(found) == _names(spots)
+  assert all(found.values()) and list(found) == [spot.identifier for spot in spots]
   assert [kind for kind, _, _ in device.calls] == ["pick up", "drop", "pick up", "drop"]
   assert device.returned == {name: 1 for name in _names(spots)}
   assert device.held == [None] * 8
@@ -173,7 +173,7 @@ def test_an_empty_spot_is_found_by_the_sensors_and_the_other_tips_go_back_to_the
   spots = _spots(_rack(), "A1 B1 C1")
   device = _Device(empty={spots[1].name})
   found = _probe(device, spots, [0, 1, 2])
-  assert found == {spots[0].name: True, spots[1].name: False, spots[2].name: True}
+  assert found == {spots[0].identifier: True, spots[1].identifier: False, spots[2].identifier: True}
   assert device.calls[-1] == ("drop", [spots[0].name, spots[2].name], [0, 2])
   assert device.held == [None] * 8
 
@@ -181,7 +181,7 @@ def test_an_empty_spot_is_found_by_the_sensors_and_the_other_tips_go_back_to_the
 def test_every_spot_empty_drops_nothing():
   spots = _spots(_rack(), "A1 B1")
   device = _Device(empty=set(_names(spots)))
-  assert _probe(device, spots, [0, 1]) == {name: False for name in _names(spots)}
+  assert _probe(device, spots, [0, 1]) == {spot.identifier: False for spot in spots}
   assert [kind for kind, _, _ in device.calls] == ["pick up"]
 
 
@@ -189,7 +189,7 @@ def test_an_empty_spot_in_one_column_leaves_the_other_columns_probed():
   spots = _spots(_rack(), "A1 B1 A2 B2 A3")
   device = _Device(empty={spots[3].name})
   found = _probe(device, spots, [0, 1, 2, 3, 4])
-  assert [found[s.name] for s in spots] == [True, True, True, False, True]
+  assert [found[s.identifier] for s in spots] == [True, True, True, False, True]
   assert [kind for kind, _, _ in device.calls] == ["pick up", "drop"] * 3
 
 
@@ -220,7 +220,7 @@ def test_integer_sensor_readings_count_as_flags():
       sense_tip_presence=sensed,
     )
   )
-  assert found == {spots[0].name: True, spots[1].name: False}
+  assert found == {spots[0].identifier: True, spots[1].identifier: False}
 
 
 def test_probing_nothing_sends_nothing():
@@ -369,7 +369,7 @@ def test_the_channels_the_error_names_are_the_ones_missed_without_any_sensor():
       raise _NamedError([1])
 
   found = _probe_named(device, spots, [0, 1, 2], named)
-  assert found == {spots[0].name: True, spots[1].name: False, spots[2].name: True}
+  assert found == {spots[0].identifier: True, spots[1].identifier: False, spots[2].identifier: True}
   assert device.calls[-1] == ("drop", [spots[0].name, spots[2].name], [0, 2])
 
 
@@ -387,7 +387,7 @@ def test_the_error_is_read_before_the_sensors():
     raise AssertionError("the sensors were read though the error named the channels")
 
   found = _probe_named(device, spots, [0, 1], named, sensors=sensors_that_must_not_be_read)
-  assert found == {spots[0].name: False, spots[1].name: True}
+  assert found == {spots[0].identifier: False, spots[1].identifier: True}
 
 
 def test_an_error_that_names_no_channel_falls_back_to_the_sensors():
@@ -396,7 +396,7 @@ def test_an_error_that_names_no_channel_falls_back_to_the_sensors():
   found = _probe_named(
     device, spots, [0, 1], device.pick_up_tips, sensors=device.sense_tip_presence
   )
-  assert found == {spots[0].name: True, spots[1].name: False}
+  assert found == {spots[0].identifier: True, spots[1].identifier: False}
 
 
 def test_an_error_that_names_no_channel_and_no_sensors_is_raised():
@@ -433,7 +433,7 @@ def test_only_the_pickups_own_channels_are_read_on_the_sensors():
   spots = _spots(_rack(), "A1 B1")
   device = _Device(empty={spots[1].name})
   found = _probe(device, spots, [2, 5])
-  assert found == {spots[0].name: True, spots[1].name: False}
+  assert found == {spots[0].identifier: True, spots[1].identifier: False}
 
 
 # -- the inventory ----------------------------------------------------------------------------
@@ -443,7 +443,7 @@ def test_the_inventory_deals_the_spots_to_the_channels_given_in_turn():
   spots = _spots(_rack(), "A1 B1 C1 D1 E1")
   device = _Device(empty={spots[3].name})
   found = _inventory(device, spots, [0, 1])
-  assert [found[s.name] for s in spots] == [True, True, True, False, True]
+  assert [found[s.identifier] for s in spots] == [True, True, True, False, True]
   picks = [channels for kind, _, channels in device.calls if kind == "pick up"]
   assert picks == [[0, 1], [0, 1], [0]]
 
@@ -460,7 +460,7 @@ def test_the_inventory_of_a_whole_rack_finds_every_empty_spot():
   empty = {spot.name for i, spot in enumerate(rack.get_all_items()) if i % 7 == 3}
   device = _Device(empty=empty)
   found = _inventory(device, rack.get_all_items(), list(range(8)))
-  assert {name for name, present in found.items() if not present} == empty
+  assert {spot.name for spot in rack.get_all_items() if not found[spot.identifier]} == empty
   assert len(found) == 96
   assert device.held == [None] * 8
   assert sum(device.returned.values()) == 96 - len(empty)
@@ -528,8 +528,8 @@ def test_scattered_spots_are_probed_in_column_pairs_and_answered_in_the_order_gi
   spots = _spots(rack, "H2 A1 C2 B1 E7")
   device = _Device(empty={rack.get_item("C2").name})
   found = _inventory(device, spots, [0, 1])
-  assert list(found) == _names(spots)
-  assert [found[s.name] for s in spots] == [True, True, False, True, True]
+  assert list(found) == [spot.identifier for spot in spots]
+  assert [found[s.identifier] for s in spots] == [True, True, False, True, True]
   picks = [names for kind, names, _ in device.calls if kind == "pick up"]
   assert picks == [
     ["rack_tipspot_A1", "rack_tipspot_B1"],

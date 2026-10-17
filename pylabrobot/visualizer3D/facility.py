@@ -4,6 +4,8 @@ Its frame is what everything in it resolves against; the tree is the only struct
 device.
 """
 
+from typing import Optional
+
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -21,6 +23,9 @@ class Facility(Resource):
     size_x: float = 10_000.0,
     size_y: float = 10_000.0,
     size_z: float = 3_000.0,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """
     Args:
@@ -29,7 +34,15 @@ class Facility(Resource):
       size_y: how deep it is, in mm.
       size_z: how tall it is, in mm.
     """
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category="facility")
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category="facility",
+      identifier=identifier,
+      metadata=metadata,
+    )
     # A facility is the frame everything else resolves against, so it sits at its own origin.
     # Without this every absolute lookup below it raises, since the root has nothing to resolve to.
     self.location = Coordinate.zero()

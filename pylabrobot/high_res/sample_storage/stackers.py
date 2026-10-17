@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources import Coordinate, PlateCarrier, PlateHolder
 
 _STACKER_SIZE_X = 112.3
@@ -12,6 +14,7 @@ def high_res_stacker(
   zero_offset: float,
   slot_height: float,
   slot_count: int,
+  identifier: Optional[str] = None,
 ) -> PlateCarrier:
   """Create a HighRes sample-store stacker from its configured dimensions.
 
@@ -62,4 +65,5 @@ def high_res_stacker(
       "slot_height": slot_height,
       "slot_count": slot_count,
     },
+    identifier=identifier,
   )

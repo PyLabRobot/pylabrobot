@@ -46,6 +46,9 @@ class MechanicalGripper(LinkBody):
     jaw_width: Optional[float] = None,
     category: str = "mechanical_gripper",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """
     Args:
@@ -75,6 +78,8 @@ class MechanicalGripper(LinkBody):
       distal_joint=None,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     if len(fingers) != 2:
       raise ValueError(f"a gripper has two fingers, not {len(fingers)}")
@@ -149,9 +154,9 @@ class MechanicalGripper(LinkBody):
       "tool_center_point": self.tool_center_point.serialize(),
       # Which children are its own parts. Anything else hung on the gripper or on a finger is not,
       # and neither the order of `children` nor what a finger carries can tell the two apart.
-      "body": self.body.name,
-      "fingers": [finger.name for finger in self.fingers],
-      "pads": [pad.name for pad in self.pads],
+      "body": self.body.identifier,
+      "fingers": [finger.identifier for finger in self.fingers],
+      "pads": [pad.identifier for pad in self.pads],
     }
 
   @classmethod
@@ -159,18 +164,20 @@ class MechanicalGripper(LinkBody):
     """Rebuild a gripper, taking its own parts back out of its children.
 
     Its body, fingers and pads are constructor arguments rather than children assigned after the
-    fact, so they are found by the names `serialize` recorded for them. Anything else goes back
+    fact, so they are found by the identifiers `serialize` recorded for them. Anything else goes back
     where it was: on a finger, or on the gripper, which is what it was holding.
 
     Raises:
       ValueError: If a part it names is not among its children, or a finger does not carry
         exactly one of the pads.
     """
-    children = {child["name"]: child for child in data["children"]}
+    children = {child.get("identifier", child.get("name")): child for child in data["children"]}
     parts = [data["body"], *data["fingers"]]
     missing = [name for name in parts if name not in children]
     if missing:
-      raise ValueError(f"gripper '{data['name']}' names parts it has no child for: {missing}")
+      raise ValueError(
+        f"gripper '{data.get('metadata', {}).get('name', data.get('name', ''))}' names parts it has no child for: {missing}"
+      )
 
     def where(child: dict) -> Coordinate:
       return cast(Coordinate, deserialize(child["location"], allow_marshal=allow_marshal))
@@ -186,15 +193,21 @@ class MechanicalGripper(LinkBody):
     for name in data["fingers"]:
       finger = Resource.deserialize({**children[name], "children": []}, allow_marshal=allow_marshal)
       on_it = children[name]["children"]
-      faces = [child for child in on_it if child["name"] in pad_names]
+      faces = [child for child in on_it if child.get("identifier", child.get("name")) in pad_names]
       if pad_names and len(faces) != 1:
         raise ValueError(f"finger '{name}' carries {len(faces)} of the gripper's pads, not 1")
       fingers.append(finger)
       pads.extend(faces)
-      carried.extend((finger, child) for child in on_it if child["name"] not in pad_names)
+      carried.extend(
+        (finger, child)
+        for child in on_it
+        if child.get("identifier", child.get("name")) not in pad_names
+      )
 
     gripper = cls(
-      name=data["name"],
+      name=data.get("metadata", {}).get("name", data.get("name", "")),
+      identifier=data.get("identifier"),
+      metadata=data.get("metadata"),
       proximal_joint=cast(
         Coordinate, deserialize(data["proximal_joint"], allow_marshal=allow_marshal)
       ),
@@ -225,7 +238,10 @@ class MechanicalGripper(LinkBody):
       gripper.preferred_pickup_location = cast(
         Coordinate, deserialize(data["preferred_pickup_location"])
       )
-    gripper.metadata = dict(data.get("metadata") or {})
+    if "metadata" in data and "name" not in data:
+      gripper.metadata = dict(data["metadata"])
+    if data.get("location") is not None:
+      gripper.location = where(data)
     for finger, child in carried:
       finger.assign_child_resource(
         Resource.deserialize(child, allow_marshal=allow_marshal), location=where(child)

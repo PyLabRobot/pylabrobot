@@ -20,11 +20,24 @@ from .grids import describe_bands, describe_grid
 
 # Fields of a serialized resource that describe this one resource rather than its kind. Everything
 # else is shared by every resource that serializes the same way, and so belongs to the model.
-INSTANCE_FIELDS = frozenset({"name", "location", "rotation", "parent_name", "children"})
+INSTANCE_FIELDS = frozenset(
+  {
+    "name",
+    "identifier",
+    "location",
+    "rotation",
+    "parent_name",
+    "parent_identifier",
+    "origin_identifier",
+    "children",
+  }
+)
 
 # Keys that name one particular thing at any depth: a tip spot carries its prototype tip's name,
 # a plate the names of its wells. Links, not kind.
-NAME_KEYS = frozenset({"name", "parent_name"})
+NAME_KEYS = frozenset(
+  {"name", "identifier", "parent_name", "parent_identifier", "origin_identifier"}
+)
 
 # Fields a resource may declare about itself that `serialize()` does not carry, read straight off
 # the resource.
@@ -104,15 +117,16 @@ def _rotation_of(data: Dict[str, Any]) -> Tuple[float, float, float]:
 class Scene:
   """A flattened resource tree: models, instances, and the measurements of the split."""
 
-  def __init__(self, names: Optional[FrozenSet[str]] = None) -> None:
-    self.names_in_tree = names or frozenset()
-    # Every model derived this pass, by resource name, so the next pass can skip the work.
+  def __init__(self, identifiers: Optional[FrozenSet[str]] = None) -> None:
+    self.identifiers_in_tree = identifiers or frozenset()
+    # Every model derived this pass, by resource identifier, so the next pass can skip the work.
     self.derived: Dict[str, Dict[str, Any]] = {}
     self.models: List[Dict[str, Any]] = []
     # Candidate model indices per serialized type: interning compares dicts directly, and a tree
     # has only a handful of distinct models per type, so the scan is short.
     self._candidates: Dict[str, List[int]] = {}
     self.names: List[str] = []
+    self.identifiers: List[str] = []
     self.model_of_instance: List[int] = []
     self.parent_of_instance: List[int] = []
     self.transforms: List[float] = []  # 6 floats per instance: x, y, z, rx, ry, rz
@@ -135,9 +149,10 @@ class Scene:
     """
     index = len(self.names)
     self.names.append(resource.name)
+    self.identifiers.append(resource.identifier)
     model_index = self._intern(model)
     self.model_of_instance.append(model_index)
-    self.derived[resource.name] = self.models[model_index]
+    self.derived[resource.identifier] = self.models[model_index]
     self.parent_of_instance.append(parent)
     location = resource.location or Coordinate.zero()
     rotation = resource.rotation
@@ -156,9 +171,11 @@ class Scene:
   ) -> int:
     """Add one serialized resource, returning its instance index."""
     index = len(self.names)
-    resource_name = data["name"]
+    resource_name = data.get("metadata", {}).get("name", data.get("name", ""))
+    identifier = data["identifier"]
+    self.identifiers.append(identifier)
     self.names.append(resource_name)
-    model = _model_of(data, self.names_in_tree)
+    model = _model_of(data, self.identifiers_in_tree)
     if cls is not None:
       model["methods"] = list(_public_methods(cls))
     if grid is not None:
@@ -170,7 +187,7 @@ class Scene:
     # The interned dict, so every instance of one model shares one object.
     model_index = self._intern(model)
     self.model_of_instance.append(model_index)
-    self.derived[resource_name] = self.models[model_index]
+    self.derived[identifier] = self.models[model_index]
     self.parent_of_instance.append(parent)
     self.transforms.extend(_location_of(data))
     self.transforms.extend(_rotation_of(data))
@@ -187,6 +204,7 @@ class Scene:
       "models": self.models,
       "instances": {
         "names": self.names,
+        "identifiers": self.identifiers,
         "model": self.model_of_instance,
         "parent": self.parent_of_instance,
         "transforms": base64.b64encode(packed).decode("ascii"),
@@ -204,24 +222,24 @@ class Scene:
     }
 
 
-def all_names(resource: Resource) -> List[str]:
-  """Every resource name in the tree, so a link to one can be recognised as a link."""
-  found = [resource.name]
+def all_identifiers(resource: Resource) -> List[str]:
+  """Every resource identifier in the tree, so a link to one can be recognised as a link."""
+  found = [resource.identifier]
   for child in resource.children:
-    found.extend(all_names(child))
+    found.extend(all_identifiers(child))
   return found
 
 
 def _serialized_children(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-  """A serialized resource's children by name. A parent may leave one out: a tip spot its tip."""
-  return {child["name"]: child for child in data.get("children", ())}
+  """A serialized resource's children by identifier. A parent may leave one out: a tip spot its tip."""
+  return {child["identifier"]: child for child in data.get("children", ())}
 
 
 def _legacy_shape(resource: Resource, data: Dict[str, Any]) -> Dict[str, Any]:
   """One JSON node per resource, listing every child, including those `serialize()` leaves out."""
   serialized = _serialized_children(data)
   data["children"] = [
-    _legacy_shape(child, serialized.get(child.name) or child.serialize())
+    _legacy_shape(child, serialized.get(child.identifier) or child.serialize())
     for child in resource.children
   ]
   return data
@@ -249,7 +267,7 @@ def build_scene(
   root: Resource,
   measure_legacy: bool = False,
   known: Optional[Dict[str, Dict[str, Any]]] = None,
-  known_names: Optional[FrozenSet[str]] = None,
+  known_identifiers: Optional[FrozenSet[str]] = None,
 ) -> Scene:
   """Flatten `root` and every descendant into models and instances.
 
@@ -259,19 +277,19 @@ def build_scene(
   Args:
     root: the resource to flatten.
     measure_legacy: also measure the per-resource tree, for `Scene.legacy_bytes`.
-    known: models derived by an earlier pass, by resource name, reused unless stale.
-    known_names: the names that pass saw; a model that links to, or names, a resource that has
+    known: models derived by an earlier pass, by resource identifier, reused unless stale.
+    known_identifiers: the names that pass saw; a model that links to, or names, a resource that has
       since appeared or gone is derived again.
   """
-  names = frozenset(all_names(root))
-  scene = Scene(names=names)
-  changed = names ^ (known_names or frozenset())
+  names = frozenset(all_identifiers(root))
+  scene = Scene(identifiers=names)
+  changed = names ^ (known_identifiers or frozenset())
   models = {id(model): model for model in (known or {}).values()}
   stale = {i for i, model in models.items() if changed and _links_to(model, changed)}
   reuse = {name: model for name, model in (known or {}).items() if id(model) not in stale}
 
   def walk(resource: Resource, parent: int, data: Optional[Dict[str, Any]] = None) -> None:
-    model = reuse.get(resource.name)
+    model = reuse.get(resource.identifier)
     if model is not None:
       index = scene.add_known(resource, parent, model)
       for child in resource.children:
@@ -293,7 +311,7 @@ def build_scene(
     )
     serialized = _serialized_children(data)
     for child in resource.children:
-      walk(child, index, serialized.get(child.name))
+      walk(child, index, serialized.get(child.identifier))
 
   walk(root, -1)
   if measure_legacy:
@@ -307,7 +325,9 @@ IDENTITY_ROTATION = {"type": "Rotation", "x": 0, "y": 0, "z": 0}
 
 # Fields that say which resource a state came from, not what it is: the key already says. A tip
 # names the spot it stands in, so without `parent_name` here every full spot's state was distinct.
-STATE_IDENTITY_KEYS = frozenset({"name", "thing", "parent_name"})
+STATE_IDENTITY_KEYS = frozenset(
+  {"name", "identifier", "thing", "parent_name", "parent_identifier", "origin_identifier"}
+)
 
 
 def _without_identity(value: Any) -> Any:
@@ -381,7 +401,7 @@ def pack_state(states: Dict[str, Tuple[Dict[str, Any], str]], epoch: int = 0) ->
 
 
 def collect_state(root: Resource) -> Dict[str, Tuple[Dict[str, Any], str]]:
-  """The cleaned state and key of every resource that publishes any, keyed by name.
+  """The cleaned state and key of every resource that publishes any, keyed by identifier.
 
   A resource whose state cleans down to nothing is left out; a rotation that is not the identity
   counts.
@@ -391,7 +411,7 @@ def collect_state(root: Resource) -> Dict[str, Tuple[Dict[str, Any], str]]:
   def walk(resource: Resource) -> None:
     cleaned, key = state_signature(resource.serialize_state())
     if cleaned:
-      state[resource.name] = (cleaned, key)
+      state[resource.identifier] = (cleaned, key)
     for child in resource.children:
       walk(child)
 

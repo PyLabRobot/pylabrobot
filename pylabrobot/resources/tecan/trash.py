@@ -15,6 +15,9 @@ class TecanTrash(Trash, TecanResource):
     size_z: float,
     category: str = "tecan_trash",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -23,10 +26,12 @@ class TecanTrash(Trash, TecanResource):
       size_z=size_z,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
 
-def Trash_Container(name: str) -> TecanTrash:
+def Trash_Container(name: str, *, identifier: Optional[str] = None) -> TecanTrash:
   """Tecan trash container."""
   return TecanTrash(
     name=name,
@@ -34,10 +39,11 @@ def Trash_Container(name: str) -> TecanTrash:
     size_y=390.0,
     size_z=140.0,
     model="Trash_Container",
+    identifier=identifier,
   )
 
 
-def Trash_Waste(name: str) -> TecanTrash:
+def Trash_Waste(name: str, *, identifier: Optional[str] = None) -> TecanTrash:
   """Tecan waste container."""
   return TecanTrash(
     name=name,
@@ -45,4 +51,5 @@ def Trash_Waste(name: str) -> TecanTrash:
     size_y=100.0,
     size_z=140.0,
     model="Trash_Waste",
+    identifier=identifier,
   )

@@ -17,7 +17,8 @@ class TestPetriDish(unittest.TestCase):
     self.assertEqual(
       serialized,
       {
-        "name": "petri_dish",
+        "identifier": petri_dish.identifier,
+        "metadata": {"name": "petri_dish"},
         "type": "PetriDish",
         "category": "petri_dish",
         "max_volume": 121500.0,
@@ -37,7 +38,8 @@ class TestPetriDish(unittest.TestCase):
     self.assertEqual(
       serialized,
       {
-        "name": "petri_dish_holder",
+        "identifier": petri_dish_holder.identifier,
+        "metadata": {"name": "petri_dish_holder"},
         "type": "PetriDishHolder",
         "size_x": 127.76,
         "size_y": 85.48,

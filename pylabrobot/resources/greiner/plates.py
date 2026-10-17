@@ -1,5 +1,7 @@
 """Greiner plates"""
 
+from typing import Optional
+
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
@@ -33,12 +35,17 @@ def _compute_height_from_volume_Greiner_384_wellplate_28ul_Fb(volume_ul: float) 
   )
 
 
-def Greiner_384_wellplate_28ul_Fb_Lid(name: str) -> Lid:
+def Greiner_384_wellplate_28ul_Fb_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
 
 
 #: Greiner_384_wellplate_28ul_Fb
-def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
+def Greiner_384_wellplate_28ul_Fb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Greiner cat. no.: 784075.
   - Colour: white
   - alternative cat. no.: 784075-25: white; 784076, 784076-25: black; 784101: clear.
@@ -57,6 +64,7 @@ def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
   """
   return Plate(
     name=name,
+    identifier=identifier,
     size_x=127.76,
     size_y=85.48,
     size_z=14.4,
@@ -86,7 +94,12 @@ def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
   # # # # # # # # # # Greiner_96_half_skirt_wellplate_200uL_vb # # # # # # # # # #
 
 
-def greiner_96_wellplate_200uL_Vb(name: str, with_lid: bool = False) -> Plate:
+def greiner_96_wellplate_200uL_Vb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Greiner cat. no.: 652260.
   SAPPHIRE MICROPLATE, 96 WELL, PP, FOR PCR, NATURAL, HALF SKIRT
   Spec: https://shop.gbo.com/en/usa/files/30114476/652260.pdf
@@ -119,4 +132,5 @@ def greiner_96_wellplate_200uL_Vb(name: str, with_lid: bool = False) -> Plate:
       max_volume=200,  # from spec (0.2 mL)
       name_prefix=name,
     ),
+    identifier=identifier,
   )

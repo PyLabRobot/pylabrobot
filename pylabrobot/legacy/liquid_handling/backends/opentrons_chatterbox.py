@@ -163,7 +163,7 @@ class OpentronsOT2ChatterboxBackend(OpentronsOT2Backend):
     self.right_pipette: Optional[Dict[str, str]] = None
     self.traversal_height = 120
     self._tip_racks: Dict[str, int] = {}
-    self._plr_name_to_load_name: Dict[str, str] = {}
+    self._plr_identifier_to_load_name: Dict[str, str] = {}
 
   @property
   def commands(self) -> List[Tuple[str, tuple, dict]]:

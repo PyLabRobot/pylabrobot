@@ -1,9 +1,13 @@
 """Thermo Fisher plate adapters"""
 
+from typing import Optional
+
 from pylabrobot.resources.plate_adapter import PlateAdapter
 
 
-def thermo_AB_96_plateadapter_MicroAmp(name: str) -> PlateAdapter:
+def thermo_AB_96_plateadapter_MicroAmp(
+  name: str, *, identifier: Optional[str] = None
+) -> PlateAdapter:
   """Thermo Fisher Scientific/Fisher Scientific cat. no.: 4312063
   Applied Biosystems™ MicroAmp™ Splash-Free 96-Well Base
   Item: https://www.thermofisher.com/order/catalog/product/4312063
@@ -22,4 +26,5 @@ def thermo_AB_96_plateadapter_MicroAmp(name: str) -> PlateAdapter:
     adapter_hole_size_y=8.0,  # from spec
     adapter_hole_size_z=22.86,  # from spec, just an open hole to the deck
     model="AppliedBiosystems_96_Well_Base",
+    identifier=identifier,
   )

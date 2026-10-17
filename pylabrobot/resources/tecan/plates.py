@@ -29,6 +29,9 @@ class TecanPlate(Plate, TecanResource):
     category: str = "tecan_plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name,
@@ -39,6 +42,8 @@ class TecanPlate(Plate, TecanResource):
       category=category,
       lid=lid,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.z_start = z_start
@@ -47,7 +52,7 @@ class TecanPlate(Plate, TecanResource):
     self.area = area
 
 
-def Microplate_96_Well_Lid(name: str) -> Lid:
+def Microplate_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -60,7 +65,12 @@ def Microplate_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Microplate_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   """white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306
 
   Coley
@@ -120,10 +130,11 @@ def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=22.6,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Microplate_portrait_96_Well_Lid(name: str) -> Lid:
+def Microplate_portrait_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -136,7 +147,12 @@ def Microplate_portrait_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Microplate_portrait_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Microplate_portrait_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=85.4,
@@ -162,10 +178,11 @@ def Microplate_portrait_96_Well(name: str, with_lid: bool = False) -> TecanPlate
       size_z=11.0,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DeepWell_96_Well_Lid(name: str) -> Lid:
+def DeepWell_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -178,7 +195,12 @@ def DeepWell_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def DeepWell_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def DeepWell_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=127.8,
@@ -204,10 +226,11 @@ def DeepWell_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=39.0,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def HalfDeepWell_384_Well_Lid(name: str) -> Lid:
+def HalfDeepWell_384_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -220,7 +243,12 @@ def HalfDeepWell_384_Well_Lid(name: str) -> Lid:
   # )
 
 
-def HalfDeepWell_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def HalfDeepWell_384_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=127.7,
@@ -246,10 +274,11 @@ def HalfDeepWell_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=18.8,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DeepWell_portrait_96_Well_Lid(name: str) -> Lid:
+def DeepWell_portrait_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -262,7 +291,12 @@ def DeepWell_portrait_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def DeepWell_portrait_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def DeepWell_portrait_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=85.4,
@@ -288,10 +322,11 @@ def DeepWell_portrait_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=38.0,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Plate_portrait_384_Well_Lid(name: str) -> Lid:
+def Plate_portrait_384_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -304,7 +339,12 @@ def Plate_portrait_384_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Plate_portrait_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Plate_portrait_384_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=85.5,
@@ -330,10 +370,11 @@ def Plate_portrait_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=11.0,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Macherey_Nagel_Plate_96_Well_Lid(name: str) -> Lid:
+def Macherey_Nagel_Plate_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -346,7 +387,12 @@ def Macherey_Nagel_Plate_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Macherey_Nagel_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Macherey_Nagel_Plate_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=151.6,
@@ -372,10 +418,11 @@ def Macherey_Nagel_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlat
       size_z=29.9,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Qiagen_Plate_96_Well_Lid(name: str) -> Lid:
+def Qiagen_Plate_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -388,7 +435,12 @@ def Qiagen_Plate_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Qiagen_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Qiagen_Plate_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=151.7,
@@ -414,10 +466,11 @@ def Qiagen_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=26.6,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def AB_Plate_96_Well_Lid(name: str) -> Lid:
+def AB_Plate_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -430,7 +483,12 @@ def AB_Plate_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def AB_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def AB_Plate_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=130.9,
@@ -456,10 +514,11 @@ def AB_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=19.5,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def PCR_Plate_96_Well_Lid(name: str) -> Lid:
+def PCR_Plate_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -472,7 +531,12 @@ def PCR_Plate_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def PCR_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def PCR_Plate_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=128.0,
@@ -498,10 +562,11 @@ def PCR_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=19.5,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DeepWell_Greiner_1536_Well_Lid(name: str) -> Lid:
+def DeepWell_Greiner_1536_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -514,7 +579,12 @@ def DeepWell_Greiner_1536_Well_Lid(name: str) -> Lid:
   # )
 
 
-def DeepWell_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def DeepWell_Greiner_1536_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=127.8,
@@ -540,10 +610,11 @@ def DeepWell_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=8.6,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Hibase_Greiner_1536_Well_Lid(name: str) -> Lid:
+def Hibase_Greiner_1536_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -556,7 +627,12 @@ def Hibase_Greiner_1536_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Hibase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Hibase_Greiner_1536_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=127.8,
@@ -582,10 +658,11 @@ def Hibase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=5.4,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Lowbase_Greiner_1536_Well_Lid(name: str) -> Lid:
+def Lowbase_Greiner_1536_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -598,7 +675,12 @@ def Lowbase_Greiner_1536_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Lowbase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Lowbase_Greiner_1536_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=127.8,
@@ -624,10 +706,11 @@ def Lowbase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=6.2,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Separation_Plate_96_Well_Lid(name: str) -> Lid:
+def Separation_Plate_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -640,7 +723,12 @@ def Separation_Plate_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Separation_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Separation_Plate_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=151.7,
@@ -666,10 +754,11 @@ def Separation_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=26.6,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DeepWell_square_96_Well_Lid(name: str) -> Lid:
+def DeepWell_square_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -682,7 +771,12 @@ def DeepWell_square_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def DeepWell_square_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def DeepWell_square_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=127.8,
@@ -708,10 +802,11 @@ def DeepWell_square_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=39.0,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def CaCo2_Plate_24_Well_Lid(name: str) -> Lid:
+def CaCo2_Plate_24_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -724,7 +819,12 @@ def CaCo2_Plate_24_Well_Lid(name: str) -> Lid:
   # )
 
 
-def CaCo2_Plate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def CaCo2_Plate_24_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=125.2,
@@ -750,10 +850,11 @@ def CaCo2_Plate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=6.5,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Plate_384_Well_Lid(name: str) -> Lid:
+def Plate_384_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -766,7 +867,12 @@ def Plate_384_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Plate_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Plate_384_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   """white: pn 30122301, black: pn 30122299, cell culture/clear: pn 30122305, cell culture/black with clear bottom: pn 30122307"""
   return TecanPlate(
     name=name,
@@ -793,10 +899,11 @@ def Plate_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=12.1,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Microplate_24_Well_Lid(name: str) -> Lid:
+def Microplate_24_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -809,7 +916,12 @@ def Microplate_24_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Microplate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Microplate_24_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   """cell culture/clear: pn 30122302"""
   return TecanPlate(
     name=name,
@@ -836,10 +948,11 @@ def Microplate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=17.6,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def TecanExtractionPlate_96_Well_Lid(name: str) -> Lid:
+def TecanExtractionPlate_96_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -852,7 +965,12 @@ def TecanExtractionPlate_96_Well_Lid(name: str) -> Lid:
   # )
 
 
-def TecanExtractionPlate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def TecanExtractionPlate_96_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=129.8,
@@ -878,10 +996,11 @@ def TecanExtractionPlate_96_Well(name: str, with_lid: bool = False) -> TecanPlat
       size_z=23.0,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Microplate_48_Well_Lid(name: str) -> Lid:
+def Microplate_48_Well_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -894,7 +1013,12 @@ def Microplate_48_Well_Lid(name: str) -> Lid:
   # )
 
 
-def Microplate_48_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def Microplate_48_Well(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> TecanPlate:
   """cell culture/clear: pn 30122303"""
   return TecanPlate(
     name=name,
@@ -921,4 +1045,5 @@ def Microplate_48_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_z=17.3,
       name_prefix=name,
     ),
+    identifier=identifier,
   )

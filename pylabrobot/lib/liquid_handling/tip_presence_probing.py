@@ -82,9 +82,9 @@ def plan_tip_inventory(tip_spots: List[TipSpot], use_channels: List[int]) -> Lis
     raise ValueError("use_channels must not be empty")
   if len(set(use_channels)) != len(use_channels):
     raise ValueError(f"use_channels must each be named once, are {use_channels}")
-  names = [tip_spot.name for tip_spot in tip_spots]
-  if len(set(names)) != len(names):
-    raise ValueError(f"tip spots must each be given once, are {names}")
+  identifiers = [tip_spot.identifier for tip_spot in tip_spots]
+  if len(set(identifiers)) != len(identifiers):
+    raise ValueError(f"tip spots must each be given once, are {identifiers}")
   channels = sorted(use_channels)
   columns: Dict[float, List[TipSpot]] = {}
   for tip_spot in tip_spots:
@@ -151,12 +151,12 @@ async def probe_tip_presence_via_pickup(
       names none.
 
   Returns:
-    Each spot's name, and whether it held a tip.
+    Each spot's identifier, and whether it held a tip.
 
   Raises:
     ValueError: As `plan_tip_presence_probes`.
   """
-  present = {tip_spot.name: True for tip_spot in tip_spots}
+  present = {tip_spot.identifier: True for tip_spot in tip_spots}
   for batch in plan_tip_presence_probes(tip_spots, use_channels):
     held = list(batch.use_channels)
     try:
@@ -170,7 +170,7 @@ async def probe_tip_presence_via_pickup(
       held = [channel for channel in batch.use_channels if channel not in missed]
       for tip_spot, channel in zip(batch.tip_spots, batch.use_channels):
         if channel in missed:
-          present[tip_spot.name] = False
+          present[tip_spot.identifier] = False
     if held:
       back = [s for s, c in zip(batch.tip_spots, batch.use_channels) if c in held]
       await drop_tips(back, held)
@@ -197,7 +197,7 @@ async def probe_tip_inventory(
     missed_channels: as `probe_tip_presence_via_pickup`.
 
   Returns:
-    Each spot's name, and whether it held a tip.
+    Each spot's identifier, and whether it held a tip.
 
   Raises:
     ValueError: As `plan_tip_inventory`.
@@ -214,4 +214,4 @@ async def probe_tip_inventory(
         missed_channels=missed_channels,
       )
     )
-  return {tip_spot.name: present[tip_spot.name] for tip_spot in tip_spots}
+  return {tip_spot.identifier: present[tip_spot.identifier] for tip_spot in tip_spots}

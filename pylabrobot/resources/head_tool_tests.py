@@ -73,11 +73,13 @@ class HeadToolTests(unittest.TestCase):
     self.assertEqual(tip.get_size_z(), 59.9)
     self.assertEqual(tip.name, "test_tip")
 
-  def test_named_tool_cannot_be_renamed(self):
+  def test_named_tool_preserves_identity_when_renamed(self):
     tool = hamilton_core_gripper_tool(name="core_gripper_tool")
     self.assertEqual(tool.name, "core_gripper_tool")
-    with self.assertRaises(AttributeError):
-      tool.name = "other"
+    identifier = tool.identifier
+    tool.name = "other"
+    self.assertEqual(tool.identifier, identifier)
+    self.assertEqual(tool.metadata["name"], "other")
 
   def test_core_gripper_tool_serialize(self):
     tool = hamilton_core_gripper_tool(name="core_gripper_tool")
@@ -85,7 +87,8 @@ class HeadToolTests(unittest.TestCase):
       serialize(tool),
       {
         "type": "HamiltonCoreGripperTool",
-        "name": "core_gripper_tool",
+        "identifier": tool.identifier,
+        "metadata": {"name": "core_gripper_tool"},
         "size_x": 36.0,
         "size_y": 8.346,
         "size_z": 32.0,

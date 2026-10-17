@@ -31,6 +31,8 @@ class Lid(Resource):
     category: str = "lid",
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     """Create a lid.
 
@@ -49,6 +51,7 @@ class Lid(Resource):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
     self.nesting_z_height = nesting_z_height
     if nesting_z_height == 0:

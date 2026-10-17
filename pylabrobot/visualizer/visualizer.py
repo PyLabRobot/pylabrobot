@@ -79,8 +79,8 @@ def _serialize_resource_tree(resource: Resource) -> dict:
 
 
 def _state_of(resource: Resource) -> Dict[str, Any]:
-  """The state of a resource and every child the visualizer draws, by name."""
-  state = {resource.name: resource.serialize_state()}
+  """The state of a resource and every child the visualizer draws, by identifier."""
+  state = {resource.identifier: resource.serialize_state()}
   for child in _drawn_children(resource):
     state.update(_state_of(child))
   return state
@@ -727,7 +727,7 @@ class Visualizer:
       """Recursively save the state of the resource and all child resources."""
       resource_state = resource.serialize_state()
       if resource_state is not None:
-        state[resource.name] = resource_state
+        state[resource.identifier] = resource_state
       for child in _drawn_children(resource):
         save_resource_state(child)
 
@@ -760,7 +760,7 @@ class Visualizer:
       "resource": _serialize_resource_tree(resource),
       "method_registry": _build_method_registry(resource),
       "state": _state_of(resource),
-      "parent_name": (resource.parent.name if resource.parent else None),
+      "parent_identifier": (resource.parent.identifier if resource.parent else None),
     }
     fut = self.send_command(event="resource_assigned", data=data, wait_for_response=False)
     asyncio.run_coroutine_threadsafe(fut, self.loop)
@@ -773,7 +773,7 @@ class Visualizer:
       return
 
     # Send a `resource_unassigned` event to the browser.
-    data = {"resource_name": resource.name}
+    data = {"resource_identifier": resource.identifier}
     fut = self.send_command(event="resource_unassigned", data=data, wait_for_response=False)
     asyncio.run_coroutine_threadsafe(fut, self.loop)
 
@@ -782,11 +782,11 @@ class Visualizer:
     rapid successive changes (e.g. 96-channel pickup) are sent as a single message."""
 
     state = resource.serialize_state()
-    self.loop.call_soon_threadsafe(self._enqueue_state_update, resource.name, state)
+    self.loop.call_soon_threadsafe(self._enqueue_state_update, resource.identifier, state)
 
-  def _enqueue_state_update(self, name: str, state: dict) -> None:
+  def _enqueue_state_update(self, identifier: str, state: dict) -> None:
     """Enqueue a state update on the event loop thread and schedule a flush if needed."""
-    self._pending_state_updates[name] = state
+    self._pending_state_updates[identifier] = state
     if not self._flush_scheduled:
       self._flush_scheduled = True
       self.loop.call_soon(self._flush_state_updates)

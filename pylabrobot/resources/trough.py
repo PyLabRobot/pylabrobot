@@ -32,6 +32,9 @@ class Trough(Container):
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones=None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     if isinstance(bottom_type, str):
       bottom_type = TroughBottomType(bottom_type)
@@ -49,6 +52,8 @@ class Trough(Container):
       compute_height_from_volume=compute_height_from_volume,
       height_volume_data=height_volume_data,
       no_go_zones=no_go_zones,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.through_base_to_container_base = through_base_to_container_base
     self.bottom_type = bottom_type

@@ -1,4 +1,5 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -9,7 +10,7 @@ from pylabrobot.resources.well import (
 )
 
 
-def biorad_384_wellplate_50uL_Vb(name: str) -> Plate:
+def biorad_384_wellplate_50uL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   return Plate(
     name=name,
     size_x=127.76,
@@ -34,6 +35,7 @@ def biorad_384_wellplate_50uL_Vb(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
@@ -57,7 +59,7 @@ _biorad_96_wellplate_200uL_Vb_height_volume_data = {
 }
 
 
-def biorad_96_wellplate_200uL_Vb(name: str) -> Plate:
+def biorad_96_wellplate_200uL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """Bio-Rad Hard-Shell 96-well PCR plate, low profile, thin wall, skirted.
 
   - Part no.: HSP9601 (white shell, clear wells).
@@ -89,6 +91,7 @@ def biorad_96_wellplate_200uL_Vb(name: str) -> Plate:
       height_volume_data=_biorad_96_wellplate_200uL_Vb_height_volume_data,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
@@ -97,7 +100,9 @@ def biorad_96_wellplate_200uL_Vb(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def BioRad_384_wellplate_50uL_Vb(name: str) -> Plate:  # remove v1b1
+def BioRad_384_wellplate_50uL_Vb(
+  name: str, *, identifier: Optional[str] = None
+) -> Plate:  # remove v1b1
   """Deprecated alias for biorad_384_wellplate_50uL_Vb().
 
   This alias will be removed in v1b1.
@@ -109,4 +114,4 @@ def BioRad_384_wellplate_50uL_Vb(name: str) -> Plate:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return biorad_384_wellplate_50uL_Vb(name)
+  return biorad_384_wellplate_50uL_Vb(name, identifier=identifier)
