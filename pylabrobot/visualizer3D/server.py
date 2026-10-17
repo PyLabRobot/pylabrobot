@@ -20,13 +20,25 @@ import socket
 import sys
 import threading
 import webbrowser
-from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  FrozenSet,
+  Iterable,
+  List,
+  Optional,
+  Sequence,
+  Set,
+  Tuple,
+)
 from urllib.parse import parse_qs, urlsplit
 
 import websockets
 from websockets.asyncio.server import Server, ServerConnection
 from websockets.http11 import Request, Response
 
+from pylabrobot.resources.collision import Collision
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -152,6 +164,19 @@ def _signature(cleaned: Dict[str, Any], key: str) -> str:
   return key + repr([round(v, STATE_DECIMALS) for v in _xyz(cleaned["location"])])
 
 
+def _moved_names(request: Dict[str, Any]) -> Set[str]:
+  """Every resource a motion moves."""
+  names: Set[str] = set()
+  if request.get("arm"):
+    names.add(request["arm"]["name"])
+  for key in ("channels", "traverse", "moves", "turns"):
+    names.update(entry["name"] for entry in request.get(key) or [])
+  jaws = request.get("jaws")
+  if jaws:
+    names.update(finger["name"] for finger in jaws["fingers"])
+  return names
+
+
 class Viewer3D:
   """A visualizer that takes any resource as its world.
 
@@ -166,6 +191,10 @@ class Viewer3D:
       the package is found without it.
     allowed_hosts: extra hostnames a browser may reach the viewer by. IP addresses, `localhost`,
       this machine's hostname and `<hostname>.local` are always accepted.
+    raise_on_collision: whether a collision check that found something may refuse here. When a
+      device's collision gate is attached to this viewer (`attach_viewer_collisions`), the flag is
+      what turns the checks into gates: a command that would hit something is drawn on the page
+      and raises, rather than being reported to whoever called the check.
 
   Access: each run makes a token, hands it out only in the link it prints and opens (`url`, as
   its `#token=` fragment, which no request carries), and refuses a websocket without it. Both
@@ -182,6 +211,7 @@ class Viewer3D:
   token: str
   allowed_hosts: Set[str]
   models_root: Optional[str]
+  raise_on_collision: bool
   rebuilds: int
   clients_seen: List[Dict[str, Optional[str]]]
   _clients: Set[ServerConnection]
@@ -202,9 +232,12 @@ class Viewer3D:
   _scene: Optional[Scene]
   _refused_a_token: bool
   _browser_drawing: Optional[asyncio.Event]
+  _models_drawn: Optional[asyncio.Event]
   _moved: Set[str]
   _scene_timer: Optional[asyncio.TimerHandle]
   _subscribed: Dict[int, Tuple[Resource, Callable[[Dict[str, Any]], None]]]
+  _motions: Dict[int, Tuple["asyncio.Future[None]", Set[Any]]]
+  _motion_count: int
 
   # -- packing -----------------------------------------------------------------
 
@@ -429,11 +462,13 @@ class Viewer3D:
     }
     return self._scene_payload
 
-  def _moves(self) -> Optional[List[Dict[str, Any]]]:
+  def _moves(self, hold: FrozenSet[str] = frozenset()) -> Optional[List[Dict[str, Any]]]:
     """Moves since the scene was built, applied to the kept scene too, or None if a name changed.
 
     A move is a resource whose parent or local transform differs from the kept scene, as `{name,
-    parent, location, rotation}`. A name appearing or disappearing needs a rebuild.
+    parent, location, rotation}`. A name appearing or disappearing needs a rebuild. A resource in
+    `hold` that has only moved, not changed parent, is left out and left unrecorded: a motion about
+    to be played takes it there, and the model has it there already.
     """
     scene = self._scene
     if scene is None or frozenset(all_names(self.root)) != self._known_names:
@@ -453,10 +488,10 @@ class Viewer3D:
         float(rotation.z),
       ]
       parent_index = -1 if parent is None else self._index_of[parent]
-      if (
-        parent_index != scene.parent_of_instance[index]
-        or local != scene.transforms[6 * index : 6 * index + 6]
-      ):
+      reparented = parent_index != scene.parent_of_instance[index]
+      if not reparented and resource.name in hold:
+        pass
+      elif reparented or local != scene.transforms[6 * index : 6 * index + 6]:
         scene.parent_of_instance[index] = parent_index
         scene.transforms[6 * index : 6 * index + 6] = local
         moves.append(
@@ -484,7 +519,7 @@ class Viewer3D:
     self._published = {name: _signature(cleaned, key) for name, (cleaned, key) in states.items()}
     await self._broadcast("state", pack_state(states, self._epoch))
 
-  async def _flush_scene(self) -> None:
+  async def _flush_scene(self, hold: FrozenSet[str] = frozenset()) -> None:
     self._scene_timer = None
     if not self._clients:
       # Nobody to tell. The kept scene is dropped, so the next client is greeted with one built
@@ -492,7 +527,7 @@ class Viewer3D:
       self._scene = None
       self._scene_payload = None
       return
-    moves = self._moves()
+    moves = self._moves(hold)
     if moves is None:
       self.rebuilds += 1
       await self._send_scene_to_all()
@@ -587,6 +622,18 @@ class Viewer3D:
       self._browser_drawing.set()
     return True
 
+  def _on_models_drawn(self, message: Any) -> bool:
+    """Whether `message` is a page saying every model file of its scene has loaded (or failed)."""
+    try:
+      parsed = json.loads(message)
+    except (TypeError, ValueError):
+      return False
+    if not isinstance(parsed, dict) or parsed.get("event") != "models_drawn":
+      return False
+    if self._models_drawn is not None:
+      self._models_drawn.set()
+    return True
+
   async def _handler(self, websocket: ServerConnection) -> None:
     self._clients.add(websocket)
     await websocket.send(_encode("scene", self._scene_message()))
@@ -594,6 +641,10 @@ class Viewer3D:
     greeted = False
     try:
       async for message in websocket:
+        if self._on_motion_played(websocket, message):
+          continue
+        if self._on_models_drawn(message):
+          continue
         # A page says hello once. A repeat is still read, or keepalive stalls, but not kept.
         if not greeted:
           greeted = self._on_client_message(message)
@@ -601,6 +652,136 @@ class Viewer3D:
       pass
     finally:
       self._clients.discard(websocket)
+      # A page that has gone plays nothing more, so nothing waits for it.
+      self._release_motions(websocket)
+
+  # -- motion ------------------------------------------------------------------
+
+  # How long a command waits for a page to play its motion before going on without it.
+  MOTION_TIMEOUT_S = 120.0
+
+  async def show_collisions(self, collisions: Sequence[Collision]) -> None:
+    """Draw on the pages what a refused command would hit.
+
+    A box goes over each resource the command ran into - the ones met at the instant of the first
+    meeting, where the check walked its way finely; a meeting the hull only leans on, with no
+    instant of its own, stands as the sweep said it. The boxes stay until the scene is rebuilt or
+    other collisions are shown. With no page connected, or called from off the viewer's loop,
+    nothing is sent.
+
+    Args:
+      collisions: what a check found, whose `obstacle` is the resource drawn over.
+    """
+    if not self._clients or self._loop is None or asyncio.get_running_loop() is not self._loop:
+      return
+    items: List[Dict[str, Any]] = []
+    seen: Set[int] = set()
+    met = [c.when for c in collisions if c.when is not None]
+    moment = min(met) if met else None
+    for collision in collisions:
+      index = self._index_of.get(collision.obstacle.name)
+      if index is None or index in seen:
+        continue
+      if moment is not None and collision.when is not None and collision.when != moment:
+        continue
+      seen.add(index)
+      items.append({"index": index, "resource": collision.obstacle.name, "group": collision.group})
+    if items:
+      await self._broadcast("collisions", {"collisions": items})
+
+  async def act_out(self, command: str, motion: Optional[Dict[str, Any]]) -> None:
+    """Act out one command's motion, and hold the command until a page has played it.
+
+    The motion is sent to the pages and waited on until every one of them says it has played it:
+    the slowest page sets the pace, and a page in a background tab, which gets no frames, jumps to
+    the end and answers at once. The model then records where the command ended, which is where
+    the pages have just brought everything. With no page connected, nothing is waited for.
+
+    A motion of None is a command that moves nothing: it is said to the page, so whatever it moves
+    can be put down to it, and the page jumps.
+
+    Args:
+      command: the command as the device names it, for a page that lists them.
+      motion: what the command moves, read out of it by the device's own motion model, or None.
+    """
+    if not self._clients or self._loop is None or asyncio.get_running_loop() is not self._loop:
+      return
+    if motion is None:
+      await self._broadcast("command", {"command": command})
+      return
+    request = motion
+    # A change is handed to the loop to be queued, so let what the last command changed reach the
+    # page first: a motion starts from where the page has everything.
+    await asyncio.sleep(0)
+    # Except where this very command has already been written: the iSWAP records a move's target as
+    # it sends it, and so does a channel packing (`recorded_first`). Sent now, that would put the
+    # part at the end of the move before it is played, so it is held until the pages have played the
+    # move there. Taken before anything else can flush. Only for those: most commands write the
+    # model once they have run, so what is pending is the last command's result, and holding that
+    # back would send it after this one's move - drawn back where it was, until the model's own
+    # move puts it right.
+    moving = _moved_names(request) if request.get("recorded_first") else set()
+    held = {name: self._pending.pop(name) for name in list(self._pending) if name in moving}
+    # A change of shape - a tip taken onto a shaft - waits out its debounce, and holds the
+    # positions back with it; the command that caused it is over, so it goes now.
+    if self._scene_timer is not None:
+      self._scene_timer.cancel()
+      # What this command already wrote is held back here too: a change of shape carries every
+      # position that differs from the kept scene, the move's own target among them.
+      await self._flush_scene(frozenset(moving))
+    if self._pending:
+      await self._flush()
+    self._motion_count += 1
+    motion_id = self._motion_count
+    played: "asyncio.Future[None]" = self._loop.create_future()
+    # Registered before sending: a page in the background answers as soon as it is told.
+    pages = set(self._clients)
+    self._motions[motion_id] = (played, pages)
+    try:
+      await self._broadcast("motion", {"id": motion_id, **request})
+      # A page that could not be sent to has been dropped, and will not answer. One that closed while
+      # this was being sent - a reload - has already let the motion go.
+      pages.intersection_update(self._clients)
+      if not pages and not played.done():
+        played.set_result(None)
+      await asyncio.wait_for(asyncio.shield(played), self.MOTION_TIMEOUT_S)
+    except asyncio.TimeoutError:
+      print(f"viewer: no page played {command} within {self.MOTION_TIMEOUT_S} s; going on")
+    finally:
+      self._motions.pop(motion_id, None)
+      if held:
+        # Anything newer that arrived meanwhile has the last word.
+        for name, state in held.items():
+          self._pending.setdefault(name, state)
+        await self._flush()
+
+  def _on_motion_played(self, websocket: Any, message: Any) -> bool:
+    """Take a page's word that it has played a motion; whether the message was that."""
+    try:
+      parsed = json.loads(message)
+    except (TypeError, ValueError):
+      return False
+    if not isinstance(parsed, dict) or parsed.get("event") != "motion_done":
+      return False
+    data = parsed.get("data")
+    motion_id = data.get("id") if isinstance(data, dict) else None
+    waiting = self._motions.get(motion_id) if isinstance(motion_id, int) else None
+    if waiting is not None:
+      played, pages = waiting
+      pages.discard(websocket)
+      if not pages and not played.done():
+        played.set_result(None)
+    return True
+
+  def _release_motions(self, websocket: Any = None) -> None:
+    """Stop waiting on one page, or on every page when none is named."""
+    for played, pages in self._motions.values():
+      if websocket is None:
+        pages.clear()
+      else:
+        pages.discard(websocket)
+      if not pages and not played.done():
+        played.set_result(None)
 
   # -- static files ------------------------------------------------------------
 
@@ -685,8 +866,9 @@ class Viewer3D:
 
       def handle_error(self, request: Any, client_address: Any) -> None:
         # A browser that leaves a page mid-download, or stalls past the timeout, is no error of
-        # ours, and a traceback on every reload buries anything that is.
-        if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError, socket.timeout)):
+        # ours, and a traceback on every reload buries anything that is. Every flavour of a
+        # vanished peer - broken pipe, reset, abort (Windows) - is a ConnectionError.
+        if isinstance(sys.exc_info()[1], (ConnectionError, socket.timeout)):
           return
         super().handle_error(request, client_address)
 
@@ -718,6 +900,7 @@ class Viewer3D:
     name: str = "facility",
     models_root: Optional[str] = None,
     allowed_hosts: Iterable[str] = (),
+    raise_on_collision: bool = False,
   ):
     self.root = root
     self.host = host
@@ -725,6 +908,7 @@ class Viewer3D:
     self.ws_port = ws_port
     self.open_browser = open_browser
     self.name = name
+    self.raise_on_collision = raise_on_collision
     self.token = secrets.token_urlsafe(32)
     machine = socket.gethostname().lower()
     # The interface bound to counts as a way in when it is a name rather than an address.
@@ -773,6 +957,10 @@ class Viewer3D:
     self.rebuilds = 0  # how many scene rebuilds a run actually cost
     self.clients_seen = []  # what each page said it draws with
     self._browser_drawing = None  # made on the loop `start` runs on
+    self._models_drawn = None  # likewise
+    # Motions sent to the pages and not yet played, by id, with the pages still playing each.
+    self._motions = {}
+    self._motion_count = 0
 
     # Every resource this viewer listens to, with the callback it gave, so `stop` can take it back.
     # By identity: a tip compares by value and is not hashable.
@@ -785,6 +973,7 @@ class Viewer3D:
   async def start(self) -> None:
     self._loop = asyncio.get_running_loop()
     self._browser_drawing = asyncio.Event()
+    self._models_drawn = asyncio.Event()
     # Off the loop, before a client can connect: the package walk for model files, and the size of
     # the tree as one node per resource, which the stats panel compares against.
     self._legacy_bytes, _ = await asyncio.gather(
@@ -826,11 +1015,32 @@ class Viewer3D:
       raise RuntimeError("start the viewer before waiting for a browser")
     await asyncio.wait_for(self._browser_drawing.wait(), timeout)
 
+  async def wait_for_models(self, timeout: Optional[float] = None) -> None:
+    """Wait until a page has every model file of the scene on screen, or has given up on it.
+
+    `wait_for_browser` returns as soon as a page is drawing - boxes, until the files land. Call this
+    too before a run whose first moves should be seen on the models themselves. A page says so once,
+    when it has loaded; each call takes one saying, so a later call waits for the next page - a
+    refresh - and a run can be played again for it.
+
+    Args:
+      timeout: seconds to wait, or None to wait for as long as it takes.
+
+    Raises:
+      RuntimeError: the viewer has not been started.
+      asyncio.TimeoutError: no page had its models drawn within `timeout`.
+    """
+    if self._models_drawn is None:
+      raise RuntimeError("start the viewer before waiting for its models")
+    await asyncio.wait_for(self._models_drawn.wait(), timeout)
+    self._models_drawn.clear()
+
   async def stop(self) -> None:
     """Close both servers and stop listening to the tree.
 
     The ports are free for the next viewer, and no change is handed to a loop that is gone.
     """
+    self._release_motions()
     self._unsubscribe(self.root)
     self.root.deregister_did_assign_resource_callback(self._on_assign)
     self.root.deregister_did_unassign_resource_callback(self._on_unassign)

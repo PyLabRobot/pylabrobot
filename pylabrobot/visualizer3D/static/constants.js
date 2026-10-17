@@ -116,6 +116,10 @@ export const FILTER_BELOW_COLLAR = 2;
 // been read for the bore at that height.
 export const FILTER_WIDTH_UNMEASURED = 0.6;
 export const SELECT = 0x1a4b8c;
+// What a refused command hit: a red, transparent box over the resource it ran into, drawn over
+// everything the way the selection box is, so it reads wherever the hit is.
+export const COLLISION = 0xd0342c;
+export const COLLISION_OPACITY = 0.25;
 // How long the selection box stays after a pick, as the existing visualizer's dashed rectangle
 // does: long enough to see what was chosen, gone before it gets in the way of looking at it.
 export const SELECTION_SHOWN_MS = 2000;
