@@ -13,6 +13,22 @@ pylabrobot.high_res package
     HighResLidValet
     HighResLidValetError
 
+.. currentmodule:: pylabrobot.high_res.micro_serve.micro_serve
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+
+    HighResMicroServe
+    MicroServeStacker
+    MicroServePlateDimensions
+    MicroServeStatus
+    MicroServeCommandStatus
+    MicroServeMotorInfo
+    MicroServeUnresolvedPreparation
+    MicroServeError
+    MicroServeProtocolError
+
 .. currentmodule:: pylabrobot.high_res.sample_storage
 
 .. autosummary::
