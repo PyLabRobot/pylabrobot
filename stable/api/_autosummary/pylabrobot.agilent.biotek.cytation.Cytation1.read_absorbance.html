@@ -64,7 +64,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="pylabrobot.agilent.biotek.cytation.Cytation1.read_fluorescence" href="pylabrobot.agilent.biotek.cytation.Cytation1.read_fluorescence.html" />
-    <link rel="prev" title="pylabrobot.agilent.biotek.cytation.Cytation1.open" href="pylabrobot.agilent.biotek.cytation.Cytation1.open.html" />
+    <link rel="prev" title="pylabrobot.agilent.biotek.cytation.Cytation1.query_capability" href="pylabrobot.agilent.biotek.cytation.Cytation1.query_capability.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
@@ -590,7 +590,10 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.agilent.biotek.cytation.Cytation1.read_absorbance">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">Cytation1.</span></span><span class="sig-name descname"><span class="pre">read_absorbance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.resources.Plate.html#pylabrobot.resources.Plate" title="pylabrobot.resources.plate.Plate"><span class="pre">Plate</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">wells</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="pylabrobot.resources.Well.html#pylabrobot.resources.Well" title="pylabrobot.resources.well.Well"><span class="pre">Well</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wavelength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">AbsorbanceResult</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pylabrobot.agilent.biotek.cytation.Cytation1.read_absorbance" title="Link to this definition">#</a></dt>
-<dd><dl class="field-list simple">
+<dd><p>Read endpoint absorbance using the reader’s negotiated RDOP22 layout.</p>
+<p>Capabilities 2056 and 2064 select the optical record fields. Legacy readers
+that report no RDOP22 support are rejected before geometry or assay setup.</p>
+<dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>plate</strong> (<a class="reference internal" href="pylabrobot.resources.Plate.html#pylabrobot.resources.Plate" title="pylabrobot.resources.plate.Plate"><em>Plate</em></a>)</p></li>
@@ -617,12 +620,12 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.agilent.biotek.cytation.Cytation1.open.html"
+       href="pylabrobot.agilent.biotek.cytation.Cytation1.query_capability.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.agilent.biotek.cytation.Cytation1.open</p>
+        <p class="prev-next-title">pylabrobot.agilent.biotek.cytation.Cytation1.query_capability</p>
       </div>
     </a>
     <a class="right-next"

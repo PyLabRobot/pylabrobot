@@ -40,6 +40,7 @@ pylabrobot.agilent.biotek.cytation.Cytation1
       ~Cytation1.deactivate
       ~Cytation1.home
       ~Cytation1.open
+      ~Cytation1.query_capability
       ~Cytation1.read_absorbance
       ~Cytation1.read_fluorescence
       ~Cytation1.read_luminescence
