@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from pylabrobot.agilent.biotek.plate_reader_protocol import (
+  encode_absorbance,
+  parse_assay_response,
+  parse_response,
+)
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Plate, Well
 
@@ -83,6 +88,8 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
     self._plate: Optional[Plate] = None
     self._shaking = False
     self._slow_mode: Optional[bool] = None
+    self._capabilities: Dict[int, bytes] = {}
+    self._receive_buffer = bytearray()
 
   def _non_overlapping_rectangles(
     self,
@@ -111,6 +118,10 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
 
   async def setup(self) -> None:
     logger.info(f"{self.__class__.__name__} setting up")
+    self._capabilities.clear()
+    self._receive_buffer.clear()
+    self._plate = None
+    self._slow_mode = None
 
     await self.io.setup()
     await self.io.usb_reset()
@@ -138,6 +149,9 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
     await self.io.stop()
 
     self._slow_mode = None
+    self._capabilities.clear()
+    self._receive_buffer.clear()
+    self._plate = None
 
   @property
   def version(self) -> str:
@@ -180,29 +194,38 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
     return (min_temp, max_temp)
 
   async def _purge_buffers(self) -> None:
+    self._receive_buffer.clear()
     for _ in range(6):
       await self.io.usb_purge_rx_buffer()
     await self.io.usb_purge_tx_buffer()
 
+  def _pop_response(self, terminator: bytes) -> Optional[bytes]:
+    """Consume one buffered response, retaining bytes from subsequent responses."""
+    if terminator == b"\x06" and self._receive_buffer and self._receive_buffer[0] != 0x06:
+      raise RuntimeError(f"BioTek: expected ACK, received {bytes(self._receive_buffer)!r}")
+    if terminator not in self._receive_buffer:
+      return None
+    end = self._receive_buffer.index(terminator) + len(terminator)
+    response = bytes(self._receive_buffer[:end])
+    del self._receive_buffer[:end]
+    return response
+
   async def _read_until(self, terminator: bytes, timeout: Optional[float] = None) -> bytes:
     if timeout is None:
       timeout = self.timeout
-    x = None
-    res = b""
-    t0 = time.time()
-    while x != terminator:
-      x = await self.io.read(1)
-      res += x
-
-      if time.time() - t0 > timeout:
-        logger.debug(f"{self.__class__.__name__} received incomplete %s", res)
+    deadline = time.monotonic() + timeout
+    while True:
+      response = self._pop_response(terminator)
+      if response is not None:
+        logger.debug(f"{self.__class__.__name__} received %s", response)
+        return response
+      if time.monotonic() > deadline:
+        logger.debug(f"{self.__class__.__name__} received incomplete %s", self._receive_buffer)
         raise TimeoutError(f"{self.__class__.__name__}: Timeout while waiting for response")
-
+      x = await self.io.read(1)
+      self._receive_buffer.extend(x)
       if x == b"":
         await asyncio.sleep(0.01)
-
-    logger.debug(f"{self.__class__.__name__} received %s", res)
-    return res
 
   async def send_command(
     self,
@@ -239,10 +262,42 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
     assert resp is not None
     return " ".join(resp[1:-1].decode().split(" ")[3:4])
 
-  async def set_slow_mode(self, slow: bool):
+  async def query_capability(self, query: int) -> bytes:
+    """Read and cache a z capability's 17-byte data field for this connection.
+
+    Byte zero is ASCII '1' when supported and '0' when unsupported. The remaining
+    sixteen bytes contain capability-specific details. A malformed reply or an
+    instrument error is raised rather than treated as an unsupported capability.
+    """
+    if not 0 <= query <= 9999:
+      raise ValueError("BioTek capability number must fit four decimal digits")
+    if query not in self._capabilities:
+      response = await self.send_command("z", f"{query:04}\x03")
+      data = parse_response(response, f"z {query:04}")
+      if len(data) != 17 or data[:1] not in (b"0", b"1"):
+        raise ValueError(f"BioTek z {query:04}: invalid capability data: {data!r}")
+      self._capabilities[query] = data
+    return self._capabilities[query]
+
+  async def _require_rdop22(self) -> None:
+    """Reject legacy readers before sending RDOP22 geometry or assay commands."""
+    if (await self.query_capability(2000))[:1] != b"1":
+      raise NotImplementedError(
+        "This reader reports no RDOP22 support (capability 2000). "
+        "Legacy BioTek V/S reads are not implemented by this driver."
+      )
+
+  async def set_slow_mode(self, slow: bool) -> None:
+    """Select carrier speed when supported; ordinary movement needs no extension."""
     if self._slow_mode == slow:
       return
-    await self.send_command("&", "S1" if slow else "S0")
+    if (await self.query_capability(2138))[:1] != b"1":
+      if slow:
+        raise NotImplementedError("This BioTek reader does not support carrier speed selection")
+      self._slow_mode = False
+      return
+    response = await self.send_command("&", "S1" if slow else "S0")
+    parse_response(response, "& S")
     self._slow_mode = slow
 
   def clear_plate(self) -> None:
@@ -341,6 +396,7 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
   async def set_plate(self, plate: Plate):
     if plate is self._plate:
       return
+    await self._require_rdop22()
 
     rows = plate.num_items_y
     columns = plate.num_items_x
@@ -377,6 +433,7 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
     )
 
     resp = await self.send_command("y", cmd, timeout=1)
+    parse_response(resp, "y")
     self._plate = plate
     return resp
 
@@ -394,9 +451,19 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
     wells: List[Well],
     wavelength: int,
   ) -> List[AbsorbanceResult]:
+    """Read endpoint absorbance using the reader's negotiated RDOP22 layout.
+
+    Capabilities 2056 and 2064 select the optical record fields. Legacy readers
+    that report no RDOP22 support are rejected before geometry or assay setup.
+    """
     min_abs, max_abs = self.abs_wavelength_range
     if not (min_abs <= wavelength <= max_abs):
       raise ValueError(f"{self.__class__.__name__}: wavelength must be within {min_abs}-{max_abs}")
+
+    rectangles = self._get_min_max_row_col_tuples(wells, plate)
+    await self._require_rdop22()
+    extra_read_field = (await self.query_capability(2056))[:1] == b"1"
+    extended_optics = (await self.query_capability(2064))[:1] == b"1"
 
     logger.info(
       "[BioTek %s] read_absorbance: plate=%s, wavelength=%dnm, wells=%d",
@@ -407,19 +474,23 @@ class BioTekPlateReaderDriver(metaclass=ABCMeta):
     )
     await self.set_plate(plate)
 
-    wavelength_str = str(wavelength).zfill(4)
     all_data: List[List[Optional[float]]] = [
       [None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)
     ]
 
-    for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
-      cmd = f"004701{min_row + 1:02}{min_col + 1:02}{max_row + 1:02}{max_col + 1:02}000120010000110010000010600008{wavelength_str}1"
-      checksum = str(sum(cmd.encode()) % 100).zfill(2)
-      cmd = cmd + checksum + "\x03"
-      await self.send_command("D", cmd)
+    for min_row, min_col, max_row, max_col in rectangles:
+      cmd = encode_absorbance(
+        bounds=(min_row + 1, min_col + 1, max_row + 1, max_col + 1),
+        wavelength=wavelength,
+        extended_optics=extended_optics,
+        extra_read_field=extra_read_field,
+      )
+      parse_assay_response(await self.send_command("D", cmd))
 
       resp = await self.send_command("O")
-      assert resp == b"\x060000\x03"
+      parse_response(resp, "O")
+      if resp != b"\x060000\x03":
+        raise ValueError(f"BioTek O: expected ACK and status, received {resp!r}")
 
       body = await self._read_until(b"\x03", timeout=60 * 3)
       assert body is not None

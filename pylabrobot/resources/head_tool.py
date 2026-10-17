@@ -51,6 +51,8 @@ class HeadTool(Resource):
 
   Attributes:
     fitting_depth: the overlap between the tool and the channel, in mm.
+    is_conductive: whether the tool conducts, which capacitive sensing through it needs. None
+      when not known.
   """
 
   def __init__(
@@ -63,6 +65,7 @@ class HeadTool(Resource):
     category: Optional[str] = None,
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
+    is_conductive: Optional[bool] = None,
   ):
     """Initialize a tool with an optional pickup location relative to its origin."""
     if not isinstance(name, str):
@@ -77,20 +80,23 @@ class HeadTool(Resource):
     )
     self.fitting_depth = fitting_depth
     self.pick_up_location = pick_up_location
+    self.is_conductive = is_conductive
 
   def __eq__(self, other: object) -> bool:
-    """Compare resource fields and the tool's fit and pickup location."""
+    """Compare resource fields and the tool's fit, pickup location and conductivity."""
     return (
       isinstance(other, HeadTool)
       and super().__eq__(other)
       and self.fitting_depth == other.fitting_depth
       and self.pick_up_location == other.pick_up_location
+      and self.is_conductive == other.is_conductive
     )
 
   def serialize(self) -> dict:
-    """Serialize the tool's resource fields, fitting depth, and pickup location."""
+    """Serialize the tool's resource fields, fitting depth, pickup location and conductivity."""
     return {
       **super().serialize(),
       "fitting_depth": self.fitting_depth,
       "pick_up_location": serialize(self.pick_up_location),
+      "is_conductive": self.is_conductive,
     }
