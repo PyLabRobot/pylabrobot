@@ -28,6 +28,24 @@ class AbsorbanceResult:
   end_timestamp: datetime
 
 
+@dataclass
+class AbsorbanceSpectrumResult:
+  """Optical density spectra from one read of a plate.
+
+  Attributes:
+    data: each measured well's spectrum, optical density by wavelength in nm in scan order, keyed
+      by well identifier (``"B3"``), row by row; wells not measured are not in it.
+    temperature: temperature in degrees C, or ``None`` if the reader did not measure one.
+    start_timestamp: when the read started.
+    end_timestamp: when the read's data was in.
+  """
+
+  data: Dict[str, Dict[int, float]]
+  temperature: Optional[float]
+  start_timestamp: datetime
+  end_timestamp: datetime
+
+
 def get_grid(plate: Plate, data: Dict[str, float]) -> List[List[Optional[float]]]:
   """`data`, keyed by well identifier, as a [row][column] grid of `plate`; None where no value.
 
@@ -47,3 +65,17 @@ def get_grid(plate: Plate, data: Dict[str, float]) -> List[List[Optional[float]]
     row, column = position[identifier]
     grid[row][column] = value
   return grid
+
+
+def get_grid_at(
+  plate: Plate, result: AbsorbanceSpectrumResult, wavelength: int
+) -> List[List[Optional[float]]]:
+  """The optical densities of `result` at `wavelength`, as a [row][column] grid of `plate`; None
+  where no value.
+
+  Raises:
+    ValueError: if `wavelength` was not scanned, or `result` keys a well `plate` does not have.
+  """
+  if any(wavelength not in spectrum for spectrum in result.data.values()):
+    raise ValueError(f"{wavelength} nm was not scanned")
+  return get_grid(plate, {well: spectrum[wavelength] for well, spectrum in result.data.items()})

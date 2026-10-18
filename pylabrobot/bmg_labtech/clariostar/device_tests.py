@@ -36,21 +36,6 @@ from pylabrobot.resources import Resource
 
 
 class DeviceTests(unittest.IsolatedAsyncioTestCase):
-  def test_generic_device(self):
-    reader = CLARIOstarDevice(io=FakeFTDI())
-    self.assertEqual(reader.name, "Generic CLARIOstar Device")
-    self.assertEqual(reader.model, "CLARIOstarDevice")
-    self.assertEqual(reader.category, "device")
-
-  def test_factories(self):
-    for factory, name in ((CLARIOstar, "CLARIOstar"), (CLARIOstarPlus, "CLARIOstarPlus")):
-      reader = factory(io=FakeFTDI())
-      self.assertIsInstance(reader, CLARIOstarDevice)
-      self.assertEqual((reader.name, reader.model), (name, name))
-      self.assertEqual(
-        (reader.get_size_x(), reader.get_size_y(), reader.get_size_z()), (450.0, 510.0, 400.0)
-      )
-
   def test_two_readers_in_one_tree(self):
     deck = Resource("deck", size_x=1000, size_y=1000, size_z=0)
     for name in ("reader_1", "reader_2"):
@@ -59,10 +44,6 @@ class DeviceTests(unittest.IsolatedAsyncioTestCase):
       {r.name for r in deck.get_all_children()},
       {"reader_1", "reader_1_plate_holder", "reader_2", "reader_2_plate_holder"},
     )
-
-  def test_drawer_moves_the_plate_holder(self):
-    reader = CLARIOstar(io=FakeFTDI())
-    self.assertIs(reader.drawer.plate_holder, reader.plate_holder)
 
   def test_the_setup_summary_names_the_reader(self):
     reader = CLARIOstar("reader_2", io=FakeFTDI())

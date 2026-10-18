@@ -93,7 +93,6 @@ class CLARIOstarDriver:
 
   _FTDI_READ_CHUNK = 25  # bytes per read; a shorter read marks the end of a burst
   _PACKET_READ_TIMEOUT = 1.0  # seconds to wait for the start of an FTDI reply
-  _MAX_FRAME_SIZE = 60_000  # a larger size field is corruption
   # Seconds without new bytes before abandoning a started frame. The longest pause measured
   # inside a reply, over about 26,000 replies including measurement data, was 0.44 s.
   _FRAME_STALL_TIMEOUT = 2.0
@@ -220,6 +219,8 @@ class CLARIOstarDriver:
     self.name = name
     self.declared_configuration_json = declared_configuration_json
     self.configuration = DeviceConfiguration()
+    # One lock over the link: a reply belongs to the last command written, so exchanges never
+    # overlap.
     self._lock = asyncio.Lock()
     self._last_warning: Optional[Tuple[int, int, int, int, int]] = None
     self.drawer = Drawer(self)
@@ -279,8 +280,6 @@ class CLARIOstarDriver:
 
         if expected_size is None and len(data) >= 3:
           expected_size = int.from_bytes(data[1:3], "big")
-          if expected_size > self._MAX_FRAME_SIZE:
-            break
           start = time.time()
 
         if len(chunk) < self._FTDI_READ_CHUNK and end_byte_found:

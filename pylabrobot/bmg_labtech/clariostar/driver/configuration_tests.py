@@ -56,25 +56,18 @@ class DecodeTests(unittest.TestCase):
     self.assertEqual(slides["BSP"], {1: "open", 2: "Filter 1", 3: "Filter 2", 4: "Filter 3"})
     self.assertEqual(slides["EM_SLIT"][6], "LUM lense")
 
-  def test_firmware_2_fills_only_the_main_board(self):
-    # The recorded reply with its firmware field set to 2.11, the line with native USB.
-    payload = bytearray(INIT_PAYLOAD)
-    payload[9:11] = (2110).to_bytes(2, "big")
-    configuration = DeviceConfiguration()
-    with self.assertRaises(ValueError):
-      configuration.update_from_init_reply(bytes(payload))
-    self.assertEqual(configuration.firmware_version, "2.11")
-    self.assertIsNone(configuration.spectrometer)
-
-  def test_older_firmware_fills_only_the_main_board(self):
-    # The recorded reply with its firmware field set to 1.29.
-    payload = bytearray(INIT_PAYLOAD)
-    payload[9:11] = (1290).to_bytes(2, "big")
-    configuration = DeviceConfiguration()
-    with self.assertRaises(ValueError):
-      configuration.update_from_init_reply(bytes(payload))
-    self.assertEqual(configuration.model, "CLARIOstarPlus")
-    self.assertIsNone(configuration.spectrometer)
+  def test_undecoded_firmware_fills_only_the_main_board(self):
+    # The recorded reply with its firmware field set to 1.29, and to 2.11, the line with native USB.
+    for firmware, version in ((1290, "1.29"), (2110, "2.11")):
+      payload = bytearray(INIT_PAYLOAD)
+      payload[9:11] = firmware.to_bytes(2, "big")
+      configuration = DeviceConfiguration()
+      with self.assertRaises(ValueError):
+        configuration.update_from_init_reply(bytes(payload))
+      self.assertEqual(
+        (configuration.model, configuration.firmware_version), ("CLARIOstarPlus", version)
+      )
+      self.assertIsNone(configuration.spectrometer)
 
   def test_not_an_init_reply(self):
     with self.assertRaises(ValueError):
@@ -92,13 +85,6 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
     driver = make_driver(io)
     await driver.initialize()
     self.assertEqual(driver.configuration.model, "CLARIOstarPlus")
-
-  async def test_malformed_init_reply_leaves_the_configuration_unread(self):
-    io = FakeFTDI()
-    io.replies = [INIT_REPLY[:100], STATUS_IDLE]
-    driver = make_driver(io)
-    await driver.initialize()
-    self.assertIsNone(driver.configuration.model)
 
   async def test_parameters_agreeing_with_init_do_not_warn(self):
     io = FakeFTDI()

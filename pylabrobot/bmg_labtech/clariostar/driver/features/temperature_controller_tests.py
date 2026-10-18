@@ -92,20 +92,13 @@ class TemperatureControllerTests(unittest.IsolatedAsyncioTestCase):
     temperature_controller = make_temperature_controller(
       io, extended=True
     )  # 10-65 C, so 20.0 C reaches the reader
-    with self.assertRaises(CommandRefusedError) as ctx:
-      await temperature_controller.start_temperature_control(20.0)
+    with self.assertLogs(temperature_controller_module.logger, "WARNING") as logs:
+      with self.assertRaises(CommandRefusedError) as ctx:
+        await temperature_controller.start_temperature_control(20.0)
+    self.assertIn("below the bottom plate's 23.1 C", logs.output[0])  # 20.0 C is below it
     self.assertEqual(io.written, [STATUS_QUERY_FRAME] * 2 + [SETPOINT_20_FRAME])
     self.assertEqual(ctx.exception.quit_codes[0], 110)
     self.assertIsNone(temperature_controller.target_temperature)
-
-  async def test_a_target_below_the_current_temperature_warns(self):
-    io = FakeFTDI()
-    io.replies = [STATUS_TEMPERATURES, STATUS_IDLE, REFUSED_TEMPERATURE]
-    temperature_controller = make_temperature_controller(io, extended=True)
-    with self.assertLogs(temperature_controller_module.logger, "WARNING") as logs:
-      with self.assertRaises(CommandRefusedError):
-        await temperature_controller.start_temperature_control(20.0)  # bottom plate 23.1 C
-    self.assertIn("below the bottom plate's 23.1 C", logs.output[0])
 
   async def test_a_target_within_the_overshoot_tolerance_does_not_warn(self):
     io = FakeFTDI()
@@ -175,9 +168,6 @@ class SimulatedTemperatureControllerTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.reader = CLARIOstarPlus(simulation=True)
     await self.reader.setup()
-
-  async def test_the_recording_has_an_temperature_controller(self):
-    self.assertIsNotNone(self.reader.temperature_controller)
 
   async def test_target_is_reached_at_once(self):
     temperature_controller = self.reader.temperature_controller

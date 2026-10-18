@@ -8,11 +8,17 @@ from typing import Callable, Dict, List, Literal, Optional, Sequence, TypeVar, U
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
-from pylabrobot.lib.absorbance.results import AbsorbanceResult
+from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
 from pylabrobot.resources import Plate, Well
 
 from .configuration import configuration_from_json, read_configuration
-from .features.absorbance import Absorbance, CLARIOstarAbsorbanceResult, Report
+from .features.absorbance import (
+  Absorbance,
+  CLARIOstarAbsorbanceResult,
+  CLARIOstarAbsorbanceSpectrumResult,
+  Report,
+  _get_spectrum_wavelengths,
+)
 from .features.drawer import Drawer
 from .features.measurement import (
   MeasurementSettings,
@@ -161,7 +167,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     """
     measurement = MeasurementSettings() if measurement_settings is None else measurement_settings
     plate, wells, _ = self._get_run_parameters(
-      wavelengths, report, measurement, shake_settings, wells
+      wavelengths, report, measurement, shake_settings, wells, timeout
     )
     wavelengths = list(wavelengths)
     logger.info(
@@ -233,6 +239,116 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
           )
         )
     return results
+
+  async def measure_spectrum(
+    self,
+    *,
+    wells: Optional[List[Well]] = None,
+    start_wavelength: int,
+    end_wavelength: int,
+    step_size: int,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
+    report: Report = "optical_density",
+    timeout: Optional[float] = None,
+    simulated_data: Optional[AbsorbanceSpectrumResult] = None,
+  ) -> AbsorbanceSpectrumResult:
+    """Check and encode the spectrum; every measured well reads a random optical density at
+    every wavelength.
+
+    Args:
+      wells, start_wavelength, end_wavelength, step_size, measurement_settings, shake_settings,
+        report, timeout: as `Absorbance.measure_spectrum`.
+      simulated_data: a spectrum an earlier `measure_spectrum` returned with the same report, on a
+        reader or in simulation; each measured well reads its spectrum there instead of random
+        values.
+
+    Raises:
+      RuntimeError: if no plate is in the plate holder.
+      ValueError: if an argument is out of range, the settings cannot read the wells of the plate,
+        or `simulated_data` is not the same report with every measured well at every wavelength.
+      NotImplementedError: for raw counts without `simulated_data`: counts need the reader's
+        calibration.
+    """
+    measurement = MeasurementSettings() if measurement_settings is None else measurement_settings
+    plate, wells, _ = self._get_spectrum_run_parameters(
+      start_wavelength,
+      end_wavelength,
+      step_size,
+      report,
+      measurement,
+      shake_settings,
+      wells,
+      timeout,
+    )
+    wavelengths = _get_spectrum_wavelengths(start_wavelength, end_wavelength, step_size)
+    identifiers = _get_measured_identifiers(plate, wells)
+    logger.info(
+      "absorbance spectrum: %d to %d nm in %d nm steps, %d of %d wells of %s, %s scan, %s",
+      start_wavelength,
+      end_wavelength,
+      step_size,
+      len(identifiers),
+      plate.num_items,
+      plate.name,
+      measurement.well_scan,
+      report,
+    )
+    temperature = (await self._driver.request_status()).temperature_bottom
+    timestamp = datetime.now()
+    if simulated_data is None:
+      if report == "raw":
+        raise NotImplementedError("raw counts are not simulated; give captured simulated_data")
+      logger.debug("%s read: simulation: random optical densities", SIMULATED_LINK)
+      data = {
+        identifier: {
+          wavelength: round(random.uniform(*_OPTICAL_DENSITY_RANGE), _OPTICAL_DENSITY_RESOLUTION)
+          for wavelength in wavelengths
+        }
+        for identifier in identifiers
+      }
+      return AbsorbanceSpectrumResult(
+        data=data, temperature=temperature, start_timestamp=timestamp, end_timestamp=timestamp
+      )
+    raw = isinstance(simulated_data, CLARIOstarAbsorbanceSpectrumResult)
+    if raw != (report == "raw"):
+      raise ValueError(f"simulated_data is not a {report} spectrum")
+    missing = [
+      identifier
+      for identifier in identifiers
+      if any(
+        wavelength not in simulated_data.data.get(identifier, {}) for wavelength in wavelengths
+      )
+    ]
+    if missing:
+      raise ValueError(f"simulated_data has no full spectrum for {missing}")
+    logger.debug("%s read: simulation: simulated_data", SIMULATED_LINK)
+    data = {
+      identifier: {
+        wavelength: float(simulated_data.data[identifier][wavelength]) for wavelength in wavelengths
+      }
+      for identifier in identifiers
+    }
+    if isinstance(simulated_data, CLARIOstarAbsorbanceSpectrumResult):
+      if simulated_data.references is None or simulated_data.calibration is None:
+        raise ValueError("simulated_data is raw but holds no references or calibration")
+      references = self._get_measured_values(
+        plate, wells, simulated_data.references, "simulated_data references"
+      )
+      return CLARIOstarAbsorbanceSpectrumResult(
+        data=data,
+        temperature=temperature,
+        start_timestamp=timestamp,
+        end_timestamp=timestamp,
+        references=references,
+        calibration={
+          wavelength: simulated_data.calibration[wavelength] for wavelength in wavelengths
+        },
+        reference_calibration=simulated_data.reference_calibration,
+      )
+    return AbsorbanceSpectrumResult(
+      data=data, temperature=temperature, start_timestamp=timestamp, end_timestamp=timestamp
+    )
 
 
 class CLARIOstarSimulationDriver(CLARIOstarDriver):

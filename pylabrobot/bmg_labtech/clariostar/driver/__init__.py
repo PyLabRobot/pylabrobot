@@ -5,6 +5,7 @@ from .features import (
   Absorbance,
   AbsorbanceConfiguration,
   CLARIOstarAbsorbanceResult,
+  CLARIOstarAbsorbanceSpectrumResult,
   Drawer,
   MeasurementSettings,
   ShakeSettings,
