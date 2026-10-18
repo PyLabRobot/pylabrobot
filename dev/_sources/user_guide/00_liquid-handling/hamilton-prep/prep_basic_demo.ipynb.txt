@@ -432,7 +432,7 @@
    "source": [
     "## 9. Plate movement with CoRe grippers (deck[4] to deck[2])\n",
     "\n",
-    "`drop_resource` reassigns the plate in the resource tree. On a device, check the gripper mount position first: the deck's default is not yet measured."
+    "`place_resource` reassigns the plate in the resource tree. On a device, check the gripper mount position first: the deck's default is not yet measured."
    ]
   },
   {
@@ -458,8 +458,8 @@
    ],
    "source": [
     "arm = await prep.driver.pick_up_core_grippers()\n",
-    "await arm.pick_up_resource(plate)\n",
-    "await arm.drop_resource(deck[2])\n",
+    "await arm.pick_up_resource(plate, pickup_distance_from_top=5)\n",
+    "await arm.place_resource(deck[2])\n",
     "await prep.driver.return_core_grippers()\n",
     "print(\"plate is now on\", plate.parent.name)"
    ]
