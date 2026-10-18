@@ -44,6 +44,7 @@ import {
   updateOrigin,
 } from "./marks.js";
 import { buildDeclaredMeshes, dracoLoader, gltfLoader } from "./models.js";
+import { dropMotions, playMotion, stepMotion } from "./motion.js";
 import {
   clearSelection,
   hoverBox,
@@ -84,7 +85,7 @@ import {
   updateBullseyes,
   updateDeltaLabels,
 } from "./tools.js";
-import { connect, initTransport } from "./transport.js";
+import { connect, initTransport, send } from "./transport.js";
 import {
   buildTree,
   refreshTreeInfo,
@@ -435,6 +436,8 @@ function rebuildScene(data) {
   const kept = rememberView();
   setWorld(buildWorld(data));
   glides.clear();
+  // A motion under way moves resources by where they stood in the last scene.
+  dropMotions();
   timings.decodeMs = performance.now() - _tScene;
   const _tBuild = performance.now();
   forgetDetail();
@@ -511,6 +514,8 @@ whileMoving(updateArms);
 
 whileMoving(updateGlides);
 
+whileMoving(stepMotion);
+
 whileMoving(() => controls.update());
 
 whileMoving(() => gif.isRecording());
@@ -581,6 +586,10 @@ initTransport({
     },
     moves: (moves) => {
       if (world && Array.isArray(moves)) applyMoves(moves);
+    },
+    // A command the device is carrying out: acted out, and the server told when it has been.
+    motion: (data) => {
+      playMotion(data, () => send("motion_done", { id: data.id }));
     },
   },
 });
