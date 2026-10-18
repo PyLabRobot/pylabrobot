@@ -20,6 +20,15 @@ btx = ["pyserial", "numpy>=1.26", "Pillow"]
 modbus = ["pymodbus>=3.0.0,<3.7.0"]
 opentrons = ["opentrons-http-api-client==0.2.1", "httpx", "zeroconf>=0.131.0"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
+celigo-grpc = ["grpcio==1.84.0", "protobuf==7.36.2", "cryptography", "numpy", "Pillow", "psutil"]
+celigo-grpc-dev = [
+  "PyLabRobot[celigo-grpc,test]",
+  "grpcio-tools==1.84.0",
+  "pytest-asyncio",
+  "types-grpcio",
+  "types-protobuf",
+  "types-psutil",
+]
 cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]
@@ -44,6 +53,10 @@ dev = [
   "sphinx_copybutton",
 ]
 
+[project.scripts]
+celigo-grpc = "pylabrobot.revvity.celigo.grpc.hardware_cli:main"
+celigo-grpc-sim = "pylabrobot.revvity.celigo.grpc.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/pylabrobot/pylabrobot"
 
@@ -56,6 +69,7 @@ include = ["pylabrobot", "pylabrobot.*"]
 exclude = ["*.__pycache__"]
 
 [tool.setuptools.package-data]
+"pylabrobot.revvity.celigo.grpc.v1" = ["*.proto", "*.pyi"]
 "*" = [
   "*.css",
   "*.csv",
@@ -77,6 +91,12 @@ exclude = ["*.__pycache__"]
 [tool.ruff]
 line-length = 100
 indent-width = 2
+force-exclude = true
+extend-exclude = [
+  "pylabrobot/revvity/celigo/grpc/v1/*_pb2.py",
+  "pylabrobot/revvity/celigo/grpc/v1/*_pb2.pyi",
+  "pylabrobot/revvity/celigo/grpc/v1/*_pb2_grpc.py",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]

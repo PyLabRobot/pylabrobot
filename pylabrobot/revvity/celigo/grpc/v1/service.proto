@@ -1,0 +1,207 @@
+syntax = "proto3";
+
+package celigo.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Prototype-specific synthetic inputs, not the production acquisition plan.
+message SimulationSpec {
+  uint32 frame_count = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  uint32 bit_depth = 4;
+  uint32 interval_ms = 5;
+}
+
+message DeviceRequest { string device_id = 1; }
+message DeviceInfo {
+  string device_id = 1;
+  string display_name = 2;
+  string device_type = 3;
+  string api_version = 4;
+  uint64 maximum_frame_bytes = 5;
+  uint64 maximum_pixels = 6;
+  uint64 retention_bytes = 7;
+  string configuration_id = 8;
+  repeated string supported_operations = 9;
+}
+enum OperationalState {
+  OPERATIONAL_STATE_UNSPECIFIED = 0;
+  OPERATIONAL_STATE_READY = 1;
+  OPERATIONAL_STATE_BUSY = 2;
+  OPERATIONAL_STATE_UNINITIALIZED = 3;
+  OPERATIONAL_STATE_INITIALIZING = 4;
+  OPERATIONAL_STATE_FAULTED = 5;
+}
+message DeviceStatus {
+  string device_id = 1;
+  OperationalState state = 2;
+  string active_job_id = 3;
+  google.protobuf.Timestamp observed_at = 4;
+  uint64 revision = 5;
+  string fault_summary = 6;
+}
+message CreateRequest {
+  string device_id = 1;
+  string request_id = 2;
+  SimulationSpec specification = 3;
+  string configuration_id = 4;
+}
+message RequestLookup {
+  string device_id = 1;
+  string request_id = 2;
+}
+message InitializationRequest {
+  string device_id = 1;
+  string request_id = 2;
+  string configuration_id = 3;
+}
+// Every physical capture parameter is explicit; zero is not a default.
+message BrightfieldSettings {
+  optional double sample_x_mm = 1;
+  optional double sample_y_mm = 2;
+  optional double z_mm = 3;
+  optional double exposure_ms = 4;
+  optional double gain = 5;
+}
+message BrightfieldRequest {
+  string device_id = 1;
+  string request_id = 2;
+  string configuration_id = 3;
+  BrightfieldSettings settings = 4;
+}
+message CeligoJobSpecification {
+  BrightfieldSettings capture = 1; // Absent only for initialization.
+  uint32 width = 2;
+  uint32 height = 3;
+}
+message CeligoConfiguration {
+  string configuration_id = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  repeated string channels = 4;
+  double calibrated_brightfield_z_mm = 5;
+  double minimum_z_mm = 6;
+  double maximum_z_mm = 7;
+  string capture_contract = 8;
+  double maximum_exposure_ms = 9;
+  double maximum_gain = 10;
+}
+message JobRef {
+  string device_id = 1;
+  string job_id = 2;
+}
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  JOB_STATE_READY = 1;
+  JOB_STATE_RUNNING = 2;
+  JOB_STATE_FINISHED = 3;
+}
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  OUTCOME_PENDING = 1;
+  OUTCOME_SUCCEEDED = 2;
+  OUTCOME_CANCELLED = 3;
+  OUTCOME_FAILED = 4;
+  OUTCOME_INTERRUPTED = 5;
+}
+message JobStatus {
+  JobRef job = 1;
+  string request_id = 2;
+  string kind = 3;
+  JobState state = 4;
+  Outcome outcome = 5;
+  string phase = 6;
+  bool cancellation_requested = 7;
+  uint32 completed = 8;
+  uint32 total = 9;
+  string progress_unit = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  string error = 13;
+  uint64 revision = 14;
+  string configuration_id = 15;
+  bool images_released = 16;
+  bool state_durable = 17;
+}
+message ListFramesRequest {
+  JobRef job = 1;
+  uint32 after_sequence = 2; // Exclusive, sequence starts at 1.
+  uint32 limit = 3; // 1..64; metadata pagination only.
+}
+message FrameInfo {
+  string frame_id = 1;
+  uint32 sequence = 2;
+  uint64 byte_length = 3;
+  string sha256 = 4;
+  bool available = 5;
+}
+message FramePage { repeated FrameInfo frames = 1; }
+message GetFrameRequest {
+  JobRef job = 1;
+  string frame_id = 2;
+}
+message AcquisitionMetadata {
+  string channel = 1;
+  double exposure_ms = 2;
+  double gain = 3;
+  double sample_x_mm = 4;
+  double sample_y_mm = 5;
+  double z_mm = 6;
+  string focus_method = 7;
+  double stage_x_mm = 8;
+  double stage_y_mm = 9;
+  double galvo_x_volts = 10;
+  double galvo_y_volts = 11;
+  string configuration_id = 12;
+}
+message ImageFrame {
+  JobRef job = 1;
+  string frame_id = 2;
+  uint32 sequence = 3;
+  string representation = 4;
+  google.protobuf.Timestamp captured_at = 5;
+  uint32 width = 6;
+  uint32 height = 7;
+  string pixel_format = 8;
+  string encoding = 9;
+  bytes image = 10; // Complete PNG; never an application-level chunk.
+  string sha256 = 11;
+  AcquisitionMetadata metadata = 12;
+}
+
+service DeviceService {
+  rpc GetDevice(DeviceRequest) returns (DeviceInfo);
+  rpc GetStatus(DeviceRequest) returns (DeviceStatus);
+  rpc WatchStatus(DeviceRequest) returns (stream DeviceStatus);
+}
+service SimulationService {
+  // Creates an inert initialization job; StartJob explicitly runs it.
+  rpc CreateInitialization(RequestLookup) returns (JobRef);
+  rpc CreateAcquisition(CreateRequest) returns (JobRef);
+  rpc CreatePreview(CreateRequest) returns (JobRef);
+}
+// Registered only by a physical Celigo service. Job creation never accesses hardware.
+service CeligoService {
+  rpc GetConfiguration(DeviceRequest) returns (CeligoConfiguration);
+  rpc CreateInitialization(InitializationRequest) returns (JobRef);
+  rpc CreateBrightfieldCapture(BrightfieldRequest) returns (JobRef);
+}
+service JobService {
+  rpc GetJob(JobRef) returns (JobStatus);
+  rpc GetJobByRequestId(RequestLookup) returns (JobRef);
+  rpc StartJob(JobRef) returns (JobStatus);
+  rpc CancelJob(JobRef) returns (JobStatus);
+  // Explicitly discard retained pixels from a finished job. Request identity,
+  // outcome, and frame metadata remain, preventing accidental replay.
+  rpc ReleaseJobImages(JobRef) returns (JobStatus);
+  // First response is current state, followed by bounded/coalesced snapshots.
+  // Ends after a Finished snapshot. Cancelling this RPC does not cancel the job.
+  rpc WatchJob(JobRef) returns (stream JobStatus);
+}
+service ImageService {
+  rpc ListFrames(ListFramesRequest) returns (FramePage);
+  rpc GetFrame(GetFrameRequest) returns (ImageFrame);
+  // Waits for first preview if none exists. Never initiates acquisition.
+  rpc WatchPreview(DeviceRequest) returns (stream ImageFrame);
+}

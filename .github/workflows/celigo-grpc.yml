@@ -1,0 +1,39 @@
+name: Celigo gRPC
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  transport:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install optional transport dependencies
+        run: pip install -e '.[celigo-grpc-dev]' mypy==1.18.2
+      - name: Test transport and fake hardware
+        run: python -m pytest -q pylabrobot/revvity/celigo/grpc/tests
+      - name: Verify generated bindings
+        run: |
+          python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. \
+            pylabrobot/revvity/celigo/grpc/v1/service.proto
+          git diff --exit-code -- pylabrobot/revvity/celigo/grpc/v1
+      - name: Check transport types
+        run: >-
+          python -m mypy --follow-imports=silent
+          pylabrobot/revvity/celigo/grpc/client.py
+          pylabrobot/revvity/celigo/grpc/hardware.py
+          pylabrobot/revvity/celigo/grpc/storage.py
+          pylabrobot/revvity/celigo/grpc/model.py
+          pylabrobot/revvity/celigo/grpc/server.py
+          pylabrobot/revvity/celigo/grpc/simulator.py
+          pylabrobot/revvity/celigo/grpc/hardware_cli.py
+          pylabrobot/revvity/celigo/grpc/cli.py
