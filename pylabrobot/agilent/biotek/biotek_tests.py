@@ -1,6 +1,7 @@
 # mypy: disable-error-code = attr-defined
 
 
+import asyncio
 import math
 import unittest
 import unittest.mock
@@ -12,6 +13,8 @@ import pytest
 pytest.importorskip("pylibftdi")
 
 from pylabrobot.agilent.biotek.plate_reader_base import BioTekPlateReaderDriver
+from pylabrobot.agilent.biotek import Cytation1, SynergyH1, SynergyHT
+from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
 
@@ -29,7 +32,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.io.setup = unittest.mock.AsyncMock()
     self.backend.io.stop = unittest.mock.AsyncMock()
     self.backend.io.read = unittest.mock.AsyncMock()
-    self.backend.io.write = unittest.mock.AsyncMock()
+    self.backend.io.write = unittest.mock.AsyncMock(side_effect=len)
     self.backend.io.usb_reset = unittest.mock.AsyncMock()
     self.backend.io.usb_purge_rx_buffer = unittest.mock.AsyncMock()
     self.backend.io.usb_purge_tx_buffer = unittest.mock.AsyncMock()
@@ -52,6 +55,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   async def test_setup(self):
     self.backend.io.read.side_effect = _byte_iter("\x061650200  Version 1.04   0000\x03")
     await self.backend.setup()
+    assert self.backend.version == "1.04"
     assert self.backend.io.setup.called
     self.backend.io.usb_reset.assert_called_once()
     self.backend.io.set_latency_timer.assert_called_with(16)
@@ -66,6 +70,37 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   async def test_request_serial_number(self):
     self.backend.io.read.side_effect = _byte_iter("\x0600000000        0000\x03")
     assert await self.backend.request_serial_number() == "00000000"
+
+  async def test_parameter_write_must_be_complete(self):
+    """A partial parameter write must fail before waiting for a reply."""
+    self.backend.io.write.side_effect = [1, 2]
+    self.backend.io.read.side_effect = [b"\x06"]
+    with self.assertRaisesRegex(IOError, "Incomplete BioTek command write"):
+      await self.backend.send_command("g", "00000")
+    self.backend.io.read.assert_awaited_once()
+
+  async def test_delimited_read_preserves_following_response(self):
+    """The shared ASCII reader must stop before the next response."""
+    self.backend.io.read.side_effect = _byte_iter("first\x03second\x03")
+    self.assertEqual(await self.backend._read_until(b"\x03"), b"first\x03")
+    self.assertEqual(await self.backend._read_until(b"\x03"), b"second\x03")
+
+  async def test_fixed_length_reply_can_contain_etx(self):
+    """The shared fixed-length exchange must preserve a delimiter in the data."""
+    self.backend.io.read.side_effect = _byte_iter("\x06a\x03b0000\x03")
+    response = await self.backend._exchange(b"z", b"1000\x03", data_length=3)
+    self.assertEqual(response, b"a\x03b")
+
+  async def test_stalled_read_raises_builtin_timeout(self):
+    """Keep the timeout type caught by setup's baud-rate fallback."""
+
+    async def stalled_read(_length):
+      """Wait until the response deadline cancels this simulated transport read."""
+      await asyncio.Future()
+
+    self.backend.io.read.side_effect = stalled_read
+    with self.assertRaises(TimeoutError):
+      await self.backend._read_until(b"\x03", timeout=0.01)
 
   async def test_open(self):
     self.backend.io.read.side_effect = _byte_iter(
@@ -223,7 +258,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       + "0000\x03"
       # focal height
       + "\x06"
-      + "\x03"
+      + "0000\x03"
       # read block 1
       + "\x06"
       + "0350000000000000010000000000490300000\x03"
@@ -447,3 +482,202 @@ class TestBioTekLoadingTray(unittest.IsolatedAsyncioTestCase):
   async def test_slow_mode_forwarded(self):
     await self.backend.open(slow=True)
     self.backend.set_slow_mode.assert_awaited_once_with(True)
+
+
+class TestSharedBioTekReader(unittest.IsolatedAsyncioTestCase):
+  """Exercise the common implementation through each reader's public methods."""
+
+  factories = (
+    BioTekPlateReaderDriver,
+    SynergyHT,
+    lambda: SynergyH1(name="reader"),
+    lambda: Cytation1(name="reader"),
+  )
+
+  def make_reader(self, factory):
+    """Construct a reader whose entire transport is mocked, including setup and stop."""
+    with unittest.mock.patch("pylabrobot.agilent.biotek._reader.FTDI", autospec=FTDI):
+      reader = factory()
+    reader.io.write.side_effect = len
+
+    async def disconnect():
+      """Model FTDI's rejection of writes after its handle has been closed."""
+      reader.io.write.side_effect = RuntimeError("Device not initialized")
+
+    reader.io.stop.side_effect = disconnect
+    return reader
+
+  async def test_identity_and_temperature_queries_across_models(self):
+    for factory in self.factories:
+      reader = self.make_reader(factory)
+      with self.subTest(model=type(reader).__name__):
+        reader.io.read.side_effect = _byte_iter(
+          "\x067090202  Version 2.24    0000\x03\x06196804  0000\x03\x062370000\x03"
+        )
+        self.assertEqual(await reader.request_firmware_version(), "2.24")
+        self.assertEqual(reader.version, "2.24")
+        self.assertEqual(await reader.request_serial_number(), "196804")
+        self.assertEqual(reader.serial_number, "196804")
+        self.assertEqual(await reader.get_temperature(), 23.7)
+        self.assertEqual(
+          reader.io.write.await_args_list,
+          [unittest.mock.call(b"e"), unittest.mock.call(b"C"), unittest.mock.call(b"h")],
+        )
+
+  async def test_bad_status_closes_connection_and_clears_identity_across_models(self):
+    for factory in self.factories:
+      reader = self.make_reader(factory)
+      with self.subTest(model=type(reader).__name__):
+        reader.io.read.side_effect = _byte_iter(
+          "\x067090202  Version 2.24    0000\x03\x06237002A\x03"
+        )
+        await reader.request_firmware_version()
+        with self.assertRaisesRegex(RuntimeError, "002A"):
+          await reader.get_temperature()
+        reader.io.stop.assert_awaited_once()
+        with self.assertRaisesRegex(RuntimeError, "Firmware version is not set"):
+          _ = reader.version
+        with self.assertRaisesRegex(RuntimeError, "Device not initialized"):
+          await reader.send_command("A")
+
+  async def test_cancelling_a_queued_command_does_not_close_the_active_operation(self):
+    for factory in self.factories:
+      reader = self.make_reader(factory)
+      with self.subTest(model=type(reader).__name__):
+        entered, release = asyncio.Event(), asyncio.Event()
+        data = _byte_iter("\x062370000\x03")
+
+        async def read(_length):
+          entered.set()
+          await release.wait()
+          return next(data)
+
+        reader.io.read.side_effect = read
+        active = asyncio.create_task(reader.get_temperature())
+        await entered.wait()
+        queued = asyncio.create_task(reader.request_firmware_version())
+        await asyncio.sleep(0)
+        queued.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+          await queued
+        reader.io.stop.assert_not_awaited()
+        release.set()
+        self.assertEqual(await active, 23.7)
+        reader.io.write.assert_awaited_once_with(b"h")
+
+  async def test_explicit_command_timeout_overrides_the_default(self):
+    reader = self.make_reader(SynergyHT)
+    reader.timeout = 0.001
+    data = _byte_iter("\x060000\x03")
+
+    async def delayed_read(_length):
+      await asyncio.sleep(0.005)
+      return next(data)
+
+    reader.io.read.side_effect = delayed_read
+    self.assertEqual(await reader.send_command("A", timeout=1), b"\x060000\x03")
+
+  async def test_baud_fallback_reuses_the_connection_with_nested_commands(self):
+    reader = self.make_reader(BioTekPlateReaderDriver)
+    reader.io.read.side_effect = [
+      TimeoutError("No reply at 9600"),
+      *_byte_iter("\x061650200  Version 1.04   0000\x03"),
+    ]
+    await reader.setup()
+    self.assertEqual(reader.version, "1.04")
+    reader.io.setup.assert_awaited_once()
+    reader.io.stop.assert_not_awaited()
+    self.assertEqual(
+      reader.io.set_baudrate.await_args_list,
+      [unittest.mock.call(9600), unittest.mock.call(38_461)],
+    )
+    self.assertEqual(reader.io.write.await_args_list, [unittest.mock.call(b"e")] * 2)
+
+  async def test_cleanup_failure_does_not_replace_the_protocol_error(self):
+    reader = self.make_reader(SynergyHT)
+    reader.io.read.return_value = b"\x15"
+    reader.io.stop.side_effect = RuntimeError("Close failed")
+    with self.assertRaisesRegex(RuntimeError, "expected ACK"):
+      await reader.open()
+    reader.io.stop.assert_awaited_once()
+
+  async def test_synergy_h1_retries_without_discarding_the_following_frame(self):
+    from pylibftdi import FtdiError
+
+    reader = self.make_reader(lambda: SynergyH1(name="reader"))
+    reader.io.read.side_effect = [FtdiError("Transient read error"), *_byte_iter("a\x03b\x03")]
+    self.assertEqual(await reader._read_until(b"\x03"), b"a\x03")
+    self.assertEqual(await reader._read_until(b"\x03"), b"b\x03")
+
+  async def test_rdop22_measurement_owns_connection_through_result_and_temperature(self):
+    for factory in (BioTekPlateReaderDriver, lambda: SynergyH1(name="reader")):
+      for outcome in ("complete", "cancel", "temperature_timeout"):
+        reader = self.make_reader(factory)
+        with self.subTest(model=type(reader).__name__, outcome=outcome):
+          plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
+          # Capability negotiation, geometry, assay setup, and start precede the result.
+          replies = (
+            "\x06100000000000000000000\x03"
+            "\x06000000000000000000000\x03"
+            "\x06100000000000000000000\x03"
+            "\x060000\x03"
+            "\x060350000000000000010000000000490300000\x03"
+            "\x060000\x03"
+          )
+          body = "01,1,\r000:00:00.0,237,01,01,+1.2340\r\n237\x1a"
+          body += f"{sum(body[6:].encode()) & 255:03d}\x1a0000\x03"
+          data = iter(
+            [*_byte_iter(replies + body)]
+            + (
+              [TimeoutError("Metadata timeout")]
+              if outcome == "temperature_timeout"
+              else [*_byte_iter("\x062370000\x03" * 2)]
+            )
+          )
+          entered, release = asyncio.Event(), asyncio.Event()
+          received = 0
+
+          async def read(_length):
+            nonlocal received
+            if received == len(replies):
+              entered.set()
+              await release.wait()
+            received += 1
+            chunk = next(data)
+            if isinstance(chunk, Exception):
+              raise chunk
+            return chunk
+
+          reader.io.read.side_effect = read
+          measurement = asyncio.create_task(reader.read_absorbance(plate, [plate.get_item(0)], 580))
+          await asyncio.wait_for(entered.wait(), 1)
+          queued = asyncio.create_task(reader.get_temperature())
+          await asyncio.sleep(0)
+          self.assertFalse(queued.done())
+          self.assertEqual(reader.io.write.call_args.args[0], b"O")
+          if outcome == "cancel":
+            measurement.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+              await measurement
+          else:
+            release.set()
+            result = await asyncio.wait_for(measurement, 1)
+            self.assertEqual(result[0].data[0][0], 1.234)
+            self.assertEqual(
+              result[0].temperature, None if outcome == "temperature_timeout" else 23.7
+            )
+          if outcome == "complete":
+            self.assertEqual(await queued, 23.7)
+            reader.io.stop.assert_not_awaited()
+          else:
+            with self.assertRaisesRegex(RuntimeError, "Device not initialized"):
+              await queued
+            reader.io.stop.assert_awaited()
+
+  async def test_background_shaking_can_be_stopped_with_the_shared_lock(self):
+    reader = self.make_reader(BioTekPlateReaderDriver)
+    reader.io.read.side_effect = _byte_iter("\x060000\x03" * 2)
+    await asyncio.wait_for(reader.shake(reader.ShakeType.ORBITAL, 3), 1)
+    await asyncio.wait_for(reader.stop(), 1)
+    self.assertEqual(reader.io.write.call_args.args[0], b"x")
+    reader.io.stop.assert_awaited_once()

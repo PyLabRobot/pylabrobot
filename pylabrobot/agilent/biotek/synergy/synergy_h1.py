@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import time
 from typing import Optional
 
 try:
@@ -50,52 +49,15 @@ class SynergyH1(BioTekPlateReaderDriver):
   def focal_height_range(self):
     return (4.5, 10.68)
 
-  async def _read_until(
-    self, terminator: bytes, timeout: Optional[float] = None, chunk_size: int = 512
-  ) -> bytes:
-    if timeout is None:
-      timeout = self.timeout
-
-    deadline = time.monotonic() + timeout
-
+  async def _read_chunk(self, length: int) -> bytes:
+    """Retry transient FTDI read errors without consuming bytes from the next reply."""
     retries = 0
-    max_retries = 3
-
     while True:
-      response = self._pop_response(terminator)
-      if response is not None:
-        return response
-      if time.monotonic() > deadline:
-        logger.debug(
-          f"{self.__class__.__name__} _read_until timed out; partial buffer (hex): %s",
-          self._receive_buffer.hex(),
-        )
-        raise TimeoutError(
-          f"{self.__class__.__name__} _read_until timed out waiting for {terminator!r}; "
-          f"partial={self._receive_buffer.hex()}"
-        )
-
       try:
-        data = await self.io.read(chunk_size)
-        if len(data) == 0:
-          await asyncio.sleep(0.02)
-          continue
-
-        self._receive_buffer.extend(data)
-
-      except FtdiError as e:
+        return await super()._read_chunk(length)
+      except FtdiError:
         retries += 1
-        logger.warning(
-          f"{self.__class__.__name__} transient FtdiError while reading: %s — retrying", e
-        )
-
-        if retries >= max_retries:
-          logger.warning(
-            f"{self.__class__.__name__} too many FtdiError retries ({max_retries}) — stopping", e
-          )
+        if retries == 3:
           raise
-
+        logger.warning("Synergy H1 FTDI read failed; retrying", exc_info=True)
         await asyncio.sleep(0.05)
-        continue
-      except Exception:
-        raise
