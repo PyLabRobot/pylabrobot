@@ -7,6 +7,7 @@ from collections import deque
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
+from unittest import TestCase
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -146,13 +147,14 @@ def test_native_endpoint_serializer(wavelength, expected):
 
 
 @async_test
-async def test_setup_and_idempotent_lifecycle(reader, caplog):
+async def test_setup_and_idempotent_lifecycle(reader):
   device, io = reader
   with pytest.raises(RuntimeError, match="Firmware version is not set"):
     _ = device.version
   replay = attach(io, setup_events() * 2, 1)
-  await device.setup()
-  await device.setup()
+  with TestCase().assertLogs(SynergyHT.__module__, level="WARNING") as logs:
+    await device.setup()
+    await device.setup()
   assert not replay.events
   assert device.version == "2.24"
   assert device.serial_number == "196804"
@@ -164,7 +166,7 @@ async def test_setup_and_idempotent_lifecycle(reader, caplog):
   io.set_latency_timer.assert_awaited_with(16)
   io.set_rts.assert_awaited_with(True)
   io.set_dtr.assert_awaited_with(False)
-  assert "not been verified on hardware" in caplog.text
+  assert any("not been verified on hardware" in message for message in logs.output)
   await device.stop()
   await device.stop()
   assert io.stop.await_count == 2
