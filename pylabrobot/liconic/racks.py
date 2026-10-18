@@ -73,3 +73,38 @@ class StoreXCassette(PlateCarrier):
         for i in range(num_sites)
       },
     )
+
+
+def _create_legacy_rack(
+  name: str,
+  site_height: int,
+  num_sites: int,
+  model: str,
+  total_height: int = 505,
+) -> PlateCarrier:
+  """Build a PlateCarrier with the fixed geometry used by the legacy rack factories."""
+  start = 17.2  # rough height of first plate position
+  return PlateCarrier(
+    name=name,
+    size_x=109,  # based off cytomat rack dimensions roughly the same
+    size_y=142,
+    size_z=total_height,
+    sites={
+      i: PlateHolder(
+        size_x=85.48,
+        size_y=127.27,
+        # estimates
+        size_z=max(site_height, total_height - site_height) if i == num_sites - 1 else site_height,
+        name=f"{name}-{i}",
+        pedestal_size_z=0,
+      ).at(
+        Coordinate(
+          x=11.76,  # estimate
+          y=0,
+          z=start + site_height * i,
+        )
+      )
+      for i in range(num_sites)
+    },
+    model=model,
+  )
