@@ -48,3 +48,42 @@ jobs:
         with:
           version: "3.12"
           extra: ${{ matrix.extra }}
+
+  test-rpc:
+    if: github.event_name != 'pull_request_review'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: "3.10"
+            extra: rpc-dev
+            test-paths: pylabrobot/rpc/tests
+          - version: "3.10"
+            extra: celigo-grpc-dev
+            test-paths: pylabrobot/rpc/tests pylabrobot/revvity/celigo/grpc/tests
+          - version: "3.12"
+            extra: celigo-grpc-dev
+            test-paths: pylabrobot/rpc/tests pylabrobot/revvity/celigo/grpc/tests
+
+    name: Tests (${{ matrix.extra }}, py${{ matrix.version }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.version }}
+      - name: Install optional RPC dependencies
+        run: pip install -e '.[${{ matrix.extra }}]'
+      - name: Run RPC tests
+        run: python -m pytest -q ${{ matrix.test-paths }}
+      - name: Verify generated bindings
+        if: matrix.extra == 'celigo-grpc-dev'
+        run: |
+          python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. \
+            pylabrobot/rpc/v1/device.proto pylabrobot/rpc/v1/jobs.proto \
+            pylabrobot/rpc/v1/images.proto pylabrobot/revvity/celigo/grpc/v1/service.proto \
+            pylabrobot/revvity/celigo/grpc/v1/storage.proto
+          git diff --exit-code -- pylabrobot/rpc/v1 pylabrobot/revvity/celigo/grpc/v1
