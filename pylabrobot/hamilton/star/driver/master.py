@@ -49,7 +49,7 @@ from pylabrobot.io.io import IOBase
 from pylabrobot.io.usb import USB
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
+from pylabrobot.resources.hamilton.hamilton_decks import FRAME_BY_NUM_TRACKS, HamiltonDeck
 from pylabrobot.resources.hamilton.star_decks import HamiltonSTARDeck
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.manipulator import LinkBody
@@ -1150,12 +1150,31 @@ class STARDriver:
         "the declared configuration does not describe this device:\n  " + "\n  ".join(differences)
       )
 
+  def _check_deck_against(self, discovered: DeviceConfiguration) -> None:
+    """Raise if the deck is not built for the number of slots the device answered.
+
+    Args:
+      discovered: what the device answered.
+
+    Raises:
+      ValueError: If the deck's track count differs from the device's slot count.
+    """
+    if self.deck is None or self.deck.num_tracks == discovered.instrument_size_slots:
+      return
+    slots = discovered.instrument_size_slots
+    frame = FRAME_BY_NUM_TRACKS.get(slots)
+    build = f": build it for the {frame} frame" if frame is not None else ""
+    raise ValueError(
+      f"this device has {slots} slots, the deck is built for {self.deck.num_tracks}{build}"
+    )
+
   async def discover(self):
     """Read what device is on the other end, and build the subsystems it turns out to have.
 
     Read-only: nothing moves. Call `initialize` to bring the device up.
     """
     self.configuration = await self.request_device_configuration()
+    self._check_deck_against(self.configuration)
     # Which device answered, and what it is running. Read into the same configuration the rest of
     # discovery fills, so a saved one says where it came from. A device that will not answer keeps
     # nothing rather than failing setup: the identity is for telling recordings apart, and nothing

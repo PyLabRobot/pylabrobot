@@ -68,12 +68,22 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     assert await self.backend.request_serial_number() == "00000000"
 
   async def test_open(self):
-    self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x03"]
+    self.backend.io.read.side_effect = _byte_iter(
+      "\x06100000000000000000000\x03"  # Carrier-speed capability
+      "\x06000000\x03"  # Carrier-speed reply
+      "\x060000\x03"  # Tray reply
+    )
     await self.backend.open()
     self.backend.io.write.assert_called_with(b"J")
 
   async def test_close(self):
-    self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x06", b"\x03", b"\x03"]
+    self.backend.io.read.side_effect = _byte_iter(
+      "\x06100000000000000000000\x03"  # Carrier-speed capability
+      "\x06000000\x03"  # Carrier-speed reply
+      "\x06100000000000000000000\x03"  # RDOP22 capability
+      "\x060000\x03"  # Geometry reply
+      "\x060000\x03"  # Tray reply
+    )
     plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
     await self.backend.close(plate=plate)
     self.backend.io.write.assert_called_with(b"A")
@@ -84,8 +94,11 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_absorbance(self):
     self.backend.io.read.side_effect = _byte_iter(
+      "\x06100000000000000000000\x03"  # RDOP22 supported
+      "\x06000000000000000000000\x03"  # No extra read field
+      "\x06100000000000000000000\x03"  # Extended optics
       "\x06"
-      + "\x03"
+      + "0000\x03"
       + "\x06"
       + "0350000000000000010000000000490300000\x03"
       + "\x06"
@@ -118,9 +131,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     )
 
     self.backend.io.write.assert_any_call(b"D")
-    self.backend.io.write.assert_any_call(
-      b"004701010108120001200100001100100000106000080580113\x03"
-    )
+    self.backend.io.write.assert_any_call(b"004701010108120001200100001100100000106000080580113")
     self.backend.io.write.assert_any_call(b"O")
 
     expected_data = [
@@ -206,9 +217,10 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_luminescence_partial(self):
     self.backend.io.read.side_effect = _byte_iter(
+      "\x06100000000000000000000\x03"  # RDOP22 supported
       # plate
       "\x06"
-      + "\x03"
+      + "0000\x03"
       # focal height
       + "\x06"
       + "\x03"
@@ -268,8 +280,9 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_fluorescence(self):
     self.backend.io.read.side_effect = _byte_iter(
+      "\x06100000000000000000000\x03"  # RDOP22 supported
       "\x06"
-      + "\x03"
+      + "0000\x03"
       + "\x06"
       + "0000\x03"
       + "\x06"
