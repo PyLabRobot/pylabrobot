@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { forgetDetail, updateDetail, updateEdgeMode } from "./appearance.js";
 import { buildMeshes } from "./boxes.js";
+import { clearCollisions, showCollisions } from "./collisions.js";
 import { PROTOCOL } from "./constants.js";
 import { initDeviceTools } from "./device_tools.js";
 import { hiddenNames, meshes, meshRoots, modelMeshes, stateOf, worldBox } from "./drawn.js";
@@ -44,6 +45,7 @@ import {
   updateOrigin,
 } from "./marks.js";
 import { buildDeclaredMeshes, dracoLoader, gltfLoader } from "./models.js";
+import { dropMotions, playMotion, stepMotion } from "./motion.js";
 import {
   clearSelection,
   hoverBox,
@@ -84,7 +86,7 @@ import {
   updateBullseyes,
   updateDeltaLabels,
 } from "./tools.js";
-import { connect, initTransport } from "./transport.js";
+import { connect, initTransport, send } from "./transport.js";
 import {
   buildTree,
   refreshTreeInfo,
@@ -435,6 +437,10 @@ function rebuildScene(data) {
   const kept = rememberView();
   setWorld(buildWorld(data));
   glides.clear();
+  // A motion under way moves resources by where they stood in the last scene.
+  dropMotions();
+  // What the last scene's indices named is not what these do: the collision boxes go.
+  clearCollisions();
   timings.decodeMs = performance.now() - _tScene;
   const _tBuild = performance.now();
   forgetDetail();
@@ -511,6 +517,8 @@ whileMoving(updateArms);
 
 whileMoving(updateGlides);
 
+whileMoving(stepMotion);
+
 whileMoving(() => controls.update());
 
 whileMoving(() => gif.isRecording());
@@ -581,6 +589,14 @@ initTransport({
     },
     moves: (moves) => {
       if (world && Array.isArray(moves)) applyMoves(moves);
+    },
+    // A command the device is carrying out: acted out, and the server told when it has been.
+    motion: (data) => {
+      playMotion(data, () => send("motion_done", { id: data.id }));
+    },
+    // What a refused command would hit: a box over each resource named, held for looking at.
+    collisions: (data) => {
+      if (Array.isArray(data.collisions)) showCollisions(data.collisions);
     },
   },
 });

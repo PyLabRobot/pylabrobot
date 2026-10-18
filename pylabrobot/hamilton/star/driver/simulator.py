@@ -15,7 +15,7 @@ import dataclasses
 import datetime
 import logging
 import math
-from typing import Any, Dict, List, Literal, Optional, Tuple, cast
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Tuple, cast
 
 from pylabrobot.hamilton.protocol.text.framing import (
   assemble_channel_command,
@@ -1893,6 +1893,11 @@ class STARSimulationDriver(STARDriver):
     # What the drives would still be doing, in seconds: the longest move recorded since the last
     # command, waited out before the next one goes.
     self._motion_owed = 0.0
+    # Who acts out a command's motion before the device answers it, or None: called with the
+    # module, the command and its parameters, and awaited. A viewer that animates what the drives
+    # do between the positions the model records sets this, so the command takes as long as the
+    # animation and the model moves only once it has played.
+    self.motion_listener: Optional[Callable[[str, str, Dict[str, Any]], Awaitable[None]]] = None
     # How far a tip of each defined type stands below the stop disc, by tip type index, as
     # `define_tip_needle` was told. A tip command names one of these, and what it collects hangs
     # that far down: the traverse height it ends at is the tip's, so the stop disc ends higher.
@@ -2099,6 +2104,8 @@ class STARSimulationDriver(STARDriver):
       **kwargs,
     )
     await self.pay_motion_time()
+    if self.motion_listener is not None:
+      await self.motion_listener(module, command, kwargs)
     answered = await self._answer(module, command, **kwargs)
     if answered is None:
       self._log_exchange(cmd, None)
