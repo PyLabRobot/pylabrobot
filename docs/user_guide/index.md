@@ -42,6 +42,7 @@ inheco/index
 kbioscience/index
 kbiosystems/index
 li_cor/index
+liconic/index
 mettler_toledo/index
 micronic/index
 molecular_devices/index

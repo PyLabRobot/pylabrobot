@@ -794,8 +794,13 @@
       "heating",
       "active cooling"
     ],
-    "status": "mostly",
-    "api_version": "v0",
+    "status": "wip",
+    "api_version": "v1",
+    "api": "pylabrobot.liconic.StoreX",
+    "code_slug": "liconic/storex.py",
+    "doc_slug": "liconic/storex/hello-world",
+    "needs_hardware_testing": true,
+    "notes": "STX PLC driver; instrument-specific cassette calibration and hardware validation required.",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://liconic.com/products/stx.php"
   },
