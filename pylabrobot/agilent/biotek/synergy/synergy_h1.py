@@ -56,19 +56,23 @@ class SynergyH1(BioTekPlateReaderDriver):
     if timeout is None:
       timeout = self.timeout
 
-    deadline = time.time() + timeout
-    buf = bytearray()
+    deadline = time.monotonic() + timeout
 
     retries = 0
     max_retries = 3
 
     while True:
-      if time.time() > deadline:
+      response = self._pop_response(terminator)
+      if response is not None:
+        return response
+      if time.monotonic() > deadline:
         logger.debug(
-          f"{self.__class__.__name__} _read_until timed out; partial buffer (hex): %s", buf.hex()
+          f"{self.__class__.__name__} _read_until timed out; partial buffer (hex): %s",
+          self._receive_buffer.hex(),
         )
         raise TimeoutError(
-          f"{self.__class__.__name__} _read_until timed out waiting for {terminator!r}; partial={buf.hex()}"
+          f"{self.__class__.__name__} _read_until timed out waiting for {terminator!r}; "
+          f"partial={self._receive_buffer.hex()}"
         )
 
       try:
@@ -77,17 +81,7 @@ class SynergyH1(BioTekPlateReaderDriver):
           await asyncio.sleep(0.02)
           continue
 
-        buf.extend(data)
-
-        if terminator in buf:
-          idx = buf.index(terminator) + len(terminator)
-          full = bytes(buf[:idx])
-          logger.debug(
-            f"{self.__class__.__name__} _read_until received %d bytes (hex prefix): %s",
-            len(full),
-            full[:200].hex(),
-          )
-          return full
+        self._receive_buffer.extend(data)
 
       except FtdiError as e:
         retries += 1
