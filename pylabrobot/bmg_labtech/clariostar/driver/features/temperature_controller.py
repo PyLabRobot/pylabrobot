@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 _OFF = 0x0000
 _MONITOR = 0x0001
 
-# Setpoint range in degrees C, from the operating manual; the vendor's temperature dialog uses
-# the same limits for a CLARIOstar. 20.0 is refused (quit code 110).
+# Setpoint range in degrees C, from the operating manual. 20.0 is refused (quit code 110).
 _TEMPERATURE_RANGE = (25.0, 45.0)
 _EXTENDED_TEMPERATURE_RANGE = (10.0, 65.0)
 

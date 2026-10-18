@@ -6,6 +6,9 @@ from pylabrobot.bmg_labtech.clariostar.driver.errors import (
   ChecksumError,
   FrameError,
 )
+from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
+  VERIFICATION_DATA_REPLY,
+)
 from pylabrobot.bmg_labtech.clariostar.driver.features.drawer_tests import (
   CLOSE_DRAWER_FRAME,
   CLOSE_DRAWER_REPLY,
@@ -80,12 +83,10 @@ class FTDIFramingTests(unittest.TestCase):
     with self.assertRaises(FrameError):
       ftdi_validate_frame(STATUS_TRUNCATED)
 
-  def test_checksum_is_three_bytes(self):
-    # 300 bytes of 0xFF sum past 16 bits; the checksum must keep the high byte.
-    frame = ftdi_wrap_payload(b"\xff" * 300)
-    self.assertEqual(int.from_bytes(frame[-4:-1], "big"), sum(frame[:-4]) & 0xFFFFFF)
-    self.assertGreater(int.from_bytes(frame[-4:-1], "big"), 0xFFFF)
-    ftdi_validate_frame(frame)
+  def test_a_checksum_past_16_bits_validates(self):
+    # The 96-well verification read's data reply: its checksum is 0x01c462.
+    self.assertGreater(int.from_bytes(VERIFICATION_DATA_REPLY[-4:-1], "big"), 0xFFFF)
+    ftdi_validate_frame(VERIFICATION_DATA_REPLY)
 
   def test_corrupted_byte_fails_checksum(self):
     frame = bytearray(STATUS_REPLY_FRAME)

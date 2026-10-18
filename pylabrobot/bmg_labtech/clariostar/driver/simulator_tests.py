@@ -16,9 +16,12 @@ from pylabrobot.bmg_labtech.clariostar.driver.configuration import (
   read_configuration,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload
-from pylabrobot.bmg_labtech.clariostar.driver.master_tests import PARAMETERS_REPLY, FakeFTDI
-from pylabrobot.bmg_labtech.clariostar.driver.parameter_table import PARAMETER_TABLE, REPLY_OFFSET
+from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
+  PARAMETERS_REPLY,
+  STATUS_IDLE,
+  FakeFTDI,
+  make_driver,
+)
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.biorad.plates import biorad_96_wellplate_200uL_Vb
 
@@ -30,28 +33,19 @@ def make_plate(name: str) -> Plate:
   return biorad_96_wellplate_200uL_Vb(name)
 
 
-def decoded_with_parameters():
+async def decoded_with_parameters():
+  """The configuration the recorded INIT and stored-parameters replies decode to."""
+  io = FakeFTDI()
+  io.replies = [STATUS_IDLE, PARAMETERS_REPLY]
   configuration = decoded()
-  payload = ftdi_extract_payload(PARAMETERS_REPLY)
-  configuration.update_from_parameters(
-    {
-      name: int.from_bytes(
-        payload[address + REPLY_OFFSET : address + REPLY_OFFSET + size], "little"
-      )
-      for name, address, size in PARAMETER_TABLE
-    }
-  )
+  configuration.update_from_parameters(await make_driver(io).request_parameters())
   return configuration
 
 
-class RecordingTests(unittest.TestCase):
-  def test_recording_is_the_decoded_replies(self):
+class RecordingTests(unittest.IsolatedAsyncioTestCase):
+  async def test_recording_is_the_decoded_replies(self):
     saved = read_configuration(RECORDING_CLARIOSTAR_PLUS)["device"]
-    self.assertEqual(saved, configuration_to_json(decoded_with_parameters()))
-
-  def test_recording_holds_no_serial_number(self):
-    saved = read_configuration(RECORDING_CLARIOSTAR_PLUS)["device"]
-    self.assertEqual(saved["serial_number"], SERIAL_NUMBER_PLACEHOLDER)
+    self.assertEqual(saved, configuration_to_json(await decoded_with_parameters()))
 
   def test_recording_is_named_from_its_contents(self):
     configuration = configuration_from_json(read_configuration(RECORDING_CLARIOSTAR_PLUS)["device"])
@@ -59,9 +53,9 @@ class RecordingTests(unittest.TestCase):
       compute_recording_name(configuration), os.path.basename(RECORDING_CLARIOSTAR_PLUS)
     )
 
-  def test_read_back_equals_decoded(self):
+  async def test_read_back_equals_decoded(self):
     configuration = configuration_from_json(read_configuration(RECORDING_CLARIOSTAR_PLUS)["device"])
-    expected = decoded_with_parameters()
+    expected = await decoded_with_parameters()
     expected.serial_number = SERIAL_NUMBER_PLACEHOLDER
     self.assertEqual(configuration, expected)
 

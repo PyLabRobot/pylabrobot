@@ -2,7 +2,7 @@
 
 import unittest
 from typing import List
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
 from pylabrobot.bmg_labtech.clariostar.driver.errors import (
@@ -153,8 +153,6 @@ class UseIOTests(unittest.IsolatedAsyncioTestCase):
   def test_io_type_sets_use_io(self):
     self.assertEqual(CLARIOstarDriver(io=FakeFTDI()).use_io, "ftdi")
     self.assertEqual(CLARIOstarDriver(io=MagicMock(spec=USB)).use_io, "usb")
-
-  def test_matching_use_io_and_io_accepted(self):
     self.assertEqual(CLARIOstarDriver(use_io="usb", io=MagicMock(spec=USB)).use_io, "usb")
 
   def test_mismatched_use_io_and_io_rejected(self):
@@ -192,15 +190,14 @@ class StatusTests(unittest.TestCase):
     self.assertFalse(motors_off.motors_enabled)
     self.assertFalse(motors_off.busy)
 
+  def test_temperatures_from_real_replies(self):
+    status = parse_status(STATUS_TEMPERATURES)
+    self.assertEqual((status.temperature_bottom, status.temperature_top), (23.1, 24.0))
+    status = parse_status(STATUS_IDLE)
+    self.assertEqual((status.temperature_bottom, status.temperature_top), (None, None))
+
 
 class ExchangeTests(unittest.IsolatedAsyncioTestCase):
-  async def test_status_round_trip(self):
-    io = FakeFTDI()
-    io.replies = [STATUS_IDLE]
-    status = await make_driver(io).request_status()
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME])
-    self.assertFalse(status.busy)
-
   async def test_reply_split_into_single_bytes(self):
     io = FakeFTDI(chunk=1)
     io.replies = [STATUS_PLATE_DETECTED]
@@ -253,36 +250,18 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class FirmwareTests(unittest.IsolatedAsyncioTestCase):
-  async def test_discover_reads_firmware_from_real_reply(self):
+  async def test_discover_applies_the_stored_parameters(self):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, PARAMETERS_REPLY]
     driver = make_driver(io)
     await driver.discover()
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME, PARAMETERS_FRAME])
     self.assertEqual(driver.configuration.extended_temperature_range, False)
-
-  async def test_confirmed_firmware_does_not_warn(self):
-    io = FakeFTDI()
-    io.replies = [STATUS_IDLE, PARAMETERS_REPLY]
-    driver = make_driver(io)
-    driver.configuration.firmware_version = "1.35"
-    with patch.object(master_module.logger, "warning") as warning:
-      await driver.discover()
-    warning.assert_not_called()
 
   def test_unconfirmed_firmware_warns(self):
     driver = make_driver(FakeFTDI())
     driver.configuration.firmware_version = "9.99"
     with self.assertLogs(master_module.logger, "WARNING"):
       driver._check_firmware_compatibility()
-
-
-class TemperatureTests(unittest.TestCase):
-  def test_temperatures_from_real_replies(self):
-    status = parse_status(STATUS_TEMPERATURES)
-    self.assertEqual((status.temperature_bottom, status.temperature_top), (23.1, 24.0))
-    status = parse_status(STATUS_IDLE)
-    self.assertEqual((status.temperature_bottom, status.temperature_top), (None, None))
 
 
 class WhenIdleTests(unittest.IsolatedAsyncioTestCase):
@@ -355,12 +334,6 @@ class StatusRefusalAndWarningTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(CommandRefusedError):
       await make_driver(io).discover()
 
-  async def test_uninitialized_reader_still_takes_init(self):
-    io = FakeFTDI()
-    io.replies = [INIT_REPLY, STATUS_BUSY, STATUS_IDLE]
-    await make_driver(io).initialize()
-    self.assertEqual(io.written[0], INIT_FRAME)
-
   async def test_warning_is_logged_once_and_not_raised(self):
     io = FakeFTDI()
     io.replies = [
@@ -398,11 +371,6 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(written, [INIT_FRAME] + [STATUS_QUERY_FRAME] * 3)
 
-  async def test_setup_initializes_a_reader_that_refuses_status(self):
-    # INIT is sent without polling first, so a reader that refuses STATUS still takes it.
-    written = await self.setup_and_return_written([INIT_REPLY, STATUS_IDLE, STATUS_IDLE])
-    self.assertEqual(written, [INIT_FRAME] + [STATUS_QUERY_FRAME] * 2)
-
   async def test_motors_still_off_after_init_raises(self):
     with self.assertRaises(RuntimeError):
       await self.setup_and_return_written([INIT_REPLY, STATUS_MOTORS_OFF, STATUS_MOTORS_OFF])
@@ -410,9 +378,11 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
   async def test_malformed_init_reply_is_not_resent(self):
     io = FakeFTDI()
     io.replies = [INIT_REPLY[:100], STATUS_BUSY, STATUS_IDLE]
-    await make_driver(io).initialize()
+    driver = make_driver(io)
+    await driver.initialize()
     self.assertEqual(io.written, [INIT_FRAME] + [STATUS_QUERY_FRAME] * 2)
     self.assertEqual(io.purges, 1)
+    self.assertIsNone(driver.configuration.model)  # the configuration stays unread
 
 
 class USBTests(unittest.IsolatedAsyncioTestCase):

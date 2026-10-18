@@ -4,9 +4,9 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Set, Tuple
 
-from pylabrobot.lib.absorbance.results import AbsorbanceResult
+from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
 from pylabrobot.resources import Plate, Well
 
 from .measurement import (
@@ -17,8 +17,8 @@ from .measurement import (
   ShakeSettings,
   _compute_run_end,
   _compute_run_start,
+  _get_measured_identifiers,
   _get_readings_by_well,
-  _run_measurement,
 )
 
 if TYPE_CHECKING:
@@ -31,8 +31,13 @@ _REPORTS = ("optical_density", "raw")
 
 # Absorbance in the well-scan field (A02, B1).
 _WELL_SCAN_CODE = 0x02
-# The absorbance fields of a RUN, as the vendor sends its default endpoint read (DOE_Baseline).
-_REFERENCE_BLOCK = bytes.fromhex("00000064232826ca00000064")
+# A discrete read's end and step fields: end 0, and the spectrometer's 10 nm bandwidth in the step
+# field (DOE_Baseline `00 00 00 64`).
+_DISCRETE_END = 0.0
+_DISCRETE_BANDWIDTH = 10.0
+# Water pathlength correction after the wavelength fields, in nm: two wavelengths, a third unused,
+# and its bandwidth, as every capture sends them.
+_PATHLENGTH_CORRECTION = (900.0, 993.0, 0.0, 10.0)
 # Pause, u16 BE each: when (0 off, 1 before plate reading), then seconds. Off, the
 # vendor sends 5 s (DOE_Baseline); on, 5 s captured (P01).
 _NO_PAUSE = bytes.fromhex("00000005")
@@ -60,23 +65,42 @@ class CLARIOstarAbsorbanceResult(AbsorbanceResult):
 
 
 @dataclass
+class CLARIOstarAbsorbanceSpectrumResult(AbsorbanceSpectrumResult):
+  """A CLARIOstar absorbance spectrum in raw counts: `data` holds each well's sample counts by
+  wavelength, with what computes their optical densities (see `CLARIOstarAbsorbanceResult`).
+
+  Attributes:
+    references: the reference counts, keyed by well identifier; the same for every wavelength.
+    calibration: each wavelength's calibration pair, keyed by wavelength in nm.
+    reference_calibration: the reference's calibration pair.
+  """
+
+  references: Optional[Dict[str, float]] = None
+  calibration: Optional[Dict[int, Tuple[int, int]]] = None
+  reference_calibration: Optional[Tuple[int, int]] = None
+
+
+@dataclass
 class AbsorbanceConfiguration(MeasurementConfiguration):
   """Device facts of the absorbance measurement."""
 
   wavelength_range: Tuple[int, int] = (220, 1000)
   """Wavelengths a read accepts, in nm (the manufacturer's spectrometer range)."""
   maximum_wavelengths: int = 8
-  """Wavelengths per read (the vendor's protocol fields WaveLength1-WaveLength8; 1-5 captured)."""
+  """Wavelengths per read (the vendor software manual: up to 8; 1-5 captured)."""
 
 
 def _check_arguments(
-  wavelengths: Sequence[int], report: str, configuration: AbsorbanceConfiguration
+  wavelengths: Sequence[int],
+  report: str,
+  configuration: AbsorbanceConfiguration,
+  timeout: Optional[float] = None,
 ) -> None:
-  """Raise if the wavelengths or the report are out of range.
+  """Raise if the wavelengths, the report or the timeout are out of range.
 
   Raises:
     ValueError: listing every violation: not 1 to `maximum_wavelengths` wavelengths, a wavelength
-      not a whole nm within `wavelength_range`, an unknown report.
+      not a whole nm within `wavelength_range`, an unknown report, a timeout not positive.
   """
   errors = []
   maximum = configuration.maximum_wavelengths
@@ -88,6 +112,46 @@ def _check_arguments(
       errors.append(f"wavelengths must be whole {lowest} to {highest} nm, got {wavelength!r}")
   if report not in _REPORTS:
     errors.append(f"report must be one of {list(_REPORTS)}, got {report!r}")
+  if timeout is not None and not timeout > 0:
+    errors.append(f"timeout must be positive, got {timeout}")
+  if errors:
+    raise ValueError("; ".join(errors))
+
+
+def _check_spectrum_arguments(
+  start_wavelength: int,
+  end_wavelength: int,
+  step_size: int,
+  report: str,
+  configuration: AbsorbanceConfiguration,
+  timeout: Optional[float] = None,
+) -> None:
+  """Raise if the spectrum's wavelengths, the report or the timeout are out of range.
+
+  Raises:
+    ValueError: listing every violation: an end not a whole nm within `wavelength_range`, an end
+      not above the start, a step not a whole nm of at least 1 dividing the range, an unknown
+      report, a timeout not positive.
+  """
+  errors = []
+  lowest, highest = configuration.wavelength_range
+  ends_valid = True
+  for name, value in (("start_wavelength", start_wavelength), ("end_wavelength", end_wavelength)):
+    if not isinstance(value, int) or not lowest <= value <= highest:
+      errors.append(f"{name} must be a whole {lowest} to {highest} nm, got {value!r}")
+      ends_valid = False
+  if not isinstance(step_size, int) or step_size < 1:
+    errors.append(f"step_size must be a whole nm of at least 1, got {step_size!r}")
+  elif ends_valid and end_wavelength <= start_wavelength:
+    errors.append(f"end_wavelength must be above start_wavelength, got {end_wavelength}")
+  elif ends_valid and (end_wavelength - start_wavelength) % step_size:
+    errors.append(
+      f"step_size must divide {start_wavelength} to {end_wavelength} nm, got {step_size}"
+    )
+  if report not in _REPORTS:
+    errors.append(f"report must be one of {list(_REPORTS)}, got {report!r}")
+  if timeout is not None and not timeout > 0:
+    errors.append(f"timeout must be positive, got {timeout}")
   if errors:
     raise ValueError("; ".join(errors))
 
@@ -99,23 +163,62 @@ def _compute_pause(pause_before_reading: Optional[int]) -> bytes:
   return _PAUSE_BEFORE_READING.to_bytes(2, "big") + pause_before_reading.to_bytes(2, "big")
 
 
+def _encode_wavelengths(*nanometres: float) -> bytes:
+  """Each wavelength as u16 BE in 0.1 nm."""
+  return b"".join(round(nm * 10).to_bytes(2, "big") for nm in nanometres)
+
+
 def _compute_run_parameters(
   plate: Plate,
   wells: Sequence[Well],
   wavelengths: Sequence[int],
   measurement: MeasurementSettings,
   shake: Optional[ShakeSettings],
-  flashes: int,
 ) -> bytes:
-  """The RUN parameters of an absorbance read."""
+  """The RUN parameters of an absorbance read: the wavelength count and the wavelengths, then the
+  end and step fields a spectrum uses (end 0, the spectrometer's bandwidth as the step)."""
   return (
     _compute_run_start(plate, wells, MODE_ABSORBANCE, _WELL_SCAN_CODE, measurement, shake)
     + bytes([len(wavelengths)])
-    + b"".join((wavelength * 10).to_bytes(2, "big") for wavelength in wavelengths)
-    + _REFERENCE_BLOCK
+    + _encode_wavelengths(*wavelengths, _DISCRETE_END, _DISCRETE_BANDWIDTH)
+    + _encode_wavelengths(*_PATHLENGTH_CORRECTION)
     + _compute_pause(measurement.pause_before_reading)
-    + _compute_run_end(_TRAILER_START, flashes)
+    + _compute_run_end(_TRAILER_START, measurement.flashes)
   )
+
+
+def _compute_spectrum_run_parameters(
+  plate: Plate,
+  wells: Sequence[Well],
+  start_wavelength: int,
+  end_wavelength: int,
+  step_size: int,
+  measurement: MeasurementSettings,
+  shake: Optional[ShakeSettings],
+) -> bytes:
+  """The RUN parameters of an absorbance spectrum: wavelength count 0, then start, end and step
+  (H01-H05)."""
+  return (
+    _compute_run_start(plate, wells, MODE_ABSORBANCE, _WELL_SCAN_CODE, measurement, shake)
+    + b"\x00"
+    + _encode_wavelengths(start_wavelength, end_wavelength, step_size)
+    + _encode_wavelengths(*_PATHLENGTH_CORRECTION)
+    + _compute_pause(measurement.pause_before_reading)
+    + _compute_run_end(_TRAILER_START, measurement.flashes)
+  )
+
+
+def _split_values(
+  values: List[int], wavelength_count: int, wells: int
+) -> Tuple[List[List[int]], List[int], List[Tuple[int, int]], Tuple[int, int]]:
+  """The samples per wavelength, the references, the wavelengths' calibration pairs and the
+  reference's, from n + 3 groups of one value per well, then n + 3 calibration pairs."""
+  groups = wavelength_count + 3
+  group = [values[k * wells : (k + 1) * wells] for k in range(groups)]
+  pairs = [
+    (values[groups * wells + 2 * k], values[groups * wells + 2 * k + 1]) for k in range(groups)
+  ]
+  return group[:wavelength_count], group[-1], pairs[:wavelength_count], pairs[-1]
 
 
 def _decode_data_reply(
@@ -146,11 +249,42 @@ def _decode_data_reply(
   if int.from_bytes(reply[9:11], "big") != expected or len(reply) < 36 + 4 * expected:
     raise ValueError("absorbance reply is incomplete")
   values = [int.from_bytes(reply[36 + 4 * i : 40 + 4 * i], "big") for i in range(expected)]
-  group = [values[k * wells : (k + 1) * wells] for k in range(groups)]
-  pairs = [
-    (values[groups * wells + 2 * k], values[groups * wells + 2 * k + 1]) for k in range(groups)
-  ]
-  return group[: len(wavelengths)], group[-1], pairs[: len(wavelengths)], pairs[-1]
+  return _split_values(values, len(wavelengths), wells)
+
+
+def _decode_spectrum_pages(
+  pages: List[bytes], wavelength_count: int
+) -> Tuple[List[List[int]], List[int], List[Tuple[int, int]], Tuple[int, int]]:
+  """As `_decode_data_reply`, for a spectrum's data pages.
+
+  Each page has the discrete header with its own value count at bytes 7-8, its page number at 29
+  and n + 2 modulo 256 at 17; its values follow. All pages' values together are the discrete
+  layout (H01-H05, the 220-1000 nm verification read).
+
+  Raises:
+    ValueError: if a page is not a page of this read, in order, or values are missing.
+  """
+  values: List[int] = []
+  wells: Optional[int] = None
+  for number, page in enumerate(pages, 1):
+    if len(page) < 36 or page[6] != _DATA_LAYOUT:
+      raise ValueError(f"absorbance spectrum page {number} is not an absorbance data page")
+    count = int.from_bytes(page[7:9], "big")
+    page_wells = int.from_bytes(page[20:22], "big")
+    if (
+      page[29] != number
+      or page[17] != (wavelength_count + 2) & 0xFF
+      or int.from_bytes(page[23:25], "big") != 1
+      or (wells is not None and page_wells != wells)
+      or len(page) != 36 + 4 * count
+    ):
+      raise ValueError(f"absorbance spectrum page {number} is not page {number} of this read")
+    wells = page_wells
+    values += [int.from_bytes(page[36 + 4 * i : 40 + 4 * i], "big") for i in range(count)]
+  expected = (wavelength_count + 3) * ((wells or 0) + 2)
+  if wells is None or len(values) != expected:
+    raise ValueError(f"absorbance spectrum data holds {len(values)} values; expected {expected}")
+  return _split_values(values, wavelength_count, wells)
 
 
 def _compute_readings(
@@ -189,15 +323,19 @@ def _compute_readings(
   return readings
 
 
+def _get_spectrum_wavelengths(
+  start_wavelength: int, end_wavelength: int, step_size: int
+) -> List[int]:
+  """The wavelengths a spectrum scans, in nm."""
+  return list(range(start_wavelength, end_wavelength + 1, step_size))
+
+
 class Absorbance(Measurement):
   """Absorbance measurement.
 
   Reached as `driver.absorbance`, built at setup only if the plate reader reports it is
   capable of performing transmittance measurements which can be converted to absorbance.
   """
-
-  # The vendor's flashes per well scan where the captures leave them unchanged (A01, A02, B1).
-  _VENDOR_FLASHES: Dict[str, int] = {"point": 5, "orbital": 7, "spiral": 15}
 
   configuration: AbsorbanceConfiguration
 
@@ -210,7 +348,15 @@ class Absorbance(Measurement):
       configuration: the absorbance's device facts. Defaults to `AbsorbanceConfiguration()`.
     """
     super().__init__(driver, configuration or AbsorbanceConfiguration())
-    self._warned_untested = False
+    self._warned_untested: Set[str] = set()
+
+  def _warn_untested(self, what: str) -> None:
+    """Warn once per reader that `what` has not run on hardware with this driver."""
+    if what not in self._warned_untested:
+      logger.warning(
+        "%s has not been tested on hardware with this driver; please report how it works", what
+      )
+      self._warned_untested.add(what)
 
   def _get_run_parameters(
     self,
@@ -219,6 +365,7 @@ class Absorbance(Measurement):
     measurement: MeasurementSettings,
     shake: Optional[ShakeSettings],
     wells: Optional[List[Well]],
+    timeout: Optional[float] = None,
   ) -> Tuple[Plate, List[Well], bytes]:
     """The plate, the wells and the RUN parameters of a measurement, every argument checked.
 
@@ -227,9 +374,9 @@ class Absorbance(Measurement):
       ValueError: if the wavelengths or report are out of range (`_check_arguments`), or the
         settings cannot read the wells of the plate on the reader (`_get_plate_and_wells`).
     """
-    _check_arguments(wavelengths, report, self.configuration)
-    plate, wells, flashes = self._get_plate_and_wells(measurement, shake, wells)
-    parameters = _compute_run_parameters(plate, wells, wavelengths, measurement, shake, flashes)
+    _check_arguments(wavelengths, report, self.configuration, timeout)
+    plate, wells = self._get_plate_and_wells(measurement, shake, wells)
+    parameters = _compute_run_parameters(plate, wells, wavelengths, measurement, shake)
     return plate, wells, parameters
 
   async def measure(
@@ -267,15 +414,11 @@ class Absorbance(Measurement):
     """
     measurement = MeasurementSettings() if measurement_settings is None else measurement_settings
     plate, wells, parameters = self._get_run_parameters(
-      wavelengths, report, measurement, shake_settings, wells
+      wavelengths, report, measurement, shake_settings, wells, timeout
     )
     timeout = self.default_read_timeout if timeout is None else timeout
     # TODO(device): the v1 driver has not run a measurement yet (reader test 7).
-    if not self._warned_untested:
-      logger.warning(
-        "absorbance has not been tested on hardware with this driver; please report how it works"
-      )
-      self._warned_untested = True
+    self._warn_untested("absorbance")
     logger.info(
       "absorbance: %s nm, %d of %d wells of %s, %s scan, %s",
       ", ".join(str(wavelength) for wavelength in wavelengths),
@@ -286,7 +429,8 @@ class Absorbance(Measurement):
       report,
     )
     start_timestamp = datetime.now()
-    reply, end_timestamp = await _run_measurement(self._driver, parameters, timeout)
+    replies, end_timestamp = await self._run_measurement(parameters, timeout)
+    reply = replies[0]
     wavelengths = list(wavelengths)
     samples, references, calibrations, reference_pair = _decode_data_reply(reply, wavelengths)
     readings = _compute_readings(samples, references, calibrations, reference_pair, report)
@@ -322,3 +466,130 @@ class Absorbance(Measurement):
           )
         )
     return results
+
+  def _get_spectrum_run_parameters(
+    self,
+    start_wavelength: int,
+    end_wavelength: int,
+    step_size: int,
+    report: str,
+    measurement: MeasurementSettings,
+    shake: Optional[ShakeSettings],
+    wells: Optional[List[Well]],
+    timeout: Optional[float] = None,
+  ) -> Tuple[Plate, List[Well], bytes]:
+    """The plate, the wells and the RUN parameters of a spectrum, every argument checked.
+
+    Raises:
+      RuntimeError: if no plate is in the plate holder.
+      ValueError: if the wavelengths or report are out of range (`_check_spectrum_arguments`),
+        or the settings cannot read the wells of the plate.
+    """
+    _check_spectrum_arguments(
+      start_wavelength, end_wavelength, step_size, report, self.configuration, timeout
+    )
+    plate, wells = self._get_plate_and_wells(measurement, shake, wells)
+    parameters = _compute_spectrum_run_parameters(
+      plate, wells, start_wavelength, end_wavelength, step_size, measurement, shake
+    )
+    return plate, wells, parameters
+
+  async def measure_spectrum(
+    self,
+    *,
+    wells: Optional[List[Well]] = None,
+    start_wavelength: int,
+    end_wavelength: int,
+    step_size: int,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
+    report: Report = "optical_density",
+    timeout: Optional[float] = None,
+  ) -> AbsorbanceSpectrumResult:
+    """Measure the absorbance spectrum of the plate in the plate holder, every wavelength in one
+    pass.
+
+    The data takes about 0.05 s per wavelength to transfer for 96 wells (220-1000 nm: about 40 s
+    of a 2.5 min read); a larger `step_size` or a narrower range shortens it. Cancelling the call
+    stops the run on the reader.
+
+    Args:
+      wells: the wells to measure, on the plate; None measures every well.
+      start_wavelength: the first wavelength in nm, a whole nm within
+        `configuration.wavelength_range`.
+      end_wavelength: the last wavelength in nm, above `start_wavelength`, within the same range.
+      step_size: nm between wavelengths, a whole nm of at least 1 dividing the range.
+      measurement_settings: how to read; None reads with the defaults.
+      shake_settings: shake the plate before the read; None does not shake.
+      report: optical density, or the raw sample counts with the reference counts and calibration
+        pairs that compute it (`CLARIOstarAbsorbanceSpectrumResult`).
+      timeout: seconds the run may take; `default_read_timeout` when None.
+
+    Returns:
+      each measured well's spectrum, keyed by well identifier.
+
+    Raises:
+      RuntimeError: if no plate is in the plate holder, or the run ends without its data.
+      ValueError: if an argument is out of range, the settings cannot read the wells of the plate,
+        or the data pages are not this read's.
+      TimeoutError: if the run takes longer than `timeout` seconds.
+    """
+    measurement = MeasurementSettings() if measurement_settings is None else measurement_settings
+    plate, wells, parameters = self._get_spectrum_run_parameters(
+      start_wavelength,
+      end_wavelength,
+      step_size,
+      report,
+      measurement,
+      shake_settings,
+      wells,
+      timeout,
+    )
+    timeout = self.default_read_timeout if timeout is None else timeout
+    # TODO(device): the v1 driver has not run a spectrum yet.
+    self._warn_untested("the absorbance spectrum")
+    wavelengths = _get_spectrum_wavelengths(start_wavelength, end_wavelength, step_size)
+    measured = len(_get_measured_identifiers(plate, wells))
+    logger.info(
+      "absorbance spectrum: %d to %d nm in %d nm steps, %d of %d wells of %s, %s scan, %s",
+      start_wavelength,
+      end_wavelength,
+      step_size,
+      measured,
+      plate.num_items,
+      plate.name,
+      measurement.well_scan,
+      report,
+    )
+    start_timestamp = datetime.now()
+    values = (len(wavelengths) + 3) * (measured + 2)
+    pages, end_timestamp = await self._run_measurement(parameters, timeout, values)
+    samples, references, calibrations, reference_pair = _decode_spectrum_pages(
+      pages, len(wavelengths)
+    )
+    readings = _compute_readings(samples, references, calibrations, reference_pair, report)
+    # Page bytes 34-35: the temperature in 0.1 C; 0 when the temperature controller is not
+    # monitoring.
+    raw_temperature = int.from_bytes(pages[0][34:36], "big")
+    temperature = raw_temperature / 10 if raw_temperature else None
+    identifiers = _get_measured_identifiers(plate, wells)
+    data: Dict[str, Dict[int, float]] = {identifier: {} for identifier in identifiers}
+    for wavelength, wavelength_readings in zip(wavelengths, readings):  # row by row over the wells
+      for identifier, value in zip(identifiers, wavelength_readings):
+        data[identifier][wavelength] = value
+    if report == "raw":
+      return CLARIOstarAbsorbanceSpectrumResult(
+        data=data,
+        temperature=temperature,
+        start_timestamp=start_timestamp,
+        end_timestamp=end_timestamp,
+        references=_get_readings_by_well(plate, wells, [float(v) for v in references]),
+        calibration=dict(zip(wavelengths, calibrations)),
+        reference_calibration=reference_pair,
+      )
+    return AbsorbanceSpectrumResult(
+      data=data,
+      temperature=temperature,
+      start_timestamp=start_timestamp,
+      end_timestamp=end_timestamp,
+    )

@@ -108,11 +108,11 @@ class MeasurementConfiguration:
   settling_time_range: Tuple[float, float] = (0.0, 1.0)
   """Seconds before each well is read (0, 0.1, 0.2, 0.5 and 1.0 captured)."""
   flashes_range: Tuple[int, int] = (1, 200)
-  """Flashes per well, every well scan (the vendor software's ini MaxFlashes, default 200)."""
+  """Flashes per well, every well scan (the vendor software manual: up to 200 per well)."""
   pause_range: Tuple[int, int] = (1, 3600)
-  """Pause before reading, seconds (the vendor database's constraint, 0-3600 with 0 off)."""
-  orbital_maximum_wells: int = 383
-  """Orbital averaging is "not available for microplates with 384 or more wells" (vendor)."""
+  """Pause before reading, seconds (the vendor software manual: up to 3600 s)."""
+  orbital_maximum_wells: int = 384
+  """Orbital averaging works on plates of up to 384 wells (the vendor software manual: 6 to 384)."""
   shake_speed_range: Tuple[int, int] = (100, 700)
   """Shaking before the read, rpm (the standalone shake's captured 100-700; 300, 500 in a RUN)."""
   shake_duration_range: Tuple[int, int] = (1, 255)
@@ -182,8 +182,7 @@ class MeasurementSettings:
     well_scan: read each well at its centre (point), or average along a circle (orbital, not on
       plates over the configuration's `orbital_maximum_wells`) or a spiral.
     scan_diameter: orbital or spiral diameter, a whole mm from 1 to the plate's well diameter.
-    flashes: whole flashes per well, within the configuration's `flashes_range`; None takes the
-      mode's vendor default for `well_scan`.
+    flashes: whole flashes per well, within the configuration's `flashes_range`.
 
   Raises:
     ValueError: on construction, listing every field of the wrong kind (see `check` for the
@@ -197,7 +196,7 @@ class MeasurementSettings:
   settling_time: float = 0.1  # the vendor's default
   well_scan: WellScan = "point"
   scan_diameter: int = 3  # the vendor's (A02, B2)
-  flashes: Optional[int] = None
+  flashes: int = 5  # as the captured default endpoint read (DOE_Baseline)
 
   def __post_init__(self) -> None:
     errors = []
@@ -210,7 +209,7 @@ class MeasurementSettings:
       errors.append(f"well_scan must be one of {list(_WELL_SCANS)}, got {self.well_scan!r}")
     if not isinstance(self.scan_diameter, int) or self.scan_diameter < 1:
       errors.append(f"scan_diameter must be a whole mm of at least 1, is {self.scan_diameter}")
-    if self.flashes is not None and not isinstance(self.flashes, int):
+    if not isinstance(self.flashes, int):
       errors.append(f"flashes must be whole, is {self.flashes}")
     if errors:
       raise ValueError("; ".join(errors))
@@ -238,7 +237,7 @@ class MeasurementSettings:
         f"settling_time must be within {lowest_time} to {highest_time} s, is {self.settling_time}"
       )
     lowest, highest = configuration.flashes_range
-    if self.flashes is not None and not lowest <= self.flashes <= highest:
+    if not lowest <= self.flashes <= highest:
       errors.append(f"flashes must be {lowest} to {highest}, is {self.flashes}")
     if not wells:
       errors.append("no wells to measure")
@@ -330,81 +329,9 @@ def _get_readings_by_well(
   return dict(zip(_get_measured_identifiers(plate, wells), readings))
 
 
-def _get_plate(driver: "CLARIOstarDriver") -> Plate:
-  """The plate in the drawer's plate holder, the one a measurement reads.
-
-  Raises:
-    RuntimeError: if the drawer has no plate holder, or no plate is in it.
-  """
-  plate_holder = driver.drawer.plate_holder
-  if plate_holder is None:
-    raise RuntimeError("the drawer has no plate holder; build the reader as a CLARIOstarDevice")
-  if not isinstance(plate_holder.resource, Plate):
-    raise RuntimeError(f"no plate in {plate_holder.name}")
-  return plate_holder.resource
-
-
-async def _run_measurement(
-  driver: "CLARIOstarDriver", parameters: bytes, timeout: float
-) -> Tuple[bytes, datetime]:
-  """Send RUN and return the data reply, and when it was read.
-
-  As the vendor ends a read: status until the reader reports the data ready, then REQUEST DATA
-  for the whole data set (`05 02 00 00 00 00 00`), then status until idle. Any failure, a timeout
-  or a cancelled call stops the run (`0b 00`) first.
-
-  Args:
-    driver: the driver to send commands through.
-    parameters: the RUN parameters, after the family byte.
-    timeout: seconds the run may take, from the RUN until the reader is idle.
-
-  Raises:
-    TimeoutError: if the run takes longer than `timeout` seconds.
-    RuntimeError: if the run ends without reporting its data ready.
-  """
-  await driver.send_command(driver.CommandFamily.RUN, parameters=parameters)
-  reply: Optional[bytes] = None
-  read_at = datetime.now()
-  start = time.monotonic()
-  try:
-    while True:
-      status = await driver.send_command(driver.CommandFamily.STATUS, retries=5)
-      busy = driver._parse_status(status).busy
-      ready = len(status) > 2 and bool(status[2] & _DATA_READY)
-      if ready and reply is None:
-        reply = await driver.send_command(
-          driver.CommandFamily.REQUEST, driver.Command.DATA, parameters=bytes(5), when_idle=False
-        )
-        read_at = datetime.now()
-      if reply is not None and not busy:
-        return reply, read_at
-      if not busy and not ready:
-        raise RuntimeError("the run ended without reporting its data ready")
-      if time.monotonic() - start >= timeout:
-        raise TimeoutError(f"the measurement took longer than {timeout} s")
-      await asyncio.sleep(driver.default_poll_interval)
-  except BaseException:  # a timeout, a cancelled call, a bad reply: stop the run first
-    logger.warning("stopping the measurement run")
-    try:
-      # A cancel between a write and its read leaves that reply unread: drop it before STOP,
-      # and drop whatever STOP left after it, so the next command reads its own reply.
-      await driver._purge_rx()
-      await driver.send_command(driver.CommandFamily.STOP, parameters=b"\x00", when_idle=False)
-      await driver._purge_rx()
-    except (CommandRefusedError, FrameError) as e:  # e.g. the run ended meanwhile (214)
-      logger.warning("STOP not accepted: %s", e)
-    raise
-
-
 class Measurement:
-  """What every measurement feature (RUN command family, 0x04) shares: the plate, the wells, the
-  run itself, and the vendor's flashes per well scan.
-
-  A mode sets `_VENDOR_FLASHES`, its settings, its RUN fields and its reply decoding.
-  """
-
-  # The vendor's flashes per well scan, where its captures leave them unchanged.
-  _VENDOR_FLASHES: Dict[str, int] = {}
+  """What every measurement feature (RUN command family, 0x04) shares: the plate, the wells and
+  the run itself. A mode adds its settings, its RUN fields and its reply decoding."""
 
   def __init__(self, driver: "CLARIOstarDriver", configuration: MeasurementConfiguration):
     """
@@ -432,21 +359,108 @@ class Measurement:
     settings: MeasurementSettings,
     shake: Optional[ShakeSettings],
     wells: Optional[List[Well]],
-  ) -> Tuple[Plate, List[Well], int]:
-    """The plate in the plate holder, the wells to read (every well when None) and the flashes,
-    the settings checked against the plate and the configuration.
+  ) -> Tuple[Plate, List[Well]]:
+    """The plate in the plate holder and the wells to read (every well when None), the settings
+    checked against the plate and the configuration.
 
     Raises:
       RuntimeError: if no plate is in the plate holder.
       ValueError: if the settings cannot read the wells of the plate on the reader
         (`MeasurementSettings.check`, `ShakeSettings.check`).
     """
-    plate = _get_plate(self._driver)
+    plate_holder = self._driver.drawer.plate_holder
+    if plate_holder is None:
+      raise RuntimeError("the drawer has no plate holder; build the reader as a CLARIOstarDevice")
+    if not isinstance(plate_holder.resource, Plate):
+      raise RuntimeError(f"no plate in {plate_holder.name}")
+    plate = plate_holder.resource
     wells = plate.get_all_items() if wells is None else wells
     settings.check(plate, wells, self.configuration)
     if shake is not None:
       shake.check(self.configuration)
-    flashes = (
-      self._VENDOR_FLASHES[settings.well_scan] if settings.flashes is None else settings.flashes
-    )
-    return plate, wells, flashes
+    return plate, wells
+
+  async def _unchecked_fw_run(self, parameters: bytes) -> None:
+    """Send RUN with `parameters`, the bytes after the family byte."""
+    await self._driver.send_command(self._driver.CommandFamily.RUN, parameters=parameters)
+
+  async def _request_data(self, values: Optional[int]) -> List[bytes]:
+    """The data replies of a finished read: one, or with `values`, pages until that many values
+    are in.
+
+    A spectrum's data comes in pages sized to fit a frame (H01: 3, the 220-1000 nm verification
+    read: 5); each `05 02 00 00 00 00 00` returns the next, its value count at reply bytes 7-8.
+
+    Raises:
+      ValueError: if a page holds no values.
+    """
+    replies: List[bytes] = []
+    received = 0
+    while True:
+      reply = await self._driver.send_command(
+        self._driver.CommandFamily.REQUEST,
+        self._driver.Command.DATA,
+        parameters=bytes(5),
+        when_idle=False,
+      )
+      replies.append(reply)
+      if values is None:
+        return replies
+      count = int.from_bytes(reply[7:9], "big") if len(reply) >= 9 else 0
+      if count == 0:
+        raise ValueError(f"data page {len(replies)} holds no values")
+      received += count
+      if received >= values:
+        return replies
+
+  async def _run_measurement(
+    self, parameters: bytes, timeout: float, values: Optional[int] = None
+  ) -> Tuple[List[bytes], datetime]:
+    """Send RUN and return the data replies, and when they were read.
+
+    As the vendor ends a read: status until the reader reports the data ready, then REQUEST DATA
+    for the whole data set (`05 02 00 00 00 00 00`), once or once per page, then status until idle.
+    Any failure, a timeout or a cancelled call stops the run (`0b 00`) first.
+
+    Args:
+      parameters: the RUN parameters, after the family byte.
+      timeout: seconds the run may take, from the RUN until the reader is idle.
+      values: the values the read returns, for data that comes in pages; None for one reply.
+
+    Raises:
+      TimeoutError: if the run takes longer than `timeout` seconds.
+      RuntimeError: if the run ends without reporting its data ready.
+      ValueError: if a data page holds no values.
+    """
+    await self._unchecked_fw_run(parameters)
+    replies: Optional[List[bytes]] = None
+    read_at = datetime.now()
+    start = time.monotonic()
+    try:
+      while True:
+        status = await self._driver.send_command(self._driver.CommandFamily.STATUS, retries=5)
+        busy = self._driver._parse_status(status).busy
+        ready = len(status) > 2 and bool(status[2] & _DATA_READY)
+        if ready and replies is None:
+          replies = await self._request_data(values)
+          read_at = datetime.now()
+        if replies is not None and not busy:
+          return replies, read_at
+        if not busy and not ready:
+          raise RuntimeError("the run ended without reporting its data ready")
+        if time.monotonic() - start >= timeout:
+          raise TimeoutError(f"the measurement took longer than {timeout} s")
+        await asyncio.sleep(self._driver.default_poll_interval)
+    except BaseException:  # a timeout, a cancelled call, a bad reply: stop the run first
+      logger.warning("stopping the measurement run")
+      try:
+        # A cancel between a write and its read leaves that reply unread: drop it before STOP,
+        # and drop whatever STOP left after it, so the next command reads its own reply.
+        await self._driver._purge_rx()
+        await self._driver.send_command(
+          self._driver.CommandFamily.STOP, parameters=b"\x00", when_idle=False
+        )
+        await self._driver._purge_rx()
+      except (CommandRefusedError, FrameError) as e:  # e.g. the run ended meanwhile (214)
+        logger.warning("STOP not accepted: %s", e)
+      raise

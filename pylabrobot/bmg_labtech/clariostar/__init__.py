@@ -7,6 +7,7 @@ from .driver import (
   AbsorbanceConfiguration,
   ChecksumError,
   CLARIOstarAbsorbanceResult,
+  CLARIOstarAbsorbanceSpectrumResult,
   CLARIOstarDriver,
   CLARIOstarSimulationDriver,
   CLARIOstarStatus,
