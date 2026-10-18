@@ -16,10 +16,13 @@ from PIL import Image
 from pylabrobot.revvity.celigo.grpc.cli import check
 from pylabrobot.revvity.celigo.grpc.client import PrototypeClient
 from pylabrobot.revvity.celigo.grpc.model import MAX_FRAME_BYTES, SimulationSpec, make_frame
-from pylabrobot.revvity.celigo.grpc.security import create_certificates
 from pylabrobot.revvity.celigo.grpc.server import SimulatorServer
-from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
-from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
+from pylabrobot.rpc.security import create_certificates
+from pylabrobot.rpc.v1 import device_pb2 as device_pb
+from pylabrobot.rpc.v1 import device_pb2_grpc as device_rpc
+from pylabrobot.rpc.v1 import images_pb2 as image_pb
+from pylabrobot.rpc.v1 import images_pb2_grpc as image_rpc
+from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 
 @pytest_asyncio.fixture
@@ -31,7 +34,7 @@ async def system(tmp_path):
     async with PrototypeClient(server.endpoint, certs) as client:
       initialization = await client.create_initialization("test-initialize")
       await initialization.start()
-      assert (await initialization.wait()).outcome == pb.OUTCOME_SUCCEEDED
+      assert (await initialization.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
       yield server, client
   finally:
     await server.stop()
@@ -68,7 +71,7 @@ async def test_jobs_deduplication_conflicts_progress_and_reconnect(system):
   server, client = system
   spec = SimulationSpec(4, 64, 64, 16, 100)
   job = await client.create("first", spec)
-  assert (await job.status()).state == pb.JOB_STATE_READY
+  assert (await job.status()).state == job_pb.JOB_STATE_READY
   assert not await job.list_frames()
   assert (await client.create("first", spec)).identifier == job.identifier
   with pytest.raises(grpc.aio.AioRpcError) as mismatch:
@@ -76,7 +79,7 @@ async def test_jobs_deduplication_conflicts_progress_and_reconnect(system):
   assert mismatch.value.code() == grpc.StatusCode.INVALID_ARGUMENT
   conflict = await client.create("second", spec)
   async with job.updates() as updates:
-    assert (await updates.get()).state == pb.JOB_STATE_READY
+    assert (await updates.get()).state == job_pb.JOB_STATE_READY
     await job.start()
     await job.start()
     with pytest.raises(grpc.aio.AioRpcError) as busy:
@@ -88,7 +91,7 @@ async def test_jobs_deduplication_conflicts_progress_and_reconnect(system):
       seen.append(snapshot)
       if snapshot.completed:
         break
-    assert any(s.state == pb.JOB_STATE_RUNNING for s in seen)
+    assert any(s.state == job_pb.JOB_STATE_RUNNING for s in seen)
     assert [s.revision for s in seen] == sorted({s.revision for s in seen})
   first = (await job.list_frames(limit=1))[0]
   frame = await job.get_frame(first.frame_id)
@@ -97,7 +100,7 @@ async def test_jobs_deduplication_conflicts_progress_and_reconnect(system):
   await client.connect()
   recovered = await client.recover("first")
   assert recovered.identifier == job.identifier
-  assert (await recovered.wait()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await recovered.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
   assert await recovered.get_frame(first.frame_id) == frame
   page = await recovered.list_frames(after_sequence=1, limit=2)
   assert [f.sequence for f in page] == [2, 3]
@@ -105,7 +108,7 @@ async def test_jobs_deduplication_conflicts_progress_and_reconnect(system):
   with pytest.raises(grpc.aio.AioRpcError) as finished:
     await recovered.start()
   assert finished.value.code() == grpc.StatusCode.FAILED_PRECONDITION
-  assert (await recovered.cancel()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await recovered.cancel()).outcome == job_pb.OUTCOME_SUCCEEDED
 
 
 @pytest.mark.asyncio
@@ -118,21 +121,21 @@ async def test_cancel_retains_frames_and_releases_instrument(system):
       pass
     await job.cancel()
     final = await job.wait()
-  assert final.outcome == pb.OUTCOME_CANCELLED
+  assert final.outcome == job_pb.OUTCOME_CANCELLED
   assert final.cancellation_requested
   assert 1 <= final.completed < final.total
   info = (await job.list_frames())[0]
   assert (await job.get_frame(info.frame_id)).sha256 == info.sha256
   next_job = await client.create("next", SimulationSpec(1, 16, 16, 8, 0))
   await next_job.start()
-  assert (await next_job.wait()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await next_job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
 
 
 @pytest.mark.asyncio
 async def test_cancel_ready_job_never_captures(system):
   _, client = system
   job = await client.create("ready", SimulationSpec(1, 16, 16, 8, 0))
-  assert (await job.cancel()).outcome == pb.OUTCOME_CANCELLED
+  assert (await job.cancel()).outcome == job_pb.OUTCOME_CANCELLED
   assert (await job.cancel()).completed == 0
   assert not await job.list_frames()
   with pytest.raises(grpc.aio.AioRpcError):
@@ -145,7 +148,7 @@ async def test_complete_png_pixels_and_concurrent_control(system, width, height,
   _, client = system
   job = await client.create("image", SimulationSpec(1, width, height, depth, 0))
   await job.start()
-  assert (await job.wait()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
   info = (await job.list_frames())[0]
   transfer = asyncio.create_task(job.get_frame(info.frame_id))
   assert (await asyncio.wait_for(job.status(), 5)).completed == 1
@@ -164,16 +167,16 @@ async def test_complete_png_pixels_and_concurrent_control(system, width, height,
 async def test_preview_and_status_streams(system):
   _, client = system
   async with client.status_updates() as status, client.previews() as previews:
-    assert (await status.get()).state == pb.OPERATIONAL_STATE_READY
+    assert (await status.get()).state == device_pb.OPERATIONAL_STATE_READY
     job = await client.create("preview", SimulationSpec(1, 64, 64, 8, 100), preview=True)
     await job.start()
     busy = await asyncio.wait_for(status.get(), 5)
-    assert busy.state == pb.OPERATIONAL_STATE_BUSY and busy.active_job_id == job.identifier
+    assert busy.state == device_pb.OPERATIONAL_STATE_BUSY and busy.active_job_id == job.identifier
     frame = await asyncio.wait_for(previews.get(), 5)
     assert frame.representation == "Preview"
     assert await job.get_frame(frame.frame_id) == frame
     await job.wait()
-    assert (await asyncio.wait_for(status.get(), 5)).state == pb.OPERATIONAL_STATE_READY
+    assert (await asyncio.wait_for(status.get(), 5)).state == device_pb.OPERATIONAL_STATE_READY
   async with client.previews() as previews:
     assert await previews.get() == frame  # Subscribing replays the latest; no new acquisition.
 
@@ -222,7 +225,7 @@ async def test_tls_rejects_untrusted_missing_and_plaintext_clients(system, tmp_p
   for channel in channels:
     try:
       with pytest.raises(grpc.aio.AioRpcError):
-        await rpc.DeviceServiceStub(channel).GetDevice(client.request, timeout=1)
+        await device_rpc.DeviceServiceStub(channel).GetDevice(client.request, timeout=1)
     finally:
       await channel.close()
   assert (client.certs.directory / "client-key.pem").stat().st_mode & 0o777 == 0o600
@@ -239,9 +242,9 @@ async def test_capture_failure_releases_device(system, monkeypatch):
   job = await client.create("failed", SimulationSpec(1, 16, 16, 8, 0))
   await job.start()
   final = await job.wait()
-  assert final.outcome == pb.OUTCOME_FAILED and "synthetic camera failed" in final.error
+  assert final.outcome == job_pb.OUTCOME_FAILED and "synthetic camera failed" in final.error
   assert final.completed == 0
-  assert (await client.status()).state == pb.OPERATIONAL_STATE_READY
+  assert (await client.status()).state == device_pb.OPERATIONAL_STATE_READY
 
 
 @pytest.mark.asyncio
@@ -262,15 +265,15 @@ async def test_cancel_waits_for_inflight_frame(system, monkeypatch):
     assert await asyncio.to_thread(entered.wait, 5)
     status = await job.cancel()
     assert (status.state, status.phase, status.outcome) == (
-      pb.JOB_STATE_RUNNING,
+      job_pb.JOB_STATE_RUNNING,
       "Stopping",
-      pb.OUTCOME_PENDING,
+      job_pb.OUTCOME_PENDING,
     )
     assert status.completed == 0
   finally:
     release.set()
   final = await job.wait()
-  assert (final.outcome, final.completed) == (pb.OUTCOME_CANCELLED, 1)
+  assert (final.outcome, final.completed) == (job_pb.OUTCOME_CANCELLED, 1)
   assert len(await job.list_frames()) == 1
 
 
@@ -279,12 +282,12 @@ async def test_stream_deadline_does_not_cancel_job(system):
   server, client = system
   job = await client.create("deadline", SimulationSpec(3, 16, 16, 8, 100))
   await job.start()
-  stream = client.jobs.WatchJob(job.ref, timeout=0.05)
+  stream = client.jobs.stub.WatchJob(job.ref, timeout=0.05)
   with pytest.raises(grpc.aio.AioRpcError) as expired:
     async for _snapshot in stream:
       pass
   assert expired.value.code() == grpc.StatusCode.DEADLINE_EXCEEDED
-  assert (await job.wait()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
   assert not server.simulator.jobs[job.identifier].stop_requested.is_set()
 
 
@@ -301,8 +304,8 @@ async def test_receive_limit_does_not_destroy_retained_image(system):
     options=(("grpc.max_receive_message_length", 1024 * 1024),),
   ) as channel:
     with pytest.raises(grpc.aio.AioRpcError) as too_big:
-      await rpc.ImageServiceStub(channel).GetFrame(
-        pb.GetFrameRequest(job=job.ref, frame_id=info.frame_id),
+      await image_rpc.ImageServiceStub(channel).GetFrame(
+        image_pb.GetFrameRequest(job=job.ref, frame_id=info.frame_id),
         timeout=5,
       )
     assert too_big.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
@@ -324,10 +327,10 @@ async def test_devices_have_independent_ownership_and_identity(system):
       await asyncio.gather(one.start(), two.start())
       assert one.identifier != two.identifier
       with pytest.raises(grpc.aio.AioRpcError) as wrong_device:
-        await client.jobs.GetJob(two.ref, timeout=2)
+        await client.jobs.stub.GetJob(two.ref, timeout=2)
       assert wrong_device.value.code() == grpc.StatusCode.NOT_FOUND
       await client.disconnect()
-      assert (await two.wait()).outcome == pb.OUTCOME_SUCCEEDED
+      assert (await two.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
   finally:
     await second.stop()
 

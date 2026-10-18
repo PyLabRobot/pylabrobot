@@ -5,23 +5,21 @@ from __future__ import annotations
 import hashlib
 import io
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
+from typing import Protocol
 
 import numpy as np
 from google.protobuf.message import Message
 from PIL import Image
 
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
+from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
+from pylabrobot.rpc.transport import channel_options
+from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 MAX_PIXELS = 4096 * 2048
 MAX_FRAME_BYTES = 32 * 1024 * 1024
 MAX_MESSAGE_BYTES = 40 * 1024 * 1024
-CHANNEL_OPTIONS = (
-  ("grpc.max_send_message_length", MAX_MESSAGE_BYTES),
-  ("grpc.max_receive_message_length", MAX_MESSAGE_BYTES),
-  ("grpc.enable_retries", 0),  # Reconcile ambiguous writes explicitly by job/request ID.
-)
-M = TypeVar("M", bound=Message)
+CHANNEL_OPTIONS = channel_options(MAX_MESSAGE_BYTES)
 
 
 class Specification(Protocol):
@@ -34,12 +32,6 @@ class Specification(Protocol):
   def reservation(self) -> int: ...
 
   def to_proto(self) -> Message: ...
-
-
-def copy_message(value: M) -> M:
-  result = type(value)()
-  result.CopyFrom(value)
-  return result
 
 
 @dataclass(frozen=True)
@@ -78,7 +70,9 @@ class SimulationSpec:
     return self.frame_count * (raw_bytes + raw_bytes // 50 + 65536)
 
 
-def make_frame(job: pb.JobRef, sequence: int, spec: SimulationSpec, preview: bool) -> pb.ImageFrame:
+def make_frame(
+  job: job_pb.JobRef, sequence: int, spec: SimulationSpec, preview: bool
+) -> stored_pb.ImageFrame:
   """Match the OPC UA prototype's pixels and PNG settings, without importing it."""
   dtype = np.uint16 if spec.bit_depth == 16 else np.uint8
   pixels = np.random.default_rng(sequence).integers(
@@ -89,7 +83,7 @@ def make_frame(job: pb.JobRef, sequence: int, spec: SimulationSpec, preview: boo
   payload = output.getvalue()
   if len(payload) > MAX_FRAME_BYTES:
     raise ValueError("encoded frame exceeds maximum_frame_bytes")
-  frame = pb.ImageFrame(
+  frame = stored_pb.ImageFrame(
     job=job,
     frame_id=f"{job.job_id}-{sequence}",
     sequence=sequence,

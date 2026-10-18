@@ -13,18 +13,19 @@ import psutil
 import pytest
 
 from pylabrobot.revvity.celigo.grpc.client import PrototypeClient
-from pylabrobot.revvity.celigo.grpc.errors import BusyError, StateError
 from pylabrobot.revvity.celigo.grpc.model import SimulationSpec
-from pylabrobot.revvity.celigo.grpc.security import create_certificates
 from pylabrobot.revvity.celigo.grpc.server import SimulatorServer
 from pylabrobot.revvity.celigo.grpc.storage import Store
-from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
+from pylabrobot.rpc.errors import BusyError, StateError
+from pylabrobot.rpc.security import create_certificates
+from pylabrobot.rpc.v1 import device_pb2 as device_pb
+from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 
 async def initialize(client, request_id="initialize"):
   job = await client.create_initialization(request_id)
   await job.start()
-  assert (await job.wait()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
 
 
 @asynccontextmanager
@@ -95,12 +96,12 @@ async def test_completed_ready_cancelled_and_preview_survive_restart(tmp_path):
   directory = tmp_path / "data"
   spec = SimulationSpec(1, 64, 64, 8, 0)
   async with local_server(directory, certs) as (_, client):
-    assert (await client.status()).state == pb.OPERATIONAL_STATE_UNINITIALIZED
+    assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
     ready = await client.create("ready", spec)
     with pytest.raises(grpc.aio.AioRpcError) as uninitialized:
       await ready.start()
     assert uninitialized.value.code() == grpc.StatusCode.FAILED_PRECONDITION
-    assert (await ready.status()).state == pb.JOB_STATE_READY
+    assert (await ready.status()).state == job_pb.JOB_STATE_READY
     await initialize(client)
     completed = await client.create("completed", spec, preview=True)
     await completed.start()
@@ -112,15 +113,15 @@ async def test_completed_ready_cancelled_and_preview_survive_restart(tmp_path):
     ids = (ready.identifier, completed.identifier, cancelled.identifier)
 
   async with local_server(directory, certs) as (server, client):
-    assert (await client.status()).state == pb.OPERATIONAL_STATE_UNINITIALIZED
+    assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
     ready = await client.recover("ready")
     completed = await client.recover("completed")
     cancelled = await client.recover("cancelled")
     assert (ready.identifier, completed.identifier, cancelled.identifier) == ids
-    assert (await ready.status()).state == pb.JOB_STATE_READY
+    assert (await ready.status()).state == job_pb.JOB_STATE_READY
     assert await completed.status() == final
     assert await completed.get_frame(info.frame_id) == frame
-    assert (await cancelled.status()).outcome == pb.OUTCOME_CANCELLED
+    assert (await cancelled.status()).outcome == job_pb.OUTCOME_CANCELLED
     assert (await client.create("completed", spec, preview=True)).identifier == completed.identifier
     async with client.previews() as updates:
       assert await asyncio.wait_for(updates.get(), 2) == frame
@@ -129,7 +130,7 @@ async def test_completed_ready_cancelled_and_preview_survive_restart(tmp_path):
       await ready.start()
     await initialize(client, "initialize-again")
     await ready.start()
-    assert (await ready.wait()).outcome == pb.OUTCOME_SUCCEEDED
+    assert (await ready.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
 
 
 @pytest.mark.asyncio
@@ -137,17 +138,17 @@ async def test_completed_ready_cancelled_and_preview_survive_restart(tmp_path):
   "point,state,outcome,frames,released",
   [
     ("create.before_commit", None, None, 0, False),
-    ("create.after_commit", pb.JOB_STATE_READY, pb.OUTCOME_PENDING, 0, False),
-    ("start.before_commit", pb.JOB_STATE_READY, pb.OUTCOME_PENDING, 0, False),
-    ("start.after_commit", pb.JOB_STATE_FINISHED, pb.OUTCOME_INTERRUPTED, 0, False),
-    ("frame.before_commit", pb.JOB_STATE_FINISHED, pb.OUTCOME_INTERRUPTED, 0, False),
-    ("frame.after_commit", pb.JOB_STATE_FINISHED, pb.OUTCOME_INTERRUPTED, 1, False),
-    ("finish.before_commit", pb.JOB_STATE_FINISHED, pb.OUTCOME_INTERRUPTED, 1, False),
-    ("finish.after_commit", pb.JOB_STATE_FINISHED, pb.OUTCOME_SUCCEEDED, 1, False),
-    ("cancel.before_commit", pb.JOB_STATE_FINISHED, pb.OUTCOME_INTERRUPTED, 0, False),
-    ("cancel.after_commit", pb.JOB_STATE_FINISHED, pb.OUTCOME_INTERRUPTED, 0, False),
-    ("release.before_commit", pb.JOB_STATE_FINISHED, pb.OUTCOME_SUCCEEDED, 1, False),
-    ("release.after_commit", pb.JOB_STATE_FINISHED, pb.OUTCOME_SUCCEEDED, 1, True),
+    ("create.after_commit", job_pb.JOB_STATE_READY, job_pb.OUTCOME_PENDING, 0, False),
+    ("start.before_commit", job_pb.JOB_STATE_READY, job_pb.OUTCOME_PENDING, 0, False),
+    ("start.after_commit", job_pb.JOB_STATE_FINISHED, job_pb.OUTCOME_INTERRUPTED, 0, False),
+    ("frame.before_commit", job_pb.JOB_STATE_FINISHED, job_pb.OUTCOME_INTERRUPTED, 0, False),
+    ("frame.after_commit", job_pb.JOB_STATE_FINISHED, job_pb.OUTCOME_INTERRUPTED, 1, False),
+    ("finish.before_commit", job_pb.JOB_STATE_FINISHED, job_pb.OUTCOME_INTERRUPTED, 1, False),
+    ("finish.after_commit", job_pb.JOB_STATE_FINISHED, job_pb.OUTCOME_SUCCEEDED, 1, False),
+    ("cancel.before_commit", job_pb.JOB_STATE_FINISHED, job_pb.OUTCOME_INTERRUPTED, 0, False),
+    ("cancel.after_commit", job_pb.JOB_STATE_FINISHED, job_pb.OUTCOME_INTERRUPTED, 0, False),
+    ("release.before_commit", job_pb.JOB_STATE_FINISHED, job_pb.OUTCOME_SUCCEEDED, 1, False),
+    ("release.after_commit", job_pb.JOB_STATE_FINISHED, job_pb.OUTCOME_SUCCEEDED, 1, True),
   ],
 )
 async def test_process_crash_at_commit_boundaries(
@@ -171,7 +172,7 @@ async def test_process_crash_at_commit_boundaries(
     assert await asyncio.wait_for(process.wait(), 5) == 87
 
   async with process_server(directory, certs) as (_, client):
-    assert (await client.status()).state == pb.OPERATIONAL_STATE_UNINITIALIZED
+    assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
     if state is None:
       with pytest.raises(grpc.aio.AioRpcError) as absent:
         await client.recover("crash-target")
@@ -180,7 +181,8 @@ async def test_process_crash_at_commit_boundaries(
       job = await client.recover("crash-target")
       status = await job.status()
       assert (status.state, status.outcome, status.completed) == (state, outcome, frames)
-      assert status.state_durable and status.images_released == released
+      assert status.state_durable
+      assert (await job.image_retention()).images_released == released
       assert status.cancellation_requested == (point == "cancel.after_commit")
       assert (await client.create("crash-target", spec)).identifier == job.identifier
       metadata = await job.list_frames()
@@ -223,7 +225,7 @@ async def test_sigkill_during_acquisition_preserves_committed_frame(tmp_path):
   async with process_server(directory, certs) as (_, client):
     recovered = await client.recover("kill")
     status = await recovered.status()
-    assert status.outcome == pb.OUTCOME_INTERRUPTED and 1 <= status.completed < 20
+    assert status.outcome == job_pb.OUTCOME_INTERRUPTED and 1 <= status.completed < 20
     assert await recovered.get_frame(info.frame_id) == frame
     with pytest.raises(grpc.aio.AioRpcError):
       await recovered.start()
@@ -248,14 +250,15 @@ async def test_storage_quota_release_and_deduplication(tmp_path):
     with pytest.raises(grpc.aio.AioRpcError):
       await client.create("second", spec)
     released = await job.release_images()
-    assert released.images_released and released.outcome == pb.OUTCOME_SUCCEEDED
+    assert released.images_released
+    assert (await job.status()).outcome == job_pb.OUTCOME_SUCCEEDED
     assert await job.release_images() == released
     assert not (await job.list_frames())[0].available
     assert (await client.create("retained", spec)).identifier == job.identifier
     await client.create("second", spec)
   async with local_server(directory, certs, storage_quota=spec.reservation()) as (_, client):
     job = await client.recover("retained")
-    assert (await job.status()).images_released
+    assert (await job.image_retention()).images_released
     with pytest.raises(grpc.aio.AioRpcError) as released:
       await job.get_frame(info.frame_id)
     assert released.value.code() == grpc.StatusCode.FAILED_PRECONDITION
@@ -281,17 +284,17 @@ async def test_sqlite_full_rolls_back_image_and_progress(tmp_path):
 
       await store.call(fill_database)
       status = await job.wait()
-    assert status.outcome == pb.OUTCOME_FAILED and status.completed == 1
+    assert status.outcome == job_pb.OUTCOME_FAILED and status.completed == 1
     assert "full" in status.error
     assert len(await job.list_frames()) == 1
     assert (await job.get_frame(info.frame_id)).sha256 == info.sha256
-    assert (await client.status()).state == pb.OPERATIONAL_STATE_FAULTED
+    assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
     with pytest.raises(grpc.aio.AioRpcError):
       await client.create("unsafe-after-fault", SimulationSpec(1, 16, 16, 8, 0))
   async with local_server(directory, certs) as (_, client):
     recovered = await client.recover("disk-full")
     result = await recovered.status()
-    assert result.outcome in (pb.OUTCOME_FAILED, pb.OUTCOME_INTERRUPTED)
+    assert result.outcome in (job_pb.OUTCOME_FAILED, job_pb.OUTCOME_INTERRUPTED)
     assert result.completed == 1
     assert (await recovered.get_frame(info.frame_id)).sha256 == info.sha256
 
@@ -343,6 +346,8 @@ async def test_lost_rpc_during_commit_does_not_lose_or_repeat_execution(
     if point.startswith("start"):
       job = await client.create("lost-response", spec)
     client.timeout = 0.1
+    if job is not None:
+      job.timeout = 0.1
     pending = asyncio.create_task(job.start() if job else client.create("lost-response", spec))
     try:
       assert await asyncio.to_thread(entered.wait, 3)
@@ -352,11 +357,13 @@ async def test_lost_rpc_during_commit_does_not_lose_or_repeat_execution(
     finally:
       release.set()
       client.timeout = 20
+      if job is not None:
+        job.timeout = 20
     await asyncio.gather(*list(server.simulator.commands))
     recovered = await client.recover("lost-response")
     assert (await client.create("lost-response", spec)).identifier == recovered.identifier
     if point.startswith("create"):
-      assert (await recovered.status()).state == pb.JOB_STATE_READY
+      assert (await recovered.status()).state == job_pb.JOB_STATE_READY
       await recovered.start()
     assert (await recovered.wait()).completed == 1
     assert len(await recovered.list_frames()) == 1
@@ -383,7 +390,7 @@ async def test_store_ownership_device_binding_and_configuration_validation(tmp_p
     assert stale.value.code() == grpc.StatusCode.FAILED_PRECONDITION
     fresh = await client.create("new-configuration", SimulationSpec(1, 16, 16, 8, 0))
     await fresh.start()
-    assert (await fresh.wait()).outcome == pb.OUTCOME_SUCCEEDED
+    assert (await fresh.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
 
 
 @pytest.mark.asyncio
@@ -406,7 +413,7 @@ async def test_corrupted_image_is_reported_without_reacquisition(tmp_path):
       await job.get_frame(info.frame_id)
     assert corrupt.value.code() == grpc.StatusCode.DATA_LOSS
     assert (await job.status()).completed == 1
-    assert (await client.status()).state == pb.OPERATIONAL_STATE_FAULTED
+    assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
 
 
 @pytest.mark.asyncio
@@ -427,13 +434,13 @@ async def test_failure_to_save_completion_is_explicit_and_recovered(tmp_path, mo
     job = await client.create("unsaved-completion", SimulationSpec(1, 16, 16, 8, 0))
     await job.start()
     result = await job.wait()
-    assert result.outcome == pb.OUTCOME_FAILED and not result.state_durable
+    assert result.outcome == job_pb.OUTCOME_FAILED and not result.state_durable
     assert result.completed == 1 and "could not be persisted" in result.error
-    assert (await client.status()).state == pb.OPERATIONAL_STATE_FAULTED
+    assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
   async with local_server(directory, certs) as (_, client):
     job = await client.recover("unsaved-completion")
     recovered = await job.status()
-    assert recovered.state_durable and recovered.outcome == pb.OUTCOME_INTERRUPTED
+    assert recovered.state_durable and recovered.outcome == job_pb.OUTCOME_INTERRUPTED
     assert recovered.completed == len(await job.list_frames()) == 1
 
 
@@ -457,10 +464,10 @@ async def test_pending_commands_are_bounded_when_disk_is_stalled(tmp_path, monke
       with pytest.raises(grpc.aio.AioRpcError) as overloaded:
         await client.create("overflow", SimulationSpec(1, 16, 16, 8, 0))
       assert overloaded.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
-      assert (await client.status()).state == pb.OPERATIONAL_STATE_UNINITIALIZED
+      assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
     finally:
       release.set()
-    assert (await (await pending).status()).state == pb.JOB_STATE_READY
+    assert (await (await pending).status()).state == job_pb.JOB_STATE_READY
 
 
 @pytest.mark.asyncio
@@ -480,9 +487,9 @@ async def test_scan_length_does_not_accumulate_image_payloads_in_server_memory(t
           warm_rss = memory.memory_info().rss
         if status.completed >= 56:
           late_rss.append(memory.memory_info().rss)
-        if status.state == pb.JOB_STATE_FINISHED:
+        if status.state == job_pb.JOB_STATE_FINISHED:
           break
-    assert status.outcome == pb.OUTCOME_SUCCEEDED and status.completed == 64
+    assert status.outcome == job_pb.OUTCOME_SUCCEEDED and status.completed == 64
     assert warm_rss is not None and late_rss
     # Over 48 MiB of additional scientific pixels were committed after warm-up.
     # Allow allocator/SQLite variation, but reject growth proportional to the scan.

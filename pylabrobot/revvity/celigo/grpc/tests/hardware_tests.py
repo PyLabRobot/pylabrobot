@@ -15,14 +15,20 @@ from PIL import Image
 from pylabrobot.revvity.celigo.camera import CameraFrame
 from pylabrobot.revvity.celigo.celigo import AcquisitionResult, ControllerStatus
 from pylabrobot.revvity.celigo.config import DigitalIOConfig, IlluminationChannelConfig, IOConfig
-from pylabrobot.revvity.celigo.grpc.client import CeligoClient, PrototypeClient
-from pylabrobot.revvity.celigo.grpc.errors import BusyError, StateError, StorageError
+from pylabrobot.revvity.celigo.grpc.client import (
+  CeligoClient,
+  PrototypeClient,
+  acquisition_metadata,
+)
 from pylabrobot.revvity.celigo.grpc.hardware import CeligoCore, CeligoServer
-from pylabrobot.revvity.celigo.grpc.security import create_certificates
 from pylabrobot.revvity.celigo.grpc.storage import Store
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
 from pylabrobot.revvity.celigo.tests.helpers import make_linear_axis_config, make_test_config
+from pylabrobot.rpc.errors import BusyError, StateError, StorageError
+from pylabrobot.rpc.security import create_certificates
+from pylabrobot.rpc.v1 import device_pb2 as device_pb
+from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 
 @pytest.fixture
@@ -163,7 +169,7 @@ async def hardware(tmp_path, config):
 async def initialize(client):
   job = await client.create_initialization("initialize")
   await job.start()
-  assert (await job.wait()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
   return job
 
 
@@ -184,7 +190,7 @@ async def test_startup_inspection_and_job_creation_never_construct_driver(hardwa
   _, client, driver, created = hardware
   assert (await client.device_info()).device_type == "Celigo"
   assert (await client.configuration()).channels == ["brightfield"]
-  assert (await client.status()).state == pb.OPERATIONAL_STATE_UNINITIALIZED
+  assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
   job = await capture(client)
   assert (await capture(client)).identifier == job.identifier
   with pytest.raises(grpc.aio.AioRpcError) as error:
@@ -202,7 +208,7 @@ async def test_generic_controller_interlock_does_not_block_brightfield(hardware)
   await initialize(client)
   job = await capture(client)
   await job.start()
-  assert (await job.wait()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
   assert len(await job.list_frames()) == 1
   assert "door" not in driver.calls
 
@@ -215,7 +221,9 @@ async def test_physical_service_has_no_simulation_rpc(hardware):
       pass
   stub = rpc.SimulationServiceStub(client.channel)
   with pytest.raises(grpc.aio.AioRpcError) as error:
-    await stub.CreateInitialization(pb.RequestLookup(device_id="celigo-test", request_id="fake"))
+    await stub.CreateInitialization(
+      job_pb.RequestLookup(device_id="celigo-test", request_id="fake")
+    )
   assert error.value.code() == grpc.StatusCode.UNIMPLEMENTED
   assert created == []
 
@@ -266,7 +274,7 @@ async def test_capture_uses_public_plr_sequence_and_preserves_pixels_and_actual_
   await initialize(client)
   job = await capture(client)
   await job.start()
-  assert (await job.wait()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
   assert len(created) == 1 and driver.calls == [
     "setup",
     "status",
@@ -281,11 +289,12 @@ async def test_capture_uses_public_plr_sequence_and_preserves_pixels_and_actual_
   frame = await job.get_frame(info.frame_id)
   assert hashlib.sha256(frame.image).hexdigest() == info.sha256
   np.testing.assert_array_equal(np.array(Image.open(io.BytesIO(frame.image))), driver.pixels)
-  assert frame.metadata.sample_x_mm == 63.5
-  assert frame.metadata.stage_x_mm != 63.5
-  assert frame.metadata.exposure_ms == 1.25 and frame.metadata.gain == 1.1
-  assert frame.metadata.z_mm == pytest.approx(2.601)
-  assert frame.metadata.configuration_id == client.configuration_id
+  metadata = acquisition_metadata(frame)
+  assert metadata.sample_x_mm == 63.5
+  assert metadata.stage_x_mm != 63.5
+  assert metadata.exposure_ms == 1.25 and metadata.gain == 1.1
+  assert metadata.z_mm == pytest.approx(2.601)
+  assert metadata.configuration_id == client.configuration_id
   assert frame.captured_at.seconds == 1700000000 and frame.captured_at.nanos == 125000000
   again = await client.create_initialization("reinitialize")
   with pytest.raises(grpc.aio.AioRpcError) as error:
@@ -304,18 +313,18 @@ async def test_cancel_keeps_ownership_until_capture_and_cleanup_finish(hardware)
   await job.start()
   await asyncio.wait_for(driver.capture_entered.wait(), 5)
   await job.cancel()
-  assert (await job.status()).state == pb.JOB_STATE_RUNNING
+  assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
   driver.capture_gate.set()
   await asyncio.wait_for(driver.stop_entered.wait(), 5)
-  assert (await job.status()).state == pb.JOB_STATE_RUNNING
+  assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
   with pytest.raises(grpc.aio.AioRpcError) as busy:
     await other.start()
   assert busy.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
   driver.stop_gate.set()
   final = await job.wait()
-  assert final.outcome == pb.OUTCOME_CANCELLED and final.completed == 1
+  assert final.outcome == job_pb.OUTCOME_CANCELLED and final.completed == 1
   assert not driver.illuminated
-  assert (await client.status()).state == pb.OPERATIONAL_STATE_UNINITIALIZED
+  assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
 
 
 @pytest.mark.asyncio
@@ -331,7 +340,7 @@ async def test_client_disconnection_does_not_cancel_capture(hardware):
   await client.connect()
   recovered = await client.recover("capture")
   assert recovered.identifier == job.identifier
-  assert (await recovered.wait()).outcome == pb.OUTCOME_SUCCEEDED
+  assert (await recovered.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
   assert driver.calls.count("capture") == 1
 
 
@@ -346,8 +355,8 @@ async def test_hardware_failure_cleans_up_and_faults_without_retry(hardware, fai
   driver.stop_error = failure == "cleanup"
   await job.start()
   final = await job.wait()
-  assert final.outcome == pb.OUTCOME_FAILED
-  assert (await client.status()).state == pb.OPERATIONAL_STATE_FAULTED
+  assert final.outcome == job_pb.OUTCOME_FAILED
+  assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
   assert "stop" in driver.calls
   if failure == "controller":
     assert "move" not in driver.calls and "capture" not in driver.calls
@@ -381,10 +390,10 @@ async def test_controller_fault_after_setup_prevents_ready_and_capture(hardware,
   job = await client.create_initialization("controller-fault")
   await job.start()
   final = await job.wait()
-  assert final.outcome == pb.OUTCOME_FAILED
+  assert final.outcome == job_pb.OUTCOME_FAILED
   assert "controller fault" in final.error
   assert driver.calls == ["setup", "status", "stop"]
-  assert (await client.status()).state == pb.OPERATIONAL_STATE_FAULTED
+  assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
   assert not await job.list_frames()
 
 
@@ -411,7 +420,7 @@ async def test_configured_door_input_blocks_imaging(tmp_path, config, inverted, 
         driver.door_input_after_move = inverted
     await job.start()
     final = await job.wait()
-    assert final.outcome == pb.OUTCOME_FAILED
+    assert final.outcome == job_pb.OUTCOME_FAILED
     assert "configured door interlock is open" in final.error
     assert "capture" not in driver.calls
     assert ("move" in driver.calls) == (phase == "after_move")
@@ -429,10 +438,10 @@ async def test_unexpected_executor_cancel_waits_for_driver_and_cannot_report_suc
   execution = server.simulator.jobs[job.identifier]
   execution.task.cancel()
   await asyncio.sleep(0)
-  assert (await job.status()).state == pb.JOB_STATE_RUNNING
+  assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
   assert server.simulator.active_job is execution
   driver.capture_gate.set()
-  assert (await job.wait()).outcome == pb.OUTCOME_INTERRUPTED
+  assert (await job.wait()).outcome == job_pb.OUTCOME_INTERRUPTED
   assert "stop" in driver.calls and not driver.illuminated
 
 
@@ -455,7 +464,7 @@ async def test_restart_restores_images_and_ready_intent_without_constructing_dri
     assert await recovered.get_frame(frame_info.frame_id) == frame
     inert = await client.recover("ready")
     assert inert.identifier == ready.identifier
-    assert (await inert.status()).state == pb.JOB_STATE_READY
+    assert (await inert.status()).state == job_pb.JOB_STATE_READY
     with pytest.raises(grpc.aio.AioRpcError):
       await inert.start()
     assert created == []

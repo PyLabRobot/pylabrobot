@@ -21,9 +21,9 @@ from google.protobuf.json_format import MessageToDict
 
 from pylabrobot.revvity.celigo.grpc.client import PrototypeClient
 from pylabrobot.revvity.celigo.grpc.model import SimulationSpec
-from pylabrobot.revvity.celigo.grpc.security import Certificates, create_certificates
 from pylabrobot.revvity.celigo.grpc.server import SimulatorServer
-from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
+from pylabrobot.rpc.security import Certificates, create_certificates
+from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 
 async def serve(args) -> None:
@@ -77,7 +77,7 @@ async def measure_profile(
     if hashlib.sha256(frame.image).hexdigest() != info.sha256:
       raise RuntimeError("image checksum mismatch")
     final = await job.wait()
-  if final.outcome != pb.OUTCOME_SUCCEEDED:
+  if final.outcome != job_pb.OUTCOME_SUCCEEDED:
     raise RuntimeError(f"acquisition failed: {final.error}")
   await client.disconnect()
   await client.connect()
@@ -119,7 +119,8 @@ async def measure_cancel(client: PrototypeClient, request_id="cancel-benchmark")
     stopped = time.perf_counter() - started
     frame = await transfer
   if (
-    final.outcome != pb.OUTCOME_CANCELLED or hashlib.sha256(frame.image).hexdigest() != info.sha256
+    final.outcome != job_pb.OUTCOME_CANCELLED
+    or hashlib.sha256(frame.image).hexdigest() != info.sha256
   ):
     raise RuntimeError("cancellation/image-transfer experiment failed")
   return {
@@ -152,7 +153,7 @@ async def check(
     run_id = f"check-{uuid4().hex}"
     initialization = await client.create_initialization(f"{run_id}-initialize")
     await initialization.start()
-    if (await initialization.wait()).outcome != pb.OUTCOME_SUCCEEDED:
+    if (await initialization.wait()).outcome != job_pb.OUTCOME_SUCCEEDED:
       raise RuntimeError("simulated initialization failed")
     profiles = []
     for name, spec in (
@@ -173,7 +174,7 @@ async def check(
     recovered = await client.recover(request_id)
     at_reconnect = await recovered.status()
     final = await recovered.wait()
-    if recovered.identifier != job.identifier or final.outcome != pb.OUTCOME_SUCCEEDED:
+    if recovered.identifier != job.identifier or final.outcome != job_pb.OUTCOME_SUCCEEDED:
       raise RuntimeError("job did not survive client disconnection")
     report.update(
       exercised=True,
@@ -186,7 +187,7 @@ async def check(
         "job_id": job.identifier,
         "completed_at_reconnect": at_reconnect.completed,
         "completed": final.completed,
-        "outcome": pb.Outcome.Name(final.outcome),
+        "outcome": job_pb.Outcome.Name(final.outcome),
       },
       final_status=MessageToDict(await client.status(), preserving_proto_field_name=True),
     )
@@ -245,7 +246,7 @@ async def demo(report_path: Path | None) -> None:
         async with PrototypeClient(endpoint, certs) as client:
           initialization = await client.create_initialization("demo-initialize")
           await initialization.start()
-          if (await initialization.wait()).outcome != pb.OUTCOME_SUCCEEDED:
+          if (await initialization.wait()).outcome != job_pb.OUTCOME_SUCCEEDED:
             raise RuntimeError("simulated initialization failed")
           profiles = []
           for name, spec in (

@@ -23,14 +23,16 @@ from pylabrobot.revvity.celigo.celigo import (
   IlluminationChannelName,
 )
 from pylabrobot.revvity.celigo.config import CeligoConfig
-from pylabrobot.revvity.celigo.grpc.errors import BusyError, StateError
 from pylabrobot.revvity.celigo.grpc.model import MAX_FRAME_BYTES, MAX_PIXELS, Specification
-from pylabrobot.revvity.celigo.grpc.security import Certificates
 from pylabrobot.revvity.celigo.grpc.server import SimulatorServer, unary
 from pylabrobot.revvity.celigo.grpc.simulator import SimulatedJob, Simulator, owned_operation
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
+from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
 from pylabrobot.revvity.celigo.scan import ScanBlock, ScanPosition, ScanSpec, build_scan_plan
+from pylabrobot.rpc.errors import BusyError, StateError
+from pylabrobot.rpc.security import Certificates
+from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 MAX_EXPOSURE_MS = 1000.0
 MAX_GAIN = 16.0
@@ -108,11 +110,11 @@ class HardwareSpecification:
 
 
 def encode_frame(
-  job: pb.JobRef,
+  job: job_pb.JobRef,
   result: AcquisitionResult,
   settings: Brightfield,
   configuration_id: str,
-) -> pb.ImageFrame:
+) -> stored_pb.ImageFrame:
   """Preserve camera pixels, actual settings, native time, and both coordinate systems."""
   frame = result.frame
   if frame.bit_depth not in (8, 16) or not 0 < frame.pixel_count <= MAX_PIXELS:
@@ -124,7 +126,7 @@ def encode_frame(
   payload = output.getvalue()
   if len(payload) > MAX_FRAME_BYTES:
     raise ValueError("encoded camera frame exceeds message limit")
-  image = pb.ImageFrame(
+  image = stored_pb.ImageFrame(
     job=job,
     frame_id=f"{job.job_id}-1",
     sequence=1,
@@ -311,7 +313,7 @@ class CeligoCore(Simulator):
     await self.driver.setup()  # PLR opens USB, configures the camera, and homes the imaging axes.
     await self.check_imaging_status()
 
-  async def capture(self, job: SimulatedJob, sequence: int) -> pb.ImageFrame | None:
+  async def capture(self, job: SimulatedJob, sequence: int) -> stored_pb.ImageFrame | None:
     if not isinstance(job.spec, HardwareSpecification) or job.spec.capture is None:
       raise TypeError("capture requires explicit brightfield settings")
     settings = job.spec.capture

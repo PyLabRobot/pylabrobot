@@ -16,12 +16,16 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 @dataclass(frozen=True)
 class Certificates:
+  """Paths to a CA certificate and separate server/client certificate pairs."""
+
   directory: Path
 
   def read(self, name: str) -> bytes:
+    """Read a PEM file from the configured credential directory."""
     return (self.directory / name).read_bytes()
 
   def client_credentials(self) -> grpc.ChannelCredentials:
+    """Authenticate this client and trust servers signed by the configured CA."""
     return grpc.ssl_channel_credentials(
       root_certificates=self.read("ca.pem"),
       private_key=self.read("client-key.pem"),
@@ -29,6 +33,7 @@ class Certificates:
     )
 
   def server_credentials(self) -> grpc.ServerCredentials:
+    """Authenticate the server and require clients signed by the configured CA."""
     return grpc.ssl_server_credentials(
       [(self.read("server-key.pem"), self.read("server.pem"))],
       root_certificates=self.read("ca.pem"),
@@ -41,9 +46,10 @@ def create_certificates(directory: Path) -> Certificates:
   directory.mkdir(mode=0o700, parents=True, exist_ok=False)
   now = datetime.now(timezone.utc)
   ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-  ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Celigo simulator demo CA")])
+  ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "PLR RPC test CA")])
 
-  def builder(subject, public_key):
+  def builder(subject: x509.Name, public_key: rsa.RSAPublicKey) -> x509.CertificateBuilder:
+    """Apply the common issuer and short validity period to a test identity."""
     return (
       x509.CertificateBuilder()
       .subject_name(subject)
@@ -66,7 +72,7 @@ def create_certificates(directory: Path) -> Certificates:
     ("client", ExtendedKeyUsageOID.CLIENT_AUTH),
   ):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"celigo-sim-{name}")])
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"plr-rpc-test-{name}")])
     cert = (
       builder(subject, key.public_key())
       .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)

@@ -1,182 +1,222 @@
-"""gRPC mapping for the simulator; no hardware imports or startup motion."""
+"""Adapt Celigo's durable acquisition engine to the shared optional RPC capabilities."""
 
 from __future__ import annotations
 
-import logging
 import tempfile
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
 from functools import wraps
 from pathlib import Path
 
-import grpc
-
-from pylabrobot.revvity.celigo.grpc.errors import (
-  BusyError,
-  CapacityError,
-  DataLossError,
-  StateError,
-  StorageError,
-)
+from pylabrobot.__version__ import __version__
 from pylabrobot.revvity.celigo.grpc.model import (
-  CHANNEL_OPTIONS,
   MAX_FRAME_BYTES,
+  MAX_MESSAGE_BYTES,
   MAX_PIXELS,
   SimulationSpec,
-  copy_message,
 )
-from pylabrobot.revvity.celigo.grpc.security import Certificates
 from pylabrobot.revvity.celigo.grpc.simulator import Simulator
 from pylabrobot.revvity.celigo.grpc.storage import DEFAULT_QUOTA
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
+from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
+from pylabrobot.rpc import device, images, jobs
+from pylabrobot.rpc.device import DeviceServer
+from pylabrobot.rpc.errors import StateError
+from pylabrobot.rpc.security import Certificates
+from pylabrobot.rpc.transport import API_VERSION, copy_message, require_device, rpc_errors
+from pylabrobot.rpc.v1 import device_pb2 as device_pb
+from pylabrobot.rpc.v1 import images_pb2 as image_pb
+from pylabrobot.rpc.v1 import images_pb2_grpc as image_rpc
+from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
+from pylabrobot.rpc.v1 import jobs_pb2_grpc as job_rpc
 
-logger = logging.getLogger(__name__)
+
+def public_job(status: stored_pb.JobStatus) -> job_pb.JobStatus:
+  """Project durable state onto the common job contract, omitting image retention."""
+  result = job_pb.JobStatus.FromString(status.SerializeToString())
+  result.DiscardUnknownFields()
+  return result
 
 
-@asynccontextmanager
-async def errors(context):
-  try:
-    yield
-  except (ValueError, TypeError) as exc:
-    await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(exc))
-  except KeyError:
-    await context.abort(grpc.StatusCode.NOT_FOUND, "device, job, request, or frame not found")
-  except (BusyError, CapacityError) as exc:
-    await context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, str(exc))
-  except StateError as exc:
-    await context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(exc))
-  except DataLossError as exc:
-    await context.abort(grpc.StatusCode.DATA_LOSS, str(exc))
-  except StorageError as exc:
-    await context.abort(grpc.StatusCode.UNAVAILABLE, str(exc))
-  except Exception:
-    logger.exception("Simulator RPC failed")
-    await context.abort(grpc.StatusCode.INTERNAL, "internal simulator error")
+def public_frame(frame: stored_pb.ImageFrame) -> image_pb.ImageFrame:
+  """Wrap complete pixels and explicitly typed Celigo metadata in a shared envelope."""
+  result = image_pb.ImageFrame(
+    job=frame.job,
+    frame_id=frame.frame_id,
+    sequence=frame.sequence,
+    representation=frame.representation,
+    captured_at=frame.captured_at,
+    width=frame.width,
+    height=frame.height,
+    pixel_format=frame.pixel_format,
+    encoding=frame.encoding,
+    image=frame.image,
+    sha256=frame.sha256,
+  )
+  result.metadata.Pack(frame.metadata)
+  return result
 
 
 def unary(method):
+  """Translate errors from typed Celigo operation methods into shared RPC status codes."""
+
   @wraps(method)
   async def call(self, request, context):
-    async with errors(context):
+    """Apply the same error mapping as the shared service adapters."""
+    async with rpc_errors(context):
       return await method(self, request, context)
 
   return call
 
 
-class Service(
-  rpc.DeviceServiceServicer,
-  rpc.SimulationServiceServicer,
-  rpc.JobServiceServicer,
-  rpc.ImageServiceServicer,
-):
-  def __init__(self, simulator: Simulator):
-    self.simulator = simulator
+class ImagingAdapter:
+  """Present Celigo state through shared interfaces without moving its executor/storage."""
 
-  def device(self, device_id: str) -> Simulator:
-    if device_id != self.simulator.device_id:
-      raise KeyError(device_id)
-    return self.simulator
+  def __init__(self, core: Simulator) -> None:
+    """Bind an initialized service core, which may still have uninitialized hardware."""
+    self.core = core
 
-  def job(self, ref: pb.JobRef):
-    return self.device(ref.device_id).jobs[ref.job_id]
+  @property
+  def device_id(self) -> str:
+    """Return the stable device identifier owned by the core."""
+    return self.core.device_id
 
-  @unary
-  async def GetDevice(self, request, context):
-    sim = self.device(request.device_id)
-    return pb.DeviceInfo(
-      device_id=sim.device_id,
-      display_name=sim.display_name,
-      device_type=sim.device_type,
-      api_version="celigo.v1",
-      maximum_frame_bytes=MAX_FRAME_BYTES,
-      maximum_pixels=MAX_PIXELS,
-      retention_bytes=sim.store.quota,
-      configuration_id=sim.configuration_id,
-      supported_operations=sim.supported_operations,
+  def get_info(self) -> device_pb.DeviceInfo:
+    """Advertise actual registered services independently of image-specific limits."""
+    operations = (
+      "celigo.v1.SimulationService"
+      if self.core.device_type == "CeligoSimulator"
+      else "celigo.v1.CeligoService"
+    )
+    return device_pb.DeviceInfo(
+      device_id=self.device_id,
+      display_name=self.core.display_name,
+      device_type=self.core.device_type,
+      api_version=API_VERSION,
+      configuration_id=self.core.configuration_id,
+      supported_operations=self.core.supported_operations,
+      services=[device.SERVICE_NAME, jobs.SERVICE_NAME, images.SERVICE_NAME, operations],
+      manufacturer="Revvity",
+      model="Celigo",
+      implementation_version=__version__,
+      instance_id=self.core.status.instance_id,
     )
 
-  @unary
-  async def GetStatus(self, request, context):
-    return copy_message(self.device(request.device_id).status)
+  def get_status(self) -> device_pb.DeviceStatus:
+    """Read the cached operational snapshot without polling or moving hardware."""
+    return copy_message(self.core.status)
 
-  async def WatchStatus(self, request, context):
-    async with errors(context):
-      with self.device(request.device_id).updates.subscribe() as queue:
-        while True:
-          yield await queue.get()
+  async def watch_status(self) -> AsyncGenerator[device_pb.DeviceStatus, None]:
+    """Publish current operational state followed by bounded updates."""
+    with self.core.updates.subscribe() as queue:
+      while True:
+        yield await queue.get()
 
-  async def create(self, request: pb.CreateRequest, preview: bool) -> pb.JobRef:
-    sim = self.device(request.device_id)
+  async def get_job(self, job_id: str) -> job_pb.JobStatus:
+    """Read a job through the image-independent public status type."""
+    return public_job(self.core.jobs[job_id].status)
+
+  async def find_job(self, request_id: str) -> job_pb.JobRef:
+    """Recover an existing request without creating or starting work."""
+    return copy_message(self.core.requests[request_id].ref)
+
+  async def start_job(self, job_id: str) -> job_pb.JobStatus:
+    """Let durable acceptance and executor bookkeeping finish if the RPC disconnects."""
+    return public_job(await self.core.command(self.core.jobs[job_id].start()))
+
+  async def cancel_job(self, job_id: str) -> job_pb.JobStatus:
+    """Persist stopping intent while the executor retains hardware ownership."""
+    return public_job(await self.core.command(self.core.jobs[job_id].cancel()))
+
+  async def watch_job(self, job_id: str) -> AsyncGenerator[job_pb.JobStatus, None]:
+    """Project bounded stored snapshots into the common job contract."""
+    with self.core.jobs[job_id].updates.subscribe() as queue:
+      while True:
+        status = await queue.get()
+        yield public_job(status)
+        if status.state == job_pb.JOB_STATE_FINISHED:
+          return
+
+  def image_capabilities(self) -> image_pb.ImageCapabilities:
+    """Keep pixel limits and retention capacity in the optional image capability."""
+    return image_pb.ImageCapabilities(
+      maximum_frame_bytes=MAX_FRAME_BYTES,
+      maximum_pixels=MAX_PIXELS,
+      retention_bytes=self.core.store.quota,
+      pixel_formats=["Mono8", "Mono16"],
+      encodings=["PNG"],
+    )
+
+  async def image_retention(self, job_id: str) -> image_pb.ImageRetention:
+    """Read the durable image-release flag without adding it to common job status."""
+    status = self.core.jobs[job_id].status
+    return image_pb.ImageRetention(job=status.job, images_released=status.images_released)
+
+  async def release_images(self, job_id: str) -> image_pb.ImageRetention:
+    """Commit explicit image release independently of the initiating RPC lifetime."""
+    status = await self.core.command(self.core.jobs[job_id].release_images())
+    return image_pb.ImageRetention(job=status.job, images_released=status.images_released)
+
+  async def list_frames(self, job_id: str, after_sequence: int, limit: int) -> image_pb.FramePage:
+    """Read one metadata page from the existing durable store."""
+    return await self.core.jobs[job_id].list_frames(after_sequence, limit)
+
+  async def get_frame(self, job_id: str, frame_id: str) -> image_pb.ImageFrame:
+    """Return a shared image envelope after validating the retained pixels."""
+    return public_frame(await self.core.jobs[job_id].get_frame(frame_id))
+
+  async def watch_preview(self) -> AsyncGenerator[image_pb.ImageFrame, None]:
+    """Read complete retained previews; subscribing never starts acquisition."""
+    with self.core.previews.subscribe() as queue:
+      while True:
+        ref = await queue.get()
+        try:
+          yield await self.get_frame(ref.job.job_id, ref.frame_id)
+        except StateError:
+          continue  # Explicit image release can race with a queued preview reference.
+
+
+class SimulationOperations(rpc.SimulationServiceServicer):
+  """Create typed synthetic acquisition requests for the Celigo simulator."""
+
+  def __init__(self, core: Simulator) -> None:
+    """Bind the simulator's operation-specific creation API."""
+    self.core = core
+
+  async def create(self, request: pb.CreateRequest, preview: bool) -> job_pb.JobRef:
+    """Validate and durably create an inert synthetic request."""
+    require_device(request.device_id, self.core.device_id)
     if not request.HasField("specification"):
       raise ValueError("specification is required")
     spec = SimulationSpec.from_proto(request.specification)
-    job = await sim.command(sim.create(request.request_id, spec, preview, request.configuration_id))
+    job = await self.core.command(
+      self.core.create(request.request_id, spec, preview, request.configuration_id)
+    )
     return copy_message(job.ref)
 
   @unary
   async def CreateInitialization(self, request, context):
-    sim = self.device(request.device_id)
-    job = await sim.command(sim.create(request.request_id, SimulationSpec(), initialize=True))
+    """Create an inert synthetic initialization job."""
+    require_device(request.device_id, self.core.device_id)
+    job = await self.core.command(
+      self.core.create(request.request_id, SimulationSpec(), initialize=True)
+    )
     return copy_message(job.ref)
 
   @unary
   async def CreateAcquisition(self, request, context):
+    """Create a synthetic multi-frame request without starting it."""
     return await self.create(request, False)
 
   @unary
   async def CreatePreview(self, request, context):
+    """Create a synthetic one-frame preview request without starting it."""
     return await self.create(request, True)
 
-  @unary
-  async def GetJob(self, request, context):
-    return copy_message(self.job(request).status)
 
-  @unary
-  async def GetJobByRequestId(self, request, context):
-    return copy_message(self.device(request.device_id).requests[request.request_id].ref)
+class SimulatorServer(DeviceServer):
+  """Compose shared transport capabilities around the Celigo acquisition engine."""
 
-  @unary
-  async def StartJob(self, request, context):
-    return await self.simulator.command(self.job(request).start())
-
-  @unary
-  async def CancelJob(self, request, context):
-    return await self.simulator.command(self.job(request).cancel())
-
-  @unary
-  async def ReleaseJobImages(self, request, context):
-    return await self.simulator.command(self.job(request).release_images())
-
-  async def WatchJob(self, request, context):
-    async with errors(context):
-      with self.job(request).updates.subscribe() as queue:
-        while True:
-          snapshot = await queue.get()
-          yield snapshot
-          if snapshot.state == pb.JOB_STATE_FINISHED:
-            return
-
-  @unary
-  async def ListFrames(self, request, context):
-    return await self.job(request.job).list_frames(request.after_sequence, request.limit)
-
-  @unary
-  async def GetFrame(self, request, context):
-    return await self.job(request.job).get_frame(request.frame_id)
-
-  async def WatchPreview(self, request, context):
-    async with errors(context):
-      with self.device(request.device_id).previews.subscribe() as queue:
-        while True:
-          ref = await queue.get()
-          try:
-            yield await self.job(ref.job).get_frame(ref.frame_id)
-          except StateError:
-            # A terminal job may have released images while this update was queued.
-            continue
-
-
-class SimulatorServer:
   def __init__(
     self,
     certs: Certificates,
@@ -189,6 +229,7 @@ class SimulatorServer:
     configuration_id="simulation-v1",
     core: Simulator | None = None,
   ):
+    """Build the imaging service; startup does not open physical hardware."""
     self.temporary = (
       tempfile.TemporaryDirectory(prefix="celigo-store-")
       if data_dir is None and core is None
@@ -199,30 +240,26 @@ class SimulatorServer:
       assert directory is not None
       core = Simulator(directory, device_id, storage_quota, max_jobs, configuration_id)
     self.simulator = core
-    self.server = grpc.aio.server(options=CHANNEL_OPTIONS, maximum_concurrent_rpcs=32)
-    service = Service(self.simulator)
-    rpc.add_DeviceServiceServicer_to_server(service, self.server)
+    self.adapter = ImagingAdapter(core)
+    super().__init__(self.adapter, certs, port=port, maximum_message_bytes=MAX_MESSAGE_BYTES)
+    job_rpc.add_JobServiceServicer_to_server(jobs.JobService(self.adapter), self.server)
+    image_rpc.add_ImageServiceServicer_to_server(images.ImageService(self.adapter), self.server)
     if core.device_type == "CeligoSimulator":
-      rpc.add_SimulationServiceServicer_to_server(service, self.server)
-    rpc.add_JobServiceServicer_to_server(service, self.server)
-    rpc.add_ImageServiceServicer_to_server(service, self.server)
-    # Prototype intentionally exposes no configurable non-loopback bind address.
-    self.port = self.server.add_secure_port(f"127.0.0.1:{port}", certs.server_credentials())
-    if not self.port:
-      raise RuntimeError("unable to bind simulator endpoint")
-    self.endpoint = f"127.0.0.1:{self.port}"
+      rpc.add_SimulationServiceServicer_to_server(SimulationOperations(core), self.server)
 
   async def start(self) -> None:
+    """Recover durable records before accepting requests; never replay interrupted work."""
     try:
       await self.simulator.open()
-      await self.server.start()
+      await super().start()
     except BaseException:
       await self.stop()
       raise
 
   async def stop(self) -> None:
+    """Stop accepting commands, finish in-flight work, and close the owned store."""
     self.simulator.closing = True
-    await self.server.stop(0)
+    await super().stop()
     await self.simulator.stop()
     if self.temporary:
       self.temporary.cleanup()

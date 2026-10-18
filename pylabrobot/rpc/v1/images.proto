@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package pylabrobot.rpc.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "pylabrobot/rpc/v1/device.proto";
+import "pylabrobot/rpc/v1/jobs.proto";
+
+message ImageCapabilities {
+  uint64 maximum_frame_bytes = 1;
+  uint64 maximum_pixels = 2;
+  uint64 retention_bytes = 3;
+  repeated string pixel_formats = 4;
+  repeated string encodings = 5;
+}
+message ImageRetention {
+  JobRef job = 1;
+  bool images_released = 2;
+}
+message ListFramesRequest {
+  JobRef job = 1;
+  uint32 after_sequence = 2; // Exclusive, sequence starts at 1.
+  uint32 limit = 3; // 1..64; metadata pagination only.
+}
+message FrameInfo {
+  string frame_id = 1;
+  uint32 sequence = 2;
+  uint64 byte_length = 3;
+  string sha256 = 4;
+  bool available = 5;
+}
+message FramePage { repeated FrameInfo frames = 1; }
+message GetFrameRequest {
+  JobRef job = 1;
+  string frame_id = 2;
+}
+message ImageFrame {
+  JobRef job = 1;
+  string frame_id = 2;
+  uint32 sequence = 3;
+  string representation = 4;
+  google.protobuf.Timestamp captured_at = 5;
+  uint32 width = 6;
+  uint32 height = 7;
+  string pixel_format = 8;
+  string encoding = 9;
+  bytes image = 10; // Complete PNG; never an application-level chunk.
+  string sha256 = 11;
+  google.protobuf.Any metadata = 12; // Typed device-specific acquisition metadata.
+}
+
+service ImageService {
+  rpc GetCapabilities(DeviceRequest) returns (ImageCapabilities);
+  rpc GetJobImageRetention(JobRef) returns (ImageRetention);
+  // Release complete image payloads only after durable job completion.
+  rpc ReleaseJobImages(JobRef) returns (ImageRetention);
+  rpc ListFrames(ListFramesRequest) returns (FramePage);
+  rpc GetFrame(GetFrameRequest) returns (ImageFrame);
+  // Waits for first preview if none exists. Never initiates acquisition.
+  rpc WatchPreview(DeviceRequest) returns (stream ImageFrame);
+}

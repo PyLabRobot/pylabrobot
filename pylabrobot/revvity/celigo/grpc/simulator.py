@@ -6,52 +6,25 @@ import asyncio
 import logging
 import re
 from collections.abc import Callable, Coroutine
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import TypeVar
 from uuid import uuid4
 
-from pylabrobot.revvity.celigo.grpc.errors import BusyError, CapacityError, StateError, StorageError
 from pylabrobot.revvity.celigo.grpc.model import (
-  M,
   SimulationSpec,
   Specification,
-  copy_message,
   make_frame,
 )
 from pylabrobot.revvity.celigo.grpc.storage import DEFAULT_QUOTA, Store, advance
-from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
+from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
+from pylabrobot.rpc.errors import BusyError, CapacityError, StateError, StorageError
+from pylabrobot.rpc.transport import Latest, copy_message
+from pylabrobot.rpc.v1 import device_pb2 as device_pb
+from pylabrobot.rpc.v1 import images_pb2 as image_pb
+from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
-
-
-class Latest(Generic[M]):
-  """One queued immutable value per subscriber; consumers reconcile skipped values."""
-
-  def __init__(self, value: M | None = None):
-    self.value = value
-    self.queues: set[asyncio.Queue[M]] = set()
-
-  def publish(self, value: M) -> None:
-    self.value = copy_message(value)
-    for queue in self.queues:
-      if queue.full():
-        queue.get_nowait()
-      queue.put_nowait(self.value)
-
-  @contextmanager
-  def subscribe(self):
-    if len(self.queues) >= 16:
-      raise CapacityError("too many subscriptions")
-    queue: asyncio.Queue[M] = asyncio.Queue(maxsize=1)
-    self.queues.add(queue)
-    if self.value is not None:
-      queue.put_nowait(self.value)
-    try:
-      yield queue
-    finally:
-      self.queues.discard(queue)
 
 
 async def owned_operation(operation: Coroutine[object, object, T]) -> T:
@@ -68,7 +41,7 @@ async def owned_operation(operation: Coroutine[object, object, T]) -> T:
 
 
 class SimulatedJob:
-  def __init__(self, service: Simulator, spec: Specification, status: pb.JobStatus):
+  def __init__(self, service: Simulator, spec: Specification, status: stored_pb.JobStatus):
     self.service = service
     self.spec = spec
     self.status = status
@@ -78,18 +51,18 @@ class SimulatedJob:
     if status.cancellation_requested:
       self.stop_requested.set()
     self.task: asyncio.Task[None] | None = None
-    self.updates: Latest[pb.JobStatus] = Latest(copy_message(status))
+    self.updates: Latest[stored_pb.JobStatus] = Latest(copy_message(status))
 
-  def publish(self, status: pb.JobStatus) -> None:
+  def publish(self, status: stored_pb.JobStatus) -> None:
     self.status = status
     self.updates.publish(status)
 
-  async def start(self) -> pb.JobStatus:
+  async def start(self) -> stored_pb.JobStatus:
     async with self.service.lock:
       self.service.ensure_available()
-      if self.status.state == pb.JOB_STATE_RUNNING:
+      if self.status.state == job_pb.JOB_STATE_RUNNING:
         return copy_message(self.status)
-      if self.status.state != pb.JOB_STATE_READY or self.stop_requested.is_set():
+      if self.status.state != job_pb.JOB_STATE_READY or self.stop_requested.is_set():
         raise StateError("finished or cancelling jobs cannot start")
       if self.service.active_job is not None:
         raise BusyError("another job owns the instrument")
@@ -100,7 +73,7 @@ class SimulatedJob:
       self.service.validate_start(self)
       status = advance(
         self.status,
-        state=pb.JOB_STATE_RUNNING,
+        state=job_pb.JOB_STATE_RUNNING,
         phase="Initializing" if self.status.kind == "Initialize" else "Capturing",
       )
       await self.service.io(self.service.store.save, status, "start")
@@ -110,35 +83,35 @@ class SimulatedJob:
       self.task = asyncio.create_task(self.run(), name=f"celigo-grpc-{self.ref.job_id}")
       return copy_message(self.status)
 
-  async def cancel(self) -> pb.JobStatus:
+  async def cancel(self) -> stored_pb.JobStatus:
     # Signal execution immediately even if a disk commit currently holds the lock.
-    if self.status.state != pb.JOB_STATE_FINISHED:
+    if self.status.state != job_pb.JOB_STATE_FINISHED:
       self.stop_requested.set()
     async with self.service.lock:
-      if self.status.state != pb.JOB_STATE_FINISHED and not self.status.cancellation_requested:
+      if self.status.state != job_pb.JOB_STATE_FINISHED and not self.status.cancellation_requested:
         status = advance(self.status, cancellation_requested=True, phase="Stopping")
-        if status.state == pb.JOB_STATE_READY:
+        if status.state == job_pb.JOB_STATE_READY:
           status.state, status.outcome, status.phase = (
-            pb.JOB_STATE_FINISHED,
-            pb.OUTCOME_CANCELLED,
+            job_pb.JOB_STATE_FINISHED,
+            job_pb.OUTCOME_CANCELLED,
             "Finished",
           )
         await self.service.io(self.service.store.save, status, "cancel")
         self.publish(status)
       return copy_message(self.status)
 
-  async def list_frames(self, after_sequence: int, limit: int) -> pb.FramePage:
+  async def list_frames(self, after_sequence: int, limit: int) -> image_pb.FramePage:
     return await self.service.io(
       self.service.store.list_frames, self.ref.job_id, after_sequence, limit
     )
 
-  async def get_frame(self, frame_id: str) -> pb.ImageFrame:
+  async def get_frame(self, frame_id: str) -> stored_pb.ImageFrame:
     async with self.service.read_slots:
       return await self.service.io(self.service.store.get_frame, self.ref.job_id, frame_id)
 
-  async def release_images(self) -> pb.JobStatus:
+  async def release_images(self) -> stored_pb.JobStatus:
     async with self.service.lock:
-      if self.status.state != pb.JOB_STATE_FINISHED or not self.status.state_durable:
+      if self.status.state != job_pb.JOB_STATE_FINISHED or not self.status.state_durable:
         raise StateError("only durably finished jobs can release images")
       if not self.status.images_released:
         status = advance(self.status, images_released=True)
@@ -173,7 +146,7 @@ class SimulatedJob:
             self.publish(status)
             if self.preview:
               self.service.previews.publish(
-                pb.GetFrameRequest(job=self.ref, frame_id=frame.frame_id)
+                image_pb.GetFrameRequest(job=self.ref, frame_id=frame.frame_id)
               )
           del frame  # Retention lives in SQLite; memory does not accumulate with scan length.
     except asyncio.CancelledError:
@@ -190,32 +163,34 @@ class SimulatedJob:
         error = f"{error}; cleanup failed: {type(exc).__name__}: {exc}".lstrip("; ")
       async with self.service.lock:
         outcome = (
-          pb.OUTCOME_INTERRUPTED
+          job_pb.OUTCOME_INTERRUPTED
           if interrupted
-          else pb.OUTCOME_FAILED
+          else job_pb.OUTCOME_FAILED
           if error
-          else (pb.OUTCOME_CANCELLED if self.stop_requested.is_set() else pb.OUTCOME_SUCCEEDED)
+          else (
+            job_pb.OUTCOME_CANCELLED if self.stop_requested.is_set() else job_pb.OUTCOME_SUCCEEDED
+          )
         )
         status = advance(
           self.status,
-          state=pb.JOB_STATE_FINISHED,
+          state=job_pb.JOB_STATE_FINISHED,
           phase="Finished",
           outcome=outcome,
           cancellation_requested=self.stop_requested.is_set(),
           error=error,
         )
-        if self.status.kind == "Initialize" and outcome == pb.OUTCOME_SUCCEEDED:
+        if self.status.kind == "Initialize" and outcome == job_pb.OUTCOME_SUCCEEDED:
           status.completed = 1
         try:
           await self.service.io(self.service.store.save, status, "finish")
         except StorageError as exc:
           # The disk may still contain Running. Recovery will mark it Interrupted.
           status.state_durable = False
-          status.outcome = pb.OUTCOME_FAILED
+          status.outcome = job_pb.OUTCOME_FAILED
           status.error = f"Completion could not be persisted: {exc}"
         self.publish(status)
         if self.status.kind == "Initialize":
-          self.service.initialized = status.outcome == pb.OUTCOME_SUCCEEDED
+          self.service.initialized = status.outcome == job_pb.OUTCOME_SUCCEEDED
         self.service.active_job = None
         self.service.publish_device()
 
@@ -230,10 +205,10 @@ class Simulator:
   def __init__(
     self,
     directory: Path,
-    device_id="celigo-sim-01",
+    device_id: str = "celigo-sim-01",
     storage_quota=DEFAULT_QUOTA,
     max_jobs=1024,
-    configuration_id="simulation-v1",
+    configuration_id: str = "simulation-v1",
     *,
     decode_spec: Callable[[bytes], Specification] = SimulationSpec.decode,
     spec_format="simulation.v1",
@@ -262,9 +237,9 @@ class Simulator:
     self.read_slots = asyncio.Semaphore(2)
     self.commands: set[asyncio.Task] = set()
     self.command_limit = 32
-    self.status = pb.DeviceStatus(device_id=device_id)
-    self.updates: Latest[pb.DeviceStatus] = Latest()
-    self.previews: Latest[pb.GetFrameRequest] = Latest()
+    self.status = device_pb.DeviceStatus(device_id=device_id, instance_id=uuid4().hex)
+    self.updates: Latest[device_pb.DeviceStatus] = Latest()
+    self.previews: Latest[image_pb.GetFrameRequest] = Latest()
 
   async def initialize(self) -> None:
     await asyncio.sleep(0)
@@ -272,7 +247,7 @@ class Simulator:
   def validate_start(self, job: SimulatedJob) -> None:
     """Hardware-specific admission checks, before committing a Running state."""
 
-  async def capture(self, job: SimulatedJob, sequence: int) -> pb.ImageFrame | None:
+  async def capture(self, job: SimulatedJob, sequence: int) -> stored_pb.ImageFrame | None:
     if not isinstance(job.spec, SimulationSpec):
       raise TypeError("simulator requires a SimulationSpec")
     return await asyncio.to_thread(make_frame, job.ref, sequence, job.spec, job.preview)
@@ -329,19 +304,22 @@ class Simulator:
 
   def publish_device(self) -> None:
     if self.fault:
-      self.status.state = pb.OPERATIONAL_STATE_FAULTED
+      self.status.state = device_pb.OPERATIONAL_STATE_FAULTED
     elif self.active_job:
       self.status.state = (
-        pb.OPERATIONAL_STATE_INITIALIZING
+        device_pb.OPERATIONAL_STATE_INITIALIZING
         if self.active_job.status.kind == "Initialize"
-        else pb.OPERATIONAL_STATE_BUSY
+        else device_pb.OPERATIONAL_STATE_BUSY
       )
     else:
       self.status.state = (
-        pb.OPERATIONAL_STATE_READY if self.initialized else pb.OPERATIONAL_STATE_UNINITIALIZED
+        device_pb.OPERATIONAL_STATE_READY
+        if self.initialized
+        else device_pb.OPERATIONAL_STATE_UNINITIALIZED
       )
     self.status.fault_summary = self.fault
     self.status.active_job_id = self.active_job.ref.job_id if self.active_job else ""
+    self.status.observation_valid = True
     self.status.observed_at.GetCurrentTime()
     self.status.revision += 1
     self.updates.publish(self.status)
@@ -375,12 +353,12 @@ class Simulator:
         return job
       if configuration_id != self.configuration_id:
         raise StateError("requested configuration no longer matches the service")
-      status = pb.JobStatus(
-        job=pb.JobRef(device_id=self.device_id, job_id=uuid4().hex),
+      status = stored_pb.JobStatus(
+        job=job_pb.JobRef(device_id=self.device_id, job_id=uuid4().hex),
         request_id=request_id,
         kind=kind,
-        state=pb.JOB_STATE_READY,
-        outcome=pb.OUTCOME_PENDING,
+        state=job_pb.JOB_STATE_READY,
+        outcome=job_pb.OUTCOME_PENDING,
         phase="Ready",
         total=1 if initialize else spec.frame_count,
         progress_unit="Steps" if initialize else "Frames",

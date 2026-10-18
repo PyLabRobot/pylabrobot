@@ -1,0 +1,167 @@
+{
+  "frames": {
+    "schema": "CREATE TABLE frames (\n        job_id TEXT NOT NULL REFERENCES jobs(job_id), frame_id TEXT NOT NULL UNIQUE,\n        sequence INTEGER NOT NULL, metadata BLOB NOT NULL, image BLOB,\n        byte_length INTEGER NOT NULL, sha256 TEXT NOT NULL,\n        PRIMARY KEY(job_id, sequence)\n      )",
+    "rows": [
+      [
+        "retained",
+        "retained-1",
+        1,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEgpyZXRhaW5lZC0xGAEiB1ByZXZpZXcqBgiB4s+qBjAIOAhCBU1vbm84SgNQTkdaQDA3NDU4MDQxOWVjYzExNWEzNDFiMWYyYzllNDI0NjRlOWZjYzU3MjAwNWY2NTFhY2E4Mzg5ZGZmNjFmYzMwZTdiMwoLYnJpZ2h0ZmllbGQRAAAAAAAA8D8ZAAAAAAAA8D8hAAAAAAAA8D86CVNpbXVsYXRlZA=="
+        },
+        {
+          "bytes": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAAAAADhZOFXAAAAU0lEQVR4AQFIALf/AP/kInnzvQaDAmfEMEjI2UtwAM0Y7Aj2pOckAdKdPSbcAioYAtcDIW3yf/pdAUgoCGZn2kANACRt7kUzUeTTAqbN3PwZ9d2Vi7kglUcfMCMAAAAASUVORK5CYII="
+        },
+        140,
+        "074580419ecc115a341b1f2c9e42464e9fcc572005f651aca8389dff61fc30e7"
+      ],
+      [
+        "released",
+        "released-1",
+        1,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEgpyZWxlYXNlZC0xGAEiB1ByZXZpZXcqBgiB4s+qBjAIOAhCBU1vbm84SgNQTkdaQDA3NDU4MDQxOWVjYzExNWEzNDFiMWYyYzllNDI0NjRlOWZjYzU3MjAwNWY2NTFhY2E4Mzg5ZGZmNjFmYzMwZTdiMwoLYnJpZ2h0ZmllbGQRAAAAAAAA8D8ZAAAAAAAA8D8hAAAAAAAA8D86CVNpbXVsYXRlZA=="
+        },
+        null,
+        140,
+        "074580419ecc115a341b1f2c9e42464e9fcc572005f651aca8389dff61fc30e7"
+      ],
+      [
+        "interrupted",
+        "interrupted-1",
+        1,
+        {
+          "bytes": "ChwKDWxlZ2FjeS1kZXZpY2USC2ludGVycnVwdGVkEg1pbnRlcnJ1cHRlZC0xGAEiB1ByZXZpZXcqBgiB4s+qBjAIOAhCBU1vbm84SgNQTkdaQDA3NDU4MDQxOWVjYzExNWEzNDFiMWYyYzllNDI0NjRlOWZjYzU3MjAwNWY2NTFhY2E4Mzg5ZGZmNjFmYzMwZTdiMwoLYnJpZ2h0ZmllbGQRAAAAAAAA8D8ZAAAAAAAA8D8hAAAAAAAA8D86CVNpbXVsYXRlZA=="
+        },
+        {
+          "bytes": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAAAAADhZOFXAAAAU0lEQVR4AQFIALf/AP/kInnzvQaDAmfEMEjI2UtwAM0Y7Aj2pOckAdKdPSbcAioYAtcDIW3yf/pdAUgoCGZn2kANACRt7kUzUeTTAqbN3PwZ9d2Vi7kglUcfMCMAAAAASUVORK5CYII="
+        },
+        140,
+        "074580419ecc115a341b1f2c9e42464e9fcc572005f651aca8389dff61fc30e7"
+      ]
+    ]
+  },
+  "jobs": {
+    "schema": "CREATE TABLE jobs (\n        job_id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE,\n        specification BLOB NOT NULL, status BLOB NOT NULL, reservation INTEGER NOT NULL\n      )",
+    "rows": [
+      [
+        "retained",
+        "retained",
+        {
+          "bytes": "CAEQCBgIIAg="
+        },
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEghyZXRhaW5lZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjfydDWBhCI7v2DAXADeg1zaW11bGF0aW9uLXYxiAEB"
+        },
+        140
+      ],
+      [
+        "released",
+        "released",
+        {
+          "bytes": "CAEQCBgIIAg="
+        },
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjfydDWBhC4xZ2KAXAEeg1zaW11bGF0aW9uLXYxgAEBiAEB"
+        },
+        0
+      ],
+      [
+        "interrupted",
+        "interrupted",
+        {
+          "bytes": "CAEQCBgIIAg="
+        },
+        {
+          "bytes": "ChwKDWxlZ2FjeS1kZXZpY2USC2ludGVycnVwdGVkEgtpbnRlcnJ1cHRlZBoHUHJldmlldyACKAFAAUgBUgZGcmFtZXNaBgiA4s+qBmIMCN/J0NYGENjx440BcAJ6DXNpbXVsYXRpb24tdjGIAQE="
+        },
+        65601
+      ]
+    ]
+  },
+  "metadata": {
+    "schema": "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    "rows": [
+      [
+        "schema_version",
+        "1"
+      ],
+      [
+        "device_id",
+        "legacy-device"
+      ],
+      [
+        "spec_format",
+        "simulation.v1"
+      ]
+    ]
+  },
+  "transitions": {
+    "schema": "CREATE TABLE transitions (\n        job_id TEXT NOT NULL REFERENCES jobs(job_id), revision INTEGER NOT NULL,\n        status BLOB NOT NULL, PRIMARY KEY(job_id, revision)\n      )",
+    "rows": [
+      [
+        "retained",
+        1,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEghyZXRhaW5lZBoHUHJldmlldyACKAFIAVIGRnJhbWVzWgYIgOLPqgZiCwjfydDWBhCw8P98cAF6DXNpbXVsYXRpb24tdjGIAQE="
+        }
+      ],
+      [
+        "retained",
+        2,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEghyZXRhaW5lZBoHUHJldmlldyACKAFAAUgBUgZGcmFtZXNaBgiA4s+qBmIMCN/J0NYGEJiOvYIBcAJ6DXNpbXVsYXRpb24tdjGIAQE="
+        }
+      ],
+      [
+        "retained",
+        3,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEghyZXRhaW5lZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjfydDWBhCI7v2DAXADeg1zaW11bGF0aW9uLXYxiAEB"
+        }
+      ],
+      [
+        "released",
+        1,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyACKAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjfydDWBhDYt7uFAXABeg1zaW11bGF0aW9uLXYxiAEB"
+        }
+      ],
+      [
+        "released",
+        2,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyACKAFAAUgBUgZGcmFtZXNaBgiA4s+qBmIMCN/J0NYGELiKkIcBcAJ6DXNpbXVsYXRpb24tdjGIAQE="
+        }
+      ],
+      [
+        "released",
+        3,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjfydDWBhCYltKIAXADeg1zaW11bGF0aW9uLXYxiAEB"
+        }
+      ],
+      [
+        "released",
+        4,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjfydDWBhC4xZ2KAXAEeg1zaW11bGF0aW9uLXYxgAEBiAEB"
+        }
+      ],
+      [
+        "interrupted",
+        1,
+        {
+          "bytes": "ChwKDWxlZ2FjeS1kZXZpY2USC2ludGVycnVwdGVkEgtpbnRlcnJ1cHRlZBoHUHJldmlldyACKAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjfydDWBhCQvoKMAXABeg1zaW11bGF0aW9uLXYxiAEB"
+        }
+      ],
+      [
+        "interrupted",
+        2,
+        {
+          "bytes": "ChwKDWxlZ2FjeS1kZXZpY2USC2ludGVycnVwdGVkEgtpbnRlcnJ1cHRlZBoHUHJldmlldyACKAFAAUgBUgZGcmFtZXNaBgiA4s+qBmIMCN/J0NYGENjx440BcAJ6DXNpbXVsYXRpb24tdjGIAQE="
+        }
+      ]
+    ]
+  }
+}

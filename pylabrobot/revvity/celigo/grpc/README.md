@@ -5,19 +5,17 @@ the protocol, generated bindings, hardware adapter, simulator, and durable jobs
 and images. Applications such as workbenches supply their own device registry,
 image analysis, records, and user interface.
 
-The canonical protocol is [v1/service.proto](v1/service.proto), with protobuf
-package `celigo.v1`. The Python import path is `pylabrobot.revvity.celigo.grpc`.
-Neither the server nor the client depends on a workbench package. Importing the
-ordinary Celigo driver does not load this optional transport.
+The Celigo operation protocol is [v1/service.proto](v1/service.proto), with
+protobuf package `celigo.v1`. Shared identity/status, jobs, and images use
+[`pylabrobot.rpc.v1`](../../../rpc/README.md). The Python device import path is
+`pylabrobot.revvity.celigo.grpc`. Neither server nor client depends on a workbench.
+Importing the ordinary Celigo driver does not load this optional transport.
 
-`DeviceService`, `JobService`, and `ImageService` are part of `celigo.v1`.
-Their names do not imply a device-independent PLR protocol: identity advertises
-imaging limits, job retention includes images, and acquisition metadata contains
-Celigo stage/galvo fields. Other device types need a separately reviewed common
-identity/status contract, optional job and image capabilities, and their own
-typed operation services. A dashboard can use per-protocol adapters while that
-shared contract is reviewed; device discovery and the web interface live outside
-this package.
+The shared layer supplies contracts and transport adapters. Celigo owns its
+acquisition engine, SQLite store, driver lifecycle, and hardware-aware cleanup.
+Its image metadata retains typed stage/galvo fields inside the shared envelope's
+protobuf `Any`. Other device types can implement identity/status alone or opt into
+jobs and images independently, without importing the Celigo implementation.
 
 ## Installation
 
@@ -97,11 +95,11 @@ not exposed by this transport yet. Laser operation is disabled.
 
 | Service | Methods |
 | --- | --- |
-| DeviceService | `GetDevice`, `GetStatus`, `WatchStatus` |
-| CeligoService, physical only | `GetConfiguration`, `CreateInitialization`, `CreateBrightfieldCapture` |
-| SimulationService, simulator only | `CreateInitialization`, `CreateAcquisition`, `CreatePreview` |
-| JobService | `GetJob`, `GetJobByRequestId`, `StartJob`, `CancelJob`, `ReleaseJobImages`, `WatchJob` |
-| ImageService | `ListFrames`, `GetFrame`, `WatchPreview` |
+| `pylabrobot.rpc.v1.DeviceService` | `GetDevice`, `GetStatus`, `WatchStatus` |
+| `celigo.v1.CeligoService`, physical only | `GetConfiguration`, `CreateInitialization`, `CreateBrightfieldCapture` |
+| `celigo.v1.SimulationService`, simulator only | `CreateInitialization`, `CreateAcquisition`, `CreatePreview` |
+| `pylabrobot.rpc.v1.JobService` | `GetJob`, `GetJobByRequestId`, `StartJob`, `CancelJob`, `WatchJob` |
+| `pylabrobot.rpc.v1.ImageService` | `GetCapabilities`, `GetJobImageRetention`, `ReleaseJobImages`, `ListFrames`, `GetFrame`, `WatchPreview` |
 
 Creation is inert and durably deduplicated by request ID. Starting a job commits
 acceptance, reserves the instrument, and returns promptly while execution
@@ -115,6 +113,8 @@ marks formerly Running jobs Interrupted, preserves committed images, and leaves
 unstarted jobs inert. It never replays motion. Recover a job by request ID after
 a lost response. Finished jobs cannot restart. Images are removed only through
 explicit `ReleaseJobImages`; request identity and frame metadata remain.
+Image release state is available through `GetJobImageRetention`, independently
+of job status. Image limits and supported encodings come from `GetCapabilities`.
 
 `GetFrame` returns one complete PNG in a protobuf `bytes` field, alongside
 identity, timestamp, dimensions, pixel format, checksum, and acquisition metadata.
@@ -142,7 +142,7 @@ an already completed job's images without starting another acquisition:
 from pathlib import Path
 
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient
-from pylabrobot.revvity.celigo.grpc.security import Certificates
+from pylabrobot.rpc.security import Certificates
 
 
 async def retrieve() -> list[bytes]:
@@ -156,6 +156,25 @@ async def retrieve() -> list[bytes]:
     return [(await job.get_frame(frame.frame_id)).image for frame in frames]
 ```
 
+Use `acquisition_metadata(frame)` from the client module to unpack and validate
+Celigo metadata. `job.image_retention()` reads release state, and
+`job.release_images()` returns that state after durable release.
+
+## Compatibility
+
+Client and server must both use the shared `pylabrobot.rpc.v1` services. The
+earlier draft's `celigo.v1.DeviceService`, `JobService`, and `ImageService` RPC
+paths are not served as aliases. Upgrade both endpoints together; the existing
+device-operation service remains `celigo.v1.CeligoService`.
+
+The SQLite schema remains version 1. Private
+[storage.proto](v1/storage.proto) records preserve the original serialized job
+and frame field layouts, including image retention and Celigo metadata. Existing
+stores can be read without a data migration. A fixture written with the earlier
+schema verifies retained pixels, released images, and interrupted-job recovery.
+Private stored messages are projected into the shared RPC envelopes, so storage
+compatibility does not depend on parsing Celigo metadata as a protobuf `Any`.
+
 ## Development
 
 Install the optional development dependencies and run the hardware-free tests
@@ -163,7 +182,7 @@ from the PLR repository root:
 
 ```bash
 python -m pip install -e '.[celigo-grpc-dev]'
-python -m pytest pylabrobot/revvity/celigo/grpc/tests
+python -m pytest pylabrobot/rpc/tests pylabrobot/revvity/celigo/grpc/tests
 ```
 
 The tests use synthetic calibration, fake drivers, encrypted loopback RPCs,
@@ -171,13 +190,15 @@ and subprocess crash injection. They require no site inventory or USB devices.
 They are skipped during base PLR test collection when transport dependencies
 are absent.
 
-Generated bindings and message type stubs ship with PLR. Regenerate all three
-outputs with the pinned compiler after editing the schema:
+Generated bindings and message type stubs ship with PLR. Regenerate all schemas
+with the pinned compiler from the repository root:
 
 ```bash
 python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. \
-  pylabrobot/revvity/celigo/grpc/v1/service.proto
+  pylabrobot/rpc/v1/device.proto pylabrobot/rpc/v1/jobs.proto \
+  pylabrobot/rpc/v1/images.proto pylabrobot/revvity/celigo/grpc/v1/service.proto \
+  pylabrobot/revvity/celigo/grpc/v1/storage.proto
 ```
 
-Preserve published field numbers and reserve removed fields. Source-package
-relocations must retain `celigo.v1` and its RPC/message contracts.
+Preserve published field numbers and reserve removed fields. Preserve private
+storage layouts separately from the public RPC contract.

@@ -18,20 +18,22 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO, TypeVar
 
-from pylabrobot.revvity.celigo.grpc.errors import (
+from pylabrobot.revvity.celigo.grpc.model import (
+  MAX_FRAME_BYTES,
+  SimulationSpec,
+  Specification,
+)
+from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
+from pylabrobot.rpc.errors import (
   BusyError,
   CapacityError,
   DataLossError,
   StateError,
   StorageError,
 )
-from pylabrobot.revvity.celigo.grpc.model import (
-  MAX_FRAME_BYTES,
-  SimulationSpec,
-  Specification,
-  copy_message,
-)
-from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
+from pylabrobot.rpc.transport import copy_message
+from pylabrobot.rpc.v1 import images_pb2 as image_pb
+from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 T = TypeVar("T")
 SCHEMA_VERSION = "1"
@@ -40,16 +42,16 @@ DISK_HEADROOM = 64 * 1024 * 1024
 
 
 def advance(
-  status: pb.JobStatus,
+  status: stored_pb.JobStatus,
   *,
-  state: pb.JobState | None = None,
-  outcome: pb.Outcome | None = None,
+  state: job_pb.JobState | None = None,
+  outcome: job_pb.Outcome | None = None,
   phase: str | None = None,
   error: str | None = None,
   completed: int | None = None,
   cancellation_requested: bool | None = None,
   images_released: bool | None = None,
-) -> pb.JobStatus:
+) -> stored_pb.JobStatus:
   """Construct the next immutable, durably publishable status revision."""
   result = copy_message(status)
   if state is not None:
@@ -115,14 +117,14 @@ class Store:
     except (sqlite3.DatabaseError, OSError) as exc:
       raise StorageError(f"{type(exc).__name__}: {exc}") from exc
 
-  async def open(self) -> list[tuple[Specification, pb.JobStatus]]:
+  async def open(self) -> list[tuple[Specification, stored_pb.JobStatus]]:
     try:
       return await self.call(self._open)
     except BaseException:
       await self.close()
       raise
 
-  def _open(self) -> list[tuple[Specification, pb.JobStatus]]:
+  def _open(self) -> list[tuple[Specification, stored_pb.JobStatus]]:
     self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     self.lock_file = (self.directory / "writer.lock").open("a+b")
     try:
@@ -184,12 +186,12 @@ class Store:
     with self.transaction():
       for row in self.db.execute("SELECT * FROM jobs").fetchall():
         spec = self.decode_spec(row["specification"])
-        status = pb.JobStatus.FromString(row["status"])
-        if status.state == pb.JOB_STATE_RUNNING:
+        status = stored_pb.JobStatus.FromString(row["status"])
+        if status.state == job_pb.JOB_STATE_RUNNING:
           status = advance(
             status,
-            state=pb.JOB_STATE_FINISHED,
-            outcome=pb.OUTCOME_INTERRUPTED,
+            state=job_pb.JOB_STATE_FINISHED,
+            outcome=job_pb.OUTCOME_INTERRUPTED,
             phase="Finished",
             error="Service stopped before durable completion; execution was not replayed.",
           )
@@ -209,7 +211,7 @@ class Store:
         db.execute("ROLLBACK")
       raise
 
-  def checkpoint(self, point: str, status: pb.JobStatus) -> None:
+  def checkpoint(self, point: str, status: stored_pb.JobStatus) -> None:
     """Crash-test seam at transaction boundaries; production has no fault hooks."""
 
   def reserved_bytes(self) -> int:
@@ -234,7 +236,7 @@ class Store:
     if shutil.disk_usage(self.directory).free < outstanding + extra + DISK_HEADROOM:
       raise CapacityError("insufficient free disk space for reserved images and SQLite headroom")
 
-  def create(self, spec: Specification, status: pb.JobStatus, reservation: int) -> None:
+  def create(self, spec: Specification, status: stored_pb.JobStatus, reservation: int) -> None:
     with self.transaction():
       if self.connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] >= self.max_jobs:
         raise CapacityError(
@@ -257,7 +259,7 @@ class Store:
       self.checkpoint("create.before_commit", status)
     self.checkpoint("create.after_commit", status)
 
-  def _journal(self, status: pb.JobStatus) -> None:
+  def _journal(self, status: stored_pb.JobStatus) -> None:
     self.connection.execute(
       "INSERT INTO transitions VALUES (?, ?, ?)",
       (
@@ -267,7 +269,7 @@ class Store:
       ),
     )
 
-  def _update(self, status: pb.JobStatus, reservation: int | None = None) -> None:
+  def _update(self, status: stored_pb.JobStatus, reservation: int | None = None) -> None:
     if reservation is None:
       self.connection.execute(
         "UPDATE jobs SET status=? WHERE job_id=?",
@@ -287,10 +289,12 @@ class Store:
       )
     self._journal(status)
 
-  def save(self, status: pb.JobStatus, action: str) -> None:
+  def save(self, status: stored_pb.JobStatus, action: str) -> None:
     with self.transaction():
       reservation = (
-        self.retained_bytes(status.job.job_id) if status.state == pb.JOB_STATE_FINISHED else None
+        self.retained_bytes(status.job.job_id)
+        if status.state == job_pb.JOB_STATE_FINISHED
+        else None
       )
       if action == "start":
         self.check_disk()
@@ -298,7 +302,7 @@ class Store:
       self.checkpoint(f"{action}.before_commit", status)
     self.checkpoint(f"{action}.after_commit", status)
 
-  def commit_frame(self, frame: pb.ImageFrame, status: pb.JobStatus) -> None:
+  def commit_frame(self, frame: stored_pb.ImageFrame, status: stored_pb.JobStatus) -> None:
     image = frame.image
     if len(image) > MAX_FRAME_BYTES or hashlib.sha256(image).hexdigest() != frame.sha256:
       raise DataLossError("capture image is oversized or failed checksum validation")
@@ -328,7 +332,7 @@ class Store:
       self.checkpoint("frame.before_commit", status)
     self.checkpoint("frame.after_commit", status)
 
-  def list_frames(self, job_id: str, after_sequence: int, limit: int) -> pb.FramePage:
+  def list_frames(self, job_id: str, after_sequence: int, limit: int) -> image_pb.FramePage:
     if not 1 <= limit <= 64:
       raise ValueError("limit must be 1..64")
     rows = self.connection.execute(
@@ -336,9 +340,9 @@ class Store:
       "FROM frames WHERE job_id=? AND sequence>? ORDER BY sequence LIMIT ?",
       (job_id, after_sequence, limit),
     ).fetchall()
-    return pb.FramePage(frames=[pb.FrameInfo(**dict(row)) for row in rows])
+    return image_pb.FramePage(frames=[image_pb.FrameInfo(**dict(row)) for row in rows])
 
-  def get_frame(self, job_id: str, frame_id: str) -> pb.ImageFrame:
+  def get_frame(self, job_id: str, frame_id: str) -> stored_pb.ImageFrame:
     row = self.connection.execute(
       "SELECT * FROM frames WHERE job_id=? AND frame_id=?",
       (job_id, frame_id),
@@ -350,25 +354,25 @@ class Store:
     image = row["image"]
     if len(image) != row["byte_length"] or hashlib.sha256(image).hexdigest() != row["sha256"]:
       raise DataLossError("retained image failed integrity validation")
-    frame = pb.ImageFrame.FromString(row["metadata"])
+    frame = stored_pb.ImageFrame.FromString(row["metadata"])
     frame.image = image
     return frame
 
-  def release_images(self, status: pb.JobStatus) -> None:
+  def release_images(self, status: stored_pb.JobStatus) -> None:
     with self.transaction():
       self.connection.execute("UPDATE frames SET image=NULL WHERE job_id=?", (status.job.job_id,))
       self._update(status, 0)
       self.checkpoint("release.before_commit", status)
     self.checkpoint("release.after_commit", status)
 
-  def latest_preview(self) -> pb.GetFrameRequest | None:
+  def latest_preview(self) -> image_pb.GetFrameRequest | None:
     rows = self.connection.execute(
       "SELECT job_id, frame_id, metadata FROM frames WHERE image IS NOT NULL ORDER BY rowid DESC"
     )
     for row in rows:
-      metadata = pb.ImageFrame.FromString(row["metadata"])
+      metadata = stored_pb.ImageFrame.FromString(row["metadata"])
       if metadata.representation == "Preview":
-        return pb.GetFrameRequest(job=metadata.job, frame_id=row["frame_id"])
+        return image_pb.GetFrameRequest(job=metadata.job, frame_id=row["frame_id"])
     return None
 
   def _close(self) -> None:

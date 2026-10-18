@@ -6,6 +6,17 @@ on:
   pull_request:
 
 jobs:
+  shared:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - name: Install common RPC dependencies only
+        run: pip install -e '.[rpc-dev]'
+      - name: Test devices without Celigo or imaging dependencies
+        run: python -m pytest -q pylabrobot/rpc/tests
   transport:
     runs-on: ubuntu-latest
     strategy:
@@ -20,15 +31,22 @@ jobs:
       - name: Install optional transport dependencies
         run: pip install -e '.[celigo-grpc-dev]' mypy==1.18.2
       - name: Test transport and fake hardware
-        run: python -m pytest -q pylabrobot/revvity/celigo/grpc/tests
+        run: python -m pytest -q pylabrobot/rpc/tests pylabrobot/revvity/celigo/grpc/tests
       - name: Verify generated bindings
         run: |
           python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. \
-            pylabrobot/revvity/celigo/grpc/v1/service.proto
-          git diff --exit-code -- pylabrobot/revvity/celigo/grpc/v1
+            pylabrobot/rpc/v1/device.proto pylabrobot/rpc/v1/jobs.proto \
+            pylabrobot/rpc/v1/images.proto pylabrobot/revvity/celigo/grpc/v1/service.proto \
+            pylabrobot/revvity/celigo/grpc/v1/storage.proto
+          git diff --exit-code -- pylabrobot/rpc/v1 pylabrobot/revvity/celigo/grpc/v1
       - name: Check transport types
         run: >-
           python -m mypy --follow-imports=silent
+          pylabrobot/rpc/device.py
+          pylabrobot/rpc/jobs.py
+          pylabrobot/rpc/images.py
+          pylabrobot/rpc/transport.py
+          pylabrobot/rpc/security.py
           pylabrobot/revvity/celigo/grpc/client.py
           pylabrobot/revvity/celigo/grpc/hardware.py
           pylabrobot/revvity/celigo/grpc/storage.py

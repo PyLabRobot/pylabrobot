@@ -14,7 +14,7 @@ from google.protobuf.json_format import MessageToDict
 from pylabrobot.revvity.celigo import Celigo, CeligoConfig
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient
 from pylabrobot.revvity.celigo.grpc.hardware import CeligoCore, CeligoServer
-from pylabrobot.revvity.celigo.grpc.security import Certificates
+from pylabrobot.rpc.security import Certificates
 
 
 async def serve(args) -> None:
