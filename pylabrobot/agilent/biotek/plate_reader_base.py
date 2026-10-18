@@ -13,7 +13,11 @@ from pylabrobot.agilent.biotek.plate_reader_protocol import (
 )
 from pylabrobot.agilent.biotek.results import (
   AbsorbanceResult as AbsorbanceResult,
+)
+from pylabrobot.agilent.biotek.results import (
   FluorescenceResult as FluorescenceResult,
+)
+from pylabrobot.agilent.biotek.results import (
   LuminescenceResult as LuminescenceResult,
 )
 from pylabrobot.resources import Plate, Well

@@ -12,8 +12,8 @@ import pytest
 
 pytest.importorskip("pylibftdi")
 
-from pylabrobot.agilent.biotek.plate_reader_base import BioTekPlateReaderDriver
 from pylabrobot.agilent.biotek import Cytation1, SynergyH1, SynergyHT
+from pylabrobot.agilent.biotek.plate_reader_base import BioTekPlateReaderDriver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
@@ -626,14 +626,7 @@ class TestSharedBioTekReader(unittest.IsolatedAsyncioTestCase):
           )
           body = "01,1,\r000:00:00.0,237,01,01,+1.2340\r\n237\x1a"
           body += f"{sum(body[6:].encode()) & 255:03d}\x1a0000\x03"
-          data = iter(
-            [*_byte_iter(replies + body)]
-            + (
-              [TimeoutError("Metadata timeout")]
-              if outcome == "temperature_timeout"
-              else [*_byte_iter("\x062370000\x03" * 2)]
-            )
-          )
+          data = _byte_iter(replies + body + "\x062370000\x03" * 2)
           entered, release = asyncio.Event(), asyncio.Event()
           received = 0
 
@@ -642,11 +635,10 @@ class TestSharedBioTekReader(unittest.IsolatedAsyncioTestCase):
             if received == len(replies):
               entered.set()
               await release.wait()
+            if outcome == "temperature_timeout" and received == len(replies + body):
+              raise TimeoutError("Metadata timeout")
             received += 1
-            chunk = next(data)
-            if isinstance(chunk, Exception):
-              raise chunk
-            return chunk
+            return next(data)
 
           reader.io.read.side_effect = read
           measurement = asyncio.create_task(reader.read_absorbance(plate, [plate.get_item(0)], 580))

@@ -23,7 +23,7 @@ class _BioTekReader:
   ) -> None:
     self.timeout = timeout
     self.io = FTDI(device_id=device_id, human_readable_device_name=human_readable_device_name)
-    self._lock = asyncio.Lock()
+    self._lock: Optional[asyncio.Lock] = None
     self._operation_owner: Optional[asyncio.Task] = None
     self._basecode: Optional[str] = None
     self._version: Optional[str] = None
@@ -69,6 +69,8 @@ class _BioTekReader:
     if task is not None and self._operation_owner is task:
       yield
       return
+    if self._lock is None:
+      self._lock = asyncio.Lock()
     async with self._lock:
       self._operation_owner = task
       try:
