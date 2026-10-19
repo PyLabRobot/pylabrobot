@@ -49,7 +49,6 @@ jobs:
           pylabrobot/rpc/jobs.py
           pylabrobot/rpc/images.py
           pylabrobot/rpc/transport.py
-          pylabrobot/rpc/security.py
           pylabrobot/revvity/celigo/grpc/client.py
           pylabrobot/revvity/celigo/grpc/hardware.py
           pylabrobot/revvity/celigo/grpc/storage.py

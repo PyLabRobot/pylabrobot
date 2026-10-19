@@ -23,17 +23,16 @@ from pylabrobot.revvity.celigo.grpc.tests.helpers import (
   make_server,
 )
 from pylabrobot.rpc.errors import BusyError, StateError
-from pylabrobot.rpc.security import create_certificates
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 
 @asynccontextmanager
-async def local_server(directory, certs, **kwargs):
-  server, driver = make_server(directory, certs, **kwargs)
+async def local_server(directory, **kwargs):
+  server, driver = make_server(directory, **kwargs)
   await server.start()
   try:
-    async with CeligoClient(server.endpoint, certs, device_id=server.core.device_id) as client:
+    async with CeligoClient(server.endpoint, device_id=server.core.device_id) as client:
       yield server, client
   finally:
     await server.stop()
@@ -49,14 +48,13 @@ import sys
 from pathlib import Path
 from pylabrobot.revvity.celigo.grpc.storage import Store
 from pylabrobot.revvity.celigo.grpc.tests.helpers import make_server
-from pylabrobot.rpc.security import Certificates
-point, directory, certificates = sys.argv[1:]
+point, directory = sys.argv[1:]
 def checkpoint(self, stage, status):
     if stage == point and status.request_id == 'crash-target':
         os._exit(87)
 Store.checkpoint = checkpoint
 async def run():
-    server, driver = make_server(Path(directory), Certificates(Path(certificates)))
+    server, driver = make_server(Path(directory))
     release = asyncio.Event()
     async def blocked_capture(**_kwargs):
         await release.wait()
@@ -78,7 +76,7 @@ asyncio.run(run())
 
 
 @asynccontextmanager
-async def process_server(directory, certs, crash_point="none"):
+async def process_server(directory, crash_point="none"):
   log_path = directory.parent / "server.log"
   with log_path.open("ab") as output:
     process = await asyncio.create_subprocess_exec(
@@ -87,7 +85,6 @@ async def process_server(directory, certs, crash_point="none"):
       CRASH_WRAPPER,
       crash_point,
       str(directory),
-      str(certs.directory),
       stdout=asyncio.subprocess.PIPE,
       stderr=output,
     )
@@ -97,7 +94,7 @@ async def process_server(directory, certs, crash_point="none"):
       ready = await asyncio.wait_for(process.stdout.readline(), 15)
       assert ready, log_path.read_text()[-4000:]
       async with CeligoClient(
-        json.loads(ready)["endpoint"], certs, device_id="celigo-test", timeout=3
+        json.loads(ready)["endpoint"], device_id="celigo-test", timeout=3
       ) as client:
         yield process, client
     finally:
@@ -112,9 +109,8 @@ async def process_server(directory, certs, crash_point="none"):
 
 @pytest.mark.asyncio
 async def test_completed_ready_cancelled_and_preview_survive_restart(tmp_path):
-  certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  async with local_server(directory, certs) as (_, client):
+  async with local_server(directory) as (_, client):
     assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
     ready = await capture(client, "ready")
     with pytest.raises(grpc.aio.AioRpcError) as uninitialized:
@@ -131,7 +127,7 @@ async def test_completed_ready_cancelled_and_preview_survive_restart(tmp_path):
     await cancelled.cancel()
     ids = (ready.identifier, completed.identifier, cancelled.identifier)
 
-  async with local_server(directory, certs) as (server, client):
+  async with local_server(directory) as (server, client):
     assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
     ready = await client.recover("ready")
     completed = await client.recover("completed")
@@ -173,9 +169,8 @@ async def test_completed_ready_cancelled_and_preview_survive_restart(tmp_path):
 async def test_process_crash_at_commit_boundaries(
   tmp_path, point, state, outcome, frames, released
 ):
-  certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  async with process_server(directory, certs, point) as (process, client):
+  async with process_server(directory, point) as (process, client):
     await initialize(client)
     with pytest.raises(grpc.aio.AioRpcError):
       job = await capture(client, "crash-target")
@@ -188,7 +183,7 @@ async def test_process_crash_at_commit_boundaries(
           await job.release_images()
     assert await asyncio.wait_for(process.wait(), 5) == 87
 
-  async with process_server(directory, certs) as (_, client):
+  async with process_server(directory) as (_, client):
     assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
     if state is None:
       with pytest.raises(grpc.aio.AioRpcError) as absent:
@@ -226,23 +221,22 @@ async def test_process_crash_at_commit_boundaries(
 
 @pytest.mark.asyncio
 async def test_sigkill_during_capture_preserves_completed_job(tmp_path):
-  certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  async with process_server(directory, certs) as (_, client):
+  async with process_server(directory) as (_, client):
     await initialize(client)
     completed = await capture(client, "completed")
     await completed.start()
     await completed.wait()
     info = (await completed.list_frames())[0]
     frame = await completed.get_frame(info.frame_id)
-  async with process_server(directory, certs, "blocked-capture") as (process, client):
+  async with process_server(directory, "blocked-capture") as (process, client):
     await initialize(client, "initialize-again")
     job = await capture(client, "kill")
     await job.start()
     assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
     process.kill()
     await process.wait()
-  async with process_server(directory, certs) as (_, client):
+  async with process_server(directory) as (_, client):
     recovered = await client.recover("kill")
     status = await recovered.status()
     assert status.outcome == job_pb.OUTCOME_INTERRUPTED and status.completed == 0
@@ -255,10 +249,9 @@ async def test_sigkill_during_capture_preserves_completed_job(tmp_path):
 
 @pytest.mark.asyncio
 async def test_storage_quota_release_and_deduplication(tmp_path):
-  certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
   async with local_server(
-    directory, certs, storage_quota=HardwareSpecification(width=64, height=48).reservation()
+    directory, storage_quota=HardwareSpecification(width=64, height=48).reservation()
   ) as (_, client):
     await initialize(client)
     job = await capture(client, "retained")
@@ -280,7 +273,7 @@ async def test_storage_quota_release_and_deduplication(tmp_path):
     assert (await capture(client, "retained")).identifier == job.identifier
     await capture(client, "second")
   async with local_server(
-    directory, certs, storage_quota=HardwareSpecification(width=64, height=48).reservation()
+    directory, storage_quota=HardwareSpecification(width=64, height=48).reservation()
   ) as (_, client):
     job = await client.recover("retained")
     assert (await job.image_retention()).images_released
@@ -291,10 +284,9 @@ async def test_storage_quota_release_and_deduplication(tmp_path):
 
 @pytest.mark.asyncio
 async def test_sqlite_full_rolls_back_image_and_progress(tmp_path):
-  certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
   driver = make_driver(256, 256, 8)
-  async with local_server(directory, certs, config=make_config(256, 256), driver=driver) as (
+  async with local_server(directory, config=make_config(256, 256), driver=driver) as (
     server,
     client,
   ):
@@ -323,7 +315,7 @@ async def test_sqlite_full_rolls_back_image_and_progress(tmp_path):
       assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
       with pytest.raises(grpc.aio.AioRpcError):
         await capture(client, "unsafe-after-fault")
-  async with local_server(directory, certs, config=make_config(256, 256)) as (_, client):
+  async with local_server(directory, config=make_config(256, 256)) as (_, client):
     recovered = await client.recover("disk-full")
     result = await recovered.status()
     assert result.outcome in (job_pb.OUTCOME_FAILED, job_pb.OUTCOME_INTERRUPTED)
@@ -335,8 +327,7 @@ async def test_sqlite_full_rolls_back_image_and_progress(tmp_path):
 
 @pytest.mark.asyncio
 async def test_admission_checks_free_space_and_record_capacity(tmp_path, monkeypatch):
-  certs = create_certificates(tmp_path / "certs")
-  async with local_server(tmp_path / "data", certs, max_jobs=2) as (server, client):
+  async with local_server(tmp_path / "data", max_jobs=2) as (server, client):
     await initialize(client)
     with monkeypatch.context() as patch:
       patch.setattr(
@@ -361,8 +352,7 @@ async def test_admission_checks_free_space_and_record_capacity(tmp_path, monkeyp
 async def test_lost_rpc_during_commit_does_not_lose_or_repeat_execution(
   tmp_path, monkeypatch, point
 ):
-  certs = create_certificates(tmp_path / "certs")
-  async with local_server(tmp_path / "data", certs) as (server, client):
+  async with local_server(tmp_path / "data") as (server, client):
     await initialize(client)
     entered, release = threading.Event(), threading.Event()
 
@@ -402,18 +392,17 @@ async def test_lost_rpc_during_commit_does_not_lose_or_repeat_execution(
 
 @pytest.mark.asyncio
 async def test_store_ownership_device_binding_and_configuration_validation(tmp_path):
-  certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  async with local_server(directory, certs) as (_, client):
+  async with local_server(directory) as (_, client):
     ready = await capture(client, "old-configuration")
-    competing, _ = make_server(directory, certs)
+    competing, _ = make_server(directory)
     with pytest.raises(BusyError):
       await competing.start()
     assert (await ready.status()).configuration_id == client.configuration_id
-  wrong, _ = make_server(directory, certs, device_id="another-device")
+  wrong, _ = make_server(directory, device_id="another-device")
   with pytest.raises(StateError, match="device_id mismatch"):
     await wrong.start()
-  async with local_server(directory, certs, connection_id="another-controller") as (_, client):
+  async with local_server(directory, connection_id="another-controller") as (_, client):
     await initialize(client)
     old = await client.recover("old-configuration")
     with pytest.raises(grpc.aio.AioRpcError) as stale:
@@ -426,8 +415,7 @@ async def test_store_ownership_device_binding_and_configuration_validation(tmp_p
 
 @pytest.mark.asyncio
 async def test_corrupted_image_is_reported_without_reacquisition(tmp_path):
-  certs = create_certificates(tmp_path / "certs")
-  async with local_server(tmp_path / "data", certs) as (server, client):
+  async with local_server(tmp_path / "data") as (server, client):
     await initialize(client)
     job = await capture(client, "corruption")
     await job.start()
@@ -449,9 +437,8 @@ async def test_corrupted_image_is_reported_without_reacquisition(tmp_path):
 
 @pytest.mark.asyncio
 async def test_failure_to_save_completion_is_explicit_and_recovered(tmp_path, monkeypatch):
-  certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  async with local_server(directory, certs) as (server, client):
+  async with local_server(directory) as (server, client):
     await initialize(client)
     store = server.core.store
     save = store.save
@@ -468,7 +455,7 @@ async def test_failure_to_save_completion_is_explicit_and_recovered(tmp_path, mo
     assert result.outcome == job_pb.OUTCOME_FAILED and not result.state_durable
     assert result.completed == 1 and "could not be persisted" in result.error
     assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
-  async with local_server(directory, certs) as (_, client):
+  async with local_server(directory) as (_, client):
     job = await client.recover("unsaved-completion")
     recovered = await job.status()
     assert recovered.state_durable and recovered.outcome == job_pb.OUTCOME_INTERRUPTED
@@ -477,8 +464,7 @@ async def test_failure_to_save_completion_is_explicit_and_recovered(tmp_path, mo
 
 @pytest.mark.asyncio
 async def test_pending_commands_are_bounded_when_disk_is_stalled(tmp_path, monkeypatch):
-  certs = create_certificates(tmp_path / "certs")
-  async with local_server(tmp_path / "data", certs) as (server, client):
+  async with local_server(tmp_path / "data") as (server, client):
     server.core.command_limit = 1
     entered, release = threading.Event(), threading.Event()
 

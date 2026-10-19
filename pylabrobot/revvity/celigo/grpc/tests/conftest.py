@@ -12,7 +12,6 @@ def transport_dependencies_available() -> bool:
         "fcntl",
         "grpc",
         "google.protobuf",
-        "cryptography",
         "numpy",
         "PIL",
         "pytest_asyncio",

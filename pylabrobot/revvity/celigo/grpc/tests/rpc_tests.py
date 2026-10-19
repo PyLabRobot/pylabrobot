@@ -1,4 +1,4 @@
-"""Real mutual-TLS loopback RPCs exercising jobs and complete image responses."""
+"""Loopback RPCs exercising jobs and complete image responses."""
 
 import asyncio
 import contextlib
@@ -21,9 +21,7 @@ from pylabrobot.revvity.celigo.grpc.tests.helpers import (
   make_driver,
   make_server,
 )
-from pylabrobot.rpc.security import create_certificates
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
-from pylabrobot.rpc.v1 import device_pb2_grpc as device_rpc
 from pylabrobot.rpc.v1 import images_pb2 as image_pb
 from pylabrobot.rpc.v1 import images_pb2_grpc as image_rpc
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
@@ -37,14 +35,11 @@ def geometry():
 @pytest_asyncio.fixture
 async def system(tmp_path, geometry):
   width, height, depth = geometry
-  certs = create_certificates(tmp_path / "certificates")
   driver = make_driver(width, height, depth)
-  server, _ = make_server(
-    tmp_path / "data", certs, config=make_config(width, height), driver=driver
-  )
+  server, _ = make_server(tmp_path / "data", config=make_config(width, height), driver=driver)
   await server.start()
   try:
-    async with CeligoClient(server.endpoint, certs, device_id="celigo-test") as client:
+    async with CeligoClient(server.endpoint, device_id="celigo-test") as client:
       await initialize(client)
       yield server, client, driver
   finally:
@@ -163,31 +158,6 @@ async def test_missing_results_and_invalid_pagination(system):
 
 
 @pytest.mark.asyncio
-async def test_tls_rejects_untrusted_missing_and_plaintext_clients(system, tmp_path):
-  _, client, driver = system
-  rogue = create_certificates(tmp_path / "rogue")
-  rogue_client = CeligoClient(client.endpoint, rogue, device_id=client.device_id, timeout=1)
-  with pytest.raises(grpc.aio.AioRpcError):
-    await rogue_client.connect()  # Wrong server trust.
-  (rogue.directory / "ca.pem").write_bytes(client.certs.read("ca.pem"))
-  with pytest.raises(grpc.aio.AioRpcError):
-    await rogue_client.connect()  # Right server trust, wrong client issuer.
-  channels = [
-    grpc.aio.insecure_channel(client.endpoint),
-    grpc.aio.secure_channel(
-      client.endpoint, grpc.ssl_channel_credentials(client.certs.read("ca.pem"))
-    ),
-  ]
-  for channel in channels:
-    try:
-      with pytest.raises(grpc.aio.AioRpcError):
-        await device_rpc.DeviceServiceStub(channel).GetDevice(client.request, timeout=1)
-    finally:
-      await channel.close()
-  assert (client.certs.directory / "client-key.pem").stat().st_mode & 0o777 == 0o600
-
-
-@pytest.mark.asyncio
 async def test_stream_deadline_does_not_cancel_job(system):
   server, client, driver = system
   with block_calls(driver.acquire_scan_position) as (capture_entered, capture_release):
@@ -211,9 +181,8 @@ async def test_receive_limit_does_not_destroy_retained_image(system):
   await job.start()
   await job.wait()
   info = (await job.list_frames())[0]
-  async with grpc.aio.secure_channel(
+  async with grpc.aio.insecure_channel(
     client.endpoint,
-    client.certs.client_credentials(),
     options=(("grpc.max_receive_message_length", 1024 * 1024),),
   ) as channel:
     with pytest.raises(grpc.aio.AioRpcError) as too_big:
@@ -228,12 +197,12 @@ async def test_receive_limit_does_not_destroy_retained_image(system):
 @pytest.mark.asyncio
 async def test_devices_have_independent_ownership_and_identity(system, tmp_path):
   _, client, driver = system
-  second, other_driver = make_server(tmp_path / "second", client.certs, device_id="celigo-test-02")
+  second, other_driver = make_server(tmp_path / "second", device_id="celigo-test-02")
   with block_calls(driver.acquire_scan_position) as (capture_entered, capture_release):
     with block_calls(other_driver.acquire_scan_position) as (other_entered, other_release):
       await second.start()
       try:
-        async with CeligoClient(second.endpoint, client.certs, "celigo-test-02") as other:
+        async with CeligoClient(second.endpoint, "celigo-test-02") as other:
           await initialize(other)
           one = await capture(client, "same-request")
           two = await capture(other, "same-request")
@@ -297,7 +266,7 @@ async def test_interrupted_response_retries_complete_retained_image(system):
 
   proxy_server = await asyncio.start_server(proxy, "127.0.0.1", 0)
   endpoint = f"127.0.0.1:{proxy_server.sockets[0].getsockname()[1]}"
-  proxy_client = CeligoClient(endpoint, client.certs, device_id=client.device_id, timeout=3)
+  proxy_client = CeligoClient(endpoint, device_id=client.device_id, timeout=3)
   try:
     await proxy_client.connect()
     remote = await proxy_client.recover("interrupted")

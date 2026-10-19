@@ -80,7 +80,6 @@ def block_calls(method):
 
 def make_server(
   directory,
-  certs,
   *,
   config=None,
   driver=None,
@@ -104,7 +103,7 @@ def make_server(
   )
   core.store.quota = storage_quota
   core.store.max_jobs = max_jobs
-  return CeligoServer(certs, core), driver
+  return CeligoServer(core), driver
 
 
 async def initialize(client, request_id="initialize"):

@@ -32,16 +32,12 @@ test, code-generation, and typing tools for RPC development; combine it with a
 device extra when testing that device's service.
 
 ```python
-from pathlib import Path
-
 from pylabrobot.rpc.device import DeviceClient
-from pylabrobot.rpc.security import Certificates
 
 
 async def inspect_device() -> None:
   async with DeviceClient(
     "127.0.0.1:50051",
-    Certificates(Path("/path/to/client-certificates")),
     device_id="incubator-01",
   ) as client:
     identity = await client.device_info()
@@ -50,16 +46,13 @@ async def inspect_device() -> None:
 ```
 
 `DeviceClient` verifies device ID and API version. `DeviceServer` binds to
-loopback using mutual TLS and registers only `DeviceService`; applications can
+loopback using plaintext gRPC and registers only `DeviceService`; applications can
 register optional generated service adapters on its `server`. The device
 application owns backend startup, shutdown, and accepted tasks. Starting the
 transport does not initialize hardware.
 
-`Certificates` loads a configured CA and client/server identities. The helper
-`create_certificates` generates disposable, seven-day loopback test credentials.
-Use an SSH tunnel for remote endpoints. Production provisioning, rotation, and
-role permissions are outside this implementation; every trusted client has
-operator access.
+Use an SSH tunnel for remote endpoints. SSH supplies authentication and encryption
+for the remote connection; the RPC listener itself does not authenticate callers.
 
 ## Status and multiple devices
 
@@ -116,7 +109,7 @@ python -m pip install -e '.[rpc-dev]'
 python -m pytest -q pylabrobot/rpc/tests
 ```
 
-The common tests use a fake pump and a status-only incubator with real encrypted
+The common tests use a fake pump and a status-only incubator with real
 loopback connections. They cover independent devices, optional services,
 non-imaging job reconnect/cancellation, identity checks, and watch cleanup.
 CI runs them in an environment without Celigo extras and runs the Celigo tests

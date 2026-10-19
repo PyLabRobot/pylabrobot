@@ -7,8 +7,7 @@ def dependencies_available() -> bool:
   """Check only transport dependencies; cameras, image codecs, and SQLite are unnecessary."""
   try:
     return all(
-      find_spec(name) is not None
-      for name in ("grpc", "google.protobuf", "cryptography", "pytest_asyncio")
+      find_spec(name) is not None for name in ("grpc", "google.protobuf", "pytest_asyncio")
     )
   except ModuleNotFoundError:
     return False

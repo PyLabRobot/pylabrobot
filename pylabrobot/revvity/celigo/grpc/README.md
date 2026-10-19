@@ -41,16 +41,15 @@ Each process serves one device. Run another process with a distinct device ID,
 port, and data directory for another instrument. Requests, jobs, and images carry
 device identity. Applications can track each device independently.
 
-The listener binds to loopback and requires mutual TLS. Use an SSH tunnel for
-remote access. Generated test identities expire after seven days; every trusted
-client has operator access. Production certificate provisioning, rotation, and
-role permissions remain to be implemented.
+The listener uses plaintext gRPC bound to loopback. Use an SSH tunnel for remote
+access. SSH supplies authentication and encryption for the remote connection;
+the RPC listener itself does not authenticate callers.
 
 ## Physical service
 
 ```bash
 celigo-grpc serve --device-id celigo-01 --port 50052 \
-  --certificates /path/to/server-certificates --data-dir /path/to/device-data \
+  --data-dir /path/to/device-data \
   --config-root /path/to/Celigo --lucam-sdk /path/to/liblucamapi.so \
   --usb-address 1-7 --hardware-lock /path/to/celigo.service.lock
 ```
@@ -64,8 +63,7 @@ requires initialization again; it never automatically repeats hardware work.
 `celigo-grpc inspect` reads identity, status, and configuration without motion:
 
 ```bash
-celigo-grpc inspect --device-id celigo-01 --endpoint 127.0.0.1:50052 \
-  --certificates /path/to/client-certificates
+celigo-grpc inspect --device-id celigo-01 --endpoint 127.0.0.1:50052
 ```
 
 The physical adapter supports initialization and one brightfield frame at
@@ -119,16 +117,12 @@ saturated RPC load.
 retrieve an already completed job's images without starting another acquisition:
 
 ```python
-from pathlib import Path
-
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient
-from pylabrobot.rpc.security import Certificates
 
 
 async def retrieve() -> list[bytes]:
   async with CeligoClient(
     "127.0.0.1:50052",
-    Certificates(Path("/path/to/client-certificates")),
     device_id="celigo-01",
   ) as client:
     job = await client.recover("existing-capture-request-id")
@@ -166,7 +160,7 @@ python -m pip install -e '.[celigo,rpc-dev]'
 python -m pytest pylabrobot/rpc/tests pylabrobot/revvity/celigo/grpc/tests
 ```
 
-The tests use synthetic calibration, mocked drivers, encrypted loopback RPCs,
+The tests use synthetic calibration, mocked drivers, loopback RPCs,
 and subprocess crash injection. They require no site inventory or USB devices.
 They are skipped during base PLR test collection when transport dependencies
 are absent.

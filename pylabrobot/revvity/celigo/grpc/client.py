@@ -16,7 +16,6 @@ from pylabrobot.rpc.images import SERVICE_NAME as IMAGE_SERVICE
 from pylabrobot.rpc.images import ImageClient
 from pylabrobot.rpc.jobs import SERVICE_NAME as JOB_SERVICE
 from pylabrobot.rpc.jobs import Job, JobClient
-from pylabrobot.rpc.security import Certificates
 from pylabrobot.rpc.transport import Updates
 from pylabrobot.rpc.v1 import images_pb2 as image_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
@@ -61,11 +60,9 @@ class ImagingJob(Job):
 class ImagingClient(DeviceClient):
   """Compose the Celigo job and image capabilities."""
 
-  def __init__(
-    self, endpoint: str, certs: Certificates, device_id: str = "celigo-01", timeout: float = 20
-  ) -> None:
+  def __init__(self, endpoint: str, device_id: str = "celigo-01", timeout: float = 20) -> None:
     """Configure image-sized message limits without imposing them on other devices."""
-    super().__init__(endpoint, certs, device_id, timeout, maximum_message_bytes=MAX_MESSAGE_BYTES)
+    super().__init__(endpoint, device_id, timeout, maximum_message_bytes=MAX_MESSAGE_BYTES)
     self.jobs: JobClient
     self.images: ImageClient
 
@@ -105,11 +102,9 @@ class CeligoClient(ImagingClient):
 
   expected_device_type = "Celigo"
 
-  def __init__(
-    self, endpoint: str, certs: Certificates, device_id: str = "celigo-01", timeout: float = 20
-  ) -> None:
+  def __init__(self, endpoint: str, device_id: str = "celigo-01", timeout: float = 20) -> None:
     """Configure a connection without creating or initializing a hardware driver."""
-    super().__init__(endpoint, certs, device_id, timeout)
+    super().__init__(endpoint, device_id, timeout)
 
   async def connect(self) -> Self:
     """Bind physical operations after validating identity and capabilities."""

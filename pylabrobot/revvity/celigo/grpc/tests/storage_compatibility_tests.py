@@ -11,7 +11,6 @@ import pytest
 
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient, acquisition_metadata
 from pylabrobot.revvity.celigo.grpc.tests.helpers import make_server
-from pylabrobot.rpc.security import create_certificates
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
@@ -41,13 +40,12 @@ async def test_stored_jobs_images_and_release_survive_protocol_split(tmp_path: P
   """Recover interrupted work, preserve pixels/metadata and release flags, and never replay."""
   directory = tmp_path / "data"
   expected = restore_fixture(directory)
-  certs = create_certificates(tmp_path / "certs")
   instance_id = ""
   for _ in range(2):
-    server, driver = make_server(directory, certs, device_id="legacy-device")
+    server, driver = make_server(directory, device_id="legacy-device")
     await server.start()
     try:
-      async with CeligoClient(server.endpoint, certs, device_id="legacy-device") as client:
+      async with CeligoClient(server.endpoint, device_id="legacy-device") as client:
         info = await client.device_info()
         assert info.instance_id and info.instance_id != instance_id
         instance_id = info.instance_id

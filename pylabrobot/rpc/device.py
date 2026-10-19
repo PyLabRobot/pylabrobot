@@ -9,7 +9,6 @@ from typing import Protocol, cast
 import grpc
 from typing_extensions import Self
 
-from pylabrobot.rpc.security import Certificates
 from pylabrobot.rpc.transport import (
   API_VERSION,
   Updates,
@@ -80,12 +79,11 @@ class DeviceService(rpc.DeviceServiceServicer):
 
 
 class DeviceServer:
-  """Loopback mutual-TLS transport hosting identity/status and explicitly added services."""
+  """Loopback gRPC transport hosting identity/status and explicitly added services."""
 
   def __init__(
     self,
     backend: DeviceBackend,
-    certs: Certificates,
     *,
     port: int = 0,
     maximum_message_bytes: int = 4 * 1024 * 1024,
@@ -95,7 +93,7 @@ class DeviceServer:
       options=channel_options(maximum_message_bytes), maximum_concurrent_rpcs=32
     )
     rpc.add_DeviceServiceServicer_to_server(DeviceService(backend), self.server)
-    self.port = self.server.add_secure_port(f"127.0.0.1:{port}", certs.server_credentials())
+    self.port = self.server.add_insecure_port(f"127.0.0.1:{port}")
     if not self.port:
       raise RuntimeError("unable to bind device endpoint")
     self.endpoint = f"127.0.0.1:{self.port}"
@@ -117,15 +115,13 @@ class DeviceClient:
   def __init__(
     self,
     endpoint: str,
-    certs: Certificates,
     device_id: str,
     timeout: float = 20,
     *,
     maximum_message_bytes: int = 4 * 1024 * 1024,
   ) -> None:
-    """Store an endpoint and trusted identity; construction performs no connection."""
+    """Store an endpoint and expected device identity; construction performs no connection."""
     self.endpoint = endpoint
-    self.certs = certs
     self.device_id = device_id
     self.timeout = timeout
     self.maximum_message_bytes = maximum_message_bytes
@@ -155,9 +151,8 @@ class DeviceClient:
   async def connect(self) -> Self:
     """Connect and validate device identity, protocol version, and optional expected type."""
     await self.disconnect()
-    self.channel = grpc.aio.secure_channel(
+    self.channel = grpc.aio.insecure_channel(
       self.endpoint,
-      self.certs.client_credentials(),
       options=channel_options(self.maximum_message_bytes),
     )
     self.devices = rpc.DeviceServiceStub(self.channel)

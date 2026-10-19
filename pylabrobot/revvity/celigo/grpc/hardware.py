@@ -35,7 +35,6 @@ from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
 from pylabrobot.revvity.celigo.scan import ScanBlock, ScanPosition, ScanSpec, build_scan_plan
 from pylabrobot.rpc.errors import BusyError, StateError
-from pylabrobot.rpc.security import Certificates
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 MAX_EXPOSURE_MS = 1000.0
@@ -422,6 +421,6 @@ class CeligoOperations(rpc.CeligoServiceServicer):
 
 
 class CeligoServer(ImagingServer):
-  def __init__(self, certs: Certificates, core: CeligoCore, *, port=0):
-    super().__init__(certs, core=core, port=port)
+  def __init__(self, core: CeligoCore, *, port=0):
+    super().__init__(core=core, port=port)
     rpc.add_CeligoServiceServicer_to_server(CeligoOperations(core), self.server)

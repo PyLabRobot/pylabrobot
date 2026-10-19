@@ -16,7 +16,6 @@ from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
 from pylabrobot.rpc import device, images, jobs
 from pylabrobot.rpc.device import DeviceServer
 from pylabrobot.rpc.errors import StateError
-from pylabrobot.rpc.security import Certificates
 from pylabrobot.rpc.transport import API_VERSION, copy_message, rpc_errors
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import images_pb2 as image_pb
@@ -173,11 +172,11 @@ class ImagingAdapter:
 class ImagingServer(DeviceServer):
   """Compose shared transport capabilities around the Celigo acquisition engine."""
 
-  def __init__(self, certs: Certificates, core: AcquisitionCore, *, port=0):
+  def __init__(self, core: AcquisitionCore, *, port=0):
     """Build the imaging service; startup does not open physical hardware."""
     self.core = core
     self.adapter = ImagingAdapter(core)
-    super().__init__(self.adapter, certs, port=port, maximum_message_bytes=MAX_MESSAGE_BYTES)
+    super().__init__(self.adapter, port=port, maximum_message_bytes=MAX_MESSAGE_BYTES)
     job_rpc.add_JobServiceServicer_to_server(jobs.JobService(self.adapter), self.server)
     image_rpc.add_ImageServiceServicer_to_server(images.ImageService(self.adapter), self.server)
 

@@ -1,4 +1,4 @@
-"""Hardware adapter behavior over real TLS RPCs, with mocked PLR driver methods."""
+"""Hardware adapter behavior over loopback RPCs, with mocked PLR driver methods."""
 
 import asyncio
 import hashlib
@@ -30,7 +30,6 @@ from pylabrobot.revvity.celigo.grpc.tests.helpers import (
 )
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.rpc.errors import BusyError, StateError, StorageError
-from pylabrobot.rpc.security import create_certificates
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
@@ -41,16 +40,15 @@ def config():
 
 
 @asynccontextmanager
-async def hardware_system(tmp_path, config, certs=None):
-  certs = certs or create_certificates(tmp_path / "certs")
+async def hardware_system(tmp_path, config):
   driver = make_driver()
   factory = Mock(return_value=driver)
 
   core = CeligoCore(tmp_path / "data", "celigo-test", config, factory, tmp_path / "hardware.lock")
-  server = CeligoServer(certs, core)
+  server = CeligoServer(core)
   await server.start()
   try:
-    async with CeligoClient(server.endpoint, certs, device_id="celigo-test") as client:
+    async with CeligoClient(server.endpoint, device_id="celigo-test") as client:
       yield server, client, driver, factory
   finally:
     driver.stop.side_effect = None
@@ -321,8 +319,7 @@ async def test_unexpected_executor_cancel_waits_for_driver_and_cannot_report_suc
 async def test_restart_restores_images_and_ready_intent_without_constructing_driver(
   tmp_path, config
 ):
-  certs = create_certificates(tmp_path / "certs")
-  async with hardware_system(tmp_path, config, certs) as (_, client, _, _):
+  async with hardware_system(tmp_path, config) as (_, client, _, _):
     await initialize(client)
     job = await capture(client)
     ready = await capture(client, "ready")
@@ -330,7 +327,7 @@ async def test_restart_restores_images_and_ready_intent_without_constructing_dri
     await job.wait()
     frame_info = (await job.list_frames())[0]
     frame = await job.get_frame(frame_info.frame_id)
-  async with hardware_system(tmp_path, config, certs) as (_, client, driver, factory):
+  async with hardware_system(tmp_path, config) as (_, client, driver, factory):
     assert factory.call_count == 0 and driver.method_calls == []
     recovered = await client.recover("capture")
     assert await recovered.get_frame(frame_info.frame_id) == frame
@@ -344,8 +341,7 @@ async def test_restart_restores_images_and_ready_intent_without_constructing_dri
 
 @pytest.mark.asyncio
 async def test_service_lock_and_store_codec_prevent_cross_backend_execution(tmp_path, config):
-  certs = create_certificates(tmp_path / "certs")
-  async with hardware_system(tmp_path, config, certs):
+  async with hardware_system(tmp_path, config):
     other = CeligoCore(
       tmp_path / "other", "celigo-test", config, make_driver, tmp_path / "hardware.lock"
     )

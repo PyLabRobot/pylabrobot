@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
-from pathlib import Path
 from uuid import uuid4
 
 import grpc
@@ -17,7 +16,6 @@ from pylabrobot.rpc.errors import CapacityError, StateError
 from pylabrobot.rpc.images import ImageClient
 from pylabrobot.rpc.jobs import SERVICE_NAME as JOB_SERVICE
 from pylabrobot.rpc.jobs import JobClient, JobService
-from pylabrobot.rpc.security import create_certificates
 from pylabrobot.rpc.transport import API_VERSION, Latest, copy_message
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
@@ -182,29 +180,27 @@ class PumpDevice(StatusDevice):
 
 
 @pytest_asyncio.fixture
-async def pump(tmp_path: Path):
+async def pump():
   """Run a non-imaging server without registering ImageService."""
-  certs = create_certificates(tmp_path / "certs")
   backend = PumpDevice()
-  server = DeviceServer(backend, certs)
+  server = DeviceServer(backend)
   job_rpc.add_JobServiceServicer_to_server(JobService(backend), server.server)
   await server.start()
   try:
-    yield backend, server, certs
+    yield backend, server
   finally:
     await backend.close()
     await server.stop()
 
 
 @pytest.mark.asyncio
-async def test_status_only_device_has_no_optional_services(tmp_path: Path) -> None:
+async def test_status_only_device_has_no_optional_services() -> None:
   """An incubator can appear in a dashboard without a job engine or image service."""
-  certs = create_certificates(tmp_path / "certs")
   backend = StatusDevice("incubator-01", "IncubatorSimulator")
-  server = DeviceServer(backend, certs)
+  server = DeviceServer(backend)
   await server.start()
   try:
-    async with DeviceClient(server.endpoint, certs, backend.device_id) as client:
+    async with DeviceClient(server.endpoint, backend.device_id) as client:
       info = await client.device_info()
       status = await client.status()
       assert list(info.services) == [DEVICE_SERVICE]
@@ -223,14 +219,14 @@ async def test_status_only_device_has_no_optional_services(tmp_path: Path) -> No
 @pytest.mark.asyncio
 async def test_independent_device_types_survive_one_disconnect(pump) -> None:
   """Failure of one network endpoint must not affect another device connection."""
-  backend, server, certs = pump
+  backend, server = pump
   second = StatusDevice("incubator-01", "IncubatorSimulator")
-  other = DeviceServer(second, certs)
+  other = DeviceServer(second)
   await other.start()
   try:
     async with (
-      DeviceClient(server.endpoint, certs, backend.device_id) as a,
-      DeviceClient(other.endpoint, certs, second.device_id, timeout=0.2) as b,
+      DeviceClient(server.endpoint, backend.device_id) as a,
+      DeviceClient(other.endpoint, second.device_id, timeout=0.2) as b,
     ):
       assert (await a.device_info()).device_type != (await b.device_info()).device_type
       await other.stop()
@@ -244,8 +240,8 @@ async def test_independent_device_types_survive_one_disconnect(pump) -> None:
 @pytest.mark.asyncio
 async def test_non_imaging_job_survives_disconnect_and_recovery(pump) -> None:
   """The common job API needs neither Celigo semantics nor image retention."""
-  backend, server, certs = pump
-  async with DeviceClient(server.endpoint, certs, backend.device_id) as client:
+  backend, server = pump
+  async with DeviceClient(server.endpoint, backend.device_id) as client:
     assert client.channel is not None
     jobs = JobClient(client.channel, backend.device_id)
     job = await jobs.recover("prime-request")
@@ -254,7 +250,7 @@ async def test_non_imaging_job_survives_disconnect_and_recovery(pump) -> None:
     assert (await client.status()).active_job_id == job.identifier
   backend.finished.set()
   await backend.task
-  async with DeviceClient(server.endpoint, certs, backend.device_id) as client:
+  async with DeviceClient(server.endpoint, backend.device_id) as client:
     assert client.channel is not None
     job = await JobClient(client.channel, backend.device_id).recover("prime-request")
     status = await job.wait()
@@ -269,8 +265,8 @@ async def test_non_imaging_job_survives_disconnect_and_recovery(pump) -> None:
 @pytest.mark.asyncio
 async def test_job_cancellation_waits_for_device_cleanup(pump) -> None:
   """Cancellation semantics remain owned by the device-specific executor."""
-  backend, server, certs = pump
-  async with DeviceClient(server.endpoint, certs, backend.device_id) as client:
+  backend, server = pump
+  async with DeviceClient(server.endpoint, backend.device_id) as client:
     assert client.channel is not None
     job = await JobClient(client.channel, backend.device_id).recover("prime-request")
     await job.start()
@@ -285,8 +281,8 @@ async def test_job_cancellation_waits_for_device_cleanup(pump) -> None:
 @pytest.mark.asyncio
 async def test_foreign_job_rejected_before_execution(pump) -> None:
   """Device scoping prevents a valid job ID from being routed to the wrong instrument."""
-  backend, server, certs = pump
-  async with DeviceClient(server.endpoint, certs, backend.device_id) as client:
+  backend, server = pump
+  async with DeviceClient(server.endpoint, backend.device_id) as client:
     assert client.channel is not None
     stub = job_rpc.JobServiceStub(client.channel)
     with pytest.raises(grpc.aio.AioRpcError) as wrong:
@@ -298,8 +294,8 @@ async def test_foreign_job_rejected_before_execution(pump) -> None:
 @pytest.mark.asyncio
 async def test_watch_closure_releases_subscription(pump) -> None:
   """Closing a dashboard watch must release its server-side subscription slot."""
-  backend, server, certs = pump
-  async with DeviceClient(server.endpoint, certs, backend.device_id) as client:
+  backend, server = pump
+  async with DeviceClient(server.endpoint, backend.device_id) as client:
     async with client.status_updates() as updates:
       assert (await updates.get()).state == device_pb.OPERATIONAL_STATE_READY
       assert len(backend.updates.queues) == 1

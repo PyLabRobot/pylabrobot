@@ -14,7 +14,6 @@ from google.protobuf.json_format import MessageToDict
 from pylabrobot.revvity.celigo import Celigo, CeligoConfig
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient
 from pylabrobot.revvity.celigo.grpc.hardware import CeligoCore, CeligoServer
-from pylabrobot.rpc.security import Certificates
 
 
 async def serve(args) -> None:
@@ -32,7 +31,7 @@ async def serve(args) -> None:
     args.hardware_lock,
     connection_id=args.usb_address or "serial-auto",
   )
-  server = CeligoServer(Certificates(args.certificates), core, port=args.port)
+  server = CeligoServer(core, port=args.port)
   stopped = asyncio.Event()
   for signum in (signal.SIGINT, signal.SIGTERM):
     asyncio.get_running_loop().add_signal_handler(signum, stopped.set)
@@ -58,7 +57,6 @@ async def serve(args) -> None:
 async def inspect(args) -> dict:
   async with CeligoClient(
     args.endpoint,
-    Certificates(args.certificates),
     device_id=args.device_id,
   ) as client:
     return {
@@ -76,7 +74,6 @@ def main() -> None:
   server = commands.add_parser(
     "serve", help="start without motion; physical operations require StartJob"
   )
-  server.add_argument("--certificates", type=Path, required=True)
   server.add_argument("--data-dir", type=Path, required=True)
   server.add_argument("--config-root", type=Path, required=True)
   server.add_argument("--lucam-sdk", required=True)
@@ -92,7 +89,6 @@ def main() -> None:
   )
   check.add_argument("--endpoint", required=True)
   check.add_argument("--device-id", default="celigo-01")
-  check.add_argument("--certificates", type=Path, required=True)
   args = parser.parse_args()
   logging.basicConfig(level=logging.INFO)
   if args.command == "serve":
