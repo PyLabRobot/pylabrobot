@@ -38,6 +38,13 @@ class TecanTipCarrier(TipCarrier, TecanResource):
     self.off_x: float = off_x
     self.off_y: float = off_y
 
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "off_x": self.off_x,
+      "off_y": self.off_y,
+    }
+
 
 def Washstation_2Grid_Trough_DiTi(name: str) -> TecanTipCarrier:
   """Tecan part no. 10650037"""

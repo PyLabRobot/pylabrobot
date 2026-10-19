@@ -4,6 +4,7 @@ size_z are best approximations, see
 https://labautomation.io/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2987
 """
 
+from collections import OrderedDict
 from typing import Dict, Optional
 
 from pylabrobot.resources.plate import Lid, Plate
@@ -29,6 +30,7 @@ class TecanPlate(Plate, TecanResource):
     category: str = "tecan_plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
   ):
     super().__init__(
       name,
@@ -36,6 +38,7 @@ class TecanPlate(Plate, TecanResource):
       size_y,
       size_z,
       ordered_items=ordered_items,
+      ordering=ordering,
       category=category,
       lid=lid,
       model=model,
@@ -45,6 +48,15 @@ class TecanPlate(Plate, TecanResource):
     self.z_dispense = z_dispense
     self.z_max = z_max
     self.area = area
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "z_start": self.z_start,
+      "z_dispense": self.z_dispense,
+      "z_max": self.z_max,
+      "area": self.area,
+    }
 
 
 def Microplate_96_Well_Lid(name: str) -> Lid:
