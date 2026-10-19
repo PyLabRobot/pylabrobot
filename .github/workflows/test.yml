@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        version: [3.9, "3.10", 3.11, 3.12, 3.13, 3.14]
+        version: ["3.10", 3.11, 3.12, 3.13, 3.14]
 
     name: ${{ github.event_name == 'pull_request_review' && 'Review notification' || 'Tests' }} (all, py${{ matrix.version }})
     runs-on: ${{ matrix.os }}
