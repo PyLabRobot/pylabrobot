@@ -260,6 +260,10 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
         await job.start()
         await job.start()
         assert (await client.get_status()).active_job_id == job.identifier
+        with self.assertRaises(asyncio.TimeoutError):
+          await job.wait(timeout=0.01)
+        assert (await job.get_status()).state == job_pb.JOB_STATE_RUNNING
+        assert not (await job.get_status()).cancellation_requested
       backend.finished.set()
       await backend.task
       async with DeviceClient(server.endpoint, backend.device_id) as client:

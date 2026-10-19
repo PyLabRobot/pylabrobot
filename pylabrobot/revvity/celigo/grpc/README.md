@@ -86,7 +86,7 @@ may miss intermediate snapshots and must reconcile status and retained frame
 metadata. Preview watches deliver whole images and never start acquisition.
 
 Limits include 32 MiB per encoded frame, 40 MiB per gRPC message, 8,388,608 pixels,
-and Mono8/Mono16 PNG. Default storage allows 256 MiB of image payload and 1024
+and Mono8/Mono16 PNG. Default storage allows 10 GiB of image payload and 1024
 retained jobs. Set `plr dev celigo serve --image-storage-bytes BYTES` to increase
 image storage for larger scans. Admission reserves capacity for every planned
 frame, using worst-case Mono16 PNG size rather than the user's storage estimate.

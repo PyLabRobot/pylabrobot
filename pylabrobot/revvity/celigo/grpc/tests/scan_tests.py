@@ -69,6 +69,22 @@ async def scan_system(directory: Path, storage_quota: int = DEFAULT_QUOTA):
 
 
 class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
+  async def test_default_capacity_admits_a_full_resolution_plate_plan(self) -> None:
+    """A 128-frame plate can reserve worst-case pixels without a quota override."""
+    with TemporaryDirectory() as directory:
+      server, hardware = make_server(Path(directory), config=make_config(2048, 2048))
+      await server.start()
+      try:
+        async with CeligoClient(server.endpoint, device_id=server.session.device_id) as client:
+          plan = await client.build_scan_plan(
+            ScanSpec.points([(63.5, 43)] * 128, channel="brightfield")
+          )
+          job = await client.create_scan("plate", plan=plan)
+          self.assertEqual((await job.get_status()).total, 128)
+          self.assertEqual(hardware.method_calls, [])
+      finally:
+        await server.stop()
+
   async def test_notebook_geometries_and_estimates_match_local_planning(self) -> None:
     """All notebook geometries survive RPC without constructing a hardware session."""
     plate = cor_96_wellplate_360uL_Fb(name="plate")

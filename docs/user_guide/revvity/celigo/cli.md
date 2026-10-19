@@ -53,7 +53,7 @@ does not identify the instrument.
 | `--device-id` | Device identity advertised by the service. | `celigo-01` |
 | `--host` | Interface address to listen on; `0.0.0.0` listens on all IPv4 interfaces. | `127.0.0.1` |
 | `--port` | Local gRPC listening port. | `50052` |
-| `--image-storage-bytes` | Capacity for retained images and reservations across jobs; increase for larger scans. | `268435456` (256 MiB) |
+| `--image-storage-bytes` | Capacity for retained images and reservations across jobs; increase for larger scans. | `10737418240` (10 GiB) |
 
 Startup loads configuration and takes the service lock without opening the
 driver or moving hardware. It prints a JSON startup record with the endpoint,

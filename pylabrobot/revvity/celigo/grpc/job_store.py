@@ -34,7 +34,7 @@ from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 T = TypeVar("T")
 SCHEMA_VERSION = "1"
-DEFAULT_QUOTA = 256 * 1024 * 1024
+DEFAULT_QUOTA = 10 * 1024 * 1024 * 1024
 DISK_HEADROOM = 64 * 1024 * 1024
 
 

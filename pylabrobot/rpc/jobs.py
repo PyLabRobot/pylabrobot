@@ -127,8 +127,8 @@ class Job:
     finally:
       call.cancel()
 
-  async def wait(self, timeout: float = 30) -> pb.JobStatus:
-    """Wait for Finished; a local timeout leaves remote execution running."""
+  async def wait(self, timeout: float | None = None) -> pb.JobStatus:
+    """Wait for Finished, optionally limiting the wait without cancelling remote execution."""
 
     async def finished() -> pb.JobStatus:
       """Consume snapshots until a terminal one arrives."""
