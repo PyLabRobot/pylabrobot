@@ -237,6 +237,7 @@ async def test_interrupted_response_retries_complete_retained_image(system):
   async def proxy(reader, writer):
     nonlocal cut_after
     task = asyncio.current_task()
+    assert task is not None
     handlers.add(task)
     remote_reader, remote_writer = await asyncio.open_connection(host, int(port))
 

@@ -22,9 +22,9 @@ dictionary or shared hardware executor.
 
 ## Installation and connection
 
-RPC requires Python 3.10 or later. Install `PyLabRobot[rpc]` for the common layer;
-this does not require NumPy, Pillow, or the Celigo driver extras. Ordinary
-local PLR use does not load the optional RPC modules.
+Install `PyLabRobot[rpc]` for the common layer; this does not require NumPy,
+Pillow, or the Celigo driver extras. Ordinary local PLR use does not load the
+optional RPC modules.
 
 Device and transport extras compose independently: `PyLabRobot[celigo,rpc]`
 installs Celigo imaging support with RPC. The shared `rpc-dev` extra supplies

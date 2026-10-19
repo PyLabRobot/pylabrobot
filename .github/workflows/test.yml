@@ -52,8 +52,5 @@ jobs:
       - name: Verify generated bindings
         if: matrix.extra == 'celigo,rpc-dev'
         run: |
-          python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. \
-            pylabrobot/rpc/v1/device.proto pylabrobot/rpc/v1/jobs.proto \
-            pylabrobot/rpc/v1/images.proto pylabrobot/revvity/celigo/grpc/v1/service.proto \
-            pylabrobot/revvity/celigo/grpc/v1/storage.proto
+          python tools/generate_rpc.py
           git diff --exit-code -- pylabrobot/rpc/v1 pylabrobot/revvity/celigo/grpc/v1

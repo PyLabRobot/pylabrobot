@@ -18,8 +18,8 @@ jobs and images independently, without importing the Celigo implementation.
 
 ## Installation
 
-The transport requires Python 3.10 or later. The server uses POSIX file locks
-and is tested on Linux. From a PLR checkout containing this package:
+The server uses POSIX file locks and is tested on Linux. From a PLR checkout
+containing this package:
 
 ```bash
 python -m pip install -e '.[celigo,rpc]'
@@ -165,14 +165,16 @@ and subprocess crash injection. They require no site inventory or USB devices.
 They are skipped during base PLR test collection when transport dependencies
 are absent.
 
+The standard `.[dev]` extra includes these dependencies. `make typecheck` checks
+RPC code, generated bindings, and tests along with the rest of PLR.
+
 Generated bindings and message type stubs ship with PLR. Regenerate all schemas
-with the pinned compiler from the repository root:
+with the pinned compiler from the repository root. The generation command adds
+an explicit type to mixed RPC handler dictionaries so the generated code passes
+the ordinary `make typecheck` too:
 
 ```bash
-python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. \
-  pylabrobot/rpc/v1/device.proto pylabrobot/rpc/v1/jobs.proto \
-  pylabrobot/rpc/v1/images.proto pylabrobot/revvity/celigo/grpc/v1/service.proto \
-  pylabrobot/revvity/celigo/grpc/v1/storage.proto
+python tools/generate_rpc.py
 ```
 
 Preserve published field numbers and reserve removed fields. Preserve private

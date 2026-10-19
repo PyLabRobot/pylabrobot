@@ -91,6 +91,7 @@ async def process_server(directory, crash_point="none"):
     try:
       import json
 
+      assert process.stdout is not None
       ready = await asyncio.wait_for(process.stdout.readline(), 15)
       assert ready, log_path.read_text()[-4000:]
       async with CeligoClient(

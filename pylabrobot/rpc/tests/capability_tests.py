@@ -25,7 +25,7 @@ from pylabrobot.rpc.v1 import jobs_pb2_grpc as job_rpc
 class StatusDevice:
   """An instrument exposing identity/status without jobs, images, or persistence."""
 
-  services = (DEVICE_SERVICE,)
+  services: tuple[str, ...] = (DEVICE_SERVICE,)
 
   def __init__(self, device_id: str, device_type: str) -> None:
     """Create one independently revisioned operational snapshot."""

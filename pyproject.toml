@@ -42,7 +42,7 @@ test = [
   "pytest",
 ]
 dev = [
-  "PyLabRobot[all,test]",
+  "PyLabRobot[all,test,celigo,rpc-dev]",
 
   # lint/type
   "mypy==1.18.2",

@@ -22,37 +22,5 @@ jobs:
           python-version: "3.10"
       - name: Install Dependencies
         run: pip install -e '.[dev]'
-      - name: Run Pytest
+      - name: Check types
         run: make typecheck
-
-  typecheck-rpc:
-    name: Type checking (RPC, py${{ matrix.version }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        version: ["3.10", "3.12"]
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v6
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.version }}
-      - name: Install optional RPC dependencies
-        run: pip install -e '.[celigo,rpc-dev]' mypy==1.18.2
-      - name: Check RPC types
-        run: >-
-          python -m mypy --follow-imports=silent
-          pylabrobot/rpc/device.py
-          pylabrobot/rpc/jobs.py
-          pylabrobot/rpc/images.py
-          pylabrobot/rpc/transport.py
-          pylabrobot/revvity/celigo/grpc/client.py
-          pylabrobot/revvity/celigo/grpc/hardware.py
-          pylabrobot/revvity/celigo/grpc/storage.py
-          pylabrobot/revvity/celigo/grpc/model.py
-          pylabrobot/revvity/celigo/grpc/server.py
-          pylabrobot/revvity/celigo/grpc/execution.py
-          pylabrobot/revvity/celigo/grpc/hardware_cli.py

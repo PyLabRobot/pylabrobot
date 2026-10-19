@@ -19,7 +19,7 @@ def restore_fixture(directory: Path) -> dict[str, bytes]:
   """Restore hardware-job SQLite records serialized with the original Celigo wire types."""
   tables = json.loads(Path(__file__).with_name("legacy_store.json").read_text())
   directory.mkdir()
-  expected = {}
+  expected: dict[str, bytes] = {}
   with sqlite3.connect(directory / "jobs.sqlite3") as db:
     for name in ("metadata", "jobs", "frames", "transitions"):
       table = tables[name]
@@ -31,7 +31,10 @@ def restore_fixture(directory: Path) -> dict[str, bytes]:
       placeholders = ",".join("?" for _ in rows[0])
       db.executemany(f"INSERT INTO {name} VALUES ({placeholders})", rows)
       if name == "frames":
-        expected = {row[0]: row[4] for row in rows if row[4] is not None}
+        for job_id, _, _, _, image, _, _ in rows:
+          if image is not None:
+            assert isinstance(job_id, str) and isinstance(image, bytes)
+            expected[job_id] = image
   return expected
 
 

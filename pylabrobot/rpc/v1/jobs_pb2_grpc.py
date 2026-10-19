@@ -98,7 +98,7 @@ class JobServiceServicer:
 
 
 def add_JobServiceServicer_to_server(servicer, server):
-    rpc_method_handlers = {
+    rpc_method_handlers: dict[str, grpc.RpcMethodHandler] = {
             'GetJob': grpc.unary_unary_rpc_method_handler(
                     servicer.GetJob,
                     request_deserializer=pylabrobot_dot_rpc_dot_v1_dot_jobs__pb2.JobRef.FromString,
