@@ -76,7 +76,7 @@ class CeligoServiceServicer:
 
 
 def add_CeligoServiceServicer_to_server(servicer, server):
-    rpc_method_handlers: dict[str, grpc.RpcMethodHandler] = {
+    rpc_method_handlers = {
             'GetConfiguration': grpc.unary_unary_rpc_method_handler(
                     servicer.GetConfiguration,
                     request_deserializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.FromString,

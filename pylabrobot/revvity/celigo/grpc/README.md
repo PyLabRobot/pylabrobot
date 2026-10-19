@@ -157,24 +157,25 @@ from the PLR repository root:
 
 ```bash
 python -m pip install -e '.[celigo,rpc-dev]'
-python -m pytest pylabrobot/rpc/tests pylabrobot/revvity/celigo/grpc/tests
+python -m unittest discover -s pylabrobot/rpc/tests -t . -p '*_tests.py'
+python -m unittest discover -s pylabrobot/revvity/celigo/grpc/tests -t . -p '*_tests.py'
 ```
 
-The tests use synthetic calibration, mocked drivers, loopback RPCs,
+The tests use `unittest.IsolatedAsyncioTestCase`, synthetic calibration, mocked drivers, loopback RPCs,
 and subprocess crash injection. They require no site inventory or USB devices.
 They are skipped during base PLR test collection when transport dependencies
 are absent.
 
 The standard `.[dev]` extra includes these dependencies. `make typecheck` checks
-RPC code, generated bindings, and tests along with the rest of PLR.
+RPC code and tests against the generated type stubs along with the rest of PLR.
 
-Generated bindings and message type stubs ship with PLR. Regenerate all schemas
-with the pinned compiler from the repository root. The generation command adds
-an explicit type to mixed RPC handler dictionaries so the generated code passes
-the ordinary `make typecheck` too:
+Generated bindings and type stubs ship with PLR. Message stubs come from
+`protoc`; service and client stubs come from `mypy-protobuf`. Regenerate all
+schemas with the pinned tools from the repository root in your development
+environment:
 
 ```bash
-python tools/generate_rpc.py
+make generate-rpc
 ```
 
 Preserve published field numbers and reserve removed fields. Preserve private

@@ -106,7 +106,7 @@ ambiguous operation responses by request/job identity.
 
 ```bash
 python -m pip install -e '.[rpc-dev]'
-python -m pytest -q pylabrobot/rpc/tests
+python -m unittest discover -s pylabrobot/rpc/tests -t . -p '*_tests.py'
 ```
 
 The common tests use a fake pump and a status-only incubator with real

@@ -74,7 +74,7 @@ class DeviceServiceServicer:
 
 
 def add_DeviceServiceServicer_to_server(servicer, server):
-    rpc_method_handlers: dict[str, grpc.RpcMethodHandler] = {
+    rpc_method_handlers = {
             'GetDevice': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDevice,
                     request_deserializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.FromString,

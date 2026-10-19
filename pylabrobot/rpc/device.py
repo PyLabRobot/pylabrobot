@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import aclosing, asynccontextmanager
-from typing import Protocol, cast
+from typing import Protocol
 
 import grpc
 from typing_extensions import Self
@@ -127,7 +127,7 @@ class DeviceClient:
     self.maximum_message_bytes = maximum_message_bytes
     self.configuration_id = ""
     self.channel: grpc.aio.Channel | None = None
-    self.devices: rpc.DeviceServiceStub
+    self.devices: rpc.DeviceServiceAsyncStub
 
   @property
   def request(self) -> pb.DeviceRequest:
@@ -136,11 +136,11 @@ class DeviceClient:
 
   async def device_info(self) -> pb.DeviceInfo:
     """Read identity and supported services from the connected endpoint."""
-    return cast(pb.DeviceInfo, await self.devices.GetDevice(self.request, timeout=self.timeout))
+    return await self.devices.GetDevice(self.request, timeout=self.timeout)
 
   async def status(self) -> pb.DeviceStatus:
     """Read current server state without pretending it is a fresh hardware observation."""
-    return cast(pb.DeviceStatus, await self.devices.GetStatus(self.request, timeout=self.timeout))
+    return await self.devices.GetStatus(self.request, timeout=self.timeout)
 
   async def disconnect(self) -> None:
     """Close this connection without cancelling accepted remote jobs."""

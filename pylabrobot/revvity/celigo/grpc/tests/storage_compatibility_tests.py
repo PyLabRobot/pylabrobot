@@ -4,10 +4,11 @@ import base64
 import hashlib
 import json
 import sqlite3
+import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import grpc
-import pytest
 
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient, acquisition_metadata
 from pylabrobot.revvity.celigo.grpc.tests.helpers import make_server
@@ -38,45 +39,47 @@ def restore_fixture(directory: Path) -> dict[str, bytes]:
   return expected
 
 
-@pytest.mark.asyncio
-async def test_stored_jobs_images_and_release_survive_protocol_split(tmp_path: Path) -> None:
-  """Recover interrupted work, preserve pixels/metadata and release flags, and never replay."""
-  directory = tmp_path / "data"
-  expected = restore_fixture(directory)
-  instance_id = ""
-  for _ in range(2):
-    server, driver = make_server(directory, device_id="legacy-device")
-    await server.start()
-    try:
-      async with CeligoClient(server.endpoint, device_id="legacy-device") as client:
-        info = await client.device_info()
-        assert info.instance_id and info.instance_id != instance_id
-        instance_id = info.instance_id
-        assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
-        assert len(server.core.jobs) == 3
-        for name in ("retained", "released", "interrupted"):
-          job = await client.recover(name)
-          status = await job.status()
-          assert status.state == job_pb.JOB_STATE_FINISHED and status.completed == 1
-          assert status.outcome == (
-            job_pb.OUTCOME_INTERRUPTED if name == "interrupted" else job_pb.OUTCOME_SUCCEEDED
-          )
-          retention = await job.image_retention()
-          assert retention.images_released == (name == "released")
-          frames = await job.list_frames()
-          assert len(frames) == 1 and frames[0].available != retention.images_released
-          if retention.images_released:
-            with pytest.raises(grpc.aio.AioRpcError) as released:
-              await job.get_frame(frames[0].frame_id)
-            assert released.value.code() == grpc.StatusCode.FAILED_PRECONDITION
-          else:
-            frame = await job.get_frame(frames[0].frame_id)
-            assert frame.image == expected[name]
-            assert hashlib.sha256(frame.image).hexdigest() == frame.sha256
-            assert frame.width == frame.height == 8
-            assert acquisition_metadata(frame).channel == "brightfield"
-        assert all(job.task is None for job in server.core.jobs.values())
-        driver.setup.assert_not_awaited()
-        driver.acquire_scan_position.assert_not_awaited()
-    finally:
-      await server.stop()
+class StorageCompatibilityTests(unittest.IsolatedAsyncioTestCase):
+  async def test_stored_jobs_images_and_release_survive_protocol_split(self) -> None:
+    """Recover interrupted work, preserve pixels/metadata and release flags, and never replay."""
+    with TemporaryDirectory() as temporary_directory:
+      tmp_path = Path(temporary_directory)
+      directory = tmp_path / "data"
+      expected = restore_fixture(directory)
+      instance_id = ""
+      for _ in range(2):
+        server, driver = make_server(directory, device_id="legacy-device")
+        await server.start()
+        try:
+          async with CeligoClient(server.endpoint, device_id="legacy-device") as client:
+            info = await client.device_info()
+            assert info.instance_id and info.instance_id != instance_id
+            instance_id = info.instance_id
+            assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
+            assert len(server.core.jobs) == 3
+            for name in ("retained", "released", "interrupted"):
+              job = await client.recover(name)
+              status = await job.status()
+              assert status.state == job_pb.JOB_STATE_FINISHED and status.completed == 1
+              assert status.outcome == (
+                job_pb.OUTCOME_INTERRUPTED if name == "interrupted" else job_pb.OUTCOME_SUCCEEDED
+              )
+              retention = await job.image_retention()
+              assert retention.images_released == (name == "released")
+              frames = await job.list_frames()
+              assert len(frames) == 1 and frames[0].available != retention.images_released
+              if retention.images_released:
+                with self.assertRaises(grpc.aio.AioRpcError) as released:
+                  await job.get_frame(frames[0].frame_id)
+                assert released.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
+              else:
+                frame = await job.get_frame(frames[0].frame_id)
+                assert frame.image == expected[name]
+                assert hashlib.sha256(frame.image).hexdigest() == frame.sha256
+                assert frame.width == frame.height == 8
+                assert acquisition_metadata(frame).channel == "brightfield"
+            assert all(job.task is None for job in server.core.jobs.values())
+            driver.setup.assert_not_awaited()
+            driver.acquire_scan_position.assert_not_awaited()
+        finally:
+          await server.stop()

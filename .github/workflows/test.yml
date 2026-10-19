@@ -52,5 +52,5 @@ jobs:
       - name: Verify generated bindings
         if: matrix.extra == 'celigo,rpc-dev'
         run: |
-          python tools/generate_rpc.py
+          make generate-rpc
           git diff --exit-code -- pylabrobot/rpc/v1 pylabrobot/revvity/celigo/grpc/v1

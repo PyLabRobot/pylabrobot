@@ -111,7 +111,7 @@ class ImageServiceServicer:
 
 
 def add_ImageServiceServicer_to_server(servicer, server):
-    rpc_method_handlers: dict[str, grpc.RpcMethodHandler] = {
+    rpc_method_handlers = {
             'GetCapabilities': grpc.unary_unary_rpc_method_handler(
                     servicer.GetCapabilities,
                     request_deserializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.FromString,

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import unittest
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 import grpc
-import pytest
-import pytest_asyncio
 
 from pylabrobot.rpc.device import SERVICE_NAME as DEVICE_SERVICE
 from pylabrobot.rpc.device import DeviceClient, DeviceServer
@@ -179,8 +179,8 @@ class PumpDevice(StatusDevice):
       await self.task
 
 
-@pytest_asyncio.fixture
-async def pump():
+@asynccontextmanager
+async def pump_system():
   """Run a non-imaging server without registering ImageService."""
   backend = PumpDevice()
   server = DeviceServer(backend)
@@ -193,127 +193,120 @@ async def pump():
     await server.stop()
 
 
-@pytest.mark.asyncio
-async def test_status_only_device_has_no_optional_services() -> None:
-  """An incubator can appear in a dashboard without a job engine or image service."""
-  backend = StatusDevice("incubator-01", "IncubatorSimulator")
-  server = DeviceServer(backend)
-  await server.start()
-  try:
-    async with DeviceClient(server.endpoint, backend.device_id) as client:
-      info = await client.device_info()
-      status = await client.status()
-      assert list(info.services) == [DEVICE_SERVICE]
-      assert status.instance_id == info.instance_id and status.observation_valid
-      assert client.channel is not None
-      with pytest.raises(grpc.aio.AioRpcError) as unavailable:
-        await JobClient(client.channel, backend.device_id).recover("missing")
-      assert unavailable.value.code() == grpc.StatusCode.UNIMPLEMENTED
-      with pytest.raises(grpc.aio.AioRpcError) as unavailable:
-        await ImageClient(client.channel, backend.device_id).capabilities()
-      assert unavailable.value.code() == grpc.StatusCode.UNIMPLEMENTED
-  finally:
-    await server.stop()
+class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
+  async def test_status_only_device_has_no_optional_services(self) -> None:
+    """An incubator can appear in a dashboard without a job engine or image service."""
+    backend = StatusDevice("incubator-01", "IncubatorSimulator")
+    server = DeviceServer(backend)
+    await server.start()
+    try:
+      async with DeviceClient(server.endpoint, backend.device_id) as client:
+        info = await client.device_info()
+        status = await client.status()
+        assert list(info.services) == [DEVICE_SERVICE]
+        assert status.instance_id == info.instance_id and status.observation_valid
+        assert client.channel is not None
+        with self.assertRaises(grpc.aio.AioRpcError) as unavailable:
+          await JobClient(client.channel, backend.device_id).recover("missing")
+        assert unavailable.exception.code() == grpc.StatusCode.UNIMPLEMENTED
+        with self.assertRaises(grpc.aio.AioRpcError) as unavailable:
+          await ImageClient(client.channel, backend.device_id).capabilities()
+        assert unavailable.exception.code() == grpc.StatusCode.UNIMPLEMENTED
+    finally:
+      await server.stop()
 
+  async def test_independent_device_types_survive_one_disconnect(self) -> None:
+    """Failure of one network endpoint must not affect another device connection."""
+    async with pump_system() as pump:
+      backend, server = pump
+      second = StatusDevice("incubator-01", "IncubatorSimulator")
+      other = DeviceServer(second)
+      await other.start()
+      try:
+        async with (
+          DeviceClient(server.endpoint, backend.device_id) as a,
+          DeviceClient(other.endpoint, second.device_id, timeout=0.2) as b,
+        ):
+          assert (await a.device_info()).device_type != (await b.device_info()).device_type
+          await other.stop()
+          with self.assertRaises(grpc.aio.AioRpcError):
+            await b.status()
+          assert (await a.status()).state == device_pb.OPERATIONAL_STATE_READY
+      finally:
+        await other.stop()
 
-@pytest.mark.asyncio
-async def test_independent_device_types_survive_one_disconnect(pump) -> None:
-  """Failure of one network endpoint must not affect another device connection."""
-  backend, server = pump
-  second = StatusDevice("incubator-01", "IncubatorSimulator")
-  other = DeviceServer(second)
-  await other.start()
-  try:
-    async with (
-      DeviceClient(server.endpoint, backend.device_id) as a,
-      DeviceClient(other.endpoint, second.device_id, timeout=0.2) as b,
-    ):
-      assert (await a.device_info()).device_type != (await b.device_info()).device_type
-      await other.stop()
-      with pytest.raises(grpc.aio.AioRpcError):
-        await b.status()
-      assert (await a.status()).state == device_pb.OPERATIONAL_STATE_READY
-  finally:
-    await other.stop()
+  async def test_non_imaging_job_survives_disconnect_and_recovery(self) -> None:
+    """The common job API needs neither Celigo semantics nor image retention."""
+    async with pump_system() as pump:
+      backend, server = pump
+      async with DeviceClient(server.endpoint, backend.device_id) as client:
+        assert client.channel is not None
+        jobs = JobClient(client.channel, backend.device_id)
+        job = await jobs.recover("prime-request")
+        await job.start()
+        await job.start()
+        assert (await client.status()).active_job_id == job.identifier
+      backend.finished.set()
+      await backend.task
+      async with DeviceClient(server.endpoint, backend.device_id) as client:
+        assert client.channel is not None
+        job = await JobClient(client.channel, backend.device_id).recover("prime-request")
+        status = await job.wait()
+        assert status.outcome == job_pb.OUTCOME_SUCCEEDED
+        assert status.completed == 3 and status.progress_unit == "Dispenses"
+        assert not status.state_durable and backend.executions == 1
+        with self.assertRaises(grpc.aio.AioRpcError) as finished:
+          await job.start()
+        assert finished.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
 
+  async def test_job_cancellation_waits_for_device_cleanup(self) -> None:
+    """Cancellation semantics remain owned by the device-specific executor."""
+    async with pump_system() as pump:
+      backend, server = pump
+      async with DeviceClient(server.endpoint, backend.device_id) as client:
+        assert client.channel is not None
+        job = await JobClient(client.channel, backend.device_id).recover("prime-request")
+        await job.start()
+        stopping = await job.cancel()
+        assert stopping.state == job_pb.JOB_STATE_RUNNING and stopping.phase == "Stopping"
+        assert (await client.status()).state == device_pb.OPERATIONAL_STATE_BUSY
+        backend.finished.set()
+        assert (await job.wait()).outcome == job_pb.OUTCOME_CANCELLED
+        assert (await client.status()).state == device_pb.OPERATIONAL_STATE_READY
 
-@pytest.mark.asyncio
-async def test_non_imaging_job_survives_disconnect_and_recovery(pump) -> None:
-  """The common job API needs neither Celigo semantics nor image retention."""
-  backend, server = pump
-  async with DeviceClient(server.endpoint, backend.device_id) as client:
-    assert client.channel is not None
-    jobs = JobClient(client.channel, backend.device_id)
-    job = await jobs.recover("prime-request")
-    await job.start()
-    await job.start()
-    assert (await client.status()).active_job_id == job.identifier
-  backend.finished.set()
-  await backend.task
-  async with DeviceClient(server.endpoint, backend.device_id) as client:
-    assert client.channel is not None
-    job = await JobClient(client.channel, backend.device_id).recover("prime-request")
-    status = await job.wait()
-    assert status.outcome == job_pb.OUTCOME_SUCCEEDED
-    assert status.completed == 3 and status.progress_unit == "Dispenses"
-    assert not status.state_durable and backend.executions == 1
-    with pytest.raises(grpc.aio.AioRpcError) as finished:
-      await job.start()
-    assert finished.value.code() == grpc.StatusCode.FAILED_PRECONDITION
+  async def test_foreign_job_rejected_before_execution(self) -> None:
+    """Device scoping prevents a valid job ID from being routed to the wrong instrument."""
+    async with pump_system() as pump:
+      backend, server = pump
+      async with DeviceClient(server.endpoint, backend.device_id) as client:
+        assert client.channel is not None
+        stub = job_rpc.JobServiceStub(client.channel)
+        with self.assertRaises(grpc.aio.AioRpcError) as wrong:
+          await stub.StartJob(job_pb.JobRef(device_id="other-device", job_id="prime-01"))
+        assert wrong.exception.code() == grpc.StatusCode.NOT_FOUND
+        assert backend.executions == 0
 
+  async def test_watch_closure_releases_subscription(self) -> None:
+    """Closing a dashboard watch must release its server-side subscription slot."""
+    async with pump_system() as pump:
+      backend, server = pump
+      async with DeviceClient(server.endpoint, backend.device_id) as client:
+        async with client.status_updates() as updates:
+          assert (await updates.get()).state == device_pb.OPERATIONAL_STATE_READY
+          assert len(backend.updates.queues) == 1
+        await asyncio.wait_for(backend.watch_closed.wait(), 3)
+        assert not backend.updates.queues
 
-@pytest.mark.asyncio
-async def test_job_cancellation_waits_for_device_cleanup(pump) -> None:
-  """Cancellation semantics remain owned by the device-specific executor."""
-  backend, server = pump
-  async with DeviceClient(server.endpoint, backend.device_id) as client:
-    assert client.channel is not None
-    job = await JobClient(client.channel, backend.device_id).recover("prime-request")
-    await job.start()
-    stopping = await job.cancel()
-    assert stopping.state == job_pb.JOB_STATE_RUNNING and stopping.phase == "Stopping"
-    assert (await client.status()).state == device_pb.OPERATIONAL_STATE_BUSY
-    backend.finished.set()
-    assert (await job.wait()).outcome == job_pb.OUTCOME_CANCELLED
-    assert (await client.status()).state == device_pb.OPERATIONAL_STATE_READY
-
-
-@pytest.mark.asyncio
-async def test_foreign_job_rejected_before_execution(pump) -> None:
-  """Device scoping prevents a valid job ID from being routed to the wrong instrument."""
-  backend, server = pump
-  async with DeviceClient(server.endpoint, backend.device_id) as client:
-    assert client.channel is not None
-    stub = job_rpc.JobServiceStub(client.channel)
-    with pytest.raises(grpc.aio.AioRpcError) as wrong:
-      await stub.StartJob(job_pb.JobRef(device_id="other-device", job_id="prime-01"))
-    assert wrong.value.code() == grpc.StatusCode.NOT_FOUND
-    assert backend.executions == 0
-
-
-@pytest.mark.asyncio
-async def test_watch_closure_releases_subscription(pump) -> None:
-  """Closing a dashboard watch must release its server-side subscription slot."""
-  backend, server = pump
-  async with DeviceClient(server.endpoint, backend.device_id) as client:
-    async with client.status_updates() as updates:
-      assert (await updates.get()).state == device_pb.OPERATIONAL_STATE_READY
-      assert len(backend.updates.queues) == 1
-    await asyncio.wait_for(backend.watch_closed.wait(), 3)
-    assert not backend.updates.queues
-
-
-@pytest.mark.asyncio
-async def test_latest_snapshots_are_bounded_and_independent() -> None:
-  """Slow or mutating subscribers cannot affect another subscriber's snapshot."""
-  latest = Latest(device_pb.DeviceStatus(revision=1), limit=2)
-  with latest.subscribe() as a, latest.subscribe() as b:
-    (await a.get()).fault_summary = "changed by subscriber"
-    assert (await b.get()).fault_summary == ""
-    latest.publish(device_pb.DeviceStatus(revision=2))
-    latest.publish(device_pb.DeviceStatus(revision=3))
-    assert a.qsize() == b.qsize() == 1
-    assert (await a.get()).revision == (await b.get()).revision == 3
-    with pytest.raises(CapacityError), latest.subscribe():
-      pass
-  assert not latest.queues
+  async def test_latest_snapshots_are_bounded_and_independent(self) -> None:
+    """Slow or mutating subscribers cannot affect another subscriber's snapshot."""
+    latest = Latest(device_pb.DeviceStatus(revision=1), limit=2)
+    with latest.subscribe() as a, latest.subscribe() as b:
+      (await a.get()).fault_summary = "changed by subscriber"
+      assert (await b.get()).fault_summary == ""
+      latest.publish(device_pb.DeviceStatus(revision=2))
+      latest.publish(device_pb.DeviceStatus(revision=3))
+      assert a.qsize() == b.qsize() == 1
+      assert (await a.get()).revision == (await b.get()).revision == 3
+      with self.assertRaises(CapacityError), latest.subscribe():
+        pass
+    assert not latest.queues

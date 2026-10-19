@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import aclosing, asynccontextmanager
-from typing import Protocol, cast
+from typing import Protocol
 
 import grpc
 
@@ -94,7 +94,7 @@ class JobService(rpc.JobServiceServicer):
 class Job:
   """Client handle for one single-use operation, without image-specific methods."""
 
-  def __init__(self, stub: rpc.JobServiceStub, ref: pb.JobRef, timeout: float = 20) -> None:
+  def __init__(self, stub: rpc.JobServiceAsyncStub, ref: pb.JobRef, timeout: float = 20) -> None:
     """Bind a remote reference; no RPC or execution occurs during construction."""
     self.stub = stub
     self.identifier = ref.job_id
@@ -108,15 +108,15 @@ class Job:
 
   async def start(self) -> pb.JobStatus:
     """Explicitly start this job; reconcile a lost response by reading its state."""
-    return cast(pb.JobStatus, await self.stub.StartJob(self.ref, timeout=self.timeout))
+    return await self.stub.StartJob(self.ref, timeout=self.timeout)
 
   async def cancel(self) -> pb.JobStatus:
     """Request stopping; a returned Running status means cleanup is still pending."""
-    return cast(pb.JobStatus, await self.stub.CancelJob(self.ref, timeout=self.timeout))
+    return await self.stub.CancelJob(self.ref, timeout=self.timeout)
 
   async def status(self) -> pb.JobStatus:
     """Read state, outcome, progress, and durability without changing execution."""
-    return cast(pb.JobStatus, await self.stub.GetJob(self.ref, timeout=self.timeout))
+    return await self.stub.GetJob(self.ref, timeout=self.timeout)
 
   @asynccontextmanager
   async def updates(self) -> AsyncIterator[Updates[pb.JobStatus]]:

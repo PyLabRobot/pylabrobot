@@ -29,7 +29,7 @@ rpc = ["grpcio==1.84.0", "protobuf==7.36.2"]
 rpc-dev = [
   "PyLabRobot[rpc,test]",
   "grpcio-tools==1.84.0",
-  "pytest-asyncio",
+  "mypy-protobuf==5.1.0",
   "types-grpcio",
   "types-protobuf",
 ]
@@ -97,9 +97,11 @@ extend-exclude = [
   "pylabrobot/rpc/v1/*_pb2.py",
   "pylabrobot/rpc/v1/*_pb2.pyi",
   "pylabrobot/rpc/v1/*_pb2_grpc.py",
+  "pylabrobot/rpc/v1/*_pb2_grpc.pyi",
   "pylabrobot/revvity/celigo/grpc/v1/*_pb2.py",
   "pylabrobot/revvity/celigo/grpc/v1/*_pb2.pyi",
   "pylabrobot/revvity/celigo/grpc/v1/*_pb2_grpc.py",
+  "pylabrobot/revvity/celigo/grpc/v1/*_pb2_grpc.pyi",
 ]
 
 [tool.ruff.lint.per-file-ignores]

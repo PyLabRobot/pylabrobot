@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import aclosing, asynccontextmanager
-from typing import Protocol, cast
+from typing import Protocol
 
 import grpc
 
@@ -121,22 +121,19 @@ class ImageClient:
 
   async def capabilities(self) -> pb.ImageCapabilities:
     """Read image limits without pulling them into common device identity."""
-    return cast(
-      pb.ImageCapabilities,
-      await self.stub.GetCapabilities(
-        device_pb.DeviceRequest(device_id=self.device_id), timeout=self.timeout
-      ),
+    return await self.stub.GetCapabilities(
+      device_pb.DeviceRequest(device_id=self.device_id), timeout=self.timeout
     )
 
   async def retention(self, job: job_pb.JobRef) -> pb.ImageRetention:
     """Read whether retained pixels were explicitly released."""
     require_device(job.device_id, self.device_id)
-    return cast(pb.ImageRetention, await self.stub.GetJobImageRetention(job, timeout=self.timeout))
+    return await self.stub.GetJobImageRetention(job, timeout=self.timeout)
 
   async def release(self, job: job_pb.JobRef) -> pb.ImageRetention:
     """Explicitly release a finished job's pixels after the application archives them."""
     require_device(job.device_id, self.device_id)
-    return cast(pb.ImageRetention, await self.stub.ReleaseJobImages(job, timeout=self.timeout))
+    return await self.stub.ReleaseJobImages(job, timeout=self.timeout)
 
   async def list_frames(
     self, job: job_pb.JobRef, after_sequence: int = 0, limit: int = 64
@@ -152,11 +149,8 @@ class ImageClient:
   async def get_frame(self, job: job_pb.JobRef, frame_id: str) -> pb.ImageFrame:
     """Retrieve complete bytes and typed metadata without decoding the image."""
     require_device(job.device_id, self.device_id)
-    return cast(
-      pb.ImageFrame,
-      await self.stub.GetFrame(
-        pb.GetFrameRequest(job=job, frame_id=frame_id), timeout=self.timeout
-      ),
+    return await self.stub.GetFrame(
+      pb.GetFrameRequest(job=job, frame_id=frame_id), timeout=self.timeout
     )
 
   @asynccontextmanager

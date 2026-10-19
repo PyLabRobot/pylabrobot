@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import cast
 
 from typing_extensions import Self
 
@@ -34,7 +33,11 @@ class ImagingJob(Job):
   """Celigo job convenience methods combining independent job and image capabilities."""
 
   def __init__(
-    self, stub: job_rpc.JobServiceStub, images: ImageClient, ref: job_pb.JobRef, timeout: float = 20
+    self,
+    stub: job_rpc.JobServiceAsyncStub,
+    images: ImageClient,
+    ref: job_pb.JobRef,
+    timeout: float = 20,
   ) -> None:
     """Bind optional image access alongside the common job handle."""
     super().__init__(stub, ref, timeout)
@@ -115,10 +118,7 @@ class CeligoClient(ImagingClient):
 
   async def configuration(self) -> pb.CeligoConfiguration:
     """Read the calibration-derived configuration for request binding."""
-    return cast(
-      pb.CeligoConfiguration,
-      await self.operations.GetConfiguration(self.request, timeout=self.timeout),
-    )
+    return await self.operations.GetConfiguration(self.request, timeout=self.timeout)
 
   async def create_initialization(self, request_id: str) -> ImagingJob:
     """Create inert initialization tied to the current hardware configuration."""
