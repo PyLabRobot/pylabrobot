@@ -11,6 +11,9 @@ license = {text = "MIT"}
 dynamic = ["version"]
 dependencies = ["typing_extensions", "websockets>=14"]
 
+[project.scripts]
+plr = "pylabrobot.cli:main"
+
 [project.optional-dependencies]
 serial = ["pyserial"]
 usb = ["pyusb", "libusb-package"]
