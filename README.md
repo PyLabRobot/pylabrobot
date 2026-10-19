@@ -21,7 +21,7 @@ Advantages over proprietary software:
 - **Fast iteration**: PyLabRobot enables rapid development of protocols using atomic commands run interactively in Jupyter notebooks or the Python REPL. This decreases iteration time from minutes to seconds.
 - **Open-source**: PyLabRobot is open-source and free to use.
 - **Control**: With Python, you have ultimate flexibility to control your lab automation equipment. You can write Turing-complete protocols that include feedback loops.
-- **Modern**: PyLabRobot is built on modern Python 3.9+ features and async/await syntax.
+- **Modern**: PyLabRobot is built on modern Python 3.10+ features and async/await syntax.
 - **Fast support**: PyLabRobot has [an active community forum](https://discuss.pylabrobot.org) for support and discussion, and most pull requests are merged within a day.
 
 ### Liquid handling robots ([docs](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/_liquid-handling.html))

@@ -195,7 +195,7 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     await self.driver.setup()
     self.head = cast(Head96, self.driver.head96)
     self.head_resource = cast(NChannelPipette, self.head.resource)
-    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    self.tip_car = tip_car = TIP_CAR_480_A00(name="tip carrier")
     tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     # A rack without a frame, which the head may be placed past the edge of.
     tip_car[3] = self.frameless_tip_rack = hamilton_96_tiprack_raised_core_ii(
@@ -274,6 +274,40 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(shaft.has_tip() for shaft in shafts))
         self.tip_rack.fill()
 
+  async def test_tip_commands_travel_in_z_then_in_x_and_y_together_then_only_descend(self):
+    every: List[str] = []
+    log = self.driver._log_exchange
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      every.append(written[:4])
+      log(written, read)
+
+    self.driver._log_exchange = recorded  # type: ignore[method-assign]
+    for command, tip_command in (
+      (self.head.pick_up_tips, "C0EP"),
+      (self.head.drop_tips, "C0ER"),
+    ):
+      every.clear()
+      await command(self.frameless_tip_rack)
+      # The arm's channels up, then X and Y; the tip command comes after them all.
+      order = [every.index(c) for c in ("C0ZA", "X0XP", "H0YA", tip_command)]
+      self.assertEqual(order, sorted(order), every)
+      # The head is raised, if at all, before X and Y move.
+      if "H0ZA" in every:
+        self.assertLess(every.index("H0ZA"), every.index("X0XP"), every)
+      self.assertNotIn("X0XP", every[every.index(tip_command) :])
+
+  async def test_an_offset_moves_the_head_but_not_which_spot_each_channel_takes_from(self):
+    rack, shafts = self.frameless_tip_rack, self.head_resource
+    tips = [spot.tip for spot in rack.get_all_items()]
+
+    # A correction of a few mm: the head goes 2 mm right, each channel still takes its own spot.
+    await self.head.pick_up_tips(rack, offset=Coordinate(2, 0, 0))
+
+    self.assertEqual([shaft.tip for shaft in shafts.get_all_items()], tips)
+    plain = rack.get_item("A1").get_location_wrt(self.deck, "c", "c", "b")
+    self.assertIn(f"xs{round((plain.x + 2) * 10):05}", self.sent[-1])
+
   async def test_a_channel_placed_over_a_spot_takes_only_the_tips_under_the_head(self):
     # Channel H12 over spot D6: channels E7 to H12 stand over spots A1 to D6, the rest past the rack.
     rack, shafts = self.frameless_tip_rack, self.head_resource
@@ -313,8 +347,8 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_failed_pickup_takes_what_the_firmware_holds_and_reads_where_it_stopped(self):
     shafts = self.head_resource.get_all_items()
-    # The guard reads no tips; after the failure the firmware holds that they are on.
-    held = AsyncMock(side_effect=[False, True])
+    # The guard and the travel read no tips; after the failure the firmware holds that they are on.
+    held = AsyncMock(side_effect=[False, False, True])
     read_z = AsyncMock(wraps=self.head.request_z_position)
     with self.failing_on("EP"), patch.object(self.head, "request_tip_presence", held):
       with patch.object(self.head, "request_z_position", read_z):
@@ -363,17 +397,80 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
   async def test_a_drop_that_would_let_a_tip_go_beside_the_rack_is_refused(self):
     await self.head.pick_up_tips(self.tip_rack)
     self.sent.clear()
-    with self.assertRaisesRegex(ValueError, "carry a tip but are not over a spot"):
+    with self.assertRaisesRegex(ValueError, "would drop a tip beside frameless_tip_rack"):
       await self.head.drop_tips(self.frameless_tip_rack, channel="A1", tip_spot="A10")
     self.assertEqual(self.sent, [])
 
+  async def test_a_drop_that_would_put_a_tip_on_a_tip_is_refused_before_anything_moves(self):
+    rack = self.frameless_tip_rack
+    await self.head.pick_up_tips(rack, channel="H12", tip_spot="A1")  # one tip, on H12
+    self.sent.clear()
+    # Spot B1 still holds its tip.
+    with self.assertRaisesRegex(ValueError, r"channels \['H12'\] would put a tip on a tip"):
+      await self.head.drop_tips(rack, channel="H12", tip_spot="B1")
+    self.assertEqual(self.sent, [])
+    self.assertTrue(self.head_resource.get_item("H12").has_tip())
+
+  async def test_a_rack_turned_half_round_is_picked_up_whole_with_h12_over_a1(self):
+    from pylabrobot.resources.hamilton import (
+      hamilton_96_tiprack_raised_core_ii,
+      hamilton_tip_300uL_filter,
+    )
+
+    rack = hamilton_96_tiprack_raised_core_ii("turned_rack", make_tip=hamilton_tip_300uL_filter)
+    rack.rotate(z=180)
+    self.tip_car[4] = rack
+    tips = {spot.name: spot.tip for spot in rack.get_all_items()}
+
+    await self.head.pick_up_tips(rack, channel="H12", tip_spot="A1")
+
+    deck = self.deck
+    for shaft in self.head_resource.get_all_items():
+      tip = shaft.tip
+      spot = next(s for s in rack.get_all_items() if tips[s.name] is tip)
+      # Each tip came from the spot right under its channel.
+      here = shaft.get_location_wrt(deck, "c", "c", "b")
+      there = spot.get_location_wrt(deck, "c", "c", "b")
+      self.assertAlmostEqual(here.x, there.x, places=1, msg=shaft.name)
+      self.assertAlmostEqual(here.y, there.y, places=1, msg=shaft.name)
+    self.assertTrue(all(spot.tip is None for spot in rack.get_all_items()))
+
+  async def test_with_tip_tracking_off_a_pick_up_leaves_the_rack_and_a_drop_into_it_is_refused(
+    self,
+  ):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(False)
+    rack = self.frameless_tip_rack
+    await self.head.pick_up_tips(rack)
+    self.assertTrue(all(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+    self.assertTrue(all(spot.tip is not None for spot in rack.get_all_items()))
+    self.sent.clear()
+    with self.assertRaisesRegex(ValueError, "dropping into a tip rack needs tip tracking"):
+      await self.head.drop_tips(rack)
+    with self.assertRaisesRegex(ValueError, "needs tip tracking"):
+      await self.head.return_tips()
+    self.assertEqual(self.sent, [])
+    await self.head.discard_tips()
+    self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+
+  async def test_with_tip_tracking_off_a_rack_modelled_empty_still_hands_out_tips(self):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(False)
+    rack = self.frameless_tip_rack
+    for spot in rack.get_all_items():
+      spot.unassign_tip()
+    await self.head.pick_up_tips(rack)
+    self.assertTrue(all(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+
   async def test_a_rack_with_a_frame_takes_the_head_only_channel_a1_over_spot_a1(self):
-    with self.assertRaisesRegex(ValueError, "'tip_rack_01' has a frame the head would hit"):
+    with self.assertRaisesRegex(ValueError, "come down on the frame of tip_rack_01"):
       await self.head.pick_up_tips(self.tip_rack, channel="H12", tip_spot="D6")
     self.assertEqual(self.sent, [])
     await self.head.pick_up_tips(self.frameless_tip_rack, channel="H12", tip_spot="D6")
     self.sent.clear()
-    with self.assertRaisesRegex(ValueError, "'tip_rack_01' has a frame the head would hit"):
+    with self.assertRaisesRegex(ValueError, "come down on the frame of tip_rack_01"):
       await self.head.drop_tips(self.tip_rack, channel="H12", tip_spot="D6")
     self.assertEqual(self.sent, [])
 
@@ -432,7 +529,7 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     def failing(failed: str):
       async def answering(module: str, command: str, **kwargs: Any):
         if command == failed:
-          check_fw_string_error(f"C0{failed}id0001er99/00")
+          check_fw_string_error(f"{module}{failed}id0001er99/00")
         return await answer(module, command, **kwargs)
 
       return answering
@@ -443,10 +540,27 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(all(spot.has_tip() for spot in spots))
     self.assertFalse(any(shaft.has_tip() for shaft in shafts))
 
+    # The head's Y move on the way over fails: nothing is picked up, and the command never goes.
+    self.sent.clear()
+    with patch.object(self.driver, "_answer", failing("YA")):
+      with self.assertRaises(STARFirmwareError):
+        await self.head.pick_up_tips(self.tip_rack)
+    self.assertNotIn("C0EP", [written[:4] for written in self.sent])
+    self.assertTrue(all(spot.has_tip() for spot in spots))
+    self.assertFalse(any(shaft.has_tip() for shaft in shafts))
+
     await self.head.pick_up_tips(self.tip_rack)
     with patch.object(self.driver, "_answer", failing("ER")):
       with self.assertRaises(STARFirmwareError):
         await self.head.drop_tips(self.tip_rack)
+    self.assertTrue(all(shaft.has_tip() for shaft in shafts))
+    self.assertFalse(any(spot.has_tip() for spot in spots))
+
+    self.sent.clear()
+    with patch.object(self.driver, "_answer", failing("YA")):
+      with self.assertRaises(STARFirmwareError):
+        await self.head.drop_tips(self.tip_rack)
+    self.assertNotIn("C0ER", [written[:4] for written in self.sent])
     self.assertTrue(all(shaft.has_tip() for shaft in shafts))
     self.assertFalse(any(spot.has_tip() for spot in spots))
 

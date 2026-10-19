@@ -6,10 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "PyLabRobot"
 description = "A hardware agnostic platform for lab automation"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 dynamic = ["version"]
 dependencies = ["typing_extensions", "websockets>=14"]
+
+[project.scripts]
+plr = "pylabrobot.cli:main"
+celigo-grpc = "pylabrobot.revvity.celigo.grpc.hardware_cli:main"
 
 [project.optional-dependencies]
 serial = ["pyserial"]
@@ -52,9 +56,6 @@ dev = [
   "myst_nb",
   "sphinx_copybutton",
 ]
-
-[project.scripts]
-celigo-grpc = "pylabrobot.revvity.celigo.grpc.hardware_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/pylabrobot/pylabrobot"
