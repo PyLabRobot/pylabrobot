@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package celigo.v1;
 
+import "google/protobuf/empty.proto";
 import "pylabrobot/rpc/v1/device.proto";
 import "pylabrobot/rpc/v1/jobs.proto";
 
@@ -24,6 +25,12 @@ message BrightfieldRequest {
   string request_id = 2;
   string configuration_id = 3;
   BrightfieldSettings settings = 4;
+}
+
+message CloseDoorRequest {
+  string device_id = 1;
+  optional double sample_x_mm = 2;
+  optional double sample_y_mm = 3;
 }
 
 message CeligoJobSpecification {
@@ -62,6 +69,9 @@ message AcquisitionMetadata {
 
 service CeligoService {
   rpc GetConfiguration(pylabrobot.rpc.v1.DeviceRequest) returns (CeligoConfiguration);
+  // Drawer commands wait for motion to finish. Disconnecting does not stop motion.
+  rpc OpenDoor(pylabrobot.rpc.v1.DeviceRequest) returns (google.protobuf.Empty);
+  rpc CloseDoor(CloseDoorRequest) returns (google.protobuf.Empty);
   rpc CreateInitialization(InitializationRequest) returns (pylabrobot.rpc.v1.JobRef);
   rpc CreateBrightfieldCapture(BrightfieldRequest) returns (pylabrobot.rpc.v1.JobRef);
 }

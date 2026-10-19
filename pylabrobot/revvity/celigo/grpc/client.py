@@ -76,6 +76,19 @@ class CeligoClient(DeviceClient):
     """Read the calibration-derived configuration for request binding."""
     return await self.operations.GetConfiguration(self.request, timeout=self.timeout)
 
+  async def open_door(self) -> None:
+    """Eject the initialized instrument's drawer and wait for motion to finish."""
+    await self.operations.OpenDoor(self.request, timeout=self.timeout)
+
+  async def close_door(self, *, sample_x_mm: float, sample_y_mm: float) -> None:
+    """Load the drawer at sample-relative XY and wait for motion to finish."""
+    await self.operations.CloseDoor(
+      pb.CloseDoorRequest(
+        device_id=self.device_id, sample_x_mm=sample_x_mm, sample_y_mm=sample_y_mm
+      ),
+      timeout=self.timeout,
+    )
+
   async def create_initialization(self, request_id: str) -> CeligoImagingJob:
     """Create inert initialization tied to the current hardware configuration."""
     ref = await self.operations.CreateInitialization(

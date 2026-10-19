@@ -56,6 +56,132 @@ async def hardware_system(tmp_path, config):
 
 
 class SessionTests(unittest.IsolatedAsyncioTestCase):
+  async def test_door_commands_require_initialization_and_use_public_driver_methods(self) -> None:
+    """Door RPCs use the owned driver without creating another session or a job."""
+    with TemporaryDirectory() as directory:
+      async with hardware_system(Path(directory), make_config()) as hardware:
+        server, client, driver, factory = hardware
+        for opening in (True, False):
+          with self.subTest(opening=opening):
+            with self.assertRaises(grpc.aio.AioRpcError) as error:
+              if opening:
+                await client.open_door()
+              else:
+                await client.close_door(sample_x_mm=63.5, sample_y_mm=43)
+            self.assertEqual(error.exception.code(), grpc.StatusCode.FAILED_PRECONDITION)
+        factory.assert_not_called()
+        await initialize(client)
+        await client.open_door()
+        await client.close_door(sample_x_mm=63.5, sample_y_mm=43)
+        driver.open_drawer.assert_awaited_once_with()
+        driver.close_drawer_to_sample_mm.assert_awaited_once_with(63.5, 43)
+        factory.assert_called_once_with()
+        self.assertEqual(len(server.session.jobs), 1)
+        self.assertEqual((await client.status()).state, device_pb.OPERATIONAL_STATE_READY)
+
+  async def test_invalid_door_requests_do_not_move_or_fault(self) -> None:
+    """Reject missing, invalid, and misaddressed targets before hardware access."""
+    with TemporaryDirectory() as directory:
+      async with hardware_system(Path(directory), make_config()) as hardware:
+        _, client, driver, _ = hardware
+        await initialize(client)
+        for settings in (
+          {},
+          {"sample_x_mm": 63.5},
+          {"sample_y_mm": 43},
+          {"sample_x_mm": float("nan"), "sample_y_mm": 43},
+          {"sample_x_mm": 63.5, "sample_y_mm": float("inf")},
+          {"sample_x_mm": 100000, "sample_y_mm": 43},
+        ):
+          with self.subTest(settings=settings):
+            with self.assertRaises(grpc.aio.AioRpcError) as error:
+              await client.operations.CloseDoor(
+                pb.CloseDoorRequest(device_id=client.device_id, **settings), timeout=5
+              )
+            self.assertEqual(error.exception.code(), grpc.StatusCode.INVALID_ARGUMENT)
+        with self.assertRaises(grpc.aio.AioRpcError) as error:
+          await client.operations.OpenDoor(device_pb.DeviceRequest(device_id="other"), timeout=5)
+        self.assertEqual(error.exception.code(), grpc.StatusCode.NOT_FOUND)
+        with self.assertRaises(grpc.aio.AioRpcError) as error:
+          await client.operations.CloseDoor(
+            pb.CloseDoorRequest(device_id="other", sample_x_mm=63.5, sample_y_mm=43), timeout=5
+          )
+        self.assertEqual(error.exception.code(), grpc.StatusCode.NOT_FOUND)
+        driver.open_drawer.assert_not_awaited()
+        driver.close_drawer_to_sample_mm.assert_not_awaited()
+        self.assertEqual((await client.status()).state, device_pb.OPERATIONAL_STATE_READY)
+
+  async def test_door_motion_keeps_ownership_after_rpc_deadline(self) -> None:
+    """A lost RPC response cannot allow acquisition or another door command to overlap."""
+    with TemporaryDirectory() as directory:
+      async with hardware_system(Path(directory), make_config()) as hardware:
+        _, client, driver, _ = hardware
+        await initialize(client)
+        job = await capture(client)
+        with block_calls(driver.open_drawer) as (entered, release):
+          call = client.operations.OpenDoor(client.request, timeout=0.2)
+          await asyncio.wait_for(entered.wait(), 5)
+          with self.assertRaises(grpc.aio.AioRpcError) as expired:
+            await call
+          self.assertEqual(expired.exception.code(), grpc.StatusCode.DEADLINE_EXCEEDED)
+          async with client.status_updates() as updates:
+            busy = await asyncio.wait_for(updates.get(), 5)
+            self.assertEqual(busy.state, device_pb.OPERATIONAL_STATE_BUSY)
+            self.assertEqual(busy.active_job_id, "")
+            with self.assertRaises(grpc.aio.AioRpcError) as conflict:
+              await job.start()
+            self.assertEqual(conflict.exception.code(), grpc.StatusCode.RESOURCE_EXHAUSTED)
+            with self.assertRaises(grpc.aio.AioRpcError) as conflict:
+              await client.close_door(sample_x_mm=63.5, sample_y_mm=43)
+            self.assertEqual(conflict.exception.code(), grpc.StatusCode.RESOURCE_EXHAUSTED)
+            driver.close_drawer_to_sample_mm.assert_not_awaited()
+            driver.stop.assert_not_awaited()
+            release.set()
+            ready = await asyncio.wait_for(updates.get(), 5)
+            self.assertEqual(ready.state, device_pb.OPERATIONAL_STATE_READY)
+        await job.start()
+        self.assertEqual((await job.wait()).outcome, job_pb.OUTCOME_SUCCEEDED)
+
+  async def test_door_commands_reject_active_acquisition(self) -> None:
+    """Drawer motion cannot interrupt a job that already owns the instrument."""
+    with TemporaryDirectory() as directory:
+      async with hardware_system(Path(directory), make_config()) as hardware:
+        _, client, driver, _ = hardware
+        await initialize(client)
+        with block_calls(driver.acquire_scan_position) as (entered, release):
+          job = await capture(client)
+          await job.start()
+          await asyncio.wait_for(entered.wait(), 5)
+          for opening in (True, False):
+            with self.subTest(opening=opening):
+              with self.assertRaises(grpc.aio.AioRpcError) as error:
+                if opening:
+                  await client.open_door()
+                else:
+                  await client.close_door(sample_x_mm=63.5, sample_y_mm=43)
+              self.assertEqual(error.exception.code(), grpc.StatusCode.RESOURCE_EXHAUSTED)
+          driver.open_drawer.assert_not_awaited()
+          driver.close_drawer_to_sample_mm.assert_not_awaited()
+          release.set()
+          self.assertEqual((await job.wait()).outcome, job_pb.OUTCOME_SUCCEEDED)
+
+  async def test_failed_door_motion_closes_driver_and_faults_session(self) -> None:
+    """Failed drawer motion blocks subsequent work until service recovery."""
+    with TemporaryDirectory() as directory:
+      async with hardware_system(Path(directory), make_config()) as hardware:
+        _, client, driver, _ = hardware
+        await initialize(client)
+        driver.close_drawer_to_sample_mm.side_effect = RuntimeError("motion failed")
+        with self.assertRaises(grpc.aio.AioRpcError) as error:
+          await client.close_door(sample_x_mm=63.5, sample_y_mm=43)
+        self.assertEqual(error.exception.code(), grpc.StatusCode.INTERNAL)
+        driver.stop.assert_awaited_once_with()
+        self.assertEqual((await client.status()).state, device_pb.OPERATIONAL_STATE_FAULTED)
+        with self.assertRaises(grpc.aio.AioRpcError) as error:
+          await client.open_door()
+        self.assertEqual(error.exception.code(), grpc.StatusCode.UNAVAILABLE)
+        driver.open_drawer.assert_not_awaited()
+
   async def test_startup_inspection_and_job_creation_never_construct_driver(self) -> None:
     with TemporaryDirectory() as temporary_directory:
       tmp_path = Path(temporary_directory)

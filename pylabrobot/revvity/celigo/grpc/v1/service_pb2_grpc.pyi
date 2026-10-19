@@ -4,6 +4,7 @@ isort:skip_file
 """
 
 from collections import abc as _abc
+from google.protobuf import empty_pb2 as _empty_pb2
 from grpc import aio as _aio
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as _service_pb2
 from pylabrobot.rpc.v1 import device_pb2 as _device_pb2
@@ -34,6 +35,9 @@ class CeligoServiceStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> CeligoServiceAsyncStub: ...
     GetConfiguration: _grpc.UnaryUnaryMultiCallable[_device_pb2.DeviceRequest, _service_pb2.CeligoConfiguration]
+    OpenDoor: _grpc.UnaryUnaryMultiCallable[_device_pb2.DeviceRequest, _empty_pb2.Empty]
+    """Drawer commands wait for motion to finish. Disconnecting does not stop motion."""
+    CloseDoor: _grpc.UnaryUnaryMultiCallable[_service_pb2.CloseDoorRequest, _empty_pb2.Empty]
     CreateInitialization: _grpc.UnaryUnaryMultiCallable[_service_pb2.InitializationRequest, _jobs_pb2.JobRef]
     CreateBrightfieldCapture: _grpc.UnaryUnaryMultiCallable[_service_pb2.BrightfieldRequest, _jobs_pb2.JobRef]
 
@@ -41,6 +45,9 @@ class CeligoServiceStub:
 class CeligoServiceAsyncStub(CeligoServiceStub):
     def __init__(self, channel: _aio.Channel) -> None: ...
     GetConfiguration: _aio.UnaryUnaryMultiCallable[_device_pb2.DeviceRequest, _service_pb2.CeligoConfiguration]  # type: ignore[assignment]
+    OpenDoor: _aio.UnaryUnaryMultiCallable[_device_pb2.DeviceRequest, _empty_pb2.Empty]  # type: ignore[assignment]
+    """Drawer commands wait for motion to finish. Disconnecting does not stop motion."""
+    CloseDoor: _aio.UnaryUnaryMultiCallable[_service_pb2.CloseDoorRequest, _empty_pb2.Empty]  # type: ignore[assignment]
     CreateInitialization: _aio.UnaryUnaryMultiCallable[_service_pb2.InitializationRequest, _jobs_pb2.JobRef]  # type: ignore[assignment]
     CreateBrightfieldCapture: _aio.UnaryUnaryMultiCallable[_service_pb2.BrightfieldRequest, _jobs_pb2.JobRef]  # type: ignore[assignment]
 
@@ -51,6 +58,21 @@ class CeligoServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _device_pb2.DeviceRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_service_pb2.CeligoConfiguration, _abc.Awaitable[_service_pb2.CeligoConfiguration]]: ...
+
+    @_abc_1.abstractmethod
+    def OpenDoor(
+        self,
+        request: _device_pb2.DeviceRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_empty_pb2.Empty, _abc.Awaitable[_empty_pb2.Empty]]:
+        """Drawer commands wait for motion to finish. Disconnecting does not stop motion."""
+
+    @_abc_1.abstractmethod
+    def CloseDoor(
+        self,
+        request: _service_pb2.CloseDoorRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_empty_pb2.Empty, _abc.Awaitable[_empty_pb2.Empty]]: ...
 
     @_abc_1.abstractmethod
     def CreateInitialization(

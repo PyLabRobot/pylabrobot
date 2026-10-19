@@ -88,10 +88,12 @@ accessing USB.
 
 ## RPC operations
 
-The physical adapter supports initialization and one brightfield frame at
-explicit sample XY, fixed Z, exposure, and gain. It records actual acquisition
-metadata. Autofocus, auto-exposure, drawer movement, and full plate scanning are
-not exposed by this transport. Laser operation is disabled.
+The physical adapter supports initialization, drawer opening and closing, and one
+brightfield frame at explicit sample XY, fixed Z, exposure, and gain. Drawer
+commands require initialization and exclusive instrument ownership; closing uses
+explicit sample XY coordinates. Capture records actual acquisition metadata.
+Autofocus, auto-exposure, and full plate scanning are not exposed by this
+transport. Laser operation is disabled.
 
 See the [Celigo gRPC reference](https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/revvity/celigo/grpc/README.md)
 for the protocol, job lifecycle, Python client, and service development details.

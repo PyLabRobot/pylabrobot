@@ -46,7 +46,7 @@ installation, connection setup, and the `plr dev celigo serve` and
 | Service | Methods |
 | --- | --- |
 | `pylabrobot.rpc.v1.DeviceService` | `GetDevice`, `GetStatus`, `WatchStatus` |
-| `celigo.v1.CeligoService` | `GetConfiguration`, `CreateInitialization`, `CreateBrightfieldCapture` |
+| `celigo.v1.CeligoService` | `GetConfiguration`, `OpenDoor`, `CloseDoor`, `CreateInitialization`, `CreateBrightfieldCapture` |
 | `pylabrobot.rpc.v1.JobService` | `GetJob`, `GetJobByRequestId`, `StartJob`, `CancelJob`, `WatchJob` |
 | `pylabrobot.rpc.v1.ImageService` | `GetCapabilities`, `GetJobImageRetention`, `ReleaseJobImages`, `ListFrames`, `GetFrame`, `WatchPreview` |
 
@@ -56,6 +56,15 @@ continues independently of its client. Jobs follow Ready → Running → Finishe
 outcome is Pending, Succeeded, Cancelled, Failed, or Interrupted. Cancellation
 waits for in-flight hardware work and cleanup before releasing ownership.
 Disconnects and RPC deadlines do not cancel accepted execution.
+
+`OpenDoor` ejects the drawer; `CloseDoor` loads it at explicit sample-relative XY
+coordinates in millimeters. Both require an initialized, idle instrument and wait
+for motion to finish. Device status is Busy during drawer motion, with no active
+job ID. Concurrent job starts and drawer commands are rejected. Accepted motion
+continues if the caller disconnects or its deadline expires, and service shutdown
+waits for it. These commands do not create durable job records; after a lost
+response, status indicates whether motion is still running or has faulted, but
+does not report the drawer's physical position.
 
 SQLite retains requests, job transitions, and complete images. Restart recovery
 marks formerly Running jobs Interrupted, preserves committed images, and leaves
@@ -108,6 +117,12 @@ async def retrieve() -> list[bytes]:
 Use `acquisition_metadata(frame)` from the client module to unpack and validate
 Celigo metadata. `job.image_retention()` reads release state, and
 `job.release_images()` returns that state after durable release.
+
+On an initialized instrument, use `await client.open_door()` to eject the drawer,
+and `await client.close_door(sample_x_mm=63.5, sample_y_mm=43.0)` to load it at a
+sample-relative position. Supply coordinates appropriate for the carrier; the
+server uses the existing driver methods `open_drawer()` and
+`close_drawer_to_sample_mm()` without requiring a server-side plate resource.
 
 ## Compatibility
 

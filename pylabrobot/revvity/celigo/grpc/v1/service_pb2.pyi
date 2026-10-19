@@ -1,3 +1,4 @@
+from google.protobuf import empty_pb2 as _empty_pb2
 from pylabrobot.rpc.v1 import device_pb2 as _device_pb2
 from pylabrobot.rpc.v1 import jobs_pb2 as _jobs_pb2
 from google.protobuf.internal import containers as _containers
@@ -43,6 +44,16 @@ class BrightfieldRequest(_message.Message):
     configuration_id: str
     settings: BrightfieldSettings
     def __init__(self, device_id: _Optional[str] = ..., request_id: _Optional[str] = ..., configuration_id: _Optional[str] = ..., settings: _Optional[_Union[BrightfieldSettings, _Mapping]] = ...) -> None: ...
+
+class CloseDoorRequest(_message.Message):
+    __slots__ = ("device_id", "sample_x_mm", "sample_y_mm")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SAMPLE_X_MM_FIELD_NUMBER: _ClassVar[int]
+    SAMPLE_Y_MM_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    sample_x_mm: float
+    sample_y_mm: float
+    def __init__(self, device_id: _Optional[str] = ..., sample_x_mm: _Optional[float] = ..., sample_y_mm: _Optional[float] = ...) -> None: ...
 
 class CeligoJobSpecification(_message.Message):
     __slots__ = ("capture", "width", "height")

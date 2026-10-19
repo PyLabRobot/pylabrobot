@@ -18,6 +18,7 @@ from uuid import uuid4
 from pylabrobot.__version__ import __version__
 from pylabrobot.revvity.celigo.celigo import Celigo
 from pylabrobot.revvity.celigo.config import CeligoConfig
+from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
 from pylabrobot.revvity.celigo.grpc.acquisition_job import AcquisitionJob, owned_operation
 from pylabrobot.revvity.celigo.grpc.image_encoding import encode_frame, public_frame
 from pylabrobot.revvity.celigo.grpc.job_specification import Brightfield, JobSpecification
@@ -47,7 +48,7 @@ class CeligoSession:
 
   device_type = "Celigo"
   display_name = "Celigo"
-  supported_operations = ("Initialize", "BrightfieldCapture")
+  supported_operations = ("Initialize", "BrightfieldCapture", "OpenDoor", "CloseDoor")
 
   def __init__(
     self,
@@ -83,6 +84,7 @@ class CeligoSession:
     self.jobs: dict[str, AcquisitionJob] = {}
     self.requests: dict[str, AcquisitionJob] = {}
     self.active_job: AcquisitionJob | None = None
+    self.door_moving = False
     self.closing = False
     self.initialized = False
     self.fault = ""
@@ -178,6 +180,8 @@ class CeligoSession:
         if self.active_job.status.kind == "Initialize"
         else device_pb.OPERATIONAL_STATE_BUSY
       )
+    elif self.door_moving:
+      self.status.state = device_pb.OPERATIONAL_STATE_BUSY
     else:
       self.status.state = (
         device_pb.OPERATIONAL_STATE_READY
@@ -209,12 +213,12 @@ class CeligoSession:
       raise
 
   async def command(self, operation: Coroutine[object, object, T]) -> T:
-    """A lost response never interrupts the commit/executor bookkeeping boundary."""
+    """Keep accepted motion and durable bookkeeping alive if the caller disconnects."""
     if self.closing or len(self.commands) >= self.command_limit:
       operation.close()
       if self.closing:
         raise StateError("service is stopping")
-      raise CapacityError("too many pending durable commands")
+      raise CapacityError("too many pending commands")
     task = asyncio.create_task(operation)
     self.commands.add(task)
 
@@ -382,6 +386,56 @@ class CeligoSession:
       await self.driver.stop()
       self.driver = None
     self.initialized = False
+
+  async def _move_door(self, sample_position: tuple[float, float] | None) -> None:
+    """Own drawer motion until completion; a missing position selects ejection."""
+    async with self.lock:
+      self.ensure_available()
+      if self.active_job is not None or self.door_moving:
+        raise BusyError("another operation owns the instrument")
+      driver = self.driver
+      if not self.initialized or driver is None:
+        raise StateError("explicit initialization is required before drawer motion")
+      self.door_moving = True
+      self.publish_device()
+    try:
+      if sample_position is None:
+        await driver.open_drawer()
+      else:
+        await driver.close_drawer_to_sample_mm(*sample_position)
+    except BaseException:
+      self.fault = "Drawer motion failed; restart the service before further motion."
+      try:
+        await self.close_driver()
+      except BaseException:
+        self.fault = "Hardware cleanup failed; physical state requires inspection."
+        self.initialized = False
+        raise
+      raise
+    finally:
+      async with self.lock:
+        self.door_moving = False
+        self.publish_device()
+
+  async def open_door(self) -> None:
+    """Eject the drawer, retaining ownership if the caller disconnects."""
+    await self.command(self._move_door(None))
+
+  async def close_door(self, *, sample_x_mm: float, sample_y_mm: float) -> None:
+    """Validate sample XY and load the drawer independently of the caller's lifetime."""
+    if not all(math.isfinite(value) for value in (sample_x_mm, sample_y_mm)):
+      raise ValueError("sample X/Y coordinates must be finite")
+    coordinates = CoordinateSystems.from_config(
+      self.config.calibration, self.config.hardware_defaults
+    )
+    x, y = coordinates.sample_mm_to_stage_mm(sample_x_mm, sample_y_mm)
+    for axis, target in ((self.config.hardware.x_axis, x), (self.config.hardware.y_axis, y)):
+      if axis is None:
+        raise StateError("drawer motion requires configured X and Y axes")
+      low, high = sorted((axis.min_position, axis.max_position))
+      if not math.isfinite(target) or not low <= target <= high:
+        raise ValueError("sample X/Y target is outside calibrated travel")
+    await self.command(self._move_door((sample_x_mm, sample_y_mm)))
 
   async def finish_operation(self, job: AcquisitionJob, failed: bool) -> None:
     if failed or job.stop_requested.is_set():

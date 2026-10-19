@@ -76,9 +76,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
   """Parse Celigo arguments and run the selected operation."""
   parser = argparse.ArgumentParser(prog="plr dev celigo", description=__doc__)
   commands = parser.add_subparsers(dest="command", required=True)
-  server = commands.add_parser(
-    "serve", help="start without motion; physical operations require StartJob"
-  )
+  server = commands.add_parser("serve", help="start the service without opening or moving hardware")
   server.add_argument("--data-dir", type=Path, required=True)
   server.add_argument("--config-root", type=Path, required=True)
   server.add_argument("--lucam-sdk", required=True)

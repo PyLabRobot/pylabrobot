@@ -22,29 +22,32 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from pylabrobot.rpc.v1 import device_pb2 as pylabrobot_dot_rpc_dot_v1_dot_device__pb2
 from pylabrobot.rpc.v1 import jobs_pb2 as pylabrobot_dot_rpc_dot_v1_dot_jobs__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n/pylabrobot/revvity/celigo/grpc/v1/service.proto\x12\tceligo.v1\x1a\x1epylabrobot/rpc/v1/device.proto\x1a\x1cpylabrobot/rpc/v1/jobs.proto\"X\n\x15InitializationRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\x12\x18\n\x10\x63onfiguration_id\x18\x03 \x01(\t\"\xcb\x01\n\x13\x42rightfieldSettings\x12\x18\n\x0bsample_x_mm\x18\x01 \x01(\x01H\x00\x88\x01\x01\x12\x18\n\x0bsample_y_mm\x18\x02 \x01(\x01H\x01\x88\x01\x01\x12\x11\n\x04z_mm\x18\x03 \x01(\x01H\x02\x88\x01\x01\x12\x18\n\x0b\x65xposure_ms\x18\x04 \x01(\x01H\x03\x88\x01\x01\x12\x11\n\x04gain\x18\x05 \x01(\x01H\x04\x88\x01\x01\x42\x0e\n\x0c_sample_x_mmB\x0e\n\x0c_sample_y_mmB\x07\n\x05_z_mmB\x0e\n\x0c_exposure_msB\x07\n\x05_gain\"\x87\x01\n\x12\x42rightfieldRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\x12\x18\n\x10\x63onfiguration_id\x18\x03 \x01(\t\x12\x30\n\x08settings\x18\x04 \x01(\x0b\x32\x1e.celigo.v1.BrightfieldSettings\"h\n\x16\x43\x65ligoJobSpecification\x12/\n\x07\x63\x61pture\x18\x01 \x01(\x0b\x32\x1e.celigo.v1.BrightfieldSettings\x12\r\n\x05width\x18\x02 \x01(\r\x12\x0e\n\x06height\x18\x03 \x01(\r\"\xfe\x01\n\x13\x43\x65ligoConfiguration\x12\x18\n\x10\x63onfiguration_id\x18\x01 \x01(\t\x12\r\n\x05width\x18\x02 \x01(\r\x12\x0e\n\x06height\x18\x03 \x01(\r\x12\x10\n\x08\x63hannels\x18\x04 \x03(\t\x12#\n\x1b\x63\x61librated_brightfield_z_mm\x18\x05 \x01(\x01\x12\x14\n\x0cminimum_z_mm\x18\x06 \x01(\x01\x12\x14\n\x0cmaximum_z_mm\x18\x07 \x01(\x01\x12\x18\n\x10\x63\x61pture_contract\x18\x08 \x01(\t\x12\x1b\n\x13maximum_exposure_ms\x18\t \x01(\x01\x12\x14\n\x0cmaximum_gain\x18\n \x01(\x01\"\x87\x02\n\x13\x41\x63quisitionMetadata\x12\x0f\n\x07\x63hannel\x18\x01 \x01(\t\x12\x13\n\x0b\x65xposure_ms\x18\x02 \x01(\x01\x12\x0c\n\x04gain\x18\x03 \x01(\x01\x12\x13\n\x0bsample_x_mm\x18\x04 \x01(\x01\x12\x13\n\x0bsample_y_mm\x18\x05 \x01(\x01\x12\x0c\n\x04z_mm\x18\x06 \x01(\x01\x12\x14\n\x0c\x66ocus_method\x18\x07 \x01(\t\x12\x12\n\nstage_x_mm\x18\x08 \x01(\x01\x12\x12\n\nstage_y_mm\x18\t \x01(\x01\x12\x15\n\rgalvo_x_volts\x18\n \x01(\x01\x12\x15\n\rgalvo_y_volts\x18\x0b \x01(\x01\x12\x18\n\x10\x63onfiguration_id\x18\x0c \x01(\t2\x90\x02\n\rCeligoService\x12T\n\x10GetConfiguration\x12 .pylabrobot.rpc.v1.DeviceRequest\x1a\x1e.celigo.v1.CeligoConfiguration\x12S\n\x14\x43reateInitialization\x12 .celigo.v1.InitializationRequest\x1a\x19.pylabrobot.rpc.v1.JobRef\x12T\n\x18\x43reateBrightfieldCapture\x12\x1d.celigo.v1.BrightfieldRequest\x1a\x19.pylabrobot.rpc.v1.JobRefb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n/pylabrobot/revvity/celigo/grpc/v1/service.proto\x12\tceligo.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1epylabrobot/rpc/v1/device.proto\x1a\x1cpylabrobot/rpc/v1/jobs.proto\"X\n\x15InitializationRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\x12\x18\n\x10\x63onfiguration_id\x18\x03 \x01(\t\"\xcb\x01\n\x13\x42rightfieldSettings\x12\x18\n\x0bsample_x_mm\x18\x01 \x01(\x01H\x00\x88\x01\x01\x12\x18\n\x0bsample_y_mm\x18\x02 \x01(\x01H\x01\x88\x01\x01\x12\x11\n\x04z_mm\x18\x03 \x01(\x01H\x02\x88\x01\x01\x12\x18\n\x0b\x65xposure_ms\x18\x04 \x01(\x01H\x03\x88\x01\x01\x12\x11\n\x04gain\x18\x05 \x01(\x01H\x04\x88\x01\x01\x42\x0e\n\x0c_sample_x_mmB\x0e\n\x0c_sample_y_mmB\x07\n\x05_z_mmB\x0e\n\x0c_exposure_msB\x07\n\x05_gain\"\x87\x01\n\x12\x42rightfieldRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\x12\x18\n\x10\x63onfiguration_id\x18\x03 \x01(\t\x12\x30\n\x08settings\x18\x04 \x01(\x0b\x32\x1e.celigo.v1.BrightfieldSettings\"y\n\x10\x43loseDoorRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\x12\x18\n\x0bsample_x_mm\x18\x02 \x01(\x01H\x00\x88\x01\x01\x12\x18\n\x0bsample_y_mm\x18\x03 \x01(\x01H\x01\x88\x01\x01\x42\x0e\n\x0c_sample_x_mmB\x0e\n\x0c_sample_y_mm\"h\n\x16\x43\x65ligoJobSpecification\x12/\n\x07\x63\x61pture\x18\x01 \x01(\x0b\x32\x1e.celigo.v1.BrightfieldSettings\x12\r\n\x05width\x18\x02 \x01(\r\x12\x0e\n\x06height\x18\x03 \x01(\r\"\xfe\x01\n\x13\x43\x65ligoConfiguration\x12\x18\n\x10\x63onfiguration_id\x18\x01 \x01(\t\x12\r\n\x05width\x18\x02 \x01(\r\x12\x0e\n\x06height\x18\x03 \x01(\r\x12\x10\n\x08\x63hannels\x18\x04 \x03(\t\x12#\n\x1b\x63\x61librated_brightfield_z_mm\x18\x05 \x01(\x01\x12\x14\n\x0cminimum_z_mm\x18\x06 \x01(\x01\x12\x14\n\x0cmaximum_z_mm\x18\x07 \x01(\x01\x12\x18\n\x10\x63\x61pture_contract\x18\x08 \x01(\t\x12\x1b\n\x13maximum_exposure_ms\x18\t \x01(\x01\x12\x14\n\x0cmaximum_gain\x18\n \x01(\x01\"\x87\x02\n\x13\x41\x63quisitionMetadata\x12\x0f\n\x07\x63hannel\x18\x01 \x01(\t\x12\x13\n\x0b\x65xposure_ms\x18\x02 \x01(\x01\x12\x0c\n\x04gain\x18\x03 \x01(\x01\x12\x13\n\x0bsample_x_mm\x18\x04 \x01(\x01\x12\x13\n\x0bsample_y_mm\x18\x05 \x01(\x01\x12\x0c\n\x04z_mm\x18\x06 \x01(\x01\x12\x14\n\x0c\x66ocus_method\x18\x07 \x01(\t\x12\x12\n\nstage_x_mm\x18\x08 \x01(\x01\x12\x12\n\nstage_y_mm\x18\t \x01(\x01\x12\x15\n\rgalvo_x_volts\x18\n \x01(\x01\x12\x15\n\rgalvo_y_volts\x18\x0b \x01(\x01\x12\x18\n\x10\x63onfiguration_id\x18\x0c \x01(\t2\x98\x03\n\rCeligoService\x12T\n\x10GetConfiguration\x12 .pylabrobot.rpc.v1.DeviceRequest\x1a\x1e.celigo.v1.CeligoConfiguration\x12\x44\n\x08OpenDoor\x12 .pylabrobot.rpc.v1.DeviceRequest\x1a\x16.google.protobuf.Empty\x12@\n\tCloseDoor\x12\x1b.celigo.v1.CloseDoorRequest\x1a\x16.google.protobuf.Empty\x12S\n\x14\x43reateInitialization\x12 .celigo.v1.InitializationRequest\x1a\x19.pylabrobot.rpc.v1.JobRef\x12T\n\x18\x43reateBrightfieldCapture\x12\x1d.celigo.v1.BrightfieldRequest\x1a\x19.pylabrobot.rpc.v1.JobRefb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'pylabrobot.revvity.celigo.grpc.v1.service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_INITIALIZATIONREQUEST']._serialized_start=124
-  _globals['_INITIALIZATIONREQUEST']._serialized_end=212
-  _globals['_BRIGHTFIELDSETTINGS']._serialized_start=215
-  _globals['_BRIGHTFIELDSETTINGS']._serialized_end=418
-  _globals['_BRIGHTFIELDREQUEST']._serialized_start=421
-  _globals['_BRIGHTFIELDREQUEST']._serialized_end=556
-  _globals['_CELIGOJOBSPECIFICATION']._serialized_start=558
-  _globals['_CELIGOJOBSPECIFICATION']._serialized_end=662
-  _globals['_CELIGOCONFIGURATION']._serialized_start=665
-  _globals['_CELIGOCONFIGURATION']._serialized_end=919
-  _globals['_ACQUISITIONMETADATA']._serialized_start=922
-  _globals['_ACQUISITIONMETADATA']._serialized_end=1185
-  _globals['_CELIGOSERVICE']._serialized_start=1188
-  _globals['_CELIGOSERVICE']._serialized_end=1460
+  _globals['_INITIALIZATIONREQUEST']._serialized_start=153
+  _globals['_INITIALIZATIONREQUEST']._serialized_end=241
+  _globals['_BRIGHTFIELDSETTINGS']._serialized_start=244
+  _globals['_BRIGHTFIELDSETTINGS']._serialized_end=447
+  _globals['_BRIGHTFIELDREQUEST']._serialized_start=450
+  _globals['_BRIGHTFIELDREQUEST']._serialized_end=585
+  _globals['_CLOSEDOORREQUEST']._serialized_start=587
+  _globals['_CLOSEDOORREQUEST']._serialized_end=708
+  _globals['_CELIGOJOBSPECIFICATION']._serialized_start=710
+  _globals['_CELIGOJOBSPECIFICATION']._serialized_end=814
+  _globals['_CELIGOCONFIGURATION']._serialized_start=817
+  _globals['_CELIGOCONFIGURATION']._serialized_end=1071
+  _globals['_ACQUISITIONMETADATA']._serialized_start=1074
+  _globals['_ACQUISITIONMETADATA']._serialized_end=1337
+  _globals['_CELIGOSERVICE']._serialized_start=1340
+  _globals['_CELIGOSERVICE']._serialized_end=1748
 # @@protoc_insertion_point(module_scope)

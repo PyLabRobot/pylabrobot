@@ -59,8 +59,8 @@ class AcquisitionJob:
         return copy_message(self.status)
       if self.status.state != job_pb.JOB_STATE_READY or self.stop_requested.is_set():
         raise StateError("finished or cancelling jobs cannot start")
-      if self.session.active_job is not None:
-        raise BusyError("another job owns the instrument")
+      if self.session.active_job is not None or self.session.door_moving:
+        raise BusyError("another operation owns the instrument")
       if self.status.configuration_id != self.session.configuration_id:
         raise StateError("job configuration no longer matches the service")
       if self.status.kind != "Initialize" and not self.session.initialized:

@@ -3,6 +3,7 @@
 import grpc
 import warnings
 
+from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2
 from pylabrobot.rpc.v1 import device_pb2 as pylabrobot_dot_rpc_dot_v1_dot_device__pb2
 from pylabrobot.rpc.v1 import jobs_pb2 as pylabrobot_dot_rpc_dot_v1_dot_jobs__pb2
@@ -41,6 +42,16 @@ class CeligoServiceStub:
                 request_serializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.SerializeToString,
                 response_deserializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CeligoConfiguration.FromString,
                 _registered_method=True)
+        self.OpenDoor = channel.unary_unary(
+                '/celigo.v1.CeligoService/OpenDoor',
+                request_serializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                _registered_method=True)
+        self.CloseDoor = channel.unary_unary(
+                '/celigo.v1.CeligoService/CloseDoor',
+                request_serializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CloseDoorRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                _registered_method=True)
         self.CreateInitialization = channel.unary_unary(
                 '/celigo.v1.CeligoService/CreateInitialization',
                 request_serializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.InitializationRequest.SerializeToString,
@@ -57,6 +68,19 @@ class CeligoServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
     def GetConfiguration(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def OpenDoor(self, request, context):
+        """Drawer commands wait for motion to finish. Disconnecting does not stop motion.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CloseDoor(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -81,6 +105,16 @@ def add_CeligoServiceServicer_to_server(servicer, server):
                     servicer.GetConfiguration,
                     request_deserializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.FromString,
                     response_serializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CeligoConfiguration.SerializeToString,
+            ),
+            'OpenDoor': grpc.unary_unary_rpc_method_handler(
+                    servicer.OpenDoor,
+                    request_deserializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
+            'CloseDoor': grpc.unary_unary_rpc_method_handler(
+                    servicer.CloseDoor,
+                    request_deserializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CloseDoorRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'CreateInitialization': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateInitialization,
@@ -120,6 +154,60 @@ class CeligoService:
             '/celigo.v1.CeligoService/GetConfiguration',
             pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.SerializeToString,
             pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CeligoConfiguration.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def OpenDoor(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/celigo.v1.CeligoService/OpenDoor',
+            pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CloseDoor(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/celigo.v1.CeligoService/CloseDoor',
+            pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CloseDoorRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,
