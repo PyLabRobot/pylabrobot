@@ -31,6 +31,7 @@ from .errors import (
 )
 from .features.absorbance import Absorbance
 from .features.drawer import Drawer
+from .features.fluorescence import Fluorescence
 from .features.temperature_controller import TemperatureController
 from .framing import (
   FTDI_CR,
@@ -224,9 +225,11 @@ class CLARIOstarDriver:
     self._lock = asyncio.Lock()
     self._last_warning: Optional[Tuple[int, int, int, int, int]] = None
     self.drawer = Drawer(self)
-    # Built by `discover` only if the reader reports a temperature controller, and absorbance.
+    # Built by `discover` only if the reader reports a temperature controller, absorbance, and
+    # a fluorescence channel.
     self.temperature_controller: Optional[TemperatureController] = None
     self.absorbance: Optional[Absorbance] = None
+    self.fluorescence: Optional[Fluorescence] = None
 
   # -- FTDI interface --------------------------------------------------------
 
@@ -672,6 +675,8 @@ class CLARIOstarDriver:
       self.temperature_controller = TemperatureController(self)
     if self.configuration.absorbance_available and self.absorbance is None:
       self.absorbance = Absorbance(self)
+    if self.configuration.fluorescence_channels and self.fluorescence is None:
+      self.fluorescence = Fluorescence(self)
 
   def _check_firmware_compatibility(self) -> None:
     """Log a warning if the firmware version has not been checked on hardware."""
