@@ -1757,7 +1757,7 @@ class SimulatedCoreGrippers(_Simulated, CoreGrippers):
     )
     return resp
 
-  async def _unchecked_fw_drop_resource(
+  async def _unchecked_fw_place_resource(
     self,
     x_position: int,
     y_position: int,
@@ -1769,7 +1769,7 @@ class SimulatedCoreGrippers(_Simulated, CoreGrippers):
     minimum_z_position_end: int,
     x_acceleration_level: Optional[int] = None,
   ):
-    resp = await super()._unchecked_fw_drop_resource(
+    resp = await super()._unchecked_fw_place_resource(
       x_position,
       y_position,
       z_position,

@@ -3,6 +3,7 @@
 
 # BMG CLARIOstar
 /docs/user_guide/bmg_labtech/clariostar/ @BioCam
+/pylabrobot/bmg_labtech/ @BioCam
 /pylabrobot/legacy/plate_reading/bmg_labtech/ @BioCam
 /pylabrobot/legacy/plate_reading/clario_star_backend.py @BioCam
 
