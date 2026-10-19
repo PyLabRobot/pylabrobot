@@ -34,7 +34,10 @@ def decode_region(value: pb.ScanRegion) -> ScanRegion:
 def encode_capture(capture: Capture) -> pb.CaptureSettings:
   """Preserve omitted camera settings for resolution by the planning service."""
   return pb.CaptureSettings(
-    channel=capture.channel, exposure_ms=capture.exposure_ms, gain=capture.gain
+    channel=capture.channel,
+    exposure_ms=capture.exposure_ms,
+    gain=capture.gain,
+    machine_auto_exposure=capture.machine_auto_exposure,
   )
 
 
@@ -44,6 +47,7 @@ def decode_capture(value: pb.CaptureSettings) -> Capture:
     channel=value.channel,
     exposure_ms=value.exposure_ms if value.HasField("exposure_ms") else None,
     gain=value.gain if value.HasField("gain") else None,
+    machine_auto_exposure=value.machine_auto_exposure,
   )
 
 

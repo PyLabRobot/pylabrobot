@@ -31,18 +31,20 @@ class InitializationRequest(_message.Message):
     def __init__(self, device_id: _Optional[str] = ..., request_id: _Optional[str] = ..., configuration_id: _Optional[str] = ...) -> None: ...
 
 class BrightfieldSettings(_message.Message):
-    __slots__ = ("sample_x_mm", "sample_y_mm", "z_mm", "exposure_ms", "gain")
+    __slots__ = ("sample_x_mm", "sample_y_mm", "z_mm", "exposure_ms", "gain", "machine_auto_exposure")
     SAMPLE_X_MM_FIELD_NUMBER: _ClassVar[int]
     SAMPLE_Y_MM_FIELD_NUMBER: _ClassVar[int]
     Z_MM_FIELD_NUMBER: _ClassVar[int]
     EXPOSURE_MS_FIELD_NUMBER: _ClassVar[int]
     GAIN_FIELD_NUMBER: _ClassVar[int]
+    MACHINE_AUTO_EXPOSURE_FIELD_NUMBER: _ClassVar[int]
     sample_x_mm: float
     sample_y_mm: float
     z_mm: float
     exposure_ms: float
     gain: float
-    def __init__(self, sample_x_mm: _Optional[float] = ..., sample_y_mm: _Optional[float] = ..., z_mm: _Optional[float] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ...) -> None: ...
+    machine_auto_exposure: bool
+    def __init__(self, sample_x_mm: _Optional[float] = ..., sample_y_mm: _Optional[float] = ..., z_mm: _Optional[float] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ..., machine_auto_exposure: _Optional[bool] = ...) -> None: ...
 
 class BrightfieldRequest(_message.Message):
     __slots__ = ("device_id", "request_id", "configuration_id", "settings")
@@ -79,7 +81,7 @@ class CeligoJobSpecification(_message.Message):
     def __init__(self, capture: _Optional[_Union[BrightfieldSettings, _Mapping]] = ..., width: _Optional[int] = ..., height: _Optional[int] = ..., scan_plan: _Optional[_Union[ScanPlan, _Mapping]] = ...) -> None: ...
 
 class CeligoConfiguration(_message.Message):
-    __slots__ = ("configuration_id", "width", "height", "channels", "calibrated_brightfield_z_mm", "minimum_z_mm", "maximum_z_mm", "capture_contract", "maximum_exposure_ms", "maximum_gain", "default_scan_exposure_ms", "default_scan_gain", "autofocus_methods")
+    __slots__ = ("configuration_id", "width", "height", "channels", "calibrated_brightfield_z_mm", "minimum_z_mm", "maximum_z_mm", "capture_contract", "maximum_exposure_ms", "maximum_gain", "default_scan_exposure_ms", "default_scan_gain", "autofocus_methods", "auto_exposure_supported")
     CONFIGURATION_ID_FIELD_NUMBER: _ClassVar[int]
     WIDTH_FIELD_NUMBER: _ClassVar[int]
     HEIGHT_FIELD_NUMBER: _ClassVar[int]
@@ -93,6 +95,7 @@ class CeligoConfiguration(_message.Message):
     DEFAULT_SCAN_EXPOSURE_MS_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_SCAN_GAIN_FIELD_NUMBER: _ClassVar[int]
     AUTOFOCUS_METHODS_FIELD_NUMBER: _ClassVar[int]
+    AUTO_EXPOSURE_SUPPORTED_FIELD_NUMBER: _ClassVar[int]
     configuration_id: str
     width: int
     height: int
@@ -106,10 +109,11 @@ class CeligoConfiguration(_message.Message):
     default_scan_exposure_ms: float
     default_scan_gain: float
     autofocus_methods: _containers.RepeatedScalarFieldContainer[AutofocusMethod]
-    def __init__(self, configuration_id: _Optional[str] = ..., width: _Optional[int] = ..., height: _Optional[int] = ..., channels: _Optional[_Iterable[str]] = ..., calibrated_brightfield_z_mm: _Optional[float] = ..., minimum_z_mm: _Optional[float] = ..., maximum_z_mm: _Optional[float] = ..., capture_contract: _Optional[str] = ..., maximum_exposure_ms: _Optional[float] = ..., maximum_gain: _Optional[float] = ..., default_scan_exposure_ms: _Optional[float] = ..., default_scan_gain: _Optional[float] = ..., autofocus_methods: _Optional[_Iterable[_Union[AutofocusMethod, str]]] = ...) -> None: ...
+    auto_exposure_supported: bool
+    def __init__(self, configuration_id: _Optional[str] = ..., width: _Optional[int] = ..., height: _Optional[int] = ..., channels: _Optional[_Iterable[str]] = ..., calibrated_brightfield_z_mm: _Optional[float] = ..., minimum_z_mm: _Optional[float] = ..., maximum_z_mm: _Optional[float] = ..., capture_contract: _Optional[str] = ..., maximum_exposure_ms: _Optional[float] = ..., maximum_gain: _Optional[float] = ..., default_scan_exposure_ms: _Optional[float] = ..., default_scan_gain: _Optional[float] = ..., autofocus_methods: _Optional[_Iterable[_Union[AutofocusMethod, str]]] = ..., auto_exposure_supported: _Optional[bool] = ...) -> None: ...
 
 class AcquisitionMetadata(_message.Message):
-    __slots__ = ("channel", "exposure_ms", "gain", "sample_x_mm", "sample_y_mm", "z_mm", "focus_method", "stage_x_mm", "stage_y_mm", "galvo_x_volts", "galvo_y_volts", "configuration_id", "planned_frame_index", "block_index", "tile_row", "tile_column", "label", "focus_score")
+    __slots__ = ("channel", "exposure_ms", "gain", "sample_x_mm", "sample_y_mm", "z_mm", "focus_method", "stage_x_mm", "stage_y_mm", "galvo_x_volts", "galvo_y_volts", "configuration_id", "planned_frame_index", "block_index", "tile_row", "tile_column", "label", "focus_score", "machine_auto_exposure")
     CHANNEL_FIELD_NUMBER: _ClassVar[int]
     EXPOSURE_MS_FIELD_NUMBER: _ClassVar[int]
     GAIN_FIELD_NUMBER: _ClassVar[int]
@@ -128,6 +132,7 @@ class AcquisitionMetadata(_message.Message):
     TILE_COLUMN_FIELD_NUMBER: _ClassVar[int]
     LABEL_FIELD_NUMBER: _ClassVar[int]
     FOCUS_SCORE_FIELD_NUMBER: _ClassVar[int]
+    MACHINE_AUTO_EXPOSURE_FIELD_NUMBER: _ClassVar[int]
     channel: str
     exposure_ms: float
     gain: float
@@ -146,7 +151,8 @@ class AcquisitionMetadata(_message.Message):
     tile_column: int
     label: str
     focus_score: float
-    def __init__(self, channel: _Optional[str] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ..., sample_x_mm: _Optional[float] = ..., sample_y_mm: _Optional[float] = ..., z_mm: _Optional[float] = ..., focus_method: _Optional[str] = ..., stage_x_mm: _Optional[float] = ..., stage_y_mm: _Optional[float] = ..., galvo_x_volts: _Optional[float] = ..., galvo_y_volts: _Optional[float] = ..., configuration_id: _Optional[str] = ..., planned_frame_index: _Optional[int] = ..., block_index: _Optional[int] = ..., tile_row: _Optional[int] = ..., tile_column: _Optional[int] = ..., label: _Optional[str] = ..., focus_score: _Optional[float] = ...) -> None: ...
+    machine_auto_exposure: bool
+    def __init__(self, channel: _Optional[str] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ..., sample_x_mm: _Optional[float] = ..., sample_y_mm: _Optional[float] = ..., z_mm: _Optional[float] = ..., focus_method: _Optional[str] = ..., stage_x_mm: _Optional[float] = ..., stage_y_mm: _Optional[float] = ..., galvo_x_volts: _Optional[float] = ..., galvo_y_volts: _Optional[float] = ..., configuration_id: _Optional[str] = ..., planned_frame_index: _Optional[int] = ..., block_index: _Optional[int] = ..., tile_row: _Optional[int] = ..., tile_column: _Optional[int] = ..., label: _Optional[str] = ..., focus_score: _Optional[float] = ..., machine_auto_exposure: _Optional[bool] = ...) -> None: ...
 
 class ScanRegion(_message.Message):
     __slots__ = ("left_mm", "top_mm", "right_mm", "bottom_mm")
@@ -197,14 +203,16 @@ class RandomGeometry(_message.Message):
     def __init__(self, bounds: _Optional[_Union[ScanRegion, _Mapping]] = ..., count: _Optional[int] = ..., block_columns: _Optional[int] = ..., block_rows: _Optional[int] = ..., seed: _Optional[int] = ..., non_overlapping: _Optional[bool] = ...) -> None: ...
 
 class CaptureSettings(_message.Message):
-    __slots__ = ("channel", "exposure_ms", "gain")
+    __slots__ = ("channel", "exposure_ms", "gain", "machine_auto_exposure")
     CHANNEL_FIELD_NUMBER: _ClassVar[int]
     EXPOSURE_MS_FIELD_NUMBER: _ClassVar[int]
     GAIN_FIELD_NUMBER: _ClassVar[int]
+    MACHINE_AUTO_EXPOSURE_FIELD_NUMBER: _ClassVar[int]
     channel: str
     exposure_ms: float
     gain: float
-    def __init__(self, channel: _Optional[str] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ...) -> None: ...
+    machine_auto_exposure: bool
+    def __init__(self, channel: _Optional[str] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ..., machine_auto_exposure: _Optional[bool] = ...) -> None: ...
 
 class ScanSpecification(_message.Message):
     __slots__ = ("points", "random", "full_coverage", "captures", "autofocus")

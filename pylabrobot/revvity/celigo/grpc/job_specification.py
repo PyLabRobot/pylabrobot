@@ -16,6 +16,7 @@ class Brightfield:
   z_mm: float
   exposure_ms: float
   gain: float
+  machine_auto_exposure: bool = False
 
   def to_proto(self) -> pb.BrightfieldSettings:
     return pb.BrightfieldSettings(**asdict(self))
@@ -25,7 +26,14 @@ class Brightfield:
     for name in ("sample_x_mm", "sample_y_mm", "z_mm", "exposure_ms", "gain"):
       if not value.HasField(name):
         raise ValueError(f"{name} is required")
-    return cls(value.sample_x_mm, value.sample_y_mm, value.z_mm, value.exposure_ms, value.gain)
+    return cls(
+      value.sample_x_mm,
+      value.sample_y_mm,
+      value.z_mm,
+      value.exposure_ms,
+      value.gain,
+      value.machine_auto_exposure,
+    )
 
 
 @dataclass(frozen=True)

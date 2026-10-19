@@ -187,6 +187,13 @@ are one-based. It also records actual camera settings, stage/Z/galvo positions,
 and the autofocus score when measured. Device preview watches publish the latest
 completed scan image; use retained frame listing to retrieve every image.
 
+Set `machine_auto_exposure=True` on a `Capture`, a single-channel `ScanSpec`
+constructor, or `client.create_brightfield_capture()` to run the driver's exposure
+selection before capture/autofocus. In a scan this applies to each frame of that
+capture channel. The supplied exposure is the initial setting; image metadata
+reports the actual selected exposure and gain. `GetConfiguration` advertises
+auto-exposure support, and the setting remains part of the persisted plan/job.
+
 Accepted scans continue when clients disconnect. Cancellation lets an in-flight
 acquisition finish and commits its image before ending the scan and cleaning up
 the driver. Failures preserve earlier committed frames. A service restart marks

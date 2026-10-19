@@ -12,7 +12,7 @@ import grpc
 import numpy as np
 from PIL import Image
 
-from pylabrobot.revvity.celigo.grpc.client import CeligoClient
+from pylabrobot.revvity.celigo.grpc.client import CeligoClient, unpack_acquisition_metadata
 from pylabrobot.revvity.celigo.grpc.limits import MAX_FRAME_BYTES
 from pylabrobot.revvity.celigo.grpc.tests.helpers import (
   block_calls,
@@ -43,6 +43,26 @@ async def rpc_system(tmp_path, geometry=(64, 48, 16)):
 
 
 class RpcTests(unittest.IsolatedAsyncioTestCase):
+  async def test_auto_exposure_preview_retains_actual_camera_settings(self) -> None:
+    """Auto-exposure reaches the driver and reports the measured rather than requested value."""
+    with TemporaryDirectory() as directory:
+      async with rpc_system(Path(directory)) as (_, client, driver):
+        self.assertTrue((await client.get_configuration()).auto_exposure_supported)
+        job = await capture(client, "auto-exposure", exposure_ms=3, machine_auto_exposure=True)
+        await job.start()
+        self.assertEqual((await job.wait()).outcome, job_pb.OUTCOME_SUCCEEDED)
+        self.assertTrue(driver.acquire_scan_position.await_args.kwargs["machine_auto_exposure"])
+        image = await job.get_frame((await job.list_frames())[0].frame_id)
+        metadata = unpack_acquisition_metadata(image)
+        self.assertTrue(metadata.machine_auto_exposure)
+        self.assertEqual(
+          metadata.exposure_ms, driver.acquire_scan_position.return_value.frame.exposure_ms
+        )
+        self.assertNotEqual(metadata.exposure_ms, 3)
+        with self.assertRaises(grpc.aio.AioRpcError) as conflict:
+          await capture(client, "auto-exposure", exposure_ms=3, machine_auto_exposure=False)
+        self.assertEqual(conflict.exception.code(), grpc.StatusCode.INVALID_ARGUMENT)
+
   async def test_jobs_deduplication_conflicts_progress_and_reconnect(self) -> None:
     with TemporaryDirectory() as temporary_directory:
       tmp_path = Path(temporary_directory)

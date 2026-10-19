@@ -138,11 +138,12 @@ class ScanEstimateModel:
 
 @dataclass(frozen=True)
 class Capture:
-  """One channel and its camera settings."""
+  """One channel and its camera settings, optionally selecting exposure for each frame."""
 
   channel: str
   exposure_ms: Optional[float] = None
   gain: Optional[float] = None
+  machine_auto_exposure: bool = False
 
   def __post_init__(self) -> None:
     if not isinstance(self.channel, str) or not self.channel.strip():
@@ -216,6 +217,7 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
   ) -> "ScanSpec":
@@ -232,7 +234,7 @@ class ScanSpec:
     centers = tuple(well_to_sample_mm(plate, well) for well in normalized_wells)
     return cls(
       geometry=_point_geometry(centers, block_shape, normalized_wells),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
     )
 
@@ -245,6 +247,7 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
   ) -> "ScanSpec":
@@ -252,7 +255,7 @@ class ScanSpec:
     normalized_centers = _normalize_centers(centers_mm)
     return cls(
       geometry=_point_geometry(normalized_centers, block_shape),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
     )
 
@@ -268,6 +271,7 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
   ) -> "ScanSpec":
@@ -287,7 +291,7 @@ class ScanSpec:
         seed=seed,
         non_overlapping=non_overlapping,
       ),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
     )
 
@@ -299,6 +303,7 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
   ) -> "ScanSpec":
@@ -306,7 +311,7 @@ class ScanSpec:
     _validate_scan_region(bounds)
     return cls(
       geometry=FullCoverageGeometry(bounds=bounds),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
     )
 
@@ -540,17 +545,27 @@ def _normalize_captures(
   exposure_ms: Optional[float],
   gain: Optional[float],
   captures: Optional[Sequence[Capture]],
+  machine_auto_exposure: bool = False,
 ) -> Tuple[Capture, ...]:
   if captures is not None:
-    if channel is not None or exposure_ms is not None or gain is not None:
-      raise ValueError("captures cannot be combined with channel, exposure_ms, or gain")
+    if channel is not None or exposure_ms is not None or gain is not None or machine_auto_exposure:
+      raise ValueError(
+        "captures cannot be combined with channel, exposure_ms, gain, or machine_auto_exposure"
+      )
     normalized = tuple(captures)
     if not normalized or any(not isinstance(capture, Capture) for capture in normalized):
       raise ValueError("captures must contain at least one Capture")
     return normalized
   if channel is None:
     raise ValueError("provide channel or captures")
-  return (Capture(channel=channel, exposure_ms=exposure_ms, gain=gain),)
+  return (
+    Capture(
+      channel=channel,
+      exposure_ms=exposure_ms,
+      gain=gain,
+      machine_auto_exposure=machine_auto_exposure,
+    ),
+  )
 
 
 def _normalize_centers(centers_mm: Sequence[CoordinateMM]) -> Tuple[CoordinateMM, ...]:

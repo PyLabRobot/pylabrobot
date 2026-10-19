@@ -146,6 +146,7 @@ class CeligoClient(DeviceClient):
     z_mm: float,
     exposure_ms: float,
     gain: float,
+    machine_auto_exposure: bool = False,
   ) -> CeligoImagingJob:
     """Create one inert fixed-Z capture with explicit physical units in the wire contract."""
     ref = await self.operations.CreateBrightfieldCapture(
@@ -159,6 +160,7 @@ class CeligoClient(DeviceClient):
           z_mm=z_mm,
           exposure_ms=exposure_ms,
           gain=gain,
+          machine_auto_exposure=machine_auto_exposure,
         ),
       ),
       timeout=self.timeout,

@@ -132,7 +132,7 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
       plate,
       ["A1", "B2"],
       block_shape=(2, 3),
-      captures=[Capture("brightfield", 1, 1), Capture("green", 20, 2)],
+      captures=[Capture("brightfield", 1, 1), Capture("green", 20, 2, machine_auto_exposure=True)],
       autofocus="image",
     )
     with TemporaryDirectory() as directory:
@@ -140,7 +140,11 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
         base = hardware.acquire_scan_position.return_value
 
         async def acquire(**kwargs):
-          frame = replace(base.frame, exposure_ms=kwargs["exposure_ms"], gain=kwargs["gain"])
+          frame = replace(
+            base.frame,
+            exposure_ms=7.5 if kwargs["machine_auto_exposure"] else kwargs["exposure_ms"],
+            gain=kwargs["gain"],
+          )
           focus = FocusResult(2700, 2.7, 10, ((2700, 10),), frame) if kwargs["autofocus"] else None
           return replace(
             base,
@@ -178,7 +182,14 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
           self.assertEqual(metadata.block_index, planned.block.index)
           self.assertEqual(metadata.label, planned.block.label)
           self.assertEqual(metadata.channel, planned.capture.channel)
-          self.assertEqual(metadata.exposure_ms, planned.capture.exposure_ms)
+          self.assertEqual(
+            metadata.exposure_ms,
+            7.5 if planned.capture.machine_auto_exposure else planned.capture.exposure_ms,
+          )
+          self.assertEqual(metadata.machine_auto_exposure, planned.capture.machine_auto_exposure)
+          self.assertEqual(
+            call.kwargs["machine_auto_exposure"], planned.capture.machine_auto_exposure
+          )
           self.assertEqual(metadata.gain, planned.capture.gain)
           self.assertEqual(
             (metadata.tile_row, metadata.tile_column),

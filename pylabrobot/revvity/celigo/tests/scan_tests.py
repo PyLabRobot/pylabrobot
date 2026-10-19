@@ -379,7 +379,9 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
       autofocus,
       z_mm,
       settled_stage_position_mm,
+      machine_auto_exposure,
     ):
+      self.assertFalse(machine_auto_exposure)
       acquisition_calls.append(
         {
           "position": position,

@@ -19,6 +19,7 @@ message BrightfieldSettings {
   optional double z_mm = 3;
   optional double exposure_ms = 4;
   optional double gain = 5;
+  bool machine_auto_exposure = 6;
 }
 
 message BrightfieldRequest {
@@ -55,6 +56,7 @@ message CeligoConfiguration {
   double default_scan_exposure_ms = 11;
   double default_scan_gain = 12;
   repeated AutofocusMethod autofocus_methods = 13;
+  bool auto_exposure_supported = 14;
 }
 
 message AcquisitionMetadata {
@@ -76,6 +78,7 @@ message AcquisitionMetadata {
   optional uint32 tile_column = 16;
   optional string label = 17;
   optional double focus_score = 18;
+  bool machine_auto_exposure = 19;
 }
 
 message ScanRegion {
@@ -110,6 +113,7 @@ message CaptureSettings {
   string channel = 1;
   optional double exposure_ms = 2;
   optional double gain = 3;
+  bool machine_auto_exposure = 4;
 }
 
 enum AutofocusMethod {

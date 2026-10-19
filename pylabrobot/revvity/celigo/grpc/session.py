@@ -155,7 +155,8 @@ class CeligoSession:
       default_scan_exposure_ms=DEFAULT_SCAN_EXPOSURE_MS,
       default_scan_gain=DEFAULT_SCAN_GAIN,
       autofocus_methods=[pb.AUTOFOCUS_NONE, pb.AUTOFOCUS_IMAGE],
-      capture_contract="Fixed-Z brightfield captures or inspected scan plans with explicit camera settings and optional image autofocus.",
+      auto_exposure_supported=True,
+      capture_contract="Fixed-Z brightfield captures or inspected scan plans with optional auto-exposure and image autofocus.",
     )
 
   def build_job_specification(self, capture: Brightfield) -> JobSpecification:
@@ -488,7 +489,7 @@ class CeligoSession:
       autofocus=None,
       z_mm=settings.z_mm,
       settled_stage_position_mm=settled,
-      machine_auto_exposure=False,
+      machine_auto_exposure=settings.machine_auto_exposure,
     )  # Public PLR API finishes illumination cleanup before returning.
     if (result.frame.width, result.frame.height) != (job.spec.width, job.spec.height):
       raise ValueError("camera returned dimensions different from calibration")

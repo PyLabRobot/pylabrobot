@@ -1857,6 +1857,7 @@ class Celigo:
           autofocus=plan.spec.autofocus if frame_index == 0 else None,
           z_mm=channel_z_mm,
           settled_stage_position_mm=settled_stage_position_mm,
+          machine_auto_exposure=capture.machine_auto_exposure,
         )
         if acquisition.focus is not None:
           focused_brightfield_z_mm = acquisition.z_mm - channel_config.z_offset_to_brightfield_mm

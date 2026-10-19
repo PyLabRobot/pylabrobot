@@ -93,6 +93,7 @@ def encode_frame(
       stage_y_mm=result.y_mm,
       z_mm=result.z_mm,
       focus_method="FixedZ",
+      machine_auto_exposure=settings.machine_auto_exposure,
       configuration_id=configuration_id,
       galvo_x_volts=result.galvo_hardware_voltages[0],
       galvo_y_volts=result.galvo_hardware_voltages[1],
@@ -126,6 +127,7 @@ def encode_scan_frame(
     tile_column=planned.position.tile_column,
     label=planned.block.label,
     focus_score=result.focus.score if result.focus is not None else None,
+    machine_auto_exposure=planned.capture.machine_auto_exposure,
   )
   return _encode_image(
     job, result.frame, metadata, sequence=planned.index + 1, representation="Scan"
