@@ -653,6 +653,32 @@ make<span class="w"> </span>format-check
 <p>Define explicit, typed methods and properties instead. When a value or callable must be selected by name, use a typed mapping with a fixed set of keys. Model behavioral differences with normal control flow or polymorphism so static analysis and readers can see every supported path.</p>
 <p>Define before use. Within a module, a function, class or constant comes above the code that uses it; within a class, a method comes above the methods that call it. A file then reads top to bottom, each part building only on what is already written above it.</p>
 </section>
+<section id="device-command-line-tools">
+<h2>Device command-line tools<a class="headerlink" href="#device-command-line-tools" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">plr</span> <span class="pre">dev</span> <span class="pre">&lt;device&gt;</span></code> dispatches to a CLI module owned by that device. The root launcher in
+<code class="docutils literal notranslate"><span class="pre">pylabrobot/cli.py</span></code> handles device selection and forwards the remaining arguments. Registrations
+in <code class="docutils literal notranslate"><span class="pre">pylabrobot/cli_registry.py</span></code> contain module paths and help text, so root help does not import
+device drivers or their optional dependencies. With no registrations, <code class="docutils literal notranslate"><span class="pre">plr</span> <span class="pre">dev</span></code> explains that
+no device CLIs are available.</p>
+<p>To add a device CLI:</p>
+<ol class="arabic">
+<li><p>Add a <code class="docutils literal notranslate"><span class="pre">cli.py</span></code> beside the device implementation with a
+<code class="docutils literal notranslate"><span class="pre">main(argv:</span> <span class="pre">Optional[Sequence[str]]</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">-&gt;</span> <span class="pre">None</span></code> entry point. It parses the remaining
+arguments and owns the device’s commands, options, and handlers.</p></li>
+<li><p>Add one entry to <code class="docutils literal notranslate"><span class="pre">DEVICE_CLIS</span></code> with a unique command name and the module’s full import path:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="s2">"my-device"</span><span class="p">:</span> <span class="n">DeviceCLI</span><span class="p">(</span><span class="s2">"pylabrobot.vendor.device.cli"</span><span class="p">,</span> <span class="s2">"My device tools"</span><span class="p">),</span>
+</pre></div>
+</div>
+<p>Replace the example name and module path with the device’s own values. The root launcher
+needs no changes.</p>
+</li>
+<li><p>Test dispatch, help, and invalid arguments without opening hardware connections.</p></li>
+</ol>
+<p>A device with multiple operations can use <code class="docutils literal notranslate"><span class="pre">argparse</span></code> subparsers and
+<code class="docutils literal notranslate"><span class="pre">parser.set_defaults(handler=...)</span></code> to select a handler. Parse arguments before calling
+<code class="docutils literal notranslate"><span class="pre">args.handler(args)</span></code>. Handlers own their event loops and device lifecycles. Importing a CLI
+module must not start operations. Device and operation help are handled by the device’s CLI.</p>
+</section>
 <section id="api-conventions">
 <h2>API conventions<a class="headerlink" href="#api-conventions" title="Link to this heading">#</a></h2>
 <p>Use PyLabRobot’s <a class="reference internal" href="../user_guide/getting-started/units.html"><span class="std std-doc">default units</span></a> in public APIs. Omit the unit from a parameter or attribute name when it uses the PyLabRobot default—for example, use <code class="docutils literal notranslate"><span class="pre">temperature</span></code>, not <code class="docutils literal notranslate"><span class="pre">temperature_celsius</span></code>. Deviate from the default only for a compelling reason, make the alternative unit explicit, and document why it is necessary. Convert device-native units internally.</p>
@@ -753,6 +779,7 @@ runs or failures. See <a class="reference internal" href="../user_guide/needs-te
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-conventions">Code conventions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#device-command-line-tools">Device command-line tools</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-conventions">API conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-documentation">Writing documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#common-tasks">Common Tasks</a><ul class="nav section-nav flex-column">
