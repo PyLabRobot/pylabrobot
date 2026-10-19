@@ -209,6 +209,13 @@ frame positions determine overlap in that case. Every image retains its own
 `metadata.image_geometry`, so later measurements use the acquisition's calibration
 even after configuration changes. Older retained images omit this message.
 
+When a frame runs autofocus, `metadata.autofocus` contains the selected Z in
+encoder ticks and millimeters, the verified final score, and every coarse/fine
+`(z_ticks, score)` sample in acquisition order. The selected score may differ from
+the sampled maximum because the driver verifies focus with a fresh image. Frames
+that reuse a block's focus omit this message. `focus_score` is also retained for
+clients using the scalar field; older images may have only that scalar.
+
 Accepted scans continue when clients disconnect. Cancellation lets an in-flight
 acquisition finish and commits its image before ending the scan and cleaning up
 the driver. Failures preserve earlier committed frames. A service restart marks

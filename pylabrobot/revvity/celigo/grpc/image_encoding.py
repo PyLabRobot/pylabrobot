@@ -149,6 +149,18 @@ def encode_scan_frame(
     machine_auto_exposure=planned.capture.machine_auto_exposure,
     image_geometry=image_geometry,
   )
+  if result.focus is not None:
+    metadata.autofocus.CopyFrom(
+      pb.AutofocusResult(
+        z_ticks=result.focus.z_ticks,
+        z_mm=result.focus.z_mm,
+        score=result.focus.score,
+        samples=[
+          pb.FocusSample(z_ticks=ticks, score=score)
+          for ticks, score in result.focus.scored_z_samples
+        ],
+      )
+    )
   return _encode_image(
     job, result.frame, metadata, sequence=planned.index + 1, representation="Scan"
   )

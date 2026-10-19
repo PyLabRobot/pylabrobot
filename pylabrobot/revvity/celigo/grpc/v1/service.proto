@@ -69,6 +69,18 @@ message CeligoConfiguration {
   map<string, ImageGeometry> image_geometry_by_channel = 15;
 }
 
+message FocusSample {
+  sint64 z_ticks = 1;
+  double score = 2;
+}
+
+message AutofocusResult {
+  sint64 z_ticks = 1;
+  double z_mm = 2;
+  double score = 3;
+  repeated FocusSample samples = 4; // Coarse and fine samples in acquisition order.
+}
+
 message AcquisitionMetadata {
   string channel = 1;
   double exposure_ms = 2;
@@ -90,6 +102,7 @@ message AcquisitionMetadata {
   optional double focus_score = 18;
   bool machine_auto_exposure = 19;
   ImageGeometry image_geometry = 20;
+  AutofocusResult autofocus = 21; // Absent when this frame did not run autofocus.
 }
 
 message ScanRegion {

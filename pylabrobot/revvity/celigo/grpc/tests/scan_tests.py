@@ -146,7 +146,11 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
             exposure_ms=7.5 if kwargs["machine_auto_exposure"] else kwargs["exposure_ms"],
             gain=kwargs["gain"],
           )
-          focus = FocusResult(2700, 2.7, 10, ((2700, 10),), frame) if kwargs["autofocus"] else None
+          focus = (
+            FocusResult(2700, 2.7, 10, ((2600, 2), (2800, 3), (2700, 11)), frame)
+            if kwargs["autofocus"]
+            else None
+          )
           return replace(
             base,
             frame=frame,
@@ -206,7 +210,15 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(call.kwargs["autofocus"], "image")
             self.assertEqual(call.kwargs["z_mm"], 2.5)
             self.assertEqual(metadata.focus_score, 10)
+            self.assertEqual(metadata.autofocus.z_ticks, 2700)
+            self.assertEqual(metadata.autofocus.z_mm, 2.7)
+            self.assertEqual(metadata.autofocus.score, 10)
+            self.assertEqual(
+              [(sample.z_ticks, sample.score) for sample in metadata.autofocus.samples],
+              [(2600, 2), (2800, 3), (2700, 11)],
+            )
           else:
+            self.assertFalse(metadata.HasField("autofocus"))
             self.assertIsNone(call.kwargs["autofocus"])
             self.assertAlmostEqual(
               call.kwargs["z_mm"], 2.7 if planned.capture.channel == "brightfield" else 2.9
