@@ -1,8 +1,11 @@
 """Driver tests over a fake io. Replies are frames recorded from a CLARIOstar Plus over FTDI."""
 
+import gzip
+import json
+import os
 import unittest
-from typing import List
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any, Dict, List, Tuple
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
 from pylabrobot.bmg_labtech.clariostar.driver.errors import (
@@ -24,7 +27,8 @@ STATUS_BUSY = bytes.fromhex("0200180c012506240000030000000000000000c00001390d")
 STATUS_DRAWER_OPEN = bytes.fromhex("0200180c010506210000000000000000000000c00001130d")
 STATUS_PLATE_DETECTED = bytes.fromhex("0200180c010500260000000000000000000000c00001120d")
 STATUS_TEMPERATURES = bytes.fromhex("0200180c010500240000000000000000e700f0c00002e70d")
-STATUS_TRUNCATED = bytes.fromhex("0200180c010500210000000000000000000d")  # bytes lost on the line
+# 18 of 24 bytes, as received on the second run ("Size field says 24 bytes, got 18").
+STATUS_TRUNCATED = bytes.fromhex("0200180c010500210000000000000000000d")
 FIRMWARE_INFO_FRAME = bytes.fromhex("02000f0c0509000000000000002b0d")
 FIRMWARE_INFO_REPLY = bytes.fromhex(
   "0200270c0a050624000005464e6f7620323020323032300031313a35313a32310000010004f20d"
@@ -85,6 +89,15 @@ REFUSED = {
     bytes.fromhex("0200180c011504060000410100000000000000c00001480d"),
   ),
 }
+
+
+def load_session_replies() -> Dict[str, Any]:
+  """What this driver sent and the reader answered: frames as hex, and a spectrum page's first
+  data request read by read."""
+  path = os.path.join(os.path.dirname(__file__), "features", "test_data", "session_replies.json.gz")
+  with gzip.open(path, "rt") as f:
+    return dict(json.load(f))
+
 
 # Replies an earlier driver received from the same reader.
 STATUS_NOT_INITIALIZED = bytes.fromhex("0200180c011500000000c90000000000000000c00001c50d")
@@ -190,11 +203,35 @@ class StatusTests(unittest.TestCase):
     self.assertFalse(motors_off.motors_enabled)
     self.assertFalse(motors_off.busy)
 
+  def test_no_plate_is_reported_with_the_drawer_out(self):
+    # As the reader answered with the plate on the plate holder and the drawer out.
+    status = parse_status(
+      bytes.fromhex(load_session_replies()["step_9_status_drawer_out_plate_on_holder"])
+    )
+    self.assertEqual((status.drawer_open, status.plate_detected), (True, False))
+
   def test_temperatures_from_real_replies(self):
     status = parse_status(STATUS_TEMPERATURES)
     self.assertEqual((status.temperature_bottom, status.temperature_top), (23.1, 24.0))
     status = parse_status(STATUS_IDLE)
     self.assertEqual((status.temperature_bottom, status.temperature_top), (None, None))
+
+
+class SessionReadsFTDI(FakeFTDI):
+  """Replays a reply read by read, at the times it arrived after its request: a read of more than
+  one chunk blocks until its bytes arrive, a chunk read returns nothing until then."""
+
+  def __init__(self, reads: List[Tuple[float, bytes]], clock: List[float]) -> None:
+    super().__init__()
+    self._reads, self._clock = list(reads), clock
+
+  async def read(self, num_bytes: int = 1) -> bytes:
+    if self._reads and (num_bytes > 25 or self._reads[0][0] <= self._clock[0]):
+      arrival, data = self._reads.pop(0)
+      self._clock[0] = max(self._clock[0], arrival)
+      return data
+    self._clock[0] += 0.01
+    return b""
 
 
 class ExchangeTests(unittest.IsolatedAsyncioTestCase):
@@ -206,6 +243,7 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_leading_garbage_is_dropped(self):
     io = FakeFTDI()
+    # Not a reader's reply: no garbage before a reply is recorded; two bytes stand in for it.
     io.replies = [b"\x0d\x00" + STATUS_IDLE]
     status = await make_driver(io).request_status()
     self.assertFalse(status.busy)
@@ -217,6 +255,21 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(io.written, [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME])
     self.assertEqual(io.purges, 1)
     self.assertFalse(status.busy)
+
+  async def test_a_long_read_does_not_count_as_silence(self):
+    # As the reader answered a spectrum page's first request: the read of the rest blocked
+    # 1.65 s, and the page stayed 421 bytes short.
+    reads = [
+      (at, bytes.fromhex(data))
+      for at, data in load_session_replies()["step_17_first_attempt_reads"]
+    ]
+    clock = [0.0]
+    driver = make_driver(SessionReadsFTDI(reads, clock))
+    driver._PACKET_READ_TIMEOUT, driver._FRAME_STALL_TIMEOUT = 1.0, 2.0  # the driver's own
+    with patch.object(master_module.time, "time", side_effect=lambda: clock[0]):
+      frame = await driver._ftdi_read_frame()
+    self.assertEqual(frame, b"".join(data for _, data in reads))
+    self.assertGreaterEqual(clock[0], reads[-1][0] + 2.0)  # 2 s of silence after the last bytes
 
   async def test_no_reply_raises_after_retries(self):
     io = FakeFTDI()
@@ -377,6 +430,7 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_malformed_init_reply_is_not_resent(self):
     io = FakeFTDI()
+    # Not a reader's reply: no short INIT reply is recorded; the recorded one cut at 100 bytes.
     io.replies = [INIT_REPLY[:100], STATUS_BUSY, STATUS_IDLE]
     driver = make_driver(io)
     await driver.initialize()
