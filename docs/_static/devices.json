@@ -148,7 +148,8 @@
     "kind": "plate reader",
     "capabilities": [
       "absorbance",
-      "heating"
+      "heating",
+      "shaking"
     ],
     "status": "wip",
     "api_version": "v1",
@@ -158,7 +159,7 @@
     "api": "pylabrobot.agilent.biotek.synergy_ht.SynergyHT",
     "code_slug": "agilent/biotek/synergy_ht",
     "doc_slug": "agilent/synergy_ht/hello-world",
-    "notes": "Endpoint absorbance on built-in 24- and 96-well plates; hardware verification pending."
+    "notes": "Endpoint absorbance with optional shaking before reads on built-in 24- and 96-well plates; hardware verification pending."
   },
   {
     "id": "agrowtek-pump-array",

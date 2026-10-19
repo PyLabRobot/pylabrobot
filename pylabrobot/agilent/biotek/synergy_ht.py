@@ -18,8 +18,9 @@ class SynergyHT(_BioTekReader):
 
   This driver has offline coverage for basecode 7090202, firmware 2.24. Other
   basecodes and devices lacking the required protocol capabilities are rejected.
-  Hardware verification is pending. Fluorescence, luminescence, shaking, kinetics,
-  and custom plate geometries are not implemented.
+  Hardware verification is pending. Shaking is supported before an absorbance read.
+  Fluorescence, luminescence, standalone shaking, kinetics, and custom plate
+  geometries are not implemented.
 
   Args:
     device_id: USB FTDI serial number, required when multiple adapters are connected.
@@ -105,15 +106,25 @@ class SynergyHT(_BioTekReader):
     await self._exchange(b"g", b" 0")
 
   @staticmethod
-  def _absorbance_setup(wavelength: int) -> bytes:
+  def _absorbance_setup(
+    wavelength: int, shake_duration: int = 0, shake_intensity: Literal[0, 1, 2, 3] = 0
+  ) -> bytes:
     """Encode the fixed 170-byte endpoint setup and its raw one-byte checksum."""
     if not 1 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 1 and 999 nm")
+    if type(shake_duration) is not int or not 0 <= shake_duration <= 65535:
+      raise ValueError("Shake duration must be an integer between 0 and 65535 seconds")
+    if type(shake_intensity) is not int or shake_intensity not in (0, 1, 2, 3):
+      raise ValueError("Shake intensity must be an integer between 0 and 3")
     packet = bytearray(170)
     packet[8] = ord("0")
     packet[29] = 0x10
     packet[49:52] = b"000"
     packet[66:84] = f"{wavelength:03d}".encode("ascii") + b"000" * 5
+    if shake_duration:
+      packet[30] = 0x10
+      packet[162:164] = shake_duration.to_bytes(2, "little")
+      packet[164] = shake_intensity
     packet[0] = sum(packet[1:]) & 0xFF
     return bytes(packet)
 
@@ -200,6 +211,9 @@ class SynergyHT(_BioTekReader):
     wavelength: int,
     plate_type: Literal["24-well", "96-well"],
     wells: Optional[Sequence[str]] = None,
+    *,
+    shake_duration: int = 0,
+    shake_intensity: Literal[0, 1, 2, 3] = 0,
   ) -> List[AbsorbanceResult]:
     """Read endpoint absorbance in optical density (OD).
 
@@ -209,6 +223,10 @@ class SynergyHT(_BioTekReader):
         unlidded plate with A1 at the tray's A1 position. Custom geometry is unsupported.
       wells: Well names such as ["A1", "B2"], or None for the whole plate. The reader
         measures the bounding rectangle; only requested wells are returned.
+      shake_duration: Shake the plate before measuring, in whole seconds (0-65535).
+        Zero disables shaking. This duration is added to read_timeout.
+      shake_intensity: Instrument intensity level (0-3), used when shake_duration
+        is positive. These are device settings, not frequencies in Hz or RPM.
 
     Returns:
       A one-element list of AbsorbanceResult, matching the other BioTek readers.
@@ -219,12 +237,18 @@ class SynergyHT(_BioTekReader):
       No blank subtraction or pathlength correction is applied. The tray must
       be closed before calling this method.
     """
-    packet = self._absorbance_setup(wavelength)
+    packet = self._absorbance_setup(wavelength, shake_duration, shake_intensity)
     rows, columns, preset, selected = self._selection(plate_type, wells)
     r0, r1 = min(r for r, _ in selected), max(r for r, _ in selected)
     c0, c1 = min(c for _, c in selected), max(c for _, c in selected)
     async with self._operation():
       logger.info("Reading Synergy HT absorbance at %s nm on a %s plate", wavelength, plate_type)
+      if shake_duration:
+        logger.info(
+          "Shaking Synergy HT plate for %s seconds at intensity %s before reading",
+          shake_duration,
+          shake_intensity,
+        )
       await self._exchange(b"V", packet)
       await self._exchange(b"{", preset)
       await self._exchange(b"i", b"1", ack_only=True)
@@ -235,7 +259,8 @@ class SynergyHT(_BioTekReader):
       await self._exchange(b"t", b"40000\x03")
       await self._exchange(b"S")
       data, temperature = await asyncio.wait_for(
-        self._read_absorbance_frame(r1 - r0 + 1, c1 - c0 + 1), self.read_timeout
+        self._read_absorbance_frame(r1 - r0 + 1, c1 - c0 + 1),
+        self.read_timeout + shake_duration,
       )
       timestamp = datetime.now()
     result: List[List[Optional[float]]] = [[None] * columns for _ in range(rows)]

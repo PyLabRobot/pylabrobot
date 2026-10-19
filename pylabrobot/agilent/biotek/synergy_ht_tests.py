@@ -19,6 +19,7 @@ from pylabrobot.io.ftdi import FTDI
 DATA = Path(__file__).parent / "test_data"
 CAPTURES = json.loads((DATA / "synergy_ht.json").read_text())
 NATIVE_SETUP = json.loads((DATA / "synergy_ht_setup.json").read_text())
+SHAKING = json.loads((DATA / "synergy_ht_shaking.json").read_text())
 
 
 class Replay:
@@ -144,6 +145,39 @@ def test_all_captured_measurements(capture):
 @pytest.mark.parametrize("wavelength,expected", NATIVE_SETUP.items())
 def test_native_endpoint_serializer(wavelength, expected):
   assert SynergyHT._absorbance_setup(int(wavelength)) == bytes.fromhex(expected)
+
+
+@pytest.mark.parametrize("setup", SHAKING["setups"], ids=lambda x: str(x["frame"]))
+def test_captured_shake_setup(setup):
+  assert SynergyHT._absorbance_setup(600, setup["duration"], setup["intensity"]) == bytes.fromhex(
+    setup["hex"]
+  )
+
+
+@pytest.mark.parametrize("vector", SHAKING["native"]["vectors"])
+def test_native_shake_duration_encoding(vector):
+  assert SynergyHT._absorbance_setup(
+    vector["wavelength"], vector["duration"], vector["intensity"]
+  ) == bytes.fromhex(vector["hex"])
+
+
+@pytest.mark.parametrize("chunk_size", [1, 2, 61, 64, 4096])
+@async_test
+async def test_captured_shake_then_read_without_shaking(reader, chunk_size):
+  device, io = reader
+  capture = SHAKING["read"]
+  replay = attach(io, capture["events"] + CAPTURES["reads"][0]["events"], chunk_size)
+  with patch("asyncio.wait_for", wraps=asyncio.wait_for) as wait_for:
+    (result,) = await device.read_absorbance(
+      600, "96-well", shake_duration=capture["duration"], shake_intensity=capture["intensity"]
+    )
+    assert wait_for.call_args.args[1] == device.read_timeout + capture["duration"]
+    assert result.data == [[0.0] * 12 for _ in range(8)]
+    assert result.temperature == 32.0
+    (unshaken,) = await device.read_absorbance(600, "96-well")
+    assert wait_for.call_args.args[1] == device.read_timeout
+    assert unshaken.data == [[0.0] * 12 for _ in range(8)]
+  assert not replay.events
 
 
 @async_test
@@ -323,6 +357,16 @@ async def test_selection_reads_bounding_rectangle_and_masks_other_wells(
     {"wells": ["I1"]},
     {"wells": ["A13"]},
     {"wells": ["A1", "A1"]},
+    {"shake_duration": -1},
+    {"shake_duration": 65536},
+    {"shake_duration": 1.5},
+    {"shake_duration": float("nan")},
+    {"shake_duration": float("inf")},
+    {"shake_duration": True},
+    {"shake_intensity": -1},
+    {"shake_intensity": 4},
+    {"shake_intensity": 1.0},
+    {"shake_intensity": True},
   ],
 )
 @async_test
@@ -425,11 +469,15 @@ async def test_short_async_error_does_not_wait_for_full_plate(reader, prefix):
   assert not replay.events
 
 
-@pytest.mark.parametrize("outcome", ["complete", "cancel", "timeout"])
+@pytest.mark.parametrize(
+  "outcome,shake_duration",
+  [("complete", 0), ("cancel", 0), ("timeout", 0), ("complete", 10), ("cancel", 10)],
+)
 @async_test
-async def test_measurement_owns_connection_until_result_or_failure(reader, outcome):
+async def test_measurement_owns_connection_until_result_or_failure(reader, outcome, shake_duration):
   device, io = reader
-  transcript = CAPTURES["reads"][0]["events"] + events(("tx", b"h"), ("rx", b"\x062370000\x03"))
+  capture = SHAKING["read"] if shake_duration else CAPTURES["reads"][0]
+  transcript = capture["events"] + events(("tx", b"h"), ("rx", b"\x062370000\x03"))
   replay = attach(io, transcript)
   waiting = asyncio.Event()
   release = asyncio.Event()
@@ -443,7 +491,9 @@ async def test_measurement_owns_connection_until_result_or_failure(reader, outco
 
   io.read.side_effect = gated_read
   device.read_timeout = 0.01 if outcome == "timeout" else 180
-  measurement = asyncio.create_task(device.read_absorbance(600, "96-well"))
+  measurement = asyncio.create_task(
+    device.read_absorbance(600, "96-well", shake_duration=shake_duration)
+  )
   await waiting.wait()
   temperature = asyncio.create_task(device.get_temperature())
   # Yield to the contender without the patched command-settling sleep.
