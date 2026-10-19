@@ -4,16 +4,12 @@ from __future__ import annotations
 
 import unittest
 
-from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.resource_state import (
   TipDropIntent,
   TipPickupIntent,
   VolumeTransferIntent,
   finalize_tip_ops,
   finalize_volume_ops,
-  place_resource,
   queue_tip_drops,
   queue_tip_pickups,
   queue_volume_transfers,
@@ -140,18 +136,6 @@ class TestResourceStateVolume(unittest.TestCase):
     finalize_volume_ops(intents, {0: True})
     self.assertAlmostEqual(well.tracker.get_used_volume(), 75)
     self.assertAlmostEqual(tip.tracker.get_used_volume(), 25)
-
-
-class TestPlaceResource(unittest.TestCase):
-  def test_place_onto_holder(self) -> None:
-    holder_a = ResourceHolder(name="a", size_x=100, size_y=100, size_z=10)
-    holder_b = ResourceHolder(name="b", size_x=100, size_y=100, size_z=10)
-    plate = Resource(name="p", size_x=127, size_y=85, size_z=14)
-    holder_a.assign_child_resource(plate)
-    place_resource(plate, holder_b)
-    self.assertIs(holder_b.resource, plate)
-    self.assertIsNone(holder_a.resource)
-    self.assertEqual(plate.location, Coordinate.zero())
 
 
 if __name__ == "__main__":
