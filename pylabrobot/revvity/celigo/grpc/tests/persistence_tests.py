@@ -15,8 +15,8 @@ from unittest.mock import patch
 import grpc
 
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient
-from pylabrobot.revvity.celigo.grpc.hardware import HardwareSpecification
-from pylabrobot.revvity.celigo.grpc.storage import Store
+from pylabrobot.revvity.celigo.grpc.job_specification import JobSpecification
+from pylabrobot.revvity.celigo.grpc.job_store import JobStore
 from pylabrobot.revvity.celigo.grpc.tests.helpers import (
   block_calls,
   capture,
@@ -35,7 +35,7 @@ async def local_server(directory, **kwargs):
   server, driver = make_server(directory, **kwargs)
   await server.start()
   try:
-    async with CeligoClient(server.endpoint, device_id=server.core.device_id) as client:
+    async with CeligoClient(server.endpoint, device_id=server.session.device_id) as client:
       yield server, client
   finally:
     await server.stop()
@@ -49,13 +49,13 @@ import os
 import signal
 import sys
 from pathlib import Path
-from pylabrobot.revvity.celigo.grpc.storage import Store
+from pylabrobot.revvity.celigo.grpc.job_store import JobStore
 from pylabrobot.revvity.celigo.grpc.tests.helpers import make_server
 point, directory = sys.argv[1:]
 def checkpoint(self, stage, status):
     if stage == point and status.request_id == 'crash-target':
         os._exit(87)
-Store.checkpoint = checkpoint
+JobStore.checkpoint = checkpoint
 async def run():
     server, driver = make_server(Path(directory))
     release = asyncio.Event()
@@ -146,7 +146,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         assert (await capture(client, "completed")).identifier == completed.identifier
         async with client.previews() as updates:
           assert await asyncio.wait_for(updates.get(), 2) == frame
-        assert all(job.task is None for job in server.core.jobs.values())
+        assert all(job.task is None for job in server.session.jobs.values())
         with self.assertRaises(grpc.aio.AioRpcError):
           await ready.start()
         await initialize(client, "initialize-again")
@@ -255,7 +255,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
       tmp_path = Path(temporary_directory)
       directory = tmp_path / "data"
       async with local_server(
-        directory, storage_quota=HardwareSpecification(width=64, height=48).reservation()
+        directory, storage_quota=JobSpecification(width=64, height=48).reservation()
       ) as (_, client):
         await initialize(client)
         job = await capture(client, "retained")
@@ -277,7 +277,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         assert (await capture(client, "retained")).identifier == job.identifier
         await capture(client, "second")
       async with local_server(
-        directory, storage_quota=HardwareSpecification(width=64, height=48).reservation()
+        directory, storage_quota=JobSpecification(width=64, height=48).reservation()
       ) as (_, client):
         job = await client.recover("retained")
         assert (await job.image_retention()).images_released
@@ -303,7 +303,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
           job = await capture(client, "disk-full")
           await job.start()
           await asyncio.wait_for(capture_entered.wait(), 5)
-          store = server.core.store
+          store = server.session.store
 
           def fill_database():
             pages = store.connection.execute("PRAGMA page_count").fetchone()[0]
@@ -334,13 +334,13 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
       async with local_server(tmp_path / "data", max_jobs=2) as (server, client):
         await initialize(client)
         with patch(
-          "pylabrobot.revvity.celigo.grpc.storage.shutil.disk_usage",
+          "pylabrobot.revvity.celigo.grpc.job_store.shutil.disk_usage",
           return_value=SimpleNamespace(free=0),
         ):
           with self.assertRaises(grpc.aio.AioRpcError) as no_disk:
             await capture(client, "rejected")
           assert no_disk.exception.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
-        assert len(server.core.jobs) == 1
+        assert len(server.session.jobs) == 1
         first = await capture(client, "last-record")
         await first.cancel()
         await first.release_images()
@@ -364,7 +364,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
                 if not release.wait(5):
                   raise RuntimeError("test did not release the commit")
 
-            with patch.object(Store, "checkpoint", hold):
+            with patch.object(JobStore, "checkpoint", hold):
               job = None
               if point.startswith("start"):
                 job = await capture(client, "lost-response")
@@ -384,7 +384,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
                 client.timeout = 20
                 if job is not None:
                   job.timeout = 20
-              await asyncio.gather(*list(server.core.commands))
+              await asyncio.gather(*list(server.session.commands))
               recovered = await client.recover("lost-response")
               assert (await capture(client, "lost-response")).identifier == recovered.identifier
               if point.startswith("create"):
@@ -425,7 +425,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         await job.start()
         await job.wait()
         info = (await job.list_frames())[0]
-        store = server.core.store
+        store = server.session.store
         await store.call(
           lambda: store.connection.execute(
             "UPDATE frames SET image=? WHERE frame_id=?",
@@ -444,7 +444,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
       directory = tmp_path / "data"
       async with local_server(directory) as (server, client):
         await initialize(client)
-        store = server.core.store
+        store = server.session.store
         save = store.save
 
         def fail_completion(status, action):
@@ -469,7 +469,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
     with TemporaryDirectory() as temporary_directory:
       tmp_path = Path(temporary_directory)
       async with local_server(tmp_path / "data") as (server, client):
-        server.core.command_limit = 1
+        server.session.command_limit = 1
         entered, release = threading.Event(), threading.Event()
 
         def hold(self, point, status):
@@ -478,7 +478,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
             if not release.wait(5):
               raise RuntimeError("test did not release the disk")
 
-        with patch.object(Store, "checkpoint", hold):
+        with patch.object(JobStore, "checkpoint", hold):
           pending = asyncio.create_task(capture(client, "blocked"))
           try:
             assert await asyncio.to_thread(entered.wait, 3)

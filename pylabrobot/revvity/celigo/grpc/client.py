@@ -7,18 +7,18 @@ from contextlib import asynccontextmanager
 
 from typing_extensions import Self
 
-from pylabrobot.revvity.celigo.grpc.model import MAX_MESSAGE_BYTES
+from pylabrobot.revvity.celigo.grpc.limits import MAX_MESSAGE_BYTES
+from pylabrobot.revvity.celigo.grpc.remote_job import CeligoImagingJob
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
 from pylabrobot.rpc.device import DeviceClient
 from pylabrobot.rpc.images import SERVICE_NAME as IMAGE_SERVICE
 from pylabrobot.rpc.images import ImageClient
 from pylabrobot.rpc.jobs import SERVICE_NAME as JOB_SERVICE
-from pylabrobot.rpc.jobs import Job, JobClient
+from pylabrobot.rpc.jobs import JobClient
 from pylabrobot.rpc.transport import Updates
 from pylabrobot.rpc.v1 import images_pb2 as image_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
-from pylabrobot.rpc.v1 import jobs_pb2_grpc as job_rpc
 
 
 def acquisition_metadata(frame: image_pb.ImageFrame) -> pb.AcquisitionMetadata:
@@ -29,45 +29,17 @@ def acquisition_metadata(frame: image_pb.ImageFrame) -> pb.AcquisitionMetadata:
   return result
 
 
-class ImagingJob(Job):
-  """Celigo job convenience methods combining independent job and image capabilities."""
+class CeligoClient(DeviceClient):
+  """Expose Celigo operations with shared job and image clients on one channel."""
 
-  def __init__(
-    self,
-    stub: job_rpc.JobServiceAsyncStub,
-    images: ImageClient,
-    ref: job_pb.JobRef,
-    timeout: float = 20,
-  ) -> None:
-    """Bind optional image access alongside the common job handle."""
-    super().__init__(stub, ref, timeout)
-    self.images = images
-
-  async def release_images(self) -> image_pb.ImageRetention:
-    """Explicitly release retained pixels after archiving them elsewhere."""
-    return await self.images.release(self.ref)
-
-  async def image_retention(self) -> image_pb.ImageRetention:
-    """Read pixel availability separately from common job state."""
-    return await self.images.retention(self.ref)
-
-  async def list_frames(self, after_sequence: int = 0, limit: int = 64) -> list[image_pb.FrameInfo]:
-    """Read one page of metadata for images owned by this job."""
-    return await self.images.list_frames(self.ref, after_sequence, limit)
-
-  async def get_frame(self, frame_id: str) -> image_pb.ImageFrame:
-    """Retrieve a whole image and its typed acquisition metadata envelope."""
-    return await self.images.get_frame(self.ref, frame_id)
-
-
-class ImagingClient(DeviceClient):
-  """Compose the Celigo job and image capabilities."""
+  expected_device_type = "Celigo"
 
   def __init__(self, endpoint: str, device_id: str = "celigo-01", timeout: float = 20) -> None:
     """Configure image-sized message limits without imposing them on other devices."""
     super().__init__(endpoint, device_id, timeout, maximum_message_bytes=MAX_MESSAGE_BYTES)
     self.jobs: JobClient
     self.images: ImageClient
+    self.operations: rpc.CeligoServiceAsyncStub
 
   async def connect(self) -> Self:
     """Validate device identity and required capabilities before binding optional clients."""
@@ -79,19 +51,20 @@ class ImagingClient(DeviceClient):
       assert self.channel is not None
       self.jobs = JobClient(self.channel, self.device_id, self.timeout)
       self.images = ImageClient(self.channel, self.device_id, self.timeout)
+      self.operations = rpc.CeligoServiceStub(self.channel)
     except BaseException:
       await self.disconnect()
       raise
     return self
 
-  def imaging_job(self, ref: job_pb.JobRef) -> ImagingJob:
+  def bind_job(self, ref: job_pb.JobRef) -> CeligoImagingJob:
     """Bind a typed creation result to this device and its image client."""
     job = self.jobs.bind(ref)
-    return ImagingJob(self.jobs.stub, self.images, job.ref, self.timeout)
+    return CeligoImagingJob(self.jobs.stub, self.images, job.ref, self.timeout)
 
-  async def recover(self, request_id: str) -> ImagingJob:
+  async def recover(self, request_id: str) -> CeligoImagingJob:
     """Recover the original operation without creating another acquisition."""
-    return self.imaging_job((await self.jobs.recover(request_id)).ref)
+    return self.bind_job((await self.jobs.recover(request_id)).ref)
 
   @asynccontextmanager
   async def previews(self) -> AsyncIterator[Updates[image_pb.ImageFrame]]:
@@ -99,28 +72,11 @@ class ImagingClient(DeviceClient):
     async with self.images.previews() as updates:
       yield updates
 
-
-class CeligoClient(ImagingClient):
-  """Typed physical Celigo operations, separated from common dashboard state."""
-
-  expected_device_type = "Celigo"
-
-  def __init__(self, endpoint: str, device_id: str = "celigo-01", timeout: float = 20) -> None:
-    """Configure a connection without creating or initializing a hardware driver."""
-    super().__init__(endpoint, device_id, timeout)
-
-  async def connect(self) -> Self:
-    """Bind physical operations after validating identity and capabilities."""
-    await super().connect()
-    assert self.channel is not None
-    self.operations = rpc.CeligoServiceStub(self.channel)
-    return self
-
   async def configuration(self) -> pb.CeligoConfiguration:
     """Read the calibration-derived configuration for request binding."""
     return await self.operations.GetConfiguration(self.request, timeout=self.timeout)
 
-  async def create_initialization(self, request_id: str) -> ImagingJob:
+  async def create_initialization(self, request_id: str) -> CeligoImagingJob:
     """Create inert initialization tied to the current hardware configuration."""
     ref = await self.operations.CreateInitialization(
       pb.InitializationRequest(
@@ -128,7 +84,7 @@ class CeligoClient(ImagingClient):
       ),
       timeout=self.timeout,
     )
-    return self.imaging_job(ref)
+    return self.bind_job(ref)
 
   async def create_brightfield_capture(
     self,
@@ -139,7 +95,7 @@ class CeligoClient(ImagingClient):
     z_mm: float,
     exposure_ms: float,
     gain: float,
-  ) -> ImagingJob:
+  ) -> CeligoImagingJob:
     """Create one inert fixed-Z capture with explicit physical units in the wire contract."""
     ref = await self.operations.CreateBrightfieldCapture(
       pb.BrightfieldRequest(
@@ -156,4 +112,4 @@ class CeligoClient(ImagingClient):
       ),
       timeout=self.timeout,
     )
-    return self.imaging_job(ref)
+    return self.bind_job(ref)

@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient
-from pylabrobot.revvity.celigo.grpc.model import MAX_FRAME_BYTES
+from pylabrobot.revvity.celigo.grpc.limits import MAX_FRAME_BYTES
 from pylabrobot.revvity.celigo.grpc.tests.helpers import (
   block_calls,
   capture,
@@ -74,7 +74,7 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
           first = (await job.list_frames(limit=1))[0]
           frame = await job.get_frame(first.frame_id)
           await client.disconnect()
-          await server.core.jobs[job.identifier].task
+          await server.session.jobs[job.identifier].task
           await client.connect()
           recovered = await client.recover("first")
           assert recovered.identifier == job.identifier
@@ -182,7 +182,7 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
           assert expired.exception.code() == grpc.StatusCode.DEADLINE_EXCEEDED
           capture_release.set()
           assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
-          assert not server.core.jobs[job.identifier].stop_requested.is_set()
+          assert not server.session.jobs[job.identifier].stop_requested.is_set()
 
   async def test_receive_limit_does_not_destroy_retained_image(self) -> None:
     geometry = (2048, 2048, 16)

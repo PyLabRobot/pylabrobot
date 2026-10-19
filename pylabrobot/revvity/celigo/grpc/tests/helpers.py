@@ -8,10 +8,11 @@ from unittest.mock import create_autospec
 import numpy as np
 
 from pylabrobot.revvity.celigo.camera import CameraFrame
-from pylabrobot.revvity.celigo.celigo import AcquisitionResult, ControllerStatus
+from pylabrobot.revvity.celigo.celigo import AcquisitionResult, Celigo, ControllerStatus
 from pylabrobot.revvity.celigo.config import IlluminationChannelConfig, IOConfig
-from pylabrobot.revvity.celigo.grpc.hardware import CeligoCore, CeligoServer, Driver
-from pylabrobot.revvity.celigo.grpc.storage import DEFAULT_QUOTA
+from pylabrobot.revvity.celigo.grpc.job_store import DEFAULT_QUOTA
+from pylabrobot.revvity.celigo.grpc.server import CeligoServer
+from pylabrobot.revvity.celigo.grpc.session import CeligoSession
 from pylabrobot.revvity.celigo.tests.helpers import make_linear_axis_config, make_test_config
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
@@ -47,7 +48,7 @@ def make_config(width=64, height=48):
 
 def make_driver(width=64, height=48, depth=16):
   """Mock the existing asynchronous driver interface with a known camera response."""
-  driver = create_autospec(Driver, instance=True, spec_set=True)
+  driver = create_autospec(Celigo, instance=True, spec_set=True)
   dtype = np.uint16 if depth == 16 else np.uint8
   pixels = np.random.default_rng(1).integers(0, 2**depth, size=(height, width), dtype=dtype)
   frame = CameraFrame(pixels.tobytes(), width, height, depth, 1.25, 1.1, 1700000000.125)
@@ -93,7 +94,7 @@ def make_server(
   driver = driver or make_driver(
     config.calibration.image_width_pixels, config.calibration.image_height_pixels
   )
-  core = CeligoCore(
+  session = CeligoSession(
     directory,
     device_id,
     config,
@@ -101,9 +102,9 @@ def make_server(
     directory / "hardware.lock",
     connection_id=connection_id,
   )
-  core.store.quota = storage_quota
-  core.store.max_jobs = max_jobs
-  return CeligoServer(core), driver
+  session.store.quota = storage_quota
+  session.store.max_jobs = max_jobs
+  return CeligoServer(session), driver
 
 
 async def initialize(client, request_id="initialize"):

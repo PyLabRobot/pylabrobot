@@ -18,10 +18,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO, TypeVar
 
-from pylabrobot.revvity.celigo.grpc.model import (
-  MAX_FRAME_BYTES,
-  Specification,
-)
+from pylabrobot.revvity.celigo.grpc.job_specification import JobSpecification
+from pylabrobot.revvity.celigo.grpc.limits import MAX_FRAME_BYTES
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
 from pylabrobot.rpc.errors import (
   BusyError,
@@ -73,7 +71,14 @@ def advance(
   return result
 
 
-class Store:
+def public_job(status: stored_pb.JobStatus) -> job_pb.JobStatus:
+  """Project durable state onto the common job contract, omitting image retention."""
+  result = job_pb.JobStatus.FromString(status.SerializeToString())
+  result.DiscardUnknownFields()
+  return result
+
+
+class JobStore:
   def __init__(
     self,
     directory: Path,
@@ -81,7 +86,7 @@ class Store:
     quota=DEFAULT_QUOTA,
     max_jobs=1024,
     *,
-    decode_spec: Callable[[bytes], Specification],
+    decode_spec: Callable[[bytes], JobSpecification],
     spec_format: str,
   ):
     if quota <= 0 or max_jobs <= 0:
@@ -116,14 +121,14 @@ class Store:
     except (sqlite3.DatabaseError, OSError) as exc:
       raise StorageError(f"{type(exc).__name__}: {exc}") from exc
 
-  async def open(self) -> list[tuple[Specification, stored_pb.JobStatus]]:
+  async def open(self) -> list[tuple[JobSpecification, stored_pb.JobStatus]]:
     try:
       return await self.call(self._open)
     except BaseException:
       await self.close()
       raise
 
-  def _open(self) -> list[tuple[Specification, stored_pb.JobStatus]]:
+  def _open(self) -> list[tuple[JobSpecification, stored_pb.JobStatus]]:
     self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     self.lock_file = (self.directory / "writer.lock").open("a+b")
     try:
@@ -235,7 +240,7 @@ class Store:
     if shutil.disk_usage(self.directory).free < outstanding + extra + DISK_HEADROOM:
       raise CapacityError("insufficient free disk space for reserved images and SQLite headroom")
 
-  def create(self, spec: Specification, status: stored_pb.JobStatus, reservation: int) -> None:
+  def create(self, spec: JobSpecification, status: stored_pb.JobStatus, reservation: int) -> None:
     with self.transaction():
       if self.connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] >= self.max_jobs:
         raise CapacityError(

@@ -16,6 +16,25 @@ Its image metadata retains typed stage/galvo fields inside the shared envelope's
 protobuf `Any`. Other device types can implement identity/status alone or opt into
 jobs and images independently, without importing the Celigo implementation.
 
+## Implementation layout
+
+| File | Responsibility |
+| --- | --- |
+| [session.py](session.py) | `CeligoSession`: driver ownership, instrument state, Python operations, and shared device/job/image backend methods. |
+| [servicer.py](servicer.py) | `CeligoServicer`: Celigo RPC requests, response references, and gRPC error mapping. |
+| [server.py](server.py) | `CeligoServer`: service registration and startup/shutdown around one session. |
+| [acquisition_job.py](acquisition_job.py) | Job execution, cancellation, progress, and completion. |
+| [job_specification.py](job_specification.py) | Concrete job settings and their persisted representation. |
+| [job_store.py](job_store.py) | SQLite job/image records, recovery, and retention. |
+| [image_encoding.py](image_encoding.py) | PNG encoding and image metadata conversion. |
+| [limits.py](limits.py) | Capture, image, and message limits. |
+| [client.py](client.py) | `CeligoClient`: Python calls to Celigo RPCs, sharing one channel with the device, job, and image clients. |
+| [remote_job.py](remote_job.py) | `CeligoImagingJob`: a client handle for starting, watching, cancelling, and retrieving a remote job's images. |
+
+The server passes the same session to the shared device, job, and image services
+and the Celigo servicer. The session accepts ordinary Python calls; the Celigo
+servicer translates requests and does not own another driver or executor.
+
 ## Command-line usage
 
 See the [Celigo CLI guide](../../../../docs/user_guide/revvity/celigo/cli.md) for
@@ -64,8 +83,13 @@ saturated RPC load.
 
 ## Python client
 
-`CeligoClient` verifies device identity and API version on connection. For example,
-retrieve an already completed job's images without starting another acquisition:
+`CeligoClient` extends the shared `DeviceClient` and composes `JobClient` and
+`ImageClient` on the same channel. Creation and recovery return a `CeligoImagingJob`
+remote handle; execution remains in the server's `AcquisitionJob`.
+
+The client verifies device identity, API version, and job/image capabilities on
+connection. For example, retrieve an already completed job's images without
+starting another acquisition:
 
 ```python
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient

@@ -56,7 +56,7 @@ class StorageCompatibilityTests(unittest.IsolatedAsyncioTestCase):
             assert info.instance_id and info.instance_id != instance_id
             instance_id = info.instance_id
             assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
-            assert len(server.core.jobs) == 3
+            assert len(server.session.jobs) == 3
             for name in ("retained", "released", "interrupted"):
               job = await client.recover(name)
               status = await job.status()
@@ -78,7 +78,7 @@ class StorageCompatibilityTests(unittest.IsolatedAsyncioTestCase):
                 assert hashlib.sha256(frame.image).hexdigest() == frame.sha256
                 assert frame.width == frame.height == 8
                 assert acquisition_metadata(frame).channel == "brightfield"
-            assert all(job.task is None for job in server.core.jobs.values())
+            assert all(job.task is None for job in server.session.jobs.values())
             driver.setup.assert_not_awaited()
             driver.acquire_scan_position.assert_not_awaited()
         finally:

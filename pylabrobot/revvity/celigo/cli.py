@@ -14,13 +14,14 @@ from google.protobuf.json_format import MessageToDict
 
 from pylabrobot.revvity.celigo import Celigo, CeligoConfig
 from pylabrobot.revvity.celigo.grpc.client import CeligoClient
-from pylabrobot.revvity.celigo.grpc.hardware import CeligoCore, CeligoServer
+from pylabrobot.revvity.celigo.grpc.server import CeligoServer
+from pylabrobot.revvity.celigo.grpc.session import CeligoSession
 
 
 async def serve(args: argparse.Namespace) -> None:
   """Run the service without constructing or initializing a driver at startup."""
   config = CeligoConfig.from_install(str(args.config_root))
-  core = CeligoCore(
+  session = CeligoSession(
     args.data_dir,
     args.device_id,
     config,
@@ -33,7 +34,7 @@ async def serve(args: argparse.Namespace) -> None:
     args.hardware_lock,
     connection_id=args.usb_address or "serial-auto",
   )
-  server = CeligoServer(core, port=args.port)
+  server = CeligoServer(session, port=args.port)
   stopped = asyncio.Event()
   for signum in (signal.SIGINT, signal.SIGTERM):
     asyncio.get_running_loop().add_signal_handler(signum, stopped.set)
@@ -46,7 +47,7 @@ async def serve(args: argparse.Namespace) -> None:
           "device_id": args.device_id,
           "device_type": "Celigo",
           "state": "Uninitialized",
-          "configuration_id": core.configuration_id,
+          "configuration_id": session.configuration_id,
         }
       ),
       flush=True,

@@ -1,4 +1,4 @@
-"""Hardware adapter behavior over loopback RPCs, with mocked PLR driver methods."""
+"""Instrument-session behavior over loopback RPCs, with mocked PLR driver methods."""
 
 import asyncio
 import hashlib
@@ -20,8 +20,10 @@ from pylabrobot.revvity.celigo.grpc.client import (
   CeligoClient,
   acquisition_metadata,
 )
-from pylabrobot.revvity.celigo.grpc.hardware import CeligoCore, CeligoServer, HardwareSpecification
-from pylabrobot.revvity.celigo.grpc.storage import Store
+from pylabrobot.revvity.celigo.grpc.job_specification import JobSpecification
+from pylabrobot.revvity.celigo.grpc.job_store import JobStore
+from pylabrobot.revvity.celigo.grpc.server import CeligoServer
+from pylabrobot.revvity.celigo.grpc.session import CeligoSession
 from pylabrobot.revvity.celigo.grpc.tests.helpers import (
   block_calls,
   capture,
@@ -40,8 +42,10 @@ async def hardware_system(tmp_path, config):
   driver = make_driver()
   factory = Mock(return_value=driver)
 
-  core = CeligoCore(tmp_path / "data", "celigo-test", config, factory, tmp_path / "hardware.lock")
-  server = CeligoServer(core)
+  session = CeligoSession(
+    tmp_path / "data", "celigo-test", config, factory, tmp_path / "hardware.lock"
+  )
+  server = CeligoServer(session)
   await server.start()
   try:
     async with CeligoClient(server.endpoint, device_id="celigo-test") as client:
@@ -51,7 +55,7 @@ async def hardware_system(tmp_path, config):
     await server.stop()
 
 
-class HardwareTests(unittest.IsolatedAsyncioTestCase):
+class SessionTests(unittest.IsolatedAsyncioTestCase):
   async def test_startup_inspection_and_job_creation_never_construct_driver(self) -> None:
     with TemporaryDirectory() as temporary_directory:
       tmp_path = Path(temporary_directory)
@@ -247,7 +251,7 @@ class HardwareTests(unittest.IsolatedAsyncioTestCase):
         def fail(*_args):
           raise StorageError("disk full")
 
-        with patch.object(server.core.store, "save", fail):
+        with patch.object(server.session.store, "save", fail):
           with self.assertRaises(grpc.aio.AioRpcError) as error:
             await job.start()
           assert error.exception.code() == grpc.StatusCode.UNAVAILABLE
@@ -322,11 +326,11 @@ class HardwareTests(unittest.IsolatedAsyncioTestCase):
           job = await capture(client)
           await job.start()
           await asyncio.wait_for(capture_entered.wait(), 5)
-          execution = server.core.jobs[job.identifier]
+          execution = server.session.jobs[job.identifier]
           execution.task.cancel()
           await asyncio.sleep(0)
           assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
-          assert server.core.active_job is execution
+          assert server.session.active_job is execution
           capture_release.set()
           assert (await job.wait()).outcome == job_pb.OUTCOME_INTERRUPTED
           driver.stop.assert_awaited_once()
@@ -359,16 +363,16 @@ class HardwareTests(unittest.IsolatedAsyncioTestCase):
       tmp_path = Path(temporary_directory)
       config = make_config()
       async with hardware_system(tmp_path, config):
-        other = CeligoCore(
+        other = CeligoSession(
           tmp_path / "other", "celigo-test", config, make_driver, tmp_path / "hardware.lock"
         )
         with self.assertRaises(BusyError):
           await other.open()
         await other.stop()
-      store = Store(
+      store = JobStore(
         tmp_path / "data",
         "celigo-test",
-        decode_spec=HardwareSpecification.decode,
+        decode_spec=JobSpecification.decode,
         spec_format="unsupported.v1",
       )
       with self.assertRaisesRegex(StateError, "specification format"):
