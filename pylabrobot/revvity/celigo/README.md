@@ -72,6 +72,7 @@ capture, and illumination cleanup. Serialize operations on an instrument.
 | `coordinates.py` | Pixel, sample-mm, and stage-mm coordinate frames |
 | `navigation.py` | Plate/well navigation and galvo FOV planning |
 | `scan.py` | Scan specifications, physical planning, execution results, and offline estimates |
+| [`grpc/`](grpc/README.md) | Optional device service, versioned protobuf contract, Python client, simulator, and durable jobs/images |
 
 Tutorials, safety guidance, and hardware workflows live in the
 [Celigo user guide](../../../docs/user_guide/revvity/celigo/index.md).

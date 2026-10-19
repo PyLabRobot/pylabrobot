@@ -25,4 +25,6 @@ class DeviceCLI:
     return cast(DeviceCLIHandler, import_module(self.module))
 
 
-DEVICE_CLIS: Mapping[str, DeviceCLI] = {}
+DEVICE_CLIS: Mapping[str, DeviceCLI] = {
+  "celigo": DeviceCLI("pylabrobot.revvity.celigo.cli", "Celigo gRPC service and inspection tools"),
+}

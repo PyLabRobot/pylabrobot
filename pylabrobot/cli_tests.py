@@ -114,6 +114,29 @@ class TestDeviceRouting(unittest.TestCase):
         self.assertNotIn("{}", output.getvalue())
         load.assert_not_called()
 
+  def test_registered_celigo_is_listed_without_importing_its_dependencies(self) -> None:
+    """The installed registry advertises Celigo even when its RPC dependencies are absent."""
+    result = subprocess.run(
+      [
+        sys.executable,
+        "-c",
+        "import sys\n"
+        "sys.modules['grpc'] = None\n"
+        "sys.modules['google.protobuf'] = None\n"
+        "from pylabrobot.cli import main\n"
+        "try:\n"
+        "  main(['dev', '--help'])\n"
+        "except SystemExit as error:\n"
+        "  assert error.code == 0\n"
+        "assert not any(name.startswith('pylabrobot.revvity.celigo') for name in sys.modules)\n",
+      ],
+      capture_output=True,
+      text=True,
+      timeout=10,
+    )
+    self.assertEqual(result.returncode, 0, result.stderr)
+    self.assertIn("celigo", result.stdout)
+
   def test_empty_registry_rejects_unknown_arguments(self) -> None:
     """The empty-registry message must not mask misspelled commands or options."""
     for arguments in (["dev", "unknown"], ["dev", "--unknown"]):
