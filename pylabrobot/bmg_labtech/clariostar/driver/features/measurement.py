@@ -388,20 +388,24 @@ class Measurement:
     """The data replies of a finished read: one, or with `values`, pages until that many values
     are in.
 
-    A spectrum's data comes in pages sized to fit a frame (H01: 3, the 220-1000 nm verification
-    read: 5); each `05 02 00 00 00 00 00` returns the next, its value count at reply bytes 7-8.
+    A spectrum's data comes as several data replies, its pages, each sized to fit a frame (H01: 3,
+    the 220-1000 nm verification read: 5); each `05 02 00 00 00 00 00` returns the next.
 
     Raises:
+      FrameError: if a page arrives short or malformed.
       ValueError: if a page holds no values.
     """
     replies: List[bytes] = []
     received = 0
     while True:
+      # A request returns the read's next page, or its last once all are sent; requesting a short
+      # page again would return the page after it instead, so each page is requested once.
       reply = await self._driver.send_command(
         self._driver.CommandFamily.REQUEST,
         self._driver.Command.DATA,
         parameters=bytes(5),
         when_idle=False,
+        retries=1 if values is not None else 3,
       )
       replies.append(reply)
       if values is None:
@@ -437,6 +441,9 @@ class Measurement:
     read_at = datetime.now()
     start = time.monotonic()
     try:
+      # A poll sent right after the RUN's reply goes unanswered, as the reader answered; the
+      # vendor's first poll follows the reply after 46 ms or more.
+      await asyncio.sleep(self._driver.default_poll_interval)
       while True:
         status = await self._driver.send_command(self._driver.CommandFamily.STATUS, retries=5)
         busy = self._driver._parse_status(status).busy
