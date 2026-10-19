@@ -19,3 +19,4 @@ class IncubatorTests(unittest.TestCase):
     serialized = i.serialize()
     deserialized = Incubator.deserialize(serialized)
     self.assertEqual(i, deserialized)
+    self.assertEqual(deserialized.serialize(), serialized)

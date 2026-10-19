@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton.hamilton_decks import (
   _TRACK_WIDTH,
@@ -16,6 +18,9 @@ class VantageDeck(HamiltonDeck):
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
     with_trash: bool = True,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ) -> None:
     """Create a new Vantage deck of the given size.
 
@@ -38,6 +43,8 @@ class VantageDeck(HamiltonDeck):
         name=name,
         category=category,
         origin=origin,
+        identifier=identifier,
+        metadata=metadata,
       )
       self.size = 1.3
 

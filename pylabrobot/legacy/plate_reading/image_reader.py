@@ -19,6 +19,9 @@ class ImageReader(PlateReader, Imager):
     category: str = "heating_shaking",
     model: Optional[str] = None,
     rotation: Optional[Rotation] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -29,5 +32,7 @@ class ImageReader(PlateReader, Imager):
       category=category,
       model=model,
       rotation=rotation,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.backend: ImageReaderBackend = backend  # fix type

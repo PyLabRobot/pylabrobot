@@ -1,7 +1,6 @@
 """Hamilton Prep deck."""
 
 import logging
-import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from pylabrobot.resources.carrier import ResourceHolder
@@ -41,7 +40,7 @@ PREP_WASTE_BIN_SIZE = (134.0, 280.0, 122.0)
 PREP_WASTE_BIN_LOCATION = Coordinate(282.25 + 12.5, -4.25 - 35.0, 75.0 - 4.0 - 122.0)
 
 
-def hamilton_prep_resourceholder(name: str) -> ResourceHolder:
+def hamilton_prep_resourceholder(name: str, *, identifier: Optional[str] = None) -> ResourceHolder:
   """A PREP deck's labware spot: four corner clips around an insert pedestal, as measured.
 
   What stands here is centred between the clips, on the moat around the pedestal: the pedestal's
@@ -65,6 +64,7 @@ def hamilton_prep_resourceholder(name: str) -> ResourceHolder:
       z=3.5,
     ),
     model="hamilton_prep_resourceholder",
+    identifier=identifier,
   )
 
 
@@ -140,6 +140,9 @@ class PrepDeck(Deck):
     with_waste_positions: bool = True,
     with_core_grippers: bool = True,
     name_prefix: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """A Prep deck of the given size, carrying the parts a Prep has.
 
@@ -158,6 +161,8 @@ class PrepDeck(Deck):
       size_z=size_z,
       origin=origin,
       category=category,
+      identifier=identifier,
+      metadata=metadata,
     )
     if with_spots:
       for column in range(2):
@@ -165,6 +170,7 @@ class PrepDeck(Deck):
           x = PREP_FIRST_SLOT_LOCATION.x + column * PREP_SPOT_PITCH_X
           y = PREP_FIRST_SLOT_LOCATION.y + row * PREP_SPOT_PITCH_Y
           spot = hamilton_prep_resourceholder(name=self.get_component_name(f"spot_{column}_{row}"))
+          spot.metadata["slot"] = [column, row]
           self.assign_child_resource(spot, location=Coordinate(x, y, 0))
 
     if with_calibration_block:
@@ -209,6 +215,7 @@ class PrepDeck(Deck):
             size_y=6.0,
             size_z=0.0,
             category="waste_position",
+            metadata={"role": waste_name},
           ),
           location=Coordinate(x=287.0, y=y_pos, z=68.4),
         )
@@ -307,16 +314,16 @@ class PrepDeck(Deck):
     """The eight labware spots, column-major: `spot_0_0` first, `spot_1_3` last."""
     numbered = []
     for child in self.children:
-      called = re.fullmatch(r"(?:.*_)?spot_(\d+)_(\d+)", child.name)
-      if called is not None and isinstance(child, ResourceHolder):
-        numbered.append(((int(called.group(1)), int(called.group(2))), child))
+      slot = child.metadata.get("slot")
+      if isinstance(slot, list) and len(slot) == 2 and isinstance(child, ResourceHolder):
+        numbered.append(((slot[0], slot[1]), child))
     return [spot for _, spot in sorted(numbered, key=lambda pair: pair[0])]
 
   @property
   def calibration_block(self) -> Optional[Resource]:
     """The steel block between the two columns, or None if this deck was built without it."""
     for child in self.children:
-      if child.name == self.get_component_name("calibration_block"):
+      if child.category == "calibration_block":
         return child
     return None
 
@@ -324,7 +331,7 @@ class PrepDeck(Deck):
   def waste_block(self) -> Optional[Trash]:
     """Where tips are dropped, or None if this deck was built without it."""
     for child in self.children:
-      if isinstance(child, Trash) and child.name == self.get_component_name("waste_block"):
+      if isinstance(child, Trash) and child.model == "hamilton_prep_wasteblock":
         return child
     return None
 
@@ -332,7 +339,7 @@ class PrepDeck(Deck):
   def waste_bin(self) -> Optional[Resource]:
     """The bin beside the waste block, or None if this deck was built without it."""
     for child in self.children:
-      if child.name == self.get_component_name("waste_bin"):
+      if child.category == "waste_bin":
         return child
     return None
 
@@ -342,9 +349,7 @@ class PrepDeck(Deck):
     block = self.waste_block
     if block is not None:
       for child in block.children:
-        if isinstance(child, Trough) and child.name == self.get_component_name(
-          "liquid_waste_container"
-        ):
+        if isinstance(child, Trough):
           return child
     return None
 
@@ -354,7 +359,7 @@ class PrepDeck(Deck):
     block = self.waste_block
     if block is not None:
       for child in block.children:
-        if isinstance(child, TipSpot) and child.name == self.get_component_name("teaching_needle"):
+        if isinstance(child, TipSpot) and child.category == "teaching_needle":
           return child
     return None
 
@@ -364,9 +369,7 @@ class PrepDeck(Deck):
     block = self.waste_block
     if block is not None:
       for child in block.children:
-        if isinstance(child, HamiltonCoreGrippers) and child.name == self.get_component_name(
-          "core_grippers"
-        ):
+        if isinstance(child, HamiltonCoreGrippers):
           return child
     return None
 
@@ -376,7 +379,7 @@ class PrepDeck(Deck):
     found = {}
     for name in ("waste_rear", "waste_front", "waste_mph"):
       for waste in self.children:
-        if isinstance(waste, Trash) and waste.name == self.get_component_name(name):
+        if isinstance(waste, Trash) and waste.metadata.get("role") == name:
           found[name] = waste
           break
     return found
@@ -419,14 +422,16 @@ class PrepDeck(Deck):
     Returns:
       The arm resource, whether it was just created or already there.
     """
-    if self.has_resource(name):
-      return self.get_resource(name)
+    for child in self.children:
+      if child.metadata.get("component") == name:
+        return child
     x_arm = Resource(
       name=name,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
       category="x_arm",
+      metadata={"component": name},
       model=model,
     )
     # What x refers to, stated on the resource as the STAR's arm states it.

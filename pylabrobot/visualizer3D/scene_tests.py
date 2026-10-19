@@ -6,12 +6,14 @@ import unittest
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import hamilton_96_tiprack_1000uL
+from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.visualizer3D.facility import Facility
 from pylabrobot.visualizer3D.scene import (
   Scene,
   _model_of,
   build_scene,
+  collect_state,
   pack_state,
   state_signature,
 )
@@ -42,6 +44,22 @@ def facility_with_a_full_rack() -> Facility:
 
 
 class SceneTests(unittest.TestCase):
+  def test_duplicate_labels_have_distinct_instance_and_state_keys(self):
+    facility = facility_with(2)
+    first, second = facility.children
+    assert isinstance(first, Plate) and isinstance(second, Plate)
+    first.name = second.name = "same"
+    first.get_item("A1").tracker.set_volume(10)
+    second.get_item("A1").tracker.set_volume(20)
+    scene = build_scene(facility)
+    instances = scene.serialize()["instances"]
+    self.assertEqual(instances["names"].count("same"), 2)
+    self.assertEqual(len(set(instances["identifiers"])), len(instances["names"]))
+    for plate, volume in [(first, 10), (second, 20)]:
+      self.assertEqual(
+        collect_state(facility)[plate.get_item("A1").identifier][0]["volume"], volume
+      )
+
   def test_emits_parents_before_children(self):
     """A client resolves world transforms in one forward pass, which only works in this order."""
     scene = build_scene(facility_with(2))
@@ -55,14 +73,22 @@ class SceneTests(unittest.TestCase):
     self.assertEqual(len(many.models), len(one.models))
     self.assertEqual(len(many.names), 1 + 20 * 97)  # facility, then plate and its 96 wells
 
+  def test_tips_with_distinct_origins_share_one_model(self):
+    rack = hamilton_96_tiprack_1000uL(name="rack", with_tips=True)
+    tips = [spot.get_tip() for spot in rack.get_all_items()]
+    self.assertEqual(len({tip.origin_identifier for tip in tips}), 96)
+    scene = build_scene(rack)
+    models = {scene.model_of_instance[scene.identifiers.index(tip.identifier)] for tip in tips}
+    self.assertEqual(len(models), 1)
+
   def test_a_move_is_seen_through_reused_models(self):
     """Skipping the derive must not change a byte of what is sent: a model is reused, a position
     never is, so moving something must still show up."""
     facility = facility_with(3)
     first = build_scene(facility)
-    names = frozenset(first.names)
+    names = frozenset(first.identifiers)
     facility.get_resource("plate_0").location = Coordinate(999, 888, 0)
-    warm = build_scene(facility, known=first.derived, known_names=names)
+    warm = build_scene(facility, known=first.derived, known_identifiers=names)
     self.assertEqual(canonical(warm), canonical(build_scene(facility)))
 
   def test_a_racked_tip_hangs_from_its_collar(self):
@@ -85,13 +111,15 @@ class SceneTests(unittest.TestCase):
     invalidates what was derived from the old one."""
     facility = facility_with(2)
     first = build_scene(facility)
-    names = frozenset(first.names)
+    names = frozenset(first.identifiers)
     # A plate's ordering links its wells by name: with A1 out of the tree, that entry is a name.
     plate = facility.get_resource("plate_0")
     plate.unassign_child_resource(facility.get_resource("plate_0_well_A1"))
-    warm = build_scene(facility, known=first.derived, known_names=names)
+    warm = build_scene(facility, known=first.derived, known_identifiers=names)
     self.assertNotEqual(
-      warm.derived["plate_0"], first.derived["plate_0"], "the model kept its link"
+      warm.derived[facility.get_resource("plate_0").identifier],
+      first.derived[facility.get_resource("plate_0").identifier],
+      "the model kept its link",
     )
     self.assertEqual(canonical(warm), canonical(build_scene(facility)))
 
@@ -102,11 +130,17 @@ class SceneTests(unittest.TestCase):
     box = Resource(name="box", size_x=10, size_y=10, size_z=10)
     facility.assign_child_resource(box, location=Coordinate(900, 900, 0))
     first = build_scene(facility)
-    names = frozenset(first.names)
+    names = frozenset(first.identifiers)
     facility.unassign_child_resource(box)
-    warm = build_scene(facility, known=first.derived, known_names=names)
-    self.assertIs(warm.derived["plate_0_well_A1"], first.derived["plate_0_well_A1"])
-    self.assertIsNot(warm.derived["plate_0"], first.derived["plate_0"])  # links its wells
+    warm = build_scene(facility, known=first.derived, known_identifiers=names)
+    self.assertIs(
+      warm.derived[facility.get_resource("plate_0_well_A1").identifier],
+      first.derived[facility.get_resource("plate_0_well_A1").identifier],
+    )
+    self.assertIsNot(
+      warm.derived[facility.get_resource("plate_0").identifier],
+      first.derived[facility.get_resource("plate_0").identifier],
+    )  # links its wells
     self.assertEqual(
       json.dumps(warm.serialize(), sort_keys=True),
       json.dumps(build_scene(facility).serialize(), sort_keys=True),
@@ -120,10 +154,12 @@ class SceneTests(unittest.TestCase):
     location = well.location
     plate.unassign_child_resource(well)
     first = build_scene(facility)
-    names = frozenset(first.names)
-    self.assertEqual(first.derived["plate_0"]["ordering"]["A1"], "plate_0_well_A1")
+    names = frozenset(first.identifiers)
+    self.assertEqual(
+      first.derived[facility.get_resource("plate_0").identifier]["ordering"]["A1"], well.identifier
+    )
     plate.assign_child_resource(well, location=location)
-    warm = build_scene(facility, known=first.derived, known_names=names)
+    warm = build_scene(facility, known=first.derived, known_identifiers=names)
     self.assertEqual(
       json.dumps(warm.serialize(), sort_keys=True),
       json.dumps(build_scene(facility).serialize(), sort_keys=True),
@@ -146,7 +182,7 @@ class SceneTests(unittest.TestCase):
 
     gather(facility)
     self.assertEqual(scene.names, [resource.name for resource in resources])
-    names = frozenset(scene.names)
+    names = frozenset(scene.identifiers)
     for resource, model_index in zip(resources, scene.model_of_instance):
       expected = _model_of(resource.serialize(), names)
       model = scene.models[model_index]

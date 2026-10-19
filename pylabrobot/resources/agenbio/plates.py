@@ -14,7 +14,12 @@ from pylabrobot.resources.well import (
 )
 
 
-def agenbio_96_wellplate_Ub_2200uL(name: str, lid: Optional[Lid] = None) -> Plate:
+def agenbio_96_wellplate_Ub_2200uL(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   AGenBio Catalog No. P-2.2-SQG-96
   - Material: Polypropylene
@@ -61,10 +66,16 @@ def agenbio_96_wellplate_Ub_2200uL(name: str, lid: Optional[Lid] = None) -> Plat
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def agenbio_4_troughplate_75mL_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
+def agenbio_4_troughplate_75mL_Vb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   AGenBio Catalog No. RES-75-4MW
   - Material: Polypropylene
@@ -112,10 +123,16 @@ def agenbio_4_troughplate_75mL_Vb(name: str, lid: Optional[Lid] = None) -> Plate
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def AGenBio_4_troughplate_75000_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
+def AGenBio_4_troughplate_75000_Vb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Deprecated. Use :func:`AGenBio_4_troughplate_75000uL_Vb` instead."""
   import warnings
 
@@ -124,10 +141,15 @@ def AGenBio_4_troughplate_75000_Vb(name: str, lid: Optional[Lid] = None) -> Plat
     DeprecationWarning,
     stacklevel=2,
   )
-  return agenbio_4_troughplate_75mL_Vb(name=name, lid=lid)
+  return agenbio_4_troughplate_75mL_Vb(name=name, lid=lid, identifier=identifier)
 
 
-def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
+def AGenBio_1_wellplate_Fl(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Deprecated. Use :func:`AGenBio_1_troughplate_190000uL_Fl` instead."""
   import warnings
 
@@ -136,10 +158,15 @@ def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
     DeprecationWarning,
     stacklevel=2,
   )
-  return agenbio_1_troughplate_190mL_Fl(name=name, lid=lid)
+  return agenbio_1_troughplate_190mL_Fl(name=name, lid=lid, identifier=identifier)
 
 
-def agenbio_1_troughplate_190mL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
+def agenbio_1_troughplate_190mL_Fl(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """AGenBio single-well reagent reservoir, 190 mL, flat-bottom (ANSI/SLAS footprint).
 
   cat. no.: RES-190-F
@@ -187,10 +214,16 @@ def agenbio_1_troughplate_190mL_Fl(name: str, lid: Optional[Lid] = None) -> Plat
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def agenbio_1_troughplate_100mL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
+def agenbio_1_troughplate_100mL_Fl(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """AGenBio single-well reagent reservoir, 100 mL, flat-bottom (ANSI/SLAS footprint).
 
   cat. no.: RES-100-F
@@ -238,6 +271,7 @@ def agenbio_1_troughplate_100mL_Fl(name: str, lid: Optional[Lid] = None) -> Plat
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
@@ -246,7 +280,12 @@ def agenbio_1_troughplate_100mL_Fl(name: str, lid: Optional[Lid] = None) -> Plat
 # --------------------------------------------------------------------------- #
 
 
-def AGenBio_1_troughplate_100000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+def AGenBio_1_troughplate_100000uL_Fl(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for agenbio_1_troughplate_100mL_Fl().
 
   This alias will be removed in v1b1.
@@ -258,10 +297,15 @@ def AGenBio_1_troughplate_100000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
     DeprecationWarning,
     stacklevel=2,
   )
-  return agenbio_1_troughplate_100mL_Fl(name, lid)
+  return agenbio_1_troughplate_100mL_Fl(name, lid, identifier=identifier)
 
 
-def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+def AGenBio_1_troughplate_190000uL_Fl(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for agenbio_1_troughplate_190mL_Fl().
 
   This alias will be removed in v1b1.
@@ -273,10 +317,15 @@ def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
     DeprecationWarning,
     stacklevel=2,
   )
-  return agenbio_1_troughplate_190mL_Fl(name, lid)
+  return agenbio_1_troughplate_190mL_Fl(name, lid, identifier=identifier)
 
 
-def AGenBio_4_troughplate_75000uL_Vb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+def AGenBio_4_troughplate_75000uL_Vb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for agenbio_4_troughplate_75mL_Vb().
 
   This alias will be removed in v1b1.
@@ -288,10 +337,15 @@ def AGenBio_4_troughplate_75000uL_Vb(name: str, lid: Optional[Lid] = None) -> Pl
     DeprecationWarning,
     stacklevel=2,
   )
-  return agenbio_4_troughplate_75mL_Vb(name, lid)
+  return agenbio_4_troughplate_75mL_Vb(name, lid, identifier=identifier)
 
 
-def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+def AGenBio_96_wellplate_Ub_2200ul(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for agenbio_96_wellplate_Ub_2200uL().
 
   This alias will be removed in v1b1.
@@ -303,4 +357,4 @@ def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plat
     DeprecationWarning,
     stacklevel=2,
   )
-  return agenbio_96_wellplate_Ub_2200uL(name, lid)
+  return agenbio_96_wellplate_Ub_2200uL(name, lid, identifier=identifier)

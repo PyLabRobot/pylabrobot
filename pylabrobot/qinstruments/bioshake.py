@@ -35,6 +35,9 @@ class BioShake(PlateHolder):
     supports_locking: bool = False,
     supports_temperature_control: bool = False,
     supports_active_cooling: bool = False,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     if not HAS_SERIAL:
       raise RuntimeError(f"pyserial is required for BioShake. Import error: {_SERIAL_IMPORT_ERROR}")
@@ -49,6 +52,8 @@ class BioShake(PlateHolder):
       pedestal_size_z=pedestal_size_z,
       category="bioshake",
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.port = port
@@ -280,7 +285,7 @@ class BioShake(PlateHolder):
 # -- Factory functions for specific models --
 
 
-def BioShake3000(name: str, port: str) -> BioShake:
+def BioShake3000(name: str, port: str, *, identifier: Optional[str] = None) -> BioShake:
   """BioShake 3000 - shaking 200-3000 rpm, no ELM, no heating."""
   return BioShake(
     name=name,
@@ -292,10 +297,11 @@ def BioShake3000(name: str, port: str) -> BioShake:
     pedestal_size_z=0,
     supports_shaking=True,
     model=BioShake3000.__name__,
+    identifier=identifier,
   )
 
 
-def BioShake3000Elm(name: str, port: str) -> BioShake:
+def BioShake3000Elm(name: str, port: str, *, identifier: Optional[str] = None) -> BioShake:
   """BioShake 3000 elm - shaking 200-3000 rpm, ELM, no heating."""
   return BioShake(
     name=name,
@@ -308,10 +314,11 @@ def BioShake3000Elm(name: str, port: str) -> BioShake:
     supports_shaking=True,
     supports_locking=True,
     model=BioShake3000Elm.__name__,
+    identifier=identifier,
   )
 
 
-def BioShake3000ElmDWP(name: str, port: str) -> BioShake:
+def BioShake3000ElmDWP(name: str, port: str, *, identifier: Optional[str] = None) -> BioShake:
   """BioShake 3000 elm DWP - shaking 200-3000 rpm, ELM, no heating."""
   return BioShake(
     name=name,
@@ -324,6 +331,7 @@ def BioShake3000ElmDWP(name: str, port: str) -> BioShake:
     supports_shaking=True,
     supports_locking=True,
     model=BioShake3000ElmDWP.__name__,
+    identifier=identifier,
   )
 
 
@@ -352,7 +360,7 @@ def BioShakeD30TElm(name: str, port: str) -> BioShake:
   raise NotImplementedError("BioShakeD30TElm is missing resource definition.")
 
 
-def BioShakeQ1(name: str, port: str) -> BioShake:
+def BioShakeQ1(name: str, port: str, *, identifier: Optional[str] = None) -> BioShake:
   """BioShake Q1 - shaking 200-3000 rpm, ELM, heating, active cooling.
 
   Dimensions defined with microplate adapter #2016-1024 (flat bottom standard).
@@ -370,6 +378,7 @@ def BioShakeQ1(name: str, port: str) -> BioShake:
     supports_temperature_control=True,
     supports_active_cooling=True,
     model=BioShakeQ1.__name__,
+    identifier=identifier,
   )
 
 

@@ -65,7 +65,7 @@ export function clearModels() {
 
 export const stateOf = new Map();
 
-export const hiddenNames = new Set();
+export const hiddenIdentifiers = new Set();
 
 // What counts as ground rather than as an object standing on it.
 export const GROUND = new Set(["facility", "deck"]);
@@ -191,7 +191,7 @@ export function remember(index, mesh, slot, at, emptyOnly = false) {
 // a parent is off".
 export function isVisible(index) {
   for (let i = index; i >= 0; i = world.parentOf[i]) {
-    if (hiddenNames.has(world.names[i])) return false;
+    if (hiddenIdentifiers.has(world.identifiers[i])) return false;
   }
   return true;
 }

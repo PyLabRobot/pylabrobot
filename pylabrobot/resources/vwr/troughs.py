@@ -1,7 +1,9 @@
+from typing import Optional
+
 from pylabrobot.resources.trough import Trough
 
 
-def VWRReagentReservoirs25mL(name: str) -> Trough:
+def VWRReagentReservoirs25mL(name: str, *, identifier: Optional[str] = None) -> Trough:
   """part number 89094"""
   return Trough(
     name=name,
@@ -10,4 +12,5 @@ def VWRReagentReservoirs25mL(name: str) -> Trough:
     size_z=25,
     max_volume=25000,
     model="VWR Reagent Reservoirs 25mL",
+    identifier=identifier,
   )

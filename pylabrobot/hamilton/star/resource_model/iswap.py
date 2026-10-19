@@ -31,6 +31,9 @@ class iSWAPHead(Resource):
     model: Optional[str] = None,
     elbow_drive_angle: Optional[float] = None,
     wrist_drive_angle: Optional[float] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """
     Args:
@@ -45,7 +48,14 @@ class iSWAPHead(Resource):
       wrist_drive_angle: the wrist drive's angle as last read, as `serialize` writes it.
     """
     super().__init__(
-      name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category, model=model
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category=category,
+      model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.reference_point = reference_point
     self.elbow_drive_angle: Optional[float] = elbow_drive_angle
@@ -99,6 +109,8 @@ def iswap_head(
   name: str,
   diameter: float,
   size_z: float,
+  *,
+  identifier: Optional[str] = None,
 ) -> iSWAPHead:
   """The head, modelled as the column standing above the arm.
 
@@ -122,6 +134,7 @@ def iswap_head(
     # so the reference point states that, and the resource lands that far above what is read.
     reference_point=Coordinate(diameter / 2, diameter / 2, -ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z),
     model="hamilton_star_iswap_head",
+    identifier=identifier,
   )
 
 
@@ -130,6 +143,8 @@ def iswap_gripper(
   tool_center_point: Coordinate,
   jaw_range: Tuple[float, float],
   jaw_width: Optional[float] = None,
+  *,
+  identifier: Optional[str] = None,
 ) -> MechanicalGripper:
   """The iSWAP's hand: the wrist joint to the centre the clamps hold a rack at.
 
@@ -189,10 +204,11 @@ def iswap_gripper(
     jaw_range=jaw_range,
     jaw_width=jaw_width,
     model=model,
+    identifier=identifier,
   )
 
 
-def iswap_link_1(name: str, length: float) -> LinkBody:
+def iswap_link_1(name: str, length: float, *, identifier: Optional[str] = None) -> LinkBody:
   """The first member: the elbow joint to the wrist joint, with the arm bolted to it.
 
   Args:
@@ -212,6 +228,7 @@ def iswap_link_1(name: str, length: float) -> LinkBody:
     distal_joint=LINK_1_JOINT + Coordinate(length, 0.0, 0.0),
     category="iswap_link",
     model="hamilton_star_iswap_link_1",
+    identifier=identifier,
   )
   body = Resource(
     name=f"{member.name}_body",

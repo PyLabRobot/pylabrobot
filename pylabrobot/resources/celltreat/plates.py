@@ -16,7 +16,7 @@ from pylabrobot.resources.well import (
 )
 
 
-def celltreat_6_wellplate_16300uL_Fb_lid(name: str) -> Lid:
+def celltreat_6_wellplate_16300uL_Fb_lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   return Lid(
     name=name,
     size_x=127.0,  # from plate specs/drawing
@@ -24,10 +24,16 @@ def celltreat_6_wellplate_16300uL_Fb_lid(name: str) -> Lid:
     size_z=10.20,  # measured
     nesting_z_height=9.0,  # measured as difference between 2-stack and single
     model=celltreat_6_wellplate_16300uL_Fb_lid.__name__,
+    identifier=identifier,
   )
 
 
-def celltreat_6_wellplate_16300uL_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+def celltreat_6_wellplate_16300uL_Fb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   CellTreat cat. no.: 229105
   - Material: Polystyrene
@@ -71,10 +77,11 @@ def celltreat_6_wellplate_16300uL_Fb(name: str, lid: Optional[Lid] = None) -> Pl
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def celltreat_12_troughplate_15mL_Vb(name: str) -> Plate:
+def celltreat_12_troughplate_15mL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """Part number: 229562 (not sterile), 229566 (sterile)"""
   well_kwargs = {
     "size_x": 8.24,  # measured
@@ -104,10 +111,11 @@ def celltreat_12_troughplate_15mL_Vb(name: str) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def celltreat_24_wellplate_3300uL_Fb_lid(name: str) -> Lid:
+def celltreat_24_wellplate_3300uL_Fb_lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   return Lid(
     name=name,
     size_x=127.61,  # from spec
@@ -115,10 +123,16 @@ def celltreat_24_wellplate_3300uL_Fb_lid(name: str) -> Lid:
     size_z=9.94,  # measured
     nesting_z_height=8.94,  # measured as height of plate "plateau"
     model=celltreat_24_wellplate_3300uL_Fb_lid.__name__,
+    identifier=identifier,
   )
 
 
-def celltreat_24_wellplate_3300uL_Fb(name: str, with_lid: bool = False) -> Plate:
+def celltreat_24_wellplate_3300uL_Fb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   CellTreat cat. no.: 229123, 229124
   https://www.celltreat.com/wp-content/uploads/24-Well-Plate.pdf
@@ -151,10 +165,16 @@ def celltreat_24_wellplate_3300uL_Fb(name: str, with_lid: bool = False) -> Plate
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def celltreat_96_wellplate_350uL_Ub(name: str, with_lid: bool = False) -> Plate:
+def celltreat_96_wellplate_350uL_Ub(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   CellTreat cat. no.: 229591
 
@@ -208,10 +228,11 @@ def celltreat_96_wellplate_350uL_Ub(name: str, with_lid: bool = False) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
-def celltreat_96_wellplate_350uL_Ub_lid(name: str) -> Lid:
+def celltreat_96_wellplate_350uL_Ub_lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   """
   CellTreat cat. no.: 229591
   - Material: Polystyrene
@@ -224,10 +245,11 @@ def celltreat_96_wellplate_350uL_Ub_lid(name: str) -> Lid:
     size_z=10.71,  # measured
     nesting_z_height=8.30,  # measured as height of plate "plateau"
     model=celltreat_96_wellplate_350uL_Ub_lid.__name__,
+    identifier=identifier,
   )
 
 
-def celltreat_96_wellplate_350uL_Fb(name: str) -> Plate:
+def celltreat_96_wellplate_350uL_Fb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """
   CellTreat cat. no.: 229195, 229196
 
@@ -266,6 +288,7 @@ def celltreat_96_wellplate_350uL_Fb(name: str) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
@@ -274,7 +297,9 @@ def celltreat_96_wellplate_350uL_Fb(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:  # remove v1b1
+def CellTreat_12_troughplate_15000ul_Vb(
+  name: str, *, identifier: Optional[str] = None
+) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_12_troughplate_15mL_Vb().
 
   This alias will be removed in v1b1.
@@ -286,10 +311,15 @@ def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return celltreat_12_troughplate_15mL_Vb(name)
+  return celltreat_12_troughplate_15mL_Vb(name, identifier=identifier)
 
 
-def CellTreat_24_wellplate_3300ul_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+def CellTreat_24_wellplate_3300ul_Fb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_24_wellplate_3300uL_Fb().
 
   This alias will be removed in v1b1.
@@ -301,10 +331,15 @@ def CellTreat_24_wellplate_3300ul_Fb(name: str, with_lid: bool = False) -> Plate
     DeprecationWarning,
     stacklevel=2,
   )
-  return celltreat_24_wellplate_3300uL_Fb(name, with_lid)
+  return celltreat_24_wellplate_3300uL_Fb(name, with_lid, identifier=identifier)
 
 
-def CellTreat_6_wellplate_16300ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+def CellTreat_6_wellplate_16300ul_Fb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_6_wellplate_16300uL_Fb().
 
   This alias will be removed in v1b1.
@@ -316,10 +351,12 @@ def CellTreat_6_wellplate_16300ul_Fb(name: str, lid: Optional[Lid] = None) -> Pl
     DeprecationWarning,
     stacklevel=2,
   )
-  return celltreat_6_wellplate_16300uL_Fb(name, lid)
+  return celltreat_6_wellplate_16300uL_Fb(name, lid, identifier=identifier)
 
 
-def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:  # remove v1b1
+def CellTreat_96_wellplate_350ul_Fb(
+  name: str, *, identifier: Optional[str] = None
+) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_96_wellplate_350uL_Fb().
 
   This alias will be removed in v1b1.
@@ -331,10 +368,15 @@ def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return celltreat_96_wellplate_350uL_Fb(name)
+  return celltreat_96_wellplate_350uL_Fb(name, identifier=identifier)
 
 
-def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+def CellTreat_96_wellplate_350ul_Ub(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_96_wellplate_350uL_Ub().
 
   This alias will be removed in v1b1.
@@ -346,10 +388,12 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
     DeprecationWarning,
     stacklevel=2,
   )
-  return celltreat_96_wellplate_350uL_Ub(name, with_lid)
+  return celltreat_96_wellplate_350uL_Ub(name, with_lid, identifier=identifier)
 
 
-def CellTreat_6_wellplate_16300ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
+def CellTreat_6_wellplate_16300ul_Fb_Lid(
+  name: str, *, identifier: Optional[str] = None
+) -> Lid:  # remove v1b1
   """Deprecated alias for celltreat_6_wellplate_16300uL_Fb_lid().
 
   This alias will be removed in v1b1.
@@ -361,10 +405,12 @@ def CellTreat_6_wellplate_16300ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return celltreat_6_wellplate_16300uL_Fb_lid(name)
+  return celltreat_6_wellplate_16300uL_Fb_lid(name, identifier=identifier)
 
 
-def CellTreat_24_wellplate_3300ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
+def CellTreat_24_wellplate_3300ul_Fb_Lid(
+  name: str, *, identifier: Optional[str] = None
+) -> Lid:  # remove v1b1
   """Deprecated alias for celltreat_24_wellplate_3300uL_Fb_lid().
 
   This alias will be removed in v1b1.
@@ -376,10 +422,12 @@ def CellTreat_24_wellplate_3300ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return celltreat_24_wellplate_3300uL_Fb_lid(name)
+  return celltreat_24_wellplate_3300uL_Fb_lid(name, identifier=identifier)
 
 
-def CellTreat_96_wellplate_350ul_Ub_Lid(name: str) -> Lid:  # remove v1b1
+def CellTreat_96_wellplate_350ul_Ub_Lid(
+  name: str, *, identifier: Optional[str] = None
+) -> Lid:  # remove v1b1
   """Deprecated alias for celltreat_96_wellplate_350uL_Ub_lid().
 
   This alias will be removed in v1b1.
@@ -391,4 +439,4 @@ def CellTreat_96_wellplate_350ul_Ub_Lid(name: str) -> Lid:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return celltreat_96_wellplate_350uL_Ub_lid(name)
+  return celltreat_96_wellplate_350uL_Ub_lid(name, identifier=identifier)

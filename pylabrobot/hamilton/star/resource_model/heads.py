@@ -24,6 +24,8 @@ def _rigid_head(
   dx: Optional[float],
   dy: Optional[float],
   dz: float,
+  *,
+  identifier: Optional[str] = None,
 ) -> NChannelPipette:
   """One of the rigid heads: a grid the device knows, in a body it does not.
 
@@ -81,6 +83,7 @@ def _rigid_head(
     ),
     category=model,
     model=model,
+    identifier=identifier,
   )
 
 
@@ -92,6 +95,8 @@ def head96(
   dx: Optional[float] = None,
   dy: Optional[float] = None,
   dz: float = 0.0,
+  *,
+  identifier: Optional[str] = None,
 ) -> NChannelPipette:
   """The 96-head: 96 channels on a 12 by 8 grid at 9 mm, moving as one.
 
@@ -110,7 +115,20 @@ def head96(
   Returns:
     The pipette.
   """
-  return _rigid_head(name, 12, 8, 9.0, "head96", size_x, size_y, size_z, dx, dy, dz)
+  return _rigid_head(
+    name,
+    12,
+    8,
+    9.0,
+    "head96",
+    size_x,
+    size_y,
+    size_z,
+    dx,
+    dy,
+    dz,
+    identifier=identifier,
+  )
 
 
 def head384(
@@ -121,6 +139,8 @@ def head384(
   dx: Optional[float] = None,
   dy: Optional[float] = None,
   dz: float = 0.0,
+  *,
+  identifier: Optional[str] = None,
 ) -> NChannelPipette:
   """The 384-head: 384 channels on a 24 by 16 grid at 4.5 mm, moving as one.
 
@@ -139,4 +159,17 @@ def head384(
   Returns:
     The pipette.
   """
-  return _rigid_head(name, 24, 16, 4.5, "head384", size_x, size_y, size_z, dx, dy, dz)
+  return _rigid_head(
+    name,
+    24,
+    16,
+    4.5,
+    "head384",
+    size_x,
+    size_y,
+    size_z,
+    dx,
+    dy,
+    dz,
+    identifier=identifier,
+  )

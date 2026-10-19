@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources.carrier import (
   Coordinate,
   ResourceHolder,
@@ -6,7 +8,7 @@ from pylabrobot.resources.carrier import (
 )
 
 
-def Trough_CAR_4R200_A00(name: str) -> TroughCarrier:
+def Trough_CAR_4R200_A00(name: str, *, identifier: Optional[str] = None) -> TroughCarrier:
   """Hamilton cat. no.: 185436
   Hamilton name: 'RGT_CAR_4R200_A00'.
   Trough carrier for 4x 200ml troughs. 2 tracks(T) wide.
@@ -38,10 +40,11 @@ def Trough_CAR_4R200_A00(name: str) -> TroughCarrier:
       name_prefix=name,
     ),
     model="Trough_CAR_4R200_A00",
+    identifier=identifier,
   )
 
 
-def Trough_CAR_5R60_A00(name: str) -> TroughCarrier:
+def Trough_CAR_5R60_A00(name: str, *, identifier: Optional[str] = None) -> TroughCarrier:
   """Hamilton cat. no.: 53646-01
   Hamilton name: 'RGT_CAR5X60'.
   Trough carrier for 5x 60ml troughs. 1 tracks(T) wide.
@@ -66,4 +69,5 @@ def Trough_CAR_5R60_A00(name: str) -> TroughCarrier:
       name_prefix=name,
     ),
     model=Trough_CAR_5R60_A00.__name__,
+    identifier=identifier,
   )

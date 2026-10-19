@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 
 from pylabrobot.resources import Coordinate
 
@@ -8,18 +8,23 @@ from .byonoy_l96 import (
 )
 
 
-def byonoy_l96a_reader_unit(name: str) -> ByonoyLuminescence96Automate:
+def byonoy_l96a_reader_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyLuminescence96Automate:
   """Create a Byonoy L96A reader unit `PlateReader`."""
   return ByonoyLuminescence96Automate(
     name=name,
     size_x=138,  # caliper
     size_y=97.5,  # caliper
     size_z=41.7,  # force z probing
-    preferred_pickup_location=Coordinate(x=69, y=48.75, z=33.2),  # z = 41.7 - 8.5
+    preferred_pickup_location=Coordinate(x=69, y=48.75, z=33.2),  # z = 41.7 - 8.5,
+    identifier=identifier,
   )
 
 
-def byonoy_l96a_base_unit(name: str) -> ByonoyLuminescenceBaseUnit:
+def byonoy_l96a_base_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyLuminescenceBaseUnit:
   """Create a Byonoy L96A base unit."""
   return ByonoyLuminescenceBaseUnit(
     name=name,
@@ -27,7 +32,8 @@ def byonoy_l96a_base_unit(name: str) -> ByonoyLuminescenceBaseUnit:
     size_y=97.5,  # caliper
     size_z=10.7,  # force z probing
     plate_holder_child_location=Coordinate(x=5.1, y=4.75, z=8),  # caliper
-    reader_unit_holder_child_location=Coordinate(x=0, y=0, z=6.3),  # z = 48 - 41.7
+    reader_unit_holder_child_location=Coordinate(x=0, y=0, z=6.3),  # z = 48 - 41.7,
+    identifier=identifier,
   )
 
 

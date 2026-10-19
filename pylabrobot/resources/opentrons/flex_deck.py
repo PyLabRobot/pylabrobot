@@ -87,10 +87,29 @@ class FlexDeck(Deck):
       deck.check_single_nozzle_clearance("C3", primary_nozzle="H1")
   """
 
-  def __init__(self, name: str = "flex_deck") -> None:
-    super().__init__(size_x=_DECK_SIZE_X, size_y=_DECK_SIZE_Y, size_z=0.0, name=name)
+  def __init__(
+    self,
+    name: str = "flex_deck",
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
+    slot_holders: Optional[Dict[str, ResourceHolder]] = None,
+  ) -> None:
+    super().__init__(
+      size_x=_DECK_SIZE_X,
+      size_y=_DECK_SIZE_Y,
+      size_z=0.0,
+      name=name,
+      identifier=identifier,
+      metadata=metadata,
+    )
 
     self._slot_holders: Dict[str, ResourceHolder] = {}
+    if slot_holders is not None:
+      self._slot_holders = slot_holders
+      for holder in slot_holders.values():
+        super().assign_child_resource(holder, location=holder.location)
+      return
     for slot_id, loc in {**SLOT_LOCATIONS, **STAGING_LOCATIONS}.items():
       holder = ResourceHolder(
         name=f"{self.name}_slot_{slot_id}",
@@ -100,6 +119,31 @@ class FlexDeck(Deck):
       )
       self._slot_holders[slot_id] = holder
       super().assign_child_resource(holder, location=Coordinate(x=loc["x"], y=loc["y"], z=loc["z"]))
+
+  def serialize(self) -> dict:
+    """Serialize slot geometry and its association with grid addresses."""
+    return {
+      **super().serialize(),
+      "slot_ordering": {slot: holder.identifier for slot, holder in self._slot_holders.items()},
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> FlexDeck:
+    """Restore the saved slot holders and their identities."""
+    children = [
+      ResourceHolder.deserialize(child, allow_marshal=allow_marshal)
+      for child in data.get("children", [])
+    ]
+    ordering = data.get("slot_ordering")
+    if ordering is None:
+      holders = dict(zip([*SLOT_LOCATIONS, *STAGING_LOCATIONS], children))
+    else:
+      by_identifier = {child.identifier: child for child in children}
+      holders = {slot: by_identifier[identifier] for slot, identifier in ordering.items()}
+    saved = {**data, "children": [], "slot_holders": holders}
+    for key in ("slot_ordering", "size_x", "size_y", "size_z", "category", "model"):
+      saved.pop(key, None)
+    return super().deserialize(saved, allow_marshal=allow_marshal)
 
   # --- Slot Validation ---
 
@@ -173,7 +217,9 @@ class FlexDeck(Deck):
     slot whose corner matches that coordinate, keeping the robot and the resource tree in sync.
     """
 
-    existing = next((child for child in self.children if child.name == resource.name), None)
+    existing = next(
+      (child for child in self.children if child.identifier == resource.identifier), None
+    )
     if existing is not None:
       if not reassign:
         raise ValueError(f"Resource '{resource.name}' already assigned to deck")

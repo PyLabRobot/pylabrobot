@@ -721,7 +721,7 @@ class Pipettes:
       channel: the channel resource to hang it from.
     """
     name = f"{channel.name}_tip_mounting_shaft"
-    if any(child.name == name for child in channel.children):
+    if any(isinstance(child, TipMountingShaft) for child in channel.children):
       return
     shaft = TipMountingShaft(name=name, tip_pickup_mode="core")
     channel.assign_child_resource(

@@ -53,6 +53,7 @@ class RotationReference(TypedDict):
 class ResourceIdentityReference(TypedDict):
   """Fields shared by direct resources and their ancestors."""
 
+  identifier: str
   name: str
   type: str
 
@@ -231,6 +232,7 @@ def resource_reference(resource: Optional["Resource"]) -> Optional[ResourceRefer
   if resource is None:
     return None
   result: ResourceReference = {
+    "identifier": resource.identifier,
     "name": resource.name,
     "type": type(resource).__name__,
   }
@@ -245,6 +247,7 @@ def resource_reference(resource: Optional["Resource"]) -> Optional[ResourceRefer
   current = resource.parent
   while current is not None:
     ancestor: ResourceAncestorReference = {
+      "identifier": current.identifier,
       "name": current.name,
       "type": type(current).__name__,
     }

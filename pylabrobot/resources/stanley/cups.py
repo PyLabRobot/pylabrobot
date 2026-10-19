@@ -1,7 +1,11 @@
+from typing import Optional
+
 from pylabrobot.resources.container import Container
 
 
-def StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name: str) -> Container:
+def StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(
+  name: str, *, identifier: Optional[str] = None
+) -> Container:
   """QUENCHER H2.0 FLOWSTATE (TM) TUMBLER
 
   https://www.stanley1913.com/products/adventure-quencher-travel-tumbler-40-oz
@@ -17,4 +21,5 @@ def StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name: str) -> Container:
     size_z=12.3 * MM_PER_INCH,
     max_volume=40 * ML_PER_OZ,
     category="cups",
+    identifier=identifier,
   )

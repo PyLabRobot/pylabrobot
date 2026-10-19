@@ -15,7 +15,7 @@ from pylabrobot.resources.well import (
 # # # # # # # # # # cor_axy_24_wellplate_10mL_Vb # # # # # # # # # #
 
 
-def cor_axy_24_wellplate_10mL_Vb(name: str) -> Plate:
+def cor_axy_24_wellplate_10mL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """
   Corning cat. no.: P-DW-10ML-24-C-S, P-DW-10ML-24-C
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-DW-10ML-24-C
@@ -50,6 +50,7 @@ def cor_axy_24_wellplate_10mL_Vb(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
@@ -64,7 +65,7 @@ def _compute_volume_from_height_Cor_Axy_24_wellplate_10mL_Vb(h: float):
 # # # # # # # # # # cor_axy_96_wellplate_500uL_Ub # # # # # # # # # #
 
 
-def cor_axy_96_wellplate_500uL_Ub(name: str) -> Plate:
+def cor_axy_96_wellplate_500uL_Ub(name: str, *, identifier: Optional[str] = None) -> Plate:
   """
   Axygen 96w Shallow Well Plate 500uL U Bottom
   - Product number: P-96-450V-C-S
@@ -98,6 +99,7 @@ def cor_axy_96_wellplate_500uL_Ub(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
@@ -118,7 +120,12 @@ _cor_axy_1_troughplate_rowVb_height_volume_data = {
 }
 
 
-def cor_axy_1_troughplate_rowVb(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_axy_1_troughplate_rowVb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   Axygen single-well reservoir, 8 V-bottom trenches across the rows
   - Corning cat. no.: RES-SW8-HP-SI
@@ -150,6 +157,7 @@ def cor_axy_1_troughplate_rowVb(name: str, lid: Optional[Lid] = None) -> Plate:
       height_volume_data=_cor_axy_1_troughplate_rowVb_height_volume_data,
       material_z_thickness=2.0,
     ),
+    identifier=identifier,
   )
 
 
@@ -158,7 +166,12 @@ def cor_axy_1_troughplate_rowVb(name: str, lid: Optional[Lid] = None) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+def Cor_Axy_24_wellplate_10mL_Vb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for cor_axy_24_wellplate_10mL_Vb().
 
   This alias will be removed in v1b1.
@@ -170,10 +183,15 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:  #
     DeprecationWarning,
     stacklevel=2,
   )
-  return cor_axy_24_wellplate_10mL_Vb(name)
+  return cor_axy_24_wellplate_10mL_Vb(name, identifier=identifier)
 
 
-def Cor_Axy_96_wellplate_500uL_Ub(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+def Cor_Axy_96_wellplate_500uL_Ub(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for cor_axy_96_wellplate_500uL_Ub().
 
   This alias will be removed in v1b1.
@@ -185,4 +203,4 @@ def Cor_Axy_96_wellplate_500uL_Ub(name: str, with_lid: bool = False) -> Plate:  
     DeprecationWarning,
     stacklevel=2,
   )
-  return cor_axy_96_wellplate_500uL_Ub(name)
+  return cor_axy_96_wellplate_500uL_Ub(name, identifier=identifier)

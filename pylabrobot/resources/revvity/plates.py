@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_volume_container_2segments_round_vbottom,
 )
@@ -25,7 +27,7 @@ def _compute_volume_from_height_Revvity_384_wellplate_28ul_Ub(
   )
 
 
-def Revvity_384_wellplate_28ul_Ub_Lid(name: str) -> Lid:
+def Revvity_384_wellplate_28ul_Ub_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -39,7 +41,12 @@ def Revvity_384_wellplate_28ul_Ub_Lid(name: str) -> Lid:
 
 
 #: Revvity_384_wellplate_28ul_Ub
-def Revvity_384_wellplate_28ul_Ub(name: str, with_lid: bool = False) -> Plate:
+def Revvity_384_wellplate_28ul_Ub(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Revvity cat. no.: 6008280. nickname "ProxiPlate-384 Plus"
   - Material: Polystyrene
   - Colour: white
@@ -78,4 +85,5 @@ def Revvity_384_wellplate_28ul_Ub(name: str, with_lid: bool = False) -> Plate:
       compute_volume_from_height=_compute_volume_from_height_Revvity_384_wellplate_28ul_Ub,
       name_prefix=name,
     ),
+    identifier=identifier,
   )

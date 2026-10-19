@@ -19,7 +19,7 @@ class HighResStackerTests(unittest.TestCase):
     self.assertEqual(stacker.model, "high_res_stacker")
     self.assertEqual(
       stacker.metadata,
-      {"zero_offset": 5, "slot_height": 22.867, "slot_count": 24},
+      {"name": "stacker_2", "zero_offset": 5, "slot_height": 22.867, "slot_count": 24},
     )
 
     first = stacker.sites[0]

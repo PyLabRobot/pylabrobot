@@ -9,9 +9,7 @@ from .resource import Resource
 def move_tool(tool: Resource, assign: Callable[[], None]) -> None:
   """Move a tool to where `assign` puts it, off whatever held it, or leave it where it was.
 
-  A name is checked against the whole tree before an assignment detaches what it moves, so a tool
-  still held elsewhere in the same tree has to be let go of first. If the assignment then fails,
-  the tool goes back where it was rather than belonging to nothing.
+  If the assignment fails after releasing the tool, restore its original parent and location.
 
   Args:
     tool: the tool to move.
@@ -28,20 +26,29 @@ def move_tool(tool: Resource, assign: Callable[[], None]) -> None:
     raise
 
 
-def release_named_tool(root: Resource, name: str, keep: Optional[Resource] = None) -> None:
-  """Let go of a tool of this name held anywhere in a tree, so one of that name can be put elsewhere.
-
-  Loading state brings its own copy of a tool that may still be held somewhere else in the tree, on
-  a channel say, and a name is unique in a tree.
+def release_tool(
+  root: Resource,
+  identifier: Optional[str],
+  *,
+  name: Optional[str] = None,
+  keep: Optional[Resource] = None,
+) -> None:
+  """Release a tool with the saved identity before restoring it under another holder.
 
   Args:
     root: the tree.
-    name: the tool's name.
+    identifier: the saved tool identifier.
+    name: a fallback for legacy state without identifiers; must be unambiguous.
     keep: a tool to leave where it is, if it is the one found: the holder's own.
   """
-  if not root.has_resource(name):
+  if identifier is not None:
+    if not root.has_resource_by_identifier(identifier):
+      return
+    held = root.get_resource_by_identifier(identifier)
+  elif name is not None and root.has_resource(name):
+    held = root.get_resource(name)
+  else:
     return
-  held = root.get_resource(name)
   if held is not keep and isinstance(held, HeadTool) and held.parent is not None:
     held.parent.unassign_child_resource(held)
 
@@ -66,6 +73,9 @@ class HeadTool(Resource):
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
     is_conductive: Optional[bool] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """Initialize a tool with an optional pickup location relative to its origin."""
     if not isinstance(name, str):
@@ -77,20 +87,12 @@ class HeadTool(Resource):
       size_z=size_z,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.fitting_depth = fitting_depth
     self.pick_up_location = pick_up_location
     self.is_conductive = is_conductive
-
-  def __eq__(self, other: object) -> bool:
-    """Compare resource fields and the tool's fit, pickup location and conductivity."""
-    return (
-      isinstance(other, HeadTool)
-      and super().__eq__(other)
-      and self.fitting_depth == other.fitting_depth
-      and self.pick_up_location == other.pick_up_location
-      and self.is_conductive == other.is_conductive
-    )
 
   def serialize(self) -> dict:
     """Serialize the tool's resource fields, fitting depth, pickup location and conductivity."""

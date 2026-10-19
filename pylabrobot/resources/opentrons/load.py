@@ -2,7 +2,7 @@ import json
 import math
 import os
 import urllib.request
-from typing import Dict, List, cast
+from typing import Dict, List, Optional, cast
 
 from pylabrobot.resources import Coordinate, Tip, TipSpot
 from pylabrobot.resources.carrier import PlateHolder
@@ -41,7 +41,12 @@ def _download_ot_resource_file(ot_name: str, force_download: bool):
 
 
 def load_ot_tip_rack(
-  ot_name: str, plr_resource_name: str, with_tips: bool = True, force_download: bool = False
+  ot_name: str,
+  plr_resource_name: str,
+  with_tips: bool = True,
+  force_download: bool = False,
+  *,
+  identifier: Optional[str] = None,
 ) -> StandingTipRack:
   """Convert an Opentrons tip rack definition file to a PyLabRobot TipRack resource."""
 
@@ -99,11 +104,16 @@ def load_ot_tip_rack(
     ordered_items=cast(Dict[str, TipSpot], ordered_items),
     model=data["metadata"]["displayName"],
     with_tips=with_tips,
+    identifier=identifier,
   )
 
 
 def load_ot_tube_rack(
-  ot_name: str, plr_resource_name: str, force_download: bool = False
+  ot_name: str,
+  plr_resource_name: str,
+  force_download: bool = False,
+  *,
+  identifier: Optional[str] = None,
 ) -> TubeRack:
   """Convert an Opentrons tube rack definition file to a PyLabRobot TubeRack resource."""
 
@@ -149,11 +159,17 @@ def load_ot_tube_rack(
     size_z=data["dimensions"]["zDimension"],
     ordered_items=cast(Dict[str, ResourceHolder], ordered_items),
     model=data["metadata"]["displayName"],
+    identifier=identifier,
   )
 
 
 def load_ot_plate_holder(
-  ot_name: str, plr_resource_name: str, z_offset: float, force_download: bool = False
+  ot_name: str,
+  plr_resource_name: str,
+  z_offset: float,
+  force_download: bool = False,
+  *,
+  identifier: Optional[str] = None,
 ) -> PlateHolder:
   """Convert an Opentrons adapter definition file to a PyLabRobot PlateHolder resource."""
 
@@ -173,4 +189,5 @@ def load_ot_plate_holder(
     child_location=Coordinate(location["x"], location["y"], z_offset),
     pedestal_size_z=0,
     model=data["metadata"]["displayName"],
+    identifier=identifier,
   )

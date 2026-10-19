@@ -87,8 +87,21 @@ class TecanTipRack(TipRack, TecanResource):
     ordered_items: Optional[Dict[str, TipSpot]] = None,
     category: str = "tecan_plate",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, ordered_items, category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      ordered_items,
+      category=category,
+      model=model,
+      identifier=identifier,
+      metadata=metadata,
+    )
 
     self.z_start = z_start
     self.z_dispense = z_dispense
@@ -96,7 +109,7 @@ class TecanTipRack(TipRack, TecanResource):
     self.area = area
 
 
-def DiTi_100ul_Te_MO(name: str) -> TecanTipRack:
+def DiTi_100ul_Te_MO(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.0,
@@ -121,10 +134,11 @@ def DiTi_100ul_Te_MO(name: str) -> TecanTipRack:
       make_tip=DiTi_100ul_Te_MO_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_Te_MO(name: str) -> TecanTipRack:
+def DiTi_50ul_Te_MO(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.0,
@@ -149,10 +163,11 @@ def DiTi_50ul_Te_MO(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_Te_MO_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_Te_MO(name: str) -> TecanTipRack:
+def DiTi_200ul_Te_MO(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.0,
@@ -177,10 +192,11 @@ def DiTi_200ul_Te_MO(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_Te_MO_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_100ul_Filter_Te_MO(name: str) -> TecanTipRack:
+def DiTi_100ul_Filter_Te_MO(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.0,
@@ -205,10 +221,11 @@ def DiTi_100ul_Filter_Te_MO(name: str) -> TecanTipRack:
       make_tip=DiTi_100ul_Filter_Te_MO_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_Filter_Te_MO(name: str) -> TecanTipRack:
+def DiTi_200ul_Filter_Te_MO(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.0,
@@ -233,10 +250,11 @@ def DiTi_200ul_Filter_Te_MO(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_Filter_Te_MO_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Adapter_96_DiTi_MCA384(name: str) -> TecanTipRack:
+def Adapter_96_DiTi_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30032043 or 30032063 - Picks 96 tips, a single row or a single column. Works with MCA384 disposable tips."""
   return TecanTipRack(
     name=name,
@@ -262,10 +280,11 @@ def Adapter_96_DiTi_MCA384(name: str) -> TecanTipRack:
       make_tip=Adapter_96_DiTi_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Adapter_DiTi_Combo_MCA384(name: str) -> TecanTipRack:
+def Adapter_DiTi_Combo_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30032060 - Picks 384 tips, a single row of 24 tips, a single column of 16 tips or two columns of 16 tips each."""
   return TecanTipRack(
     name=name,
@@ -291,10 +310,11 @@ def Adapter_DiTi_Combo_MCA384(name: str) -> TecanTipRack:
       make_tip=Adapter_DiTi_Combo_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Adapter_DiTi_MCA384(name: str) -> TecanTipRack:
+def Adapter_DiTi_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30032061 - Picks 384 tips. Works with MCA384 disposable tips (Former Part no. 30032041)."""
   return TecanTipRack(
     name=name,
@@ -320,10 +340,11 @@ def Adapter_DiTi_MCA384(name: str) -> TecanTipRack:
       make_tip=Adapter_DiTi_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_100ul_Filter_MCA96(name: str) -> TecanTipRack:
+def DiTi_100ul_Filter_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612347"""
   return TecanTipRack(
     name=name,
@@ -349,10 +370,11 @@ def DiTi_100ul_Filter_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_100ul_Filter_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_100ul_MCA96(name: str) -> TecanTipRack:
+def DiTi_100ul_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612345 or 10612346"""
   return TecanTipRack(
     name=name,
@@ -378,10 +400,11 @@ def DiTi_100ul_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_100ul_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_Filter_MCA96(name: str) -> TecanTipRack:
+def DiTi_200ul_Filter_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612342"""
   return TecanTipRack(
     name=name,
@@ -407,10 +430,11 @@ def DiTi_200ul_Filter_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_Filter_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_MCA96(name: str) -> TecanTipRack:
+def DiTi_200ul_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612340 or 10612341"""
   return TecanTipRack(
     name=name,
@@ -436,10 +460,11 @@ def DiTi_200ul_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_MCA96(name: str) -> TecanTipRack:
+def DiTi_50ul_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612343"""
   return TecanTipRack(
     name=name,
@@ -465,10 +490,11 @@ def DiTi_50ul_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Base_Nested_DiTi_MCA96(name: str) -> TecanTipRack:
+def Base_Nested_DiTi_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30038609 or 30038614 or 30038619"""
   return TecanTipRack(
     name=name,
@@ -494,10 +520,11 @@ def Base_Nested_DiTi_MCA96(name: str) -> TecanTipRack:
       make_tip=Base_Nested_DiTi_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_100ul_Nested_MCA96(name: str) -> TecanTipRack:
+def DiTi_100ul_Nested_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30038614"""
   return TecanTipRack(
     name=name,
@@ -523,10 +550,11 @@ def DiTi_100ul_Nested_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_100ul_Nested_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_100ul_SBS_MCA96(name: str) -> TecanTipRack:
+def DiTi_100ul_SBS_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -551,10 +579,11 @@ def DiTi_100ul_SBS_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_100ul_SBS_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_SBS_MCA96(name: str) -> TecanTipRack:
+def DiTi_200ul_SBS_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -579,10 +608,11 @@ def DiTi_200ul_SBS_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_SBS_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_SBS_MCA96(name: str) -> TecanTipRack:
+def DiTi_50ul_SBS_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -607,10 +637,11 @@ def DiTi_50ul_SBS_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_SBS_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_Nested_MCA96(name: str) -> TecanTipRack:
+def DiTi_50ul_Nested_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30038609"""
   return TecanTipRack(
     name=name,
@@ -636,10 +667,11 @@ def DiTi_50ul_Nested_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_Nested_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Adapter_96_DiTi_1to1_MCA384(name: str) -> TecanTipRack:
+def Adapter_96_DiTi_1to1_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30032048 - Picks 96 tips, single rows/columns. Uses 1channel per tip. Works with MCA96 disposable tips."""
   return TecanTipRack(
     name=name,
@@ -665,10 +697,11 @@ def Adapter_96_DiTi_1to1_MCA384(name: str) -> TecanTipRack:
       make_tip=Adapter_96_DiTi_1to1_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_Nested_MCA96(name: str) -> TecanTipRack:
+def DiTi_200ul_Nested_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30038619"""
   return TecanTipRack(
     name=name,
@@ -694,10 +727,11 @@ def DiTi_200ul_Nested_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_Nested_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_w_b_filter_MCA96(name: str) -> TecanTipRack:
+def DiTi_200ul_w_b_filter_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30050349, not for volumes under 5ul"""
   return TecanTipRack(
     name=name,
@@ -723,10 +757,11 @@ def DiTi_200ul_w_b_filter_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_w_b_filter_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_wide_bore_MCA96(name: str) -> TecanTipRack:
+def DiTi_200ul_wide_bore_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30050348, not for volumes under 5ul"""
   return TecanTipRack(
     name=name,
@@ -752,10 +787,11 @@ def DiTi_200ul_wide_bore_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_wide_bore_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Adapter_96_DiTi_4to1_MCA384(name: str) -> TecanTipRack:
+def Adapter_96_DiTi_4to1_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30032042 or 30032062 - EVA (Extended Volume Adapter) - Maximum capacity 500 uL. Use with SBS 96 tip box only."""
   return TecanTipRack(
     name=name,
@@ -781,10 +817,11 @@ def Adapter_96_DiTi_4to1_MCA384(name: str) -> TecanTipRack:
       make_tip=Adapter_96_DiTi_4to1_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_500ul_Filter_SBS_MCA96(name: str) -> TecanTipRack:
+def DiTi_500ul_Filter_SBS_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=129.6,
@@ -809,10 +846,11 @@ def DiTi_500ul_Filter_SBS_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_500ul_Filter_SBS_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_500ul_SBS_MCA96(name: str) -> TecanTipRack:
+def DiTi_500ul_SBS_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=129.2,
@@ -837,10 +875,11 @@ def DiTi_500ul_SBS_MCA96(name: str) -> TecanTipRack:
       make_tip=DiTi_500ul_SBS_MCA96_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_Nested_Waste_MCA384(name: str) -> TecanTipRack:
+def DiTi_Nested_Waste_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30054549"""
   return TecanTipRack(
     name=name,
@@ -866,10 +905,11 @@ def DiTi_Nested_Waste_MCA384(name: str) -> TecanTipRack:
       make_tip=DiTi_Nested_Waste_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_1000ul_SBS_LiHa(name: str) -> TecanTipRack:
+def DiTi_1000ul_SBS_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.0,
@@ -894,10 +934,11 @@ def DiTi_1000ul_SBS_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_1000ul_SBS_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_SBS_LiHa(name: str) -> TecanTipRack:
+def DiTi_200ul_SBS_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -922,10 +963,11 @@ def DiTi_200ul_SBS_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_SBS_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_SBS_LiHa(name: str) -> TecanTipRack:
+def DiTi_50ul_SBS_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -950,10 +992,11 @@ def DiTi_50ul_SBS_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_SBS_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_5000ul_LiHa(name: str) -> TecanTipRack:
+def DiTi_5000ul_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30059897 (Tecan Pure). Tip is usable in a volume range of 300ul to 4850ul."""
   return TecanTipRack(
     name=name,
@@ -979,10 +1022,11 @@ def DiTi_5000ul_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_5000ul_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_5000ul_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_5000ul_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30065423 (Tecan Pure), Tip is usable in a volume range of 300ul to 4800ul."""
   return TecanTipRack(
     name=name,
@@ -1008,10 +1052,11 @@ def DiTi_5000ul_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_5000ul_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_125ul_Filter_MCA384(name: str) -> TecanTipRack:
+def DiTi_125ul_Filter_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30051810 (Tecan Sterile). Maximum pipetting volume is 110ul."""
   return TecanTipRack(
     name=name,
@@ -1037,10 +1082,11 @@ def DiTi_125ul_Filter_MCA384(name: str) -> TecanTipRack:
       make_tip=DiTi_125ul_Filter_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_125ul_MCA384(name: str) -> TecanTipRack:
+def DiTi_125ul_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30051808 (Tecan Pure) or 30051809 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
@@ -1066,10 +1112,11 @@ def DiTi_125ul_MCA384(name: str) -> TecanTipRack:
       make_tip=DiTi_125ul_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_15ul_Filter_MCA384(name: str) -> TecanTipRack:
+def DiTi_15ul_Filter_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30051804 (Tecan Sterile). Maximum pipetting volume is 14.5ul."""
   return TecanTipRack(
     name=name,
@@ -1095,10 +1142,11 @@ def DiTi_15ul_Filter_MCA384(name: str) -> TecanTipRack:
       make_tip=DiTi_15ul_Filter_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_15ul_MCA384(name: str) -> TecanTipRack:
+def DiTi_15ul_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30051802 (Tecan Pure) or 30051803 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
@@ -1124,10 +1172,11 @@ def DiTi_15ul_MCA384(name: str) -> TecanTipRack:
       make_tip=DiTi_15ul_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_Filter_MCA384(name: str) -> TecanTipRack:
+def DiTi_50ul_Filter_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30051807 (Tecan Sterile). Maximum pipetting volume is 40ul."""
   return TecanTipRack(
     name=name,
@@ -1153,10 +1202,11 @@ def DiTi_50ul_Filter_MCA384(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_Filter_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_MCA384(name: str) -> TecanTipRack:
+def DiTi_50ul_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30051805 (Tecan Pure) or 30051806 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
@@ -1182,10 +1232,11 @@ def DiTi_50ul_MCA384(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_MCA384_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_1000ul_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_1000ul_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612513 or 10612555 or 30000631"""
   return TecanTipRack(
     name=name,
@@ -1211,10 +1262,11 @@ def DiTi_1000ul_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_1000ul_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_1000ul_LiHa(name: str) -> TecanTipRack:
+def DiTi_1000ul_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612554 or 30000630"""
   return TecanTipRack(
     name=name,
@@ -1240,10 +1292,11 @@ def DiTi_1000ul_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_1000ul_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_10ul_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_10ul_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612517"""
   return TecanTipRack(
     name=name,
@@ -1269,10 +1322,11 @@ def DiTi_10ul_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_10ul_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_10ul_LiHa(name: str) -> TecanTipRack:
+def DiTi_10ul_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612516"""
   return TecanTipRack(
     name=name,
@@ -1298,10 +1352,11 @@ def DiTi_10ul_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_10ul_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_200ul_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612511 or 10612553 or 30000629"""
   return TecanTipRack(
     name=name,
@@ -1327,10 +1382,11 @@ def DiTi_200ul_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_LiHa(name: str) -> TecanTipRack:
+def DiTi_200ul_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 10612552 or 30000627"""
   return TecanTipRack(
     name=name,
@@ -1356,10 +1412,11 @@ def DiTi_200ul_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_50ul_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30032114"""
   return TecanTipRack(
     name=name,
@@ -1385,10 +1442,11 @@ def DiTi_50ul_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_LiHa(name: str) -> TecanTipRack:
+def DiTi_50ul_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30032115"""
   return TecanTipRack(
     name=name,
@@ -1414,10 +1472,11 @@ def DiTi_50ul_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_350ul_Nested_LiHa(name: str) -> TecanTipRack:
+def DiTi_350ul_Nested_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30083400(Tecan Pure), 30083401 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
@@ -1443,10 +1502,11 @@ def DiTi_350ul_Nested_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_350ul_Nested_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_10ul_Filter_LiHa_L(name: str) -> TecanTipRack:
+def DiTi_10ul_Filter_LiHa_L(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30104804"""
   return TecanTipRack(
     name=name,
@@ -1472,10 +1532,11 @@ def DiTi_10ul_Filter_LiHa_L(name: str) -> TecanTipRack:
       make_tip=DiTi_10ul_Filter_LiHa_L_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_10ul_Filter_Nested_LiHa(name: str) -> TecanTipRack:
+def DiTi_10ul_Filter_Nested_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30104978 (Tecan Pure), 30104979 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
@@ -1501,10 +1562,11 @@ def DiTi_10ul_Filter_Nested_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_10ul_Filter_Nested_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_10ul_LiHa_L(name: str) -> TecanTipRack:
+def DiTi_10ul_LiHa_L(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30104803"""
   return TecanTipRack(
     name=name,
@@ -1530,10 +1592,11 @@ def DiTi_10ul_LiHa_L(name: str) -> TecanTipRack:
       make_tip=DiTi_10ul_LiHa_L_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_10ul_Nested_LiHa(name: str) -> TecanTipRack:
+def DiTi_10ul_Nested_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30104977 (Tecan Pure)"""
   return TecanTipRack(
     name=name,
@@ -1559,10 +1622,11 @@ def DiTi_10ul_Nested_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_10ul_Nested_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_10ul_SBS_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_10ul_SBS_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30104976 (Tecan Sterile), 30104974 (Tecan Pure, Refill)"""
   return TecanTipRack(
     name=name,
@@ -1588,10 +1652,11 @@ def DiTi_10ul_SBS_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_10ul_SBS_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_10ul_SBS_LiHa(name: str) -> TecanTipRack:
+def DiTi_10ul_SBS_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30104975 (Tecan Sterile), 30104973 (Tecan Pure, Refill)"""
   return TecanTipRack(
     name=name,
@@ -1617,10 +1682,11 @@ def DiTi_10ul_SBS_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_10ul_SBS_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_1000ul_W_B_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_1000ul_W_B_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30115239"""
   return TecanTipRack(
     name=name,
@@ -1646,10 +1712,11 @@ def DiTi_1000ul_W_B_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_1000ul_W_B_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_1000ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_1000ul_CL_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30126020 or 30126095"""
   return TecanTipRack(
     name=name,
@@ -1675,10 +1742,11 @@ def DiTi_1000ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_1000ul_CL_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_1000ul_CL_LiHa(name: str) -> TecanTipRack:
+def DiTi_1000ul_CL_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30126019 or 30126094"""
   return TecanTipRack(
     name=name,
@@ -1704,10 +1772,11 @@ def DiTi_1000ul_CL_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_1000ul_CL_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_200ul_CL_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30126018 or 30126093"""
   return TecanTipRack(
     name=name,
@@ -1733,10 +1802,11 @@ def DiTi_200ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_CL_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_200ul_CL_LiHa(name: str) -> TecanTipRack:
+def DiTi_200ul_CL_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30126017 or 30126092"""
   return TecanTipRack(
     name=name,
@@ -1762,10 +1832,11 @@ def DiTi_200ul_CL_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_200ul_CL_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
+def DiTi_50ul_CL_Filter_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30126097"""
   return TecanTipRack(
     name=name,
@@ -1791,10 +1862,11 @@ def DiTi_50ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_CL_Filter_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def DiTi_50ul_CL_LiHa(name: str) -> TecanTipRack:
+def DiTi_50ul_CL_LiHa(name: str, *, identifier: Optional[str] = None) -> TecanTipRack:
   """Tecan part no. 30126096"""
   return TecanTipRack(
     name=name,
@@ -1820,4 +1892,5 @@ def DiTi_50ul_CL_LiHa(name: str) -> TecanTipRack:
       make_tip=DiTi_50ul_CL_LiHa_tip,
       name_prefix=name,
     ),
+    identifier=identifier,
   )

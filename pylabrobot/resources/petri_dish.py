@@ -21,6 +21,9 @@ class PetriDish(Container):
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones=None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -35,6 +38,8 @@ class PetriDish(Container):
       compute_height_from_volume=compute_height_from_volume,
       height_volume_data=height_volume_data,
       no_go_zones=no_go_zones,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.diameter = diameter
     self.height = height
@@ -62,6 +67,9 @@ class PetriDishHolder(Resource):
     size_z: float = 14.5,
     category: str = "petri_dish_holder",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -70,6 +78,8 @@ class PetriDishHolder(Resource):
       size_z=size_z,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
   def assign_child_resource(

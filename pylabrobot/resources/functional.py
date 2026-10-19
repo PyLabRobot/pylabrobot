@@ -112,13 +112,13 @@ class randomized_tip_spot_generator:
 
   async def __anext__(self) -> TipSpot:
     while True:
-      available_tips = [ts for ts in self.tip_spots if ts.name not in self.recently_sampled]
+      available_tips = [ts for ts in self.tip_spots if ts.identifier not in self.recently_sampled]
 
       if not available_tips:
         raise RuntimeError("All tips have been used recently. No tips available.")
 
       chosen_tip_spot = random.choice(available_tips)
-      self.recently_sampled.append(chosen_tip_spot.name)
+      self.recently_sampled.append(chosen_tip_spot.identifier)
 
       self.save_state()
 

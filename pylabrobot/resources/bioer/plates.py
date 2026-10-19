@@ -1,8 +1,8 @@
 # BioER 2.2 mL deep-well plate (96 wells, square V-bottom).
 # Height<->volume is an explicit table sampled from the measured fill-height curve
 # (13 points, <=0.05 mm vs the original cubic fit); PLR interpolates piecewise-linearly.
-
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -31,7 +31,7 @@ _HEIGHT_VOLUME = {
 }
 
 
-def bioer_96_wellplate_2200uL_Vb(name: str) -> Plate:
+def bioer_96_wellplate_2200uL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """BioER Cat. No. BSH06M1T-A (KingFisher-compatible)
   Spec: https://bioer.com.cn/uploadfiles/2024/05/20240513165756879.pdf
   """
@@ -65,6 +65,7 @@ def bioer_96_wellplate_2200uL_Vb(name: str) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
@@ -73,7 +74,9 @@ def bioer_96_wellplate_2200uL_Vb(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def BioER_96_wellplate_Vb_2200uL(name: str) -> Plate:  # remove v1b1
+def BioER_96_wellplate_Vb_2200uL(
+  name: str, *, identifier: Optional[str] = None
+) -> Plate:  # remove v1b1
   """Deprecated alias for bioer_96_wellplate_2200uL_Vb().
 
   This alias will be removed in v1b1.
@@ -85,4 +88,4 @@ def BioER_96_wellplate_Vb_2200uL(name: str) -> Plate:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return bioer_96_wellplate_2200uL_Vb(name)
+  return bioer_96_wellplate_2200uL_Vb(name, identifier=identifier)

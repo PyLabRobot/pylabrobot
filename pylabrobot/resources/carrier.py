@@ -29,6 +29,8 @@ class Carrier(Resource, Generic[S]):
     category: Optional[str] = "carrier",
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name=name,
@@ -38,6 +40,7 @@ class Carrier(Resource, Generic[S]):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
 
     sites = sites or {}
@@ -116,9 +119,6 @@ class Carrier(Resource, Generic[S]):
     all_resources = [site.resource for site in self.sites.values()]
     return [resource for resource in all_resources if resource is not None]
 
-  def __eq__(self, other):
-    return super().__eq__(other) and self.sites == other.sites
-
   def get_free_sites(self) -> List[S]:
     return [site for site in self.sites.values() if site.resource is None]
 
@@ -138,6 +138,8 @@ class TipCarrier(Carrier):
     category="tip_carrier",
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name,
@@ -148,6 +150,7 @@ class TipCarrier(Carrier):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
 
 
@@ -165,6 +168,8 @@ class PlateHolder(ResourceHolder):
     category="plate_holder",
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name,
@@ -175,6 +180,7 @@ class PlateHolder(ResourceHolder):
       model=model,
       child_location=child_location,
       metadata=metadata,
+      identifier=identifier,
     )
     if pedestal_size_z is None:
       raise ValueError(
@@ -276,6 +282,8 @@ class PlateCarrier(Carrier):
     category="plate_carrier",
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name,
@@ -286,6 +294,7 @@ class PlateCarrier(Carrier):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
     self.sites: Dict[int, PlateHolder] = sites or {}  # fix type
 
@@ -335,6 +344,8 @@ class MFXCarrier(Carrier[ResourceHolder]):
     category="mfx_carrier",
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name=name,
@@ -345,6 +356,7 @@ class MFXCarrier(Carrier[ResourceHolder]):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
 
 
@@ -363,6 +375,8 @@ class TubeCarrier(Carrier):
     category="tube_carrier",
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name,
@@ -373,6 +387,7 @@ class TubeCarrier(Carrier):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
 
 
@@ -391,6 +406,8 @@ class TroughCarrier(Carrier):
     category="trough_carrier",
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name,
@@ -401,6 +418,7 @@ class TroughCarrier(Carrier):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
 
 

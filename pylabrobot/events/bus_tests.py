@@ -40,12 +40,18 @@ class TestEventBus(unittest.TestCase):
     self.assertEqual(
       resource_reference(child),
       {
+        "identifier": child.identifier,
         "name": "child",
         "type": "Resource",
         "model": "child-model",
         "rotation": {"x": 0, "y": 0, "z": 0},
         "ancestors": [
-          {"name": "parent", "type": "Resource", "model": "parent-model"},
+          {
+            "identifier": parent.identifier,
+            "name": "parent",
+            "type": "Resource",
+            "model": "parent-model",
+          },
         ],
       },
     )

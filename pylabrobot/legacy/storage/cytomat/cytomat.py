@@ -170,8 +170,8 @@ class CytomatBackend(IncubatorBackend):
 
   def _site_to_firmware_string(self, site: PlateHolder) -> str:
     rack = cast(PlateCarrier, site.parent)
-    rack_idx = [rack.name for rack in self._racks].index(
-      rack.name
+    rack_idx = [rack.identifier for rack in self._racks].index(
+      rack.identifier
     )  # autoreload resistant, should work
     site_idx = next(idx for idx, s in rack.sites.items() if s == site)
 

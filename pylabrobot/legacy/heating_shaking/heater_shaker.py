@@ -21,6 +21,9 @@ class HeaterShaker(TemperatureController, Shaker):
     child_location: Coordinate,
     category: str = "heating_shaking",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -31,6 +34,8 @@ class HeaterShaker(TemperatureController, Shaker):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.backend: HeaterShakerBackend = backend  # fix type
 

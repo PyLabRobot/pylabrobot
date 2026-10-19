@@ -1,9 +1,13 @@
 """Sergi Lab Supplies plate adapters"""
 
+from typing import Optional
+
 from pylabrobot.resources.plate_adapter import PlateAdapter
 
 
-def SergiLabSupplies_96_MagneticRack_250ul_Vb(name: str) -> PlateAdapter:
+def SergiLabSupplies_96_MagneticRack_250ul_Vb(
+  name: str, *, identifier: Optional[str] = None
+) -> PlateAdapter:
   """
   Sergi Lab Supplies Magnetic Rack [cat. no. 1047]
   - Holds a 96-well PCR plate for DNA/RNA purification
@@ -26,4 +30,5 @@ def SergiLabSupplies_96_MagneticRack_250ul_Vb(name: str) -> PlateAdapter:
     adapter_hole_size_y=7.0,  # measured
     adapter_hole_size_z=16.0,  # measured (22.0 - 6) = 16.0
     model="SergiLabSupplies_96_MagneticRack_250ul_Vb",
+    identifier=identifier,
   )

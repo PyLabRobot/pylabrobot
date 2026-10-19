@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError, NoTipError
-from pylabrobot.resources.head_tool import HeadTool, move_tool, release_named_tool
+from pylabrobot.resources.head_tool import HeadTool, move_tool, release_tool
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_tracking import does_tip_tracking
 
@@ -66,6 +66,8 @@ class TipSpot(Resource):
     size_z: float = 0,
     category: str = "tip_spot",
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     """Initialize a tip spot.
 
@@ -86,6 +88,7 @@ class TipSpot(Resource):
       size_z=size_z,
       category=category,
       metadata=metadata,
+      identifier=identifier,
     )
     self.parent: Optional["TipRack"] = None
 
@@ -195,7 +198,9 @@ class TipSpot(Resource):
   def make_tip(self) -> Tip:
     """Create a new tip instance for this spot and assign it a unique name."""
 
-    return self._make_tip_func(self._get_next_tip_name())
+    tip = self._make_tip_func(self._get_next_tip_name())
+    tip.origin_identifier = self.identifier
+    return tip
 
   # -- legacy ------------------------------------------------------------------------------------
   # TODO: Remove in v1. The legacy liquid handler's view of this spot, with its pending
@@ -227,9 +232,11 @@ class TipSpot(Resource):
 
   def serialize(self) -> dict:
     """Serialize the tip spot. Its tip is state, not a serialized child."""
+    prototype = self._make_tip_func("prototype").serialize()
+    prototype.pop("identifier", None)
     data = {
       **super().serialize(),
-      "prototype_tip": self.make_tip().serialize(),
+      "prototype_tip": prototype,
     }
     data.pop("children", None)
     return data
@@ -240,18 +247,16 @@ class TipSpot(Resource):
     tip_data = data["prototype_tip"]
 
     def make_tip(name: str) -> Tip:
-      tip_data_with_name = {**tip_data, "name": name}
+      tip_data_with_name = {**tip_data, "metadata": {**tip_data.get("metadata", {}), "name": name}}
+      tip_data_with_name.pop("identifier", None)
+      tip_data_with_name.pop("location", None)
+      tip_data_with_name.pop("parent_identifier", None)
       return Tip.deserialize(tip_data_with_name, allow_marshal=allow_marshal)
 
-    return cls(
-      name=data["name"],
-      size_x=data["size_x"],
-      size_y=data["size_y"],
-      size_z=data.get("size_z", 0),
-      make_tip=make_tip,
-      category=data.get("category", "tip_spot"),
-      metadata=data.get("metadata"),
-    )
+    data_copy = {**data, "make_tip": make_tip}
+    data_copy.pop("prototype_tip")
+    data_copy.pop("model", None)
+    return super().deserialize(data_copy, allow_marshal=allow_marshal)
 
   def serialize_state(self) -> Dict[str, Any]:
     """This spot's state, with the tip it holds in the tree: `tip`, `tip_state` and `pending_tip`.
@@ -264,13 +269,15 @@ class TipSpot(Resource):
   def load_state(self, state: Dict[str, Any]):
     """Load this spot's state: the saved `pending_tip` goes into it, as this spot's child.
 
-    A tool of the same name held elsewhere in the same tree, on a channel say, gives way first.
+    A tool with the saved identifier held elsewhere in the tree gives way first.
     """
     super().load_state(state)
     tracker_state = {k: v for k, v in state.items() if k != "rotation"}
     pending = tracker_state.get("pending_tip")
     if pending is not None:
-      release_named_tool(self.get_root(), pending["name"], keep=self.tip)
+      release_tool(
+        self.get_root(), pending.get("identifier"), name=pending.get("name"), keep=self.tip
+      )
     _legacy_tracker(self).load_state(tracker_state)
 
   def get_identifier(self) -> str:
@@ -286,7 +293,8 @@ class TipSpot(Resource):
 def tip_origin(tip: Tip, root: Resource) -> Optional[TipSpot]:
   """The tip spot a tip was made by, looked up in a tree.
 
-  A spot names each tip it makes after itself, `rack_tipspot_A1#0` say, so the name leads back to it
+  The origin identifier points to the spot regardless of either resource's display name.
+  Legacy tips without an origin identifier use their generated name
   wherever the tip is now.
 
   Args:
@@ -294,8 +302,13 @@ def tip_origin(tip: Tip, root: Resource) -> Optional[TipSpot]:
     root: the tree to look for the spot in, a deck say.
 
   Returns:
-    The spot, or None if the tip's name names no spot in `root`.
+    The origin spot, or None if it is not in `root`.
   """
+  if tip.origin_identifier is not None:
+    if not root.has_resource_by_identifier(tip.origin_identifier):
+      return None
+    spot = root.get_resource_by_identifier(tip.origin_identifier)
+    return spot if isinstance(spot, TipSpot) else None
   spot_name, separator, _ = tip.name.rpartition("#")
   if not separator or not root.has_resource(spot_name):
     return None
@@ -319,6 +332,8 @@ class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
     with_tips: bool = True,
     metadata: Optional[Mapping[str, Any]] = None,
     frame_height: Optional[float] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name,
@@ -330,6 +345,7 @@ class TipRack(Liddable, ItemizedResource[TipSpot], metaclass=ABCMeta):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
     self._frame_height = frame_height
 
@@ -493,6 +509,8 @@ class EmbeddedTipRack(TipRack):
     with_tips: bool = True,
     frame_height: Optional[float] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     """sinking_depth: the depth the tip rack sinks into the tip holder when placed inside it."""
     super().__init__(
@@ -507,6 +525,7 @@ class EmbeddedTipRack(TipRack):
       with_tips=with_tips,
       frame_height=frame_height,
       metadata=metadata,
+      identifier=identifier,
     )
     self.sinking_depth = sinking_depth
 
@@ -542,6 +561,8 @@ class StandingTipRack(TipRack):
     metadata: Optional[Mapping[str, Any]] = None,
     frame_height: Optional[float] = None,
     stacking_z_height: Optional[float] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name,
@@ -555,6 +576,7 @@ class StandingTipRack(TipRack):
       with_tips=with_tips,
       metadata=metadata,
       frame_height=frame_height,
+      identifier=identifier,
     )
     self.stacking_z_height = stacking_z_height
 
@@ -590,6 +612,8 @@ class NestedTipRack(StandingTipRack):
     with_tips: bool = True,
     metadata: Optional[Mapping[str, Any]] = None,
     frame_height: Optional[float] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     warnings.warn(
       "NestedTipRack is deprecated, use StandingTipRack with a stacking_z_height instead",
@@ -609,6 +633,7 @@ class NestedTipRack(StandingTipRack):
       metadata=metadata,
       frame_height=frame_height,
       stacking_z_height=stacking_z_height,
+      identifier=identifier,
     )
 
   def assign_child_resource(

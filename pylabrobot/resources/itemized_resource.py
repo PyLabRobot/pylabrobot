@@ -58,6 +58,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     category: Optional[str] = None,
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     """Initialize an itemized resource
 
@@ -70,7 +72,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         :func:`pylabrobot.resources.create_ordered_items_2d`. If this is specified, `ordering` must
         be `None`. Keys must be in transposed MS Excel style notation, e.g. "A1" for the first item,
         "B1" for the item below that, "A2" for the item to the right, etc.
-      ordering: The order of the items on the resource. This is a dict of item identifier <> item name.
+      ordering: Maps grid addresses (e.g. A1) to child resource identifiers.
         If this is specified, `ordered_items` must be `None`. See `ordered_items` for the format of the
         identifiers.
       category: The category of the resource.
@@ -96,7 +98,14 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """
 
     super().__init__(
-      name, size_x, size_y, size_z, category=category, model=model, metadata=metadata
+      name,
+      size_x,
+      size_y,
+      size_z,
+      category=category,
+      model=model,
+      metadata=metadata,
+      identifier=identifier,
     )
 
     if ordered_items is not None:
@@ -107,7 +116,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
           raise ValueError("Item location must be specified if supplied at initialization.")
         self.assign_child_resource(item, location=item.location)
       self._ordering = OrderedDict(
-        (identifier, item.name) for identifier, item in ordered_items.items()
+        (address, item.identifier) for address, item in ordered_items.items()
       )
     else:
       if ordering is None:
@@ -208,7 +217,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       )
 
     # Cast child to item type. Children will always be `T`, but the type checker doesn't know that.
-    return cast(T, self.children[identifier])
+    item_identifier = list(self._ordering.values())[identifier]
+    for child in self.children:
+      if child.identifier == item_identifier:
+        return cast(T, child)
+    raise IndexError(f"Item with identifier '{item_identifier}' is no longer assigned.")
 
   def get_items(self, identifiers: Union[str, Sequence[int], Sequence[str]]) -> List[T]:
     """Get the items with the given identifier.
@@ -425,16 +438,16 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
   def index_of_item(self, item: T) -> Optional[int]:
     """Return the index of the given item in the resource, or `None` if not found."""
-    for i, i_item_name in enumerate(self._ordering.values()):
-      if i_item_name == item.name:
+    for i, item_identifier in enumerate(self._ordering.values()):
+      if item_identifier == item.identifier:
         return i
     return None
 
   def get_child_identifier(self, item: T) -> str:
     """Get the identifier of the item."""
-    for identifier, i_item_name in self._ordering.items():
-      if i_item_name == item.name:
-        return identifier
+    for address, item_identifier in self._ordering.items():
+      if item_identifier == item.identifier:
+        return address
     raise ValueError(f"Item {item} not found in resource.")
 
   def get_child_column(self, item: T) -> int:

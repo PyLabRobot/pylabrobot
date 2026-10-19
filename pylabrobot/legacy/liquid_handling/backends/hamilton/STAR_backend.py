@@ -144,7 +144,6 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.barcode import Barcode, Barcode1DSymbology
 from pylabrobot.resources.hamilton import (
-  HamiltonSTARDeck,
   HamiltonTip,
   TipDropMethod,
   TipPickupMethod,
@@ -6121,14 +6120,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   def _get_core_gripper_mount(self) -> HamiltonCoreGrippers:
     """Find the CoRe gripper mount on a default or named STAR deck."""
-    name = (
-      self.deck.get_component_name("core_grippers")
-      if isinstance(self.deck, HamiltonSTARDeck)
-      else "core_grippers"
-    )
-    mount = self.deck.get_resource(name)
-    assert isinstance(mount, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
-    return mount
+    mounts = self.deck.find_resources(type=HamiltonCoreGrippers)
+    if len(mounts) != 1:
+      raise ValueError("Expected exactly one CoRe gripper mount on the deck.")
+    return cast(HamiltonCoreGrippers, mounts[0])
 
   def _get_core_front_back(self):
     core_grippers = self._get_core_gripper_mount()

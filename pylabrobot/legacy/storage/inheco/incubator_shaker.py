@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
@@ -14,7 +14,13 @@ class IncubatorShakerStack(Resource, Machine):
   - Handles sequential (not concurrent) setup/teardown across all units.
   """
 
-  def __init__(self, backend: InhecoIncubatorShakerStackBackend):
+  def __init__(
+    self,
+    backend: InhecoIncubatorShakerStackBackend,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
+  ):
     Resource.__init__(
       self,
       name="inheco_incubator_shaker_stack",
@@ -22,6 +28,8 @@ class IncubatorShakerStack(Resource, Machine):
       size_y=268.5,
       size_z=58.0,  # MP: 58, Shaker MP: 88.5, DWP: 104, Shaker DWP: 139 mm
       category="incubator_shaker_stack",
+      identifier=identifier,
+      metadata=metadata,
     )
 
     Machine.__init__(self, backend=backend)

@@ -21,6 +21,9 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
     child_location: Coordinate = Coordinate.zero(),
     child: Optional[ItemizedResource] = None,
     backend: Optional[OpentronsThermocyclerBackend] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
     **_ignored,
   ):
     """Args:
@@ -38,7 +41,9 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
       backend=backend,
       child_location=child_location,
       category="thermocycler",
-      model="thermocyclerModuleV1",  # must match OT API "moduleModel"
+      model="thermocyclerModuleV1",  # must match OT API "moduleModel",
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.backend = backend
@@ -67,6 +72,9 @@ class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
     child_location: Coordinate = Coordinate.zero(),
     child: Optional[ItemizedResource] = None,
     backend: Optional[OpentronsThermocyclerBackend] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
     **_ignored,
   ):
     """Args:
@@ -84,7 +92,9 @@ class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
       backend=backend,
       child_location=child_location,
       category="thermocycler",
-      model="thermocyclerModuleV2",  # must match OT API "moduleModel"
+      model="thermocyclerModuleV2",  # must match OT API "moduleModel",
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.backend = backend

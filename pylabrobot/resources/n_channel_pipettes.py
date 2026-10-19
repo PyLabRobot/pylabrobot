@@ -50,6 +50,9 @@ class TipMountingShaft(Resource):
     category: str = "tip_mounting_shaft",
     model: Optional[str] = None,
     cross_section_type: str = CrossSectionType.CIRCLE.value,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """
     Args:
@@ -81,6 +84,8 @@ class TipMountingShaft(Resource):
       size_z=size_z,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
   @property
@@ -179,6 +184,8 @@ class NChannelPipette(ItemizedResource[TipMountingShaft]):
     category: str = "n_channel_pipette",
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     """
     Args:
@@ -207,6 +214,7 @@ class NChannelPipette(ItemizedResource[TipMountingShaft]):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
     self.reference_point = reference_point
     self.independent_channel_actuation = independent_channel_actuation

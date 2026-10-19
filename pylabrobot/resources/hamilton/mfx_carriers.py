@@ -1,5 +1,5 @@
 import warnings
-from typing import Dict
+from typing import Dict, Optional
 
 from pylabrobot.resources.carrier import (
   Coordinate,
@@ -8,7 +8,12 @@ from pylabrobot.resources.carrier import (
 )
 
 
-def hamilton_mfx_carrier_L5_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+def hamilton_mfx_carrier_L5_base(
+  name: str,
+  modules: Dict[int, ResourceHolder],
+  *,
+  identifier: Optional[str] = None,
+) -> MFXCarrier:
   """Hamilton cat. no.: 188039
   Hamilton name: 'MFX_CAR_L5_base'
   Labware carrier base for up to 5 Multiflex Modules
@@ -42,10 +47,16 @@ def hamilton_mfx_carrier_L5_base(name: str, modules: Dict[int, ResourceHolder]) 
     size_z=18.2,
     sites=sites,
     model="MFX_CAR_L5_base",
+    identifier=identifier,
   )
 
 
-def MFX_CAR_L4_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+def MFX_CAR_L4_SHAKER(
+  name: str,
+  modules: Dict[int, ResourceHolder],
+  *,
+  identifier: Optional[str] = None,
+) -> MFXCarrier:
   """Hamilton cat. no.: 187001
   Sometimes referred to as "PLT_CAR_L4_SHAKER" by Hamilton.
   Template carrier with 4 positions for Hamilton Heater Shaker in landscape.
@@ -69,10 +80,16 @@ def MFX_CAR_L4_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarri
     size_z=8.0,
     sites=sites,
     model="PLT_CAR_L4_SHAKER",
+    identifier=identifier,
   )
 
 
-def MFX_CAR_P3_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+def MFX_CAR_P3_SHAKER(
+  name: str,
+  modules: Dict[int, ResourceHolder],
+  *,
+  identifier: Optional[str] = None,
+) -> MFXCarrier:
   """Hamilton cat. no.: 187001
   Sometimes referred to as "PLT_CAR_L4_SHAKER" by Hamilton, this one has extra holes for portrait orientation shakers.
     (you can drill these yourself, if you're adventurous)
@@ -100,10 +117,16 @@ def MFX_CAR_P3_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarri
     size_z=8.0,
     sites=sites,
     model="MFX_CAR_P3_SHAKER",
+    identifier=identifier,
   )
 
 
-def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+def MFX_CAR_P3_base(
+  name: str,
+  modules: Dict[int, ResourceHolder],
+  *,
+  identifier: Optional[str] = None,
+) -> MFXCarrier:
   """Hamilton cat. no.: 188053
   Labware carrier base for up to 3 Multiflex Modules in Portrait orientation
   Does not support half-indices
@@ -126,6 +149,7 @@ def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier
     size_z=18.195,
     sites=sites,
     model="MFX_CAR_P3_base",
+    identifier=identifier,
   )
 
 
@@ -133,11 +157,16 @@ def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier
 # TODO: Remove >2026-02
 
 
-def MFX_CAR_L5_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+def MFX_CAR_L5_base(
+  name: str,
+  modules: Dict[int, ResourceHolder],
+  *,
+  identifier: Optional[str] = None,
+) -> MFXCarrier:
   """Deprecated alias for `hamilton_mfx_carrier_L5_base`."""
   warnings.warn(
     "MFX_CAR_L5_base is deprecated. Use 'hamilton_mfx_carrier_L5_base' instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_mfx_carrier_L5_base(name, modules)
+  return hamilton_mfx_carrier_L5_base(name, modules, identifier=identifier)

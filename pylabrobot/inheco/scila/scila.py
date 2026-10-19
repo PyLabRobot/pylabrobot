@@ -25,6 +25,9 @@ class SCILADrawerLoadingTray(ResourceHolder):
     child_location: Coordinate = Coordinate.zero(),
     category: str = "loading_tray",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     if drawer_id not in {1, 2, 3, 4}:
       raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
@@ -37,6 +40,8 @@ class SCILADrawerLoadingTray(ResourceHolder):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self._scila = scila
     self._drawer_id = drawer_id
@@ -86,7 +91,10 @@ class SCILA(Resource):
     gas_mixer_connected: bool = True,
     size_x: float = 0.0,  # TODO: measure
     size_y: float = 0.0,  # TODO: measure
-    size_z: float = 0.0,  # TODO: measure
+    size_z: float = 0.0,  # TODO: measure,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     Resource.__init__(
       self,
@@ -95,6 +103,8 @@ class SCILA(Resource):
       size_y=size_y,
       size_z=size_z,
       model="Inheco SCILA",
+      identifier=identifier,
+      metadata=metadata,
     )
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
     self.gas_mixer_connected = gas_mixer_connected

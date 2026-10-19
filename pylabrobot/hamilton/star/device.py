@@ -162,6 +162,9 @@ class STARDevice(Resource):
     left_side_panel_installed: bool = False,
     deck_location: Optional[Coordinate] = None,
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """
     Args:
@@ -209,6 +212,8 @@ class STARDevice(Resource):
       size_z=deck.get_absolute_size_z() if size_z is None else size_z,
       category="device",
       model=model if model is not None else self.__class__.__name__,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.extension_housing = extension_housing
     self.left_side_panel_installed = left_side_panel_installed
@@ -390,6 +395,8 @@ def STAR(
   size_z: float = SIZE_Z,
   extension_housing: bool = True,
   left_side_panel_installed: bool = False,
+  *,
+  identifier: Optional[str] = None,
 ) -> STARDevice:
   """A full-size STAR, on a full-size STAR deck.
 
@@ -417,6 +424,7 @@ def STAR(
     left_side_panel_installed=left_side_panel_installed,
     deck_location=STAR_DECK_LOCATION,
     model=STAR.__name__,
+    identifier=identifier,
   )
 
 
@@ -431,6 +439,8 @@ def STARlet(
   size_z: float = SIZE_Z,
   extension_housing: bool = True,
   left_side_panel_installed: bool = False,
+  *,
+  identifier: Optional[str] = None,
 ) -> STARDevice:
   """A STARlet, on a STARlet deck.
 
@@ -458,6 +468,7 @@ def STARlet(
     left_side_panel_installed=left_side_panel_installed,
     deck_location=STARLET_DECK_LOCATION,
     model=STARlet.__name__,
+    identifier=identifier,
   )
 
 
@@ -472,6 +483,8 @@ def STARPlus(
   size_z: float = SIZE_Z,
   extension_housing: bool = True,
   left_side_panel_installed: bool = False,
+  *,
+  identifier: Optional[str] = None,
 ) -> STARDevice:
   """A STARplus, on a STARplus deck.
 
@@ -506,4 +519,5 @@ def STARPlus(
     left_side_panel_installed=left_side_panel_installed,
     deck_location=STAR_DECK_LOCATION,
     model=STARPlus.__name__,
+    identifier=identifier,
   )

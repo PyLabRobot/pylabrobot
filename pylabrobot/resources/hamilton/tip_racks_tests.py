@@ -64,7 +64,9 @@ class HamiltonTipRackSerializationTests(unittest.TestCase):
     self.assertEqual(tip_rack.frame_height, 10.0)
 
   def test_standing_tip_rack_roundtrip_keeps_stacking_z_height(self):
-    tip_rack = TipRack.deserialize(hamilton_96_tiprack_50uL_NTR(name="tr").serialize())
+    original = hamilton_96_tiprack_50uL_NTR(name="tr")
+    tip_rack = TipRack.deserialize(original.serialize())
     assert isinstance(tip_rack, StandingTipRack)
     self.assertEqual(tip_rack.stacking_z_height, 16.0)
-    self.assertEqual(tip_rack, hamilton_96_tiprack_50uL_NTR(name="tr"))
+    self.assertEqual(tip_rack, original)
+    self.assertEqual(tip_rack.serialize(), original.serialize())

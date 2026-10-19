@@ -2,7 +2,7 @@
 
 This document introduces PyLabRobot Resources (labware and deck definitions) and general subclasses. You can find more information on creating custom resources in the {doc}`custom-resources` section.
 
-In PyLabRobot, a {class}`pylabrobot.resources.resource.Resource` is a piece of labware or equipment used in a protocol or program, a part of a labware item (such as a Well) or a container of labware items (such as a Deck). All resources inherit from a single base class {class}`pylabrobot.resources.resource.Resource` that provides most of the functionality, such as the name, sizing, type, model, as well as methods for dealing with state. The name and sizing are required for all resources, with the name being a unique identifier for the resource and the sizing being the x, y and z-dimensions of the resource in millimeters when conceptualized as a cuboid.
+In PyLabRobot, a {class}`pylabrobot.resources.resource.Resource` is a piece of labware or equipment used in a protocol or program, a part of a labware item (such as a Well) or a container of labware items (such as a Deck). All resources inherit from a single base class {class}`pylabrobot.resources.resource.Resource` that provides most of the functionality, such as the name, sizing, type, model, as well as methods for dealing with state. The name and sizing are required for all resources, with the name stored as descriptive metadata and the sizing being the x, y and z-dimensions of the resource in millimeters when conceptualized as a cuboid.
 
 While you can instantiate a `Resource` directly, several subclasses of methods exist to provide additional functionality and model specific resource attributes. For example, a {class}`pylabrobot.resources.plate.Plate` has methods for easily accessing {class}`pylabrobot.resources.well.Well`s.
 
@@ -14,7 +14,7 @@ The relation between resources is modelled by a tree, specifically an [_arboresc
 
 The simplest way to define a resource is to subclass {class}`pylabrobot.resources.resource.Resource` and define the `name` and `size_x`, `size_y` and `size_z` attributes.
 
-The size attributes are in millimeters and define the dimensions of the resource as a cuboid. This the complete outer bounding box of the resource. The `name` attribute is a unique identifier for the resource, and it can be used to reference the resource in protocols and programs.
+The size attributes are in millimeters and define the dimensions of the resource as a cuboid. This the complete outer bounding box of the resource. The `name` property reads and writes `metadata["name"]`. Names can repeat and can change while a resource is assigned. Each resource has a separate, stable `identifier` string for identity.
 
 Here's an example of a simple resource:
 
@@ -31,6 +31,20 @@ child = Resource(name="child", size_x=5, size_y=5, size_z=5)
 # assign to bottom front left corner of parent
 resource.assign_child_resource(child, Coordinate(x=0, y=0, z=0))
 ```
+
+## Names and identity
+
+`resource.name` reads and writes `resource.metadata["name"]`. Names are labels: they may repeat,
+and renaming an assigned resource leaves its identity unchanged. Pass `identifier="your-id"`
+to a constructor or factory to choose its identity; otherwise it receives a UUID string.
+Identifiers are immutable, must be unique within a tree, and determine equality and hashing.
+
+`resource.copy()`, `.named("label")`, `.at(location)`, and `.rotated(z=90)` return copies that
+preserve the identifiers of the entire subtree. Use `get_resource_by_identifier(identifier)` for
+exact lookup; `get_resource(name)` remains convenient for unambiguous names and rejects duplicates.
+
+Serialized layouts, state dictionaries, item ordering, and visualizer references use identifiers.
+Legacy layouts and unambiguous name-keyed state remain readable.
 
 ## Resource Metadata
 
@@ -94,16 +108,13 @@ This will create a file `resource.json` with the resource definition.
 
 ```json
 {
-  "name": "resource",
+  "identifier": "example-resource-id",
+  "metadata": {"name": "resource"},
   "type": "Resource",
   "size_x": 10,
   "size_y": 10,
   "size_z": 10,
-  "location": null,
-  "category": null,
-  "model": null,
-  "children": [],
-  "parent_name": null
+  "location": null
 }
 ```
 

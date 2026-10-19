@@ -47,6 +47,9 @@ class Shaker(ResourceHolder, Machine):
     child_location: Coordinate,
     category: str = "shaker",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     ResourceHolder.__init__(
       self,
@@ -57,6 +60,8 @@ class Shaker(ResourceHolder, Machine):
       category=category,
       model=model,
       child_location=child_location,
+      identifier=identifier,
+      metadata=metadata,
     )
     Machine.__init__(self, backend=backend)
     self.backend: ShakerBackend = backend  # fix type

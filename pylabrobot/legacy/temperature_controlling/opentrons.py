@@ -30,6 +30,9 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
       0, 0, 80.1
     ),  # dimensional drawing from OT (x and y are not changed wrt parent)
     child: Optional[ItemizedResource] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """Create a new Opentrons temperature module v2.
 
@@ -62,7 +65,9 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
       child_location=child_location,
       backend=backend,
       category="temperature_controller",
-      model="temperatureModuleV2",  # Must match OT moduleModel in list_connected_modules()
+      model="temperatureModuleV2",  # Must match OT moduleModel in list_connected_modules(),
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.child = child

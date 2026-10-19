@@ -41,6 +41,9 @@ class ByonoyLuminescence96(Resource, ByonoyDriver):
     model: Optional[str] = "Byonoy L96 Reader Unit",
     barcode: Optional[Barcode] = None,
     preferred_pickup_location: Optional[Coordinate] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ) -> None:
     Resource.__init__(
       self,
@@ -53,6 +56,8 @@ class ByonoyLuminescence96(Resource, ByonoyDriver):
       model=model,
       barcode=barcode,
       preferred_pickup_location=preferred_pickup_location,
+      identifier=identifier,
+      metadata=metadata,
     )
     ByonoyDriver.__init__(
       self, pid=0x119B, device_type=ByonoyDevice.LUMINESCENCE_96, name="Byonoy L96"
@@ -235,6 +240,9 @@ class _ByonoyLuminescenceReaderPlateHolder(PlateHolder):
     child_location: Coordinate = Coordinate.zero(),
     category: str = "plate_holder",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -245,6 +253,8 @@ class _ByonoyLuminescenceReaderPlateHolder(PlateHolder):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self._byonoy_base: Optional[ByonoyLuminescenceBaseUnit] = None
 
@@ -276,6 +286,9 @@ class ByonoyLuminescenceBaseUnit(Resource):
     category: Optional[str] = None,
     model: Optional[str] = "Byonoy L96 Reader Unit",
     barcode: Optional[Barcode] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -286,6 +299,8 @@ class ByonoyLuminescenceBaseUnit(Resource):
       category=category,
       model=model,
       barcode=barcode,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.plate_holder = _ByonoyLuminescenceReaderPlateHolder(
@@ -328,7 +343,7 @@ class ByonoyLuminescenceBaseUnit(Resource):
 # ---------------------------------------------------------------------------
 
 
-def byonoy_l96_reader_unit(name: str) -> ByonoyLuminescence96:
+def byonoy_l96_reader_unit(name: str, *, identifier: Optional[str] = None) -> ByonoyLuminescence96:
   """Create a Byonoy L96 reader unit (non-automate, no preferred pickup)."""
   return ByonoyLuminescence96(
     name=name,
@@ -336,10 +351,13 @@ def byonoy_l96_reader_unit(name: str) -> ByonoyLuminescence96:
     size_y=97.5,
     size_z=35,
     preferred_pickup_location=None,
+    identifier=identifier,
   )
 
 
-def byonoy_l96_base_unit(name: str) -> ByonoyLuminescenceBaseUnit:
+def byonoy_l96_base_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyLuminescenceBaseUnit:
   """Create a Byonoy L96 base unit."""
   return ByonoyLuminescenceBaseUnit(
     name=name,
@@ -348,6 +366,7 @@ def byonoy_l96_base_unit(name: str) -> ByonoyLuminescenceBaseUnit:
     size_z=9.4,
     plate_holder_child_location=Coordinate(x=6.25, y=6.1, z=2.64),
     reader_unit_holder_child_location=Coordinate(x=0, y=0, z=7.2),
+    identifier=identifier,
   )
 
 
@@ -362,7 +381,7 @@ def byonoy_l96(
   return base_unit, reader_unit
 
 
-def byonoy_l96a_reader_unit(name: str) -> ByonoyLuminescence96:
+def byonoy_l96a_reader_unit(name: str, *, identifier: Optional[str] = None) -> ByonoyLuminescence96:
   """Create a Byonoy L96A reader unit (automate, with preferred pickup)."""
   return ByonoyLuminescence96(
     name=name,
@@ -370,10 +389,13 @@ def byonoy_l96a_reader_unit(name: str) -> ByonoyLuminescence96:
     size_y=97.5,
     size_z=41.7,
     preferred_pickup_location=Coordinate(x=69, y=48.75, z=33.2),
+    identifier=identifier,
   )
 
 
-def byonoy_l96a_base_unit(name: str) -> ByonoyLuminescenceBaseUnit:
+def byonoy_l96a_base_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyLuminescenceBaseUnit:
   """Create a Byonoy L96A base unit."""
   return ByonoyLuminescenceBaseUnit(
     name=name,
@@ -382,6 +404,7 @@ def byonoy_l96a_base_unit(name: str) -> ByonoyLuminescenceBaseUnit:
     size_z=10.7,
     plate_holder_child_location=Coordinate(x=5.1, y=4.75, z=8),
     reader_unit_holder_child_location=Coordinate(x=0, y=0, z=6.3),
+    identifier=identifier,
   )
 
 

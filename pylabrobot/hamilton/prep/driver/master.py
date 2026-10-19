@@ -66,7 +66,6 @@ from .features.heater_shaker import (
   HEATER_SHAKER_PLATE_XY,
   HEATER_SHAKER_PLATE_Z,
   HEATER_SHAKER_SIZE,
-  HEATER_SHAKER_SPOT,
   PrepHamiltonHeaterShaker,
 )
 from .features.lights import Lights
@@ -1646,10 +1645,10 @@ class PrepDriver:
     """
     if self.hs is None or not isinstance(self.deck, PrepDeck):
       return
-    name = self.get_component_name(HEATER_SHAKER_SPOT)
-    if not self.deck.has_resource(name):
+    spots = self.deck.spots
+    spot = next((spot for spot in spots if spot.metadata.get("slot") == [0, 3]), None)
+    if spot is None:
       return
-    spot = self.deck.get_resource(name)
     if spot.location is None:
       return
     if isinstance(spot, PlateHolder) and spot.get_size_z() == HEATER_SHAKER_PLATE_Z:
@@ -1661,7 +1660,9 @@ class PrepDriver:
     size_x, size_y = HEATER_SHAKER_SIZE
     plate_x, plate_y = HEATER_SHAKER_PLATE_XY
     holder = PlateHolder(
-      name=name,
+      name=spot.name,
+      identifier=spot.identifier,
+      metadata=spot.metadata.copy(),
       size_x=size_x,
       size_y=size_y,
       size_z=HEATER_SHAKER_PLATE_Z,
@@ -1713,7 +1714,9 @@ class PrepDriver:
     self.pipettes.resources = []
     for channel in range(len(positions)):
       name = self.get_component_name(f"pipette_channel_{channel}")
-      resource = next((child for child in arm.resource.children if child.name == name), None)
+      resource = next(
+        (child for child in arm.resource.children if child.metadata.get("component") == name), None
+      )
       if resource is None:
         resource = Resource(
           name=name,
@@ -1721,6 +1724,7 @@ class PrepDriver:
           size_y=pipettes.channel_width,
           size_z=pipettes.channel_size_z,
           category="pipette_channel",
+          metadata={"component": name, "channel": channel},
           model=pipettes.channel_model,
         )
         anchor = resource.get_anchor(x=pipettes.x_reference_anchor)
@@ -1731,7 +1735,14 @@ class PrepDriver:
       self.pipettes.resources.append(resource)
     # The 8-channel head rides the arm too, where the same read reports it; one there is reused.
     if self.head8 is not None and head_at is not None:
-      head = next((c for c in arm.resource.children if c.name == self.head8.resource.name), None)
+      head = next(
+        (
+          c
+          for c in arm.resource.children
+          if isinstance(c, NChannelPipette) and c.model == self.head8.resource.model
+        ),
+        None,
+      )
       if isinstance(head, NChannelPipette):
         self.head8.resource = head
       elif head is None:

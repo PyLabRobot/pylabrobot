@@ -1,13 +1,14 @@
 """Corning-Falcon Tubes"""
 
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.tube import Tube
 
 # # # # # # # # # # cor_falcon_tube_14mL_Rb # # # # # # # # # #
 
 
-def cor_falcon_tube_14mL_Rb(name: str) -> Tube:
+def cor_falcon_tube_14mL_Rb(name: str, *, identifier: Optional[str] = None) -> Tube:
   """
   Corning cat. no.: 352059
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/General-Labware/Tubes/Tubes%2C-Round-Bottom/Falcon%C2%AE-Round-Bottom-High-clarity-Polypropylene-Tube/p/highClarityPolypropyleneRoundBottomTubes
@@ -26,14 +27,15 @@ def cor_falcon_tube_14mL_Rb(name: str) -> Tube:
     size_z=95,
     model=cor_falcon_tube_14mL_Rb.__name__,
     material_z_thickness=1.19,
-    max_volume=14_000,  # units: ul
+    max_volume=14_000,  # units: ul,
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # cor_falcon_tube_15mL_Vb # # # # # # # # # #
 
 
-def cor_falcon_tube_15mL_Vb(name: str) -> Tube:
+def cor_falcon_tube_15mL_Vb(name: str, *, identifier: Optional[str] = None) -> Tube:
   """
   Corning cat. no.: 352196
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Liquid-Handling/Tubes%2C-Liquid-Handling/Centrifuge-Tubes/Falcon%C2%AE-Conical-Centrifuge-Tubes/p/falconConicalTubes
@@ -52,14 +54,15 @@ def cor_falcon_tube_15mL_Vb(name: str) -> Tube:
     size_z=120,
     model=cor_falcon_tube_15mL_Vb.__name__,
     max_volume=15_000,
-    material_z_thickness=1.47,  # measured
+    material_z_thickness=1.47,  # measured,
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # cor_falcon_tube_50mL_Vb # # # # # # # # # #
 
 
-def cor_falcon_tube_50mL_Vb(name: str) -> Tube:
+def cor_falcon_tube_50mL_Vb(name: str, *, identifier: Optional[str] = None) -> Tube:
   """
   Corning cat. no.: 352098
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Liquid-Handling/Tubes%2C-Liquid-Handling/Centrifuge-Tubes/Falcon%C2%AE-Conical-Centrifuge-Tubes/p/falconConicalTubes
@@ -79,6 +82,7 @@ def cor_falcon_tube_50mL_Vb(name: str) -> Tube:
     model=cor_falcon_tube_50mL_Vb.__name__,
     max_volume=50_000,
     material_z_thickness=1.2,
+    identifier=identifier,
   )
 
 
@@ -87,7 +91,7 @@ def cor_falcon_tube_50mL_Vb(name: str) -> Tube:
 # --------------------------------------------------------------------------- #
 
 
-def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:  # remove v1b1
+def Cor_Falcon_tube_14mL_Rb(name: str, *, identifier: Optional[str] = None) -> Tube:  # remove v1b1
   """Deprecated alias for cor_falcon_tube_14mL_Rb().
 
   This alias will be removed in v1b1.
@@ -99,10 +103,10 @@ def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return cor_falcon_tube_14mL_Rb(name)
+  return cor_falcon_tube_14mL_Rb(name, identifier=identifier)
 
 
-def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:  # remove v1b1
+def Cor_Falcon_tube_15mL_Vb(name: str, *, identifier: Optional[str] = None) -> Tube:  # remove v1b1
   """Deprecated alias for cor_falcon_tube_15mL_Vb().
 
   This alias will be removed in v1b1.
@@ -114,10 +118,10 @@ def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return cor_falcon_tube_15mL_Vb(name)
+  return cor_falcon_tube_15mL_Vb(name, identifier=identifier)
 
 
-def Cor_Falcon_tube_50mL_Vb(name: str) -> Tube:  # remove v1b1
+def Cor_Falcon_tube_50mL_Vb(name: str, *, identifier: Optional[str] = None) -> Tube:  # remove v1b1
   """Deprecated alias for cor_falcon_tube_50mL_Vb().
 
   This alias will be removed in v1b1.
@@ -129,4 +133,4 @@ def Cor_Falcon_tube_50mL_Vb(name: str) -> Tube:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return cor_falcon_tube_50mL_Vb(name)
+  return cor_falcon_tube_50mL_Vb(name, identifier=identifier)

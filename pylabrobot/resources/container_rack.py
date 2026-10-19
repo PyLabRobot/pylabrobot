@@ -59,6 +59,9 @@ class ContainerRack(ItemizedResource[ResourceHolder], Generic[T]):
     ordered_items: Optional[Dict[str, ResourceHolder]] = None,
     model: Optional[str] = None,
     category: str = "container_rack",
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     if ordered_items is None or len(ordered_items) == 0:
       raise ValueError("ordered_items must be provided and non-empty")
@@ -71,6 +74,8 @@ class ContainerRack(ItemizedResource[ResourceHolder], Generic[T]):
       ordered_items=ordered_items,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
   def __repr__(self) -> str:

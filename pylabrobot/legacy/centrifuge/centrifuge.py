@@ -97,6 +97,8 @@ class Centrifuge(Machine, Resource):
     model: Optional[str] = None,
     buckets: Optional[Tuple[ResourceHolder, ResourceHolder]] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ) -> None:
     Machine.__init__(self, backend=backend)
     Resource.__init__(
@@ -109,6 +111,7 @@ class Centrifuge(Machine, Resource):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
     self.backend: CentrifugeBackend = backend  # fix type
     self._door_open = False
@@ -204,21 +207,27 @@ class Centrifuge(Machine, Resource):
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):
-    backend = CentrifugeBackend.deserialize(data["backend"])
-    buckets = tuple(ResourceHolder.deserialize(bucket) for bucket in data["buckets"])
+    backend = CentrifugeBackend.deserialize(data["backend"].copy())
+    buckets = tuple(
+      ResourceHolder.deserialize(bucket, allow_marshal=allow_marshal) for bucket in data["buckets"]
+    )
     assert len(buckets) == 2
-    return cls(
+    centrifuge = cls(
       backend=backend,
-      name=data["name"],
+      name=data.get("metadata", {}).get("name", data.get("name", "")),
+      identifier=data.get("identifier"),
+      metadata=data.get("metadata"),
       size_x=data["size_x"],
       size_y=data["size_y"],
       size_z=data["size_z"],
-      rotation=cast(Optional[Rotation], deserialize(data.get("rotation"))),
+      rotation=cast(Rotation, deserialize(data.get("rotation"))),
       category=data.get("category"),
       model=data.get("model"),
       buckets=buckets,
-      metadata=data.get("metadata"),
     )
+
+    centrifuge.location = deserialize(data.get("location"))
+    return centrifuge
 
 
 class Loader(Machine, ResourceHolder):
@@ -238,6 +247,8 @@ class Loader(Machine, ResourceHolder):
     category="loader",
     model=None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ) -> None:
     Machine.__init__(self, backend=backend)
     ResourceHolder.__init__(
@@ -251,6 +262,7 @@ class Loader(Machine, ResourceHolder):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
     self.backend: LoaderBackend = backend  # fix type
     self.centrifuge = centrifuge
@@ -296,23 +308,30 @@ class Loader(Machine, ResourceHolder):
 
   def serialize(self) -> dict:
     return {
-      "resource": ResourceHolder.serialize(self),
-      "machine": Machine.serialize(self),
+      **ResourceHolder.serialize(self),
+      **Machine.serialize(self),
       "centrifuge": self.centrifuge.serialize(),
     }
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):
-    return cls(
-      backend=LoaderBackend.deserialize(data["machine"]["backend"]),
-      centrifuge=Centrifuge.deserialize(data["centrifuge"]),
-      name=data["resource"]["name"],
-      size_x=data["resource"]["size_x"],
-      size_y=data["resource"]["size_y"],
-      size_z=data["resource"]["size_z"],
-      child_location=deserialize(data["resource"]["child_location"]),
-      rotation=deserialize(data["resource"].get("rotation")),
-      category=data["resource"].get("category"),
-      model=data["resource"].get("model"),
-      metadata=data["resource"].get("metadata"),
+    resource_data = data.get("resource", data)  # Older layouts wrapped resource/machine separately.
+    loader = cls(
+      backend=LoaderBackend.deserialize(data.get("machine", data)["backend"].copy()),
+      centrifuge=Centrifuge.deserialize(data["centrifuge"], allow_marshal=allow_marshal),
+      name=resource_data.get("metadata", {}).get("name", resource_data.get("name", "")),
+      identifier=resource_data.get("identifier"),
+      metadata=resource_data.get("metadata"),
+      size_x=resource_data["size_x"],
+      size_y=resource_data["size_y"],
+      size_z=resource_data["size_z"],
+      child_location=deserialize(resource_data["child_location"]),
+      rotation=deserialize(resource_data.get("rotation")),
+      category=resource_data.get("category"),
+      model=resource_data.get("model"),
     )
+    loader.location = deserialize(resource_data.get("location"))
+    for child_data in resource_data.get("children", []):
+      child = Resource.deserialize(child_data, allow_marshal=allow_marshal)
+      loader.assign_child_resource(child, location=child.location)
+    return loader

@@ -246,7 +246,9 @@ class TestRoundTrip(unittest.TestCase):
 
   def test_a_pad_missing_from_its_finger_is_refused(self):
     data = gripper().serialize()
-    finger = next(child for child in data["children"] if child["name"] == "demo_finger_right")
+    finger = next(
+      child for child in data["children"] if child["metadata"]["name"] == "demo_finger_right"
+    )
     finger["children"] = []
     with self.assertRaises(ValueError):
       MechanicalGripper.deserialize(data)

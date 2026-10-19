@@ -1,6 +1,7 @@
 """Resource definitions for Eppendorf tubes."""
 
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.tube import Tube, TubeBottomType
 
@@ -9,7 +10,12 @@ from pylabrobot.resources.tube import Tube, TubeBottomType
 # --------------------------------------------------------------------------- #
 
 
-def Eppendorf_DNA_LoBind_1_5ml_Vb(name: str, model="Eppendorf_DNA_LoBind_1_5ml_Vb") -> Tube:
+def Eppendorf_DNA_LoBind_1_5ml_Vb(
+  name: str,
+  model="Eppendorf_DNA_LoBind_1_5ml_Vb",
+  *,
+  identifier: Optional[str] = None,
+) -> Tube:
   """1.5 mL round-bottom snap-cap Eppendorf tube.
 
   .. deprecated:: Will be removed in 2026-04
@@ -26,10 +32,10 @@ def Eppendorf_DNA_LoBind_1_5ml_Vb(name: str, model="Eppendorf_DNA_LoBind_1_5ml_V
     DeprecationWarning,
     stacklevel=2,
   )
-  return eppendorf_tube_1500uL_Vb(name=name)
+  return eppendorf_tube_1500uL_Vb(name=name, identifier=identifier)
 
 
-def Eppendorf_Protein_LoBind_1_5ml_Vb(name: str) -> Tube:
+def Eppendorf_Protein_LoBind_1_5ml_Vb(name: str, *, identifier: Optional[str] = None) -> Tube:
   """1.5 mL round-bottom screw-cap Eppendorf tube.
 
   .. deprecated:: Will be removed in 2026-04
@@ -45,10 +51,10 @@ def Eppendorf_Protein_LoBind_1_5ml_Vb(name: str) -> Tube:
     DeprecationWarning,
     stacklevel=2,
   )
-  return eppendorf_tube_1500uL_Vb(name=name)
+  return eppendorf_tube_1500uL_Vb(name=name, identifier=identifier)
 
 
-def eppendorf_tube_1500uL_Vb(name: str) -> Tube:
+def eppendorf_tube_1500uL_Vb(name: str, *, identifier: Optional[str] = None) -> Tube:
   """Eppendorf cat. no.: 022363204
 
   1.5 mL or 1_500 uL snap-cap Eppendorf tube with V-bottom;
@@ -80,7 +86,8 @@ def eppendorf_tube_1500uL_Vb(name: str) -> Tube:
     material_z_thickness=1.3,
     bottom_type=TubeBottomType.V,
     # compute_volume_from_height=_compute_volume_from_height_eppendorf_tube_1500uL_Vb, TODO
-    # compute_height_from_volume=_compute_height_from_volume_eppendorf_tube_1500uL_Vb, TODO
+    # compute_height_from_volume=_compute_height_from_volume_eppendorf_tube_1500uL_Vb, TODO,
+    identifier=identifier,
   )
 
 
@@ -89,7 +96,7 @@ def eppendorf_tube_1500uL_Vb(name: str) -> Tube:
 # --------------------------------------------------------------------------- #
 
 
-def Eppendorf_DNA_LoBind_2ml_Ub(name: str) -> Tube:
+def Eppendorf_DNA_LoBind_2ml_Ub(name: str, *, identifier: Optional[str] = None) -> Tube:
   """2 mL round-bottom snap-cap Eppendorf tube. cat. no.: 022431048
 
   - bottom_type=TubeBottomType.U
@@ -103,7 +110,8 @@ def Eppendorf_DNA_LoBind_2ml_Ub(name: str) -> Tube:
     size_z=41,  # measured
     model="Eppendorf_DNA_LoBind_2ml_Ub",
     max_volume=2000,  # units: ul
-    material_z_thickness=0.8,  # measured
+    material_z_thickness=0.8,  # measured,
+    identifier=identifier,
   )
 
 
@@ -136,7 +144,7 @@ _eppendorf_tube_5mL_Vb_snapcap_height_volume_data = {
 }
 
 
-def eppendorf_tube_5mL_Vb_snapcap(name: str) -> Tube:
+def eppendorf_tube_5mL_Vb_snapcap(name: str, *, identifier: Optional[str] = None) -> Tube:
   """Eppendorf cat. no.: 0030119401
 
   5 mL snap-cap Eppendorf tube with V-bottom.
@@ -165,4 +173,5 @@ def eppendorf_tube_5mL_Vb_snapcap(name: str) -> Tube:
     material_z_thickness=1.2,
     bottom_type=TubeBottomType.V,
     height_volume_data=_eppendorf_tube_5mL_Vb_snapcap_height_volume_data,
+    identifier=identifier,
   )

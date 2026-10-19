@@ -64,6 +64,10 @@ class HamiltonTip(Tip, HamiltonTool):
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
     is_conductive: Optional[bool] = None,
+    *,
+    identifier: Optional[str] = None,
+    origin_identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """Initialize a Hamilton tip with its name and firmware tip characteristics."""
     if isinstance(tip_size, str):
@@ -99,19 +103,13 @@ class HamiltonTip(Tip, HamiltonTool):
       model=model,
       pick_up_location=pick_up_location,
       is_conductive=is_conductive,
+      identifier=identifier,
+      origin_identifier=origin_identifier,
+      metadata=metadata,
     )
 
     self.pickup_method = pickup_method
     self.tip_size = tip_size
-
-  def __eq__(self, other: object) -> bool:
-    """Compare tip fields and Hamilton's tip size and pickup method."""
-    return (
-      isinstance(other, HamiltonTip)
-      and super().__eq__(other)
-      and self.tip_size == other.tip_size
-      and self.pickup_method == other.pickup_method
-    )
 
   def __repr__(self) -> str:
     return (
@@ -137,37 +135,41 @@ class HamiltonTip(Tip, HamiltonTool):
     }
 
 
-def standard_volume_tip_no_filter(name: str) -> HamiltonTip:
+def standard_volume_tip_no_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_300uL` instead."""
   warnings.warn(
     "standard_volume_tip_no_filter is deprecated, use hamilton_tip_300uL instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_300uL(name=name)
+  return hamilton_tip_300uL(name=name, identifier=identifier)
 
 
-def standard_volume_tip_with_filter(name: str) -> HamiltonTip:
+def standard_volume_tip_with_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_300uL_filter` instead."""
   warnings.warn(
     "standard_volume_tip_with_filter is deprecated, use hamilton_tip_300uL_filter instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_300uL_filter(name=name)
+  return hamilton_tip_300uL_filter(name=name, identifier=identifier)
 
 
-def slim_standard_volume_tip_with_filter(name: str) -> HamiltonTip:
+def slim_standard_volume_tip_with_filter(
+  name: str, *, identifier: Optional[str] = None
+) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_300uL_filter_slim` instead."""
   warnings.warn(
     "slim_standard_volume_tip_with_filter is deprecated, use hamilton_tip_300uL_filter_slim instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_300uL_filter_slim(name=name)
+  return hamilton_tip_300uL_filter_slim(name=name, identifier=identifier)
 
 
-def ultrawide_standard_volume_tip_with_filter(name: str) -> HamiltonTip:
+def ultrawide_standard_volume_tip_with_filter(
+  name: str, *, identifier: Optional[str] = None
+) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_300uL_filter_ultrawide` instead."""
   warnings.warn(
     "ultrawide_standard_volume_tip_with_filter is deprecated, "
@@ -175,60 +177,62 @@ def ultrawide_standard_volume_tip_with_filter(name: str) -> HamiltonTip:
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_300uL_filter_ultrawide(name=name)
+  return hamilton_tip_300uL_filter_ultrawide(name=name, identifier=identifier)
 
 
-def low_volume_tip_no_filter(name: str) -> HamiltonTip:
+def low_volume_tip_no_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_10uL` instead."""
   warnings.warn(
     "low_volume_tip_no_filter is deprecated, use hamilton_tip_10uL instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_10uL(name=name)
+  return hamilton_tip_10uL(name=name, identifier=identifier)
 
 
-def low_volume_tip_with_filter(name: str) -> HamiltonTip:
+def low_volume_tip_with_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_10uL_filter` instead."""
   warnings.warn(
     "low_volume_tip_with_filter is deprecated, use hamilton_tip_10uL_filter instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_10uL_filter(name=name)
+  return hamilton_tip_10uL_filter(name=name, identifier=identifier)
 
 
-def high_volume_tip_no_filter(name: str) -> HamiltonTip:
+def high_volume_tip_no_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_1000uL` instead."""
   warnings.warn(
     "high_volume_tip_no_filter is deprecated, use hamilton_tip_1000uL instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_1000uL(name=name)
+  return hamilton_tip_1000uL(name=name, identifier=identifier)
 
 
-def high_volume_tip_with_filter(name: str) -> HamiltonTip:
+def high_volume_tip_with_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_1000uL_filter` instead."""
   warnings.warn(
     "high_volume_tip_with_filter is deprecated, use hamilton_tip_1000uL_filter instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_1000uL_filter(name=name)
+  return hamilton_tip_1000uL_filter(name=name, identifier=identifier)
 
 
-def wide_high_volume_tip_with_filter(name: str) -> HamiltonTip:
+def wide_high_volume_tip_with_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_1000uL_filter_wide` instead."""
   warnings.warn(
     "wide_high_volume_tip_with_filter is deprecated, use hamilton_tip_1000uL_filter_wide instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_1000uL_filter_wide(name=name)
+  return hamilton_tip_1000uL_filter_wide(name=name, identifier=identifier)
 
 
-def ultrawide_high_volume_tip_with_filter(name: str) -> HamiltonTip:
+def ultrawide_high_volume_tip_with_filter(
+  name: str, *, identifier: Optional[str] = None
+) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_1000uL_filter_ultrawide` instead."""
   warnings.warn(
     "ultrawide_high_volume_tip_with_filter is deprecated, "
@@ -236,63 +240,63 @@ def ultrawide_high_volume_tip_with_filter(name: str) -> HamiltonTip:
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_1000uL_filter_ultrawide(name=name)
+  return hamilton_tip_1000uL_filter_ultrawide(name=name, identifier=identifier)
 
 
-def four_ml_tip_with_filter(name: str) -> HamiltonTip:
+def four_ml_tip_with_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_4000uL_filter` instead."""
   warnings.warn(
     "four_ml_tip_with_filter is deprecated, use hamilton_tip_4000uL_filter instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_4000uL_filter(name=name)
+  return hamilton_tip_4000uL_filter(name=name, identifier=identifier)
 
 
-def five_ml_tip_with_filter(name: str) -> HamiltonTip:
+def five_ml_tip_with_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_5000uL_filter` instead."""
   warnings.warn(
     "five_ml_tip_with_filter is deprecated, use hamilton_tip_5000uL_filter instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_5000uL_filter(name=name)
+  return hamilton_tip_5000uL_filter(name=name, identifier=identifier)
 
 
-def five_ml_tip(name: str) -> HamiltonTip:
+def five_ml_tip(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_5000uL` instead."""
   warnings.warn(
     "five_ml_tip is deprecated, use hamilton_tip_5000uL instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_5000uL(name=name)
+  return hamilton_tip_5000uL(name=name, identifier=identifier)
 
 
-def fifty_ul_tip_with_filter(name: str) -> HamiltonTip:
+def fifty_ul_tip_with_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_50uL_filter` instead."""
   warnings.warn(
     "fifty_ul_tip_with_filter is deprecated, use hamilton_tip_50uL_filter instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_50uL_filter(name=name)
+  return hamilton_tip_50uL_filter(name=name, identifier=identifier)
 
 
-def fifty_ul_tip_no_filter(name: str) -> HamiltonTip:
+def fifty_ul_tip_no_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_50uL` instead."""
   warnings.warn(
     "fifty_ul_tip_no_filter is deprecated, use hamilton_tip_50uL instead",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_50uL(name=name)
+  return hamilton_tip_50uL(name=name, identifier=identifier)
 
 
 # # # # # # # # # # New naming convention # # # # # # # # # #
 
 
-def hamilton_tip_10uL(name: str) -> HamiltonTip:
+def hamilton_tip_10uL(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 10 uL tip without filter (`tt02` in venus)
 
   Variants:
@@ -313,10 +317,11 @@ def hamilton_tip_10uL(name: str) -> HamiltonTip:
     tip_size=TipSize.LOW_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=6.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_10uL_filter(name: str) -> HamiltonTip:
+def hamilton_tip_10uL_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 10 uL tip with filter (`tt03` in venus)
 
   Variants:
@@ -333,10 +338,11 @@ def hamilton_tip_10uL_filter(name: str) -> HamiltonTip:
     tip_size=TipSize.LOW_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=6.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_50uL(name: str) -> HamiltonTip:
+def hamilton_tip_50uL(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 50 uL tip without filter
 
   Variants:
@@ -356,10 +362,11 @@ def hamilton_tip_50uL(name: str) -> HamiltonTip:
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=8.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_50uL_filter(name: str) -> HamiltonTip:
+def hamilton_tip_50uL_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 50 uL tip with filter
 
   Hamilton cat. no.: 235948
@@ -374,10 +381,11 @@ def hamilton_tip_50uL_filter(name: str) -> HamiltonTip:
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=8.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_300uL(name: str) -> HamiltonTip:
+def hamilton_tip_300uL(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 300 uL tip without filter (`tt00` in venus)
 
   Variants:
@@ -395,10 +403,11 @@ def hamilton_tip_300uL(name: str) -> HamiltonTip:
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=8.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_300uL_filter(name: str) -> HamiltonTip:
+def hamilton_tip_300uL_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 300 uL tip with filter (`tt01` in venus)
 
   Variants:
@@ -415,10 +424,11 @@ def hamilton_tip_300uL_filter(name: str) -> HamiltonTip:
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=8.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_300uL_filter_slim(name: str) -> HamiltonTip:
+def hamilton_tip_300uL_filter_slim(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton cat. no.: 235646 (CORE-II: conductive)
   Hamilton 300 uL slim tip with filter"""
   return HamiltonTip(
@@ -431,10 +441,13 @@ def hamilton_tip_300uL_filter_slim(name: str) -> HamiltonTip:
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=10.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_300uL_filter_ultrawide(name: str) -> HamiltonTip:
+def hamilton_tip_300uL_filter_ultrawide(
+  name: str, *, identifier: Optional[str] = None
+) -> HamiltonTip:
   """Hamilton 300 uL ultra wide bore (1.55 mm) tip with filter"""
   return HamiltonTip(
     model=hamilton_tip_300uL_filter_ultrawide.__name__,
@@ -446,10 +459,11 @@ def hamilton_tip_300uL_filter_ultrawide(name: str) -> HamiltonTip:
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=8.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_1000uL(name: str) -> HamiltonTip:
+def hamilton_tip_1000uL(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 1000 uL tip without filter
 
   Variants:
@@ -467,10 +481,11 @@ def hamilton_tip_1000uL(name: str) -> HamiltonTip:
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=10.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_1000uL_filter(name: str) -> HamiltonTip:
+def hamilton_tip_1000uL_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 1000 uL tip with filter
 
   Hamilton cat. no.: 235940 - conductive, sterile
@@ -485,10 +500,11 @@ def hamilton_tip_1000uL_filter(name: str) -> HamiltonTip:
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=10.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_1000uL_filter_wide(name: str) -> HamiltonTip:
+def hamilton_tip_1000uL_filter_wide(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 1000 uL wide bore (1.20 mm) tip with filter
 
   Hamilton P/N 235677
@@ -503,10 +519,13 @@ def hamilton_tip_1000uL_filter_wide(name: str) -> HamiltonTip:
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=10.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_1000uL_filter_ultrawide(name: str) -> HamiltonTip:
+def hamilton_tip_1000uL_filter_ultrawide(
+  name: str, *, identifier: Optional[str] = None
+) -> HamiltonTip:
   """Hamilton 1000 uL ultra wide bore (3.20 mm) tip with filter
 
   Hamilton P/N 235541
@@ -521,10 +540,11 @@ def hamilton_tip_1000uL_filter_ultrawide(name: str) -> HamiltonTip:
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=10.0,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_4000uL_filter(name: str) -> HamiltonTip:
+def hamilton_tip_4000uL_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 4000 uL tip with filter (`tt29` in venus)"""
   return HamiltonTip(
     model=hamilton_tip_4000uL_filter.__name__,
@@ -535,10 +555,11 @@ def hamilton_tip_4000uL_filter(name: str) -> HamiltonTip:
     maximal_volume=4367,
     tip_size=TipSize.XL,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_5000uL(name: str) -> HamiltonTip:
+def hamilton_tip_5000uL(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 5000 uL tip without filter (`tt25` in venus)"""
   return HamiltonTip(
     model=hamilton_tip_5000uL.__name__,
@@ -549,10 +570,11 @@ def hamilton_tip_5000uL(name: str) -> HamiltonTip:
     maximal_volume=5420,
     tip_size=TipSize.XL,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_5000uL_filter(name: str) -> HamiltonTip:
+def hamilton_tip_5000uL_filter(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton 5000 uL tip with filter (`tt25` in venus)"""
   return HamiltonTip(
     model=hamilton_tip_5000uL_filter.__name__,
@@ -563,13 +585,14 @@ def hamilton_tip_5000uL_filter(name: str) -> HamiltonTip:
     maximal_volume=5420,
     tip_size=TipSize.XL,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # Teaching needles # # # # # # # # # #
 
 
-def hamilton_teaching_needle_300uL(name: str) -> HamiltonTip:
+def hamilton_teaching_needle_300uL(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton teaching needle, 300 uL size class - closed-tip probe, cannot pipette.
 
   For labware teaching, not liquid handling. Geometry matches hamilton_tip_300uL; the
@@ -588,10 +611,11 @@ def hamilton_teaching_needle_300uL(name: str) -> HamiltonTip:
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=8.0,
     is_conductive=True,
+    identifier=identifier,
   )
 
 
-def hamilton_teaching_needle_5000uL(name: str) -> HamiltonTip:
+def hamilton_teaching_needle_5000uL(name: str, *, identifier: Optional[str] = None) -> HamiltonTip:
   """Hamilton teaching needle, 5000 uL size class - closed-tip probe, cannot pipette.
 
   For labware teaching, not liquid handling. Geometry matches hamilton_tip_5000uL; the
@@ -609,4 +633,5 @@ def hamilton_teaching_needle_5000uL(name: str) -> HamiltonTip:
     tip_size=TipSize.XL,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     is_conductive=True,
+    identifier=identifier,
   )

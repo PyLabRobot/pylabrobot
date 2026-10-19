@@ -30,7 +30,8 @@ class TestPlateAdapter(unittest.TestCase):
     self.assertEqual(
       serialized,
       {
-        "name": "adapter",
+        "identifier": _adapter.identifier,
+        "metadata": {"name": "adapter"},
         "type": "PlateAdapter",
         "size_x": 128.0,
         "size_y": 86.0,

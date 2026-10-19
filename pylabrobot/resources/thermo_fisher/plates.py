@@ -2,6 +2,7 @@
 
 import logging
 import math
+from typing import Optional
 
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_in_container_2segments_square_ubottom,
@@ -65,7 +66,7 @@ def _compute_height_from_volume_Thermo_TS_96_wellplate_1200ul_Rb(
   )
 
 
-def Thermo_TS_96_wellplate_1200ul_Rb_Lid(name: str) -> Lid:
+def Thermo_TS_96_wellplate_1200ul_Rb_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -78,7 +79,12 @@ def Thermo_TS_96_wellplate_1200ul_Rb_Lid(name: str) -> Lid:
   # )
 
 
-def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate:
+def Thermo_TS_96_wellplate_1200ul_Rb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Thermo Fisher Scientific/Fisher Scientific cat. no.: AB1127/10243223.
   - Material: Polypropylene (AB-1068, polystyrene).
   - Brand: Thermo Scientific.
@@ -120,6 +126,7 @@ def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate
       compute_height_from_volume=(_compute_height_from_volume_Thermo_TS_96_wellplate_1200ul_Rb),
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
@@ -161,7 +168,9 @@ def _compute_height_from_volume_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
   )
 
 
-def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:
+def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(
+  name: str, *, identifier: Optional[str] = None
+) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -174,7 +183,12 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:
   # )
 
 
-def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = False) -> Plate:
+def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Thermo Fisher Scientific/Fisher Scientific cat. no.: 4483354/15273005 (= with barcode)
   - alternative cat. no.: 16698853 (FS) (= **without** barcode).
   - See `./engineering_diagrams/` directory for more part numbers (different colours).
@@ -219,13 +233,14 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
       ),
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # Thermo_Nunc_96_well_plate_1300uL_Rb # # # # # # # # # #
 
 
-def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
+def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """
   - Part no.: 260252
   - Diagram: https://assets.thermofisher.com/TFS-Assets/LSG/manuals/D03011.pdf
@@ -259,6 +274,7 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       ),
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
@@ -302,11 +318,18 @@ def _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(volume_
   )
 
 
-def thermo_AB_96_wellplate_300ul_Vb_MicroAmp_Lid(name: str) -> Lid:
+def thermo_AB_96_wellplate_300ul_Vb_MicroAmp_Lid(
+  name: str, *, identifier: Optional[str] = None
+) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
 
 
-def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) -> Plate:
+def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Thermo Fisher Scientific cat. no.: N8010560/4316813 (w/o barcode)
   - alternative cat. no.: 4306737/4326659 (with barcode).
   - See `./engineering_diagrams/` directory for more part numbers.
@@ -353,10 +376,13 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
       ),
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
+def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(
+  name: str, *, identifier: Optional[str] = None
+) -> Plate:
   """Thermo Fisher Scientific cat. no.: 4309849, 4326270, 4343814 (with barcode), 4343370 (w/o barcode).
 
   https://documents.thermofisher.com/TFS-Assets/LSG/manuals/cms_042831.pdf
@@ -397,13 +423,16 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # thermo_nunc_1_troughplate_90000uL_Fb_omnitray # # # # # # # # # #
 
 
-def thermo_nunc_1_troughplate_90000uL_Fb_omnitray(name: str) -> Plate:
+def thermo_nunc_1_troughplate_90000uL_Fb_omnitray(
+  name: str, *, identifier: Optional[str] = None
+) -> Plate:
   """
   https://assets.fishersci.com/TFS-Assets/LSG/manuals/D03023.pdf
 
@@ -437,13 +466,19 @@ def thermo_nunc_1_troughplate_90000uL_Fb_omnitray(name: str) -> Plate:
       # compute_height_from_volume=None,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # Thermo_TS_Nunc_96_wellplate_300uL_Fb # # # # # # # # # #
 
 
-def Thermo_TS_Nunc_96_wellplate_300uL_Fb(name: str, with_lid: bool = False) -> Plate:
+def Thermo_TS_Nunc_96_wellplate_300uL_Fb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Thermo Scientific™ Nunc™ 96-Well Optical-Bottom Microplate, black, TC surface
   - Product Number: 165305
   - Max Volume: 400 uL
@@ -474,10 +509,11 @@ def Thermo_TS_Nunc_96_wellplate_300uL_Fb(name: str, with_lid: bool = False) -> P
       material_z_thickness=2.2,  # from spec
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name: str) -> Lid:
+def Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   return Lid(
     name=name,
     size_x=127.25,  # from spec
@@ -485,13 +521,16 @@ def Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name: str) -> Lid:
     size_z=9.1,  # from spec
     nesting_z_height=16.7 - 14.86,  # from spec: lid+plate_z - plate_z
     model="Thermo_TS_Nunc_96_assay_300uL_Fb_Lid",
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # thermo_TS_nalgene_1_troughplate_300mL_Fb # # # # # # # # # #
 
 
-def thermo_TS_nalgene_1_troughplate_300mL_Fb(name: str) -> Plate:
+def thermo_TS_nalgene_1_troughplate_300mL_Fb(
+  name: str, *, identifier: Optional[str] = None
+) -> Plate:
   """Thermo Fisher Scientific Nalgene 300mL Flat Bottom Reservoir
   - Product Number: 12001300 (non-sterile), 12001301 (sterile)
   - 1-well reservoir with SBS footprint
@@ -522,4 +561,5 @@ def thermo_TS_nalgene_1_troughplate_300mL_Fb(name: str) -> Plate:
       material_z_thickness=1.15,  # measured.
       name_prefix=name,
     ),
+    identifier=identifier,
   )

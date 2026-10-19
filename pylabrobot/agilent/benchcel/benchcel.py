@@ -583,6 +583,8 @@ class BenchCel4R(Resource):
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = "Agilent BenchCel 4R",
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """
     Args:
@@ -640,6 +642,8 @@ class BenchCel4R(Resource):
       rotation=rotation,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.loading_tray = PlateHolder(

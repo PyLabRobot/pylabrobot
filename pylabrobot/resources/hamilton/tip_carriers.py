@@ -1,6 +1,7 @@
 """ML Star tip carriers"""
 
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.carrier import (
   ResourceHolder,
@@ -11,7 +12,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
 
 
-def TIP_CAR_120BC_4mlTF_A00(name: str) -> TipCarrier:
+def TIP_CAR_120BC_4mlTF_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Tip carrier with 5 4ml tip with filter racks landscape"""
   return TipCarrier(
     name=name,
@@ -32,10 +33,11 @@ def TIP_CAR_120BC_4mlTF_A00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_120BC_4mlTF_A00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_120BC_5mlT_A00(name: str) -> TipCarrier:
+def TIP_CAR_120BC_5mlT_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Tip carrier with 5 5ml tip racks landscape"""
   return TipCarrier(
     name=name,
@@ -56,10 +58,11 @@ def TIP_CAR_120BC_5mlT_A00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_120BC_5mlT_A00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_288_A00(name: str) -> TipCarrier:
+def TIP_CAR_288_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Carrier for 3 Racks with 96 Tips portrait  [revision A00]"""
   return TipCarrier(
     name=name,
@@ -78,10 +81,11 @@ def TIP_CAR_288_A00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_288_A00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_288_B00(name: str) -> TipCarrier:
+def TIP_CAR_288_B00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Carrier for 3 Racks with 96 Tips portrait [revision B00]"""
   return TipCarrier(
     name=name,
@@ -100,10 +104,11 @@ def TIP_CAR_288_B00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_288_B00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_288_C00(name: str) -> TipCarrier:
+def TIP_CAR_288_C00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Carrier for 3 Racks with 96 Tips portrait [revision C00]"""
   return TipCarrier(
     name=name,
@@ -122,10 +127,11 @@ def TIP_CAR_288_C00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_288_C00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_384BC_A00(name: str) -> TipCarrier:
+def TIP_CAR_384BC_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Tip carrier with 4 empty tip rack positions landscape, with Barcode Identification  [revision A00]"""
   return TipCarrier(
     name=name,
@@ -145,10 +151,11 @@ def TIP_CAR_384BC_A00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_384BC_A00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_384_A00(name: str) -> TipCarrier:
+def TIP_CAR_384_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Carrier for 4 Racks with 96 Tips landscape [revision A00]"""
   return TipCarrier(
     name=name,
@@ -168,10 +175,11 @@ def TIP_CAR_384_A00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_384_A00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_72_4mlTF_C00(name: str) -> TipCarrier:
+def TIP_CAR_72_4mlTF_C00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Tip carrier with 3 4ml tip with filter racks portrait  [revision C00]"""
   return TipCarrier(
     name=name,
@@ -190,10 +198,11 @@ def TIP_CAR_72_4mlTF_C00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_72_4mlTF_C00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_72_5mlT_C00(name: str) -> TipCarrier:
+def TIP_CAR_72_5mlT_C00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Tip carrier with 3 5ml tip racks portrait  [revision C00]"""
   return TipCarrier(
     name=name,
@@ -212,10 +221,11 @@ def TIP_CAR_72_5mlT_C00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_72_5mlT_C00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_96BC_4mlTF_A00(name: str) -> TipCarrier:
+def TIP_CAR_96BC_4mlTF_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Carrier for 4 4ml with filter tip racks landscape"""
   return TipCarrier(
     name=name,
@@ -235,10 +245,11 @@ def TIP_CAR_96BC_4mlTF_A00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_96BC_4mlTF_A00",
+    identifier=identifier,
   )
 
 
-def TIP_CAR_96BC_5mlT_A00(name: str) -> TipCarrier:
+def TIP_CAR_96BC_5mlT_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Carrier for 4 5ml tip racks landscape"""
   return TipCarrier(
     name=name,
@@ -258,10 +269,11 @@ def TIP_CAR_96BC_5mlT_A00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model="TIP_CAR_96BC_5mlT_A00",
+    identifier=identifier,
   )
 
 
-def hamilton_tip_carrier_L5(name: str) -> TipCarrier:
+def hamilton_tip_carrier_L5(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Hamilton cat. no.: 182085
   Hamilton name: 'TIP_CAR_480_A00'.
   Carrier for 5 racks of 96 tips, landscape.
@@ -286,10 +298,11 @@ def hamilton_tip_carrier_L5(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model=hamilton_tip_carrier_L5.__name__,
+    identifier=identifier,
   )
 
 
-def hamilton_tip_carrier_L5_ntr_a00(name: str) -> TipCarrier:
+def hamilton_tip_carrier_L5_ntr_a00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Hamilton cat. no.: 182074
   Hamilton name: 'TIP_CAR_NTR_A00'.
   Carrier for 5 stacks of up to 4x 96 nested tip racks (NTR), landscape.
@@ -318,10 +331,11 @@ def hamilton_tip_carrier_L5_ntr_a00(name: str) -> TipCarrier:
       name_prefix=name,
     ),
     model=hamilton_tip_carrier_L5_ntr_a00.__name__,
+    identifier=identifier,
   )
 
 
-def hamilton_prep_ftr_pedestal(name: str) -> TipCarrier:
+def hamilton_prep_ftr_pedestal(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Hamilton cat. no.: 6600553-01
   Pedestal for elevating fixed tip racks (FTR) on the MicroLab Prep.
   Body: 133.11 x 89.96 x 53.37 mm. FTR rack seats on top of the pedestal.
@@ -335,47 +349,48 @@ def hamilton_prep_ftr_pedestal(name: str) -> TipCarrier:
     size_z=53.37,
     sites={0: site},
     model="hamilton_prep_ftr_pedestal",
+    identifier=identifier,
   )
 
 
 # Deprecated names for backwards compatibility
 
 
-def TIP_CAR_NTR_A00(name: str) -> TipCarrier:
+def TIP_CAR_NTR_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Deprecated alias for `hamilton_tip_carrier_L5_ntr_a00`."""
   warnings.warn(
     "TIP_CAR_NTR_A00 is deprecated. Use 'hamilton_tip_carrier_L5_ntr_a00' instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_carrier_L5_ntr_a00(name)
+  return hamilton_tip_carrier_L5_ntr_a00(name, identifier=identifier)
 
 
-def TIP_CAR_480(name: str) -> TipCarrier:
+def TIP_CAR_480(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Deprecated alias for `hamilton_tip_carrier_L5`."""
   warnings.warn(
     "TIP_CAR_480 is deprecated. Use 'hamilton_tip_carrier_L5' instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_carrier_L5(name)
+  return hamilton_tip_carrier_L5(name, identifier=identifier)
 
 
-def TIP_CAR_480BC_A00(name: str) -> TipCarrier:
+def TIP_CAR_480BC_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Deprecated alias for `hamilton_tip_carrier_L5`."""
   warnings.warn(
     "TIP_CAR_480BC_A00 is deprecated. Use 'hamilton_tip_carrier_L5' instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_carrier_L5(name)
+  return hamilton_tip_carrier_L5(name, identifier=identifier)
 
 
-def TIP_CAR_480_A00(name: str) -> TipCarrier:
+def TIP_CAR_480_A00(name: str, *, identifier: Optional[str] = None) -> TipCarrier:
   """Deprecated alias for `hamilton_tip_carrier_L5`."""
   warnings.warn(
     "TIP_CAR_480_A00 is deprecated. Use 'hamilton_tip_carrier_L5' instead.",
     DeprecationWarning,
     stacklevel=2,
   )
-  return hamilton_tip_carrier_L5(name)
+  return hamilton_tip_carrier_L5(name, identifier=identifier)

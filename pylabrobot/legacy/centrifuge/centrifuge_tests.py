@@ -33,6 +33,7 @@ class CentrifugeTests(unittest.IsolatedAsyncioTestCase):
     serialized = centrifuge.serialize()
     deserialized = Centrifuge.deserialize(serialized)
     self.assertEqual(deserialized, centrifuge)
+    self.assertEqual(deserialized.serialize(), serialized)
 
 
 class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
@@ -197,7 +198,9 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
     self.loader.backend = LoaderChatterboxBackend()
     self.centrifuge.backend = CentrifugeChatterboxBackend()
     serialized = self.loader.serialize()
-    self.assertEqual(Loader.deserialize(serialized), self.loader)
+    restored = Loader.deserialize(serialized)
+    self.assertEqual(restored, self.loader)
+    self.assertEqual(restored.serialize(), serialized)
 
 
 class Access2BackendTests(unittest.IsolatedAsyncioTestCase):

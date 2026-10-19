@@ -76,7 +76,7 @@ class ShaftHoldsItsTip(unittest.TestCase):
     self.assertEqual(grip.z, tool.fitting_depth)
 
   def test_an_empty_shaft_equals_one_carrying_a_tip(self):
-    other = TipMountingShaft(name="shaft", tip_pickup_mode="core")
+    other = self.shaft.copy()
     self.shaft.mount_tip(self.tip)
     self.assertEqual(self.shaft, other)
 

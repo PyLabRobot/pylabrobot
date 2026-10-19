@@ -24,6 +24,9 @@ class TecanWashStation(Carrier, TecanResource):
     sites: Optional[Dict[int, ResourceHolder]] = None,
     category="tecan_wash_station",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name,
@@ -33,13 +36,15 @@ class TecanWashStation(Carrier, TecanResource):
       sites,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.off_x: float = off_x
     self.off_y: float = off_y
 
 
-def Wash_Station(name: str) -> TecanWashStation:
+def Wash_Station(name: str, *, identifier: Optional[str] = None) -> TecanWashStation:
   """Tecan part no. 10613001"""
   return TecanWashStation(
     name=name,
@@ -67,16 +72,17 @@ def Wash_Station(name: str) -> TecanWashStation:
       ],
     ),
     model="Wash_Station",
+    identifier=identifier,
   )
 
 
-def Wash_Station_Waste(name: str) -> Trash:
-  return Trash(name=name, size_x=12.0, size_y=100.0, size_z=140.0)
+def Wash_Station_Waste(name: str, *, identifier: Optional[str] = None) -> Trash:
+  return Trash(name=name, size_x=12.0, size_y=100.0, size_z=140.0, identifier=identifier)
 
 
-def Wash_Station_Cleaner_shallow(name: str) -> Trash:
-  return Trash(name=name, size_x=12.0, size_y=73.0, size_z=140.0)
+def Wash_Station_Cleaner_shallow(name: str, *, identifier: Optional[str] = None) -> Trash:
+  return Trash(name=name, size_x=12.0, size_y=73.0, size_z=140.0, identifier=identifier)
 
 
-def Wash_Station_Cleaner_deep(name: str) -> Trash:
-  return Trash(name=name, size_x=12.0, size_y=73.0, size_z=140.0)
+def Wash_Station_Cleaner_deep(name: str, *, identifier: Optional[str] = None) -> Trash:
+  return Trash(name=name, size_x=12.0, size_y=73.0, size_z=140.0, identifier=identifier)

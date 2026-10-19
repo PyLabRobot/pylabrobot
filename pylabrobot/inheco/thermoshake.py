@@ -28,6 +28,9 @@ class InhecoThermoShake(ResourceHolder, InhecoTemperatureController):
     child_location: Coordinate,
     category: str = "heating_shaking",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     ResourceHolder.__init__(
       self,
@@ -38,6 +41,8 @@ class InhecoThermoShake(ResourceHolder, InhecoTemperatureController):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     InhecoTemperatureController.__init__(self, index=index, interface=control_box)
 
@@ -81,7 +86,11 @@ class InhecoThermoShake(ResourceHolder, InhecoTemperatureController):
 
 
 def inheco_thermoshake_ac(
-  name: str, control_box: InhecoTECControlBox, index: int
+  name: str,
+  control_box: InhecoTECControlBox,
+  index: int,
+  *,
+  identifier: Optional[str] = None,
 ) -> InhecoThermoShake:
   """Inheco Thermoshake AC
 
@@ -101,11 +110,16 @@ def inheco_thermoshake_ac(
     size_z=115.9,  # from spec
     child_location=Coordinate(x=0, y=0, z=109.9),  # TODO
     model=inheco_thermoshake_ac.__name__,
+    identifier=identifier,
   )
 
 
 def inheco_thermoshake(
-  name: str, control_box: InhecoTECControlBox, index: int
+  name: str,
+  control_box: InhecoTECControlBox,
+  index: int,
+  *,
+  identifier: Optional[str] = None,
 ) -> InhecoThermoShake:
   """Inheco Thermoshake (7100146)
 
@@ -121,12 +135,17 @@ def inheco_thermoshake(
     size_z=118,  # from spec
     child_location=Coordinate(x=9.62, y=9.22, z=109.9),  # measured
     model=inheco_thermoshake.__name__,
-    # pedestal_size_z=-4.2,  # measured
+    # pedestal_size_z=-4.2,  # measured,
+    identifier=identifier,
   )
 
 
 def inheco_thermoshake_rm(
-  name: str, control_box: InhecoTECControlBox, index: int
+  name: str,
+  control_box: InhecoTECControlBox,
+  index: int,
+  *,
+  identifier: Optional[str] = None,
 ) -> InhecoThermoShake:
   """Inheco Thermoshake RM (7100144)
 
@@ -144,4 +163,5 @@ def inheco_thermoshake_rm(
     size_z=116,  # from spec
     child_location=Coordinate(x=0, y=0, z=0),  # TODO
     model=inheco_thermoshake_rm.__name__,
+    identifier=identifier,
   )

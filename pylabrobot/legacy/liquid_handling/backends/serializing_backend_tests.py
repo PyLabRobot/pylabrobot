@@ -54,7 +54,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
       data={
         "channels": [
           {
-            "resource_name": tip_spot.name,
+            "resource_identifier": tip_spot.identifier,
             "offset": serialize(Coordinate.zero()),
             "tip": serialize(tip),
           }
@@ -76,7 +76,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
       data={
         "channels": [
           {
-            "resource_name": tip_spot.name,
+            "resource_identifier": tip_spot.identifier,
             "offset": serialize(Coordinate.zero()),
             "tip": serialize(tip),
           }
@@ -97,7 +97,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
       data={
         "channels": [
           {
-            "resource_name": well.name,
+            "resource_identifier": well.identifier,
             "offset": serialize(Coordinate.zero()),
             "tip": tip.serialize(),
             "volume": 10,
@@ -123,7 +123,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
       data={
         "channels": [
           {
-            "resource_name": wells[0].name,
+            "resource_identifier": wells[0].identifier,
             "offset": serialize(Coordinate.zero()),
             "tip": tip.serialize(),
             "volume": 10,
@@ -142,7 +142,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.backend.send_command.assert_called_once_with(
       command="pick_up_tips96",
       data={
-        "resource_name": self.tip_rack.name,
+        "resource_identifier": self.tip_rack.identifier,
         "offset": serialize(Coordinate.zero()),
       },
     )
@@ -155,7 +155,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.backend.send_command.assert_called_once_with(
       command="drop_tips96",
       data={
-        "resource_name": self.tip_rack.name,
+        "resource_identifier": self.tip_rack.identifier,
         "offset": serialize(Coordinate.zero()),
       },
     )
@@ -170,7 +170,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
       command="aspirate96",
       data={
         "aspiration": {
-          "well_names": [well.name for well in self.plate.get_all_items()],
+          "well_identifiers": [well.identifier for well in self.plate.get_all_items()],
           "offset": serialize(Coordinate.zero()),
           "volume": 10,
           "flow_rate": None,
@@ -192,7 +192,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
       command="dispense96",
       data={
         "dispense": {
-          "well_names": [well.name for well in self.plate.get_all_items()],
+          "well_identifiers": [well.identifier for well in self.plate.get_all_items()],
           "offset": serialize(Coordinate.zero()),
           "volume": 10.0,
           "flow_rate": None,
@@ -216,7 +216,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       calls[0].kwargs["data"],
       {
-        "resource_name": self.plate.name,
+        "resource_identifier": self.plate.identifier,
         "offset": serialize(Coordinate.zero()),
         "pickup_distance_from_top": 9.87,
         "direction": "FRONT",
@@ -228,7 +228,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       calls[1].kwargs["data"],
       {
-        "resource_name": self.plate.name,
+        "resource_identifier": self.plate.identifier,
         "destination": serialize(to),
         "offset": serialize(Coordinate.zero()),
         "pickup_distance_from_top": 9.87,

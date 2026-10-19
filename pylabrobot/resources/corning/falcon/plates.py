@@ -18,7 +18,12 @@ from pylabrobot.resources.well import (
 # # # # # # # # # # cor_falcon_96_wellplate_275uL_Fb # # # # # # # # # #
 
 
-def cor_falcon_96_wellplate_275uL_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_falcon_96_wellplate_275uL_Fb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   Corning cat. no.: 353072
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
@@ -59,13 +64,19 @@ def cor_falcon_96_wellplate_275uL_Fb(name: str, lid: Optional[Lid] = None) -> Pl
       ),
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # cor_falcon_96_wellplate_250uL_Rb # # # # # # # # # #
 
 
-def cor_falcon_96_wellplate_250uL_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_falcon_96_wellplate_250uL_Rb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   Corning cat. no.: 353077
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
@@ -109,13 +120,19 @@ def cor_falcon_96_wellplate_250uL_Rb(name: str, lid: Optional[Lid] = None) -> Pl
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
 # # # # # # # # # # cor_falcon_96_wellplate_340uL_Fb_black # # # # # # # # # #
 
 
-def cor_falcon_96_wellplate_340uL_Fb_black(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_falcon_96_wellplate_340uL_Fb_black(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   Corning cat. no.: 353219
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
@@ -163,6 +180,7 @@ def cor_falcon_96_wellplate_340uL_Fb_black(name: str, lid: Optional[Lid] = None)
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )
 
 
@@ -171,7 +189,12 @@ def cor_falcon_96_wellplate_340uL_Fb_black(name: str, lid: Optional[Lid] = None)
 # --------------------------------------------------------------------------- #
 
 
-def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+def Cor_Falcon_96_wellplate_250ul_Rb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for cor_falcon_96_wellplate_250uL_Rb().
 
   This alias will be removed in v1b1.
@@ -183,10 +206,15 @@ def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Pl
     DeprecationWarning,
     stacklevel=2,
   )
-  return cor_falcon_96_wellplate_250uL_Rb(name, lid)
+  return cor_falcon_96_wellplate_250uL_Rb(name, lid, identifier=identifier)
 
 
-def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+def Cor_Falcon_96_wellplate_275ul_Fb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for cor_falcon_96_wellplate_275uL_Fb().
 
   This alias will be removed in v1b1.
@@ -198,11 +226,14 @@ def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Pl
     DeprecationWarning,
     stacklevel=2,
   )
-  return cor_falcon_96_wellplate_275uL_Fb(name, lid)
+  return cor_falcon_96_wellplate_275uL_Fb(name, lid, identifier=identifier)
 
 
 def Cor_Falcon_96_wellplate_340ul_Fb_Black(
-  name: str, lid: Optional[Lid] = None
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
 ) -> Plate:  # remove v1b1
   """Deprecated alias for cor_falcon_96_wellplate_340uL_Fb_black().
 
@@ -215,4 +246,4 @@ def Cor_Falcon_96_wellplate_340ul_Fb_Black(
     DeprecationWarning,
     stacklevel=2,
   )
-  return cor_falcon_96_wellplate_340uL_Fb_black(name, lid)
+  return cor_falcon_96_wellplate_340uL_Fb_black(name, lid, identifier=identifier)

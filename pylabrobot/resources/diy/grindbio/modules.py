@@ -1,7 +1,11 @@
+from typing import Optional
+
 from pylabrobot.resources.carrier import Coordinate, PlateHolder
 
 
-def Hamilton_MFX_plateholder_DWP_metal_tapped_10mm_3dprint(name: str) -> PlateHolder:
+def Hamilton_MFX_plateholder_DWP_metal_tapped_10mm_3dprint(
+  name: str, *, identifier: Optional[str] = None
+) -> PlateHolder:
   """A Hamilton module is screwed onto 3d printed adapters.
   Hamilton MFX DWP Module (cat.-no. 188042 / 188042-00). It contains metal clamps at the corners.
   https://www.hamiltoncompany.com/other-robotics/188042
@@ -19,4 +23,5 @@ def Hamilton_MFX_plateholder_DWP_metal_tapped_10mm_3dprint(name: str) -> PlateHo
     child_location=Coordinate(4.0, 4.0, 183.95 - 63.95 - 100),  # 20.0 measured
     pedestal_size_z=-4.74,
     model=Hamilton_MFX_plateholder_DWP_metal_tapped_10mm_3dprint.__name__,
+    identifier=identifier,
   )

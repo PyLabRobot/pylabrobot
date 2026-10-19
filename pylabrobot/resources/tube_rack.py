@@ -26,6 +26,9 @@ class TubeRack(ContainerRack[Tube]):
     ordered_items: Optional[Dict[str, ResourceHolder]] = None,
     model: Optional[str] = None,
     category: str = "tube_rack",
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -35,6 +38,8 @@ class TubeRack(ContainerRack[Tube]):
       ordered_items=ordered_items,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
   def assign_child_resource(

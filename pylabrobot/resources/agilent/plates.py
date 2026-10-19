@@ -1,4 +1,5 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_container_1segment_round_vbottom,
@@ -31,7 +32,7 @@ def _compute_height_from_volume_agilent_96_wellplate_150uL_Vb(
   )
 
 
-def agilent_96_wellplate_150uL_Vb(name: str) -> Plate:
+def agilent_96_wellplate_150uL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """
   Part number: 5042-8502
 
@@ -101,19 +102,20 @@ def agilent_96_wellplate_150uL_Vb(name: str) -> Plate:
       **well_kwargs,
     ),
     plate_type="skirted",
+    identifier=identifier,
   )
 
 
-def agilent_96_wellplate_150uL_Ub(name: str) -> Plate:
+def agilent_96_wellplate_150uL_Ub(name: str, *, identifier: Optional[str] = None) -> Plate:
   """Deprecated for agilent_96_wellplate_150uL_Vb. Use that one instead."""
   warnings.warn(
     "agilent_96_wellplate_150uL_Ub is deprecated. Use agilent_96_wellplate_150uL_Vb instead.",
     DeprecationWarning,
   )
-  return agilent_96_wellplate_150uL_Vb(name)
+  return agilent_96_wellplate_150uL_Vb(name, identifier=identifier)
 
 
-def agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
+def agilent_2_reservoir_144mL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """Agilent 2 Reservoir 144mL V bottom
   Part Number: 203852-100
   - Max Volume: 144 mL
@@ -142,10 +144,11 @@ def agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
       material_z_thickness=1.15,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def agilent_1_troughplate_86mL_Vb(name: str) -> Plate:
+def agilent_1_troughplate_86mL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """Agilent 1 Troughplate 86mL V bottom
   Part Number: 201254-100
   - Max Volume: 86 mL
@@ -173,6 +176,7 @@ def agilent_1_troughplate_86mL_Vb(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       material_z_thickness=1.15,
     ),
+    identifier=identifier,
   )
 
 
@@ -181,7 +185,9 @@ def agilent_1_troughplate_86mL_Vb(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:  # remove v1b1
+def Agilent_2_reservoir_144mL_Vb(
+  name: str, *, identifier: Optional[str] = None
+) -> Plate:  # remove v1b1
   """Deprecated alias for agilent_2_reservoir_144mL_Vb().
 
   This alias will be removed in v1b1.
@@ -193,4 +199,4 @@ def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return agilent_2_reservoir_144mL_Vb(name)
+  return agilent_2_reservoir_144mL_Vb(name, identifier=identifier)

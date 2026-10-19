@@ -34,7 +34,9 @@ class TipTests(unittest.TestCase):
       serialize(tip),
       {
         "type": "Tip",
-        "name": "test_tip",
+        "identifier": tip.identifier,
+        "metadata": {"name": "test_tip"},
+        "origin_identifier": None,
         "category": "tip",
         "diameter": TIP_DIAMETER[TipSize.STANDARD_VOLUME],
         "size_z": 10.0,
@@ -72,7 +74,9 @@ class TipTests(unittest.TestCase):
       tip.serialize(),
       {
         "type": "HamiltonTip",
-        "name": "test_tip",
+        "identifier": tip.identifier,
+        "metadata": {"name": "test_tip"},
+        "origin_identifier": None,
         "category": "tip",
         "diameter": 8.2,
         "pick_up_location": None,
@@ -167,7 +171,7 @@ class TipTests(unittest.TestCase):
     tip.tracker.set_volume(50.0)
     self.assertEqual([state["volume"] for state in seen], [50.0])
 
-  def test_equality_includes_tool_and_tip_fields(self):
+  def test_identity_survives_changes_to_tool_and_tip_fields(self):
     """Matching resource geometry alone does not make different tips equal."""
     tip = Tip("tip", TIP_DIAMETER[TipSize.STANDARD_VOLUME], 50, False, 300, 8, collar_height=4)
     data = tip.serialize()
@@ -184,11 +188,11 @@ class TipTests(unittest.TestCase):
     ):
       with self.subTest(changes=changes):
         other = Tip.deserialize({**data, **changes})
-        self.assertNotEqual(tip, other)
-        self.assertNotEqual(other, tip)
+        self.assertEqual(tip, other)
+        self.assertEqual(other, tip)
     self.assertNotEqual(hamilton_tip_300uL("tip"), hamilton_tip_300uL_filter("tip"))
 
-  def test_equality_includes_vendor_fields(self):
+  def test_identity_survives_changes_to_vendor_fields(self):
     """Hamilton size and pickup method participate in equality."""
     tip = hamilton_tip_300uL("tip")
     for changes in (
@@ -197,7 +201,7 @@ class TipTests(unittest.TestCase):
     ):
       with self.subTest(changes=changes):
         other = Tip.deserialize({**tip.serialize(), **changes})
-        self.assertNotEqual(tip, other)
+        self.assertEqual(tip, other)
 
   @unittest.skip("Tecan tip diameter has not been measured.")
   def test_equality_includes_tecan_tip_type(self):
@@ -206,16 +210,18 @@ class TipTests(unittest.TestCase):
     other = Tip.deserialize({**tecan_tip.serialize(), "tip_type": TipType.STANDARD.name})
     self.assertNotEqual(tecan_tip, other)
 
-  def test_tools_are_unhashable(self):
-    """Tools and tips cannot be used as dictionary keys or set members."""
+  def test_tools_are_hashable_by_identifier(self):
+    """Tool keys remain stable after changing display names."""
     resources = (
       HeadTool("tool", 6, 6, 50, fitting_depth=8),
       Tip("tip", TIP_DIAMETER[TipSize.STANDARD_VOLUME], 50, False, 300, 8),
       hamilton_tip_300uL("hamilton_tip"),
     )
     for resource in resources:
-      with self.subTest(resource=resource.name), self.assertRaises(TypeError):
-        hash(resource)
+      with self.subTest(resource=resource.name):
+        original_hash = hash(resource)
+        resource.name = "renamed"
+        self.assertEqual(hash(resource), original_hash)
 
   @unittest.skip("Tecan tip diameter has not been measured.")
   def test_tecan_tip_is_unhashable(self):
@@ -264,13 +270,13 @@ class TipTests(unittest.TestCase):
 
     restored = Resource.deserialize(parent.serialize())
     self.assertEqual(restored.serialize(), parent.serialize())
-    restored_tip = restored.get_resource("tip")
+    restored_tip = restored.get_resource_by_identifier(tip.identifier)
     self.assertIsInstance(restored_tip, HamiltonTip)
     self.assertEqual(restored_tip.location, tip.location)
 
     standalone = Tip.deserialize(tip.serialize())
     self.assertIsNone(standalone.parent)
-    self.assertIsNone(standalone.location)
+    self.assertEqual(standalone.location, tip.location)
     self.assertEqual(standalone.rotation.serialize(), tip.rotation.serialize())
     self.assertEqual(standalone.metadata, tip.metadata)
 

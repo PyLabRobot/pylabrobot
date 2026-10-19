@@ -30,6 +30,9 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
     child_location: Coordinate = Coordinate.zero(),
     category: str = "plate_holder",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -40,6 +43,8 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self._byonoy_base: Optional[ByonoyAbsorbanceBaseUnit] = None
 
@@ -88,6 +93,9 @@ class ByonoyAbsorbanceBaseUnit(Resource):
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
     preferred_pickup_location: Optional[Coordinate] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -99,6 +107,8 @@ class ByonoyAbsorbanceBaseUnit(Resource):
       model=model,
       barcode=barcode,
       preferred_pickup_location=preferred_pickup_location,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.plate_holder = _ByonoyAbsorbanceReaderPlateHolder(
@@ -147,10 +157,18 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
   _ERROR_NAMES = ABS96_ERROR_NAMES
   _DD_IGNORE_ERRORS_IN_CALIBRATION = 0x800E
 
-  def __init__(self, name: str = "byonoy_absorbance_96") -> None:
+  def __init__(
+    self,
+    name: str = "byonoy_absorbance_96",
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
+  ) -> None:
     # Drawn with the parking unit's housing, which is the same part, until the detection unit is
     # modelled on its own.
-    ByonoyAbsorbanceBaseUnit.__init__(self, name=name, model="byonoy_a96a_parking_unit")
+    ByonoyAbsorbanceBaseUnit.__init__(
+      self, name=name, model="byonoy_a96a_parking_unit", identifier=identifier, metadata=metadata
+    )
     ByonoyDriver.__init__(
       self, pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96"
     )
@@ -393,7 +411,7 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
     ]
 
 
-def byonoy_sbs_adapter(name: str) -> ResourceHolder:
+def byonoy_sbs_adapter(name: str, *, identifier: Optional[str] = None) -> ResourceHolder:
   """Create a Byonoy SBS adapter ResourceHolder."""
   return ResourceHolder(
     name=name,
@@ -406,10 +424,11 @@ def byonoy_sbs_adapter(name: str) -> ResourceHolder:
       z=17.0,
     ),
     model="byonoy_a96a_sbs_adapter",
+    identifier=identifier,
   )
 
 
-def byonoy_a96a_illumination_unit(name: str) -> Resource:
+def byonoy_a96a_illumination_unit(name: str, *, identifier: Optional[str] = None) -> Resource:
   size_x = 155.26
   size_y = 95.48
   return Resource(
@@ -419,17 +438,24 @@ def byonoy_a96a_illumination_unit(name: str) -> Resource:
     size_z=42.898,
     model="byonoy_a96a_illumination_unit",
     preferred_pickup_location=Coordinate(x=size_x / 2, y=size_y / 2, z=29.5),
+    identifier=identifier,
   )
 
 
-def byonoy_a96a_detection_unit(name: str) -> ByonoyAbsorbance96:
+def byonoy_a96a_detection_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyAbsorbance96:
   """Create a Byonoy A96A detection unit."""
-  return ByonoyAbsorbance96(name=name)
+  return ByonoyAbsorbance96(name=name, identifier=identifier)
 
 
-def byonoy_a96a_parking_unit(name: str) -> ByonoyAbsorbanceBaseUnit:
+def byonoy_a96a_parking_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyAbsorbanceBaseUnit:
   """Create a Byonoy A96A detection unit holder (base only, no backend)."""
-  return ByonoyAbsorbanceBaseUnit(name=name, model="byonoy_a96a_parking_unit")
+  return ByonoyAbsorbanceBaseUnit(
+    name=name, model="byonoy_a96a_parking_unit", identifier=identifier
+  )
 
 
 def byonoy_a96a(name: str, assign: bool = True) -> Tuple[ByonoyAbsorbance96, Resource]:

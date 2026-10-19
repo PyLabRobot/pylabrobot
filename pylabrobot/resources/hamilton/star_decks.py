@@ -1,10 +1,9 @@
 """Hamilton STAR, STARlet and STARplus decks."""
 
 import warnings
-from typing import Literal, Optional, cast
+from typing import Literal, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.errors import ResourceNotFoundError
 from pylabrobot.resources.hamilton.core_grippers import (
   hamilton_core_gripper_1000ul_5ml_on_waste,
   hamilton_core_gripper_1000ul_at_waste,
@@ -48,6 +47,9 @@ class HamiltonSTARDeck(HamiltonDeck):
     model: Optional[str] = None,
     num_rails: Optional[int] = None,
     with_teaching_rack: Optional[bool] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ) -> None:
     """Create a new STAR(let) deck of the given size.
 
@@ -79,12 +81,18 @@ class HamiltonSTARDeck(HamiltonDeck):
       category=category,
       origin=origin,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
       trash96 = Trash(
-        self.get_component_name("trash_core96"), size_x=122.4, size_y=82.6, size_z=0
+        self.get_component_name("trash_core96"),
+        size_x=122.4,
+        size_y=82.6,
+        size_z=0,
+        category="trash96",
       )  # size of tiprack
       self.assign_child_resource(
         resource=trash96,
@@ -181,27 +189,26 @@ class HamiltonSTARDeck(HamiltonDeck):
 
   def get_trash_area(self) -> Trash:
     """Return this deck's pipette waste area."""
-    name = self.get_component_name("trash")
-    if not self.has_resource(name):
-      raise ResourceNotFoundError("Trash area not found")
-    return cast(Trash, self.get_resource(name))
+    return super().get_trash_area()
 
   def get_trash_area96(self) -> Trash:
-    name = self.get_component_name("trash_core96")
-    if not self.has_resource(name):
+    matches = [
+      child for child in self.children if isinstance(child, Trash) and child.category == "trash96"
+    ]
+    if not matches:
       raise RuntimeError(
         "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
       )
-    return cast(Trash, self.get_resource(name))
+    if len(matches) != 1:
+      raise ValueError("Multiple 96-head trash areas found.")
+    return matches[0]
 
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas and the waste block."""
-    children_names = [child.name for child in self.children]
-    for resource_name in children_names:
-      resource = self.get_resource(resource_name)
+    for resource in self.children.copy():
       if isinstance(resource, Trash) and not include_trash:
         continue
-      if resource.name == self.get_component_name("waste_block"):
+      if resource.category == "waste_block":
         continue
       resource.unassign()
 
@@ -216,6 +223,8 @@ def STARLetDeck(
   ] = "1000uL-5mL-on-waste",
   name: str = "deck",
   with_teaching_rack: Optional[bool] = None,
+  *,
+  identifier: Optional[str] = None,
 ) -> HamiltonSTARDeck:
   """Create a new STARLet deck."""
 
@@ -231,6 +240,7 @@ def STARLetDeck(
     with_teaching_needle_rack=with_teaching_needle_rack,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
+    identifier=identifier,
   )
 
 
@@ -244,6 +254,8 @@ def STARDeck(
   ] = "1000uL-5mL-on-waste",
   name: str = "deck",
   with_teaching_rack: Optional[bool] = None,
+  *,
+  identifier: Optional[str] = None,
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck."""
 
@@ -259,6 +271,7 @@ def STARDeck(
     with_teaching_needle_rack=with_teaching_needle_rack,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
+    identifier=identifier,
   )
 
 
@@ -280,6 +293,8 @@ def STARPlusDeck(
   ] = "1000uL-5mL-on-waste",
   name: str = "deck",
   with_teaching_rack: Optional[bool] = None,
+  *,
+  identifier: Optional[str] = None,
 ) -> HamiltonSTARDeck:
   """Create a new STARplus deck.
 
@@ -298,4 +313,5 @@ def STARPlusDeck(
     with_teaching_needle_rack=with_teaching_needle_rack,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
+    identifier=identifier,
   )

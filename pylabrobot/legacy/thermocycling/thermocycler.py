@@ -73,6 +73,9 @@ class Thermocycler(ResourceHolder, Machine):
     child_location: Coordinate,
     category: str = "thermocycler",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """Initialize a Thermocycler resource.
 
@@ -95,6 +98,8 @@ class Thermocycler(ResourceHolder, Machine):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     Machine.__init__(self, backend=backend)
     self.backend: ThermocyclerBackend = backend

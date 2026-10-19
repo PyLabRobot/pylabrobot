@@ -330,7 +330,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
         "resource": _serialize_resource_tree(child),
         "method_registry": _build_method_registry(child),
         "state": child.serialize_all_state(),
-        "parent_name": "root",
+        "parent_identifier": self.r.identifier,
       },
       wait_for_response=False,
     )
@@ -344,7 +344,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
 
     self.send_command_mock.assert_called_with(
       event="resource_unassigned",
-      data={"resource_name": "child"},
+      data={"resource_identifier": child.identifier},
       wait_for_response=False,
     )
 
@@ -358,7 +358,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     call_args = self.send_command_mock.call_args[1]
     self.assertEqual(call_args["event"], "set_state")
     self.assertEqual(
-      call_args["data"]["plate_01_well_H12"]["volume"],
+      call_args["data"][plate.get_item("H12").identifier]["volume"],
       500,
     )
 
@@ -371,10 +371,10 @@ class VisualizerHeldToolTests(unittest.TestCase):
     self.assertTrue(spot.children)
 
     tree = _serialize_resource_tree(rack)
-    spot_data = next(child for child in tree["children"] if child["name"] == spot.name)
+    spot_data = next(child for child in tree["children"] if child["identifier"] == spot.identifier)
     self.assertEqual(spot_data["children"], [])
-    self.assertNotIn(spot.get_tip().name, _state_of(rack))
-    self.assertIn(spot.name, _state_of(rack))
+    self.assertNotIn(spot.get_tip().identifier, _state_of(rack))
+    self.assertIn(spot.identifier, _state_of(rack))
 
 
 class TestVisualizerMetadataHandling(unittest.TestCase):
@@ -412,7 +412,7 @@ class TestVisualizerMetadataHandling(unittest.TestCase):
       "set_root_resource", {"resource": _serialize_resource_tree(deck)}
     )
     decoded = json.loads(payload)["data"]["resource"]
-    self.assertEqual(decoded["name"], "deck")
+    self.assertEqual(decoded["metadata"]["name"], "deck")
     self.assertEqual(decoded["metadata"]["level"], 0)
     self.assertIsInstance(decoded["metadata"]["fn"], str)
     self.assertEqual(decoded["children"][0]["metadata"]["level"], 1)

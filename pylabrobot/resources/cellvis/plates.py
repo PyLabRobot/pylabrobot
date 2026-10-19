@@ -1,4 +1,5 @@
 import warnings
+from typing import Optional
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -9,7 +10,7 @@ from pylabrobot.resources.well import (
 )
 
 
-def cellvis_24_wellplate_3600uL_Fb_lid(name: str) -> Lid:
+def cellvis_24_wellplate_3600uL_Fb_lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   return Lid(
     name=name,
     size_x=127.15,  # from spec
@@ -17,10 +18,16 @@ def cellvis_24_wellplate_3600uL_Fb_lid(name: str) -> Lid:
     size_z=10,  # from spec
     nesting_z_height=7.5,  # from spec
     model="cellvis_24_wellplate_3600uL_Fb_lid",
+    identifier=identifier,
   )
 
 
-def cellvis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:
+def cellvis_24_wellplate_3600uL_Fb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """p/n P24-1.5P
 
   https://www.cellvis.com/_24-well-plate-with--number-1.5-glass-like-polymer-coverslip-bottom-tissue-culture-treated-for-better-cell-attachment-than-cover-glass_/product_detail.php?product_id=65
@@ -52,10 +59,11 @@ def cellvis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def cellvis_96_wellplate_350uL_Fb_lid(name: str) -> Lid:
+def cellvis_96_wellplate_350uL_Fb_lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   return Lid(
     name=name,
     size_x=127.6,  # from spec
@@ -63,10 +71,16 @@ def cellvis_96_wellplate_350uL_Fb_lid(name: str) -> Lid:
     size_z=10,  # from spec
     nesting_z_height=10 - (16.03 - 13.83),  # from spec
     model="cellvis_96_wellplate_350uL_Fb_lid",
+    identifier=identifier,
   )
 
 
-def cellvis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
+def cellvis_96_wellplate_350uL_Fb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """p/n P96-1.5H-N
 
   https://www.cellvis.com/_96-well-glass-bottom-plate-with-high-performance-number-1.5-cover-glass_/product_detail.php?product_id=50
@@ -96,6 +110,7 @@ def cellvis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
@@ -104,7 +119,9 @@ def cellvis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def CellVis_24_wellplate_3600uL_Fb_Lid(name: str) -> Lid:  # remove v1b1
+def CellVis_24_wellplate_3600uL_Fb_Lid(
+  name: str, *, identifier: Optional[str] = None
+) -> Lid:  # remove v1b1
   """Deprecated alias for cellvis_24_wellplate_3600uL_Fb_lid().
 
   This alias will be removed in v1b1.
@@ -116,10 +133,15 @@ def CellVis_24_wellplate_3600uL_Fb_Lid(name: str) -> Lid:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return cellvis_24_wellplate_3600uL_Fb_lid(name)
+  return cellvis_24_wellplate_3600uL_Fb_lid(name, identifier=identifier)
 
 
-def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+def CellVis_24_wellplate_3600uL_Fb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for cellvis_24_wellplate_3600uL_Fb().
 
   This alias will be removed in v1b1.
@@ -131,10 +153,12 @@ def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate: 
     DeprecationWarning,
     stacklevel=2,
   )
-  return cellvis_24_wellplate_3600uL_Fb(name, with_lid)
+  return cellvis_24_wellplate_3600uL_Fb(name, with_lid, identifier=identifier)
 
 
-def CellVis_96_wellplate_350uL_Fb_Lid(name: str) -> Lid:  # remove v1b1
+def CellVis_96_wellplate_350uL_Fb_Lid(
+  name: str, *, identifier: Optional[str] = None
+) -> Lid:  # remove v1b1
   """Deprecated alias for cellvis_96_wellplate_350uL_Fb_lid().
 
   This alias will be removed in v1b1.
@@ -146,10 +170,15 @@ def CellVis_96_wellplate_350uL_Fb_Lid(name: str) -> Lid:  # remove v1b1
     DeprecationWarning,
     stacklevel=2,
   )
-  return cellvis_96_wellplate_350uL_Fb_lid(name)
+  return cellvis_96_wellplate_350uL_Fb_lid(name, identifier=identifier)
 
 
-def CellVis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+def CellVis_96_wellplate_350uL_Fb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:  # remove v1b1
   """Deprecated alias for cellvis_96_wellplate_350uL_Fb().
 
   This alias will be removed in v1b1.
@@ -161,4 +190,4 @@ def CellVis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:  
     DeprecationWarning,
     stacklevel=2,
   )
-  return cellvis_96_wellplate_350uL_Fb(name, with_lid)
+  return cellvis_96_wellplate_350uL_Fb(name, with_lid, identifier=identifier)

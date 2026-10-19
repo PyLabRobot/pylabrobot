@@ -27,6 +27,9 @@ class TecanPlateCarrier(PlateCarrier, TecanResource):
     sites: Optional[Dict[int, PlateHolder]] = None,
     category="tecan_plate_carrier",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name,
@@ -36,6 +39,8 @@ class TecanPlateCarrier(PlateCarrier, TecanResource):
       sites,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.off_x = off_x
@@ -46,7 +51,9 @@ class TecanPlateCarrier(PlateCarrier, TecanResource):
     self.roma_z_end = roma_z_end
 
 
-def MP_2Pos_portrait_No_Robot_Access(name: str) -> TecanPlateCarrier:
+def MP_2Pos_portrait_No_Robot_Access(
+  name: str, *, identifier: Optional[str] = None
+) -> TecanPlateCarrier:
   """Tecan part no. 10613007"""
   return TecanPlateCarrier(
     name=name,
@@ -66,10 +73,11 @@ def MP_2Pos_portrait_No_Robot_Access(name: str) -> TecanPlateCarrier:
       name_prefix=name,
     ),
     model="MP_2Pos_portrait_No_Robot_Access",
+    identifier=identifier,
   )
 
 
-def MP_2_Pos_portrait(name: str) -> TecanPlateCarrier:
+def MP_2_Pos_portrait(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 10612605"""
   return TecanPlateCarrier(
     name=name,
@@ -89,10 +97,11 @@ def MP_2_Pos_portrait(name: str) -> TecanPlateCarrier:
       name_prefix=name,
     ),
     model="MP_2_Pos_portrait",
+    identifier=identifier,
   )
 
 
-def MP_3Pos_PCR(name: str) -> TecanPlateCarrier:
+def MP_3Pos_PCR(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 10613034"""
   return TecanPlateCarrier(
     name=name,
@@ -118,10 +127,11 @@ def MP_3Pos_PCR(name: str) -> TecanPlateCarrier:
       pedestal_size_z=0,
     ),
     model="MP_3Pos_PCR",
+    identifier=identifier,
   )
 
 
-def MP_3Pos_TePS(name: str) -> TecanPlateCarrier:
+def MP_3Pos_TePS(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 10643025"""
   return TecanPlateCarrier(
     name=name,
@@ -147,10 +157,11 @@ def MP_3Pos_TePS(name: str) -> TecanPlateCarrier:
       pedestal_size_z=0,
     ),
     model="MP_3Pos_TePS",
+    identifier=identifier,
   )
 
 
-def LI___MP_3Pos(name: str) -> TecanPlateCarrier:
+def LI___MP_3Pos(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 10650010"""
   return TecanPlateCarrier(
     name=name,
@@ -176,10 +187,11 @@ def LI___MP_3Pos(name: str) -> TecanPlateCarrier:
       pedestal_size_z=0,
     ),
     model="LI___MP_3Pos",
+    identifier=identifier,
   )
 
 
-def MP_4Pos_landscape(name: str) -> TecanPlateCarrier:
+def MP_4Pos_landscape(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 30013668"""
   return TecanPlateCarrier(
     name=name,
@@ -201,10 +213,11 @@ def MP_4Pos_landscape(name: str) -> TecanPlateCarrier:
       name_prefix=name,
     ),
     model="MP_4Pos_landscape",
+    identifier=identifier,
   )
 
 
-def MP_12Pos_landscape(name: str) -> TecanPlateCarrier:
+def MP_12Pos_landscape(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 30051762"""
   return TecanPlateCarrier(
     name=name,
@@ -234,10 +247,11 @@ def MP_12Pos_landscape(name: str) -> TecanPlateCarrier:
       name_prefix=name,
     ),
     model="MP_12Pos_landscape",
+    identifier=identifier,
   )
 
 
-def MP_8Pos_landscape(name: str) -> TecanPlateCarrier:
+def MP_8Pos_landscape(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 30054411"""
   return TecanPlateCarrier(
     name=name,
@@ -263,10 +277,11 @@ def MP_8Pos_landscape(name: str) -> TecanPlateCarrier:
       name_prefix=name,
     ),
     model="MP_8Pos_landscape",
+    identifier=identifier,
   )
 
 
-def MP_20Pos_landscape(name: str) -> TecanPlateCarrier:
+def MP_20Pos_landscape(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   return TecanPlateCarrier(
     name=name,
     size_x=687.0,
@@ -303,10 +318,11 @@ def MP_20Pos_landscape(name: str) -> TecanPlateCarrier:
       name_prefix=name,
     ),
     model="MP_20Pos_landscape",
+    identifier=identifier,
   )
 
 
-def MP_16Pos_landscape(name: str) -> TecanPlateCarrier:
+def MP_16Pos_landscape(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   return TecanPlateCarrier(
     name=name,
     size_x=548.0,
@@ -339,10 +355,11 @@ def MP_16Pos_landscape(name: str) -> TecanPlateCarrier:
       name_prefix=name,
     ),
     model="MP_16Pos_landscape",
+    identifier=identifier,
   )
 
 
-def MP_3Pos(name: str) -> TecanPlateCarrier:
+def MP_3Pos(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 10612604"""
   return TecanPlateCarrier(
     name=name,
@@ -368,10 +385,11 @@ def MP_3Pos(name: str) -> TecanPlateCarrier:
       pedestal_size_z=0,
     ),
     model="MP_3Pos",
+    identifier=identifier,
   )
 
 
-def MP_3Pos_Cooled(name: str) -> TecanPlateCarrier:
+def MP_3Pos_Cooled(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 10613046"""
   return TecanPlateCarrier(
     name=name,
@@ -396,10 +414,11 @@ def MP_3Pos_Cooled(name: str) -> TecanPlateCarrier:
       name_prefix=name,
     ),
     model="MP_3Pos_Cooled",
+    identifier=identifier,
   )
 
 
-def MP_3Pos_Fixed(name: str) -> TecanPlateCarrier:
+def MP_3Pos_Fixed(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 10613031"""
   return TecanPlateCarrier(
     name=name,
@@ -424,10 +443,11 @@ def MP_3Pos_Fixed(name: str) -> TecanPlateCarrier:
       name_prefix=name,
     ),
     model="MP_3Pos_Fixed",
+    identifier=identifier,
   )
 
 
-def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
+def MP_3Pos_Flat(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 10612624
 
   Coley:
@@ -478,10 +498,11 @@ def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
       pedestal_size_z=0,
     ),
     model="MP_3Pos_Flat",
+    identifier=identifier,
   )
 
 
-def MP_3Pos_No_Robot_Access(name: str) -> TecanPlateCarrier:
+def MP_3Pos_No_Robot_Access(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 10613006"""
   return TecanPlateCarrier(
     name=name,
@@ -503,10 +524,11 @@ def MP_3Pos_No_Robot_Access(name: str) -> TecanPlateCarrier:
       pedestal_size_z=0,
     ),
     model="MP_3Pos_No_Robot_Access",
+    identifier=identifier,
   )
 
 
-def MP_4Pos(name: str) -> TecanPlateCarrier:
+def MP_4Pos(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 30013668"""
   return TecanPlateCarrier(
     name=name,
@@ -533,10 +555,11 @@ def MP_4Pos(name: str) -> TecanPlateCarrier:
       pedestal_size_z=0,
     ),
     model="MP_4Pos",
+    identifier=identifier,
   )
 
 
-def MP_4Pos_flat(name: str) -> TecanPlateCarrier:
+def MP_4Pos_flat(name: str, *, identifier: Optional[str] = None) -> TecanPlateCarrier:
   """Tecan part no. 30013061"""
   return TecanPlateCarrier(
     name=name,
@@ -563,4 +586,5 @@ def MP_4Pos_flat(name: str) -> TecanPlateCarrier:
       pedestal_size_z=0,
     ),
     model="MP_4Pos_flat",
+    identifier=identifier,
   )

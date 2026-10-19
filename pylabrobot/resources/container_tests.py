@@ -30,7 +30,8 @@ class TestContainer(unittest.TestCase):
     self.assertEqual(
       c.serialize(),
       {
-        "name": "container",
+        "identifier": c.identifier,
+        "metadata": {"name": "container"},
         "size_x": 10,
         "size_y": 10,
         "size_z": 10,

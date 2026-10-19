@@ -66,6 +66,9 @@ class Incubator(Machine, Resource):
     category: Optional[str] = None,
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
+    loading_tray: Optional[PlateHolder] = None,
   ):
     Machine.__init__(self, backend=backend)
     self.backend: IncubatorBackend = backend  # fix type
@@ -79,8 +82,9 @@ class Incubator(Machine, Resource):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
-    self.loading_tray = PlateHolder(
+    self.loading_tray = loading_tray or PlateHolder(
       name=self.name + "_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
     )
     self.assign_child_resource(self.loading_tray, location=loading_tray_location)
@@ -101,11 +105,18 @@ class Incubator(Machine, Resource):
     return sum(len(rack.get_free_sites()) for rack in self._racks)
 
   def get_site_by_plate_name(self, plate_name: str) -> PlateHolder:
-    for rack in self._racks:
-      for site in rack.sites.values():
-        if site.resource is not None and site.resource.name == plate_name:
-          return site
-    raise ResourceNotFoundError(f"Plate {plate_name} not found in incubator '{self.name}'")
+    """Find the site holding an unambiguously named plate."""
+    matches = [
+      site
+      for rack in self._racks
+      for site in rack.sites.values()
+      if site.resource is not None and site.resource.name == plate_name
+    ]
+    if not matches:
+      raise ResourceNotFoundError(f"Plate {plate_name!r} not found in {self.name!r}.")
+    if len(matches) > 1:
+      raise ValueError(f"Plate name {plate_name!r} is ambiguous; use the resource's identifier.")
+    return matches[0]
 
   @evented_operation("incubator.fetch_plate", _fetch_plate_event_context)
   async def fetch_plate_to_loading_tray(self, plate_name: str, **backend_kwargs) -> Plate:
@@ -228,21 +239,30 @@ class Incubator(Machine, Resource):
       "backend": self.backend.serialize(),
       "racks": [rack.serialize() for rack in self._racks],
       "loading_tray_location": serialize(self.loading_tray.location),
+      "loading_tray": self.loading_tray.serialize(),
     }
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):
-    backend = IncubatorBackend.deserialize(data.pop("backend"))
-    return cls(
+    backend = IncubatorBackend.deserialize(data["backend"].copy())
+    tray_data = data.get("loading_tray", (data.get("children") or [None])[0])
+    incubator = cls(
       backend=backend,
-      name=data["name"],
+      name=data.get("metadata", {}).get("name", data.get("name", "")),
+      identifier=data.get("identifier"),
+      metadata=data.get("metadata"),
       size_x=data["size_x"],
       size_y=data["size_y"],
       size_z=data["size_z"],
-      racks=[PlateCarrier.deserialize(rack) for rack in data["racks"]],
+      racks=[PlateCarrier.deserialize(rack, allow_marshal=allow_marshal) for rack in data["racks"]],
+      loading_tray=(
+        PlateHolder.deserialize(tray_data, allow_marshal=allow_marshal) if tray_data else None
+      ),
       loading_tray_location=cast(Coordinate, deserialize(data["loading_tray_location"])),
-      rotation=cast(Optional[Rotation], deserialize(data.get("rotation"))),
+      rotation=cast(Rotation, deserialize(data.get("rotation"))),
       category=data.get("category"),
       model=data.get("model"),
-      metadata=data.get("metadata"),
     )
+
+    incubator.location = deserialize(data.get("location"))
+    return incubator

@@ -40,7 +40,7 @@ def _compute_height_from_volume_Porvair_6_reservoir_47ml_Vb(
   )
 
 
-def Porvair_6_reservoir_47ml_Vb_Lid(name: str) -> Lid:
+def Porvair_6_reservoir_47ml_Vb_Lid(name: str, *, identifier: Optional[str] = None) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -54,7 +54,12 @@ def Porvair_6_reservoir_47ml_Vb_Lid(name: str) -> Lid:
 
 
 #: Porvair_6_reservoir_47ml_Vb
-def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
+def Porvair_6_reservoir_47ml_Vb(
+  name: str,
+  with_lid: bool = False,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """Porvair cat. no.: 390015.
   - Material: Polypropylene
   - Sterilization compatibility: Autoclaving (15 minutes at 121°C) or Gamma Irradiation
@@ -92,10 +97,16 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
       compute_height_from_volume=_compute_height_from_volume_Porvair_6_reservoir_47ml_Vb,
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def Porvair_24_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
+def Porvair_24_wellplate_Vb(
+  name: str,
+  lid: Optional[Lid] = None,
+  *,
+  identifier: Optional[str] = None,
+) -> Plate:
   """
   Porvair cat. no.: 390108
   - Material: Polypropylene
@@ -154,4 +165,5 @@ def Porvair_24_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
       name_prefix=name,
       **well_kwargs,
     ),
+    identifier=identifier,
   )

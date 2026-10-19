@@ -24,6 +24,9 @@ class TecanTipCarrier(TipCarrier, TecanResource):
     sites: Optional[Dict[int, ResourceHolder]] = None,
     category="tecan_tip_carrier",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name,
@@ -33,13 +36,17 @@ class TecanTipCarrier(TipCarrier, TecanResource):
       sites,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.off_x: float = off_x
     self.off_y: float = off_y
 
 
-def Washstation_2Grid_Trough_DiTi(name: str) -> TecanTipCarrier:
+def Washstation_2Grid_Trough_DiTi(
+  name: str, *, identifier: Optional[str] = None
+) -> TecanTipCarrier:
   """Tecan part no. 10650037"""
   return TecanTipCarrier(
     name=name,
@@ -83,10 +90,11 @@ def Washstation_2Grid_Trough_DiTi(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="Washstation_2Grid_Trough_DiTi",
+    identifier=identifier,
   )
 
 
-def MCA384_DiTi_Carrier(name: str) -> TecanTipCarrier:
+def MCA384_DiTi_Carrier(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   return TecanTipCarrier(
     name=name,
     size_x=149.0,
@@ -105,10 +113,11 @@ def MCA384_DiTi_Carrier(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="MCA384_DiTi_Carrier",
+    identifier=identifier,
   )
 
 
-def DiTi_2Pos___Waste(name: str) -> TecanTipCarrier:
+def DiTi_2Pos___Waste(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 10613012"""
   return TecanTipCarrier(
     name=name,
@@ -137,10 +146,11 @@ def DiTi_2Pos___Waste(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_2Pos___Waste",
+    identifier=identifier,
   )
 
 
-def DiTi_3Pos(name: str) -> TecanTipCarrier:
+def DiTi_3Pos(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 10613022"""
   return TecanTipCarrier(
     name=name,
@@ -161,10 +171,11 @@ def DiTi_3Pos(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_3Pos",
+    identifier=identifier,
   )
 
 
-def DiTi_SBS_3_Pos_MCA96(name: str) -> TecanTipCarrier:
+def DiTi_SBS_3_Pos_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043"""
   return TecanTipCarrier(
     name=name,
@@ -185,10 +196,11 @@ def DiTi_SBS_3_Pos_MCA96(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_SBS_3_Pos_MCA96",
+    identifier=identifier,
   )
 
 
-def LI___DiTi_3Pos(name: str) -> TecanTipCarrier:
+def LI___DiTi_3Pos(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 10650036"""
   return TecanTipCarrier(
     name=name,
@@ -209,10 +221,11 @@ def LI___DiTi_3Pos(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="LI___DiTi_3Pos",
+    identifier=identifier,
   )
 
 
-def DiTi_SBS_2P_Waste_MCA96(name: str) -> TecanTipCarrier:
+def DiTi_SBS_2P_Waste_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020045"""
   return TecanTipCarrier(
     name=name,
@@ -241,10 +254,11 @@ def DiTi_SBS_2P_Waste_MCA96(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_SBS_2P_Waste_MCA96",
+    identifier=identifier,
   )
 
 
-def DiTi_SBS_4_Pos_MCA96(name: str) -> TecanTipCarrier:
+def DiTi_SBS_4_Pos_MCA96(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -266,10 +280,11 @@ def DiTi_SBS_4_Pos_MCA96(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_SBS_4_Pos_MCA96",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2P_W_MCA384(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2P_W_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   return TecanTipCarrier(
     name=name,
     size_x=149.0,
@@ -369,10 +384,11 @@ def DiTi_Nest_2P_W_MCA384(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2P_W_MCA384",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2P_W_MCA384_Indiv(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2P_W_MCA384_Indiv(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30053521"""
   return TecanTipCarrier(
     name=name,
@@ -473,10 +489,11 @@ def DiTi_Nest_2P_W_MCA384_Indiv(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2P_W_MCA384_Indiv",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_Pos_MCA384_Indiv(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_Pos_MCA384_Indiv(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30053521"""
   return TecanTipCarrier(
     name=name,
@@ -521,10 +538,11 @@ def DiTi_Nest_3_Pos_MCA384_Indiv(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_MCA384_Indiv",
+    identifier=identifier,
   )
 
 
-def DiTi_Nested_3_Pos_MCA384(name: str) -> TecanTipCarrier:
+def DiTi_Nested_3_Pos_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052707"""
   return TecanTipCarrier(
     name=name,
@@ -569,10 +587,11 @@ def DiTi_Nested_3_Pos_MCA384(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nested_3_Pos_MCA384",
+    identifier=identifier,
   )
 
 
-def DiTi_Nested_4_Pos_MCA384(name: str) -> TecanTipCarrier:
+def DiTi_Nested_4_Pos_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052708"""
   return TecanTipCarrier(
     name=name,
@@ -626,10 +645,11 @@ def DiTi_Nested_4_Pos_MCA384(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nested_4_Pos_MCA384",
+    identifier=identifier,
   )
 
 
-def DiTi_SBS_2P_W_MCA38_Indiv(name: str) -> TecanTipCarrier:
+def DiTi_SBS_2P_W_MCA38_Indiv(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30053521"""
   return TecanTipCarrier(
     name=name,
@@ -658,10 +678,11 @@ def DiTi_SBS_2P_W_MCA38_Indiv(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_SBS_2P_W_MCA38_Indiv",
+    identifier=identifier,
   )
 
 
-def DiTi_SBS_2P_W_MCA384(name: str) -> TecanTipCarrier:
+def DiTi_SBS_2P_W_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052707"""
   return TecanTipCarrier(
     name=name,
@@ -690,10 +711,11 @@ def DiTi_SBS_2P_W_MCA384(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_SBS_2P_W_MCA384",
+    identifier=identifier,
   )
 
 
-def DiTi_SBS_3_Pos_MCA384(name: str) -> TecanTipCarrier:
+def DiTi_SBS_3_Pos_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052707"""
   return TecanTipCarrier(
     name=name,
@@ -714,10 +736,11 @@ def DiTi_SBS_3_Pos_MCA384(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_SBS_3_Pos_MCA384",
+    identifier=identifier,
   )
 
 
-def DiTi_SBS_3_Pos_MCA384_Indiv(name: str) -> TecanTipCarrier:
+def DiTi_SBS_3_Pos_MCA384_Indiv(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30053521"""
   return TecanTipCarrier(
     name=name,
@@ -738,10 +761,11 @@ def DiTi_SBS_3_Pos_MCA384_Indiv(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_SBS_3_Pos_MCA384_Indiv",
+    identifier=identifier,
   )
 
 
-def DiTi_SBS_4_Pos_MCA384(name: str) -> TecanTipCarrier:
+def DiTi_SBS_4_Pos_MCA384(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052708"""
   return TecanTipCarrier(
     name=name,
@@ -763,10 +787,11 @@ def DiTi_SBS_4_Pos_MCA384(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_SBS_4_Pos_MCA384",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2_W_MCA96_100(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2_W_MCA96_100(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043 or 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -867,10 +892,11 @@ def DiTi_Nest_2_W_MCA96_100(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA96_100",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2_W_MCA96_200(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2_W_MCA96_200(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043 or 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -971,10 +997,11 @@ def DiTi_Nest_2_W_MCA96_200(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA96_200",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2_W_MCA96_50(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2_W_MCA96_50(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043 or 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -1075,10 +1102,11 @@ def DiTi_Nest_2_W_MCA96_50(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA96_50",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_Pos_MCA96_100(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_Pos_MCA96_100(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043"""
   return TecanTipCarrier(
     name=name,
@@ -1123,10 +1151,11 @@ def DiTi_Nest_3_Pos_MCA96_100(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_MCA96_100",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_Pos_MCA96_200(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_Pos_MCA96_200(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043"""
   return TecanTipCarrier(
     name=name,
@@ -1171,10 +1200,11 @@ def DiTi_Nest_3_Pos_MCA96_200(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_MCA96_200",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_Pos_MCA96_50(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_Pos_MCA96_50(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043"""
   return TecanTipCarrier(
     name=name,
@@ -1219,10 +1249,11 @@ def DiTi_Nest_3_Pos_MCA96_50(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_MCA96_50",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_4_Pos_MCA96_100(name: str) -> TecanTipCarrier:
+def DiTi_Nest_4_Pos_MCA96_100(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -1276,10 +1307,11 @@ def DiTi_Nest_4_Pos_MCA96_100(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_MCA96_100",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_4_Pos_MCA96_200(name: str) -> TecanTipCarrier:
+def DiTi_Nest_4_Pos_MCA96_200(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -1333,10 +1365,11 @@ def DiTi_Nest_4_Pos_MCA96_200(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_MCA96_200",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_4_Pos_MCA96_50(name: str) -> TecanTipCarrier:
+def DiTi_Nest_4_Pos_MCA96_50(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -1390,10 +1423,11 @@ def DiTi_Nest_4_Pos_MCA96_50(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_MCA96_50",
+    identifier=identifier,
   )
 
 
-def DiTi_3Pos___Waste(name: str) -> TecanTipCarrier:
+def DiTi_3Pos___Waste(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 10762023"""
   return TecanTipCarrier(
     name=name,
@@ -1425,10 +1459,11 @@ def DiTi_3Pos___Waste(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_3Pos___Waste",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2_W_MCA384_100(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2_W_MCA384_100(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043 or 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -1529,10 +1564,11 @@ def DiTi_Nest_2_W_MCA384_100(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA384_100",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2_W_MCA384_200(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2_W_MCA384_200(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043 or 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -1633,10 +1669,11 @@ def DiTi_Nest_2_W_MCA384_200(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA384_200",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2_W_MCA384_50(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2_W_MCA384_50(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30020043 or 30020044"""
   return TecanTipCarrier(
     name=name,
@@ -1737,10 +1774,11 @@ def DiTi_Nest_2_W_MCA384_50(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA384_50",
+    identifier=identifier,
   )
 
 
-def DiTi_Waste_station_6_Trough(name: str) -> TecanTipCarrier:
+def DiTi_Waste_station_6_Trough(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30073056"""
   return TecanTipCarrier(
     name=name,
@@ -1784,10 +1822,11 @@ def DiTi_Waste_station_6_Trough(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Waste_station_6_Trough",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2_W_LiHa_350(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2_W_LiHa_350(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052707. Usable with DiTi nested Waste LiHa, Tecan part no. 30089580"""
   return TecanTipCarrier(
     name=name,
@@ -1852,10 +1891,11 @@ def DiTi_Nest_2_W_LiHa_350(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2_W_LiHa_350",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_Pos_LiHa_350(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_Pos_LiHa_350(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052707"""
   return TecanTipCarrier(
     name=name,
@@ -1888,10 +1928,11 @@ def DiTi_Nest_3_Pos_LiHa_350(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_LiHa_350",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_W_LiHa_350(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_W_LiHa_350(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052708. Usable with DiTi nested Waste LiHa, Tecan part no. 30089580"""
   return TecanTipCarrier(
     name=name,
@@ -1971,10 +2012,11 @@ def DiTi_Nest_3_W_LiHa_350(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_W_LiHa_350",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_4_Pos_LiHa_350(name: str) -> TecanTipCarrier:
+def DiTi_Nest_4_Pos_LiHa_350(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052708"""
   return TecanTipCarrier(
     name=name,
@@ -2012,10 +2054,11 @@ def DiTi_Nest_4_Pos_LiHa_350(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_LiHa_350",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2_W_LiHa_10(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2_W_LiHa_10(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052707. Usable with DiTi nested Waste LiHa, Tecan part no. 30089580"""
   return TecanTipCarrier(
     name=name,
@@ -2080,10 +2123,11 @@ def DiTi_Nest_2_W_LiHa_10(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2_W_LiHa_10",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_2_W_LiHa_10_F(name: str) -> TecanTipCarrier:
+def DiTi_Nest_2_W_LiHa_10_F(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052707. Usable with DiTi nested Waste LiHa, Tecan part no. 30089580"""
   return TecanTipCarrier(
     name=name,
@@ -2148,10 +2192,11 @@ def DiTi_Nest_2_W_LiHa_10_F(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_2_W_LiHa_10_F",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_Pos_LiHa_10(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_Pos_LiHa_10(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052707"""
   return TecanTipCarrier(
     name=name,
@@ -2184,10 +2229,11 @@ def DiTi_Nest_3_Pos_LiHa_10(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_LiHa_10",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_Pos_LiHa_10_F(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_Pos_LiHa_10_F(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052707"""
   return TecanTipCarrier(
     name=name,
@@ -2220,10 +2266,11 @@ def DiTi_Nest_3_Pos_LiHa_10_F(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_LiHa_10_F",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_W_LiHa_10(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_W_LiHa_10(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052708. Usable with DiTi nested Waste LiHa, Tecan part no. 30089580"""
   return TecanTipCarrier(
     name=name,
@@ -2303,10 +2350,11 @@ def DiTi_Nest_3_W_LiHa_10(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_W_LiHa_10",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_3_W_LiHa_10_F(name: str) -> TecanTipCarrier:
+def DiTi_Nest_3_W_LiHa_10_F(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052708. Usable with DiTi nested Waste LiHa, Tecan part no. 30089580"""
   return TecanTipCarrier(
     name=name,
@@ -2386,10 +2434,11 @@ def DiTi_Nest_3_W_LiHa_10_F(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_3_W_LiHa_10_F",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_4_Pos_LiHa_10(name: str) -> TecanTipCarrier:
+def DiTi_Nest_4_Pos_LiHa_10(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052708"""
   return TecanTipCarrier(
     name=name,
@@ -2427,10 +2476,11 @@ def DiTi_Nest_4_Pos_LiHa_10(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_LiHa_10",
+    identifier=identifier,
   )
 
 
-def DiTi_Nest_4_Pos_LiHa_10_F(name: str) -> TecanTipCarrier:
+def DiTi_Nest_4_Pos_LiHa_10_F(name: str, *, identifier: Optional[str] = None) -> TecanTipCarrier:
   """Tecan part no. 30052708"""
   return TecanTipCarrier(
     name=name,
@@ -2468,4 +2518,5 @@ def DiTi_Nest_4_Pos_LiHa_10_F(name: str) -> TecanTipCarrier:
       name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_LiHa_10_F",
+    identifier=identifier,
   )

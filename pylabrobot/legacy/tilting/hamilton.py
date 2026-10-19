@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.legacy.tilting.hamilton_backend import (
   HamiltonTiltModuleBackend,
 )
@@ -16,6 +18,9 @@ class HamiltonTiltModule(Tilter):
     pedestal_size_z: float = 3.47,
     write_timeout: float = 3,
     timeout: float = 3,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """Initialize a Hamilton tilt module.
 
@@ -41,6 +46,8 @@ class HamiltonTiltModule(Tilter):
       child_location=child_location,
       category="tilter",
       model=HamiltonTiltModule.__name__,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.pedestal_size_z = pedestal_size_z

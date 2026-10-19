@@ -188,7 +188,7 @@ class Flex:
     self._labware: Optional[LabwareRegistry] = None
     # Names loaded under the non-pipettable movable stub. Tracked separately so
     # a pipetting op refuses them even on a load-cache hit.
-    self._stub_labware: Set[int] = set()
+    self._stub_labware: Set[str] = set()
     self.left: Optional[_FlexHead] = None
     self.right: Optional[_FlexHead] = None
     self.head96: Optional[_FlexHead] = None
@@ -559,7 +559,7 @@ class Flex:
     """Resolve and bind a resource once per run, validating its current slot."""
     registry = self._require_labware()
     name = resource.name
-    if id(resource) in self._stub_labware and not allow_stub:
+    if resource.identifier in self._stub_labware and not allow_stub:
       raise _not_pipettable_error(resource)
     slot = self.deck.get_slot(resource)
     if slot is None:
@@ -659,7 +659,7 @@ class Flex:
         },
       )
     registry.remove(resource)
-    self._stub_labware.discard(id(resource))
+    self._stub_labware.discard(resource.identifier)
     slot = self.deck.get_slot(resource)
     if slot is not None:
       self.deck.unassign_child_at_slot(slot)
@@ -775,7 +775,7 @@ class Flex:
     definition = self._build_labware_definition(resource, grip_distance_from_top, allow_stub)
     identity = await registry.define(resource, definition)
     if not _has_pipettable_geometry(resource):
-      self._stub_labware.add(id(resource))
+      self._stub_labware.add(resource.identifier)
     return identity
 
   @staticmethod

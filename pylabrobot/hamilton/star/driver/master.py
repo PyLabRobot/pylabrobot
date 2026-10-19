@@ -1450,7 +1450,7 @@ class STARDriver:
         and self.deck.has_resource(self._deck_component_name("trash_core96"))
       ):
         head.configuration.tip_discard_location = cast(Head96, head)._position_centred_in(
-          self.deck.get_resource(self._deck_component_name("trash_core96"))
+          self.deck.get_trash_area96()
         )
       if not await self.request_initialization_status(head.configuration.module):
         if head.configuration.tip_discard_location is None:
@@ -1657,7 +1657,9 @@ class STARDriver:
 
     for channel in range(len(c.channels)):
       name = self._component_name(f"pipette_channel_{channel}")
-      resource = next((r for r in arm.resource.children if r.name == name), None)
+      resource = next(
+        (r for r in arm.resource.children if r.metadata.get("component") == name), None
+      )
       if resource is None:
         width = c.channels[channel].width
         if width is None:
@@ -1670,6 +1672,7 @@ class STARDriver:
           size_y=width,
           size_z=c.channel_size_z,
           category="pipette_channel",
+          metadata={"component": name, "channel": channel},
           model="hamilton_star_pipette_channel",
         )
         # Along X a channel sits at the arm's own reference point, so its centre lands there. The
@@ -1716,7 +1719,10 @@ class STARDriver:
         # device, and a simulated one falls back to where it rests rather than reporting back the
         # placeholder position it is about to be given.
         y, z = await head.request_y_position(), await head.request_z_position()
-        existing = next((child for child in arm.resource.children if child.name == name), None)
+        existing = next(
+          (child for child in arm.resource.children if child.metadata.get("component") == name),
+          None,
+        )
         resource = existing if isinstance(existing, NChannelPipette) else None
         if resource is None:
           if c.x_offset is None:
@@ -1726,6 +1732,7 @@ class STARDriver:
           # The definition, not a bare resource: it carries a mounting shaft per channel, which
           # is what a collected tip becomes a child of.
           resource = build(name=name, size_z=c.body_size_z)
+          resource.metadata["component"] = name
           # Channel A1 sits `x_offset` left of the point the drive tracks the arm by, and the arm
           # is located by its own left edge, so A1 lands that far left of the reference point. What
           # is placed is the head, whose own A1 stands inside it, so that inset comes off too - the
@@ -1767,7 +1774,9 @@ class STARDriver:
       z = await iswap.elbow_request_z_position()
       angle = await iswap.elbow_drive_request_angle()
       name = self._component_name("iswap_head")
-      existing = next((child for child in arm.resource.children if child.name == name), None)
+      existing = next(
+        (child for child in arm.resource.children if child.metadata.get("component") == name), None
+      )
       resource = existing if isinstance(existing, iSWAPHead) else None
       if resource is None:
         if c.elbow_x_offset is None:
@@ -1792,6 +1801,7 @@ class STARDriver:
           diameter=c.elbow_drive_diameter,
           size_z=round(max(tops) - retracted_base, 1) if tops else c.elbow_drive_size_z,
         )
+        resource.metadata["component"] = name
         # The drive sits `elbow_x_offset` left of the point the drive tracks the arm by,
         # and the arm is located by its own left edge, so it lands that far left of the reference
         # point.

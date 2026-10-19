@@ -691,7 +691,7 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     restored = SteriStore.deserialize(serialized)
 
     self.assertIsInstance(restored, SteriStore)
-    self.assertEqual(restored.metadata, {"owner": "lab"})
+    self.assertEqual(restored.metadata, {"name": self.driver.name, "owner": "lab"})
     self.assertEqual(
       [nest.name for nest in restored.nests], [nest.name for nest in self.driver.nests]
     )

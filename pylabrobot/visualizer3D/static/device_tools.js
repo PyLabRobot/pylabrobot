@@ -126,22 +126,19 @@ export function initDeviceTools({ onSelect }) {
     return null;
   }
 
-  /**
-   * A head's mounting shafts, placed on the grid their names describe - `A1` through `H12` on a
-   * 96-head. A head that names them some other way falls back to one long row, which is honest
-   * about not knowing rather than inventing a shape.
-   */
+  /** A head's mounting shafts on their physical grid, independent of their display labels. */
   function gridOf(index) {
     const shafts = world.childrenOf[index].filter((c) => categoryOf(c) === SHAFT);
-    const placed = shafts.map((shaft) => {
-      const spot = /_([A-Z]+)(\d+)$/.exec(world.names[shaft]);
-      return {
-        index: shaft,
-        row: spot ? spot[1].charCodeAt(spot[1].length - 1) - 65 : 0,
-        column: spot ? Number(spot[2]) - 1 : shafts.indexOf(shaft),
-        filled: world.childrenOf[shaft].length > 0,
-      };
-    });
+    const xs = [...new Set(shafts.map((shaft) => world.local[shaft * 6]))].sort((a, b) => a - b);
+    const ys = [...new Set(shafts.map((shaft) => world.local[shaft * 6 + 1]))].sort(
+      (a, b) => b - a,
+    );
+    const placed = shafts.map((shaft) => ({
+      index: shaft,
+      row: ys.indexOf(world.local[shaft * 6 + 1]),
+      column: xs.indexOf(world.local[shaft * 6]),
+      filled: world.childrenOf[shaft].length > 0,
+    }));
     const rows = Math.max(1, ...placed.map((p) => p.row + 1));
     const columns = Math.max(1, ...placed.map((p) => p.column + 1));
     return { placed, rows, columns, filled: placed.filter((p) => p.filled).length };
@@ -154,10 +151,9 @@ export function initDeviceTools({ onSelect }) {
 
   // ------------------------------------------------------------------ drawing a panel
 
-  /** The channel's own number, as the tree names it, so the panel and the tree agree. */
+  /** The channel number declared by its device, with its position as a fallback. */
   function channelLabel(index, fallback) {
-    const numbered = /(\d+)$/.exec(world.names[index]);
-    return numbered ? numbered[1] : String(fallback);
+    return String(modelOf(index).metadata?.channel ?? fallback);
   }
 
   const glowFilter = (id, colour) =>
@@ -516,7 +512,7 @@ export function initDeviceTools({ onSelect }) {
       return;
     }
     // The device last used is the one a compact navbar keeps showing.
-    selected = world.names[device];
+    selected = world.identifiers[device];
     showSelected();
     const element = document.createElement("div");
     element.className = `dt-panel mt-panel-${kind}`;
@@ -538,7 +534,7 @@ export function initDeviceTools({ onSelect }) {
     mainEl?.appendChild(element);
     draggable(element);
     button.classList.add("active");
-    const panel = { element, device, kind, button, name: world.names[device] };
+    const panel = { element, device, kind, button, name: world.identifiers[device] };
     open.set(id, panel);
     render(panel);
     layOut();
@@ -573,7 +569,7 @@ export function initDeviceTools({ onSelect }) {
     for (const [id, panel] of [...open]) if (panel.name === selected) close(id);
     selected = name;
     showSelected();
-    const device = world.indexOfName.get(name);
+    const device = world.indexOfIdentifier.get(name);
     for (const kind of kinds) {
       const button = buttonOf.get(idOf(device, kind));
       if (button) toggle(device, kind, button);
@@ -589,7 +585,7 @@ export function initDeviceTools({ onSelect }) {
     containerEl.textContent = "";
     pickerEl = null;
     if (!world) return;
-    const names = devices().map((device) => world.names[device]);
+    const names = devices().map((device) => world.identifiers[device]);
     if (!names.includes(selected)) selected = names[0] ?? null;
     // Shown only when the groups do not fit side by side.
     pickerEl = document.createElement("select");
@@ -604,7 +600,7 @@ export function initDeviceTools({ onSelect }) {
       const parts = partsOf(device);
       const group = document.createElement("div");
       group.className = "dt-group";
-      group.dataset.name = world.names[device];
+      group.dataset.name = world.identifiers[device];
 
       const label = document.createElement("button");
       label.className = "dt-label";
@@ -645,16 +641,16 @@ export function initDeviceTools({ onSelect }) {
     const compact = containerEl.classList.contains("compact");
     for (const [name, kind] of wasOpen) {
       if (compact && name !== selected) continue;
-      const device = world.indexOfName.get(name);
+      const device = world.indexOfIdentifier.get(name);
       const button = device === undefined ? undefined : buttonOf.get(idOf(device, kind));
       if (button) toggle(device, kind, button);
     }
     // A device that has just arrived shows its panels; closed once, they stay closed.
     const autoOpen = names.length <= AUTO_OPEN_MAX_DEVICES;
     for (const device of devices()) {
-      if (shown.has(world.names[device])) continue;
-      shown.add(world.names[device]);
-      if (!autoOpen || (compact && world.names[device] !== selected)) continue;
+      if (shown.has(world.identifiers[device])) continue;
+      shown.add(world.identifiers[device]);
+      if (!autoOpen || (compact && world.identifiers[device] !== selected)) continue;
       for (const { kind } of KINDS) {
         const button = buttonOf.get(idOf(device, kind));
         if (button && !open.has(idOf(device, kind))) toggle(device, kind, button);

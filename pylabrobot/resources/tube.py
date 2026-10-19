@@ -39,6 +39,9 @@ class Tube(Container):
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones=None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """Create a new tube.
 
@@ -69,6 +72,8 @@ class Tube(Container):
       compute_height_from_volume=compute_height_from_volume,
       height_volume_data=height_volume_data,
       no_go_zones=no_go_zones,
+      identifier=identifier,
+      metadata=metadata,
     )
 
   def serialize(self) -> dict:

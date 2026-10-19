@@ -137,6 +137,7 @@ export function renderInfoPanel() {
 
   const identity = [
     ["name", escapeHtml(world.names[index])],
+    ["identifier", escapeHtml(world.identifiers[index])],
     ["type", escapeHtml(model.type)],
     // Always shown: a resource without a model says so rather than leaving the row out.
     ["model", model.model ? escapeHtml(String(model.model)) : "none"],

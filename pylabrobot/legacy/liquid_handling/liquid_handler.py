@@ -354,6 +354,8 @@ class LiquidHandler(Resource, Machine):
     default_offset_head96: Optional[Coordinate] = None,
     name: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     """Initialize a LiquidHandler.
 
@@ -373,6 +375,7 @@ class LiquidHandler(Resource, Machine):
       size_z=deck._size_z,
       category="liquid_handler",
       metadata=metadata,
+      identifier=identifier,
     )
     Machine.__init__(self, backend=backend)
 
@@ -536,7 +539,7 @@ class LiquidHandler(Resource, Machine):
     for resource in resources:
       # names on the deck are unique, so we can simply check if the resource matches the one on
       # the deck (if any).
-      resource_from_deck = self.deck.get_resource(resource.name)
+      resource_from_deck = self.deck.get_resource_by_identifier(resource.identifier)
       # it might be better to use `is`, but that would probably cause problems with autoreload.
       if not resource_from_deck == resource:
         raise ValueError(f"Resource {resource} is not assigned to the deck.")
@@ -2762,13 +2765,18 @@ class LiquidHandler(Resource, Machine):
     else:
       default_offset = Coordinate.zero()
 
-    return cls(
+    liquid_handler = cls(
       deck=deck,
       backend=backend,
       default_offset_head96=default_offset,
-      name=data.get("name"),
+      name=data.get("metadata", {}).get("name", data.get("name")),
+      identifier=data.get("identifier"),
       metadata=data.get("metadata"),
     )
+
+    liquid_handler.location = deserialize(data.get("location"))
+    liquid_handler.rotation = cast(Rotation, deserialize(data.get("rotation")))
+    return liquid_handler
 
   @classmethod
   def load(cls, path: str) -> LiquidHandler:
@@ -2834,7 +2842,7 @@ class LiquidHandler(Resource, Machine):
       use_channels: Channels to use (must match tip_spots length).
 
     Returns:
-      Dict[str, bool]: Mapping of tip spot names to presence flags.
+      Dict[str, bool]: Mapping of tip spot identifiers to presence flags.
     """
 
     if use_channels is None:
@@ -2902,10 +2910,10 @@ class LiquidHandler(Resource, Machine):
         Tip spots to probe for presence of a tip.
       probing_fn:
         Function used to probe a batch of tip spots. Must accept ``tip_spots`` and
-        ``use_channels`` and return a mapping of tip spot names to boolean flags.
+        ``use_channels`` and return a mapping of tip spot identifiers to boolean flags.
 
     Returns:
-      Mapping from tip spot names to whether a tip is present.
+      Mapping from tip spot identifiers to whether a tip is present.
     """
 
     if probing_fn is None:

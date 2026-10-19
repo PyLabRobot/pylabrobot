@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import copy
 import inspect
 import itertools
 import json
 import logging
 import re
 import sys
+import uuid
 from collections.abc import Iterable, Mapping
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
@@ -146,7 +148,8 @@ class Resource(SerializableMixin):
     barcode: The barcode of the resource (optional).
     preferred_pickup_location: The location where the center of the gripper should be when picking
       up this resource, relative to the resource's origin (optional).
-    metadata: Free-form metadata. Treated as black box during serialisation.
+    identifier: Stable identity, defaulting to a UUID string.
+    metadata: Free-form metadata, including the name. Treated as black box during serialisation.
       To make standard JSON serialisation work, only add JSON-compatible metadata.
   """
 
@@ -162,8 +165,12 @@ class Resource(SerializableMixin):
     barcode: Optional[Barcode] = None,
     preferred_pickup_location: Optional[Coordinate] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
-    self._name = name
+    if identifier is not None and (not isinstance(identifier, str) or not identifier):
+      raise ValueError("Resource identifier must be a non-empty string.")
+    self._identifier = str(uuid.uuid4()) if identifier is None else identifier
     self._size_x = size_x
     self._size_y = size_y
     self._size_z = size_z
@@ -177,14 +184,15 @@ class Resource(SerializableMixin):
     # nested containers/objects remain shared. Deep-copy before passing in if you
     # need full isolation of mutable metadata values.
     self.metadata: Dict[str, Any] = dict(metadata) if metadata is not None else {}
+    self.metadata["name"] = name
 
     self._location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
-    # Everything in this tree, by name, kept only by its root. `assign_child_resource` hands the
+    # Everything in this tree, by identifier, kept only by its root. `assign_child_resource` hands the
     # map to the new root and `unassign_child_resource` hands it back, the only two moments a root
-    # changes. `None` elsewhere means the names are tracked above, not that there are none.
-    self._subtree_resources: Optional[Dict[str, Resource]] = {name: self}
+    # changes. `None` elsewhere means the identifiers are tracked above, not that there are none.
+    self._subtree_resources: Optional[Dict[str, Resource]] = {self.identifier: self}
 
     self._will_assign_resource_callbacks: List[WillAssignResourceCallback] = []
     self._did_assign_resource_callbacks: List[DidAssignResourceCallback] = []
@@ -207,7 +215,7 @@ class Resource(SerializableMixin):
 
   def serialize(self) -> dict:
     data: dict = {
-      "name": self.name,
+      "identifier": self.identifier,
       "type": self.__class__.__name__,
       "size_x": self._size_x,
       "size_y": self._size_y,
@@ -226,49 +234,38 @@ class Resource(SerializableMixin):
     if self.preferred_pickup_location is not None:
       data["preferred_pickup_location"] = serialize(self.preferred_pickup_location)
     if self.metadata:
-      data["metadata"] = self.metadata.copy()
+      data["metadata"] = copy.deepcopy(self.metadata)
     if self.children:
       data["children"] = [child.serialize() for child in self.children]
     if self.parent is not None:
-      data["parent_name"] = self.parent.name
+      data["parent_identifier"] = self.parent.identifier
     return data
+
+  @property
+  def identifier(self) -> str:
+    """The stable identity of this resource, independent of its name and location."""
+    return self._identifier
 
   @property
   def name(self) -> str:
     """Get the name of this resource."""
-    return self._name
+    return cast(str, self.metadata.get("name", ""))
 
   @name.setter
   def name(self, name: str):
-    """Refuse the change: a resource's name is how it is identified.
+    """Set the display name, including while the resource is assigned."""
+    self.metadata["name"] = name
+    for callback in self._resource_state_updated_callbacks:
+      callback({"metadata": copy.deepcopy(self.metadata)})
 
-    Raises:
-      AttributeError: Always. The name is the resource's identifier - it is unique across the tree,
-        it is what `get_resource` finds a resource by, and it is the key state is serialized under.
-        Anything built from it, such as the wells of a plate, takes it at construction, so a name
-        that changed afterwards would leave those disagreeing with it.
-    """
-    raise AttributeError(
-      f"cannot rename {self._name!r} to {name!r}: a resource's name is its identifier and is fixed "
-      "when it is created. Create the resource with the name you want instead."
-    )
-
-  def _comparable_children(self) -> List["Resource"]:
-    """The children compared in equality: all of them, unless a subclass holds some as state."""
+  def _comparable_children(self) -> List[Resource]:
+    """Children included in structural summaries; subclasses may omit held tools."""
     return self.children
 
   def __eq__(self, other):
-    return (
-      isinstance(other, Resource)
-      and self.name == other.name
-      and self.get_absolute_size_x() == other.get_absolute_size_x()
-      and self.get_absolute_size_y() == other.get_absolute_size_y()
-      and self.get_absolute_size_z() == other.get_absolute_size_z()
-      and self.location == other.location
-      and self.category == other.category
-      and self._comparable_children() == other._comparable_children()
-      and self.metadata == other.metadata
-    )
+    if not isinstance(other, Resource):
+      return NotImplemented
+    return self.identifier == other.identifier
 
   def __repr__(self) -> str:
     return (
@@ -278,7 +275,7 @@ class Resource(SerializableMixin):
     )
 
   def __hash__(self) -> int:
-    return hash(repr(self))
+    return hash(self.identifier)
 
   def get_anchor(self, x: str = "l", y: str = "f", z: str = "b") -> Coordinate:
     """Get a relative location within the resource.
@@ -480,7 +477,7 @@ class Resource(SerializableMixin):
     # Check for unsupported resource assignment operations
     self._check_assignment(resource=resource, reassign=reassign)
     root = self.get_root()
-    arriving = root._check_naming_conflicts(resource=resource)
+    arriving = root._check_identifier_conflicts(resource=resource)
 
     # Call "will assign" callbacks
     for callback in self._will_assign_resource_callbacks:
@@ -652,30 +649,19 @@ class Resource(SerializableMixin):
     """
     root = self.get_root()
     if root._subtree_resources is None:
-      raise RuntimeError(f"root '{root.name}' is not holding a map of names")
+      raise RuntimeError(f"root '{root.name}' is not holding a map of identifiers")
     return root._subtree_resources
 
-  def _check_naming_conflicts(self, resource: Resource) -> Dict[str, Resource]:
-    """Raise if anything in `resource`'s subtree is already named in this one.
-
-    Names identify a resource across the whole tree - `get_resource` finds one by name, and
-    `serialize_all_state` keys state by it - so two resources may not share one.
-
-    Args:
-      resource: The resource arriving, with everything beneath it.
-
-    Returns:
-      What arrived, by name, so the caller does not walk the same subtree again to record it.
-
-    Raises:
-      ValueError: If any name in that subtree is already in this tree.
-    """
+  def _check_identifier_conflicts(self, resource: Resource) -> Dict[str, Resource]:
+    """Check all incoming identifiers before changing either tree, returning the incoming map."""
     held = self._resources()
     arriving: Dict[str, Resource] = {}
-    for res in [resource] + resource.get_all_children():
-      if res.name in held:
-        raise ValueError(f"Resource with name '{res.name}' already exists in the tree.")
-      arriving[res.name] = res
+    for item in [resource, *resource.get_all_children()]:
+      if item.identifier in arriving or (
+        item.identifier in held and held[item.identifier] is not item
+      ):
+        raise ValueError(f"Resource identifier '{item.identifier}' already exists in the tree.")
+      arriving[item.identifier] = item
     return arriving
 
   def unassign_child_resource(self, resource: Resource):
@@ -688,7 +674,7 @@ class Resource(SerializableMixin):
     :meth:`~Resource.register_did_unassign_resource_callback` will be called.
     """
 
-    if resource not in self.children:
+    if not any(child is resource for child in self.children):
       raise ValueError(
         f"Resource with name '{resource.name}' is not a child of this resource ('{self.name}')."
       )
@@ -700,9 +686,9 @@ class Resource(SerializableMixin):
     # Preserve the pose for the event before unassignment clears it.
     previous_location = coordinate_reference(resource.location)
 
-    # The map goes with it: this tree gives up those names and the subtree heads a tree of its
+    # The map goes with it: this tree gives up those identifiers and the subtree heads a tree of its
     # own again, so it takes them back. Read before the tree changes shape.
-    departing = {res.name: res for res in [resource] + resource.get_all_children()}
+    departing = {res.identifier: res for res in [resource] + resource.get_all_children()}
     held = self._resources()
     for name in departing:
       held.pop(name, None)
@@ -752,32 +738,37 @@ class Resource(SerializableMixin):
       The resource with the given name.
 
     Raises:
-      ValueError: If no resource with the given name exists.
+      ResourceNotFoundError: If no resource with the given name exists.
+      ValueError: If multiple resources have the given name.
     """
 
-    resource = self._resources().get(name)
-    if resource is None:
+    matches = [item for item in [self, *self.get_all_children()] if item.name == name]
+    if not matches:
       raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
-    if not (resource is self or resource.is_in_subtree_of(self)):
-      where = (
-        f"assigned to '{resource.parent.name}'" if resource.parent else "the root of this tree"
-      )
+    if len(matches) > 1:
+      raise ValueError(f"Resource name '{name}' is ambiguous; use get_resource_by_identifier().")
+    return matches[0]
+
+  def get_resource_by_identifier(self, identifier: str) -> Resource:
+    """Get a resource by identifier within this subtree, including this resource."""
+    resource = self._resources().get(identifier)
+    if resource is None or not (resource is self or resource.is_in_subtree_of(self)):
       raise ResourceNotFoundError(
-        f"'{name}' is not at or beneath '{self.name}'. It is in the same tree, {where}."
+        f"Resource with identifier '{identifier}' does not exist in this subtree."
       )
     return resource
 
+  def has_resource_by_identifier(self, identifier: str) -> bool:
+    """Whether this subtree contains the identifier, including this resource."""
+    try:
+      self.get_resource_by_identifier(identifier)
+      return True
+    except ResourceNotFoundError:
+      return False
+
   def has_resource(self, name: str) -> bool:
-    """Whether anything at or beneath this resource carries the given name.
-
-    Args:
-      name: The name to look for.
-
-    Returns:
-      True when a resource with that name is in this subtree.
-    """
-    resource = self._resources().get(name)
-    return resource is not None and (resource is self or resource.is_in_subtree_of(self))
+    """Whether any resource in this subtree, including this resource, has the given name."""
+    return any(item.name == name for item in [self, *self.get_all_children()])
 
   def find_resources(
     self,
@@ -1010,6 +1001,7 @@ class Resource(SerializableMixin):
     self._state_updated()
 
   def copy(self) -> Self:
+    """Copy the subtree and state, preserving all resource identifiers."""
     resource_copy = self.__class__.deserialize(self.serialize(), allow_marshal=True)
     resource_copy.load_all_state(self.serialize_all_state())
     return resource_copy
@@ -1021,7 +1013,7 @@ class Resource(SerializableMixin):
     z: float = 0,
     pivot_coordinate: Optional[Coordinate] = None,
   ) -> Self:
-    """Return a copy of this resource rotated by the given number of degrees.
+    """Return a rotated copy, preserving the identifiers of this resource and its descendants.
 
     Args:
       x: degrees to turn about X.
@@ -1039,16 +1031,15 @@ class Resource(SerializableMixin):
     return new_resource
 
   def at(self, location: Coordinate) -> Self:
-    """Return a copy of this resource at the given location."""
+    """Return a relocated copy, preserving subtree identity."""
     new_resource = self.copy()
     new_resource.location = location
     return new_resource
 
   def named(self, name: str) -> Self:
-    """Return a copy of this resource with the given name."""
+    """Return a renamed copy, preserving subtree identity."""
     new_resource = self.copy()
-    # The copy is new and in no tree, so this finishes building it rather than renaming anything.
-    new_resource._name = name
+    new_resource.name = name
     return new_resource
 
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:
@@ -1177,10 +1168,13 @@ class Resource(SerializableMixin):
     if subclass is None:
       raise ValueError(f'Could not find subclass with name "{data["type"]}"')
     assert issubclass(subclass, cls)
+    if subclass is not cls and subclass.deserialize.__func__ is not cls.deserialize.__func__:  # type: ignore[attr-defined]
+      return cast(Self, subclass.deserialize(data, allow_marshal=allow_marshal))
 
     for key in [
       "type",
       "parent_name",
+      "parent_identifier",
       "location",
     ]:  # delete meta keys
       data_copy.pop(key, None)
@@ -1188,18 +1182,65 @@ class Resource(SerializableMixin):
     rotation = data_copy.pop("rotation", None)
     barcode = data_copy.pop("barcode", None)
     preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
-    metadata_data = data_copy.pop("metadata", {})
-    resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
+    metadata_data = copy.deepcopy(data_copy.pop("metadata", {}))
+    if metadata_data is None:
+      metadata_data = {}
+    if not isinstance(metadata_data, dict):
+      raise TypeError(f"Expected metadata to be a dict, got {type(metadata_data).__name__}")
+    data_copy["name"] = metadata_data.get("name", data_copy.get("name", ""))
+    # Name-keyed item ordering is accepted when loading layouts without identifiers.
+    children_data = [dict(child) for child in children_data]
+    if "identifier" not in data or "name" in data:
+      if data.get("category") in {
+        "x_arm",
+        "autoload_sled",
+        "autoload_loading_tray",
+        "pipette_channel",
+      }:
+        metadata_data.setdefault("component", data_copy["name"])
+      if data["type"] == "HamiltonCoreGripperTool":
+        for side in ("front", "back"):
+          if data_copy["name"].endswith(f"_{side}"):
+            metadata_data.setdefault("side", side)
+      for child in children_data:
+        child_name = child.get("name", "")
+        child_metadata = copy.deepcopy(child.get("metadata") or {})
+        if data["type"] == "PrepDeck":
+          slot = re.fullmatch(r"(?:.*_)?spot_(\d+)_(\d+)", child_name)
+          if slot is not None:
+            child_metadata.setdefault("slot", [int(slot.group(1)), int(slot.group(2))])
+          for role in ("waste_rear", "waste_front", "waste_mph"):
+            if child_name == role or child_name.endswith(f"_{role}"):
+              child_metadata.setdefault("role", role)
+        if data["type"] == "HamiltonSTARDeck" and child["type"] == "Trash":
+          if child_name == "trash_core96" or child_name.endswith("_trash_core96"):
+            child["category"] = "trash96"
+        if child_metadata:
+          child["metadata"] = child_metadata
+      for child in children_data:
+        child.setdefault("identifier", str(uuid.uuid4()))
+      if "ordering" in data_copy:
+        child_identifiers = {child["name"]: child["identifier"] for child in children_data}
+        data_copy["ordering"] = {
+          address: child_identifiers[name] for address, name in data_copy["ordering"].items()
+        }
+      if data["type"] == "OTDeck":
+        data_copy["with_trash"] = False
+      if data["type"] == "TecanDeck":
+        data_copy["with_wash_station"] = False
+    resource = subclass(
+      **deserialize(data_copy, allow_marshal=allow_marshal), metadata=metadata_data
+    )
+    if "metadata" in data and "name" not in data:
+      resource.metadata = metadata_data
+    if data.get("location") is not None:
+      resource.location = cast(Coordinate, deserialize(data["location"]))
     if rotation is not None:
       resource.rotation = deserialize(rotation)  # not pretty, should be done in init.
     if barcode is not None:
       resource.barcode = Barcode(**barcode)
     if preferred_pickup_location is not None:
       resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
-    if metadata_data is not None:
-      if not isinstance(metadata_data, dict):
-        raise TypeError(f"Expected metadata to be a dict, got {type(metadata_data).__name__}")
-      resource.metadata = metadata_data.copy()
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
       if child_cls is None:
@@ -1295,11 +1336,11 @@ class Resource(SerializableMixin):
     this resource only.
 
     Returns:
-      A dictionary where the keys are the names of the resources and the values are the serialized
+      A dictionary where the keys are the identifiers of the resources and the values are the serialized
       states of the resources.
     """
 
-    state = {self.name: self.serialize_state()}
+    state = {self.identifier: self.serialize_state()}
     for child in self.children:
       state.update(child.serialize_all_state())
     return state
@@ -1320,13 +1361,26 @@ class Resource(SerializableMixin):
   # Developer note: you probably don't need to override this method. Instead, override `load_state`.
   def load_all_state(self, state: Dict[str, Dict[str, Any]]) -> None:
     """Load state for this resource and all children."""
-    # Load state for this resource first.
-    if self.name in state:
-      self.load_state(state[self.name])
+    resources = [self, *self.get_all_children()]
+    by_identifier = {item.identifier: item for item in resources}
+    resolved = dict(state)
+    for key, value in state.items():
+      if key in by_identifier:
+        continue
+      matches = [resource for resource in resources if resource.name == key]
+      if len(matches) > 1:
+        raise ValueError("Cannot load name-keyed state when resource names are ambiguous.")
+      if matches and matches[0].identifier not in state:
+        resolved[matches[0].identifier] = value
 
-    # Then load state for all children.
-    for child in self.children:
-      child.load_all_state(state)
+    def load_subtree(item: Resource) -> None:
+      if item.identifier in resolved:
+        item.load_state(resolved[item.identifier])
+      # A holder's state can restore children that its layout intentionally omits.
+      for child in item.children.copy():
+        load_subtree(child)
+
+    load_subtree(self)
 
   def save_state_to_file(self, fn: str, indent: Optional[int] = None):
     """Save the state of this resource and all children to a JSON file.
@@ -1383,7 +1437,9 @@ class Resource(SerializableMixin):
     ```
     """
     highest_point = self.get_absolute_location(z="t").z
-    if self.name == "deck":
+    from .deck import Deck
+
+    if isinstance(self, Deck):
       highest_point = 0
     for resource in self.children:
       highest_point = max(highest_point, resource.get_highest_known_point())
@@ -1393,7 +1449,7 @@ class Resource(SerializableMixin):
     """Validate whether `resource` may be dropped onto this resource.
 
     Non-mutating preflight check used before assignment (e.g., drag/drop, LiquidHandler).
-    Enforces generic tree/assignment rules (reassign semantics, root name conflicts, no cycles).
+    Enforces generic tree/assignment rules (reassign semantics, identifier conflicts, no cycles).
     Override in subclasses (and call `super()`) to add domain-specific constraints.
 
     Raises:
@@ -1403,8 +1459,7 @@ class Resource(SerializableMixin):
     # (delegated to `_check_assignment` to stay consistent as rules evolve).
     self._check_assignment(resource=resource, reassign=reassign)
 
-    # Tree-wide invariants enforced at the root (e.g., global naming constraints).
-    # self.get_root()._check_naming_conflicts(resource=resource)
+    self.get_root()._check_identifier_conflicts(resource=resource)
 
     # Subclasses can add stricter “drop rules” here.
     # Examples:

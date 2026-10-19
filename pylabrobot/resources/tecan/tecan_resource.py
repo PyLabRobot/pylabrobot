@@ -27,6 +27,8 @@ class TecanResource(Resource):
     category: Optional[str] = None,
     model: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    *,
+    identifier: Optional[str] = None,
   ):
     super().__init__(
       name=name,
@@ -36,6 +38,7 @@ class TecanResource(Resource):
       category=category,
       model=model,
       metadata=metadata,
+      identifier=identifier,
     )
 
     self.off_x = off_x

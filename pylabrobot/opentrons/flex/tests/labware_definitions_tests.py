@@ -638,10 +638,10 @@ class TestUnbuildableLabwareGuard(unittest.IsolatedAsyncioTestCase):
     gripper = self.flex.gripper
     assert gripper is not None
     await gripper.move_labware(rack, "C2")
-    self.assertIn(id(rack), self.flex._stub_labware)
+    self.assertIn(rack.identifier, self.flex._stub_labware)
 
     await self.flex.labware_moved_off_deck(rack)
-    self.assertNotIn(id(rack), self.flex._stub_labware)
+    self.assertNotIn(rack.identifier, self.flex._stub_labware)
 
 
 class TestCustomLabwareLoadFlow(unittest.IsolatedAsyncioTestCase):

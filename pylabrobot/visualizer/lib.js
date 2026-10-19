@@ -73,7 +73,7 @@ function buildWrtDropdown() {
     var nodes = container.querySelectorAll(":scope > .tree-node");
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
-      var name = node.dataset.resourceName;
+      var name = node.dataset.resourceIdentifier;
       if (name) items.push(name);
       // Recurse into children if not collapsed
       var childrenDiv = node.querySelector(":scope > .tree-node-children");
@@ -89,7 +89,7 @@ function buildWrtDropdown() {
   for (var i = 0; i < visibleNames.length; i++) {
     var opt = document.createElement("option");
     opt.value = visibleNames[i];
-    opt.textContent = visibleNames[i];
+    opt.textContent = resources[visibleNames[i]].name;
     wrtSelect.appendChild(opt);
   }
 
@@ -954,7 +954,9 @@ function getSnappingGrid(x, y, width, height) {
 class Resource {
   constructor(resourceData, parent = undefined) {
     const { name, location, size_x, size_y, size_z, children } = resourceData;
-    this.name = name;
+    this.identifier = resourceData.identifier || crypto.randomUUID();
+    this.metadata = { ...resourceData.metadata };
+    if (!("name" in this.metadata)) this.metadata.name = name || "";
     this.size_x = size_x;
     this.size_y = size_y;
     this.size_z = size_z;
@@ -981,9 +983,12 @@ class Resource {
       this.assignChild(childInstance);
 
       // Save in global lookup
-      resources[child.name] = childInstance;
+      resources[childInstance.identifier] = childInstance;
     }
   }
+
+  get name() { return this.metadata.name; }
+  set name(value) { this.metadata.name = value; }
 
   // Dynamically compute the color based on RESOURCE_COLORS
   getColor() {
@@ -1012,7 +1017,7 @@ class Resource {
     });
     // Re-apply the tree eye-toggle state; draw() runs on every redraw (volume
     // change, tip pickup, re-assign) and would otherwise resurrect a hidden item.
-    this.group.visible(!hiddenResourceNames.has(this.name));
+    this.group.visible(!hiddenResourceNames.has(this.identifier));
     this.mainShape = this.drawMainShape();
     if (this.mainShape !== undefined) {
       this.group.add(this.mainShape);
@@ -1110,7 +1115,7 @@ class Resource {
         tooltip.scaleY(-ts);
         layer.add(tooltip);
         if (typeof highlightSidebarRow === "function") {
-          highlightSidebarRow(this.name);
+          highlightSidebarRow(this.identifier);
         }
         if (activeTool === "coords") {
           showResHighlightBullseye(this);
@@ -1184,7 +1189,7 @@ class Resource {
             const wrtLine = document.createElement("div");
             wrtLine.style.color = "#888";
             wrtLine.style.fontSize = "12px";
-            wrtLine.textContent = `wrt ${wrtName} (${wxl}, ${wyl}, ${wzl})`;
+            wrtLine.textContent = `wrt ${resources[wrtName]?.name || wrtName} (${wxl}, ${wyl}, ${wzl})`;
 
             const coordLine = document.createElement("div");
             coordLine.style.fontFamily = "monospace";
@@ -1228,7 +1233,7 @@ class Resource {
         }
       });
       this.mainShape.on("dblclick dbltap", () => {
-        showUmlPanel(this.name);
+        showUmlPanel(this.identifier);
       });
     }
   }
@@ -1267,7 +1272,8 @@ class Resource {
     }
 
     return {
-      name: this.name,
+      identifier: this.identifier,
+      metadata: { ...this.metadata },
       type: this.constructor.name,
       location: {
         ...this.location,
@@ -1279,7 +1285,7 @@ class Resource {
       size_y: this.size_y,
       size_z: this.size_z,
       children: serializedChildren,
-      parent_name: this.parent === undefined ? null : this.parent.name,
+      parent_identifier: this.parent === undefined ? null : this.parent.identifier,
       model: this.model,
       rotation: this.rotation,
       barcode: this.barcode,
@@ -1319,7 +1325,7 @@ class Resource {
     }
 
     // Remove from global lookup
-    delete resources[this.name];
+    delete resources[this.identifier];
 
     // Remove from UI
     if (this.group !== undefined) {
@@ -1339,6 +1345,7 @@ class Resource {
   }
 
   setState(state) {
+    if (state.metadata) this.metadata = { ...state.metadata };
     // Rotation is shipped as part of every resource's state so that
     // `Resource.rotate(...)` (which fires `_state_updated`) propagates to the
     // visualizer through the existing `set_state` channel.
@@ -1623,14 +1630,14 @@ class OTDeck extends Deck {
       if (!holder.location || (holder.children && holder.children.length > 0)) {
         continue; // skip non-slot children and occupied slots
       }
-      const match = holder.name ? holder.name.match(/slot_(\d+)$/) : null;
-      if (match === null) {
+      const slot = holder.metadata.slot;
+      if (slot === undefined) {
         continue;
       }
       const siteLabel = new Konva.Text({
         x: holder.location.x,
         y: holder.location.y + holder.size_y,
-        text: match[1],
+        text: String(slot),
         width: holder.size_x,
         height: holder.size_y,
         fontSize: 16,
@@ -1751,6 +1758,7 @@ class Container extends Resource {
   }
 
   setState(state) {
+    if (state.metadata) this.metadata = { ...state.metadata };
     super.setState(state);
     this.setVolume(state.volume);
   }
@@ -1943,6 +1951,7 @@ class TipSpot extends Resource {
   }
 
   setState(state) {
+    if (state.metadata) this.metadata = { ...state.metadata };
     super.setState(state);
     this.has_tip = state.tip !== null;
     // Fast path: recolor the existing tip circle in place instead of rebuilding
@@ -2325,7 +2334,7 @@ function buildTipAttrs(ch, headState) {
   var tipStateData = chState.tip_state;
   if (!tipData) return null;
   var attrs = [
-    { key: "name", value: tipData.name || "Unknown" },
+    { key: "name", value: tipData.metadata?.name || tipData.name || "Unknown" },
     { key: "type", value: tipData.type || "Unknown" },
     { key: "tip_size", value: (tipData.tip_size || "").replace(/_/g, " ") },
     { key: "size_z", value: (tipData.size_z || "?") + " mm" },
@@ -2811,7 +2820,7 @@ function buildSingleArm(armData, anchorDropdown, armId) {
   var plateW = 52, plateH = 22;
   var snapshot = null; // serialized resource data, or null
   if (hasResource) {
-    snapshot = resourceSnapshots[armData.resource_name] || null;
+    snapshot = resourceSnapshots[armData.resource_identifier] || null;
     var sizeX = snapshot ? snapshot.size_x : (armData.size_x || 127);
     var sizeY = snapshot ? snapshot.size_y : (armData.size_y || 86);
     var scale = Math.min(80 / sizeX, 80 / sizeY);
@@ -2948,12 +2957,12 @@ function buildSingleArm(armData, anchorDropdown, armId) {
       // Temporarily save/restore global resources to avoid conflicts.
       var savedRes = {};
       var snapshotData = JSON.parse(JSON.stringify(snapshot));
-      snapshotData.parent_name = undefined;
+      snapshotData.parent_identifier = undefined;
       snapshotData.location = { x: 0, y: 0, z: 0, type: "Coordinate" };
       function _saveKey(n) { if (n in resources) savedRes[n] = resources[n]; }
-      _saveKey(snapshotData.name);
+      _saveKey(snapshotData.identifier);
       for (var si = 0; si < (snapshotData.children || []).length; si++) {
-        _saveKey(snapshotData.children[si].name);
+        _saveKey(snapshotData.children[si].identifier);
       }
       var plateCopy = loadResource(snapshotData);
       plateCopy.draw(plateLayer);
@@ -2961,9 +2970,9 @@ function buildSingleArm(armData, anchorDropdown, armId) {
       // Export to data URL
       var plateDataUrl = plateStage.toDataURL({ pixelRatio: 2 });
       // Clean up: restore resources, destroy offscreen stage
-      delete resources[plateCopy.name];
+      delete resources[plateCopy.identifier];
       for (var ci2 = 0; ci2 < plateCopy.children.length; ci2++) {
-        delete resources[plateCopy.children[ci2].name];
+        delete resources[plateCopy.children[ci2].identifier];
       }
       for (var rk in savedRes) { resources[rk] = savedRes[rk]; }
       plateStage.destroy();
@@ -3073,11 +3082,12 @@ class LiquidHandler extends Resource {
   }
 
   setState(state) {
+    if (state.metadata) this.metadata = { ...state.metadata };
     super.setState(state);
     if (state.head_state) {
       this.headState = state.head_state;
       this.numHeads = Object.keys(state.head_state).length;
-      var panel = document.getElementById("single-channel-dropdown-" + this.name);
+      var panel = document.getElementById("single-channel-dropdown-" + this.identifier);
       if (panel) {
         fillHeadIcons(panel, this.headState);
         refreshPipetteInfoPanel(this.headState);
@@ -3086,35 +3096,47 @@ class LiquidHandler extends Resource {
     if ("head96_state" in state) {
       this.head96State = state.head96_state;
       // Show/hide multi-channel button based on whether the machine tool exists
-      var multiBtn = document.getElementById("multi-channel-btn-" + this.name);
+      var multiBtn = document.getElementById("multi-channel-btn-" + this.identifier);
       if (multiBtn) multiBtn.style.display = (this.head96State !== null && this.head96State !== undefined) ? "" : "none";
-      var panel96 = document.getElementById("multi-channel-dropdown-" + this.name);
+      var panel96 = document.getElementById("multi-channel-dropdown-" + this.identifier);
       if (panel96) {
         fillHead96Grid(panel96, this.head96State);
       }
     }
     if ("arm_state" in state) {
-      this.armState = state.arm_state;
+      this.armState = Object.fromEntries(Object.entries(state.arm_state || {}).map(([armId, pickup]) => {
+      if (!pickup || !pickup.resource) return [armId, pickup];
+      const resource = pickup.resource;
+      resourceSnapshots[resource.identifier] = resource;
+      return [armId, {
+        ...pickup,
+        resource_identifier: resource.identifier,
+        resource_name: resource.metadata.name,
+        resource_type: resource.type,
+        size_x: resource.size_x,
+        size_y: resource.size_y,
+      }];
+    }));
       // Show/hide arm button based on whether the machine tool exists
-      var armBtnEl = document.getElementById("arm-btn-" + this.name);
+      var armBtnEl = document.getElementById("arm-btn-" + this.identifier);
       if (armBtnEl) armBtnEl.style.display = (this.armState !== null && this.armState !== undefined) ? "" : "none";
       // Snapshot each held resource NOW, while it is still in the resources dict.
       // pick_up_resource() sends set_state BEFORE resource_unassigned fires, so
       // the resource and all its children are still intact at this point.
       for (var armKey in (this.armState || {})) {
         var ad = this.armState[armKey];
-        if (ad && ad.resource_name && !resourceSnapshots[ad.resource_name]) {
-          var res = resources[ad.resource_name];
+        if (ad && ad.resource_identifier && !resourceSnapshots[ad.resource_identifier]) {
+          var res = resources[ad.resource_identifier];
           if (res) {
             try {
-              resourceSnapshots[ad.resource_name] = res.serialize();
+              resourceSnapshots[ad.resource_identifier] = res.serialize();
             } catch (e) {
-              console.warn("[arm snapshot] failed for " + ad.resource_name, e);
+              console.warn("[arm snapshot] failed for " + ad.resource_identifier, e);
             }
           }
         }
       }
-      var armPanel = document.getElementById("arm-dropdown-" + this.name);
+      var armPanel = document.getElementById("arm-dropdown-" + this.identifier);
       if (armPanel) {
         fillArmPanel(armPanel, this.armState);
       }
@@ -3226,14 +3248,14 @@ function classForResourceType(type, category) {
 function loadResource(resourceData) {
   const resourceClass = classForResourceType(resourceData.type, resourceData.category);
 
-  const parentName = resourceData.parent_name;
+  const parentIdentifier = resourceData.parent_identifier;
   var parent = undefined;
-  if (parentName !== undefined) {
-    parent = resources[parentName];
+  if (parentIdentifier !== undefined && parentIdentifier !== null) {
+    parent = resources[parentIdentifier];
   }
 
   const resource = new resourceClass(resourceData, parent);
-  resources[resource.name] = resource;
+  resources[resource.identifier] = resource;
 
   // If the resource has a parent, ensure it's registered in the parent's children list.
   // The constructor sets this.parent but doesn't add to parent.children.
@@ -3575,7 +3597,7 @@ var sidepanelHighlightRect = null;
 var sidepanelHoverRect = null;
 var sidepanelHoverGlow = null;
 
-// Names of resources currently hidden via the tree eye toggle. Keyed by name
+// Identifiers of resources currently hidden via the tree eye toggle. Keyed by identifier
 // rather than by JS instance so the state survives the destroy/redraw and
 // unassign/re-assign cycles that recreate a resource's Konva group.
 var hiddenResourceNames = new Set();
@@ -3603,7 +3625,7 @@ function treeEyeSvg(hidden) {
 function isHiddenByAncestor(resource) {
   var p = resource ? resource.parent : undefined;
   while (p) {
-    if (hiddenResourceNames.has(p.name)) return true;
+    if (hiddenResourceNames.has(p.identifier)) return true;
     p = p.parent;
   }
   return false;
@@ -3615,7 +3637,7 @@ function isHiddenByAncestor(resource) {
 // preserves stacking order (a destroy/redraw would re-append it last).
 function applyOwnVisibility(resource) {
   if (resource && resource.group !== undefined) {
-    resource.group.visible(!hiddenResourceNames.has(resource.name));
+    resource.group.visible(!hiddenResourceNames.has(resource.identifier));
   }
 }
 
@@ -3637,11 +3659,11 @@ function setResourceHidden(resourceName, hidden) {
 // resource's own flag and every hidden ancestor so it actually becomes visible.
 function revealResourceAndAncestors(resource) {
   if (!resource) return;
-  hiddenResourceNames.delete(resource.name);
+  hiddenResourceNames.delete(resource.identifier);
   applyOwnVisibility(resource);
   var p = resource.parent;
   while (p) {
-    hiddenResourceNames.delete(p.name);
+    hiddenResourceNames.delete(p.identifier);
     applyOwnVisibility(p);
     p = p.parent;
   }
@@ -3656,7 +3678,7 @@ function revealResourceAndAncestors(resource) {
 // eye is shown disabled with a tooltip rather than letting a click lie about
 // what happened on the canvas.
 function updateRowVisibility(row, resource) {
-  var ownHidden = hiddenResourceNames.has(resource.name);
+  var ownHidden = hiddenResourceNames.has(resource.identifier);
   var inherited = isHiddenByAncestor(resource);
   var eye = row.querySelector(":scope > .tree-node-eye");
   if (eye) {
@@ -3836,7 +3858,7 @@ function getDisplayChildren(resource) {
           result.push({ index: i, resource: holder.children[j] });
         }
       } else if (isResourceHolder(holder)) {
-        result.push({ index: i, empty: true, holderName: holder.name });
+        result.push({ index: i, empty: true, holderIdentifier: holder.identifier });
       } else {
         result.push({ index: i, resource: holder });
       }
@@ -3872,7 +3894,7 @@ function getDisplayChildren(resource) {
   return resource.children || [];
 }
 
-function buildEmptySlotDOM(index, depth, holderName) {
+function buildEmptySlotDOM(index, depth, holderIdentifier) {
   const node = document.createElement("div");
   node.className = "tree-node tree-node-empty";
 
@@ -3897,9 +3919,9 @@ function buildEmptySlotDOM(index, depth, holderName) {
   node.appendChild(row);
 
   // Hover to highlight the resource holder on canvas
-  if (holderName) {
+  if (holderIdentifier) {
     row.addEventListener("mouseenter", function () {
-      showHoverHighlight(holderName);
+      showHoverHighlight(holderIdentifier);
     });
     row.addEventListener("mouseleave", function () {
       clearHoverHighlight();
@@ -3912,7 +3934,7 @@ function buildEmptySlotDOM(index, depth, holderName) {
 function buildTreeNodeDOM(resource, depth, slotIndex) {
   const node = document.createElement("div");
   node.className = "tree-node";
-  node.dataset.resourceName = resource.name;
+  node.dataset.resourceIdentifier = resource.identifier;
 
   const row = document.createElement("div");
   row.className = "tree-node-row";
@@ -3966,13 +3988,13 @@ function buildTreeNodeDOM(resource, depth, slotIndex) {
   row.appendChild(nameSpan);
   row.appendChild(typeSpan);
   row.appendChild(info);
-  row.appendChild(createVisibilityToggle(resource.name));
+  row.appendChild(createVisibilityToggle(resource.identifier));
   updateRowVisibility(row, resource);
   node.appendChild(row);
 
   // Hover row to show yellow highlight on canvas
   row.addEventListener("mouseenter", function () {
-    showHoverHighlight(resource.name);
+    showHoverHighlight(resource.identifier);
   });
   row.addEventListener("mouseleave", function () {
     clearHoverHighlight();
@@ -3985,7 +4007,7 @@ function buildTreeNodeDOM(resource, depth, slotIndex) {
     if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; return; }
     clickTimer = setTimeout(function () {
       clickTimer = null;
-      showUmlPanel(resource.name);
+      showUmlPanel(resource.identifier);
     }, 250);
   });
 
@@ -3993,7 +4015,7 @@ function buildTreeNodeDOM(resource, depth, slotIndex) {
   row.addEventListener("dblclick", function (e) {
     e.stopPropagation();
     if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-    focusOnResource(resource.name);
+    focusOnResource(resource.identifier);
   });
 
   // Click arrow to toggle children
@@ -4016,7 +4038,7 @@ function buildTreeNodeDOM(resource, depth, slotIndex) {
     for (let i = 0; i < displayChildren.length; i++) {
       const entry = displayChildren[i];
       if (isCarrier && entry.empty) {
-        childrenDiv.appendChild(buildEmptySlotDOM(entry.index, depth + 1, entry.holderName));
+        childrenDiv.appendChild(buildEmptySlotDOM(entry.index, depth + 1, entry.holderIdentifier));
       } else if (isCarrier && entry.resource) {
         childrenDiv.appendChild(buildTreeNodeDOM(entry.resource, depth + 1, entry.index));
       } else {
@@ -4039,7 +4061,7 @@ function buildResourceTree(rootResource, { rebuildNavbar = true } = {}) {
   // Build a root node for the master resource (e.g. LiquidHandler)
   const rootNode = document.createElement("div");
   rootNode.className = "tree-node";
-  rootNode.dataset.resourceName = rootResource.name;
+  rootNode.dataset.resourceIdentifier = rootResource.identifier;
 
   const rootRow = document.createElement("div");
   rootRow.className = "tree-node-row";
@@ -4066,12 +4088,12 @@ function buildResourceTree(rootResource, { rebuildNavbar = true } = {}) {
   rootRow.appendChild(rootDot);
   rootRow.appendChild(rootName);
   rootRow.appendChild(rootType);
-  rootRow.appendChild(createVisibilityToggle(rootResource.name));
+  rootRow.appendChild(createVisibilityToggle(rootResource.identifier));
   updateRowVisibility(rootRow, rootResource);
   rootNode.appendChild(rootRow);
 
   rootRow.addEventListener("mouseenter", function () {
-    showHoverHighlight(rootResource.name);
+    showHoverHighlight(rootResource.identifier);
   });
   rootRow.addEventListener("mouseleave", function () {
     clearHoverHighlight();
@@ -4082,13 +4104,13 @@ function buildResourceTree(rootResource, { rebuildNavbar = true } = {}) {
     if (rootClickTimer) { clearTimeout(rootClickTimer); rootClickTimer = null; return; }
     rootClickTimer = setTimeout(function () {
       rootClickTimer = null;
-      showUmlPanel(rootResource.name);
+      showUmlPanel(rootResource.identifier);
     }, 250);
   });
   rootRow.addEventListener("dblclick", function (e) {
     e.stopPropagation();
     if (rootClickTimer) { clearTimeout(rootClickTimer); rootClickTimer = null; }
-    focusOnResource(rootResource.name);
+    focusOnResource(rootResource.identifier);
   });
 
   // Build deck-level children inside the root node
@@ -4124,7 +4146,7 @@ function addResourceToTree(resource) {
 
   // Find the parent node in the tree
   const parentNode = treeContainer.querySelector(
-    `.tree-node[data-resource-name="${CSS.escape(resource.parent.name)}"]`
+    `.tree-node[data-resource-identifier="${CSS.escape(resource.parent.identifier)}"]`
   );
   if (!parentNode) {
     // Parent not in tree; rebuild the whole tree
@@ -4136,7 +4158,7 @@ function addResourceToTree(resource) {
   }
 
   // Rebuild the parent node's subtree to reflect the new child
-  const parentResource = resources[resource.parent.name];
+  const parentResource = resources[resource.parent.identifier];
   if (!parentResource) return;
   const depth = getResourceDepth(parentResource);
   const newParentNode = buildTreeNodeDOM(parentResource, depth);
@@ -4144,19 +4166,19 @@ function addResourceToTree(resource) {
   parentNode.replaceWith(newParentNode);
 }
 
-function removeResourceFromTree(resourceName) {
+function removeResourceFromTree(resourceIdentifier) {
   const treeContainer = document.getElementById("resource-tree");
   if (!treeContainer) return;
 
   const node = treeContainer.querySelector(
-    `.tree-node[data-resource-name="${CSS.escape(resourceName)}"]`
+    `.tree-node[data-resource-identifier="${CSS.escape(resourceIdentifier)}"]`
   );
   if (node) {
     // Find the parent tree-node and rebuild it
     const parentTreeNode = node.parentElement && node.parentElement.closest(".tree-node");
     if (parentTreeNode) {
-      const parentName = parentTreeNode.dataset.resourceName;
-      const parentResource = resources[parentName];
+      const parentIdentifier = parentTreeNode.dataset.resourceIdentifier;
+      const parentResource = resources[parentIdentifier];
       if (parentResource) {
         const depth = getResourceDepth(parentResource);
         const newNode = buildTreeNodeDOM(parentResource, depth);
@@ -4178,33 +4200,33 @@ function getResourceDepth(resource) {
   return depth;
 }
 
-function updateSidepanelState(resourceName) {
+function updateSidepanelState(resourceIdentifier) {
   const treeContainer = document.getElementById("resource-tree");
   if (!treeContainer) return;
 
-  const resource = resources[resourceName];
+  const resource = resources[resourceIdentifier];
   if (!resource) return;
 
   // For tip spots and wells, update the parent summary instead
   if (resource instanceof TipSpot || resource instanceof Well || resource instanceof Tube) {
     if (resource.parent) {
-      updateSidepanelNodeInfo(resource.parent.name);
+      updateSidepanelNodeInfo(resource.parent.identifier);
     }
     return;
   }
 
-  updateSidepanelNodeInfo(resourceName);
+  updateSidepanelNodeInfo(resourceIdentifier);
 }
 
-function updateSidepanelNodeInfo(resourceName) {
+function updateSidepanelNodeInfo(resourceIdentifier) {
   const treeContainer = document.getElementById("resource-tree");
   if (!treeContainer) return;
 
-  const resource = resources[resourceName];
+  const resource = resources[resourceIdentifier];
   if (!resource) return;
 
   const node = treeContainer.querySelector(
-    `.tree-node[data-resource-name="${CSS.escape(resourceName)}"]`
+    `.tree-node[data-resource-identifier="${CSS.escape(resourceIdentifier)}"]`
   );
   if (!node) return;
 
@@ -4266,19 +4288,19 @@ function clearHoverHighlight() {
   resourceLayer.draw();
 }
 
-function highlightSidebarRow(resourceName) {
+function highlightSidebarRow(resourceIdentifier) {
   clearSidebarHighlight();
   const tree = document.getElementById("resource-tree");
   if (!tree) return;
   const nodes = tree.querySelectorAll(".tree-node");
   const nodeByName = {};
   for (const node of nodes) {
-    if (node.dataset.resourceName) {
-      nodeByName[node.dataset.resourceName] = node;
+    if (node.dataset.resourceIdentifier) {
+      nodeByName[node.dataset.resourceIdentifier] = node;
     }
   }
   // Walk up the parent chain until we find a resource with a sidebar entry.
-  let name = resourceName;
+  let name = resourceIdentifier;
   while (name) {
     if (nodeByName[name]) {
       const row = nodeByName[name].querySelector(":scope > .tree-node-row");
@@ -4290,7 +4312,7 @@ function highlightSidebarRow(resourceName) {
     }
     const res = resources[name];
     if (res && res.parent) {
-      name = res.parent.name;
+      name = res.parent.identifier;
     } else {
       break;
     }
@@ -4306,8 +4328,8 @@ function clearSidebarHighlight() {
   }
 }
 
-function highlightResourceOnCanvas(resourceName) {
-  const resource = resources[resourceName];
+function highlightResourceOnCanvas(resourceIdentifier) {
+  const resource = resources[resourceIdentifier];
   if (!resource) return;
 
   // Update selected state in tree
@@ -4317,7 +4339,7 @@ function highlightResourceOnCanvas(resourceName) {
     if (prev) prev.classList.remove("selected");
 
     const node = treeContainer.querySelector(
-      `.tree-node[data-resource-name="${CSS.escape(resourceName)}"]`
+      `.tree-node[data-resource-identifier="${CSS.escape(resourceIdentifier)}"]`
     );
     if (node) {
       const row = node.querySelector(":scope > .tree-node-row");
@@ -4360,8 +4382,8 @@ function highlightResourceOnCanvas(resourceName) {
   }, 2000);
 }
 
-function focusOnResource(resourceName) {
-  var resource = resources[resourceName];
+function focusOnResource(resourceIdentifier) {
+  var resource = resources[resourceIdentifier];
   if (!resource || !stage) return;
 
   // Use the rotated world AABB so the viewport fits and centres on what the
@@ -4398,7 +4420,7 @@ function focusOnResource(resourceName) {
   stage.batchDraw();
 
   // Also highlight the resource
-  highlightResourceOnCanvas(resourceName);
+  highlightResourceOnCanvas(resourceIdentifier);
 }
 
 // Expand/collapse tree nodes to a given depth
@@ -4729,7 +4751,7 @@ window.addEventListener("load", function () {
     var seen = {};
     var deduped = [];
     for (var i = 0; i < result.length; i++) {
-      var name = result[i].resource.name;
+      var name = result[i].resource.identifier;
       if (!seen[name]) {
         seen[name] = true;
         deduped.push(result[i].resource);
@@ -4807,7 +4829,7 @@ window.addEventListener("load", function () {
 
       row.addEventListener("mouseenter", (function (rName) {
         return function () { showHoverHighlight(rName); };
-      })(res.name));
+      })(res.identifier));
       row.addEventListener("mouseleave", function () {
         clearHoverHighlight();
       });
@@ -4824,7 +4846,7 @@ window.addEventListener("load", function () {
           if (searchClickTimer) { clearTimeout(searchClickTimer); searchClickTimer = null; }
           focusOnResource(rName);
         });
-      })(res.name);
+      })(res.identifier);
 
       resultsDiv.appendChild(row);
     }
@@ -4940,6 +4962,7 @@ function formatVolume(v) {
 
 function getUmlAttributes(resource) {
   var attrs = [];
+  attrs.push({ key: "identifier", value: JSON.stringify(resource.identifier) });
   attrs.push({ key: "name", value: JSON.stringify(resource.name) });
   attrs.push({ key: "type", value: resource.resourceType || resource.constructor.name });
   attrs.push({ key: "children", value: resource.children ? resource.children.length : 0 });
@@ -5138,17 +5161,17 @@ function buildUmlPanelDOM(resource) {
   return panel;
 }
 
-function showUmlPanel(resourceName) {
-  var resource = resources[resourceName];
+function showUmlPanel(resourceIdentifier) {
+  var resource = resources[resourceIdentifier];
   if (!resource) return;
 
   // Toggle off if clicking the same resource
-  if (umlPanelResourceName === resourceName) {
+  if (umlPanelResourceIdentifier === resourceIdentifier) {
     hideUmlPanel();
     return;
   }
 
-  umlPanelResourceName = resourceName;
+  umlPanelResourceIdentifier = resourceIdentifier;
   _umlPanelOpenedAt = Date.now();
 
   // Remove existing panel
@@ -5162,11 +5185,11 @@ function showUmlPanel(resourceName) {
   mainEl.appendChild(panelDOM);
 
   // Also highlight the resource on canvas
-  highlightResourceOnCanvas(resourceName);
+  highlightResourceOnCanvas(resourceIdentifier);
 }
 
 function hideUmlPanel() {
-  umlPanelResourceName = null;
+  umlPanelResourceIdentifier = null;
   var existing = document.getElementById("uml-panel");
   if (existing) existing.remove();
 }
@@ -5808,7 +5831,7 @@ function currentCachePixelRatio() {
 
 function cacheResourceGroup(resource) {
   if (!resource || !resource.group) return;
-  if (hiddenResourceNames.has(resource.name)) return; // don't freeze a hidden item visible
+  if (hiddenResourceNames.has(resource.identifier)) return; // don't freeze a hidden item visible
   try {
     if (!resource.group.isCached()) {
       resource.group.cache({ pixelRatio: currentCachePixelRatio() });
@@ -5828,7 +5851,7 @@ function uncacheResourceGroup(resource) {
 function markCacheOwnerActive(resource) {
   if (!resource || !resource.group) return;
   uncacheResourceGroup(resource);
-  const name = resource.name;
+  const name = resource.identifier;
   if (_recacheTimers.has(name)) clearTimeout(_recacheTimers.get(name));
   _recacheTimers.set(name, setTimeout(() => {
     _recacheTimers.delete(name);
@@ -5859,7 +5882,7 @@ function cacheAllIdleOwners() {
 function suspendCacheForHighlight(resource) {
   const owner = getCacheOwner(resource);
   if (!owner || !owner.group) return;
-  if (_recacheTimers.has(owner.name)) { clearTimeout(_recacheTimers.get(owner.name)); _recacheTimers.delete(owner.name); }
+  if (_recacheTimers.has(owner.identifier)) { clearTimeout(_recacheTimers.get(owner.identifier)); _recacheTimers.delete(owner.identifier); }
   uncacheResourceGroup(owner);
   _highlightCacheOwner = owner;
 }
@@ -5868,7 +5891,7 @@ function resumeCacheAfterHighlight() {
   if (_highlightCacheOwner) {
     const owner = _highlightCacheOwner;
     _highlightCacheOwner = null;
-    if (resources[owner.name] === owner) markCacheOwnerActive(owner);
+    if (resources[owner.identifier] === owner) markCacheOwnerActive(owner);
   }
 }
 
@@ -5883,7 +5906,7 @@ function requestZoomRecache() {
     // Only rebuild when we can get meaningfully sharper; this also no-ops once the
     // pixel ratio is capped (target stops growing), so zooming further in is free.
     if (target <= _cachePixelRatio * ZOOM_RECACHE_FACTOR) return;
-    const highlightedName = _highlightCacheOwner && _highlightCacheOwner.name;
+    const highlightedName = _highlightCacheOwner && _highlightCacheOwner.identifier;
     for (const name in resources) {
       const r = resources[name];
       if (isCacheOwnerType(r) && !_recacheTimers.has(name) && name !== highlightedName) {

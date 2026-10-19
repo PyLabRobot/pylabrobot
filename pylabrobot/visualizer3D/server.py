@@ -33,7 +33,7 @@ from pylabrobot.resources.resource import Resource
 from .scene import (
   STATE_DECIMALS,
   Scene,
-  all_names,
+  all_identifiers,
   build_scene,
   collect_state,
   legacy_size,
@@ -133,7 +133,7 @@ def _models_on_disk(root: str) -> Dict[str, str]:
 PORT_TRIES = 20
 # What the page and this server agree on: the scene carries it, and a page that expects another
 # number says so rather than drawing what it misreads.
-PROTOCOL = 1
+PROTOCOL = 2
 
 
 def _port_taken(error: OSError) -> bool:
@@ -197,7 +197,7 @@ class Viewer3D:
   _index_of: Dict[str, int]
   _published: Dict[str, str]
   _known_models: Dict[str, Dict[str, Any]]
-  _known_names: FrozenSet[str]
+  _known_identifiers: FrozenSet[str]
   _scene_payload: Optional[Dict[str, Any]]
   _scene: Optional[Scene]
   _refused_a_token: bool
@@ -391,6 +391,10 @@ class Viewer3D:
         await self._broadcast("state", message)
 
   def _enqueue(self, name: str, state: Dict[str, Any]) -> None:
+    if "metadata" in state:
+      self._known_models.pop(name, None)
+      self._mark_scene_dirty()
+      return
     if "location" in state and self._placed_as_kept(name, state["location"]):
       state = {k: v for k, v in state.items() if k != "location"}
     self._pending[name] = state_signature(state)
@@ -407,8 +411,10 @@ class Viewer3D:
     if self._scene_payload is not None and not rebuild:
       return self._scene_payload
 
-    scene = build_scene(self.root, known=self._known_models, known_names=self._known_names)
-    self._known_names = frozenset(scene.names)
+    scene = build_scene(
+      self.root, known=self._known_models, known_identifiers=self._known_identifiers
+    )
+    self._known_identifiers = frozenset(scene.identifiers)
     self._known_models = scene.derived
     scene.legacy_bytes = self._legacy_bytes
 
@@ -418,7 +424,7 @@ class Viewer3D:
 
     # A new scene renumbers everything, so the indices change with the epoch that names them.
     self._epoch += 1
-    self._index_of = {name: i for i, name in enumerate(payload["instances"]["names"])}
+    self._index_of = {name: i for i, name in enumerate(payload["instances"]["identifiers"])}
     # Placed afresh, so nothing has moved since.
     self._moved = set()
     self._scene_payload = {
@@ -432,16 +438,21 @@ class Viewer3D:
   def _moves(self) -> Optional[List[Dict[str, Any]]]:
     """Moves since the scene was built, applied to the kept scene too, or None if a name changed.
 
-    A move is a resource whose parent or local transform differs from the kept scene, as `{name,
-    parent, location, rotation}`. A name appearing or disappearing needs a rebuild.
+    A move is a resource whose parent or local transform differs from the kept scene, as `{identifier,
+    parent, location, rotation}`. Adding or removing an identifier needs a rebuild.
     """
     scene = self._scene
-    if scene is None or frozenset(all_names(self.root)) != self._known_names:
+    if scene is None or frozenset(all_identifiers(self.root)) != self._known_identifiers:
+      return None
+    if any(
+      scene.names[self._index_of[item.identifier]] != item.name
+      for item in [self.root, *self.root.get_all_children()]
+    ):
       return None
     moves: List[Dict[str, Any]] = []
 
     def walk(resource: Resource, parent: Optional[str]) -> None:
-      index = self._index_of[resource.name]
+      index = self._index_of[resource.identifier]
       location = resource.location or Coordinate.zero()
       rotation = resource.rotation
       local = [
@@ -461,14 +472,14 @@ class Viewer3D:
         scene.transforms[6 * index : 6 * index + 6] = local
         moves.append(
           {
-            "name": resource.name,
+            "identifier": resource.identifier,
             "parent": parent,
             "location": {"x": local[0], "y": local[1], "z": local[2]},
             "rotation": {"x": local[3], "y": local[4], "z": local[5]},
           }
         )
       for child in resource.children:
-        walk(child, resource.name)
+        walk(child, resource.identifier)
 
     walk(self.root, None)
     if moves and self._scene_payload is not None:
@@ -531,7 +542,7 @@ class Viewer3D:
       # Batched on the loop, so a 96-channel operation is one message, not ninety-six.
       loop = self._live_loop()
       if loop is not None:
-        loop.call_soon_threadsafe(self._enqueue, r.name, state)
+        loop.call_soon_threadsafe(self._enqueue, r.identifier, state)
 
     resource.register_state_update_callback(on_update)
     self._subscribed[id(resource)] = (resource, on_update)
@@ -757,7 +768,7 @@ class Viewer3D:
     # Models derived by the last flatten, by resource name, and the names that flatten saw: the
     # next one reuses every model that no appeared or vanished name could have changed.
     self._known_models = {}
-    self._known_names = frozenset()
+    self._known_identifiers = frozenset()
     # The scene as last built: a client arriving is handed this rather than causing a rebuild,
     # which would renumber everything under the clients already watching.
     self._scene_payload = None

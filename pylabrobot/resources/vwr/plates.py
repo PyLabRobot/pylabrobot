@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
@@ -7,7 +9,7 @@ from pylabrobot.resources.well import (
 )
 
 
-def VWR_1_troughplate_195000uL_Ub(name: str) -> Plate:
+def VWR_1_troughplate_195000uL_Ub(name: str, *, identifier: Optional[str] = None) -> Plate:
   """VWR NA Cat. No. 77575-302"""
   # technical drawing:
   # https://github.com/PyLabRobot/pylabrobot/pull/574#issuecomment-2967988150
@@ -40,10 +42,11 @@ def VWR_1_troughplate_195000uL_Ub(name: str) -> Plate:
       max_volume=195000,  # from spec 195 mL
       name_prefix=name,
     ),
+    identifier=identifier,
   )
 
 
-def VWR_96_wellplate_2mL_Vb(name: str) -> Plate:
+def VWR_96_wellplate_2mL_Vb(name: str, *, identifier: Optional[str] = None) -> Plate:
   """VWR NA Cat. No. 76329-998"""
   # product info
   # https://us-prod2.vwr.com/store/product/26915641/vwr-96-well-deep-well-plates-with-automation-notches
@@ -75,4 +78,5 @@ def VWR_96_wellplate_2mL_Vb(name: str) -> Plate:
       max_volume=2200,  # from spec 2.2 ml
       name_prefix=name,
     ),
+    identifier=identifier,
   )

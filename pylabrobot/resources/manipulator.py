@@ -37,6 +37,9 @@ class LinkBody(Resource):
     distal_joint: Optional[Coordinate] = None,
     category: str = "link_body",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     """
     Args:
@@ -51,7 +54,14 @@ class LinkBody(Resource):
       model: which member this is.
     """
     super().__init__(
-      name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category, model=model
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category=category,
+      model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self.proximal_joint = proximal_joint
     self.distal_joint = distal_joint

@@ -471,9 +471,9 @@ def _get_profile_segments(resource: object) -> list[PrepCmd.SegmentDescriptor]:
     bottom = resource.bottom_type if isinstance(resource, Well) else None
     if (
       bottom in (WellBottomType.V, WellBottomType.U)
-      and resource.name not in _warned_cylinder_fallback
+      and resource.identifier not in _warned_cylinder_fallback
     ):
-      _warned_cylinder_fallback.add(resource.name)
+      _warned_cylinder_fallback.add(resource.identifier)
       logger.warning(
         "%s has a %s-bottom but no height-volume data, so the tip follows it as a cylinder",
         resource.name,
@@ -1732,7 +1732,7 @@ class Pipettes:
       channel: the channel resource to hang it from.
     """
     name = f"{channel.name}_tip_mounting_shaft"
-    if any(child.name == name for child in channel.children):
+    if any(isinstance(child, TipMountingShaft) for child in channel.children):
       return
     shaft = TipMountingShaft(name=name, tip_pickup_mode="core")
     channel.assign_child_resource(
@@ -5013,10 +5013,7 @@ class Pipettes:
       return
     if not isinstance(deck, PrepDeck):
       raise RuntimeError("tips are discarded into a PrepDeck's waste block")
-    waste_name = deck.get_component_name("waste_block")
-    if not deck.has_resource(waste_name):
-      raise RuntimeError("tips are discarded into the deck's waste block; this deck has none")
-    waste = deck.get_resource(waste_name)
+    waste = deck.waste_block
     if not isinstance(waste, Trash):
       raise RuntimeError("tips are discarded into the deck's waste block; this deck has none")
     await self.drop_tips([waste] * len(use_channels), use_channels=use_channels, **kwargs)
@@ -7751,7 +7748,7 @@ class Pipettes:
       margin: how far past an expected wall a search may travel, in mm.
 
     Returns:
-      What each search found, by holder name, then keyed "front", "back", "left" and "right", each
+      What each search found, by holder identifier, then keyed "front", "back", "left" and "right", each
       list as long as `n_replicates`, with None where nothing was detected.
 
     Raises:
@@ -7807,7 +7804,7 @@ class Pipettes:
         edges[edge] = measurements
 
       await self.move_to_safe_z()
-      found[holder.name] = edges
+      found[holder.identifier] = edges
 
       if any(None in edge for edge in edges.values()):
         logger.warning("%s: missed an edge - %s", holder.name, edges)

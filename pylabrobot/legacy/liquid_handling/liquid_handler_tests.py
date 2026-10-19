@@ -245,27 +245,27 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     )
 
   def test_illegal_subresource_assignment_before(self):
-    # Test assigning subresource with the same name as another resource in another carrier. This
+    # Test assigning subresource with the same identifier as another resource in another carrier. This
     # should raise an ValueError when the carrier is assigned to the liquid handler.
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
+    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub", identifier="duplicate")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = cor_96_wellplate_360uL_Fb(name="sub")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="sub", identifier="duplicate")
     self.deck.assign_child_resource(tip_car, track=1)
     with self.assertRaises(ValueError):
       self.deck.assign_child_resource(plt_car, track=10)
 
   def test_illegal_subresource_assignment_after(self):
-    # Test assigning subresource with the same name as another resource in another carrier, after
+    # Test assigning subresource with the same identifier as another resource in another carrier, after
     # the carrier has been assigned. This should raise an error.
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
+    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub", identifier="duplicate")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="ok")
     self.deck.assign_child_resource(tip_car, track=1)
     self.deck.assign_child_resource(plt_car, track=10)
     with self.assertRaises(ValueError):
-      plt_car[1] = cor_96_wellplate_360uL_Fb(name="sub")
+      plt_car[1] = cor_96_wellplate_360uL_Fb(name="sub", identifier="duplicate")
 
   async def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
@@ -533,7 +533,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.backend.drop_tips = unittest.mock.AsyncMock()
     spots = [self.tip_rack.get_item(well) for well in ("A1", "B1", "A2")]
     found = await self.lh.probe_tip_presence_via_pickup(spots, use_channels=[0, 1, 2])
-    self.assertEqual(found, {spots[0].name: True, spots[1].name: False, spots[2].name: True})
+    self.assertEqual(
+      found, {spots[0].identifier: True, spots[1].identifier: False, spots[2].identifier: True}
+    )
     self.assertEqual(
       [call.kwargs["use_channels"] for call in self.backend.pick_up_tips.call_args_list],
       [[0, 1], [2]],
@@ -1632,7 +1634,7 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(serialized_pickup["pickup_distance_from_top"], 5.0)
     self.assertEqual(serialized_pickup["direction"], "FRONT")
     self.assertIn("resource", serialized_pickup)
-    self.assertEqual(serialized_pickup["resource"]["name"], "plate")
+    self.assertEqual(serialized_pickup["resource"]["metadata"]["name"], "plate")
 
   async def test_serialize_state_arm_none_after_drop(self):
     self.lh._resource_pickup = ResourcePickup(

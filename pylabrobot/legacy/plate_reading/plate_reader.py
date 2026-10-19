@@ -52,6 +52,9 @@ class PlateReader(ResourceHolder, Machine):
     model: Optional[str] = None,
     child_location: Coordinate = Coordinate.zero(),
     preferred_pickup_location: Optional[Coordinate] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ) -> None:
     ResourceHolder.__init__(
       self,
@@ -64,6 +67,8 @@ class PlateReader(ResourceHolder, Machine):
       model=model,
       child_location=child_location,
       preferred_pickup_location=preferred_pickup_location,
+      identifier=identifier,
+      metadata=metadata,
     )
     Machine.__init__(self, backend=backend)
     self.backend: PlateReaderBackend = backend  # fix type

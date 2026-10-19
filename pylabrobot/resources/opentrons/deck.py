@@ -53,16 +53,33 @@ class OTDeck(Deck):
     with_trash: bool = True,
     name: str = "ot2_deck",
     category: str = "deck",
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
+    slot_holders: Optional[List[ResourceHolder]] = None,
   ):
     super().__init__(
-      size_x=size_x, size_y=size_y, size_z=size_z, name=name, origin=origin, category=category
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      name=name,
+      origin=origin,
+      category=category,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self._slot_holders: List[ResourceHolder] = []
+    if slot_holders is not None:
+      self._slot_holders = slot_holders
+      for holder in slot_holders:
+        super().assign_child_resource(holder, location=holder.location)
+      return
     for i, base in enumerate(_BASE_SLOT_LOCATIONS):
       is_trash_slot = i == 11 and with_trash
       holder = ResourceHolder(
         name=f"{self.name}_slot_{i + 1}",
+        metadata={"slot": i + 1},
         size_x=_TRASH_SIZE_X if is_trash_slot else _SLOT_SIZE_X,
         size_y=_TRASH_SIZE_Y if is_trash_slot else _SLOT_SIZE_Y,
         size_z=_TRASH_SIZE_Z if is_trash_slot else 0,
@@ -72,6 +89,27 @@ class OTDeck(Deck):
 
     if with_trash:
       self._assign_trash()
+
+  def serialize(self) -> dict:
+    """Serialize the slot order independently of labels and child traversal order."""
+    return {
+      **super().serialize(),
+      "slot_ordering": [holder.identifier for holder in self._slot_holders],
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "OTDeck":
+    """Restore slot holders directly, preserving their identities and labware."""
+    children = data.get("children", [])
+    if "slot_ordering" in data:
+      by_identifier = {child["identifier"]: child for child in children}
+      children = [by_identifier[identifier] for identifier in data["slot_ordering"]]
+    holders = [ResourceHolder.deserialize(child, allow_marshal=allow_marshal) for child in children]
+    for slot, holder in enumerate(holders, 1):
+      holder.metadata.setdefault("slot", slot)
+    saved = {**data, "children": [], "slot_holders": holders, "with_trash": False}
+    saved.pop("slot_ordering", None)
+    return super().deserialize(saved, allow_marshal=allow_marshal)
 
   @property
   def slots(self) -> List[Optional[Resource]]:
@@ -92,6 +130,7 @@ class OTDeck(Deck):
 
     trash_container = Trash(
       name="trash_container",
+      category="trash_container",
       size_x=_TRASH_SIZE_X,
       size_y=_TRASH_SIZE_Y,
       size_z=_TRASH_SIZE_Z,
@@ -121,11 +160,12 @@ class OTDeck(Deck):
     """Assign a slot holder to the deck.
 
     The deck's direct children are the 12 slot holders created in ``__init__``. Deserialization
-    re-assigns those holders by name, replacing the placeholder with the loaded one (which carries
-    its labware). Labware itself is placed with :meth:`assign_child_at_slot`, not here.
+    restores the saved holders and their labware by identifier. Labware itself is placed with :meth:`assign_child_at_slot`, not here.
     """
 
-    existing = next((child for child in self.children if child.name == resource.name), None)
+    existing = next(
+      (child for child in self.children if child.identifier == resource.identifier), None
+    )
     if existing is not None:
       if not reassign:
         raise ValueError(f"Resource '{resource.name}' already assigned to deck")

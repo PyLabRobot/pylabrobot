@@ -1,3 +1,5 @@
+from typing import Optional
+
 from .container import Container
 
 
@@ -18,6 +20,9 @@ class Trash(Container):
     compute_height_from_volume=None,
     height_volume_data=None,
     no_go_zones=None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -32,4 +37,6 @@ class Trash(Container):
       compute_height_from_volume=compute_height_from_volume,
       height_volume_data=height_volume_data,
       no_go_zones=no_go_zones,
+      identifier=identifier,
+      metadata=metadata,
     )

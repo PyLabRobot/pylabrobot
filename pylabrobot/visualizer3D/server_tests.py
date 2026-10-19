@@ -102,9 +102,22 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
   async def test_snapshot_names_every_publishing_resource(self):
     ws, scene, snapshot = await self.connect()
     try:
-      self.assertIn("plate_well_A1", snapshot["of"])
+      self.assertIn(self.plate.get_item("A1").identifier, snapshot["of"])
       self.assertEqual(len(snapshot["of"]), 96)  # the wells; the plate itself publishes nothing
       self.assertIn("plate_well_A1", scene["instances"]["names"])
+    finally:
+      await ws.close()
+
+  async def test_renaming_rebuilds_labels_and_keeps_instance_identifiers(self):
+    ws, before, _ = await self.connect()
+    try:
+      self.plate.name = "renamed"
+      message = json.loads(await asyncio.wait_for(ws.recv(), 2.0))
+      self.assertEqual(message["event"], "scene")
+      after = message["data"]["instances"]
+      self.assertEqual(after["identifiers"], before["instances"]["identifiers"])
+      index = after["identifiers"].index(self.plate.identifier)
+      self.assertEqual(after["names"][index], "renamed")
     finally:
       await ws.close()
 
@@ -125,7 +138,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     self.facility.assign_child_resource(rack, location=Coordinate(300, 10, 0))
     ws, _, snapshot = await self.connect()
     try:
-      spots = [spot.name for spot in rack.get_all_items()]
+      spots = [spot.identifier for spot in rack.get_all_items()]
       self.assertEqual(len({snapshot["of"][name] for name in spots}), 1)
       self.assertEqual(len(snapshot["states"]), 3)  # the wells, the spots and the tips
     finally:
@@ -140,7 +153,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     tip.tracker.set_volume(30.0)
     ws, _, snapshot = await self.connect()
     try:
-      state = snapshot["states"][snapshot["of"][tip.name]]
+      state = snapshot["states"][snapshot["of"][tip.identifier]]
       self.assertEqual(state["volume"], 30.0)
       self.assertEqual(state["max_volume"], tip.maximal_volume)
     finally:
@@ -156,7 +169,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       tip.tracker.set_volume(12.5)
       update = await self.next_state(ws)
       self.assertIsNotNone(update)
-      self.assertEqual(update["states"][update["of"][tip.name]]["volume"], 12.5)
+      self.assertEqual(update["states"][update["of"][tip.identifier]]["volume"], 12.5)
     finally:
       await ws.close()
 
@@ -166,7 +179,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       self.plate.get_item("A1").tracker.set_volume(150.0)
       update = await self.next_state(ws)
       self.assertIsNotNone(update)
-      self.assertEqual(list(update["of"]), ["plate_well_A1"])
+      self.assertEqual(list(update["of"]), [self.plate.get_item("A1").identifier])
     finally:
       await ws.close()
 
@@ -200,7 +213,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       self.plate.get_item("B1").tracker.set_volume(10.0)
       update = await self.next_state(ws)
       self.assertIsNotNone(update)
-      self.assertEqual(list(update["of"]), ["plate_well_B1"])
+      self.assertEqual(list(update["of"]), [self.plate.get_item("B1").identifier])
     finally:
       await ws.close()
 
@@ -214,7 +227,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       self.plate.get_item("B1").tracker.set_volume(10.0)
       update = await self.next_state(ws)
       self.assertIsNotNone(update)
-      self.assertEqual(list(update["of"]), ["plate_well_B1"])
+      self.assertEqual(list(update["of"]), [self.plate.get_item("B1").identifier])
     finally:
       await ws.close()
 
@@ -233,7 +246,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       kept.get_item("A1").tracker.set_volume(150.0)
       update = await self.next_state(ws)
       self.assertIsNotNone(update)
-      self.assertEqual(list(update["of"]), ["kept_well_A1"])
+      self.assertEqual(list(update["of"]), [kept.get_item("A1").identifier])
     finally:
       await ws.close()
 
@@ -259,8 +272,8 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       self.plate.location = Coordinate(400, 300, 0)
       update = await self.next_state(ws)
       self.assertIsNotNone(update)
-      self.assertIn("plate", update["of"])
-      self.assertEqual(update["locations"]["plate"]["x"], 400)
+      self.assertIn(self.plate.identifier, update["of"])
+      self.assertEqual(update["locations"][self.plate.identifier]["x"], 400)
     finally:
       await ws.close()
 
@@ -278,11 +291,11 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       holder.assign_child_resource(self.plate, location=Coordinate(5, 5, 50))
       states, moves = await self.next_of(ws, "moves")
       for state in states:
-        self.assertNotIn("plate", state.get("locations", {}), state)
-      moved = {move["name"]: move for move in moves["moves"]}
-      self.assertIn("plate", moved)
-      self.assertEqual(moved["plate"]["parent"], "holder")
-      self.assertEqual(moved["plate"]["location"], {"x": 5.0, "y": 5.0, "z": 50.0})
+        self.assertNotIn(self.plate.identifier, state.get("locations", {}), state)
+      moved = {move["identifier"]: move for move in moves["moves"]}
+      self.assertIn(self.plate.identifier, moved)
+      self.assertEqual(moved[self.plate.identifier]["parent"], holder.identifier)
+      self.assertEqual(moved[self.plate.identifier]["location"], {"x": 5.0, "y": 5.0, "z": 50.0})
       self.assertEqual(self.viewer.rebuilds, 0)
     finally:
       await ws.close()
@@ -379,10 +392,10 @@ class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
     await self.pipettes.pick_up_tips([self.rack.get_item("A1")])
     tip = self.pipettes.get_mounted_tip(0)
     assert tip is not None
-    await self.told(ws, tip.name)  # the pick-up's scene and snapshot
+    await self.told(ws, tip.identifier)  # the pick-up's scene and snapshot
     aspirating = asyncio.ensure_future(self.pipettes.aspirate([self.well], [50.0]))
     await asyncio.wait_for(self.drawing.wait(), 10)
-    return tip, await self.told(ws, tip.name), aspirating
+    return tip, await self.told(ws, tip.identifier), aspirating
 
   async def test_a_mounted_tip_is_told_its_committed_volume(self):
     """While the command runs the tip's booking is pending, and the page shows `volume`: it
@@ -393,7 +406,7 @@ class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
       tip, during, aspirating = await self.aspirate_held(ws)
       self.release.set()
       await aspirating
-      after = await self.told(ws, tip.name)
+      after = await self.told(ws, tip.identifier)
     finally:
       self.release.set()
       await ws.close()
@@ -412,7 +425,7 @@ class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
       self.release.set()
       with self.assertRaises(CommandFailed):
         await aspirating
-      after = await self.told(ws, tip.name)
+      after = await self.told(ws, tip.identifier)
     finally:
       self.release.set()
       await ws.close()

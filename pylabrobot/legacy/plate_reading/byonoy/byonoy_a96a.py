@@ -7,7 +7,7 @@ from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.rotation import Rotation
 
 
-def byonoy_sbs_adapter(name: str) -> ResourceHolder:
+def byonoy_sbs_adapter(name: str, *, identifier: Optional[str] = None) -> ResourceHolder:
   """Create a Byonoy SBS adapter `ResourceHolder`.
 
   This helper returns a `ResourceHolder` describing the physical footprint of the
@@ -28,6 +28,7 @@ def byonoy_sbs_adapter(name: str) -> ResourceHolder:
       y=-(95.48 - 85.48) / 2,
       z=17.0,
     ),
+    identifier=identifier,
   )
 
 
@@ -45,6 +46,9 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
     child_location: Coordinate = Coordinate.zero(),
     category: str = "plate_holder",
     model: Optional[str] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -55,6 +59,8 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
       child_location=child_location,
       category=category,
       model=model,
+      identifier=identifier,
+      metadata=metadata,
     )
     self._byonoy_base: Optional["ByonoyAbsorbanceBaseUnit"] = None
 
@@ -85,6 +91,9 @@ class ByonoyAbsorbanceBaseUnit(Resource):
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
     preferred_pickup_location: Optional[Coordinate] = None,
+    *,
+    identifier: Optional[str] = None,
+    metadata: Optional[dict] = None,
   ):
     super().__init__(
       name=name,
@@ -96,6 +105,8 @@ class ByonoyAbsorbanceBaseUnit(Resource):
       model=model,
       barcode=barcode,
       preferred_pickup_location=preferred_pickup_location,
+      identifier=identifier,
+      metadata=metadata,
     )
 
     self.plate_holder = _ByonoyAbsorbanceReaderPlateHolder(
@@ -134,8 +145,12 @@ class ByonoyAbsorbanceBaseUnit(Resource):
 
 
 class ByonoyAbsorbance96Automate(PlateReader, ByonoyAbsorbanceBaseUnit):
-  def __init__(self, name: str):
-    ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base")
+  def __init__(
+    self, name: str, *, identifier: Optional[str] = None, metadata: Optional[dict] = None
+  ):
+    ByonoyAbsorbanceBaseUnit.__init__(
+      self, name=name + "_base", identifier=identifier, metadata=metadata
+    )
     PlateReader.__init__(
       self,
       name=name + "_reader",
@@ -143,25 +158,31 @@ class ByonoyAbsorbance96Automate(PlateReader, ByonoyAbsorbanceBaseUnit):
       size_y=95.7,
       size_z=0,
       backend=ByonoyAbsorbance96AutomateBackend(),
+      identifier=identifier,
+      metadata=metadata,
     )
 
 
-def byonoy_a96a_detection_unit(name: str) -> ByonoyAbsorbance96Automate:
+def byonoy_a96a_detection_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyAbsorbance96Automate:
   """Create a Byonoy A96A detection unit `PlateReader`.
 
   The detection unit is modeled as a fixed-size rectangular prism.
   """
 
-  return ByonoyAbsorbance96Automate(name=name)
+  return ByonoyAbsorbance96Automate(name=name, identifier=identifier)
 
 
-def byonoy_a96a_parking_unit(name: str) -> ByonoyAbsorbanceBaseUnit:
+def byonoy_a96a_parking_unit(
+  name: str, *, identifier: Optional[str] = None
+) -> ByonoyAbsorbanceBaseUnit:
   """Create a Byonoy A96A detection unit holder."""
 
-  return ByonoyAbsorbanceBaseUnit(name=name)
+  return ByonoyAbsorbanceBaseUnit(name=name, identifier=identifier)
 
 
-def byonoy_a96a_illumination_unit(name: str) -> Resource:
+def byonoy_a96a_illumination_unit(name: str, *, identifier: Optional[str] = None) -> Resource:
   """ """
   size_x = 155.26
   size_y = 95.48
@@ -172,6 +193,7 @@ def byonoy_a96a_illumination_unit(name: str) -> Resource:
     size_z=42.898,
     model="Byonoy A96A Illumination Unit",
     preferred_pickup_location=Coordinate(x=size_x / 2, y=size_y / 2, z=29.5),
+    identifier=identifier,
   )
 
 

@@ -17,7 +17,8 @@ class HamiltonCoreGripperToolTests(unittest.TestCase):
       serialize(tool),
       {
         "type": "HamiltonCoreGripperTool",
-        "name": "core_gripper_tool",
+        "identifier": tool.identifier,
+        "metadata": {"name": "core_gripper_tool"},
         "size_x": 36.0,
         "size_y": 8.346,
         "size_z": 32.0,
