@@ -50,14 +50,14 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
         server, client, driver = system
         with block_calls(driver.acquire_scan_position) as (capture_entered, capture_release):
           job = await capture(client, "first")
-          assert (await job.status()).state == job_pb.JOB_STATE_READY
+          assert (await job.get_status()).state == job_pb.JOB_STATE_READY
           assert not await job.list_frames()
           assert (await capture(client, "first")).identifier == job.identifier
           with self.assertRaises(grpc.aio.AioRpcError) as mismatch:
             await capture(client, "first", exposure_ms=2)
           assert mismatch.exception.code() == grpc.StatusCode.INVALID_ARGUMENT
           conflict = await capture(client, "second")
-          async with job.updates() as updates:
+          async with job.watch_status() as updates:
             assert (await updates.get()).state == job_pb.JOB_STATE_READY
             await job.start()
             await job.start()
@@ -76,7 +76,7 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
           await client.disconnect()
           await server.session.jobs[job.identifier].task
           await client.connect()
-          recovered = await client.recover("first")
+          recovered = await client.recover_job("first")
           assert recovered.identifier == job.identifier
           assert (await recovered.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
           assert await recovered.get_frame(first.frame_id) == frame
@@ -111,7 +111,7 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
             assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
             info = (await job.list_frames())[0]
             transfer = asyncio.create_task(job.get_frame(info.frame_id))
-            assert (await asyncio.wait_for(job.status(), 5)).completed == 1
+            assert (await asyncio.wait_for(job.get_status(), 5)).completed == 1
             frame = await asyncio.wait_for(transfer, 10)
             assert frame.width == width and frame.height == height
             assert frame.pixel_format == f"Mono{depth}" and frame.encoding == "PNG"
@@ -129,7 +129,7 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
       async with rpc_system(tmp_path) as system:
         _, client, driver = system
         with block_calls(driver.acquire_scan_position) as (capture_entered, capture_release):
-          async with client.status_updates() as status, client.previews() as previews:
+          async with client.watch_status() as status, client.watch_previews() as previews:
             assert (await status.get()).state == device_pb.OPERATIONAL_STATE_READY
             job = await capture(client, "preview")
             await job.start()
@@ -146,7 +146,7 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
             assert (
               await asyncio.wait_for(status.get(), 5)
             ).state == device_pb.OPERATIONAL_STATE_READY
-          async with client.previews() as previews:
+          async with client.watch_previews() as previews:
             assert (
               await previews.get() == frame
             )  # Subscribing replays the latest; no new acquisition.
@@ -157,7 +157,7 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
       async with rpc_system(tmp_path) as system:
         server, client, driver = system
         with self.assertRaises(grpc.aio.AioRpcError) as missing:
-          await client.recover("missing")
+          await client.recover_job("missing")
         assert missing.exception.code() == grpc.StatusCode.NOT_FOUND
         job = await capture(client, "one")
         with self.assertRaises(grpc.aio.AioRpcError) as missing:
@@ -289,7 +289,7 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
         proxy_client = CeligoClient(endpoint, device_id=client.device_id, timeout=3)
         try:
           await proxy_client.connect()
-          remote = await proxy_client.recover("interrupted")
+          remote = await proxy_client.recover_job("interrupted")
           cut_after = 100000
           interrupted = asyncio.create_task(remote.get_frame(info.frame_id))
           await asyncio.wait_for(cut.wait(), 5)
@@ -302,11 +302,11 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
           await proxy_client.disconnect()
           cut_after = None
           await proxy_client.connect()
-          recovered = await proxy_client.recover("interrupted")
+          recovered = await proxy_client.recover_job("interrupted")
           frame = await recovered.get_frame(info.frame_id)
           assert hashlib.sha256(frame.image).hexdigest() == info.sha256
           assert len(frame.image) == info.byte_length
-          assert (await recovered.status()).completed == 1
+          assert (await recovered.get_status()).completed == 1
         finally:
           with contextlib.suppress(ConnectionError):
             await proxy_client.disconnect()

@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 
 import grpc
 
-from pylabrobot.revvity.celigo.grpc.client import CeligoClient, acquisition_metadata
+from pylabrobot.revvity.celigo.grpc.client import CeligoClient, unpack_acquisition_metadata
 from pylabrobot.revvity.celigo.grpc.tests.helpers import make_server
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
@@ -52,19 +52,19 @@ class StorageCompatibilityTests(unittest.IsolatedAsyncioTestCase):
         await server.start()
         try:
           async with CeligoClient(server.endpoint, device_id="legacy-device") as client:
-            info = await client.device_info()
+            info = await client.get_device_info()
             assert info.instance_id and info.instance_id != instance_id
             instance_id = info.instance_id
-            assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
+            assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
             assert len(server.session.jobs) == 3
             for name in ("retained", "released", "interrupted"):
-              job = await client.recover(name)
-              status = await job.status()
+              job = await client.recover_job(name)
+              status = await job.get_status()
               assert status.state == job_pb.JOB_STATE_FINISHED and status.completed == 1
               assert status.outcome == (
                 job_pb.OUTCOME_INTERRUPTED if name == "interrupted" else job_pb.OUTCOME_SUCCEEDED
               )
-              retention = await job.image_retention()
+              retention = await job.get_image_retention()
               assert retention.images_released == (name == "released")
               frames = await job.list_frames()
               assert len(frames) == 1 and frames[0].available != retention.images_released
@@ -77,7 +77,7 @@ class StorageCompatibilityTests(unittest.IsolatedAsyncioTestCase):
                 assert frame.image == expected[name]
                 assert hashlib.sha256(frame.image).hexdigest() == frame.sha256
                 assert frame.width == frame.height == 8
-                assert acquisition_metadata(frame).channel == "brightfield"
+                assert unpack_acquisition_metadata(frame).channel == "brightfield"
             assert all(job.task is None for job in server.session.jobs.values())
             driver.setup.assert_not_awaited()
             driver.acquire_scan_position.assert_not_awaited()

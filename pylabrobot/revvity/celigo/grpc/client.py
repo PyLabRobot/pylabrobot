@@ -21,7 +21,7 @@ from pylabrobot.rpc.v1 import images_pb2 as image_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 
-def acquisition_metadata(frame: image_pb.ImageFrame) -> pb.AcquisitionMetadata:
+def unpack_acquisition_metadata(frame: image_pb.ImageFrame) -> pb.AcquisitionMetadata:
   """Decode Celigo metadata explicitly, rejecting a different device's metadata type."""
   result = pb.AcquisitionMetadata()
   if not frame.metadata.Unpack(result):
@@ -45,7 +45,7 @@ class CeligoClient(DeviceClient):
     """Validate device identity and required capabilities before binding optional clients."""
     await super().connect()
     try:
-      info = await self.device_info()
+      info = await self.get_device_info()
       if not {JOB_SERVICE, IMAGE_SERVICE}.issubset(info.services):
         raise ValueError("device does not advertise the required job and image capabilities")
       assert self.channel is not None
@@ -59,20 +59,20 @@ class CeligoClient(DeviceClient):
 
   def bind_job(self, ref: job_pb.JobRef) -> CeligoImagingJob:
     """Bind a typed creation result to this device and its image client."""
-    job = self.jobs.bind(ref)
+    job = self.jobs.bind_job(ref)
     return CeligoImagingJob(self.jobs.stub, self.images, job.ref, self.timeout)
 
-  async def recover(self, request_id: str) -> CeligoImagingJob:
+  async def recover_job(self, request_id: str) -> CeligoImagingJob:
     """Recover the original operation without creating another acquisition."""
-    return self.bind_job((await self.jobs.recover(request_id)).ref)
+    return self.bind_job((await self.jobs.recover_job(request_id)).ref)
 
   @asynccontextmanager
-  async def previews(self) -> AsyncIterator[Updates[image_pb.ImageFrame]]:
+  async def watch_previews(self) -> AsyncIterator[Updates[image_pb.ImageFrame]]:
     """Observe complete previews without starting capture."""
-    async with self.images.previews() as updates:
+    async with self.images.watch_previews() as updates:
       yield updates
 
-  async def configuration(self) -> pb.CeligoConfiguration:
+  async def get_configuration(self) -> pb.CeligoConfiguration:
     """Read the calibration-derived configuration for request binding."""
     return await self.operations.GetConfiguration(self.request, timeout=self.timeout)
 

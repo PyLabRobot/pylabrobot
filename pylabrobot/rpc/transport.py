@@ -18,7 +18,9 @@ API_VERSION = "pylabrobot.rpc.v1"
 logger = logging.getLogger(__name__)
 
 
-def channel_options(maximum_message_bytes: int = 4 * 1024 * 1024) -> tuple[tuple[str, int], ...]:
+def build_channel_options(
+  maximum_message_bytes: int = 4 * 1024 * 1024,
+) -> tuple[tuple[str, int], ...]:
   """Set explicit message bounds and require applications to reconcile ambiguous writes."""
   if maximum_message_bytes <= 0:
     raise ValueError("maximum_message_bytes must be positive")
@@ -43,7 +45,7 @@ def require_device(actual: str, expected: str) -> None:
 
 
 @asynccontextmanager
-async def rpc_errors(context: grpc.aio.ServicerContext) -> AsyncIterator[None]:
+async def translate_rpc_errors(context: grpc.aio.ServicerContext) -> AsyncIterator[None]:
   """Translate application failures into consistent gRPC status codes."""
   try:
     yield

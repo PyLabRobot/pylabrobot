@@ -55,7 +55,7 @@ point, directory = sys.argv[1:]
 def checkpoint(self, stage, status):
     if stage == point and status.request_id == 'crash-target':
         os._exit(87)
-JobStore.checkpoint = checkpoint
+JobStore.on_transaction_boundary = checkpoint
 async def run():
     server, driver = make_server(Path(directory))
     release = asyncio.Event()
@@ -117,12 +117,12 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
       tmp_path = Path(temporary_directory)
       directory = tmp_path / "data"
       async with local_server(directory) as (_, client):
-        assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
+        assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
         ready = await capture(client, "ready")
         with self.assertRaises(grpc.aio.AioRpcError) as uninitialized:
           await ready.start()
         assert uninitialized.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
-        assert (await ready.status()).state == job_pb.JOB_STATE_READY
+        assert (await ready.get_status()).state == job_pb.JOB_STATE_READY
         await initialize(client)
         completed = await capture(client, "completed")
         await completed.start()
@@ -134,17 +134,17 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         ids = (ready.identifier, completed.identifier, cancelled.identifier)
 
       async with local_server(directory) as (server, client):
-        assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
-        ready = await client.recover("ready")
-        completed = await client.recover("completed")
-        cancelled = await client.recover("cancelled")
+        assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
+        ready = await client.recover_job("ready")
+        completed = await client.recover_job("completed")
+        cancelled = await client.recover_job("cancelled")
         assert (ready.identifier, completed.identifier, cancelled.identifier) == ids
-        assert (await ready.status()).state == job_pb.JOB_STATE_READY
-        assert await completed.status() == final
+        assert (await ready.get_status()).state == job_pb.JOB_STATE_READY
+        assert await completed.get_status() == final
         assert await completed.get_frame(info.frame_id) == frame
-        assert (await cancelled.status()).outcome == job_pb.OUTCOME_CANCELLED
+        assert (await cancelled.get_status()).outcome == job_pb.OUTCOME_CANCELLED
         assert (await capture(client, "completed")).identifier == completed.identifier
-        async with client.previews() as updates:
+        async with client.watch_previews() as updates:
           assert await asyncio.wait_for(updates.get(), 2) == frame
         assert all(job.task is None for job in server.session.jobs.values())
         with self.assertRaises(grpc.aio.AioRpcError):
@@ -188,17 +188,17 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
             assert await asyncio.wait_for(process.wait(), 5) == 87
 
           async with process_server(directory) as (_, client):
-            assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
+            assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
             if state is None:
               with self.assertRaises(grpc.aio.AioRpcError) as absent:
-                await client.recover("crash-target")
+                await client.recover_job("crash-target")
               assert absent.exception.code() == grpc.StatusCode.NOT_FOUND
             else:
-              job = await client.recover("crash-target")
-              status = await job.status()
+              job = await client.recover_job("crash-target")
+              status = await job.get_status()
               assert (status.state, status.outcome, status.completed) == (state, outcome, frames)
               assert status.state_durable
-              assert (await job.image_retention()).images_released == released
+              assert (await job.get_image_retention()).images_released == released
               assert status.cancellation_requested == (point == "cancel.after_commit")
               assert (await capture(client, "crash-target")).identifier == job.identifier
               metadata = await job.list_frames()
@@ -213,7 +213,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
                   image = await job.get_frame(info.frame_id)
                   assert hashlib.sha256(image.image).hexdigest() == info.sha256
               # Reopening again cannot resurrect an interrupted run or replay a frame.
-              assert (await job.status()).completed == frames
+              assert (await job.get_status()).completed == frames
           with sqlite3.connect(directory / "jobs.sqlite3") as db:
             assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
             for stored, last_transition in db.execute(
@@ -237,15 +237,15 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         await initialize(client, "initialize-again")
         job = await capture(client, "kill")
         await job.start()
-        assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
+        assert (await job.get_status()).state == job_pb.JOB_STATE_RUNNING
         process.kill()
         await process.wait()
       async with process_server(directory) as (_, client):
-        recovered = await client.recover("kill")
-        status = await recovered.status()
+        recovered = await client.recover_job("kill")
+        status = await recovered.get_status()
         assert status.outcome == job_pb.OUTCOME_INTERRUPTED and status.completed == 0
         assert not await recovered.list_frames()
-        completed = await client.recover("completed")
+        completed = await client.recover_job("completed")
         assert await completed.get_frame(info.frame_id) == frame
         with self.assertRaises(grpc.aio.AioRpcError):
           await recovered.start()
@@ -255,7 +255,8 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
       tmp_path = Path(temporary_directory)
       directory = tmp_path / "data"
       async with local_server(
-        directory, storage_quota=JobSpecification(width=64, height=48).reservation()
+        directory,
+        storage_quota=JobSpecification(width=64, height=48).calculate_storage_reservation(),
       ) as (_, client):
         await initialize(client)
         job = await capture(client, "retained")
@@ -271,16 +272,17 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
           await capture(client, "second")
         released = await job.release_images()
         assert released.images_released
-        assert (await job.status()).outcome == job_pb.OUTCOME_SUCCEEDED
+        assert (await job.get_status()).outcome == job_pb.OUTCOME_SUCCEEDED
         assert await job.release_images() == released
         assert not (await job.list_frames())[0].available
         assert (await capture(client, "retained")).identifier == job.identifier
         await capture(client, "second")
       async with local_server(
-        directory, storage_quota=JobSpecification(width=64, height=48).reservation()
+        directory,
+        storage_quota=JobSpecification(width=64, height=48).calculate_storage_reservation(),
       ) as (_, client):
-        job = await client.recover("retained")
-        assert (await job.image_retention()).images_released
+        job = await client.recover_job("retained")
+        assert (await job.get_image_retention()).images_released
         with self.assertRaises(grpc.aio.AioRpcError) as released:
           await job.get_frame(info.frame_id)
         assert released.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
@@ -309,23 +311,23 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
             pages = store.connection.execute("PRAGMA page_count").fetchone()[0]
             store.connection.execute(f"PRAGMA max_page_count={pages + 2}")
 
-          await store.call(fill_database)
+          await store.run_in_worker(fill_database)
           capture_release.set()
           status = await job.wait()
           assert status.outcome == job_pb.OUTCOME_FAILED and status.completed == 0
           assert "full" in status.error
           assert not await job.list_frames()
           assert (await retained.get_frame(info.frame_id)).sha256 == info.sha256
-          assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
+          assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_FAULTED
           with self.assertRaises(grpc.aio.AioRpcError):
             await capture(client, "unsafe-after-fault")
       async with local_server(directory, config=make_config(256, 256)) as (_, client):
-        recovered = await client.recover("disk-full")
-        result = await recovered.status()
+        recovered = await client.recover_job("disk-full")
+        result = await recovered.get_status()
         assert result.outcome in (job_pb.OUTCOME_FAILED, job_pb.OUTCOME_INTERRUPTED)
         assert result.completed == 0
         assert not await recovered.list_frames()
-        retained = await client.recover("retained")
+        retained = await client.recover_job("retained")
         assert (await retained.get_frame(info.frame_id)).sha256 == info.sha256
 
   async def test_admission_checks_free_space_and_record_capacity(self) -> None:
@@ -364,7 +366,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
                 if not release.wait(5):
                   raise RuntimeError("test did not release the commit")
 
-            with patch.object(JobStore, "checkpoint", hold):
+            with patch.object(JobStore, "on_transaction_boundary", hold):
               job = None
               if point.startswith("start"):
                 job = await capture(client, "lost-response")
@@ -385,10 +387,10 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
                 if job is not None:
                   job.timeout = 20
               await asyncio.gather(*list(server.session.commands))
-              recovered = await client.recover("lost-response")
+              recovered = await client.recover_job("lost-response")
               assert (await capture(client, "lost-response")).identifier == recovered.identifier
               if point.startswith("create"):
-                assert (await recovered.status()).state == job_pb.JOB_STATE_READY
+                assert (await recovered.get_status()).state == job_pb.JOB_STATE_READY
                 await recovered.start()
               assert (await recovered.wait()).completed == 1
               assert len(await recovered.list_frames()) == 1
@@ -402,13 +404,13 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         competing, _ = make_server(directory)
         with self.assertRaises(BusyError):
           await competing.start()
-        assert (await ready.status()).configuration_id == client.configuration_id
+        assert (await ready.get_status()).configuration_id == client.configuration_id
       wrong, _ = make_server(directory, device_id="another-device")
       with self.assertRaisesRegex(StateError, "device_id mismatch"):
         await wrong.start()
       async with local_server(directory, connection_id="another-controller") as (_, client):
         await initialize(client)
-        old = await client.recover("old-configuration")
+        old = await client.recover_job("old-configuration")
         with self.assertRaises(grpc.aio.AioRpcError) as stale:
           await old.start()
         assert stale.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
@@ -426,7 +428,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         await job.wait()
         info = (await job.list_frames())[0]
         store = server.session.store
-        await store.call(
+        await store.run_in_worker(
           lambda: store.connection.execute(
             "UPDATE frames SET image=? WHERE frame_id=?",
             (b"damaged", info.frame_id),
@@ -435,8 +437,8 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(grpc.aio.AioRpcError) as corrupt:
           await job.get_frame(info.frame_id)
         assert corrupt.exception.code() == grpc.StatusCode.DATA_LOSS
-        assert (await job.status()).completed == 1
-        assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
+        assert (await job.get_status()).completed == 1
+        assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_FAULTED
 
   async def test_failure_to_save_completion_is_explicit_and_recovered(self) -> None:
     with TemporaryDirectory() as temporary_directory:
@@ -445,23 +447,23 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
       async with local_server(directory) as (server, client):
         await initialize(client)
         store = server.session.store
-        save = store.save
+        save = store.save_job_status
 
         def fail_completion(status, action):
           if action == "finish" and status.request_id == "unsaved-completion":
             raise sqlite3.OperationalError("disk I/O error")
           return save(status, action)
 
-        with patch.object(store, "save", fail_completion):
+        with patch.object(store, "save_job_status", fail_completion):
           job = await capture(client, "unsaved-completion")
           await job.start()
           result = await job.wait()
           assert result.outcome == job_pb.OUTCOME_FAILED and not result.state_durable
           assert result.completed == 1 and "could not be persisted" in result.error
-          assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
+          assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_FAULTED
       async with local_server(directory) as (_, client):
-        job = await client.recover("unsaved-completion")
-        recovered = await job.status()
+        job = await client.recover_job("unsaved-completion")
+        recovered = await job.get_status()
         assert recovered.state_durable and recovered.outcome == job_pb.OUTCOME_INTERRUPTED
         assert recovered.completed == len(await job.list_frames()) == 1
 
@@ -478,14 +480,14 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
             if not release.wait(5):
               raise RuntimeError("test did not release the disk")
 
-        with patch.object(JobStore, "checkpoint", hold):
+        with patch.object(JobStore, "on_transaction_boundary", hold):
           pending = asyncio.create_task(capture(client, "blocked"))
           try:
             assert await asyncio.to_thread(entered.wait, 3)
             with self.assertRaises(grpc.aio.AioRpcError) as overloaded:
               await capture(client, "overflow")
             assert overloaded.exception.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
-            assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
+            assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
           finally:
             release.set()
-          assert (await (await pending).status()).state == job_pb.JOB_STATE_READY
+          assert (await (await pending).get_status()).state == job_pb.JOB_STATE_READY

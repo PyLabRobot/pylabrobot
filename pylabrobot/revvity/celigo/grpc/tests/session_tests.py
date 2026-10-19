@@ -18,7 +18,7 @@ from pylabrobot.revvity.celigo.celigo import ControllerStatus
 from pylabrobot.revvity.celigo.config import DigitalIOConfig
 from pylabrobot.revvity.celigo.grpc.client import (
   CeligoClient,
-  acquisition_metadata,
+  unpack_acquisition_metadata,
 )
 from pylabrobot.revvity.celigo.grpc.job_specification import JobSpecification
 from pylabrobot.revvity.celigo.grpc.job_store import JobStore
@@ -77,7 +77,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         driver.close_drawer_to_sample_mm.assert_awaited_once_with(63.5, 43)
         factory.assert_called_once_with()
         self.assertEqual(len(server.session.jobs), 1)
-        self.assertEqual((await client.status()).state, device_pb.OPERATIONAL_STATE_READY)
+        self.assertEqual((await client.get_status()).state, device_pb.OPERATIONAL_STATE_READY)
 
   async def test_invalid_door_requests_do_not_move_or_fault(self) -> None:
     """Reject missing, invalid, and misaddressed targets before hardware access."""
@@ -109,7 +109,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.exception.code(), grpc.StatusCode.NOT_FOUND)
         driver.open_drawer.assert_not_awaited()
         driver.close_drawer_to_sample_mm.assert_not_awaited()
-        self.assertEqual((await client.status()).state, device_pb.OPERATIONAL_STATE_READY)
+        self.assertEqual((await client.get_status()).state, device_pb.OPERATIONAL_STATE_READY)
 
   async def test_door_motion_keeps_ownership_after_rpc_deadline(self) -> None:
     """A lost RPC response cannot allow acquisition or another door command to overlap."""
@@ -124,7 +124,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
           with self.assertRaises(grpc.aio.AioRpcError) as expired:
             await call
           self.assertEqual(expired.exception.code(), grpc.StatusCode.DEADLINE_EXCEEDED)
-          async with client.status_updates() as updates:
+          async with client.watch_status() as updates:
             busy = await asyncio.wait_for(updates.get(), 5)
             self.assertEqual(busy.state, device_pb.OPERATIONAL_STATE_BUSY)
             self.assertEqual(busy.active_job_id, "")
@@ -176,7 +176,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
           await client.close_door(sample_x_mm=63.5, sample_y_mm=43)
         self.assertEqual(error.exception.code(), grpc.StatusCode.INTERNAL)
         driver.stop.assert_awaited_once_with()
-        self.assertEqual((await client.status()).state, device_pb.OPERATIONAL_STATE_FAULTED)
+        self.assertEqual((await client.get_status()).state, device_pb.OPERATIONAL_STATE_FAULTED)
         with self.assertRaises(grpc.aio.AioRpcError) as error:
           await client.open_door()
         self.assertEqual(error.exception.code(), grpc.StatusCode.UNAVAILABLE)
@@ -187,9 +187,9 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
       tmp_path = Path(temporary_directory)
       async with hardware_system(tmp_path, make_config()) as hardware:
         _, client, driver, factory = hardware
-        assert (await client.device_info()).device_type == "Celigo"
-        assert (await client.configuration()).channels == ["brightfield"]
-        assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
+        assert (await client.get_device_info()).device_type == "Celigo"
+        assert (await client.get_configuration()).channels == ["brightfield"]
+        assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
         job = await capture(client)
         assert (await capture(client)).identifier == job.identifier
         with self.assertRaises(grpc.aio.AioRpcError) as error:
@@ -283,7 +283,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         assert settings["channel"] == "brightfield"
         assert settings["autofocus"] is None and settings["machine_auto_exposure"] is False
         assert settings["settled_stage_position_mm"] == driver.move_to_scan_block.return_value
-        metadata = acquisition_metadata(frame)
+        metadata = unpack_acquisition_metadata(frame)
         assert metadata.sample_x_mm == 63.5
         assert metadata.stage_x_mm != 63.5
         assert metadata.exposure_ms == 1.25 and metadata.gain == 1.1
@@ -308,17 +308,17 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
             await job.start()
             await asyncio.wait_for(capture_entered.wait(), 5)
             await job.cancel()
-            assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
+            assert (await job.get_status()).state == job_pb.JOB_STATE_RUNNING
             capture_release.set()
             await asyncio.wait_for(stop_entered.wait(), 5)
-            assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
+            assert (await job.get_status()).state == job_pb.JOB_STATE_RUNNING
             with self.assertRaises(grpc.aio.AioRpcError) as busy:
               await other.start()
             assert busy.exception.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
             stop_release.set()
             final = await job.wait()
             assert final.outcome == job_pb.OUTCOME_CANCELLED and final.completed == 1
-            assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
+            assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
 
   async def test_client_disconnection_does_not_cancel_capture(self) -> None:
     with TemporaryDirectory() as temporary_directory:
@@ -333,7 +333,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
           await client.disconnect()
           capture_release.set()
           await client.connect()
-          recovered = await client.recover("capture")
+          recovered = await client.recover_job("capture")
           assert recovered.identifier == job.identifier
           assert (await recovered.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
           driver.acquire_scan_position.assert_awaited_once()
@@ -356,7 +356,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
             await job.start()
             final = await job.wait()
             assert final.outcome == job_pb.OUTCOME_FAILED
-            assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
+            assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_FAULTED
             driver.stop.assert_awaited_once()
             if failure == "controller":
               driver.move_to_scan_block.assert_not_awaited()
@@ -377,7 +377,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         def fail(*_args):
           raise StorageError("disk full")
 
-        with patch.object(server.session.store, "save", fail):
+        with patch.object(server.session.store, "save_job_status", fail):
           with self.assertRaises(grpc.aio.AioRpcError) as error:
             await job.start()
           assert error.exception.code() == grpc.StatusCode.UNAVAILABLE
@@ -401,7 +401,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
               "request_controller_status",
               "stop",
             ]
-            assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
+            assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_FAULTED
             assert not await job.list_frames()
 
   async def test_configured_door_input_blocks_imaging(self) -> None:
@@ -455,7 +455,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
           execution = server.session.jobs[job.identifier]
           execution.task.cancel()
           await asyncio.sleep(0)
-          assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
+          assert (await job.get_status()).state == job_pb.JOB_STATE_RUNNING
           assert server.session.active_job is execution
           capture_release.set()
           assert (await job.wait()).outcome == job_pb.OUTCOME_INTERRUPTED
@@ -475,11 +475,11 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         frame = await job.get_frame(frame_info.frame_id)
       async with hardware_system(tmp_path, config) as (_, client, driver, factory):
         assert factory.call_count == 0 and driver.method_calls == []
-        recovered = await client.recover("capture")
+        recovered = await client.recover_job("capture")
         assert await recovered.get_frame(frame_info.frame_id) == frame
-        inert = await client.recover("ready")
+        inert = await client.recover_job("ready")
         assert inert.identifier == ready.identifier
-        assert (await inert.status()).state == job_pb.JOB_STATE_READY
+        assert (await inert.get_status()).state == job_pb.JOB_STATE_READY
         with self.assertRaises(grpc.aio.AioRpcError):
           await inert.start()
         assert factory.call_count == 0

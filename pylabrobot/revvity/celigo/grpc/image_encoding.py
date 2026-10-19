@@ -15,7 +15,7 @@ from pylabrobot.rpc.v1 import images_pb2 as image_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 
-def public_frame(frame: stored_pb.ImageFrame) -> image_pb.ImageFrame:
+def build_public_image_frame(frame: stored_pb.ImageFrame) -> image_pb.ImageFrame:
   """Wrap complete pixels and explicitly typed Celigo metadata in a shared envelope."""
   result = image_pb.ImageFrame(
     job=frame.job,

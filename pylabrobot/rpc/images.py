@@ -8,7 +8,7 @@ from typing import Protocol
 
 import grpc
 
-from pylabrobot.rpc.transport import Updates, require_device, rpc_errors
+from pylabrobot.rpc.transport import Updates, require_device, translate_rpc_errors
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import images_pb2 as pb
 from pylabrobot.rpc.v1 import images_pb2_grpc as rpc
@@ -25,11 +25,11 @@ class ImageBackend(Protocol):
     """Return the instrument owning these images."""
     ...
 
-  def image_capabilities(self) -> pb.ImageCapabilities:
+  def get_image_capabilities(self) -> pb.ImageCapabilities:
     """Describe supported representations and payload/retention limits."""
     ...
 
-  async def image_retention(self, job_id: str) -> pb.ImageRetention:
+  async def get_image_retention(self, job_id: str) -> pb.ImageRetention:
     """Read whether a job's images have been explicitly released."""
     ...
 
@@ -45,7 +45,7 @@ class ImageBackend(Protocol):
     """Read one complete retained image without triggering another acquisition."""
     ...
 
-  def watch_preview(self) -> AsyncGenerator[pb.ImageFrame, None]:
+  def watch_previews(self) -> AsyncGenerator[pb.ImageFrame, None]:
     """Observe complete previews without starting capture."""
     ...
 
@@ -61,23 +61,23 @@ class ImageService(rpc.ImageServiceServicer):
     self, request: device_pb.DeviceRequest, context: grpc.aio.ServicerContext
   ) -> pb.ImageCapabilities:
     """Read limits specific to image-capable devices."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
-      return self.backend.image_capabilities()
+      return self.backend.get_image_capabilities()
 
   async def GetJobImageRetention(
     self, request: job_pb.JobRef, context: grpc.aio.ServicerContext
   ) -> pb.ImageRetention:
     """Read pixel retention separately from generic job status."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
-      return await self.backend.image_retention(request.job_id)
+      return await self.backend.get_image_retention(request.job_id)
 
   async def ReleaseJobImages(
     self, request: job_pb.JobRef, context: grpc.aio.ServicerContext
   ) -> pb.ImageRetention:
     """Request explicit release under the device's durability rules."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
       return await self.backend.release_images(request.job_id)
 
@@ -85,7 +85,7 @@ class ImageService(rpc.ImageServiceServicer):
     self, request: pb.ListFramesRequest, context: grpc.aio.ServicerContext
   ) -> pb.FramePage:
     """Page frame metadata, never image bytes."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.job.device_id, self.backend.device_id)
       return await self.backend.list_frames(
         request.job.job_id, request.after_sequence, request.limit
@@ -95,7 +95,7 @@ class ImageService(rpc.ImageServiceServicer):
     self, request: pb.GetFrameRequest, context: grpc.aio.ServicerContext
   ) -> pb.ImageFrame:
     """Deliver one complete encoded image."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.job.device_id, self.backend.device_id)
       return await self.backend.get_frame(request.job.job_id, request.frame_id)
 
@@ -103,9 +103,9 @@ class ImageService(rpc.ImageServiceServicer):
     self, request: device_pb.DeviceRequest, context: grpc.aio.ServicerContext
   ) -> AsyncIterator[pb.ImageFrame]:
     """Observe latest complete previews without owning an acquisition task."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
-      async with aclosing(self.backend.watch_preview()) as updates:
+      async with aclosing(self.backend.watch_previews()) as updates:
         async for frame in updates:
           yield frame
 
@@ -119,18 +119,18 @@ class ImageClient:
     self.device_id = device_id
     self.timeout = timeout
 
-  async def capabilities(self) -> pb.ImageCapabilities:
+  async def get_image_capabilities(self) -> pb.ImageCapabilities:
     """Read image limits without pulling them into common device identity."""
     return await self.stub.GetCapabilities(
       device_pb.DeviceRequest(device_id=self.device_id), timeout=self.timeout
     )
 
-  async def retention(self, job: job_pb.JobRef) -> pb.ImageRetention:
+  async def get_image_retention(self, job: job_pb.JobRef) -> pb.ImageRetention:
     """Read whether retained pixels were explicitly released."""
     require_device(job.device_id, self.device_id)
     return await self.stub.GetJobImageRetention(job, timeout=self.timeout)
 
-  async def release(self, job: job_pb.JobRef) -> pb.ImageRetention:
+  async def release_images(self, job: job_pb.JobRef) -> pb.ImageRetention:
     """Explicitly release a finished job's pixels after the application archives them."""
     require_device(job.device_id, self.device_id)
     return await self.stub.ReleaseJobImages(job, timeout=self.timeout)
@@ -154,7 +154,7 @@ class ImageClient:
     )
 
   @asynccontextmanager
-  async def previews(self) -> AsyncIterator[Updates[pb.ImageFrame]]:
+  async def watch_previews(self) -> AsyncIterator[Updates[pb.ImageFrame]]:
     """Watch previews; context exit cancels only this subscription."""
     call = self.stub.WatchPreview(device_pb.DeviceRequest(device_id=self.device_id))
     try:

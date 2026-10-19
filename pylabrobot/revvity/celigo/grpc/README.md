@@ -109,13 +109,13 @@ async def retrieve() -> list[bytes]:
     "127.0.0.1:50052",
     device_id="celigo-01",
   ) as client:
-    job = await client.recover("existing-capture-request-id")
+    job = await client.recover_job("existing-capture-request-id")
     frames = await job.list_frames()
     return [(await job.get_frame(frame.frame_id)).image for frame in frames]
 ```
 
-Use `acquisition_metadata(frame)` from the client module to unpack and validate
-Celigo metadata. `job.image_retention()` reads release state, and
+Use `unpack_acquisition_metadata(frame)` from the client module to unpack and validate
+Celigo metadata. `job.get_image_retention()` reads release state, and
 `job.release_images()` returns that state after durable release.
 
 On an initialized instrument, use `await client.open_door()` to eject the drawer,

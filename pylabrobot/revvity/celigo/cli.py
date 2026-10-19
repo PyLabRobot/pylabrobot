@@ -64,10 +64,10 @@ async def inspect(args: argparse.Namespace) -> dict:
     device_id=args.device_id,
   ) as client:
     return {
-      "device": MessageToDict(await client.device_info(), preserving_proto_field_name=True),
-      "status": MessageToDict(await client.status(), preserving_proto_field_name=True),
+      "device": MessageToDict(await client.get_device_info(), preserving_proto_field_name=True),
+      "status": MessageToDict(await client.get_status(), preserving_proto_field_name=True),
       "configuration": MessageToDict(
-        await client.configuration(), preserving_proto_field_name=True
+        await client.get_configuration(), preserving_proto_field_name=True
       ),
     }
 

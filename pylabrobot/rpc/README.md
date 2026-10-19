@@ -40,8 +40,8 @@ async def inspect_device() -> None:
     "127.0.0.1:50051",
     device_id="incubator-01",
   ) as client:
-    identity = await client.device_info()
-    status = await client.status()
+    identity = await client.get_device_info()
+    status = await client.get_status()
     print(identity.display_name, status.state, identity.services)
 ```
 

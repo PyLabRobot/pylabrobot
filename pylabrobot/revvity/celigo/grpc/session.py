@@ -19,10 +19,14 @@ from pylabrobot.__version__ import __version__
 from pylabrobot.revvity.celigo.celigo import Celigo
 from pylabrobot.revvity.celigo.config import CeligoConfig
 from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
-from pylabrobot.revvity.celigo.grpc.acquisition_job import AcquisitionJob, owned_operation
-from pylabrobot.revvity.celigo.grpc.image_encoding import encode_frame, public_frame
+from pylabrobot.revvity.celigo.grpc.acquisition_job import AcquisitionJob, run_owned_operation
+from pylabrobot.revvity.celigo.grpc.image_encoding import build_public_image_frame, encode_frame
 from pylabrobot.revvity.celigo.grpc.job_specification import Brightfield, JobSpecification
-from pylabrobot.revvity.celigo.grpc.job_store import JobStore, advance, public_job
+from pylabrobot.revvity.celigo.grpc.job_store import (
+  JobStore,
+  advance_job_status,
+  build_public_job_status,
+)
 from pylabrobot.revvity.celigo.grpc.limits import (
   MAX_EXPOSURE_MS,
   MAX_FRAME_BYTES,
@@ -113,7 +117,8 @@ class CeligoSession:
     ):
       raise ValueError("DoorInterlock must be a digital input in 0..11")
 
-  def configuration(self) -> pb.CeligoConfiguration:
+  def get_configuration(self) -> pb.CeligoConfiguration:
+    """Read capture limits and reference positions from the configured calibration."""
     z_axis = self.config.hardware.z_axis
     assert z_axis is not None
     return pb.CeligoConfiguration(
@@ -130,14 +135,16 @@ class CeligoSession:
       capture_contract="One brightfield frame at explicit sample XY and fixed Z; no autofocus or auto-exposure.",
     )
 
-  def specification(self, capture: Brightfield) -> JobSpecification:
+  def build_job_specification(self, capture: Brightfield) -> JobSpecification:
+    """Combine capture settings with the configured camera geometry."""
     return JobSpecification(
       capture,
       self.config.calibration.image_width_pixels,
       self.config.calibration.image_height_pixels,
     )
 
-  def plan(self, capture: Brightfield):
+  def build_scan_plan(self, capture: Brightfield):
+    """Calculate stage and galvo targets for a single brightfield frame."""
     return build_scan_plan(
       self.config,
       ScanSpec.points(
@@ -148,7 +155,8 @@ class CeligoSession:
       ),
     )
 
-  def validate_spec(self, spec: JobSpecification, initialize: bool) -> None:
+  def validate_job_specification(self, spec: JobSpecification, initialize: bool) -> None:
+    """Reject settings outside the configured capture contract and calibrated travel."""
     if initialize:
       if spec != JobSpecification():
         raise ValueError("initialization must not contain capture settings")
@@ -160,18 +168,22 @@ class CeligoSession:
       raise ValueError("capture settings must be finite")
     if not 0 < capture.exposure_ms <= MAX_EXPOSURE_MS or not 0 <= capture.gain <= MAX_GAIN:
       raise ValueError("exposure or gain exceeds the brightfield service limits")
-    configuration = self.configuration()
+    configuration = self.get_configuration()
     if not configuration.minimum_z_mm <= capture.z_mm <= configuration.maximum_z_mm:
       raise ValueError("Z is outside calibrated travel")
     if (spec.width, spec.height) != (configuration.width, configuration.height):
       raise ValueError("image geometry no longer matches the configuration")
-    self.plan(capture)  # Offline validation of stage and galvo targets before persisting intent.
+    self.build_scan_plan(
+      capture
+    )  # Offline validation of stage and galvo targets before persisting intent.
 
-  def validate_start(self, job: AcquisitionJob) -> None:
+  def validate_job_start(self, job: AcquisitionJob) -> None:
+    """Reject reinitialization while a driver session already exists."""
     if job.status.kind == "Initialize" and self.driver is not None:
       raise StateError("already initialized; restart the service before reinitializing")
 
-  def publish_device(self) -> None:
+  def publish_status(self) -> None:
+    """Refresh the device's operational snapshot and notify subscribers."""
     if self.fault:
       self.status.state = device_pb.OPERATIONAL_STATE_FAULTED
     elif self.active_job:
@@ -201,18 +213,18 @@ class CeligoSession:
     if self.fault:
       raise StorageError("service fault requires recovery: " + self.fault)
 
-  async def io(self, function: Callable[..., T], *args: object) -> T:
+  async def run_storage_operation(self, function: Callable[..., T], *args: object) -> T:
     """Run a storage operation and surface durable-write failures as device faults."""
     try:
-      return await self.store.call(function, *args)
+      return await self.store.run_in_worker(function, *args)
     except StorageError as exc:
       self.fault = str(exc)
       if self.active_job:
         self.active_job.stop_requested.set()
-      self.publish_device()
+      self.publish_status()
       raise
 
-  async def command(self, operation: Coroutine[object, object, T]) -> T:
+  async def run_command(self, operation: Coroutine[object, object, T]) -> T:
     """Keep accepted motion and durable bookkeeping alive if the caller disconnects."""
     if self.closing or len(self.commands) >= self.command_limit:
       operation.close()
@@ -230,7 +242,7 @@ class CeligoSession:
     task.add_done_callback(finished)
     return await asyncio.shield(task)
 
-  async def create(
+  async def create_job(
     self,
     request_id: str,
     spec: JobSpecification,
@@ -238,12 +250,13 @@ class CeligoSession:
     configuration_id="",
     initialize=False,
   ) -> AcquisitionJob:
+    """Persist an inert job, reusing its request ID only when all settings match."""
     async with self.lock:
       self.ensure_available()
-      self.validate_spec(spec, initialize)
+      self.validate_job_specification(spec, initialize)
       if not 1 <= len(request_id) <= 128:
         raise ValueError("request_id must be 1..128 characters")
-      reservation = 0 if initialize else spec.reservation()
+      reservation = 0 if initialize else spec.calculate_storage_reservation()
       kind = "Initialize" if initialize else "Preview" if preview else "Acquisition"
       configuration_id = configuration_id or self.configuration_id
       if preview and spec.frame_count != 1:
@@ -271,8 +284,8 @@ class CeligoSession:
         configuration_id=configuration_id,
       )
       status.created_at.GetCurrentTime()
-      status = advance(status)
-      await self.io(self.store.create, spec, status, reservation)
+      status = advance_job_status(status)
+      await self.run_storage_operation(self.store.create_job, spec, status, reservation)
       job = AcquisitionJob(self, spec, status)
       self.jobs[job.ref.job_id] = job
       self.requests[request_id] = job
@@ -282,8 +295,8 @@ class CeligoSession:
     """Persist initialization settings without opening or moving the instrument."""
     if not configuration_id:
       raise ValueError("configuration_id is required")
-    return await self.command(
-      self.create(
+    return await self.run_command(
+      self.create_job(
         request_id,
         JobSpecification(),
         configuration_id=configuration_id,
@@ -297,10 +310,10 @@ class CeligoSession:
     """Validate and persist a fixed-focus capture for an explicit job start."""
     if not configuration_id:
       raise ValueError("configuration_id is required")
-    return await self.command(
-      self.create(
+    return await self.run_command(
+      self.create_job(
         request_id,
-        self.specification(settings),
+        self.build_job_specification(settings),
         preview=True,
         configuration_id=configuration_id,
       )
@@ -319,8 +332,8 @@ class CeligoSession:
       job = AcquisitionJob(self, spec, status)
       self.jobs[job.ref.job_id] = job
       self.requests[status.request_id] = job
-    self.previews.value = await self.io(self.store.latest_preview)
-    self.publish_device()
+    self.previews.value = await self.run_storage_operation(self.store.get_latest_preview)
+    self.publish_status()
 
   async def check_imaging_status(self) -> None:
     """Check controller health and a configured door input before brightfield work."""
@@ -351,14 +364,15 @@ class CeligoSession:
     await self.driver.setup()  # PLR opens USB, configures the camera, and homes the imaging axes.
     await self.check_imaging_status()
 
-  async def capture(self, job: AcquisitionJob, sequence: int) -> stored_pb.ImageFrame | None:
+  async def capture_frame(self, job: AcquisitionJob, sequence: int) -> stored_pb.ImageFrame | None:
+    """Acquire and encode one frame, checking cancellation between hardware operations."""
     if job.spec.capture is None:
       raise TypeError("capture requires explicit brightfield settings")
     settings = job.spec.capture
     driver = self.driver
     if driver is None:
       raise StateError("driver is not initialized")
-    plan = self.plan(settings)
+    plan = self.build_scan_plan(settings)
     await self.check_imaging_status()
     if job.stop_requested.is_set():
       return None
@@ -397,7 +411,7 @@ class CeligoSession:
       if not self.initialized or driver is None:
         raise StateError("explicit initialization is required before drawer motion")
       self.door_moving = True
-      self.publish_device()
+      self.publish_status()
     try:
       if sample_position is None:
         await driver.open_drawer()
@@ -415,11 +429,11 @@ class CeligoSession:
     finally:
       async with self.lock:
         self.door_moving = False
-        self.publish_device()
+        self.publish_status()
 
   async def open_door(self) -> None:
     """Eject the drawer, retaining ownership if the caller disconnects."""
-    await self.command(self._move_door(None))
+    await self.run_command(self._move_door(None))
 
   async def close_door(self, *, sample_x_mm: float, sample_y_mm: float) -> None:
     """Validate sample XY and load the drawer independently of the caller's lifetime."""
@@ -435,7 +449,7 @@ class CeligoSession:
       low, high = sorted((axis.min_position, axis.max_position))
       if not math.isfinite(target) or not low <= target <= high:
         raise ValueError("sample X/Y target is outside calibrated travel")
-    await self.command(self._move_door((sample_x_mm, sample_y_mm)))
+    await self.run_command(self._move_door((sample_x_mm, sample_y_mm)))
 
   async def finish_operation(self, job: AcquisitionJob, failed: bool) -> None:
     if failed or job.stop_requested.is_set():
@@ -464,13 +478,13 @@ class CeligoSession:
         await self.store.close()
       finally:
         try:
-          await owned_operation(self.close_driver())
+          await run_owned_operation(self.close_driver())
         finally:
           if self.lock_file is not None:
             self.lock_file.close()
             self.lock_file = None
 
-  def get_info(self) -> device_pb.DeviceInfo:
+  def get_device_info(self) -> device_pb.DeviceInfo:
     """Advertise actual registered services independently of image-specific limits."""
     return device_pb.DeviceInfo(
       device_id=self.device_id,
@@ -503,7 +517,7 @@ class CeligoSession:
 
   async def get_job(self, job_id: str) -> job_pb.JobStatus:
     """Read a job through the image-independent public status type."""
-    return public_job(self.jobs[job_id].status)
+    return build_public_job_status(self.jobs[job_id].status)
 
   async def find_job(self, request_id: str) -> job_pb.JobRef:
     """Recover an existing request without creating or starting work."""
@@ -511,22 +525,22 @@ class CeligoSession:
 
   async def start_job(self, job_id: str) -> job_pb.JobStatus:
     """Let durable acceptance and executor bookkeeping finish if the RPC disconnects."""
-    return public_job(await self.command(self.jobs[job_id].start()))
+    return build_public_job_status(await self.run_command(self.jobs[job_id].start()))
 
   async def cancel_job(self, job_id: str) -> job_pb.JobStatus:
     """Persist stopping intent while the executor retains hardware ownership."""
-    return public_job(await self.command(self.jobs[job_id].cancel()))
+    return build_public_job_status(await self.run_command(self.jobs[job_id].cancel()))
 
   async def watch_job(self, job_id: str) -> AsyncGenerator[job_pb.JobStatus, None]:
     """Project bounded stored snapshots into the common job contract."""
     with self.jobs[job_id].updates.subscribe() as queue:
       while True:
         status = await queue.get()
-        yield public_job(status)
+        yield build_public_job_status(status)
         if status.state == job_pb.JOB_STATE_FINISHED:
           return
 
-  def image_capabilities(self) -> image_pb.ImageCapabilities:
+  def get_image_capabilities(self) -> image_pb.ImageCapabilities:
     """Keep pixel limits and retention capacity in the optional image capability."""
     return image_pb.ImageCapabilities(
       maximum_frame_bytes=MAX_FRAME_BYTES,
@@ -536,14 +550,14 @@ class CeligoSession:
       encodings=["PNG"],
     )
 
-  async def image_retention(self, job_id: str) -> image_pb.ImageRetention:
+  async def get_image_retention(self, job_id: str) -> image_pb.ImageRetention:
     """Read the durable image-release flag without adding it to common job status."""
     status = self.jobs[job_id].status
     return image_pb.ImageRetention(job=status.job, images_released=status.images_released)
 
   async def release_images(self, job_id: str) -> image_pb.ImageRetention:
     """Commit explicit image release independently of the initiating RPC lifetime."""
-    status = await self.command(self.jobs[job_id].release_images())
+    status = await self.run_command(self.jobs[job_id].release_images())
     return image_pb.ImageRetention(job=status.job, images_released=status.images_released)
 
   async def list_frames(self, job_id: str, after_sequence: int, limit: int) -> image_pb.FramePage:
@@ -552,9 +566,9 @@ class CeligoSession:
 
   async def get_frame(self, job_id: str, frame_id: str) -> image_pb.ImageFrame:
     """Return a shared image envelope after validating the retained pixels."""
-    return public_frame(await self.jobs[job_id].get_frame(frame_id))
+    return build_public_image_frame(await self.jobs[job_id].get_frame(frame_id))
 
-  async def watch_preview(self) -> AsyncGenerator[image_pb.ImageFrame, None]:
+  async def watch_previews(self) -> AsyncGenerator[image_pb.ImageFrame, None]:
     """Read complete retained previews; subscribing never starts acquisition."""
     with self.previews.subscribe() as queue:
       while True:

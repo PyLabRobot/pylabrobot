@@ -8,7 +8,7 @@ from collections.abc import Coroutine
 from typing import TYPE_CHECKING, TypeVar
 
 from pylabrobot.revvity.celigo.grpc.job_specification import JobSpecification
-from pylabrobot.revvity.celigo.grpc.job_store import advance
+from pylabrobot.revvity.celigo.grpc.job_store import advance_job_status
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
 from pylabrobot.rpc.errors import BusyError, StateError, StorageError
 from pylabrobot.rpc.transport import Latest, copy_message
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-async def owned_operation(operation: Coroutine[object, object, T]) -> T:
+async def run_owned_operation(operation: Coroutine[object, object, T]) -> T:
   """Keep ownership until an in-flight operation finishes, even on executor cancellation."""
   task = asyncio.create_task(operation)
   try:
@@ -48,7 +48,8 @@ class AcquisitionJob:
     self.task: asyncio.Task[None] | None = None
     self.updates: Latest[stored_pb.JobStatus] = Latest(copy_message(status))
 
-  def publish(self, status: stored_pb.JobStatus) -> None:
+  def publish_status(self, status: stored_pb.JobStatus) -> None:
+    """Replace the job's cached status and notify its subscribers."""
     self.status = status
     self.updates.publish(status)
 
@@ -65,16 +66,16 @@ class AcquisitionJob:
         raise StateError("job configuration no longer matches the service")
       if self.status.kind != "Initialize" and not self.session.initialized:
         raise StateError("explicit initialization is required before acquisition")
-      self.session.validate_start(self)
-      status = advance(
+      self.session.validate_job_start(self)
+      status = advance_job_status(
         self.status,
         state=job_pb.JOB_STATE_RUNNING,
         phase="Initializing" if self.status.kind == "Initialize" else "Capturing",
       )
-      await self.session.io(self.session.store.save, status, "start")
-      self.publish(status)
+      await self.session.run_storage_operation(self.session.store.save_job_status, status, "start")
+      self.publish_status(status)
       self.session.active_job = self
-      self.session.publish_device()
+      self.session.publish_status()
       self.task = asyncio.create_task(self.run(), name=f"celigo-grpc-{self.ref.job_id}")
       return copy_message(self.status)
 
@@ -84,35 +85,41 @@ class AcquisitionJob:
       self.stop_requested.set()
     async with self.session.lock:
       if self.status.state != job_pb.JOB_STATE_FINISHED and not self.status.cancellation_requested:
-        status = advance(self.status, cancellation_requested=True, phase="Stopping")
+        status = advance_job_status(self.status, cancellation_requested=True, phase="Stopping")
         if status.state == job_pb.JOB_STATE_READY:
           status.state, status.outcome, status.phase = (
             job_pb.JOB_STATE_FINISHED,
             job_pb.OUTCOME_CANCELLED,
             "Finished",
           )
-        await self.session.io(self.session.store.save, status, "cancel")
-        self.publish(status)
+        await self.session.run_storage_operation(
+          self.session.store.save_job_status, status, "cancel"
+        )
+        self.publish_status(status)
       return copy_message(self.status)
 
   async def list_frames(self, after_sequence: int, limit: int) -> image_pb.FramePage:
-    return await self.session.io(
+    return await self.session.run_storage_operation(
       self.session.store.list_frames, self.ref.job_id, after_sequence, limit
     )
 
   async def get_frame(self, frame_id: str) -> stored_pb.ImageFrame:
     async with self.session.read_slots:
-      return await self.session.io(self.session.store.get_frame, self.ref.job_id, frame_id)
+      return await self.session.run_storage_operation(
+        self.session.store.get_frame, self.ref.job_id, frame_id
+      )
 
   async def release_images(self) -> stored_pb.JobStatus:
     async with self.session.lock:
       if self.status.state != job_pb.JOB_STATE_FINISHED or not self.status.state_durable:
         raise StateError("only durably finished jobs can release images")
       if not self.status.images_released:
-        status = advance(self.status, images_released=True)
-        await self.session.io(self.session.store.release_images, status)
-        self.publish(status)
-        self.session.previews.value = await self.session.io(self.session.store.latest_preview)
+        status = advance_job_status(self.status, images_released=True)
+        await self.session.run_storage_operation(self.session.store.release_images, status)
+        self.publish_status(status)
+        self.session.previews.value = await self.session.run_storage_operation(
+          self.session.store.get_latest_preview
+        )
       return copy_message(self.status)
 
   async def run(self) -> None:
@@ -121,7 +128,7 @@ class AcquisitionJob:
     try:
       if self.status.kind == "Initialize":
         if not self.stop_requested.is_set():
-          await owned_operation(self.session.initialize())
+          await run_owned_operation(self.session.initialize())
       else:
         for sequence in range(1, self.spec.frame_count + 1):
           if self.stop_requested.is_set():
@@ -132,13 +139,13 @@ class AcquisitionJob:
               break
             except asyncio.TimeoutError:
               pass
-          frame = await owned_operation(self.session.capture(self, sequence))
+          frame = await run_owned_operation(self.session.capture_frame(self, sequence))
           if frame is None:
             break
           async with self.session.lock:
-            status = advance(self.status, completed=sequence)
-            await self.session.io(self.session.store.commit_frame, frame, status)
-            self.publish(status)
+            status = advance_job_status(self.status, completed=sequence)
+            await self.session.run_storage_operation(self.session.store.commit_frame, frame, status)
+            self.publish_status(status)
             if self.preview:
               self.session.previews.publish(
                 image_pb.GetFrameRequest(job=self.ref, frame_id=frame.frame_id)
@@ -152,7 +159,7 @@ class AcquisitionJob:
       error = f"{type(exc).__name__}: {exc}"
     finally:
       try:
-        await owned_operation(self.session.finish_operation(self, bool(error)))
+        await run_owned_operation(self.session.finish_operation(self, bool(error)))
       except (Exception, asyncio.CancelledError) as exc:
         logger.exception("Operation cleanup failed for %s", self.ref.job_id)
         error = f"{error}; cleanup failed: {type(exc).__name__}: {exc}".lstrip("; ")
@@ -166,7 +173,7 @@ class AcquisitionJob:
             job_pb.OUTCOME_CANCELLED if self.stop_requested.is_set() else job_pb.OUTCOME_SUCCEEDED
           )
         )
-        status = advance(
+        status = advance_job_status(
           self.status,
           state=job_pb.JOB_STATE_FINISHED,
           phase="Finished",
@@ -177,14 +184,16 @@ class AcquisitionJob:
         if self.status.kind == "Initialize" and outcome == job_pb.OUTCOME_SUCCEEDED:
           status.completed = 1
         try:
-          await self.session.io(self.session.store.save, status, "finish")
+          await self.session.run_storage_operation(
+            self.session.store.save_job_status, status, "finish"
+          )
         except StorageError as exc:
           # The disk may still contain Running. Recovery will mark it Interrupted.
           status.state_durable = False
           status.outcome = job_pb.OUTCOME_FAILED
           status.error = f"Completion could not be persisted: {exc}"
-        self.publish(status)
+        self.publish_status(status)
         if self.status.kind == "Initialize":
           self.session.initialized = status.outcome == job_pb.OUTCOME_SUCCEEDED
         self.session.active_job = None
-        self.session.publish_device()
+        self.session.publish_status()

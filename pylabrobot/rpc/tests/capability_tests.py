@@ -42,7 +42,7 @@ class StatusDevice:
     self.updates = Latest(self.snapshot)
     self.watch_closed = asyncio.Event()
 
-  def get_info(self) -> device_pb.DeviceInfo:
+  def get_device_info(self) -> device_pb.DeviceInfo:
     """Advertise only the services this test instrument actually exposes."""
     return device_pb.DeviceInfo(
       device_id=self.device_id,
@@ -201,16 +201,16 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
     await server.start()
     try:
       async with DeviceClient(server.endpoint, backend.device_id) as client:
-        info = await client.device_info()
-        status = await client.status()
+        info = await client.get_device_info()
+        status = await client.get_status()
         assert list(info.services) == [DEVICE_SERVICE]
         assert status.instance_id == info.instance_id and status.observation_valid
         assert client.channel is not None
         with self.assertRaises(grpc.aio.AioRpcError) as unavailable:
-          await JobClient(client.channel, backend.device_id).recover("missing")
+          await JobClient(client.channel, backend.device_id).recover_job("missing")
         assert unavailable.exception.code() == grpc.StatusCode.UNIMPLEMENTED
         with self.assertRaises(grpc.aio.AioRpcError) as unavailable:
-          await ImageClient(client.channel, backend.device_id).capabilities()
+          await ImageClient(client.channel, backend.device_id).get_image_capabilities()
         assert unavailable.exception.code() == grpc.StatusCode.UNIMPLEMENTED
     finally:
       await server.stop()
@@ -227,11 +227,11 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
           DeviceClient(server.endpoint, backend.device_id) as a,
           DeviceClient(other.endpoint, second.device_id, timeout=0.2) as b,
         ):
-          assert (await a.device_info()).device_type != (await b.device_info()).device_type
+          assert (await a.get_device_info()).device_type != (await b.get_device_info()).device_type
           await other.stop()
           with self.assertRaises(grpc.aio.AioRpcError):
-            await b.status()
-          assert (await a.status()).state == device_pb.OPERATIONAL_STATE_READY
+            await b.get_status()
+          assert (await a.get_status()).state == device_pb.OPERATIONAL_STATE_READY
       finally:
         await other.stop()
 
@@ -242,15 +242,15 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
       async with DeviceClient(server.endpoint, backend.device_id) as client:
         assert client.channel is not None
         jobs = JobClient(client.channel, backend.device_id)
-        job = await jobs.recover("prime-request")
+        job = await jobs.recover_job("prime-request")
         await job.start()
         await job.start()
-        assert (await client.status()).active_job_id == job.identifier
+        assert (await client.get_status()).active_job_id == job.identifier
       backend.finished.set()
       await backend.task
       async with DeviceClient(server.endpoint, backend.device_id) as client:
         assert client.channel is not None
-        job = await JobClient(client.channel, backend.device_id).recover("prime-request")
+        job = await JobClient(client.channel, backend.device_id).recover_job("prime-request")
         status = await job.wait()
         assert status.outcome == job_pb.OUTCOME_SUCCEEDED
         assert status.completed == 3 and status.progress_unit == "Dispenses"
@@ -265,14 +265,14 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
       backend, server = pump
       async with DeviceClient(server.endpoint, backend.device_id) as client:
         assert client.channel is not None
-        job = await JobClient(client.channel, backend.device_id).recover("prime-request")
+        job = await JobClient(client.channel, backend.device_id).recover_job("prime-request")
         await job.start()
         stopping = await job.cancel()
         assert stopping.state == job_pb.JOB_STATE_RUNNING and stopping.phase == "Stopping"
-        assert (await client.status()).state == device_pb.OPERATIONAL_STATE_BUSY
+        assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_BUSY
         backend.finished.set()
         assert (await job.wait()).outcome == job_pb.OUTCOME_CANCELLED
-        assert (await client.status()).state == device_pb.OPERATIONAL_STATE_READY
+        assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_READY
 
   async def test_foreign_job_rejected_before_execution(self) -> None:
     """Device scoping prevents a valid job ID from being routed to the wrong instrument."""
@@ -291,7 +291,7 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
     async with pump_system() as pump:
       backend, server = pump
       async with DeviceClient(server.endpoint, backend.device_id) as client:
-        async with client.status_updates() as updates:
+        async with client.watch_status() as updates:
           assert (await updates.get()).state == device_pb.OPERATIONAL_STATE_READY
           assert len(backend.updates.queues) == 1
         await asyncio.wait_for(backend.watch_closed.wait(), 3)

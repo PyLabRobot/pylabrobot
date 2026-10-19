@@ -38,7 +38,7 @@ DEFAULT_QUOTA = 256 * 1024 * 1024
 DISK_HEADROOM = 64 * 1024 * 1024
 
 
-def advance(
+def advance_job_status(
   status: stored_pb.JobStatus,
   *,
   state: job_pb.JobState | None = None,
@@ -71,7 +71,7 @@ def advance(
   return result
 
 
-def public_job(status: stored_pb.JobStatus) -> job_pb.JobStatus:
+def build_public_job_status(status: stored_pb.JobStatus) -> job_pb.JobStatus:
   """Project durable state onto the common job contract, omitting image retention."""
   result = job_pb.JobStatus.FromString(status.SerializeToString())
   result.DiscardUnknownFields()
@@ -108,7 +108,8 @@ class JobStore:
       raise StorageError("store is not open")
     return self.db
 
-  async def call(self, function: Callable[..., T], *args) -> T:
+  async def run_in_worker(self, function: Callable[..., T], *args) -> T:
+    """Run storage work on the dedicated thread and wait for SQLite use to finish."""
     if self.closed:
       raise StorageError("store is closed")
     try:
@@ -123,7 +124,7 @@ class JobStore:
 
   async def open(self) -> list[tuple[JobSpecification, stored_pb.JobStatus]]:
     try:
-      return await self.call(self._open)
+      return await self.run_in_worker(self._open)
     except BaseException:
       await self.close()
       raise
@@ -169,7 +170,7 @@ class JobStore:
         PRIMARY KEY(job_id, sequence)
       );
     """)
-    with self.transaction():
+    with self.begin_transaction():
       for key, value in (
         ("schema_version", SCHEMA_VERSION),
         ("device_id", self.device_id),
@@ -187,24 +188,25 @@ class JobStore:
       finally:
         os.close(descriptor)
     records = []
-    with self.transaction():
+    with self.begin_transaction():
       for row in self.db.execute("SELECT * FROM jobs").fetchall():
         spec = self.decode_spec(row["specification"])
         status = stored_pb.JobStatus.FromString(row["status"])
         if status.state == job_pb.JOB_STATE_RUNNING:
-          status = advance(
+          status = advance_job_status(
             status,
             state=job_pb.JOB_STATE_FINISHED,
             outcome=job_pb.OUTCOME_INTERRUPTED,
             phase="Finished",
             error="Service stopped before durable completion; execution was not replayed.",
           )
-          self._update(status, self.retained_bytes(status.job.job_id))
+          self._update_job_status(status, self.get_retained_bytes(status.job.job_id))
         records.append((spec, status))
     return records
 
   @contextmanager
-  def transaction(self):
+  def begin_transaction(self):
+    """Begin an immediate transaction and commit or roll it back on context exit."""
     db = self.connection
     db.execute("BEGIN IMMEDIATE")
     try:
@@ -215,15 +217,17 @@ class JobStore:
         db.execute("ROLLBACK")
       raise
 
-  def checkpoint(self, point: str, status: stored_pb.JobStatus) -> None:
+  def on_transaction_boundary(self, point: str, status: stored_pb.JobStatus) -> None:
     """Crash-test seam at transaction boundaries; production has no fault hooks."""
 
-  def reserved_bytes(self) -> int:
+  def get_reserved_bytes(self) -> int:
+    """Read the total storage reservation across all retained jobs."""
     return int(
       self.connection.execute("SELECT COALESCE(SUM(reservation), 0) FROM jobs").fetchone()[0]
     )
 
-  def retained_bytes(self, job_id: str) -> int:
+  def get_retained_bytes(self, job_id: str) -> int:
+    """Read the size of a job's retained image payloads."""
     return int(
       self.connection.execute(
         "SELECT COALESCE(SUM(byte_length), 0) FROM frames WHERE job_id=? AND image IS NOT NULL",
@@ -231,24 +235,27 @@ class JobStore:
       ).fetchone()[0]
     )
 
-  def check_disk(self, extra: int = 0) -> None:
+  def check_disk_capacity(self, extra: int = 0) -> None:
     """Admission estimate; actual write errors still require transaction rollback."""
     retained = self.connection.execute(
       "SELECT COALESCE(SUM(byte_length), 0) FROM frames WHERE image IS NOT NULL"
     ).fetchone()[0]
-    outstanding = max(0, self.reserved_bytes() - retained)
+    outstanding = max(0, self.get_reserved_bytes() - retained)
     if shutil.disk_usage(self.directory).free < outstanding + extra + DISK_HEADROOM:
       raise CapacityError("insufficient free disk space for reserved images and SQLite headroom")
 
-  def create(self, spec: JobSpecification, status: stored_pb.JobStatus, reservation: int) -> None:
-    with self.transaction():
+  def create_job(
+    self, spec: JobSpecification, status: stored_pb.JobStatus, reservation: int
+  ) -> None:
+    """Reserve storage and persist a job's specification and initial status."""
+    with self.begin_transaction():
       if self.connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] >= self.max_jobs:
         raise CapacityError(
           "job record capacity exhausted; request IDs are never silently discarded"
         )
-      if self.reserved_bytes() + reservation > self.quota:
+      if self.get_reserved_bytes() + reservation > self.quota:
         raise CapacityError("image storage quota exhausted")
-      self.check_disk(reservation)
+      self.check_disk_capacity(reservation)
       self.connection.execute(
         "INSERT INTO jobs VALUES (?, ?, ?, ?, ?)",
         (
@@ -259,11 +266,12 @@ class JobStore:
           reservation,
         ),
       )
-      self._journal(status)
-      self.checkpoint("create.before_commit", status)
-    self.checkpoint("create.after_commit", status)
+      self._record_transition(status)
+      self.on_transaction_boundary("create.before_commit", status)
+    self.on_transaction_boundary("create.after_commit", status)
 
-  def _journal(self, status: stored_pb.JobStatus) -> None:
+  def _record_transition(self, status: stored_pb.JobStatus) -> None:
+    """Append a job status revision to its transition history."""
     self.connection.execute(
       "INSERT INTO transitions VALUES (?, ?, ?)",
       (
@@ -273,7 +281,8 @@ class JobStore:
       ),
     )
 
-  def _update(self, status: stored_pb.JobStatus, reservation: int | None = None) -> None:
+  def _update_job_status(self, status: stored_pb.JobStatus, reservation: int | None = None) -> None:
+    """Replace stored status and record its transition in the current transaction."""
     if reservation is None:
       self.connection.execute(
         "UPDATE jobs SET status=? WHERE job_id=?",
@@ -291,20 +300,21 @@ class JobStore:
           status.job.job_id,
         ),
       )
-    self._journal(status)
+    self._record_transition(status)
 
-  def save(self, status: stored_pb.JobStatus, action: str) -> None:
-    with self.transaction():
+  def save_job_status(self, status: stored_pb.JobStatus, action: str) -> None:
+    """Commit a job transition and release unused reservations when it finishes."""
+    with self.begin_transaction():
       reservation = (
-        self.retained_bytes(status.job.job_id)
+        self.get_retained_bytes(status.job.job_id)
         if status.state == job_pb.JOB_STATE_FINISHED
         else None
       )
       if action == "start":
-        self.check_disk()
-      self._update(status, reservation)
-      self.checkpoint(f"{action}.before_commit", status)
-    self.checkpoint(f"{action}.after_commit", status)
+        self.check_disk_capacity()
+      self._update_job_status(status, reservation)
+      self.on_transaction_boundary(f"{action}.before_commit", status)
+    self.on_transaction_boundary(f"{action}.after_commit", status)
 
   def commit_frame(self, frame: stored_pb.ImageFrame, status: stored_pb.JobStatus) -> None:
     image = frame.image
@@ -312,14 +322,14 @@ class JobStore:
       raise DataLossError("capture image is oversized or failed checksum validation")
     metadata = copy_message(frame)
     metadata.ClearField("image")
-    with self.transaction():
+    with self.begin_transaction():
       reservation = self.connection.execute(
         "SELECT reservation FROM jobs WHERE job_id=?",
         (status.job.job_id,),
       ).fetchone()[0]
-      if self.retained_bytes(status.job.job_id) + len(image) > reservation:
+      if self.get_retained_bytes(status.job.job_id) + len(image) > reservation:
         raise CapacityError("encoded image exceeds reserved storage")
-      self.check_disk()
+      self.check_disk_capacity()
       self.connection.execute(
         "INSERT INTO frames VALUES (?, ?, ?, ?, ?, ?, ?)",
         (
@@ -332,9 +342,9 @@ class JobStore:
           frame.sha256,
         ),
       )
-      self._update(status)
-      self.checkpoint("frame.before_commit", status)
-    self.checkpoint("frame.after_commit", status)
+      self._update_job_status(status)
+      self.on_transaction_boundary("frame.before_commit", status)
+    self.on_transaction_boundary("frame.after_commit", status)
 
   def list_frames(self, job_id: str, after_sequence: int, limit: int) -> image_pb.FramePage:
     if not 1 <= limit <= 64:
@@ -363,13 +373,14 @@ class JobStore:
     return frame
 
   def release_images(self, status: stored_pb.JobStatus) -> None:
-    with self.transaction():
+    with self.begin_transaction():
       self.connection.execute("UPDATE frames SET image=NULL WHERE job_id=?", (status.job.job_id,))
-      self._update(status, 0)
-      self.checkpoint("release.before_commit", status)
-    self.checkpoint("release.after_commit", status)
+      self._update_job_status(status, 0)
+      self.on_transaction_boundary("release.before_commit", status)
+    self.on_transaction_boundary("release.after_commit", status)
 
-  def latest_preview(self) -> image_pb.GetFrameRequest | None:
+  def get_latest_preview(self) -> image_pb.GetFrameRequest | None:
+    """Find the most recently stored preview whose pixels are still retained."""
     rows = self.connection.execute(
       "SELECT job_id, frame_id, metadata FROM frames WHERE image IS NOT NULL ORDER BY rowid DESC"
     )

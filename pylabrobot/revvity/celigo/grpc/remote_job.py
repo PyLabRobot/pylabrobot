@@ -25,11 +25,11 @@ class CeligoImagingJob(Job):
 
   async def release_images(self) -> image_pb.ImageRetention:
     """Explicitly release retained pixels after archiving them elsewhere."""
-    return await self.images.release(self.ref)
+    return await self.images.release_images(self.ref)
 
-  async def image_retention(self) -> image_pb.ImageRetention:
+  async def get_image_retention(self) -> image_pb.ImageRetention:
     """Read pixel availability separately from common job state."""
-    return await self.images.retention(self.ref)
+    return await self.images.get_image_retention(self.ref)
 
   async def list_frames(self, after_sequence: int = 0, limit: int = 64) -> list[image_pb.FrameInfo]:
     """Read one page of metadata for images owned by this job."""

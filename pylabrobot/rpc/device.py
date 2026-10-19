@@ -12,10 +12,10 @@ from typing_extensions import Self
 from pylabrobot.rpc.transport import (
   API_VERSION,
   Updates,
-  channel_options,
+  build_channel_options,
   copy_message,
   require_device,
-  rpc_errors,
+  translate_rpc_errors,
 )
 from pylabrobot.rpc.v1 import device_pb2 as pb
 from pylabrobot.rpc.v1 import device_pb2_grpc as rpc
@@ -31,7 +31,7 @@ class DeviceBackend(Protocol):
     """Return the stable instrument identity."""
     ...
 
-  def get_info(self) -> pb.DeviceInfo:
+  def get_device_info(self) -> pb.DeviceInfo:
     """Describe identity and the registered optional services."""
     ...
 
@@ -55,15 +55,15 @@ class DeviceService(rpc.DeviceServiceServicer):
     self, request: pb.DeviceRequest, context: grpc.aio.ServicerContext
   ) -> pb.DeviceInfo:
     """Read device identity after checking the request's target."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
-      return copy_message(self.backend.get_info())
+      return copy_message(self.backend.get_device_info())
 
   async def GetStatus(
     self, request: pb.DeviceRequest, context: grpc.aio.ServicerContext
   ) -> pb.DeviceStatus:
     """Read a cached operational snapshot; timestamps describe its actual freshness."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
       return copy_message(self.backend.get_status())
 
@@ -71,7 +71,7 @@ class DeviceService(rpc.DeviceServiceServicer):
     self, request: pb.DeviceRequest, context: grpc.aio.ServicerContext
   ) -> AsyncIterator[pb.DeviceStatus]:
     """Forward bounded state updates without initializing or operating the device."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
       async with aclosing(self.backend.watch_status()) as updates:
         async for status in updates:
@@ -90,7 +90,7 @@ class DeviceServer:
   ) -> None:
     """Configure transport only; the device application owns initialization and cleanup."""
     self.server = grpc.aio.server(
-      options=channel_options(maximum_message_bytes), maximum_concurrent_rpcs=32
+      options=build_channel_options(maximum_message_bytes), maximum_concurrent_rpcs=32
     )
     rpc.add_DeviceServiceServicer_to_server(DeviceService(backend), self.server)
     self.port = self.server.add_insecure_port(f"127.0.0.1:{port}")
@@ -134,11 +134,11 @@ class DeviceClient:
     """Build an identity-scoped read request."""
     return pb.DeviceRequest(device_id=self.device_id)
 
-  async def device_info(self) -> pb.DeviceInfo:
+  async def get_device_info(self) -> pb.DeviceInfo:
     """Read identity and supported services from the connected endpoint."""
     return await self.devices.GetDevice(self.request, timeout=self.timeout)
 
-  async def status(self) -> pb.DeviceStatus:
+  async def get_status(self) -> pb.DeviceStatus:
     """Read current server state without pretending it is a fresh hardware observation."""
     return await self.devices.GetStatus(self.request, timeout=self.timeout)
 
@@ -153,11 +153,11 @@ class DeviceClient:
     await self.disconnect()
     self.channel = grpc.aio.insecure_channel(
       self.endpoint,
-      options=channel_options(self.maximum_message_bytes),
+      options=build_channel_options(self.maximum_message_bytes),
     )
     self.devices = rpc.DeviceServiceStub(self.channel)
     try:
-      info = await self.device_info()
+      info = await self.get_device_info()
       if info.device_id != self.device_id or info.api_version != API_VERSION:
         raise ValueError("device identity or API version mismatch")
       if self.expected_device_type is not None and info.device_type != self.expected_device_type:
@@ -169,7 +169,7 @@ class DeviceClient:
     return self
 
   @asynccontextmanager
-  async def status_updates(self) -> AsyncIterator[Updates[pb.DeviceStatus]]:
+  async def watch_status(self) -> AsyncIterator[Updates[pb.DeviceStatus]]:
     """Subscribe to snapshots; closing this context cancels only the watch."""
     call = self.devices.WatchStatus(self.request)
     try:

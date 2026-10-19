@@ -40,7 +40,8 @@ class JobSpecification:
   def interval_ms(self) -> int:
     return 0
 
-  def reservation(self) -> int:
+  def calculate_storage_reservation(self) -> int:
+    """Calculate the byte reservation for pixels and encoding overhead."""
     raw = self.width * self.height * 2
     return raw + raw // 50 + 65536
 

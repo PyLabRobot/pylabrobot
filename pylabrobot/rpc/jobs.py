@@ -9,7 +9,7 @@ from typing import Protocol
 
 import grpc
 
-from pylabrobot.rpc.transport import Updates, copy_message, require_device, rpc_errors
+from pylabrobot.rpc.transport import Updates, copy_message, require_device, translate_rpc_errors
 from pylabrobot.rpc.v1 import jobs_pb2 as pb
 from pylabrobot.rpc.v1 import jobs_pb2_grpc as rpc
 
@@ -54,7 +54,7 @@ class JobService(rpc.JobServiceServicer):
 
   async def GetJob(self, request: pb.JobRef, context: grpc.aio.ServicerContext) -> pb.JobStatus:
     """Read a job belonging to this device."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
       return await self.backend.get_job(request.job_id)
 
@@ -62,19 +62,19 @@ class JobService(rpc.JobServiceServicer):
     self, request: pb.RequestLookup, context: grpc.aio.ServicerContext
   ) -> pb.JobRef:
     """Recover a previously created request without executing it."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
       return await self.backend.find_job(request.request_id)
 
   async def StartJob(self, request: pb.JobRef, context: grpc.aio.ServicerContext) -> pb.JobStatus:
     """Delegate start acceptance; the device owns any accepted execution task."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
       return await self.backend.start_job(request.job_id)
 
   async def CancelJob(self, request: pb.JobRef, context: grpc.aio.ServicerContext) -> pb.JobStatus:
     """Delegate cooperative stopping without interpreting device-specific progress."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
       return await self.backend.cancel_job(request.job_id)
 
@@ -82,7 +82,7 @@ class JobService(rpc.JobServiceServicer):
     self, request: pb.JobRef, context: grpc.aio.ServicerContext
   ) -> AsyncIterator[pb.JobStatus]:
     """Forward snapshots; cancelling this stream does not cancel the remote job."""
-    async with rpc_errors(context):
+    async with translate_rpc_errors(context):
       require_device(request.device_id, self.backend.device_id)
       async with aclosing(self.backend.watch_job(request.job_id)) as updates:
         async for status in updates:
@@ -114,12 +114,12 @@ class Job:
     """Request stopping; a returned Running status means cleanup is still pending."""
     return await self.stub.CancelJob(self.ref, timeout=self.timeout)
 
-  async def status(self) -> pb.JobStatus:
+  async def get_status(self) -> pb.JobStatus:
     """Read state, outcome, progress, and durability without changing execution."""
     return await self.stub.GetJob(self.ref, timeout=self.timeout)
 
   @asynccontextmanager
-  async def updates(self) -> AsyncIterator[Updates[pb.JobStatus]]:
+  async def watch_status(self) -> AsyncIterator[Updates[pb.JobStatus]]:
     """Watch coalesced snapshots until completion or client context exit."""
     call = self.stub.WatchJob(self.ref)
     try:
@@ -132,7 +132,7 @@ class Job:
 
     async def finished() -> pb.JobStatus:
       """Consume snapshots until a terminal one arrives."""
-      async with self.updates() as updates:
+      async with self.watch_status() as updates:
         while True:
           snapshot = await updates.get()
           if snapshot.state == pb.JOB_STATE_FINISHED:
@@ -150,14 +150,14 @@ class JobClient:
     self.device_id = device_id
     self.timeout = timeout
 
-  def bind(self, ref: pb.JobRef) -> Job:
+  def bind_job(self, ref: pb.JobRef) -> Job:
     """Bind a typed operation's returned reference to this device client."""
     require_device(ref.device_id, self.device_id)
     return Job(self.stub, ref, self.timeout)
 
-  async def recover(self, request_id: str) -> Job:
+  async def recover_job(self, request_id: str) -> Job:
     """Find the same job after reconnecting, without resubmitting its operation."""
     ref = await self.stub.GetJobByRequestId(
       pb.RequestLookup(device_id=self.device_id, request_id=request_id), timeout=self.timeout
     )
-    return self.bind(ref)
+    return self.bind_job(ref)
