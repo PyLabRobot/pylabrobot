@@ -92,8 +92,8 @@ REFUSED = {
 
 
 def load_session_replies() -> Dict[str, Any]:
-  """What this driver sent and the reader answered in its hardware session (steps of
-  `clariostar_testing.ipynb`): frames as hex, and step 17's first data request read by read."""
+  """What this driver sent and the reader answered: frames as hex, and a spectrum page's first
+  data request read by read."""
   path = os.path.join(os.path.dirname(__file__), "features", "test_data", "session_replies.json.gz")
   with gzip.open(path, "rt") as f:
     return dict(json.load(f))
@@ -204,7 +204,7 @@ class StatusTests(unittest.TestCase):
     self.assertFalse(motors_off.busy)
 
   def test_no_plate_is_reported_with_the_drawer_out(self):
-    # Step 9: the plate on the plate holder, the drawer out.
+    # As the reader answered with the plate on the plate holder and the drawer out.
     status = parse_status(
       bytes.fromhex(load_session_replies()["step_9_status_drawer_out_plate_on_holder"])
     )
@@ -257,8 +257,8 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(status.busy)
 
   async def test_a_long_read_does_not_count_as_silence(self):
-    # Step 17's first data request: the read of the frame's rest blocked 1.65 s; the page then
-    # stayed 421 bytes short.
+    # As the reader answered a spectrum page's first request: the read of the rest blocked
+    # 1.65 s, and the page stayed 421 bytes short.
     reads = [
       (at, bytes.fromhex(data))
       for at, data in load_session_replies()["step_17_first_attempt_reads"]

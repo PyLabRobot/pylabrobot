@@ -441,6 +441,9 @@ class Measurement:
     read_at = datetime.now()
     start = time.monotonic()
     try:
+      # A poll sent right after the RUN's reply goes unanswered, as the reader answered; the
+      # vendor's first poll follows the reply after 46 ms or more.
+      await asyncio.sleep(self._driver.default_poll_interval)
       while True:
         status = await self._driver.send_command(self._driver.CommandFamily.STATUS, retries=5)
         busy = self._driver._parse_status(status).busy

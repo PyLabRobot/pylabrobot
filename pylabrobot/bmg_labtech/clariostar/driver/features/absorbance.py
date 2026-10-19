@@ -88,7 +88,7 @@ class AbsorbanceConfiguration(MeasurementConfiguration):
   wavelength_range: Tuple[int, int] = (220, 1000)
   """Wavelengths a read accepts, in nm (the manufacturer's spectrometer range)."""
   maximum_wavelengths: int = 8
-  """Wavelengths per read (the vendor software manual: up to 8; 1-5 captured)."""
+  """Wavelengths per read (the vendor software manual: up to 8; 8 read on hardware)."""
 
 
 def _check_arguments(
@@ -512,8 +512,8 @@ class Absorbance(Measurement):
 
     The data takes about 0.05 s per wavelength to transfer for 96 wells (220-1000 nm: about 40 s
     of a 2.5 min read); a larger `step_size` or a narrower range shortens it. Cancelling the call
-    stops the run on the reader. A data page that arrives short stops the run, and the plate is
-    read once more.
+    stops the run on the reader. A data page that arrives short ends the read, and the plate is
+    measured once more (a new run: the reader cannot send a page again).
 
     Args:
       wells: the wells to measure, on the plate; None measures every well.
@@ -569,7 +569,7 @@ class Absorbance(Measurement):
       start_timestamp = datetime.now()
       pages, end_timestamp = await self._run_measurement(parameters, timeout, values)
     except FrameError as error:  # a page arrived short; the reader cannot send it again
-      logger.warning("absorbance spectrum: %s; the run was stopped, reading the plate again", error)
+      logger.warning("absorbance spectrum: %s; measuring the plate again", error)
       start_timestamp = datetime.now()
       pages, end_timestamp = await self._run_measurement(parameters, timeout, values)
     samples, references, calibrations, reference_pair = _decode_spectrum_pages(

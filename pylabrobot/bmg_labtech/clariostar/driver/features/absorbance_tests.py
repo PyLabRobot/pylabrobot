@@ -9,10 +9,12 @@ import os
 import unittest
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+from unittest.mock import patch
 
 from pylabrobot.bmg_labtech.clariostar.device import CLARIOstarPlus
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
 from pylabrobot.bmg_labtech.clariostar.driver.errors import FrameError
+from pylabrobot.bmg_labtech.clariostar.driver.features import measurement as measurement_module
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance import (
   Absorbance,
   AbsorbanceConfiguration,
@@ -661,6 +663,24 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual((result.wavelength, result.temperature), (600, None))
     self.assertEqual(list(result.data), COLUMN_1)
 
+  async def test_the_first_poll_waits_after_the_run(self):
+    # As the reader answered: a poll sent right after the RUN's reply went unanswered.
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, COLUMN_1_DATA_REPLY]
+    plate = captured_96_well_plate()
+    absorbance = make_absorbance(io, plate)
+    absorbance._driver.default_poll_interval = 0.25
+    waits = []
+    real_sleep = asyncio.sleep
+
+    async def sleep(seconds):
+      waits.append((seconds, len(io.written)))
+      await real_sleep(0)
+
+    with patch.object(measurement_module.asyncio, "sleep", sleep):
+      await measure_with(absorbance, [600], wells=plate.get_items("A1:H1"))
+    self.assertEqual(waits[0], (0.25, 2))  # after the STATUS and the RUN, before any poll
+
   async def test_a_well_given_twice_is_read_once(self):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, COLUMN_1_DATA_REPLY]
@@ -922,8 +942,8 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
 
 # The driver's asyncio.Lock needs an event loop on Python 3.9: build drivers inside one.
 class SessionTests(unittest.IsolatedAsyncioTestCase):
-  """Column 1 of an empty plate as the reader read it in the hardware session: what this driver
-  sends is the RUN the reader ran, and the reads agree with each other."""
+  """Column 1 of an empty plate, as the reader answered: what this driver sends is the RUN the
+  reader ran, and the reads agree with each other."""
 
   async def read(self, step: str, **arguments):
     """Step `step`'s read of column 1, answered by the reader's reply that step; its RUN and
@@ -959,7 +979,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ShortPageTests(unittest.IsolatedAsyncioTestCase):
-  """Step 17's data page as the reader sent it: short on its first request (15,783 of 16,204
+  """A spectrum data page, as the reader answered: short on its first request (15,783 of 16,204
   bytes), whole on the next."""
 
   def setUp(self):
