@@ -1,15 +1,22 @@
 digraph StoreX {
-  rankdir=LR;
-  node [shape=box];
+  graph [rankdir=TB, bgcolor="#f8fafc", pad=0.2, nodesep=0.6, ranksep=0.7];
+  node [shape=box, style="rounded,filled", fillcolor="#ede9fe", color="#8b5cf6",
+        fontcolor="#0f172a", fontname="Helvetica", fontsize=16, margin="0.16,0.12"];
+  edge [color="#475569", fontcolor="#475569", fontname="Helvetica", fontsize=14];
+
   slot [label="Confirmed source"];
   shovel [label="Confirmed shovel"];
   destination [label="Confirmed destination"];
-  uncertain [label="Unresolved transfer\nFurther handling blocked"];
-  slot -> shovel [label="pick + ready + sensors"];
-  shovel -> destination [label="place + ready + sensors"];
-  slot -> uncertain [label="interrupted pick"];
-  shovel -> uncertain [label="interrupted place"];
-  uncertain -> slot [label="inspect + reconcile source"];
-  uncertain -> shovel [label="inspect + reconcile shovel"];
-  uncertain -> destination [label="inspect + reconcile destination"];
+  uncertain [label="Unresolved transfer\nFurther handling blocked",
+             fillcolor="#fef3c7", color="#b45309"];
+
+  { rank=same; shovel; uncertain; }
+
+  slot -> shovel [label="pick + ready\n+ sensors", weight=5];
+  shovel -> destination [label="place + ready\n+ sensors", weight=5];
+  slot -> uncertain [label="interrupted pick", color="#b45309", fontcolor="#b45309"];
+  shovel -> uncertain [label="interrupted\nplace", color="#b45309", fontcolor="#b45309"];
+  uncertain -> slot [label="inspect +\nreconcile source", constraint=false];
+  uncertain -> shovel [label="inspect +\nreconcile shovel", constraint=false];
+  uncertain -> destination [label="inspect +\nreconcile destination", constraint=false];
 }
