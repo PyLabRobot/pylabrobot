@@ -7,6 +7,7 @@ from collections import deque
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
+from typing import Literal, Tuple
 from unittest import TestCase
 from unittest.mock import AsyncMock, patch
 
@@ -20,6 +21,12 @@ DATA = Path(__file__).parent / "test_data"
 CAPTURES = json.loads((DATA / "synergy_ht.json").read_text())
 NATIVE_SETUP = json.loads((DATA / "synergy_ht_setup.json").read_text())
 SHAKING = json.loads((DATA / "synergy_ht_shaking.json").read_text())
+SHAKE_INTENSITIES: Tuple[Literal["slow", "medium", "fast", "variable"], ...] = (
+  "slow",
+  "medium",
+  "fast",
+  "variable",
+)
 
 
 class Replay:
@@ -149,15 +156,15 @@ def test_native_endpoint_serializer(wavelength, expected):
 
 @pytest.mark.parametrize("setup", SHAKING["setups"], ids=lambda x: str(x["frame"]))
 def test_captured_shake_setup(setup):
-  assert SynergyHT._absorbance_setup(600, setup["duration"], setup["intensity"]) == bytes.fromhex(
-    setup["hex"]
-  )
+  assert SynergyHT._absorbance_setup(
+    600, setup["duration"], SHAKE_INTENSITIES[setup["intensity"]]
+  ) == bytes.fromhex(setup["hex"])
 
 
 @pytest.mark.parametrize("vector", SHAKING["native"]["vectors"])
 def test_native_shake_duration_encoding(vector):
   assert SynergyHT._absorbance_setup(
-    vector["wavelength"], vector["duration"], vector["intensity"]
+    vector["wavelength"], vector["duration"], SHAKE_INTENSITIES[vector["intensity"]]
   ) == bytes.fromhex(vector["hex"])
 
 
@@ -169,7 +176,10 @@ async def test_captured_shake_then_read_without_shaking(reader, chunk_size):
   replay = attach(io, capture["events"] + CAPTURES["reads"][0]["events"], chunk_size)
   with patch("asyncio.wait_for", wraps=asyncio.wait_for) as wait_for:
     (result,) = await device.read_absorbance(
-      600, "96-well", shake_duration=capture["duration"], shake_intensity=capture["intensity"]
+      600,
+      "96-well",
+      shake_duration=capture["duration"],
+      shake_intensity=SHAKE_INTENSITIES[capture["intensity"]],
     )
     assert wait_for.call_args.args[1] == device.read_timeout + capture["duration"]
     assert result.data == [[0.0] * 12 for _ in range(8)]
@@ -364,9 +374,15 @@ async def test_selection_reads_bounding_rectangle_and_masks_other_wells(
     {"shake_duration": float("inf")},
     {"shake_duration": True},
     {"shake_intensity": -1},
+    {"shake_intensity": 0},
+    {"shake_intensity": 1},
+    {"shake_intensity": 2},
+    {"shake_intensity": 3},
     {"shake_intensity": 4},
     {"shake_intensity": 1.0},
     {"shake_intensity": True},
+    {"shake_intensity": "unknown"},
+    {"shake_intensity": "Slow"},
   ],
 )
 @async_test

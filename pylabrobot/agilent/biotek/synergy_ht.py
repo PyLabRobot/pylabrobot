@@ -107,15 +107,18 @@ class SynergyHT(_BioTekReader):
 
   @staticmethod
   def _absorbance_setup(
-    wavelength: int, shake_duration: int = 0, shake_intensity: Literal[0, 1, 2, 3] = 0
+    wavelength: int,
+    shake_duration: int = 0,
+    shake_intensity: Literal["slow", "medium", "fast", "variable"] = "slow",
   ) -> bytes:
     """Encode the fixed 170-byte endpoint setup and its raw one-byte checksum."""
     if not 1 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 1 and 999 nm")
     if type(shake_duration) is not int or not 0 <= shake_duration <= 65535:
       raise ValueError("Shake duration must be an integer between 0 and 65535 seconds")
-    if type(shake_intensity) is not int or shake_intensity not in (0, 1, 2, 3):
-      raise ValueError("Shake intensity must be an integer between 0 and 3")
+    intensity_codes = {"slow": 0, "medium": 1, "fast": 2, "variable": 3}
+    if not isinstance(shake_intensity, str) or shake_intensity not in intensity_codes:
+      raise ValueError("Shake intensity must be 'slow', 'medium', 'fast', or 'variable'")
     packet = bytearray(170)
     packet[8] = ord("0")
     packet[29] = 0x10
@@ -124,7 +127,7 @@ class SynergyHT(_BioTekReader):
     if shake_duration:
       packet[30] = 0x10
       packet[162:164] = shake_duration.to_bytes(2, "little")
-      packet[164] = shake_intensity
+      packet[164] = intensity_codes[shake_intensity]
     packet[0] = sum(packet[1:]) & 0xFF
     return bytes(packet)
 
@@ -213,7 +216,7 @@ class SynergyHT(_BioTekReader):
     wells: Optional[Sequence[str]] = None,
     *,
     shake_duration: int = 0,
-    shake_intensity: Literal[0, 1, 2, 3] = 0,
+    shake_intensity: Literal["slow", "medium", "fast", "variable"] = "slow",
   ) -> List[AbsorbanceResult]:
     """Read endpoint absorbance in optical density (OD).
 
@@ -225,8 +228,8 @@ class SynergyHT(_BioTekReader):
         measures the bounding rectangle; only requested wells are returned.
       shake_duration: Shake the plate before measuring, in whole seconds (0-65535).
         Zero disables shaking. This duration is added to read_timeout.
-      shake_intensity: Instrument intensity level (0-3), used when shake_duration
-        is positive. These are device settings, not frequencies in Hz or RPM.
+      shake_intensity: "slow" (default), "medium", "fast", or "variable", used when
+        shake_duration is positive. These are device settings, not frequencies in Hz or RPM.
 
     Returns:
       A one-element list of AbsorbanceResult, matching the other BioTek readers.
