@@ -16,60 +16,11 @@ Its image metadata retains typed stage/galvo fields inside the shared envelope's
 protobuf `Any`. Other device types can implement identity/status alone or opt into
 jobs and images independently, without importing the Celigo implementation.
 
-## Installation
+## Command-line usage
 
-The server uses POSIX file locks and is tested on Linux. From a PLR checkout
-containing this package:
-
-```bash
-python -m pip install -e '.[celigo,rpc]'
-```
-
-The `celigo` and `rpc` extras are independent: combine device imaging dependencies
-with the shared transport when using Celigo remotely. Physical operation also
-needs the `ftdi` extra, the Lumenera SDK, USB access,
-and the instrument's vendor calibration/configuration files. These are not
-required for the remote client.
-
-```bash
-python -m pip install -e '.[celigo,rpc,ftdi]'
-```
-
-## Connection
-
-Each process serves one device. Run another process with a distinct device ID,
-port, and data directory for another instrument. Requests, jobs, and images carry
-device identity. Applications can track each device independently.
-
-The listener uses plaintext gRPC bound to loopback. Use an SSH tunnel for remote
-access. SSH supplies authentication and encryption for the remote connection;
-the RPC listener itself does not authenticate callers.
-
-## Physical service
-
-```bash
-celigo-grpc serve --device-id celigo-01 --port 50052 \
-  --data-dir /path/to/device-data \
-  --config-root /path/to/Celigo --lucam-sdk /path/to/liblucamapi.so \
-  --usb-address 1-7 --hardware-lock /path/to/celigo.service.lock
-```
-
-Use the actual controller USB topology and calibration for the instrument.
-Startup loads configuration and takes an exclusive service lock without opening
-the driver or moving hardware. Status starts as Uninitialized. Initialization
-requires creating and explicitly starting an initialization job. A restart
-requires initialization again; it never automatically repeats hardware work.
-
-`celigo-grpc inspect` reads identity, status, and configuration without motion:
-
-```bash
-celigo-grpc inspect --device-id celigo-01 --endpoint 127.0.0.1:50052
-```
-
-The physical adapter supports initialization and one brightfield frame at
-explicit sample XY, fixed Z, exposure, and gain. It records actual acquisition
-metadata. Autofocus, auto-exposure, drawer movement, and full plate scanning are
-not exposed by this transport yet. Laser operation is disabled.
+See the [Celigo CLI guide](../../../../docs/user_guide/revvity/celigo/cli.md) for
+installation, connection setup, and the `plr dev celigo serve` and
+`plr dev celigo inspect` commands.
 
 ## Contract
 

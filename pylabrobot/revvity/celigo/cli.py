@@ -1,4 +1,4 @@
-"""Physical Celigo server. Startup and inspection never construct or initialize a driver."""
+"""Celigo gRPC service and inspection tools."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import logging
 import signal
 from pathlib import Path
+from typing import Optional, Sequence
 
 from google.protobuf.json_format import MessageToDict
 
@@ -16,7 +17,8 @@ from pylabrobot.revvity.celigo.grpc.client import CeligoClient
 from pylabrobot.revvity.celigo.grpc.hardware import CeligoCore, CeligoServer
 
 
-async def serve(args) -> None:
+async def serve(args: argparse.Namespace) -> None:
+  """Run the service without constructing or initializing a driver at startup."""
   config = CeligoConfig.from_install(str(args.config_root))
   core = CeligoCore(
     args.data_dir,
@@ -54,7 +56,8 @@ async def serve(args) -> None:
     await server.stop()
 
 
-async def inspect(args) -> dict:
+async def inspect(args: argparse.Namespace) -> dict:
+  """Read identity, status, and configuration from a running service."""
   async with CeligoClient(
     args.endpoint,
     device_id=args.device_id,
@@ -68,8 +71,9 @@ async def inspect(args) -> dict:
     }
 
 
-def main() -> None:
-  parser = argparse.ArgumentParser(description=__doc__)
+def main(argv: Optional[Sequence[str]] = None) -> None:
+  """Parse Celigo arguments and run the selected operation."""
+  parser = argparse.ArgumentParser(prog="plr dev celigo", description=__doc__)
   commands = parser.add_subparsers(dest="command", required=True)
   server = commands.add_parser(
     "serve", help="start without motion; physical operations require StartJob"
@@ -89,7 +93,7 @@ def main() -> None:
   )
   check.add_argument("--endpoint", required=True)
   check.add_argument("--device-id", default="celigo-01")
-  args = parser.parse_args()
+  args = parser.parse_args(argv)
   logging.basicConfig(level=logging.INFO)
   if args.command == "serve":
     asyncio.run(serve(args))

@@ -13,7 +13,6 @@ dependencies = ["typing_extensions", "websockets>=14"]
 
 [project.scripts]
 plr = "pylabrobot.cli:main"
-celigo-grpc = "pylabrobot.revvity.celigo.grpc.hardware_cli:main"
 
 [project.optional-dependencies]
 serial = ["pyserial"]
