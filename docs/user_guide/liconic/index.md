@@ -1,8 +1,7 @@
 # LiCONiC
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 
-storex/hello-world
-storex/recovery
+storex/index
 ```

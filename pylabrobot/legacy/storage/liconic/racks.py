@@ -1,6 +1,7 @@
 from pylabrobot.liconic.racks import _create_legacy_rack
 from pylabrobot.resources import Coordinate as Coordinate
-from pylabrobot.resources.carrier import PlateCarrier as PlateCarrier, PlateHolder as PlateHolder
+from pylabrobot.resources.carrier import PlateCarrier as PlateCarrier
+from pylabrobot.resources.carrier import PlateHolder as PlateHolder
 
 
 def _liconic_rack(

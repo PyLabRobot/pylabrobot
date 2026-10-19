@@ -3,6 +3,8 @@ from typing import Dict, Tuple, Type
 from pylabrobot.legacy.storage.liconic.constants import ControllerError, HandlingError
 from pylabrobot.liconic.errors import (
   CONTROLLER_ERRORS as _CONTROLLER_ERRORS,
+)
+from pylabrobot.liconic.errors import (
   HANDLING_ERRORS as _HANDLING_ERRORS,
 )
 

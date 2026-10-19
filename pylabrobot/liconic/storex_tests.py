@@ -33,6 +33,7 @@ class StoreXTestCase(unittest.IsolatedAsyncioTestCase):
       swap_home_sensor=100,
     )
     self.io = create_autospec(Serial, instance=True)
+    self.io.port = "offline"
     self.store.io = self.io
     sleep_patch = patch("pylabrobot.liconic.storex.sleep", new_callable=AsyncMock)
     self.sleep = sleep_patch.start()
@@ -873,7 +874,7 @@ class StoreXClimateTests(StoreXTestCase):
     self.io.write.assert_not_awaited()
 
 
-class CassetteTests(unittest.TestCase):
+class CassetteTests(unittest.IsolatedAsyncioTestCase):
   def test_documented_tall_pitch_and_calibrated_override(self) -> None:
     rack = StoreXCassette("tall", num_sites=4, site_height=104, pitch=110)
     self.assertEqual(rack.pitch_steps, 3769)
@@ -884,7 +885,7 @@ class CassetteTests(unittest.TestCase):
     )
     self.assertEqual(calibrated.pitch_steps, 942)
 
-  def test_plate_height_includes_lid_and_last_slot_has_real_clearance(self) -> None:
+  async def test_plate_height_includes_lid_and_last_slot_has_real_clearance(self) -> None:
     rack = StoreXCassette("rack", num_sites=2, site_height=17, pitch=23)
     store = StoreX("store", "offline", "STX44_IC", {1: rack})
     plate = Plate(
