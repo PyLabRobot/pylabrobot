@@ -11,7 +11,7 @@ import math
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Set, Tuple
 
 from pylabrobot.resources import Plate, Well
 
@@ -342,6 +342,7 @@ class Measurement:
     self._driver = driver
     self.configuration = configuration
     self._default_read_timeout = 600.0  # 200 flashes on 96 wells take 223 s
+    self._warned_untested: Set[str] = set()
 
   @property
   def default_read_timeout(self) -> float:
@@ -353,6 +354,14 @@ class Measurement:
     if not value > 0:
       raise ValueError(f"default_read_timeout must be positive, got {value}")
     self._default_read_timeout = value
+
+  def _warn_untested(self, what: str) -> None:
+    """Warn once per reader that `what` has not run on hardware with this driver."""
+    if what not in self._warned_untested:
+      logger.warning(
+        "%s has not been tested on hardware with this driver; please report how it works", what
+      )
+      self._warned_untested.add(what)
 
   def _get_plate_and_wells(
     self,
