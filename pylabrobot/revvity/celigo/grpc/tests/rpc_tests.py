@@ -97,6 +97,11 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(driver.acquire_scan_position.await_args.kwargs["machine_auto_exposure"])
         image = await job.get_frame((await job.list_frames())[0].frame_id)
         metadata = unpack_acquisition_metadata(image)
+        self.assertTrue(metadata.HasField("timing"))
+        self.assertTrue(metadata.timing.HasField("stage_move_elapsed"))
+        self.assertLessEqual(
+          metadata.timing.started_at.ToNanoseconds(), metadata.timing.finished_at.ToNanoseconds()
+        )
         self.assertTrue(metadata.machine_auto_exposure)
         self.assertEqual(
           metadata.exposure_ms, driver.acquire_scan_position.return_value.frame.exposure_ms

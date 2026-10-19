@@ -2,6 +2,7 @@ import datetime
 
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import duration_pb2 as _duration_pb2
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from pylabrobot.rpc.v1 import device_pb2 as _device_pb2
 from pylabrobot.rpc.v1 import jobs_pb2 as _jobs_pb2
 from google.protobuf.internal import containers as _containers
@@ -153,8 +154,20 @@ class AutofocusResult(_message.Message):
     samples: _containers.RepeatedCompositeFieldContainer[FocusSample]
     def __init__(self, z_ticks: _Optional[int] = ..., z_mm: _Optional[float] = ..., score: _Optional[float] = ..., samples: _Optional[_Iterable[_Union[FocusSample, _Mapping]]] = ...) -> None: ...
 
+class AcquisitionTiming(_message.Message):
+    __slots__ = ("started_at", "finished_at", "elapsed", "stage_move_elapsed")
+    STARTED_AT_FIELD_NUMBER: _ClassVar[int]
+    FINISHED_AT_FIELD_NUMBER: _ClassVar[int]
+    ELAPSED_FIELD_NUMBER: _ClassVar[int]
+    STAGE_MOVE_ELAPSED_FIELD_NUMBER: _ClassVar[int]
+    started_at: _timestamp_pb2.Timestamp
+    finished_at: _timestamp_pb2.Timestamp
+    elapsed: _duration_pb2.Duration
+    stage_move_elapsed: _duration_pb2.Duration
+    def __init__(self, started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., finished_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., elapsed: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., stage_move_elapsed: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ...) -> None: ...
+
 class AcquisitionMetadata(_message.Message):
-    __slots__ = ("channel", "exposure_ms", "gain", "sample_x_mm", "sample_y_mm", "z_mm", "focus_method", "stage_x_mm", "stage_y_mm", "galvo_x_volts", "galvo_y_volts", "configuration_id", "planned_frame_index", "block_index", "tile_row", "tile_column", "label", "focus_score", "machine_auto_exposure", "image_geometry", "autofocus")
+    __slots__ = ("channel", "exposure_ms", "gain", "sample_x_mm", "sample_y_mm", "z_mm", "focus_method", "stage_x_mm", "stage_y_mm", "galvo_x_volts", "galvo_y_volts", "configuration_id", "planned_frame_index", "block_index", "tile_row", "tile_column", "label", "focus_score", "machine_auto_exposure", "image_geometry", "autofocus", "timing")
     CHANNEL_FIELD_NUMBER: _ClassVar[int]
     EXPOSURE_MS_FIELD_NUMBER: _ClassVar[int]
     GAIN_FIELD_NUMBER: _ClassVar[int]
@@ -176,6 +189,7 @@ class AcquisitionMetadata(_message.Message):
     MACHINE_AUTO_EXPOSURE_FIELD_NUMBER: _ClassVar[int]
     IMAGE_GEOMETRY_FIELD_NUMBER: _ClassVar[int]
     AUTOFOCUS_FIELD_NUMBER: _ClassVar[int]
+    TIMING_FIELD_NUMBER: _ClassVar[int]
     channel: str
     exposure_ms: float
     gain: float
@@ -197,7 +211,8 @@ class AcquisitionMetadata(_message.Message):
     machine_auto_exposure: bool
     image_geometry: ImageGeometry
     autofocus: AutofocusResult
-    def __init__(self, channel: _Optional[str] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ..., sample_x_mm: _Optional[float] = ..., sample_y_mm: _Optional[float] = ..., z_mm: _Optional[float] = ..., focus_method: _Optional[str] = ..., stage_x_mm: _Optional[float] = ..., stage_y_mm: _Optional[float] = ..., galvo_x_volts: _Optional[float] = ..., galvo_y_volts: _Optional[float] = ..., configuration_id: _Optional[str] = ..., planned_frame_index: _Optional[int] = ..., block_index: _Optional[int] = ..., tile_row: _Optional[int] = ..., tile_column: _Optional[int] = ..., label: _Optional[str] = ..., focus_score: _Optional[float] = ..., machine_auto_exposure: _Optional[bool] = ..., image_geometry: _Optional[_Union[ImageGeometry, _Mapping]] = ..., autofocus: _Optional[_Union[AutofocusResult, _Mapping]] = ...) -> None: ...
+    timing: AcquisitionTiming
+    def __init__(self, channel: _Optional[str] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ..., sample_x_mm: _Optional[float] = ..., sample_y_mm: _Optional[float] = ..., z_mm: _Optional[float] = ..., focus_method: _Optional[str] = ..., stage_x_mm: _Optional[float] = ..., stage_y_mm: _Optional[float] = ..., galvo_x_volts: _Optional[float] = ..., galvo_y_volts: _Optional[float] = ..., configuration_id: _Optional[str] = ..., planned_frame_index: _Optional[int] = ..., block_index: _Optional[int] = ..., tile_row: _Optional[int] = ..., tile_column: _Optional[int] = ..., label: _Optional[str] = ..., focus_score: _Optional[float] = ..., machine_auto_exposure: _Optional[bool] = ..., image_geometry: _Optional[_Union[ImageGeometry, _Mapping]] = ..., autofocus: _Optional[_Union[AutofocusResult, _Mapping]] = ..., timing: _Optional[_Union[AcquisitionTiming, _Mapping]] = ...) -> None: ...
 
 class ScanRegion(_message.Message):
     __slots__ = ("left_mm", "top_mm", "right_mm", "bottom_mm")

@@ -13,7 +13,7 @@ from pylabrobot.revvity.celigo.grpc.job_specification import Brightfield
 from pylabrobot.revvity.celigo.grpc.limits import MAX_FRAME_BYTES, MAX_PIXELS
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
-from pylabrobot.revvity.celigo.scan import FrameResult
+from pylabrobot.revvity.celigo.scan import AcquisitionTiming, FrameResult
 from pylabrobot.rpc.v1 import images_pb2 as image_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
@@ -87,12 +87,24 @@ def _encode_image(
   return image
 
 
+def encode_acquisition_timing(timing: AcquisitionTiming) -> pb.AcquisitionTiming:
+  """Encode UTC host timestamps and separately measured acquisition/stage durations."""
+  result = pb.AcquisitionTiming()
+  result.started_at.FromNanoseconds(round(timing.started_at * 1_000_000_000))
+  result.finished_at.FromNanoseconds(round(timing.finished_at * 1_000_000_000))
+  result.elapsed.FromTimedelta(timing.elapsed)
+  if timing.stage_move_elapsed is not None:
+    result.stage_move_elapsed.FromTimedelta(timing.stage_move_elapsed)
+  return result
+
+
 def encode_frame(
   job: job_pb.JobRef,
   result: AcquisitionResult,
   settings: Brightfield,
   configuration_id: str,
   image_geometry: pb.ImageGeometry,
+  timing: AcquisitionTiming,
 ) -> stored_pb.ImageFrame:
   """Encode one fixed-focus brightfield capture and its acquisition settings."""
   return _encode_image(
@@ -110,6 +122,7 @@ def encode_frame(
       focus_method="FixedZ",
       machine_auto_exposure=settings.machine_auto_exposure,
       image_geometry=image_geometry,
+      timing=encode_acquisition_timing(timing),
       configuration_id=configuration_id,
       galvo_x_volts=result.galvo_hardware_voltages[0],
       galvo_y_volts=result.galvo_hardware_voltages[1],
@@ -161,6 +174,8 @@ def encode_scan_frame(
         ],
       )
     )
+  if result.timing is not None:
+    metadata.timing.CopyFrom(encode_acquisition_timing(result.timing))
   return _encode_image(
     job, result.frame, metadata, sequence=planned.index + 1, representation="Scan"
   )

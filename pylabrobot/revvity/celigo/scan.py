@@ -418,6 +418,20 @@ class ScanPlan:
 
 
 @dataclass(frozen=True)
+class AcquisitionTiming:
+  """Host Unix timestamps and monotonic durations, excluding image persistence.
+
+  elapsed includes acquisition and illumination cleanup. stage_move_elapsed is
+  present only on the first image after a coarse-stage move and is separate from elapsed.
+  """
+
+  started_at: float
+  finished_at: float
+  elapsed: timedelta
+  stage_move_elapsed: Optional[timedelta] = None
+
+
+@dataclass(frozen=True)
 class FrameResult:
   """A captured frame linked to the exact operation that produced it."""
 
@@ -427,6 +441,7 @@ class FrameResult:
   actual_z_mm: float
   galvo_hardware_voltages: Tuple[float, float]
   focus: Optional["FocusResult"]
+  timing: Optional[AcquisitionTiming] = None
 
 
 @dataclass(frozen=True)

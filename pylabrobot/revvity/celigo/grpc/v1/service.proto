@@ -4,6 +4,7 @@ package celigo.v1;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "pylabrobot/rpc/v1/device.proto";
 import "pylabrobot/rpc/v1/jobs.proto";
 
@@ -81,6 +82,13 @@ message AutofocusResult {
   repeated FocusSample samples = 4; // Coarse and fine samples in acquisition order.
 }
 
+message AcquisitionTiming {
+  google.protobuf.Timestamp started_at = 1;
+  google.protobuf.Timestamp finished_at = 2;
+  google.protobuf.Duration elapsed = 3; // Acquisition and cleanup; excludes stage move/storage.
+  google.protobuf.Duration stage_move_elapsed = 4; // Only the first frame of each block.
+}
+
 message AcquisitionMetadata {
   string channel = 1;
   double exposure_ms = 2;
@@ -103,6 +111,7 @@ message AcquisitionMetadata {
   bool machine_auto_exposure = 19;
   ImageGeometry image_geometry = 20;
   AutofocusResult autofocus = 21; // Absent when this frame did not run autofocus.
+  AcquisitionTiming timing = 22;
 }
 
 message ScanRegion {

@@ -9,8 +9,10 @@ import json
 import logging
 import math
 import re
+import time
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from dataclasses import asdict, replace
+from datetime import timedelta
 from pathlib import Path
 from typing import BinaryIO, TypeVar
 from uuid import uuid4
@@ -44,6 +46,7 @@ from pylabrobot.revvity.celigo.grpc.limits import (
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
 from pylabrobot.revvity.celigo.scan import (
+  AcquisitionTiming,
   FrameResult,
   PlannedFrame,
   ScanEstimateModel,
@@ -481,10 +484,14 @@ class CeligoSession:
     await self.check_imaging_status()
     if job.stop_requested.is_set():
       return None
+    stage_move_started = time.monotonic()
     settled = await driver.move_to_scan_block(plan.blocks[0])
+    stage_move_elapsed = timedelta(seconds=time.monotonic() - stage_move_started)
     await self.check_imaging_status()
     if job.stop_requested.is_set():
       return None
+    acquisition_started_at = time.time()
+    acquisition_started = time.monotonic()
     result = await driver.acquire_scan_position(
       position=plan.frames[0].position,
       label=job.ref.job_id,
@@ -496,6 +503,12 @@ class CeligoSession:
       settled_stage_position_mm=settled,
       machine_auto_exposure=settings.machine_auto_exposure,
     )  # Public PLR API finishes illumination cleanup before returning.
+    timing = AcquisitionTiming(
+      started_at=acquisition_started_at,
+      finished_at=time.time(),
+      elapsed=timedelta(seconds=time.monotonic() - acquisition_started),
+      stage_move_elapsed=stage_move_elapsed,
+    )
     if (result.frame.width, result.frame.height) != (job.spec.width, job.spec.height):
       raise ValueError("camera returned dimensions different from calibration")
     return await asyncio.to_thread(
@@ -505,6 +518,7 @@ class CeligoSession:
       settings,
       self.configuration_id,
       encode_image_geometry(self.config, result.channel),
+      timing,
     )
 
   async def execute_scan(self, job: AcquisitionJob) -> None:

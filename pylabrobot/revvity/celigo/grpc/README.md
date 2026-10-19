@@ -216,6 +216,15 @@ the sampled maximum because the driver verifies focus with a fresh image. Frames
 that reuse a block's focus omit this message. `focus_score` is also retained for
 clients using the scalar field; older images may have only that scalar.
 
+`metadata.timing` records acquisition start/finish timestamps on the device host
+and a monotonic elapsed duration. Acquisition includes optics, auto-exposure,
+autofocus/capture, and illumination cleanup; it excludes PNG encoding, storage,
+callbacks, and network transfer. Coarse-stage movement is measured separately as
+`stage_move_elapsed`, present only on the first frame of each block (and on a
+single brightfield capture). Local `FrameResult.timing` exposes the same data.
+The camera's own capture timestamp remains in the shared image envelope. Older
+retained images omit timing instead of reporting invented zero durations.
+
 Accepted scans continue when clients disconnect. Cancellation lets an in-flight
 acquisition finish and commits its image before ending the scan and cleaning up
 the driver. Failures preserve earlier committed frames. A service restart marks

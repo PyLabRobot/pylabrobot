@@ -63,6 +63,7 @@ from pylabrobot.revvity.celigo.protocol import (
   validate_payload_length,
 )
 from pylabrobot.revvity.celigo.scan import (
+  AcquisitionTiming,
   AutofocusMethod,
   BlockShape,
   FrameResult,
@@ -1838,7 +1839,9 @@ class Celigo:
       block_frames.append(planned_frame)
 
     for block in plan.blocks:
+      stage_move_started = time.monotonic()
       settled_stage_position_mm = await self.move_to_scan_block(block)
+      stage_move_elapsed = timedelta(seconds=time.monotonic() - stage_move_started)
       focused_brightfield_z_mm = initial_brightfield_z_mm
       label = block.label if block.label is not None else f"block-{block.index}"
       for frame_index, planned_frame in enumerate(frames_by_block[block.index]):
@@ -1851,6 +1854,8 @@ class Celigo:
           if focused_brightfield_z_mm is None
           else focused_brightfield_z_mm + channel_config.z_offset_to_brightfield_mm
         )
+        acquisition_started_at = time.time()
+        acquisition_started = time.monotonic()
         acquisition = await self.acquire_scan_position(
           position=planned_frame.position,
           label=label,
@@ -1862,6 +1867,12 @@ class Celigo:
           settled_stage_position_mm=settled_stage_position_mm,
           machine_auto_exposure=capture.machine_auto_exposure,
         )
+        timing = AcquisitionTiming(
+          started_at=acquisition_started_at,
+          finished_at=time.time(),
+          elapsed=timedelta(seconds=time.monotonic() - acquisition_started),
+          stage_move_elapsed=stage_move_elapsed if frame_index == 0 else None,
+        )
         if acquisition.focus is not None:
           focused_brightfield_z_mm = acquisition.z_mm - channel_config.z_offset_to_brightfield_mm
         frame_result = FrameResult(
@@ -1871,6 +1882,7 @@ class Celigo:
           actual_z_mm=acquisition.z_mm,
           galvo_hardware_voltages=acquisition.galvo_hardware_voltages,
           focus=acquisition.focus,
+          timing=timing,
         )
         if retain_frames:
           frame_results.append(frame_result)

@@ -436,6 +436,49 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
       )
     )
 
+  async def test_acquisition_timing_excludes_callbacks_and_counts_stage_motion_once(self):
+    """Separate physical acquisition from per-frame persistence and shared block movement."""
+    plan = self.celigo.plan(ScanSpec.points([(5, 5)], block_shape=(2, 1), channel="brightfield"))
+    with patch("pylabrobot.revvity.celigo.celigo.time") as clock:
+      clock.monotonic.return_value = 0
+      clock.time.return_value = 1000
+
+      async def move(block):
+        clock.monotonic.return_value += 2
+        clock.time.return_value += 2
+        return block.stage_x_mm, block.stage_y_mm
+
+      async def acquire(**kwargs):
+        clock.monotonic.return_value += 3
+        clock.time.return_value += 3
+        return SimpleNamespace(
+          frame=_frame(),
+          x_mm=1,
+          y_mm=2,
+          z_mm=2.5,
+          galvo_hardware_voltages=(0, 0),
+          focus=None,
+        )
+
+      async def persist(frame):
+        clock.monotonic.return_value += 10
+        clock.time.return_value += 10
+
+      with (
+        patch.object(self.celigo, "move_to_scan_block", move),
+        patch.object(self.celigo, "acquire_scan_position", acquire),
+      ):
+        result = await self.celigo.execute(plan, on_frame=persist)
+    first, second = (frame.timing for frame in result.frames)
+    assert first is not None and second is not None
+    self.assertEqual((first.started_at, first.finished_at), (1002, 1005))
+    self.assertEqual((second.started_at, second.finished_at), (1015, 1018))
+    self.assertEqual(first.elapsed, timedelta(seconds=3))
+    self.assertEqual(second.elapsed, timedelta(seconds=3))
+    self.assertEqual(first.stage_move_elapsed, timedelta(seconds=2))
+    self.assertIsNone(second.stage_move_elapsed)
+    self.assertEqual(result.elapsed, timedelta(seconds=28))
+
   async def test_execute_rejects_a_plan_after_configuration_changes_before_motion(self):
     plan = self.celigo.plan(ScanSpec.points([(5, 5)], channel="brightfield"))
     self.celigo.config.magnification = 5

@@ -188,6 +188,12 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
           self.assertEqual(metadata.block_index, planned.block.index)
           self.assertEqual(metadata.label, planned.block.label)
           self.assertEqual(metadata.channel, planned.capture.channel)
+          self.assertTrue(metadata.HasField("timing"))
+          self.assertLessEqual(
+            metadata.timing.started_at.ToNanoseconds(), metadata.timing.finished_at.ToNanoseconds()
+          )
+          self.assertGreaterEqual(metadata.timing.elapsed.ToNanoseconds(), 0)
+          self.assertEqual(metadata.timing.HasField("stage_move_elapsed"), planned.index % 12 == 0)
           self.assertEqual(
             metadata.image_geometry,
             configuration.image_geometry_by_channel[planned.capture.channel],

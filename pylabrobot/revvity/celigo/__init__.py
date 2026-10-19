@@ -63,6 +63,7 @@ from pylabrobot.revvity.celigo.motion import (
 )
 from pylabrobot.revvity.celigo.navigation import well_to_sample_mm, well_to_stage_mm
 from pylabrobot.revvity.celigo.scan import (
+  AcquisitionTiming,
   AutofocusMethod,
   BlockShape,
   Capture,
@@ -84,6 +85,7 @@ from pylabrobot.revvity.celigo.scan import (
 
 __all__ = [
   "AcquisitionResult",
+  "AcquisitionTiming",
   "AnalogInputConfig",
   "AutofocusMethod",
   "Axis",
