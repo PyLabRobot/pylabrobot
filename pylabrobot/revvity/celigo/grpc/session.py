@@ -23,6 +23,7 @@ from pylabrobot.revvity.celigo.grpc.acquisition_job import AcquisitionJob, run_o
 from pylabrobot.revvity.celigo.grpc.image_encoding import (
   build_public_image_frame,
   encode_frame,
+  encode_image_geometry,
   encode_scan_frame,
 )
 from pylabrobot.revvity.celigo.grpc.job_specification import Brightfield, JobSpecification
@@ -156,6 +157,9 @@ class CeligoSession:
       default_scan_gain=DEFAULT_SCAN_GAIN,
       autofocus_methods=[pb.AUTOFOCUS_NONE, pb.AUTOFOCUS_IMAGE],
       auto_exposure_supported=True,
+      image_geometry_by_channel={
+        channel: encode_image_geometry(self.config, channel) for channel in self.config.channels
+      },
       capture_contract="Fixed-Z brightfield captures or inspected scan plans with optional auto-exposure and image autofocus.",
     )
 
@@ -494,7 +498,14 @@ class CeligoSession:
     )  # Public PLR API finishes illumination cleanup before returning.
     if (result.frame.width, result.frame.height) != (job.spec.width, job.spec.height):
       raise ValueError("camera returned dimensions different from calibration")
-    return await asyncio.to_thread(encode_frame, job.ref, result, settings, self.configuration_id)
+    return await asyncio.to_thread(
+      encode_frame,
+      job.ref,
+      result,
+      settings,
+      self.configuration_id,
+      encode_image_geometry(self.config, result.channel),
+    )
 
   async def execute_scan(self, job: AcquisitionJob) -> None:
     """Execute the stored plan, persisting each frame before allowing more motion."""
@@ -512,7 +523,13 @@ class CeligoSession:
       """Commit pixels and progress together, then honor cooperative cancellation."""
       if (result.frame.width, result.frame.height) != (job.spec.width, job.spec.height):
         raise ValueError("camera returned dimensions different from calibration")
-      frame = await asyncio.to_thread(encode_scan_frame, job.ref, result, self.configuration_id)
+      frame = await asyncio.to_thread(
+        encode_scan_frame,
+        job.ref,
+        result,
+        self.configuration_id,
+        encode_image_geometry(self.config, result.planned.capture.channel),
+      )
       await job.commit_frame(frame)
       if job.stop_requested.is_set():
         raise _ScanCancelled()

@@ -5,6 +5,7 @@ import contextlib
 import hashlib
 import io
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -43,6 +44,48 @@ async def rpc_system(tmp_path, geometry=(64, 48, 16)):
 
 
 class RpcTests(unittest.IsolatedAsyncioTestCase):
+  async def test_calibrated_image_geometry_is_retained_with_the_pixels(self) -> None:
+    """Retain anisotropic channel scales and total overlap for later measurements."""
+    config = make_config()
+    config.calibration = replace(config.calibration, microns_per_pixel_x=10, microns_per_pixel_y=12)
+    config.navigation = replace(config.navigation, frame_overlap_x_mm=0.01, frame_overlap_y_mm=0.02)
+    config.channels["brightfield"] = replace(
+      config.channels["brightfield"],
+      mm_per_pixel_x_correction_to_brightfield=1.2,
+      mm_per_pixel_y_correction_to_brightfield=0.75,
+    )
+    with TemporaryDirectory() as directory:
+      server, _ = make_server(Path(directory), config=config)
+      await server.start()
+      try:
+        async with CeligoClient(server.endpoint, device_id="celigo-test") as client:
+          geometry = (await client.get_configuration()).image_geometry_by_channel["brightfield"]
+          self.assertEqual((geometry.microns_per_pixel_x, geometry.microns_per_pixel_y), (12, 9))
+          self.assertAlmostEqual(geometry.nominal_overlap_x_mm, 0.024)
+          self.assertAlmostEqual(geometry.nominal_overlap_y_mm, 0.03)
+          await initialize(client)
+          job = await capture(client, "calibrated")
+          await job.start()
+          await job.wait()
+          image = await job.get_frame((await job.list_frames())[0].frame_id)
+          self.assertEqual(unpack_acquisition_metadata(image).image_geometry, geometry)
+      finally:
+        await server.stop()
+      config.calibration = replace(config.calibration, microns_per_pixel_x=20)
+      server, hardware = make_server(Path(directory), config=config)
+      await server.start()
+      try:
+        async with CeligoClient(server.endpoint, device_id="celigo-test") as client:
+          job = await client.recover_job("calibrated")
+          retained = unpack_acquisition_metadata(await job.get_frame(image.frame_id))
+          self.assertEqual(retained.image_geometry, geometry)
+          self.assertNotEqual(
+            (await client.get_configuration()).image_geometry_by_channel["brightfield"], geometry
+          )
+          hardware.setup.assert_not_called()
+      finally:
+        await server.stop()
+
   async def test_auto_exposure_preview_retains_actual_camera_settings(self) -> None:
     """Auto-exposure reaches the driver and reports the measured rather than requested value."""
     with TemporaryDirectory() as directory:

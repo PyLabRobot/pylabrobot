@@ -173,6 +173,7 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(hardware.move_to_scan_block.await_count, 2)
         self.assertEqual(hardware.acquire_scan_position.await_count, 24)
         frames = await job.list_frames()
+        configuration = await client.get_configuration()
         self.assertEqual([frame.sequence for frame in frames], list(range(1, 25)))
         for planned, info, call in zip(
           plan.frames, frames, hardware.acquire_scan_position.await_args_list
@@ -183,6 +184,10 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
           self.assertEqual(metadata.block_index, planned.block.index)
           self.assertEqual(metadata.label, planned.block.label)
           self.assertEqual(metadata.channel, planned.capture.channel)
+          self.assertEqual(
+            metadata.image_geometry,
+            configuration.image_geometry_by_channel[planned.capture.channel],
+          )
           self.assertEqual(
             metadata.exposure_ms,
             7.5 if planned.capture.machine_auto_exposure else planned.capture.exposure_ms,

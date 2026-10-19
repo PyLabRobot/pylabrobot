@@ -8,6 +8,7 @@ from PIL import Image
 
 from pylabrobot.revvity.celigo.camera import CameraFrame
 from pylabrobot.revvity.celigo.celigo import AcquisitionResult
+from pylabrobot.revvity.celigo.config import CeligoConfig
 from pylabrobot.revvity.celigo.grpc.job_specification import Brightfield
 from pylabrobot.revvity.celigo.grpc.limits import MAX_FRAME_BYTES, MAX_PIXELS
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
@@ -15,6 +16,19 @@ from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
 from pylabrobot.revvity.celigo.scan import FrameResult
 from pylabrobot.rpc.v1 import images_pb2 as image_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
+
+
+def encode_image_geometry(config: CeligoConfig, channel: str) -> pb.ImageGeometry:
+  """Apply channel calibration and report total adjacent-frame overlap, not edge margins."""
+  correction = config.channels[channel]
+  x = correction.mm_per_pixel_x_correction_to_brightfield
+  y = correction.mm_per_pixel_y_correction_to_brightfield
+  return pb.ImageGeometry(
+    microns_per_pixel_x=config.calibration.microns_per_pixel_x * x,
+    microns_per_pixel_y=config.calibration.microns_per_pixel_y * y,
+    nominal_overlap_x_mm=2 * config.navigation.frame_overlap_x_mm * x,
+    nominal_overlap_y_mm=2 * config.navigation.frame_overlap_y_mm * y,
+  )
 
 
 def build_public_image_frame(frame: stored_pb.ImageFrame) -> image_pb.ImageFrame:
@@ -78,6 +92,7 @@ def encode_frame(
   result: AcquisitionResult,
   settings: Brightfield,
   configuration_id: str,
+  image_geometry: pb.ImageGeometry,
 ) -> stored_pb.ImageFrame:
   """Encode one fixed-focus brightfield capture and its acquisition settings."""
   return _encode_image(
@@ -94,6 +109,7 @@ def encode_frame(
       z_mm=result.z_mm,
       focus_method="FixedZ",
       machine_auto_exposure=settings.machine_auto_exposure,
+      image_geometry=image_geometry,
       configuration_id=configuration_id,
       galvo_x_volts=result.galvo_hardware_voltages[0],
       galvo_y_volts=result.galvo_hardware_voltages[1],
@@ -104,7 +120,10 @@ def encode_frame(
 
 
 def encode_scan_frame(
-  job: job_pb.JobRef, result: FrameResult, configuration_id: str
+  job: job_pb.JobRef,
+  result: FrameResult,
+  configuration_id: str,
+  image_geometry: pb.ImageGeometry,
 ) -> stored_pb.ImageFrame:
   """Link a captured image to its exact planned frame, block, tile, and channel."""
   planned = result.planned
@@ -128,6 +147,7 @@ def encode_scan_frame(
     label=planned.block.label,
     focus_score=result.focus.score if result.focus is not None else None,
     machine_auto_exposure=planned.capture.machine_auto_exposure,
+    image_geometry=image_geometry,
   )
   return _encode_image(
     job, result.frame, metadata, sequence=planned.index + 1, representation="Scan"

@@ -201,6 +201,14 @@ the supplied seed determines each channel's fixed Z. Omitting it uses instrument
 calibration. Planning checks every channel's initial position against Z travel.
 The seed is part of the inspectable, persisted plan and survives reconnect/restart.
 
+`configuration.image_geometry_by_channel[channel]` exposes calibrated X/Y pixel
+sizes in microns and nominal adjacent-frame overlap in millimeters, including
+channel scale corrections. Overlap is the total shared width, twice the vendor's
+per-edge overlap setting. Full-coverage plans can tighten spacing; their actual
+frame positions determine overlap in that case. Every image retains its own
+`metadata.image_geometry`, so later measurements use the acquisition's calibration
+even after configuration changes. Older retained images omit this message.
+
 Accepted scans continue when clients disconnect. Cancellation lets an in-flight
 acquisition finish and commits its image before ending the scan and cleaning up
 the driver. Failures preserve earlier committed frames. A service restart marks

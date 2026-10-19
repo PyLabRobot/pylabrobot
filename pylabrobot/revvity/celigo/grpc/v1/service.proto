@@ -42,6 +42,15 @@ message CeligoJobSpecification {
   ScanPlan scan_plan = 4;
 }
 
+message ImageGeometry {
+  double microns_per_pixel_x = 1;
+  double microns_per_pixel_y = 2;
+  // Total overlap between adjacent frames at the calibrated grid spacing.
+  // Full-coverage plans may use tighter spacing; their positions remain authoritative.
+  double nominal_overlap_x_mm = 3;
+  double nominal_overlap_y_mm = 4;
+}
+
 message CeligoConfiguration {
   string configuration_id = 1;
   uint32 width = 2;
@@ -57,6 +66,7 @@ message CeligoConfiguration {
   double default_scan_gain = 12;
   repeated AutofocusMethod autofocus_methods = 13;
   bool auto_exposure_supported = 14;
+  map<string, ImageGeometry> image_geometry_by_channel = 15;
 }
 
 message AcquisitionMetadata {
@@ -79,6 +89,7 @@ message AcquisitionMetadata {
   optional string label = 17;
   optional double focus_score = 18;
   bool machine_auto_exposure = 19;
+  ImageGeometry image_geometry = 20;
 }
 
 message ScanRegion {

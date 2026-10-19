@@ -80,8 +80,27 @@ class CeligoJobSpecification(_message.Message):
     scan_plan: ScanPlan
     def __init__(self, capture: _Optional[_Union[BrightfieldSettings, _Mapping]] = ..., width: _Optional[int] = ..., height: _Optional[int] = ..., scan_plan: _Optional[_Union[ScanPlan, _Mapping]] = ...) -> None: ...
 
+class ImageGeometry(_message.Message):
+    __slots__ = ("microns_per_pixel_x", "microns_per_pixel_y", "nominal_overlap_x_mm", "nominal_overlap_y_mm")
+    MICRONS_PER_PIXEL_X_FIELD_NUMBER: _ClassVar[int]
+    MICRONS_PER_PIXEL_Y_FIELD_NUMBER: _ClassVar[int]
+    NOMINAL_OVERLAP_X_MM_FIELD_NUMBER: _ClassVar[int]
+    NOMINAL_OVERLAP_Y_MM_FIELD_NUMBER: _ClassVar[int]
+    microns_per_pixel_x: float
+    microns_per_pixel_y: float
+    nominal_overlap_x_mm: float
+    nominal_overlap_y_mm: float
+    def __init__(self, microns_per_pixel_x: _Optional[float] = ..., microns_per_pixel_y: _Optional[float] = ..., nominal_overlap_x_mm: _Optional[float] = ..., nominal_overlap_y_mm: _Optional[float] = ...) -> None: ...
+
 class CeligoConfiguration(_message.Message):
-    __slots__ = ("configuration_id", "width", "height", "channels", "calibrated_brightfield_z_mm", "minimum_z_mm", "maximum_z_mm", "capture_contract", "maximum_exposure_ms", "maximum_gain", "default_scan_exposure_ms", "default_scan_gain", "autofocus_methods", "auto_exposure_supported")
+    __slots__ = ("configuration_id", "width", "height", "channels", "calibrated_brightfield_z_mm", "minimum_z_mm", "maximum_z_mm", "capture_contract", "maximum_exposure_ms", "maximum_gain", "default_scan_exposure_ms", "default_scan_gain", "autofocus_methods", "auto_exposure_supported", "image_geometry_by_channel")
+    class ImageGeometryByChannelEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: ImageGeometry
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[ImageGeometry, _Mapping]] = ...) -> None: ...
     CONFIGURATION_ID_FIELD_NUMBER: _ClassVar[int]
     WIDTH_FIELD_NUMBER: _ClassVar[int]
     HEIGHT_FIELD_NUMBER: _ClassVar[int]
@@ -96,6 +115,7 @@ class CeligoConfiguration(_message.Message):
     DEFAULT_SCAN_GAIN_FIELD_NUMBER: _ClassVar[int]
     AUTOFOCUS_METHODS_FIELD_NUMBER: _ClassVar[int]
     AUTO_EXPOSURE_SUPPORTED_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_GEOMETRY_BY_CHANNEL_FIELD_NUMBER: _ClassVar[int]
     configuration_id: str
     width: int
     height: int
@@ -110,10 +130,11 @@ class CeligoConfiguration(_message.Message):
     default_scan_gain: float
     autofocus_methods: _containers.RepeatedScalarFieldContainer[AutofocusMethod]
     auto_exposure_supported: bool
-    def __init__(self, configuration_id: _Optional[str] = ..., width: _Optional[int] = ..., height: _Optional[int] = ..., channels: _Optional[_Iterable[str]] = ..., calibrated_brightfield_z_mm: _Optional[float] = ..., minimum_z_mm: _Optional[float] = ..., maximum_z_mm: _Optional[float] = ..., capture_contract: _Optional[str] = ..., maximum_exposure_ms: _Optional[float] = ..., maximum_gain: _Optional[float] = ..., default_scan_exposure_ms: _Optional[float] = ..., default_scan_gain: _Optional[float] = ..., autofocus_methods: _Optional[_Iterable[_Union[AutofocusMethod, str]]] = ..., auto_exposure_supported: _Optional[bool] = ...) -> None: ...
+    image_geometry_by_channel: _containers.MessageMap[str, ImageGeometry]
+    def __init__(self, configuration_id: _Optional[str] = ..., width: _Optional[int] = ..., height: _Optional[int] = ..., channels: _Optional[_Iterable[str]] = ..., calibrated_brightfield_z_mm: _Optional[float] = ..., minimum_z_mm: _Optional[float] = ..., maximum_z_mm: _Optional[float] = ..., capture_contract: _Optional[str] = ..., maximum_exposure_ms: _Optional[float] = ..., maximum_gain: _Optional[float] = ..., default_scan_exposure_ms: _Optional[float] = ..., default_scan_gain: _Optional[float] = ..., autofocus_methods: _Optional[_Iterable[_Union[AutofocusMethod, str]]] = ..., auto_exposure_supported: _Optional[bool] = ..., image_geometry_by_channel: _Optional[_Mapping[str, ImageGeometry]] = ...) -> None: ...
 
 class AcquisitionMetadata(_message.Message):
-    __slots__ = ("channel", "exposure_ms", "gain", "sample_x_mm", "sample_y_mm", "z_mm", "focus_method", "stage_x_mm", "stage_y_mm", "galvo_x_volts", "galvo_y_volts", "configuration_id", "planned_frame_index", "block_index", "tile_row", "tile_column", "label", "focus_score", "machine_auto_exposure")
+    __slots__ = ("channel", "exposure_ms", "gain", "sample_x_mm", "sample_y_mm", "z_mm", "focus_method", "stage_x_mm", "stage_y_mm", "galvo_x_volts", "galvo_y_volts", "configuration_id", "planned_frame_index", "block_index", "tile_row", "tile_column", "label", "focus_score", "machine_auto_exposure", "image_geometry")
     CHANNEL_FIELD_NUMBER: _ClassVar[int]
     EXPOSURE_MS_FIELD_NUMBER: _ClassVar[int]
     GAIN_FIELD_NUMBER: _ClassVar[int]
@@ -133,6 +154,7 @@ class AcquisitionMetadata(_message.Message):
     LABEL_FIELD_NUMBER: _ClassVar[int]
     FOCUS_SCORE_FIELD_NUMBER: _ClassVar[int]
     MACHINE_AUTO_EXPOSURE_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_GEOMETRY_FIELD_NUMBER: _ClassVar[int]
     channel: str
     exposure_ms: float
     gain: float
@@ -152,7 +174,8 @@ class AcquisitionMetadata(_message.Message):
     label: str
     focus_score: float
     machine_auto_exposure: bool
-    def __init__(self, channel: _Optional[str] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ..., sample_x_mm: _Optional[float] = ..., sample_y_mm: _Optional[float] = ..., z_mm: _Optional[float] = ..., focus_method: _Optional[str] = ..., stage_x_mm: _Optional[float] = ..., stage_y_mm: _Optional[float] = ..., galvo_x_volts: _Optional[float] = ..., galvo_y_volts: _Optional[float] = ..., configuration_id: _Optional[str] = ..., planned_frame_index: _Optional[int] = ..., block_index: _Optional[int] = ..., tile_row: _Optional[int] = ..., tile_column: _Optional[int] = ..., label: _Optional[str] = ..., focus_score: _Optional[float] = ..., machine_auto_exposure: _Optional[bool] = ...) -> None: ...
+    image_geometry: ImageGeometry
+    def __init__(self, channel: _Optional[str] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ..., sample_x_mm: _Optional[float] = ..., sample_y_mm: _Optional[float] = ..., z_mm: _Optional[float] = ..., focus_method: _Optional[str] = ..., stage_x_mm: _Optional[float] = ..., stage_y_mm: _Optional[float] = ..., galvo_x_volts: _Optional[float] = ..., galvo_y_volts: _Optional[float] = ..., configuration_id: _Optional[str] = ..., planned_frame_index: _Optional[int] = ..., block_index: _Optional[int] = ..., tile_row: _Optional[int] = ..., tile_column: _Optional[int] = ..., label: _Optional[str] = ..., focus_score: _Optional[float] = ..., machine_auto_exposure: _Optional[bool] = ..., image_geometry: _Optional[_Union[ImageGeometry, _Mapping]] = ...) -> None: ...
 
 class ScanRegion(_message.Message):
     __slots__ = ("left_mm", "top_mm", "right_mm", "bottom_mm")
