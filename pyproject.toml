@@ -55,7 +55,6 @@ dev = [
 
 [project.scripts]
 celigo-grpc = "pylabrobot.revvity.celigo.grpc.hardware_cli:main"
-celigo-grpc-sim = "pylabrobot.revvity.celigo.grpc.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/pylabrobot/pylabrobot"

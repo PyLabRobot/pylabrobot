@@ -5,21 +5,6 @@ package celigo.v1;
 import "pylabrobot/rpc/v1/device.proto";
 import "pylabrobot/rpc/v1/jobs.proto";
 
-message SimulationSpec {
-  uint32 frame_count = 1;
-  uint32 width = 2;
-  uint32 height = 3;
-  uint32 bit_depth = 4;
-  uint32 interval_ms = 5;
-}
-
-message CreateRequest {
-  string device_id = 1;
-  string request_id = 2;
-  SimulationSpec specification = 3;
-  string configuration_id = 4;
-}
-
 message InitializationRequest {
   string device_id = 1;
   string request_id = 2;
@@ -73,13 +58,6 @@ message AcquisitionMetadata {
   double galvo_x_volts = 10;
   double galvo_y_volts = 11;
   string configuration_id = 12;
-}
-
-service SimulationService {
-  // Creates an inert initialization job; StartJob explicitly runs it.
-  rpc CreateInitialization(pylabrobot.rpc.v1.RequestLookup) returns (pylabrobot.rpc.v1.JobRef);
-  rpc CreateAcquisition(CreateRequest) returns (pylabrobot.rpc.v1.JobRef);
-  rpc CreatePreview(CreateRequest) returns (pylabrobot.rpc.v1.JobRef);
 }
 
 service CeligoService {

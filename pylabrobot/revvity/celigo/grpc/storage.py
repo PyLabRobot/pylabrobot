@@ -20,7 +20,6 @@ from typing import BinaryIO, TypeVar
 
 from pylabrobot.revvity.celigo.grpc.model import (
   MAX_FRAME_BYTES,
-  SimulationSpec,
   Specification,
 )
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
@@ -82,8 +81,8 @@ class Store:
     quota=DEFAULT_QUOTA,
     max_jobs=1024,
     *,
-    decode_spec: Callable[[bytes], Specification] = SimulationSpec.decode,
-    spec_format="simulation.v1",
+    decode_spec: Callable[[bytes], Specification],
+    spec_format: str,
   ):
     if quota <= 0 or max_jobs <= 0:
       raise ValueError("storage quota and max_jobs must be positive")
@@ -140,7 +139,7 @@ class Store:
         if row is None or row[0] != expected:
           raise StateError(f"store {key} mismatch")
       row = self.db.execute("SELECT value FROM metadata WHERE key='spec_format'").fetchone()
-      existing_format = row[0] if row is not None else "simulation.v1"
+      existing_format = row[0] if row is not None else None
       if existing_format != self.spec_format:
         raise StateError("store specification format mismatch")
     self.db.execute("PRAGMA journal_mode=WAL")

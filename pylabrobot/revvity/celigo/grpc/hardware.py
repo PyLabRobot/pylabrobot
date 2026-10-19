@@ -23,9 +23,13 @@ from pylabrobot.revvity.celigo.celigo import (
   IlluminationChannelName,
 )
 from pylabrobot.revvity.celigo.config import CeligoConfig
+from pylabrobot.revvity.celigo.grpc.execution import (
+  AcquisitionCore,
+  AcquisitionJob,
+  owned_operation,
+)
 from pylabrobot.revvity.celigo.grpc.model import MAX_FRAME_BYTES, MAX_PIXELS, Specification
-from pylabrobot.revvity.celigo.grpc.server import SimulatorServer, unary
-from pylabrobot.revvity.celigo.grpc.simulator import SimulatedJob, Simulator, owned_operation
+from pylabrobot.revvity.celigo.grpc.server import ImagingServer, unary
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
@@ -159,7 +163,7 @@ def encode_frame(
   return image
 
 
-class CeligoCore(Simulator):
+class CeligoCore(AcquisitionCore):
   """Reuse durable execution while keeping all driver access behind explicit jobs."""
 
   device_type = "Celigo"
@@ -269,7 +273,7 @@ class CeligoCore(Simulator):
       raise ValueError("image geometry no longer matches the configuration")
     self.plan(capture)  # Offline validation of stage and galvo targets before persisting intent.
 
-  def validate_start(self, job: SimulatedJob) -> None:
+  def validate_start(self, job: AcquisitionJob) -> None:
     if job.status.kind == "Initialize" and self.driver is not None:
       raise StateError("already initialized; restart the service before reinitializing")
 
@@ -313,7 +317,7 @@ class CeligoCore(Simulator):
     await self.driver.setup()  # PLR opens USB, configures the camera, and homes the imaging axes.
     await self.check_imaging_status()
 
-  async def capture(self, job: SimulatedJob, sequence: int) -> stored_pb.ImageFrame | None:
+  async def capture(self, job: AcquisitionJob, sequence: int) -> stored_pb.ImageFrame | None:
     if not isinstance(job.spec, HardwareSpecification) or job.spec.capture is None:
       raise TypeError("capture requires explicit brightfield settings")
     settings = job.spec.capture
@@ -349,7 +353,7 @@ class CeligoCore(Simulator):
       self.driver = None
     self.initialized = False
 
-  async def finish_operation(self, job: SimulatedJob, failed: bool) -> None:
+  async def finish_operation(self, job: AcquisitionJob, failed: bool) -> None:
     if failed or job.stop_requested.is_set():
       if failed and not self.fault:
         self.fault = "Hardware operation failed; restart the service before further motion."
@@ -417,7 +421,7 @@ class CeligoOperations(rpc.CeligoServiceServicer):
     return job.ref
 
 
-class CeligoServer(SimulatorServer):
+class CeligoServer(ImagingServer):
   def __init__(self, certs: Certificates, core: CeligoCore, *, port=0):
     super().__init__(certs, core=core, port=port)
     rpc.add_CeligoServiceServicer_to_server(CeligoOperations(core), self.server)

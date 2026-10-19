@@ -1,8 +1,7 @@
 # Celigo gRPC service
 
 Optional device-side service and Python client for the PLR Celigo driver. PLR owns
-the protocol, generated bindings, hardware adapter, simulator, and durable jobs
-and images. Applications such as workbenches supply their own device registry,
+the protocol, generated bindings, hardware adapter, and durable jobs and images. Applications such as workbenches supply their own device registry,
 image analysis, records, and user interface.
 
 The Celigo operation protocol is [v1/service.proto](v1/service.proto), with
@@ -30,32 +29,13 @@ The `celigo` and `rpc` extras are independent: combine device imaging dependenci
 with the shared transport when using Celigo remotely. Physical operation also
 needs the `ftdi` extra, the Lumenera SDK, USB access,
 and the instrument's vendor calibration/configuration files. These are not
-required for the simulator or remote client.
+required for the remote client.
 
 ```bash
 python -m pip install -e '.[celigo,rpc,ftdi]'
 ```
 
-## Simulator and connection
-
-Run the hardware-free two-process demonstration:
-
-```bash
-celigo-grpc-sim demo
-```
-
-It creates temporary certificates and storage, checks whole-image transfers,
-concurrent status, cancellation, and reconnect recovery, and removes temporary
-data when finished. For a persistent simulator, choose a fresh certificate
-directory and a reusable data directory:
-
-```bash
-celigo-grpc-sim certificates /path/to/test-certificates
-celigo-grpc-sim serve --device-id celigo-sim-01 --port 50051 \
-  --certificates /path/to/test-certificates --data-dir /path/to/simulator-data
-celigo-grpc-sim check --device-id celigo-sim-01 --endpoint 127.0.0.1:50051 \
-  --certificates /path/to/test-certificates
-```
+## Connection
 
 Each process serves one device. Run another process with a distinct device ID,
 port, and data directory for another instrument. Requests, jobs, and images carry
@@ -98,8 +78,7 @@ not exposed by this transport yet. Laser operation is disabled.
 | Service | Methods |
 | --- | --- |
 | `pylabrobot.rpc.v1.DeviceService` | `GetDevice`, `GetStatus`, `WatchStatus` |
-| `celigo.v1.CeligoService`, physical only | `GetConfiguration`, `CreateInitialization`, `CreateBrightfieldCapture` |
-| `celigo.v1.SimulationService`, simulator only | `CreateInitialization`, `CreateAcquisition`, `CreatePreview` |
+| `celigo.v1.CeligoService` | `GetConfiguration`, `CreateInitialization`, `CreateBrightfieldCapture` |
 | `pylabrobot.rpc.v1.JobService` | `GetJob`, `GetJobByRequestId`, `StartJob`, `CancelJob`, `WatchJob` |
 | `pylabrobot.rpc.v1.ImageService` | `GetCapabilities`, `GetJobImageRetention`, `ReleaseJobImages`, `ListFrames`, `GetFrame`, `WatchPreview` |
 
@@ -136,9 +115,8 @@ saturated RPC load.
 
 ## Python client
 
-Use `CeligoClient` for physical devices and `PrototypeClient` for simulators.
-Both verify device identity and API version on connection. For example, retrieve
-an already completed job's images without starting another acquisition:
+`CeligoClient` verifies device identity and API version on connection. For example,
+retrieve an already completed job's images without starting another acquisition:
 
 ```python
 from pathlib import Path
@@ -172,8 +150,9 @@ device-operation service remains `celigo.v1.CeligoService`.
 The SQLite schema remains version 1. Private
 [storage.proto](v1/storage.proto) records preserve the original serialized job
 and frame field layouts, including image retention and Celigo metadata. Existing
-stores can be read without a data migration. A fixture written with the earlier
-schema verifies retained pixels, released images, and interrupted-job recovery.
+Celigo hardware stores can be read without a data migration. A fixture written
+with the earlier schema verifies retained pixels, released images, and
+interrupted-job recovery.
 Private stored messages are projected into the shared RPC envelopes, so storage
 compatibility does not depend on parsing Celigo metadata as a protobuf `Any`.
 
@@ -187,7 +166,7 @@ python -m pip install -e '.[celigo,rpc-dev]'
 python -m pytest pylabrobot/rpc/tests pylabrobot/revvity/celigo/grpc/tests
 ```
 
-The tests use synthetic calibration, fake drivers, encrypted loopback RPCs,
+The tests use synthetic calibration, mocked drivers, encrypted loopback RPCs,
 and subprocess crash injection. They require no site inventory or USB devices.
 They are skipped during base PLR test collection when transport dependencies
 are absent.

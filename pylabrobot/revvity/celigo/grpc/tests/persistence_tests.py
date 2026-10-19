@@ -11,45 +11,69 @@ from types import SimpleNamespace
 import grpc
 import pytest
 
-from pylabrobot.revvity.celigo.grpc.client import PrototypeClient
-from pylabrobot.revvity.celigo.grpc.model import SimulationSpec
-from pylabrobot.revvity.celigo.grpc.server import SimulatorServer
+from pylabrobot.revvity.celigo.grpc.client import CeligoClient
+from pylabrobot.revvity.celigo.grpc.hardware import HardwareSpecification
 from pylabrobot.revvity.celigo.grpc.storage import Store
+from pylabrobot.revvity.celigo.grpc.tests.helpers import (
+  block_calls,
+  capture,
+  initialize,
+  make_config,
+  make_driver,
+  make_server,
+)
 from pylabrobot.rpc.errors import BusyError, StateError
 from pylabrobot.rpc.security import create_certificates
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 
-async def initialize(client, request_id="initialize"):
-  job = await client.create_initialization(request_id)
-  await job.start()
-  assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
-
-
 @asynccontextmanager
 async def local_server(directory, certs, **kwargs):
-  server = SimulatorServer(certs, data_dir=directory, **kwargs)
+  server, driver = make_server(directory, certs, **kwargs)
   await server.start()
   try:
-    async with PrototypeClient(server.endpoint, certs) as client:
+    async with CeligoClient(server.endpoint, certs, device_id=server.core.device_id) as client:
       yield server, client
   finally:
     await server.stop()
 
 
-# Fault injection exists only in this test process wrapper, never in the CLI.
+# This child process runs the real service with mocked driver methods and test-only crash injection.
 CRASH_WRAPPER = """
+import asyncio
+import json
 import os
+import signal
 import sys
+from pathlib import Path
 from pylabrobot.revvity.celigo.grpc.storage import Store
-from pylabrobot.revvity.celigo.grpc.cli import main
-point = sys.argv.pop(1)
+from pylabrobot.revvity.celigo.grpc.tests.helpers import make_server
+from pylabrobot.rpc.security import Certificates
+point, directory, certificates = sys.argv[1:]
 def checkpoint(self, stage, status):
     if stage == point and status.request_id == 'crash-target':
         os._exit(87)
 Store.checkpoint = checkpoint
-main()
+async def run():
+    server, driver = make_server(Path(directory), Certificates(Path(certificates)))
+    release = asyncio.Event()
+    async def blocked_capture(**_kwargs):
+        await release.wait()
+        return driver.acquire_scan_position.return_value
+    if point.startswith('cancel.') or point == 'blocked-capture':
+        driver.acquire_scan_position.side_effect = blocked_capture
+    stopped = asyncio.Event()
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        asyncio.get_running_loop().add_signal_handler(signum, stopped.set)
+    await server.start()
+    try:
+        print(json.dumps({'endpoint': server.endpoint}), flush=True)
+        await stopped.wait()
+    finally:
+        release.set()
+        await server.stop()
+asyncio.run(run())
 """
 
 
@@ -62,13 +86,8 @@ async def process_server(directory, certs, crash_point="none"):
       "-c",
       CRASH_WRAPPER,
       crash_point,
-      "serve",
-      "--port",
-      "0",
-      "--certificates",
-      str(certs.directory),
-      "--data-dir",
       str(directory),
+      str(certs.directory),
       stdout=asyncio.subprocess.PIPE,
       stderr=output,
     )
@@ -77,7 +96,9 @@ async def process_server(directory, certs, crash_point="none"):
 
       ready = await asyncio.wait_for(process.stdout.readline(), 15)
       assert ready, log_path.read_text()[-4000:]
-      async with PrototypeClient(json.loads(ready)["endpoint"], certs, timeout=3) as client:
+      async with CeligoClient(
+        json.loads(ready)["endpoint"], certs, device_id="celigo-test", timeout=3
+      ) as client:
         yield process, client
     finally:
       if process.returncode is None:
@@ -93,21 +114,20 @@ async def process_server(directory, certs, crash_point="none"):
 async def test_completed_ready_cancelled_and_preview_survive_restart(tmp_path):
   certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  spec = SimulationSpec(1, 64, 64, 8, 0)
   async with local_server(directory, certs) as (_, client):
     assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
-    ready = await client.create("ready", spec)
+    ready = await capture(client, "ready")
     with pytest.raises(grpc.aio.AioRpcError) as uninitialized:
       await ready.start()
     assert uninitialized.value.code() == grpc.StatusCode.FAILED_PRECONDITION
     assert (await ready.status()).state == job_pb.JOB_STATE_READY
     await initialize(client)
-    completed = await client.create("completed", spec, preview=True)
+    completed = await capture(client, "completed")
     await completed.start()
     final = await completed.wait()
     info = (await completed.list_frames())[0]
     frame = await completed.get_frame(info.frame_id)
-    cancelled = await client.create("cancelled", spec)
+    cancelled = await capture(client, "cancelled")
     await cancelled.cancel()
     ids = (ready.identifier, completed.identifier, cancelled.identifier)
 
@@ -121,10 +141,10 @@ async def test_completed_ready_cancelled_and_preview_survive_restart(tmp_path):
     assert await completed.status() == final
     assert await completed.get_frame(info.frame_id) == frame
     assert (await cancelled.status()).outcome == job_pb.OUTCOME_CANCELLED
-    assert (await client.create("completed", spec, preview=True)).identifier == completed.identifier
+    assert (await capture(client, "completed")).identifier == completed.identifier
     async with client.previews() as updates:
       assert await asyncio.wait_for(updates.get(), 2) == frame
-    assert all(job.task is None for job in server.simulator.jobs.values())
+    assert all(job.task is None for job in server.core.jobs.values())
     with pytest.raises(grpc.aio.AioRpcError):
       await ready.start()
     await initialize(client, "initialize-again")
@@ -155,12 +175,10 @@ async def test_process_crash_at_commit_boundaries(
 ):
   certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  interval = 10000 if point.startswith("cancel.") else 0
-  spec = SimulationSpec(1, 64, 64, 8, interval)
   async with process_server(directory, certs, point) as (process, client):
     await initialize(client)
     with pytest.raises(grpc.aio.AioRpcError):
-      job = await client.create("crash-target", spec)
+      job = await capture(client, "crash-target")
       await job.start()
       if point.startswith("cancel."):
         await job.cancel()
@@ -183,7 +201,7 @@ async def test_process_crash_at_commit_boundaries(
       assert status.state_durable
       assert (await job.image_retention()).images_released == released
       assert status.cancellation_requested == (point == "cancel.after_commit")
-      assert (await client.create("crash-target", spec)).identifier == job.identifier
+      assert (await capture(client, "crash-target")).identifier == job.identifier
       metadata = await job.list_frames()
       assert len(metadata) == frames
       for info in metadata:
@@ -207,25 +225,30 @@ async def test_process_crash_at_commit_boundaries(
 
 
 @pytest.mark.asyncio
-async def test_sigkill_during_acquisition_preserves_committed_frame(tmp_path):
+async def test_sigkill_during_capture_preserves_completed_job(tmp_path):
   certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  async with process_server(directory, certs) as (process, client):
+  async with process_server(directory, certs) as (_, client):
     await initialize(client)
-    job = await client.create("kill", SimulationSpec(20, 64, 64, 8, 300))
-    async with job.updates() as updates:
-      await job.start()
-      while (await asyncio.wait_for(updates.get(), 5)).completed == 0:
-        pass
-      info = (await job.list_frames())[0]
-      frame = await job.get_frame(info.frame_id)
-      process.kill()
-      await process.wait()
+    completed = await capture(client, "completed")
+    await completed.start()
+    await completed.wait()
+    info = (await completed.list_frames())[0]
+    frame = await completed.get_frame(info.frame_id)
+  async with process_server(directory, certs, "blocked-capture") as (process, client):
+    await initialize(client, "initialize-again")
+    job = await capture(client, "kill")
+    await job.start()
+    assert (await job.status()).state == job_pb.JOB_STATE_RUNNING
+    process.kill()
+    await process.wait()
   async with process_server(directory, certs) as (_, client):
     recovered = await client.recover("kill")
     status = await recovered.status()
-    assert status.outcome == job_pb.OUTCOME_INTERRUPTED and 1 <= status.completed < 20
-    assert await recovered.get_frame(info.frame_id) == frame
+    assert status.outcome == job_pb.OUTCOME_INTERRUPTED and status.completed == 0
+    assert not await recovered.list_frames()
+    completed = await client.recover("completed")
+    assert await completed.get_frame(info.frame_id) == frame
     with pytest.raises(grpc.aio.AioRpcError):
       await recovered.start()
 
@@ -234,12 +257,13 @@ async def test_sigkill_during_acquisition_preserves_committed_frame(tmp_path):
 async def test_storage_quota_release_and_deduplication(tmp_path):
   certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  spec = SimulationSpec(1, 64, 64, 8, 0)
-  async with local_server(directory, certs, storage_quota=spec.reservation()) as (_, client):
+  async with local_server(
+    directory, certs, storage_quota=HardwareSpecification(width=64, height=48).reservation()
+  ) as (_, client):
     await initialize(client)
-    job = await client.create("retained", spec)
+    job = await capture(client, "retained")
     with pytest.raises(grpc.aio.AioRpcError) as exhausted:
-      await client.create("second", spec)
+      await capture(client, "second")
     assert exhausted.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
     with pytest.raises(grpc.aio.AioRpcError):
       await job.release_images()  # Ready jobs cannot silently surrender their reservation.
@@ -247,15 +271,17 @@ async def test_storage_quota_release_and_deduplication(tmp_path):
     await job.wait()
     info = (await job.list_frames())[0]
     with pytest.raises(grpc.aio.AioRpcError):
-      await client.create("second", spec)
+      await capture(client, "second")
     released = await job.release_images()
     assert released.images_released
     assert (await job.status()).outcome == job_pb.OUTCOME_SUCCEEDED
     assert await job.release_images() == released
     assert not (await job.list_frames())[0].available
-    assert (await client.create("retained", spec)).identifier == job.identifier
-    await client.create("second", spec)
-  async with local_server(directory, certs, storage_quota=spec.reservation()) as (_, client):
+    assert (await capture(client, "retained")).identifier == job.identifier
+    await capture(client, "second")
+  async with local_server(
+    directory, certs, storage_quota=HardwareSpecification(width=64, height=48).reservation()
+  ) as (_, client):
     job = await client.recover("retained")
     assert (await job.image_retention()).images_released
     with pytest.raises(grpc.aio.AioRpcError) as released:
@@ -267,35 +293,44 @@ async def test_storage_quota_release_and_deduplication(tmp_path):
 async def test_sqlite_full_rolls_back_image_and_progress(tmp_path):
   certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
-  async with local_server(directory, certs) as (server, client):
+  driver = make_driver(256, 256, 8)
+  async with local_server(directory, certs, config=make_config(256, 256), driver=driver) as (
+    server,
+    client,
+  ):
     await initialize(client)
-    job = await client.create("disk-full", SimulationSpec(2, 256, 256, 8, 400))
-    async with job.updates() as updates:
+    retained = await capture(client, "retained")
+    await retained.start()
+    await retained.wait()
+    info = (await retained.list_frames())[0]
+    with block_calls(driver.acquire_scan_position) as (capture_entered, capture_release):
+      job = await capture(client, "disk-full")
       await job.start()
-      while (await asyncio.wait_for(updates.get(), 5)).completed < 1:
-        pass
-      info = (await job.list_frames())[0]
-      store = server.simulator.store
+      await asyncio.wait_for(capture_entered.wait(), 5)
+      store = server.core.store
 
       def fill_database():
         pages = store.connection.execute("PRAGMA page_count").fetchone()[0]
         store.connection.execute(f"PRAGMA max_page_count={pages + 2}")
 
       await store.call(fill_database)
+      capture_release.set()
       status = await job.wait()
-    assert status.outcome == job_pb.OUTCOME_FAILED and status.completed == 1
-    assert "full" in status.error
-    assert len(await job.list_frames()) == 1
-    assert (await job.get_frame(info.frame_id)).sha256 == info.sha256
-    assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
-    with pytest.raises(grpc.aio.AioRpcError):
-      await client.create("unsafe-after-fault", SimulationSpec(1, 16, 16, 8, 0))
-  async with local_server(directory, certs) as (_, client):
+      assert status.outcome == job_pb.OUTCOME_FAILED and status.completed == 0
+      assert "full" in status.error
+      assert not await job.list_frames()
+      assert (await retained.get_frame(info.frame_id)).sha256 == info.sha256
+      assert (await client.status()).state == device_pb.OPERATIONAL_STATE_FAULTED
+      with pytest.raises(grpc.aio.AioRpcError):
+        await capture(client, "unsafe-after-fault")
+  async with local_server(directory, certs, config=make_config(256, 256)) as (_, client):
     recovered = await client.recover("disk-full")
     result = await recovered.status()
     assert result.outcome in (job_pb.OUTCOME_FAILED, job_pb.OUTCOME_INTERRUPTED)
-    assert result.completed == 1
-    assert (await recovered.get_frame(info.frame_id)).sha256 == info.sha256
+    assert result.completed == 0
+    assert not await recovered.list_frames()
+    retained = await client.recover("retained")
+    assert (await retained.get_frame(info.frame_id)).sha256 == info.sha256
 
 
 @pytest.mark.asyncio
@@ -309,18 +344,16 @@ async def test_admission_checks_free_space_and_record_capacity(tmp_path, monkeyp
         lambda _: SimpleNamespace(free=0),
       )
       with pytest.raises(grpc.aio.AioRpcError) as no_disk:
-        await client.create("rejected", SimulationSpec(1, 16, 16, 8, 0))
+        await capture(client, "rejected")
       assert no_disk.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
-    assert len(server.simulator.jobs) == 1
-    first = await client.create("last-record", SimulationSpec(1, 16, 16, 8, 0))
+    assert len(server.core.jobs) == 1
+    first = await capture(client, "last-record")
     await first.cancel()
     await first.release_images()
     with pytest.raises(grpc.aio.AioRpcError) as no_records:
-      await client.create("too-many-records", SimulationSpec(1, 16, 16, 8, 0))
+      await capture(client, "too-many-records")
     assert no_records.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
-    assert (
-      await client.create("last-record", SimulationSpec(1, 16, 16, 8, 0))
-    ).identifier == first.identifier
+    assert (await capture(client, "last-record")).identifier == first.identifier
 
 
 @pytest.mark.asyncio
@@ -340,14 +373,13 @@ async def test_lost_rpc_during_commit_does_not_lose_or_repeat_execution(
           raise RuntimeError("test did not release the commit")
 
     monkeypatch.setattr(Store, "checkpoint", hold)
-    spec = SimulationSpec(1, 32, 32, 8, 0)
     job = None
     if point.startswith("start"):
-      job = await client.create("lost-response", spec)
+      job = await capture(client, "lost-response")
     client.timeout = 0.1
     if job is not None:
       job.timeout = 0.1
-    pending = asyncio.create_task(job.start() if job else client.create("lost-response", spec))
+    pending = asyncio.create_task(job.start() if job else capture(client, "lost-response"))
     try:
       assert await asyncio.to_thread(entered.wait, 3)
       with pytest.raises(grpc.aio.AioRpcError) as expired:
@@ -358,9 +390,9 @@ async def test_lost_rpc_during_commit_does_not_lose_or_repeat_execution(
       client.timeout = 20
       if job is not None:
         job.timeout = 20
-    await asyncio.gather(*list(server.simulator.commands))
+    await asyncio.gather(*list(server.core.commands))
     recovered = await client.recover("lost-response")
-    assert (await client.create("lost-response", spec)).identifier == recovered.identifier
+    assert (await capture(client, "lost-response")).identifier == recovered.identifier
     if point.startswith("create"):
       assert (await recovered.status()).state == job_pb.JOB_STATE_READY
       await recovered.start()
@@ -373,21 +405,21 @@ async def test_store_ownership_device_binding_and_configuration_validation(tmp_p
   certs = create_certificates(tmp_path / "certs")
   directory = tmp_path / "data"
   async with local_server(directory, certs) as (_, client):
-    ready = await client.create("old-configuration", SimulationSpec(1, 16, 16, 8, 0))
-    competing = SimulatorServer(certs, data_dir=directory)
+    ready = await capture(client, "old-configuration")
+    competing, _ = make_server(directory, certs)
     with pytest.raises(BusyError):
       await competing.start()
-    assert (await ready.status()).configuration_id == "simulation-v1"
-  wrong = SimulatorServer(certs, data_dir=directory, device_id="another-device")
+    assert (await ready.status()).configuration_id == client.configuration_id
+  wrong, _ = make_server(directory, certs, device_id="another-device")
   with pytest.raises(StateError, match="device_id mismatch"):
     await wrong.start()
-  async with local_server(directory, certs, configuration_id="simulation-v2") as (_, client):
+  async with local_server(directory, certs, connection_id="another-controller") as (_, client):
     await initialize(client)
     old = await client.recover("old-configuration")
     with pytest.raises(grpc.aio.AioRpcError) as stale:
       await old.start()
     assert stale.value.code() == grpc.StatusCode.FAILED_PRECONDITION
-    fresh = await client.create("new-configuration", SimulationSpec(1, 16, 16, 8, 0))
+    fresh = await capture(client, "new-configuration")
     await fresh.start()
     assert (await fresh.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
 
@@ -397,11 +429,11 @@ async def test_corrupted_image_is_reported_without_reacquisition(tmp_path):
   certs = create_certificates(tmp_path / "certs")
   async with local_server(tmp_path / "data", certs) as (server, client):
     await initialize(client)
-    job = await client.create("corruption", SimulationSpec(1, 16, 16, 8, 0))
+    job = await capture(client, "corruption")
     await job.start()
     await job.wait()
     info = (await job.list_frames())[0]
-    store = server.simulator.store
+    store = server.core.store
     await store.call(
       lambda: store.connection.execute(
         "UPDATE frames SET image=? WHERE frame_id=?",
@@ -421,7 +453,7 @@ async def test_failure_to_save_completion_is_explicit_and_recovered(tmp_path, mo
   directory = tmp_path / "data"
   async with local_server(directory, certs) as (server, client):
     await initialize(client)
-    store = server.simulator.store
+    store = server.core.store
     save = store.save
 
     def fail_completion(status, action):
@@ -430,7 +462,7 @@ async def test_failure_to_save_completion_is_explicit_and_recovered(tmp_path, mo
       return save(status, action)
 
     monkeypatch.setattr(store, "save", fail_completion)
-    job = await client.create("unsaved-completion", SimulationSpec(1, 16, 16, 8, 0))
+    job = await capture(client, "unsaved-completion")
     await job.start()
     result = await job.wait()
     assert result.outcome == job_pb.OUTCOME_FAILED and not result.state_durable
@@ -447,7 +479,7 @@ async def test_failure_to_save_completion_is_explicit_and_recovered(tmp_path, mo
 async def test_pending_commands_are_bounded_when_disk_is_stalled(tmp_path, monkeypatch):
   certs = create_certificates(tmp_path / "certs")
   async with local_server(tmp_path / "data", certs) as (server, client):
-    server.simulator.command_limit = 1
+    server.core.command_limit = 1
     entered, release = threading.Event(), threading.Event()
 
     def hold(self, point, status):
@@ -457,11 +489,11 @@ async def test_pending_commands_are_bounded_when_disk_is_stalled(tmp_path, monke
           raise RuntimeError("test did not release the disk")
 
     monkeypatch.setattr(Store, "checkpoint", hold)
-    pending = asyncio.create_task(client.create("blocked", SimulationSpec(1, 16, 16, 8, 0)))
+    pending = asyncio.create_task(capture(client, "blocked"))
     try:
       assert await asyncio.to_thread(entered.wait, 3)
       with pytest.raises(grpc.aio.AioRpcError) as overloaded:
-        await client.create("overflow", SimulationSpec(1, 16, 16, 8, 0))
+        await capture(client, "overflow")
       assert overloaded.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
       assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
     finally:

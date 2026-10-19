@@ -8,7 +8,7 @@ from typing import cast
 
 from typing_extensions import Self
 
-from pylabrobot.revvity.celigo.grpc.model import MAX_MESSAGE_BYTES, SimulationSpec
+from pylabrobot.revvity.celigo.grpc.model import MAX_MESSAGE_BYTES
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
 from pylabrobot.rpc.device import DeviceClient
@@ -59,10 +59,10 @@ class ImagingJob(Job):
 
 
 class ImagingClient(DeviceClient):
-  """Compose imaging capabilities for the Celigo hardware and its simulator."""
+  """Compose the Celigo job and image capabilities."""
 
   def __init__(
-    self, endpoint: str, certs: Certificates, device_id: str = "celigo-sim-01", timeout: float = 20
+    self, endpoint: str, certs: Certificates, device_id: str = "celigo-01", timeout: float = 20
   ) -> None:
     """Configure image-sized message limits without imposing them on other devices."""
     super().__init__(endpoint, certs, device_id, timeout, maximum_message_bytes=MAX_MESSAGE_BYTES)
@@ -98,42 +98,6 @@ class ImagingClient(DeviceClient):
     """Observe complete previews without starting capture."""
     async with self.images.previews() as updates:
       yield updates
-
-
-class PrototypeClient(ImagingClient):
-  """Typed synthetic operations; rejects physical devices before creating requests."""
-
-  expected_device_type = "CeligoSimulator"
-
-  async def connect(self) -> Self:
-    """Bind the simulator operation service after validating the device type."""
-    await super().connect()
-    assert self.channel is not None
-    self.operations = rpc.SimulationServiceStub(self.channel)
-    return self
-
-  async def create(
-    self, request_id: str, spec: SimulationSpec, *, preview: bool = False
-  ) -> ImagingJob:
-    """Create a durable inert acquisition or preview request."""
-    method = self.operations.CreatePreview if preview else self.operations.CreateAcquisition
-    ref = await method(
-      pb.CreateRequest(
-        device_id=self.device_id,
-        request_id=request_id,
-        specification=spec.to_proto(),
-        configuration_id=self.configuration_id,
-      ),
-      timeout=self.timeout,
-    )
-    return self.imaging_job(ref)
-
-  async def create_initialization(self, request_id: str) -> ImagingJob:
-    """Create synthetic initialization; StartJob remains an explicit action."""
-    ref = await self.operations.CreateInitialization(
-      job_pb.RequestLookup(device_id=self.device_id, request_id=request_id), timeout=self.timeout
-    )
-    return self.imaging_job(ref)
 
 
 class CeligoClient(ImagingClient):

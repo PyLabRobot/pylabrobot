@@ -1,20 +1,17 @@
-"""Persistent, hardware-free execution independent of RPC and process lifetimes."""
+"""Durable acquisition execution independent of RPC and process lifetimes."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import TypeVar
 from uuid import uuid4
 
-from pylabrobot.revvity.celigo.grpc.model import (
-  SimulationSpec,
-  Specification,
-  make_frame,
-)
+from pylabrobot.revvity.celigo.grpc.model import Specification
 from pylabrobot.revvity.celigo.grpc.storage import DEFAULT_QUOTA, Store, advance
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
 from pylabrobot.rpc.errors import BusyError, CapacityError, StateError, StorageError
@@ -40,8 +37,8 @@ async def owned_operation(operation: Coroutine[object, object, T]) -> T:
     raise
 
 
-class SimulatedJob:
-  def __init__(self, service: Simulator, spec: Specification, status: stored_pb.JobStatus):
+class AcquisitionJob:
+  def __init__(self, service: AcquisitionCore, spec: Specification, status: stored_pb.JobStatus):
     self.service = service
     self.spec = spec
     self.status = status
@@ -195,23 +192,23 @@ class SimulatedJob:
         self.service.publish_device()
 
 
-class Simulator:
+class AcquisitionCore(ABC):
   """Execution state guarded by a lock; durable mutations outlive their calling RPC."""
 
-  device_type = "CeligoSimulator"
-  display_name = "Simulated Celigo"
-  supported_operations: tuple[str, ...] = ("Initialize", "SimulatedAcquisition", "SimulatedPreview")
+  device_type: str
+  display_name: str
+  supported_operations: tuple[str, ...]
 
   def __init__(
     self,
     directory: Path,
-    device_id: str = "celigo-sim-01",
+    device_id: str,
     storage_quota=DEFAULT_QUOTA,
     max_jobs=1024,
-    configuration_id: str = "simulation-v1",
     *,
-    decode_spec: Callable[[bytes], Specification] = SimulationSpec.decode,
-    spec_format="simulation.v1",
+    configuration_id: str,
+    decode_spec: Callable[[bytes], Specification],
+    spec_format: str,
   ):
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", device_id):
       raise ValueError("invalid device ID")
@@ -227,9 +224,9 @@ class Simulator:
       decode_spec=decode_spec,
       spec_format=spec_format,
     )
-    self.jobs: dict[str, SimulatedJob] = {}
-    self.requests: dict[str, SimulatedJob] = {}
-    self.active_job: SimulatedJob | None = None
+    self.jobs: dict[str, AcquisitionJob] = {}
+    self.requests: dict[str, AcquisitionJob] = {}
+    self.active_job: AcquisitionJob | None = None
     self.closing = False
     self.initialized = False
     self.fault = ""
@@ -241,27 +238,27 @@ class Simulator:
     self.updates: Latest[device_pb.DeviceStatus] = Latest()
     self.previews: Latest[image_pb.GetFrameRequest] = Latest()
 
+  @abstractmethod
   async def initialize(self) -> None:
-    await asyncio.sleep(0)
+    """Initialize the driver through an explicitly started job."""
 
-  def validate_start(self, job: SimulatedJob) -> None:
+  def validate_start(self, job: AcquisitionJob) -> None:
     """Hardware-specific admission checks, before committing a Running state."""
 
-  async def capture(self, job: SimulatedJob, sequence: int) -> stored_pb.ImageFrame | None:
-    if not isinstance(job.spec, SimulationSpec):
-      raise TypeError("simulator requires a SimulationSpec")
-    return await asyncio.to_thread(make_frame, job.ref, sequence, job.spec, job.preview)
+  @abstractmethod
+  async def capture(self, job: AcquisitionJob, sequence: int) -> stored_pb.ImageFrame | None:
+    """Acquire a frame while retaining instrument ownership."""
 
-  async def finish_operation(self, job: SimulatedJob, failed: bool) -> None:
+  async def finish_operation(self, job: AcquisitionJob, failed: bool) -> None:
     """Hardware adapters finish their cleanup before ownership or status is released."""
 
+  @abstractmethod
   def validate_spec(self, spec: Specification, initialize: bool) -> None:
-    if not isinstance(spec, SimulationSpec):
-      raise TypeError("simulator requires a SimulationSpec")
+    """Validate device-specific settings before recording a job."""
 
   async def open(self) -> None:
     for spec, status in await self.store.open():
-      job = SimulatedJob(self, spec, status)
+      job = AcquisitionJob(self, spec, status)
       self.jobs[job.ref.job_id] = job
       self.requests[status.request_id] = job
     self.previews.value = await self.io(self.store.latest_preview)
@@ -331,7 +328,7 @@ class Simulator:
     preview=False,
     configuration_id="",
     initialize=False,
-  ) -> SimulatedJob:
+  ) -> AcquisitionJob:
     async with self.lock:
       self.ensure_available()
       self.validate_spec(spec, initialize)
@@ -367,7 +364,7 @@ class Simulator:
       status.created_at.GetCurrentTime()
       status = advance(status)
       await self.io(self.store.create, spec, status, reservation)
-      job = SimulatedJob(self, spec, status)
+      job = AcquisitionJob(self, spec, status)
       self.jobs[job.ref.job_id] = job
       self.requests[request_id] = job
       return job

@@ -55,6 +55,5 @@ jobs:
           pylabrobot/revvity/celigo/grpc/storage.py
           pylabrobot/revvity/celigo/grpc/model.py
           pylabrobot/revvity/celigo/grpc/server.py
-          pylabrobot/revvity/celigo/grpc/simulator.py
+          pylabrobot/revvity/celigo/grpc/execution.py
           pylabrobot/revvity/celigo/grpc/hardware_cli.py
-          pylabrobot/revvity/celigo/grpc/cli.py

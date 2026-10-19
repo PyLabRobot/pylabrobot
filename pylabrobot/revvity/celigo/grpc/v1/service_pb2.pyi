@@ -8,32 +8,6 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
-class SimulationSpec(_message.Message):
-    __slots__ = ("frame_count", "width", "height", "bit_depth", "interval_ms")
-    FRAME_COUNT_FIELD_NUMBER: _ClassVar[int]
-    WIDTH_FIELD_NUMBER: _ClassVar[int]
-    HEIGHT_FIELD_NUMBER: _ClassVar[int]
-    BIT_DEPTH_FIELD_NUMBER: _ClassVar[int]
-    INTERVAL_MS_FIELD_NUMBER: _ClassVar[int]
-    frame_count: int
-    width: int
-    height: int
-    bit_depth: int
-    interval_ms: int
-    def __init__(self, frame_count: _Optional[int] = ..., width: _Optional[int] = ..., height: _Optional[int] = ..., bit_depth: _Optional[int] = ..., interval_ms: _Optional[int] = ...) -> None: ...
-
-class CreateRequest(_message.Message):
-    __slots__ = ("device_id", "request_id", "specification", "configuration_id")
-    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
-    REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
-    SPECIFICATION_FIELD_NUMBER: _ClassVar[int]
-    CONFIGURATION_ID_FIELD_NUMBER: _ClassVar[int]
-    device_id: str
-    request_id: str
-    specification: SimulationSpec
-    configuration_id: str
-    def __init__(self, device_id: _Optional[str] = ..., request_id: _Optional[str] = ..., specification: _Optional[_Union[SimulationSpec, _Mapping]] = ..., configuration_id: _Optional[str] = ...) -> None: ...
-
 class InitializationRequest(_message.Message):
     __slots__ = ("device_id", "request_id", "configuration_id")
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]

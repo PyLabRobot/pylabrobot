@@ -2,28 +2,22 @@
 
 from __future__ import annotations
 
-import tempfile
 from collections.abc import AsyncGenerator
 from functools import wraps
-from pathlib import Path
 
 from pylabrobot.__version__ import __version__
+from pylabrobot.revvity.celigo.grpc.execution import AcquisitionCore
 from pylabrobot.revvity.celigo.grpc.model import (
   MAX_FRAME_BYTES,
   MAX_MESSAGE_BYTES,
   MAX_PIXELS,
-  SimulationSpec,
 )
-from pylabrobot.revvity.celigo.grpc.simulator import Simulator
-from pylabrobot.revvity.celigo.grpc.storage import DEFAULT_QUOTA
-from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
-from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
 from pylabrobot.rpc import device, images, jobs
 from pylabrobot.rpc.device import DeviceServer
 from pylabrobot.rpc.errors import StateError
 from pylabrobot.rpc.security import Certificates
-from pylabrobot.rpc.transport import API_VERSION, copy_message, require_device, rpc_errors
+from pylabrobot.rpc.transport import API_VERSION, copy_message, rpc_errors
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import images_pb2 as image_pb
 from pylabrobot.rpc.v1 import images_pb2_grpc as image_rpc
@@ -72,7 +66,7 @@ def unary(method):
 class ImagingAdapter:
   """Present Celigo state through shared interfaces without moving its executor/storage."""
 
-  def __init__(self, core: Simulator) -> None:
+  def __init__(self, core: AcquisitionCore) -> None:
     """Bind an initialized service core, which may still have uninitialized hardware."""
     self.core = core
 
@@ -83,11 +77,6 @@ class ImagingAdapter:
 
   def get_info(self) -> device_pb.DeviceInfo:
     """Advertise actual registered services independently of image-specific limits."""
-    operations = (
-      "celigo.v1.SimulationService"
-      if self.core.device_type == "CeligoSimulator"
-      else "celigo.v1.CeligoService"
-    )
     return device_pb.DeviceInfo(
       device_id=self.device_id,
       display_name=self.core.display_name,
@@ -95,7 +84,12 @@ class ImagingAdapter:
       api_version=API_VERSION,
       configuration_id=self.core.configuration_id,
       supported_operations=self.core.supported_operations,
-      services=[device.SERVICE_NAME, jobs.SERVICE_NAME, images.SERVICE_NAME, operations],
+      services=[
+        device.SERVICE_NAME,
+        jobs.SERVICE_NAME,
+        images.SERVICE_NAME,
+        "celigo.v1.CeligoService",
+      ],
       manufacturer="Revvity",
       model="Celigo",
       implementation_version=__version__,
@@ -176,81 +170,21 @@ class ImagingAdapter:
           continue  # Explicit image release can race with a queued preview reference.
 
 
-class SimulationOperations(rpc.SimulationServiceServicer):
-  """Create typed synthetic acquisition requests for the Celigo simulator."""
-
-  def __init__(self, core: Simulator) -> None:
-    """Bind the simulator's operation-specific creation API."""
-    self.core = core
-
-  async def create(self, request: pb.CreateRequest, preview: bool) -> job_pb.JobRef:
-    """Validate and durably create an inert synthetic request."""
-    require_device(request.device_id, self.core.device_id)
-    if not request.HasField("specification"):
-      raise ValueError("specification is required")
-    spec = SimulationSpec.from_proto(request.specification)
-    job = await self.core.command(
-      self.core.create(request.request_id, spec, preview, request.configuration_id)
-    )
-    return copy_message(job.ref)
-
-  @unary
-  async def CreateInitialization(self, request, context):
-    """Create an inert synthetic initialization job."""
-    require_device(request.device_id, self.core.device_id)
-    job = await self.core.command(
-      self.core.create(request.request_id, SimulationSpec(), initialize=True)
-    )
-    return copy_message(job.ref)
-
-  @unary
-  async def CreateAcquisition(self, request, context):
-    """Create a synthetic multi-frame request without starting it."""
-    return await self.create(request, False)
-
-  @unary
-  async def CreatePreview(self, request, context):
-    """Create a synthetic one-frame preview request without starting it."""
-    return await self.create(request, True)
-
-
-class SimulatorServer(DeviceServer):
+class ImagingServer(DeviceServer):
   """Compose shared transport capabilities around the Celigo acquisition engine."""
 
-  def __init__(
-    self,
-    certs: Certificates,
-    *,
-    port=0,
-    device_id="celigo-sim-01",
-    data_dir: Path | None = None,
-    storage_quota=DEFAULT_QUOTA,
-    max_jobs=1024,
-    configuration_id="simulation-v1",
-    core: Simulator | None = None,
-  ):
+  def __init__(self, certs: Certificates, core: AcquisitionCore, *, port=0):
     """Build the imaging service; startup does not open physical hardware."""
-    self.temporary = (
-      tempfile.TemporaryDirectory(prefix="celigo-store-")
-      if data_dir is None and core is None
-      else None
-    )
-    directory = Path(self.temporary.name) if self.temporary else data_dir
-    if core is None:
-      assert directory is not None
-      core = Simulator(directory, device_id, storage_quota, max_jobs, configuration_id)
-    self.simulator = core
+    self.core = core
     self.adapter = ImagingAdapter(core)
     super().__init__(self.adapter, certs, port=port, maximum_message_bytes=MAX_MESSAGE_BYTES)
     job_rpc.add_JobServiceServicer_to_server(jobs.JobService(self.adapter), self.server)
     image_rpc.add_ImageServiceServicer_to_server(images.ImageService(self.adapter), self.server)
-    if core.device_type == "CeligoSimulator":
-      rpc.add_SimulationServiceServicer_to_server(SimulationOperations(core), self.server)
 
   async def start(self) -> None:
     """Recover durable records before accepting requests; never replay interrupted work."""
     try:
-      await self.simulator.open()
+      await self.core.open()
       await super().start()
     except BaseException:
       await self.stop()
@@ -258,8 +192,6 @@ class SimulatorServer(DeviceServer):
 
   async def stop(self) -> None:
     """Stop accepting commands, finish in-flight work, and close the owned store."""
-    self.simulator.closing = True
+    self.core.closing = True
     await super().stop()
-    await self.simulator.stop()
-    if self.temporary:
-      self.temporary.cleanup()
+    await self.core.stop()

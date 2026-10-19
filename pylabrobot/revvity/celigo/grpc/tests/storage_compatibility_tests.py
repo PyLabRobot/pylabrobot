@@ -9,15 +9,15 @@ from pathlib import Path
 import grpc
 import pytest
 
-from pylabrobot.revvity.celigo.grpc.client import PrototypeClient, acquisition_metadata
-from pylabrobot.revvity.celigo.grpc.server import SimulatorServer
+from pylabrobot.revvity.celigo.grpc.client import CeligoClient, acquisition_metadata
+from pylabrobot.revvity.celigo.grpc.tests.helpers import make_server
 from pylabrobot.rpc.security import create_certificates
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 
 
 def restore_fixture(directory: Path) -> dict[str, bytes]:
-  """Restore synthetic SQLite records serialized with the original Celigo wire types."""
+  """Restore hardware-job SQLite records serialized with the original Celigo wire types."""
   tables = json.loads(Path(__file__).with_name("legacy_store.json").read_text())
   directory.mkdir()
   expected = {}
@@ -44,15 +44,15 @@ async def test_stored_jobs_images_and_release_survive_protocol_split(tmp_path: P
   certs = create_certificates(tmp_path / "certs")
   instance_id = ""
   for _ in range(2):
-    server = SimulatorServer(certs, device_id="legacy-device", data_dir=directory)
+    server, driver = make_server(directory, certs, device_id="legacy-device")
     await server.start()
     try:
-      async with PrototypeClient(server.endpoint, certs, device_id="legacy-device") as client:
+      async with CeligoClient(server.endpoint, certs, device_id="legacy-device") as client:
         info = await client.device_info()
         assert info.instance_id and info.instance_id != instance_id
         instance_id = info.instance_id
         assert (await client.status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
-        assert len(server.simulator.jobs) == 3
+        assert len(server.core.jobs) == 3
         for name in ("retained", "released", "interrupted"):
           job = await client.recover(name)
           status = await job.status()
@@ -74,6 +74,8 @@ async def test_stored_jobs_images_and_release_survive_protocol_split(tmp_path: P
             assert hashlib.sha256(frame.image).hexdigest() == frame.sha256
             assert frame.width == frame.height == 8
             assert acquisition_metadata(frame).channel == "brightfield"
-        assert all(job.task is None for job in server.simulator.jobs.values())
+        assert all(job.task is None for job in server.core.jobs.values())
+        driver.setup.assert_not_awaited()
+        driver.acquire_scan_position.assert_not_awaited()
     finally:
       await server.stop()

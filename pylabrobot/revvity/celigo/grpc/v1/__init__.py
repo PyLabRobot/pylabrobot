@@ -1,1 +1,1 @@
-"""Versioned simulator schema and generated bindings."""
+"""Versioned Celigo schema and generated bindings."""
