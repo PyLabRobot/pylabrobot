@@ -4,6 +4,7 @@ from .biotek import (
   Cytation1,
   Cytation5,
   CytationImagingConfig,
+  PowerWaveX,
   SynergyH1,
 )
 from .plateloc import (

@@ -1,0 +1,1779 @@
+"""Driver for the Agilent BioTek PowerWave / PowerWaveX microplate spectrophotometer.
+
+Page references are to the *PowerWaveX Operator's Manual* (Bio-Tek p/n 7261014
+Rev D2), Appendix B "Computer Control".
+
+This is an RS-232 instrument from the early 2000s, so it predates the USB/FTDI
+BioTek readers in :mod:`pylabrobot.agilent.biotek.plate_reader_base` and speaks a
+different command language. The plate carrier commands ``'J'`` and ``'A'`` are the
+only ones the two generations share.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import logging
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, cast
+
+from pylabrobot.io.serial import Serial
+from pylabrobot.resources import Coordinate, Plate, PlateHolder, Well
+
+from ._protocol import (
+  ACK,
+  CR,
+  DLE,
+  ETX,
+  KINETIC_FLAGS,
+  KINETIC_SHAKE_FLAGS,
+  MAX_WAVELENGTH,
+  MIN_WAVELENGTH,
+  NAK,
+  SCAN_SECONDS_PER_WAVELENGTH,
+  SCAN_WHOLE_STRIP,
+  STATUS_LENGTH,
+  SUB,
+  Command,
+  PowerWaveBusyError,
+  PowerWaveError,
+  PowerWaveFatalError,
+  PowerWaveHaltedError,
+  PowerWaveNakError,
+  PowerWaveParseError,
+  PowerWaveReadAbortedError,
+  PowerWaveSelfTestError,
+  PowerWaveStatusError,
+  build_assay_definition,
+  configuration_has_incubator,
+  count_overrange,
+  encode_plate_geometry,
+  encode_scan_request,
+  encode_strip_range,
+  encode_temperature_setpoint,
+  parse_device_configuration,
+  parse_plate,
+  parse_scan_data,
+  parse_scan_wavelength_list,
+  parse_self_test_report,
+  parse_status,
+  parse_temperature,
+  parse_uint16,
+  parse_wavelength_table,
+  scan_wavelengths,
+  verify_plate_checksum,
+  verify_scan_checksum,
+)
+
+try:
+  import serial as _serial  # noqa: F401
+
+  HAS_SERIAL = True
+  _SERIAL_IMPORT_ERROR: Optional[ImportError] = None
+except ImportError as e:  # pragma: no cover - depends on the environment
+  HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
+
+logger = logging.getLogger(__name__)
+
+ScanSeries = Literal["single", "first", "next", "last"]
+
+ShakeSpeed = Literal["slow", "medium", "fast", "variable"]
+
+#: Wire code for each shake speed, shared by the assay definition and the scan
+#: request (pages B-10, B-14).
+_SHAKE_SPEED_CODES: Dict[ShakeSpeed, int] = {"slow": 0, "medium": 1, "fast": 2, "variable": 3}
+
+
+def _shake_speed_code(speed: ShakeSpeed) -> int:
+  """The wire code for a shake speed, or ValueError for an unknown one."""
+  if speed not in _SHAKE_SPEED_CODES:
+    raise ValueError(f"shake_speed must be one of {list(_SHAKE_SPEED_CODES)}, got {speed!r}")
+  return _SHAKE_SPEED_CODES[speed]
+
+
+@dataclass
+class AbsorbanceResult:
+  """One plate read at one wavelength.
+
+  Attributes:
+    data: Absorbance indexed ``[row][column]``, in optical density units. Columns
+      outside the strip range that was read are ``None``. Overrange wells are
+      :data:`~._protocol.OVERRANGE`.
+    wavelength: The wavelength read, in nm.
+    temperature: ``None``; query the chamber temperature separately with
+      :meth:`PowerWaveX.request_current_temperature`.
+    timestamp: When the read's data finished arriving.
+  """
+
+  data: List[List[Optional[float]]]
+  wavelength: int
+  temperature: Optional[float]
+  timestamp: datetime
+
+
+@dataclass
+class SpectralScanResult:
+  """One spectral scan of a well or a strip (page B-14).
+
+  Attributes:
+    wavelengths: The wavelengths visited, in nm and in scan order.
+    data: Absorbance indexed ``[wavelength][well]``, in optical density units.
+      A single-well scan has one entry per row; a strip scan has one per plate
+      row. Overrange wells are :data:`~._protocol.OVERRANGE`.
+    column: The 1-based plate column scanned.
+    row: The 1-based plate row, or ``None`` when the whole strip was scanned.
+    calibrated: Wavelengths the instrument calibrated before scanning.
+    temperature: ``None``; query the chamber temperature separately with
+      :meth:`PowerWaveX.request_current_temperature`.
+    timestamp: When the scan completed.
+  """
+
+  wavelengths: List[int]
+  data: List[List[float]]
+  column: int
+  row: Optional[int]
+  calibrated: List[int]
+  temperature: Optional[float]
+  timestamp: datetime
+
+  def spectrum(self, well_index: int = 0) -> List[Tuple[int, float]]:
+    """The (wavelength, absorbance) pairs for one well of this scan."""
+    return [(w, self.data[i][well_index]) for i, w in enumerate(self.wavelengths)]
+
+
+class PowerWaveX:
+  """Agilent BioTek PowerWaveX microplate spectrophotometer.
+
+  Absorbance reader with an optional incubator. Wavelengths are selected by a
+  monochromator anywhere in 200-999 nm at 1 nm increments, and up to six can be
+  read in a single pass of the plate. Driven over RS-232 at 9600 baud, 8 data
+  bits, no parity, two stop bits.
+
+  The geometry command accepts 8x12 and 16x24 plates, but a 96-well instrument
+  refuses a 384-well read with status ``0A0`` (:class:`PowerWaveStatusError`)
+  and reads 96-well plates normally afterwards.
+
+  Example:
+    >>> reader = PowerWaveX(name="reader", port="/dev/ttyUSB0")
+    >>> await reader.setup()
+    >>> await reader.open()
+    ... # load a plate
+    >>> await reader.close()
+    >>> results = await reader.read_absorbance(plate, plate.get_all_items(), 630)
+    >>> results[0].data[0][0]  # A1, in OD
+  """
+
+  #: Serial line settings fixed by the instrument (page B-5).
+  BAUDRATE = 9600
+  BYTESIZE = 8
+  PARITY = "N"
+  STOPBITS = 2
+
+  #: Seconds to settle either side of flushing the stray NAK that follows an
+  #: accepted assay definition table.
+  _ASSAY_SETTLE_SECONDS = 1.0
+
+  #: How long to wait for the status string that explains an abandoned read.
+  _ABORT_STATUS_SECONDS = 10.0
+
+  #: How long :meth:`halt` waits for a read in progress to let go of the serial
+  #: port. A read notices within one io slice, so this only has to cover that.
+  _HALT_HANDOVER_SECONDS = 5.0
+
+  #: How long the line must stay quiet before :meth:`halt` calls the last byte it
+  #: heard the acknowledgement.
+  _HALT_QUIET_SECONDS = 1.0
+
+  #: Seconds allowed per scanned wavelength, on top of :attr:`timeout`. A class
+  #: attribute so a test can collapse the wait.
+  _SCAN_SECONDS_PER_WAVELENGTH = SCAN_SECONDS_PER_WAVELENGTH
+
+  #: How long the line must stay quiet for :meth:`_drain_input` to call it clear,
+  #: and the total time it will spend draining.
+  _DRAIN_QUIET_SECONDS = 1.5
+  _DRAIN_LIMIT_SECONDS = 20.0
+
+  def __init__(
+    self,
+    name: str,
+    port: Optional[str] = None,
+    vid: Optional[int] = None,
+    pid: Optional[int] = None,
+    timeout: float = 70,
+  ) -> None:
+    """
+    Args:
+      name: Machine name, also used to name the plate holder resource.
+      port: Serial port, for example ``"/dev/ttyUSB0"`` or ``"COM3"``. Either this
+        or both ``vid`` and ``pid`` must be given.
+      vid: USB vendor id of the serial adapter, as an alternative to ``port``.
+      pid: USB product id of the serial adapter, as an alternative to ``port``.
+      timeout: Default seconds to wait for a complete response. Plate reads are
+        slow, so this is generous.
+    """
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
+
+    self.timeout = timeout
+    self._connected = False
+    self._model: Optional[str] = None
+    self._wavelength_table: Optional[List[int]] = None
+
+    # One operation at a time owns the serial port, and halt() has to be able to
+    # take it from a run in progress rather than queue behind it.
+    self._halt_requested = asyncio.Event()
+    self._port_free = asyncio.Event()
+    self._port_free.set()
+    self._port_owner: Optional[asyncio.Task] = None
+    self._halt_owner: Optional[asyncio.Task] = None
+    self._halt_finished = asyncio.Event()
+    self._halt_finished.set()
+
+    self.io = Serial(
+      human_readable_device_name="Agilent BioTek PowerWaveX",
+      port=port,
+      vid=vid,
+      pid=pid,
+      baudrate=self.BAUDRATE,
+      bytesize=self.BYTESIZE,
+      parity=self.PARITY,
+      stopbits=self.STOPBITS,
+      # Reads poll in one-second slices so that the operation deadlines below stay
+      # responsive; per-operation waits are handled by _read_until.
+      timeout=1,
+      write_timeout=2,
+    )
+
+    self.plate_holder = PlateHolder(
+      name=name + "_plate_holder",
+      size_x=127.76,
+      size_y=85.48,
+      size_z=0,  # TODO: measure
+      pedestal_size_z=0,
+      child_location=Coordinate.zero(),  # TODO: measure
+    )
+
+  # ------------------------------------------------------------------------------------
+  # Properties
+  # ------------------------------------------------------------------------------------
+
+  @property
+  def port(self) -> str:
+    """The configured or detected serial port."""
+    return cast(str, self.io.port)
+
+  @property
+  def connected(self) -> bool:
+    """Whether :meth:`setup` has completed without a subsequent :meth:`stop`."""
+    return self._connected
+
+  @property
+  def model(self) -> str:
+    """The model name reported by the instrument during :meth:`setup`."""
+    if self._model is None:
+      raise RuntimeError("Model unknown. Did you call setup()?")
+    return self._model
+
+  @property
+  def wavelength_table(self) -> List[int]:
+    """The calibrated wavelengths in nm, read at :meth:`setup` (page B-11).
+
+    A calibration set, not a constraint: the monochromator reads any wavelength in
+    :attr:`abs_wavelength_range`, though gains are calibrated only for these.
+    """
+    if self._wavelength_table is None:
+      raise RuntimeError("Wavelength table unknown. Did you call setup()?")
+    return list(self._wavelength_table)
+
+  @property
+  def supports_heating(self) -> bool:
+    """Whether the identified model includes the incubator."""
+    return configuration_has_incubator(self.model)
+
+  @property
+  def supports_cooling(self) -> bool:
+    """The PowerWave incubator heats only; it cannot cool below ambient."""
+    return False
+
+  @property
+  def abs_wavelength_range(self) -> tuple[int, int]:
+    """Readable absorbance wavelengths in nm (page 1-1).
+
+    340 models cannot go below 340 nm; this driver does not detect that, since the
+    instrument configuration word does not distinguish it for every variant.
+
+    Warning:
+      Reading below 210 nm at a wavelength the instrument has not calibrated
+      abandons the read, latches ``0F11`` or ``0F21`` ("signal out of range" on
+      detector channel 1 or 2), and can leave the instrument unresponsive until
+      it is power cycled. READ PLATE sets its own gain for an uncalibrated
+      wavelength, and below 210 nm too little light reaches the detector for that
+      to succeed. Each wavelength stands alone: a calibrated neighbour does not
+      help.
+
+      :meth:`scan_plate` calibrates every wavelength it sweeps, down to 200 nm,
+      after which reads there succeed. So to read below 210 nm, first scan a band
+      covering the wavelength; :attr:`SpectralScanResult.calibrated` lists the
+      wavelengths the scan had to calibrate.
+
+      200 nm is a firmware floor: a scan request below it is answered with status
+      ``090``.
+    """
+    return (MIN_WAVELENGTH, MAX_WAVELENGTH)
+
+  @property
+  def temperature_range(self) -> tuple[float, float]:
+    """Supported incubator setpoint range in degrees C (page B-17)."""
+    return (22.0, 50.0)
+
+  # ------------------------------------------------------------------------------------
+  # Transport
+  # ------------------------------------------------------------------------------------
+
+  def _check_halted(self) -> None:
+    """Abandon a read that :meth:`halt` has asked to stop."""
+    if self._halt_requested.is_set():
+      raise PowerWaveHaltedError(
+        "The read was interrupted by halt(); the serial port has been handed over."
+      )
+
+  async def _send_command(self, command: Command) -> None:
+    """Write a command byte and consume the ACK.
+
+    Raises:
+      PowerWaveNakError: If the instrument rejected the command.
+      PowerWaveError: If the reply was neither ACK nor NAK.
+    """
+    await self.io.write(bytes(command.value))
+    logger.debug("[PowerWaveX %s] sent %s", self.port, command.name)
+
+    # The io layer reads in one-second slices, so poll until this driver's own
+    # deadline. An instrument that is still finishing a read or a carriage move
+    # takes several seconds to acknowledge the next command, longer than one slice.
+    deadline = time.monotonic() + self.timeout
+    response = b""
+    while len(response) == 0:
+      self._check_halted()
+      if time.monotonic() > deadline:
+        raise TimeoutError(f"No reply to {command.name} within {self.timeout}s")
+      response = await self.io.read(1)
+
+    if response == ACK:
+      return
+    if response == NAK:
+      raise PowerWaveNakError(f"Instrument rejected {command.name} with NAK")
+    raise PowerWaveError(f"Expected ACK or NAK after {command.name}, got {response!r}")
+
+  async def _read_exactly(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
+    """Read exactly ``num_bytes``, or raise TimeoutError."""
+    deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
+    buffer = bytearray()
+
+    while len(buffer) < num_bytes:
+      self._check_halted()
+      if time.monotonic() > deadline:
+        raise TimeoutError(
+          f"Timed out reading {num_bytes} bytes, got {len(buffer)}: {bytes(buffer)!r}"
+        )
+      chunk = await self.io.read(num_bytes - len(buffer))
+      buffer.extend(chunk)
+
+    return bytes(buffer)
+
+  async def _read_until(self, terminator: bytes, timeout: Optional[float] = None) -> bytes:
+    """Read until ``terminator`` is seen, inclusive, or raise TimeoutError."""
+    deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
+    buffer = bytearray()
+
+    while True:
+      if buffer.endswith(terminator):
+        return bytes(buffer)
+      self._check_halted()
+      if time.monotonic() > deadline:
+        raise TimeoutError(
+          f"Timed out waiting for {terminator!r}, partial response: {bytes(buffer)!r}"
+        )
+      buffer.extend(await self.io.read(1))
+
+  async def _read_status(self, timeout: Optional[float] = None) -> str:
+    """Read and validate a status string (page B-21).
+
+    Returns:
+      The three-character status code, always ``"000"``, since anything else
+      raises.
+
+    Raises:
+      PowerWaveStatusError: If the instrument reported an error.
+      PowerWaveParseError: If the status string was malformed.
+    """
+    frame = await self._read_until(ETX, timeout=timeout)
+
+    if len(frame) > STATUS_LENGTH:
+      # Stale bytes ahead of the status string, most often a plate data checksum
+      # left unread by an earlier command.
+      logger.warning(
+        "[PowerWaveX %s] discarding %d unexpected bytes before status string: %r",
+        self.port,
+        len(frame) - STATUS_LENGTH,
+        frame[:-STATUS_LENGTH],
+      )
+      frame = frame[-STATUS_LENGTH:]
+    elif len(frame) < STATUS_LENGTH:
+      raise PowerWaveParseError(f"Truncated status string: {frame!r}")
+
+    return parse_status(frame)
+
+  async def _drain_input(self, reason: str = "left by a previous session") -> bool:
+    """Discard anything the instrument is still sending, until the line goes quiet.
+
+    Returns:
+      Whether the line actually fell quiet. ``False`` means it was still talking
+      when :attr:`_DRAIN_LIMIT_SECONDS` ran out, so the stream is still dirty.
+
+    A session that was interrupted mid-response - a crashed script, an abandoned
+    plate read - leaves the rest of that response in flight. Those bytes would
+    otherwise be read as the reply to the next command, which surfaces as an
+    unexpected byte in place of an ACK.
+    """
+    await self.io.reset_input_buffer()
+    await self.io.reset_output_buffer()
+
+    # A non-positive quiet window means "flush only", which is how the tests opt
+    # out: their scripted transport answers a read before any command is sent,
+    # whereas a real instrument stays silent until it is asked something.
+    if self._DRAIN_QUIET_SECONDS <= 0:
+      return True
+
+    discarded = bytearray()
+    deadline = time.monotonic() + self._DRAIN_LIMIT_SECONDS
+    quiet_until = time.monotonic() + self._DRAIN_QUIET_SECONDS
+
+    while time.monotonic() < quiet_until and time.monotonic() < deadline:
+      chunk = await self.io.read(64)
+      if len(chunk) > 0:
+        discarded.extend(chunk)
+        quiet_until = time.monotonic() + self._DRAIN_QUIET_SECONDS
+
+    if len(discarded) > 0:
+      logger.warning(
+        "[PowerWaveX %s] discarded %d stale bytes %s: %r",
+        self.port,
+        len(discarded),
+        reason,
+        bytes(discarded[:64]),
+      )
+
+    return time.monotonic() < deadline
+
+  async def _resynchronise(self, reason: str) -> None:
+    """Discard what a broken exchange left behind, and say so if it cannot.
+
+    Runs on the way out of the exchange that broke, so the next caller finds the
+    line as clean as the connection allows.
+    """
+    if await self._drain_input(reason=reason):
+      return
+
+    logger.warning(
+      "[PowerWaveX %s] the instrument was still sending after %ds, so the line is "
+      "still out of step - it is probably still running. Call halt() to abort it.",
+      self.port,
+      self._DRAIN_LIMIT_SECONDS,
+    )
+
+  @contextlib.asynccontextmanager
+  async def _owns_port(self):
+    """Hold the serial port for one command or run, so nothing interleaves.
+
+    Every exchange with the instrument goes through here, not just the long ones.
+    A read holds the line for seconds to minutes while it streams data, and the
+    instrument offers no way to ask what it is doing, so a temperature query
+    issued meanwhile - the obvious thing for a display to do on a timer - would
+    read bytes belonging to the read and leave the read reading its own reply.
+
+    Re-entrant within one task, so a composite operation can claim the port once
+    and still call the commands it is built from. A different task is refused
+    with :class:`PowerWaveBusyError` rather than queued, since the instrument
+    cannot answer it anyway and failing fast tells a caller to ask again later.
+
+    While this is held, :meth:`halt` sets a flag that the read loops notice and
+    raise :class:`PowerWaveHaltedError` on, so the port is handed over rather
+    than contended for.
+    """
+    current = asyncio.current_task()
+    if self._port_owner is current:
+      yield  # already ours: a nested call from the same operation
+      return
+
+    if self._halt_owner is not None and self._halt_owner is not current:
+      raise PowerWaveBusyError("HALT has reserved the serial port. Wait for it to finish.")
+
+    if self._port_owner is not None:
+      raise PowerWaveBusyError(
+        "Another operation is using the serial port. Wait for it to finish, or "
+        "call halt() to abort a read or scan in progress."
+      )
+
+    self._halt_requested.clear()
+    self._port_owner = current
+    self._port_free.clear()
+    try:
+      yield
+    except PowerWaveHaltedError:
+      # halt() resynchronises the line itself, and is waiting for this release.
+      # Draining here would sit through the rest of the run it just abandoned.
+      raise
+    except asyncio.CancelledError:
+      # Best effort: an await in this path can be cancelled in turn, so the line
+      # may stay dirty. setup()'s drain is the backstop for that.
+      with contextlib.suppress(Exception, asyncio.CancelledError):
+        await self._resynchronise("left by a cancelled operation")
+      raise
+    except Exception:
+      # The exchange stopped part way through, so the instrument is very likely
+      # still talking. Hand the port back clean rather than leave the next
+      # command to read the remains and fail for reasons of its own, such as a
+      # checksum error surfacing one command later as "expected ACK, got 0x1a".
+      with contextlib.suppress(Exception):
+        await self._resynchronise("left by a failed exchange")
+      raise
+    finally:
+      self._port_owner = None
+      self._port_free.set()
+
+  async def _read_halt_acknowledgement(self, timeout: float) -> bytes:
+    """Read an abandoned run's leftovers and HALT's ``DLE``, which comes last.
+
+    ``DLE`` is 0x10, and a plate data block's checksum is a raw byte, so one in
+    256 of them is the same value. Stopping at the first ``DLE`` therefore takes
+    a checksum for the acknowledgement and leaves the real one queued as the
+    reply to whatever runs next.
+
+    Position is the only thing that separates them, but silence alone does not
+    locate it: the instrument pauses to home its axes *before* acknowledging, so
+    the leftovers are followed by a gap and then the ``DLE``. Waiting for a quiet
+    line and taking the last byte picks up the end of the leftovers instead. So
+    this waits for a buffer that both ends in ``DLE`` and has gone quiet.
+
+    One case stays ambiguous: an abort that lands exactly on a block boundary
+    whose checksum happens to be 0x10. Nothing on the wire distinguishes that,
+    and it needs both coincidences at once.
+
+    Raises:
+      TimeoutError: If no acknowledgement arrives in time.
+    """
+    deadline = time.monotonic() + timeout
+    buffer = bytearray()
+    last_heard = time.monotonic()
+
+    while time.monotonic() <= deadline:
+      chunk = await self.io.read(64)
+      if len(chunk) > 0:
+        buffer.extend(chunk)
+        last_heard = time.monotonic()
+        continue
+
+      quiet_for = time.monotonic() - last_heard
+      if buffer.endswith(DLE) and quiet_for >= self._HALT_QUIET_SECONDS:
+        return bytes(buffer)
+
+    raise TimeoutError(
+      f"HALT was not acknowledged within {timeout:.0f}s; heard {len(buffer)} bytes "
+      f"ending {bytes(buffer[-8:])!r}"
+    )
+
+  async def _raise_read_aborted(self, done: int, total: int) -> None:
+    """Explain a read or scan the instrument abandoned, then raise.
+
+    A read that faults part way through is not reported inside the data stream.
+    The instrument halts, shows the fault on its front panel, and stops answering
+    the serial port until an operator acknowledges it there; it then sends
+    ``DLE`` - the byte that completes a HALT - where the next block's ``CR`` start
+    code belongs. So this arrives only when someone is at the instrument while a
+    read is outstanding, which is why the same fault can look immediate, late, or
+    silent. Anything that follows is decoded by
+    :func:`._protocol.parse_status`, including the four-character ELx codes that
+    carry a real description. The instrument then answers ``080`` until
+    :meth:`self_test` runs. See :attr:`abs_wavelength_range`.
+
+    Args:
+      done: Data blocks received before the abort.
+      total: Blocks the command should have produced.
+
+    Raises:
+      PowerWaveReadAbortedError: Always, carrying the reported code when the
+        instrument sent one.
+    """
+    where = f"after {done} of {total} data block{'' if total == 1 else 's'}"
+    try:
+      status = await self._read_exactly(
+        STATUS_LENGTH, timeout=min(self._ABORT_STATUS_SECONDS, self.timeout)
+      )
+    except TimeoutError:
+      status = b""
+
+    if len(status) > 0:
+      try:
+        code = parse_status(status)
+      except (PowerWaveStatusError, PowerWaveFatalError) as reported:
+        raise PowerWaveReadAbortedError(
+          f"The instrument abandoned the read {where}: {reported}. The fault is shown on "
+          f"its front panel and stays latched there until cleared; readings will keep "
+          f"failing with 080 until it is.",
+          code=reported.code,
+        ) from reported
+      raise PowerWaveReadAbortedError(
+        f"The instrument abandoned the read {where}, then reported status {code}.", code=code
+      )
+
+    raise PowerWaveReadAbortedError(
+      f"The instrument abandoned the read {where} and reported no status. Check its front "
+      f"panel for the fault code and run self_test()."
+    )
+
+  async def _consume_end_of_data(self) -> None:
+    """Consume the ``^Z`` that closes a whole READ PLATE response.
+
+    The manual documents a ``^Z`` terminator and a checksum per data block and
+    stops there. A PowerWaveX w/ Incubator (firmware R06.20) also sends one extra
+    ``^Z`` after the last block's checksum, once per READ PLATE command however
+    many blocks or kinetic cycles it produced.
+
+    It arrives only after the carriage has returned home, around 7-8 s after the
+    checksum, so this waits out the driver's full response timeout rather than a
+    short window. Firmware that does not send it is tolerated with a warning, at
+    the cost of one such wait per read.
+    """
+    try:
+      trailer = await self._read_exactly(1)
+    except TimeoutError:
+      logger.warning(
+        "[PowerWaveX %s] no ^Z end-of-data marker after the last data block; "
+        "this firmware may not send one",
+        self.port,
+      )
+      return
+
+    if trailer != SUB:
+      logger.warning(
+        "[PowerWaveX %s] expected a ^Z end-of-data marker after the last data block, got %r",
+        self.port,
+        trailer,
+      )
+
+  # ------------------------------------------------------------------------------------
+  # Identification
+  # ------------------------------------------------------------------------------------
+
+  async def request_model(self) -> str:
+    """Read the instrument configuration and return the model name (page B-19).
+
+    This command is answered with the configuration word and, unusually, no
+    status string.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.GET_INSTRUMENT_CONFIGURATION)
+      payload = await self._read_exactly(2)
+    model = parse_device_configuration(payload)
+    logger.debug("[PowerWaveX %s] identified as %s", self.port, model)
+    return model
+
+  async def request_wavelength_table(self) -> List[int]:
+    """Read the calibrated wavelength table in nm (page B-11).
+
+    A calibration set, not a list of installed filters: the monochromator reads
+    any wavelength in range. Unused table positions report ``000`` and are
+    omitted.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.GET_WAVELENGTH_TABLE)
+      payload = await self._read_exactly(24)
+      table = parse_wavelength_table(payload)
+      await self._read_status()
+    return table
+
+  async def request_minimum_kinetic_interval(self) -> int:
+    """Read the shortest usable kinetic interval in seconds (page B-13).
+
+    Determined by the loaded assay definition, the strip range and the baud rate,
+    so the value changes once an assay has been pushed. Asked before the right
+    assay is loaded it answers for the wrong one, which is why
+    :meth:`read_absorbance_kinetic` queries it itself rather than taking the
+    caller's word for the interval.
+
+    The floor scales with the wavelength count, since the carriage makes a pass
+    per wavelength: over a full 96-well plate at 9600 baud it is about 10 s for
+    one wavelength, 19 s for two and 38 s for four.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.GET_MINIMUM_KINETIC_INTERVAL)
+      payload = await self._read_exactly(2)
+      interval = parse_uint16(payload)
+      await self._read_status()
+    return interval
+
+  # ------------------------------------------------------------------------------------
+  # Lifecycle
+  # ------------------------------------------------------------------------------------
+
+  async def setup(self) -> None:
+    """Open the serial connection and identify the instrument.
+
+    Reads the instrument configuration (page B-19) and the calibrated wavelength
+    table (page B-11), both of which are then available without further traffic
+    as :attr:`model` and :attr:`wavelength_table`.
+    """
+    logger.warning(
+      "The PowerWaveX driver has been tested on one instrument only, a PowerWaveX w/ "
+      "Incubator (firmware R06.20). Other PowerWave models and firmware are untested. "
+      "If you run it on one, please report the result at https://discuss.pylabrobot.org "
+      "or open a pull request so this warning can be updated."
+    )
+
+    # Claimed before the transport is touched: reopening, draining or closing it
+    # under a run in progress would swallow that run's data and break its port.
+    async with self._owns_port():
+      await self.io.setup()
+      self._connected = True
+
+      try:
+        # A previous session may have died mid-operation, leaving the instrument
+        # part way through a response. Flushing once is not enough: bytes already
+        # on the wire arrive after the flush and would be read as the reply to the
+        # first command. Drain until the line has been quiet for a moment.
+        await self._drain_input()
+
+        self._model = await self.request_model()
+        self._wavelength_table = await self.request_wavelength_table()
+      except BaseException:
+        # Identification failed, so this is not a usable session. Leaving the
+        # transport open with connected reporting True invites a caller to keep
+        # using it.
+        self._connected = False
+        with contextlib.suppress(Exception):
+          await self.io.stop()
+        raise
+
+    logger.info(
+      "[PowerWaveX %s] connected: model=%s, calibrated wavelengths=%s",
+      self.port,
+      self._model,
+      self._wavelength_table,
+    )
+
+  async def halt(self) -> None:
+    """Abort a read or scan in progress (``'X'``, page B-12).
+
+    All axes return to their home positions and the carrier is presented
+    outside. This command is framed differently from every other: the instrument
+    sends neither ACK nor a status string, only a single ``DLE`` once the abort
+    has completed.
+
+    Safe to call while a read or scan is running, which is the point of it: the
+    read in progress is asked to stop, and raises
+    :class:`PowerWaveHaltedError` in whichever task was awaiting it, before this
+    takes the serial port and sends the command. That ordering matters because
+    both would otherwise be polling the same bytes, and the read would swallow
+    the ``DLE`` this waits for.
+
+    Endpoint reads, scans and kinetic runs all stop within a few seconds. Unlike
+    a fault, a halt latches nothing: the next read works without a
+    :meth:`self_test` in between.
+
+    Raises:
+      PowerWaveBusyError: If another halt is already in progress.
+      PowerWaveError: If a read in progress does not let go of the serial port,
+        or the instrument does not acknowledge with ``DLE``.
+    """
+    if self._halt_owner is not None:
+      raise PowerWaveBusyError("Another halt is already in progress.")
+
+    # Reserve before yielding so the interrupted task cannot start another
+    # exchange between releasing the port and HALT acquiring it.
+    self._halt_owner = asyncio.current_task()
+    self._halt_finished.clear()
+    try:
+      if not self._port_free.is_set():
+        logger.info("[PowerWaveX %s] halting a read in progress", self.port)
+        self._halt_requested.set()
+        try:
+          await asyncio.wait_for(self._port_free.wait(), timeout=self._HALT_HANDOVER_SECONDS)
+        except (asyncio.TimeoutError, TimeoutError):
+          raise PowerWaveError(
+            f"A read in progress did not release the serial port within "
+            f"{self._HALT_HANDOVER_SECONDS:.0f}s, so HALT was not sent. The instrument is "
+            f"still reading."
+          ) from None
+
+      # Held for the acknowledgement too, so nothing starts a read into the DLE this
+      # is about to wait for.
+      async with self._owns_port():
+        await self.io.write(bytes(Command.HALT.value))
+        logger.debug("[PowerWaveX %s] sent HALT", self.port)
+
+        # The acknowledgement is the last byte, not the first DLE: see
+        # _read_halt_acknowledgement. Sending the command before reading is what
+        # stops the stream, so this never waits out a run it could have aborted.
+        try:
+          response = await self._read_halt_acknowledgement(self.timeout)
+        except TimeoutError:
+          # Whatever is still in flight would otherwise answer the next command.
+          await self._drain_input(reason="left by an unacknowledged halt")
+          raise
+        if len(response) > 1:
+          logger.debug(
+            "[PowerWaveX %s] discarded %d bytes of the abandoned run before the DLE",
+            self.port,
+            len(response) - 1,
+          )
+
+    finally:
+      self._halt_requested.clear()
+      self._halt_owner = None
+      self._halt_finished.set()
+
+    logger.info("[PowerWaveX %s] halted, carrier out", self.port)
+
+  async def stop(self) -> None:
+    """Halt any run in progress, then close the serial connection.
+
+    Always disconnects. A read, scan or kinetic run still holding the serial port
+    is aborted with :meth:`halt` first, which presents the carrier and makes the
+    interrupted call raise :class:`PowerWaveHaltedError`. Closing the port under
+    the run instead would leave the instrument running with nobody listening. A
+    halt already in progress is allowed to finish. If the run cannot be halted,
+    the connection is closed anyway.
+
+    Forgets the identity read at setup, so the next session asks the instrument
+    again, in case a different one is on the port.
+    """
+    if self._halt_owner is not None:
+      await self._halt_finished.wait()
+    elif not self._port_free.is_set():
+      logger.warning("[PowerWaveX %s] stop() is halting the run in progress", self.port)
+      try:
+        await self.halt()
+      except (PowerWaveError, TimeoutError) as error:
+        logger.warning(
+          "[PowerWaveX %s] could not halt the run in progress (%s); closing the port anyway",
+          self.port,
+          error,
+        )
+
+    await self.io.stop()
+    self._connected = False
+
+    self._model = None
+    self._wavelength_table = None
+    logger.info("[PowerWaveX %s] disconnected", self.port)
+
+  # ------------------------------------------------------------------------------------
+  # Plate carrier
+  # ------------------------------------------------------------------------------------
+
+  async def open(self) -> None:
+    """Present the plate carrier outside the instrument so a plate can be loaded.
+
+    PRESENT PLATE CARRIER (``'J'``), page B-7.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.PRESENT_PLATE_CARRIER)
+      await self._read_status()
+    logger.info("[PowerWaveX %s] carrier out", self.port)
+
+  async def close(self) -> None:
+    """Store the plate carrier inside the instrument.
+
+    STORE PLATE CARRIER (``'A'``), page B-7.
+
+    Note:
+      Unlike the newer USB BioTek readers, this instrument takes no plate
+      geometry with the store command. Geometry is a separate SET PLATE GEOMETRY
+      (``'{'``) request, which the read and scan methods send themselves. Tall or
+      lidded labware has not been tested.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.STORE_PLATE_CARRIER)
+      await self._read_status()
+    logger.info("[PowerWaveX %s] carrier in", self.port)
+
+  # ------------------------------------------------------------------------------------
+  # Incubator
+  # ------------------------------------------------------------------------------------
+
+  async def request_current_temperature(self) -> float:
+    """Read the incubation chamber temperature in degrees C (page B-18).
+
+    Averaged over four thermal zones. Accepted at any time, including during a
+    read cycle, though the answer is deferred until any plate data transmission
+    has finished.
+
+    Raises:
+      PowerWaveError: If the instrument has no working incubator.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.GET_TEMPERATURE)
+      payload = await self._read_exactly(2)
+      try:
+        temperature = parse_temperature(payload)
+      except PowerWaveError:
+        # The instrument flags an incubator error in the status string that follows.
+        await self._read_status()
+        raise
+      await self._read_status()
+    logger.info("[PowerWaveX %s] temperature: %.1f degrees C", self.port, temperature)
+    return temperature
+
+  async def set_temperature(self, temperature: int) -> None:
+    """Set the incubator setpoint in whole degrees C (page B-17).
+
+    Args:
+      temperature: 22 to 50 degrees C, or 0 to switch the heaters off. The
+        instrument accepts whole degrees only.
+
+    Raises:
+      NotImplementedError: If the identified model has no incubator.
+
+    Note:
+      The manual lists the setpoint as data bytes "1 - 2", but a PowerWaveX w/
+      Incubator (firmware R06.20) takes a *single* raw byte holding the integer
+      degrees.
+    """
+    if not self.supports_heating:
+      raise NotImplementedError(f"{self.model} has no incubator.")
+
+    payload = encode_temperature_setpoint(temperature)
+
+    async with self._owns_port():
+      await self._send_command(Command.SET_TEMPERATURE)
+      await self.io.write(payload)
+      await self._read_status()
+
+    if temperature == 0:
+      logger.info("[PowerWaveX %s] incubator off", self.port)
+    else:
+      logger.info("[PowerWaveX %s] incubator setpoint: %d degrees C", self.port, temperature)
+
+  async def stop_heating(self) -> None:
+    """Switch the incubator heaters off, by setting the setpoint to zero (page B-17)."""
+    await self.set_temperature(0)
+
+  # ------------------------------------------------------------------------------------
+  # Absorbance reads
+  # ------------------------------------------------------------------------------------
+
+  def _check_read_wavelengths(self, wavelengths: Sequence[int]) -> None:
+    """Range-check wavelengths for a read, and warn about uncalibrated ones.
+
+    A warning rather than a refusal: whether a wavelength is safe depends on
+    calibration the instrument does not report, such as a scan in an earlier
+    session. See :attr:`abs_wavelength_range` for the risk.
+
+    Raises:
+      ValueError: If a wavelength is outside the instrument's range.
+    """
+    low, high = self.abs_wavelength_range
+    for wavelength in wavelengths:
+      if not low <= wavelength <= high:
+        raise ValueError(f"Wavelength must be within {low}-{high} nm, got {wavelength}")
+
+    uncalibrated = [w for w in wavelengths if w not in (self._wavelength_table or [])]
+    if len(uncalibrated) > 0:
+      logger.warning(
+        "[PowerWaveX %s] %s nm not in the calibrated wavelength table %s. The read sets "
+        "its own gain, which is less accurate than the stored table (page B-8) and can "
+        "hang the instrument outright where little light reaches the detector: below "
+        "210 nm it abandons the read and waits for its front panel. scan_plate() over a "
+        "band containing the wavelength calibrates it properly first; see "
+        "abs_wavelength_range.",
+        self.port,
+        uncalibrated,
+        self._wavelength_table,
+      )
+
+  async def _push_assay_definition(self, table: bytes) -> None:
+    """Download a 170-byte assay definition table (``'V'``, page B-10).
+
+    Args:
+      table: The table, built by :func:`._protocol.build_assay_definition`.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.SET_ASSAY_DEFINITION)
+      await self.io.write(table)
+      await self._read_status()
+
+      # The instrument emits a stray NAK shortly after accepting the table, with
+      # no command outstanding. Settle, then discard it so it cannot be mistaken
+      # for the next reply. This stays inside the ownership block: a command let
+      # in during the settle would have its reply discarded by the flush.
+      await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
+      await self.io.reset_input_buffer()
+      await self.io.reset_output_buffer()
+      await asyncio.sleep(self._ASSAY_SETTLE_SECONDS)
+
+    logger.debug("[PowerWaveX %s] assay definition loaded", self.port)
+
+  async def _set_plate_geometry(self, num_rows: int, num_columns: int) -> None:
+    """Select the microplate geometry (``'{'``, page B-12).
+
+    Must be sent *after* the assay definition table, which is why
+    :meth:`read_absorbances` sequences it that way. Sending it resets the strip
+    range to the full plate, so any strip range must follow it.
+
+    The manual recommends issuing this even for 96-well plates, which are the
+    default.
+
+    Args:
+      num_rows: 8 for a 96-well plate, 16 for a 384-well plate.
+      num_columns: 12 for a 96-well plate, 24 for a 384-well plate.
+
+    Raises:
+      NotImplementedError: For any layout the instrument has no code for.
+      PowerWaveStatusError: If the instrument rejects the geometry. A 96-well
+        PowerWaveX answers ``0A0`` to a 384-well request.
+
+    Note:
+      The manual documents only an ACK for this command, with no status string.
+      That is wrong: a PowerWaveX w/ Incubator (firmware R06.20) sends a full
+      status string after the geometry byte, verified directly. Not consuming it
+      leaves five bytes queued and desynchronises every later command.
+    """
+    payload = encode_plate_geometry(num_rows, num_columns)
+
+    async with self._owns_port():
+      await self._send_command(Command.SET_PLATE_GEOMETRY)
+      await self.io.write(payload)
+      await self._read_status()
+
+    logger.debug("[PowerWaveX %s] plate geometry set to %dx%d", self.port, num_rows, num_columns)
+
+  async def _set_strip_range(self, first_strip: int, last_strip: int) -> None:
+    """Restrict the read to a contiguous range of plate columns (``'%'``, page B-13).
+
+    Strips are numbered plate columns, from 1. The instrument cannot skip strips
+    and cannot select rows, so every row of the chosen columns is always read.
+
+    The range reverts to the full plate whenever a new assay definition table is
+    loaded, and whenever SET PLATE GEOMETRY is sent, so this must be the last of
+    the three.
+
+    Args:
+      first_strip: First column to read, from 1.
+      last_strip: Last column to read, inclusive.
+
+    Raises:
+      ValueError: If the range falls outside 1 to :data:`._protocol.MAX_STRIP`.
+
+    Note:
+      The instrument does not range-check these itself; it answered ``000`` to a
+      first strip of 0 when tested, and accepted columns 13 to 24 against a
+      96-well geometry. Callers take the range from :meth:`_strip_range_for`,
+      which keeps it within the plate.
+    """
+    payload = encode_strip_range(first_strip, last_strip)
+
+    async with self._owns_port():
+      await self._send_command(Command.SET_STRIP_RANGE)
+      await self.io.write(payload)
+      await self._read_status()
+
+    logger.debug("[PowerWaveX %s] strip range set to %d-%d", self.port, first_strip, last_strip)
+
+  async def _start_read(self) -> None:
+    """Send READ PLATE and consume the status string that precedes the data."""
+    await self._send_command(Command.READ_PLATE)
+    await self._read_status()
+
+  async def _collect_blocks(
+    self,
+    num_blocks: int,
+    num_rows: int,
+    num_columns: int,
+    timeout: Optional[float] = None,
+  ) -> List[List[List[float]]]:
+    """Read and verify ``num_blocks`` consecutive plate data blocks.
+
+    Each block is a ``CR`` start code, the rows, a ``^Z`` terminator and a raw
+    checksum byte. The checksum byte must be consumed here.
+    """
+    blocks = []
+    for index in range(num_blocks):
+      try:
+        start = await self._read_exactly(1, timeout=timeout)
+      except TimeoutError as silence:
+        # Nothing at all arrived. A fault can abandon the read without the DLE
+        # below, and can take the serial interface down with it.
+        raise PowerWaveReadAbortedError(
+          f"No data block arrived after {index} of {num_blocks} "
+          f"block{'' if num_blocks == 1 else 's'}: the instrument sent nothing for "
+          f"{timeout if timeout is not None else self.timeout:.0f}s. It has halted and is "
+          f"waiting for the fault to be acknowledged at its front panel, and will not "
+          f"answer the serial port until then. Press the panel key, note the code it "
+          f"shows, then call self_test() to clear the latched 080. No power cycle is "
+          f"needed."
+        ) from silence
+      if start == DLE:
+        await self._raise_read_aborted(index, num_blocks)
+      frame = start + await self._read_until(SUB, timeout=timeout)
+      checksum = await self._read_exactly(1, timeout=timeout)
+      verify_plate_checksum(frame, checksum[0])
+      blocks.append(parse_plate(frame, num_rows, num_columns))
+      logger.debug(
+        "[PowerWaveX %s] block %d/%d parsed, checksum %d verified",
+        self.port,
+        index + 1,
+        num_blocks,
+        checksum[0],
+      )
+
+    return blocks
+
+  async def _read_plate(
+    self, num_blocks: int, num_rows: int, num_columns: int
+  ) -> List[List[List[float]]]:
+    """Run READ PLATE and collect one parsed data block per wavelength (page B-9).
+
+    The response is an ACK, a status string, then for each wavelength a ``CR``
+    start code, the rows, a ``^Z`` terminator and a raw checksum byte. A trailing
+    status string is sent only if the read failed, so none is consumed here.
+
+    Args:
+      num_blocks: One per wavelength in the loaded assay definition.
+      num_rows: Rows in the loaded plate geometry.
+      num_columns: Columns actually read, which is the strip range and not
+        necessarily the plate width.
+    """
+    await self._start_read()
+    blocks = await self._collect_blocks(num_blocks, num_rows, num_columns)
+    await self._consume_end_of_data()
+    return blocks
+
+  def _strip_range_for(self, plate: Plate, wells: List[Well]) -> tuple[int, int]:
+    """Work out the strip range covering ``wells``, validating the selection.
+
+    The instrument reads whole columns only, so a selection that does not fill
+    every row of its columns is widened to the enclosing strips. Those extra
+    wells are measured and reported rather than discarded.
+
+    Returns:
+      The inclusive, 1-based ``(first_strip, last_strip)`` to read.
+    """
+    if len(wells) == 0:
+      raise ValueError("No wells to read")
+
+    parents = set(well.parent for well in wells)
+    if len(parents) != 1 or parents.pop() is not plate:
+      raise ValueError("All wells must belong to the specified plate")
+
+    # Validates the geometry early, before anything is sent.
+    encode_plate_geometry(plate.num_items_y, plate.num_items_x)
+
+    columns = [well.get_column() for well in wells]
+    first_strip, last_strip = min(columns) + 1, max(columns) + 1
+
+    covered = (last_strip - first_strip + 1) * plate.num_items_y
+    if covered != len(wells):
+      logger.info(
+        "[PowerWaveX %s] the selection of %d wells is not a whole block of columns; "
+        "reading strips %d-%d (%d wells) and reporting all of them, since the instrument "
+        "cannot select rows (page B-13)",
+        self.port,
+        len(wells),
+        first_strip,
+        last_strip,
+        covered,
+      )
+
+    return first_strip, last_strip
+
+  def _place_strips(
+    self, block: List[List[float]], plate: Plate, first_strip: int
+  ) -> List[List[Optional[float]]]:
+    """Position a strip-range data block within a full-plate grid.
+
+    Columns outside the strip range were never measured and stay ``None``.
+    """
+    data: List[List[Optional[float]]] = [
+      [None] * plate.num_items_x for _ in range(plate.num_items_y)
+    ]
+    for row_index, row in enumerate(block):
+      for offset, value in enumerate(row):
+        data[row_index][first_strip - 1 + offset] = value
+    return data
+
+  async def read_absorbances(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelengths: Sequence[int],
+  ) -> List[AbsorbanceResult]:
+    """Read absorbance at up to six wavelengths in a single pass of the plate.
+
+    The instrument's assay definition table holds up to six wavelengths and
+    returns one data block per wavelength from one READ PLATE command (page B-9),
+    so this is substantially faster than calling :meth:`read_absorbance` in a
+    loop.
+
+    Args:
+      plate: The plate loaded in the carrier.
+      wells: The wells to read. The instrument reads whole columns, so the read
+        covers every column that holds a selected well, and all of their wells
+        are reported. Columns outside that range are ``None``.
+      wavelengths: One to six wavelengths in nm, 200 to 999.
+
+    Returns:
+      One :class:`AbsorbanceResult` per requested wavelength, in the order asked.
+      Each result's temperature is ``None``; use :meth:`request_current_temperature`
+      to query the chamber temperature separately.
+    """
+    first_strip, last_strip = self._strip_range_for(plate, wells)
+
+    self._check_read_wavelengths(wavelengths)
+    table = build_assay_definition(wavelengths, read_type="endpoint")
+
+    num_strips = last_strip - first_strip + 1
+    logger.info(
+      "[PowerWaveX %s] read_absorbance: plate=%s, wavelengths=%s nm, wells=%d, strips %d-%d",
+      self.port,
+      plate.name,
+      list(wavelengths),
+      len(wells),
+      first_strip,
+      last_strip,
+    )
+
+    # Held across the setup commands as well as the data, because a second
+    # operation starting here would interleave its assay definition with this
+    # one's data stream.
+    async with self._owns_port():
+      # Order matters (pages B-12, B-13): the assay definition resets the strip
+      # range, and so does the geometry command, so both must follow it in this
+      # order.
+      await self._push_assay_definition(table)
+      await self._set_plate_geometry(plate.num_items_y, plate.num_items_x)
+      if num_strips != plate.num_items_x:
+        await self._set_strip_range(first_strip, last_strip)
+
+      blocks = await self._read_plate(len(wavelengths), plate.num_items_y, num_strips)
+
+    timestamp = datetime.now()
+
+    results = []
+    for wavelength, block in zip(wavelengths, blocks):
+      data = self._place_strips(block, plate, first_strip)
+      overrange = count_overrange(block)
+      if overrange > 0:
+        logger.warning(
+          "[PowerWaveX %s] %d of %d wells overrange at %d nm; readings above 3.000 OD are "
+          "outside the instrument's specified range (page 1-1)",
+          self.port,
+          overrange,
+          plate.num_items_y * num_strips,
+          wavelength,
+        )
+      results.append(
+        AbsorbanceResult(
+          data=data,
+          wavelength=wavelength,
+          temperature=None,
+          timestamp=timestamp,
+        )
+      )
+
+    return results
+
+  async def read_absorbance(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelength: int,
+  ) -> List[AbsorbanceResult]:
+    """Read absorbance at one wavelength.
+
+    Args:
+      plate: The plate loaded in the carrier, 8x12 or 16x24.
+      wells: The wells to read; widened to whole columns as for
+        :meth:`read_absorbances`.
+      wavelength: Wavelength in nm, 200 to 999. The monochromator selects it at
+        1 nm increments (page 1-1), so any value in range is readable regardless
+        of the stored wavelength table.
+
+    Returns:
+      A single-element list, for consistency with the other BioTek readers.
+
+    Raises:
+      NotImplementedError: If the plate is neither 8x12 nor 16x24.
+      PowerWaveStatusError: With ``0A0`` if a 96-well instrument is asked to read
+        a 384-well plate.
+
+    Note:
+      The carrier is not moved. Call :meth:`close` first if the plate is still
+      presented outside.
+    """
+    return await self.read_absorbances(plate, wells, [wavelength])
+
+  async def _kinetic_exchange(
+    self,
+    plate: Plate,
+    table: bytes,
+    wavelengths: Sequence[int],
+    interval: int,
+    count: int,
+    first_strip: int,
+    last_strip: int,
+    num_strips: int,
+  ) -> List[AbsorbanceResult]:
+    """Load a kinetic assay and collect every cycle (pages B-10, B-13).
+
+    Split out so :meth:`read_absorbance_kinetic` can hold the serial port across
+    the whole run, which is what lets :meth:`halt` stop it.
+    """
+    await self._push_assay_definition(table)
+    await self._set_plate_geometry(plate.num_items_y, plate.num_items_x)
+    if num_strips != plate.num_items_x:
+      await self._set_strip_range(first_strip, last_strip)
+
+    # Only meaningful once the assay is loaded: it depends on the assay, the strip
+    # range and the baud rate (page B-13).
+    minimum = await self.request_minimum_kinetic_interval()
+    if interval < minimum:
+      # The instrument refuses such a series with status 090 rather than running
+      # it late. Raise here instead, where the minimum can be reported.
+      raise ValueError(
+        f"interval {interval}s is below the instrument's minimum of {minimum}s for this "
+        f"assay. The minimum depends on the wavelength count, the strip range and the "
+        f"baud rate, so it is only known once the assay is loaded; reading at {interval}s "
+        f"would be rejected with status 090."
+      )
+
+    logger.info(
+      "[PowerWaveX %s] kinetic read: %s nm, %d cycles every %ds, about %d minutes",
+      self.port,
+      list(wavelengths),
+      count,
+      interval,
+      round(interval * count / 60),
+    )
+
+    # Each cycle arrives an interval apart, so the per-block deadline has to cover
+    # the wait as well as the transfer.
+    block_timeout = interval + self.timeout
+
+    results: List[AbsorbanceResult] = []
+    await self._start_read()
+
+    for cycle in range(count):
+      blocks = await self._collect_blocks(
+        len(wavelengths), plate.num_items_y, num_strips, timeout=block_timeout
+      )
+      # Stamped once the cycle's data is in hand, so it labels this cycle.
+      timestamp = datetime.now()
+      for wavelength, block in zip(wavelengths, blocks):
+        results.append(
+          AbsorbanceResult(
+            data=self._place_strips(block, plate, first_strip),
+            wavelength=wavelength,
+            temperature=None,
+            timestamp=timestamp,
+          )
+        )
+      logger.info("[PowerWaveX %s] kinetic cycle %d/%d", self.port, cycle + 1, count)
+
+    # One marker closes the whole run, however many cycles it produced.
+    await self._consume_end_of_data()
+
+    return results
+
+  async def read_absorbance_kinetic(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    wavelengths: Sequence[int],
+    interval: int,
+    count: int,
+    shake_time: int = 0,
+    shake_speed: ShakeSpeed = "medium",
+    total_read_time: Optional[int] = None,
+  ) -> List[AbsorbanceResult]:
+    """Read the plate repeatedly at a fixed interval (page B-10).
+
+    The instrument runs the whole series itself once READ PLATE is sent, emitting
+    one data block per wavelength per cycle. This call therefore blocks for
+    roughly ``interval * count`` seconds.
+
+    Args:
+      plate: The plate loaded in the carrier.
+      wells: The wells to read; widened to whole columns as for
+        :meth:`read_absorbances`.
+      wavelengths: One to six wavelengths in nm.
+      interval: Seconds between reads. Must be at least
+        :meth:`request_minimum_kinetic_interval`, which depends on the assay and
+        the baud rate, and so is only known once the assay has been loaded. A
+        shorter interval raises :class:`ValueError`, because the instrument
+        rejects the read outright rather than running it late.
+      count: Number of reads, 2 to 9999.
+      shake_time: Seconds to shake before each cycle, 0 to 999. Zero, the default,
+        means the plate is never shaken: the flags that enable shaking are left
+        clear and no shake time is sent. Shaking is a property of an assay rather
+        than of reading one, so it is never done unasked.
+      shake_speed: ``"slow"``, ``"medium"``, ``"fast"`` or ``"variable"``, which
+        cycles through the speeds. Only consulted when ``shake_time`` is above
+        zero.
+      total_read_time: Not supported; pass ``None``. Running a kinetic series by
+        total time means the instrument ignores ``count``, so the driver cannot
+        know how many blocks to expect. See :data:`._protocol.KINETIC_FLAGS`.
+
+    Returns:
+      One :class:`AbsorbanceResult` per wavelength per cycle, ordered by cycle
+      then wavelength. Each is timestamped when its cycle's data finished
+      arriving, not when the instrument measured it: the instrument reports no
+      time of its own, and a read takes roughly ten seconds to transfer, so a
+      cycle was measured somewhat before its timestamp. The spacing between
+      timestamps tracks the interval closely, so rates computed from differences
+      are unaffected, while absolute times carry that offset.
+
+    Note:
+      Use :meth:`halt` to abort a run in progress.
+    """
+    first_strip, last_strip = self._strip_range_for(plate, wells)
+    self._check_read_wavelengths(wavelengths)
+
+    num_strips = last_strip - first_strip + 1
+
+    if total_read_time is not None:
+      raise NotImplementedError(
+        "total_read_time is not supported: setting the total kinetic time makes the "
+        "instrument ignore count and keep cycling, so the driver cannot tell when the "
+        "run ends. Use count and interval instead."
+      )
+
+    table = build_assay_definition(
+      wavelengths,
+      read_type="kinetic",
+      flags=KINETIC_SHAKE_FLAGS if shake_time > 0 else KINETIC_FLAGS,
+      kinetic_interval=interval,
+      kinetic_read_count=count,
+      shake_time=shake_time,
+      shake_speed=_shake_speed_code(shake_speed),
+    )
+
+    # Held across the setup commands too, so a second operation cannot interleave
+    # its assay definition with this run's cycles.
+    async with self._owns_port():
+      return await self._kinetic_exchange(
+        plate, table, wavelengths, interval, count, first_strip, last_strip, num_strips
+      )
+
+  async def self_test(self, timeout: float = 180, raise_on_failure: bool = True) -> str:
+    """Run the instrument self-test and return its report (``'*'``, page B-16).
+
+    This is the documented remedy for status ``080``, and the only way to learn
+    *why* an instrument is refusing to read. It recalibrates gains and should be
+    run after any change to the wavelength table.
+
+    Args:
+      timeout: Seconds to allow. The test moves every axis and is slow.
+      raise_on_failure: Whether to raise when the report declares a failure.
+
+    Returns:
+      The full ASCII report, including the per-wavelength Air and Dark counts and
+      the incubator zone results.
+
+    Raises:
+      PowerWaveSelfTestError: If the report declares a failure and
+        ``raise_on_failure`` is set.
+
+    Note:
+      The status string that closes this response reports whether the *command*
+      ran, not whether the test passed. A failing instrument still answers
+      ``"000"``, so the verdict is taken from the report body instead.
+    """
+    async with self._owns_port():
+      await self._send_command(Command.SELF_TEST)
+      frame = await self._read_until(ETX, timeout=timeout)
+
+    if len(frame) < STATUS_LENGTH:
+      raise PowerWaveParseError(f"Truncated self-test response: {frame!r}")
+
+    report = frame[:-STATUS_LENGTH].decode("latin-1")
+    parse_status(frame[-STATUS_LENGTH:])
+
+    code = parse_self_test_report(report)
+    if code is None:
+      logger.info("[PowerWaveX %s] self-test passed", self.port)
+      return report
+
+    error = PowerWaveSelfTestError(code, report)
+    logger.error("[PowerWaveX %s] %s", self.port, error)
+    if raise_on_failure:
+      raise error
+    return report
+
+  async def _scan_exchange(
+    self,
+    plate: Plate,
+    request: bytes,
+    expected: List[int],
+    num_wells: int,
+    row: int,
+    target_column: int,
+    shake_time: int,
+  ) -> SpectralScanResult:
+    """Send a prepared scan request and collect its response (page B-14).
+
+    Split out so :meth:`scan_plate` can hold the serial port across the whole
+    exchange, which is what lets :meth:`halt` interrupt a scan.
+    """
+    # One budget for every phase of the scan, because the slow parts come before
+    # the data: the instrument shakes first, then calibrates whatever wavelengths
+    # it must, and only then sweeps. Timing any one phase against the plain
+    # response timeout fails a scan that is merely slow - a 31-wavelength
+    # calibrated scan, or any shake approaching its 99 second maximum, outlasts it
+    # before the first wavelength list arrives.
+    timeout = self.timeout + shake_time + self._SCAN_SECONDS_PER_WAVELENGTH * len(expected)
+
+    await self._send_command(Command.SCAN_PLATE)
+    await self.io.write(request + ETX)
+
+    # The request is acknowledged a second time, after ETX (page B-14). Poll for
+    # it rather than reading one io slice, as _send_command does: the instrument
+    # is free to take its time here.
+    acknowledgement = await self._read_exactly(1, timeout=timeout)
+    if acknowledgement == NAK:
+      raise PowerWaveNakError("Instrument rejected the scan request: invalid arguments")
+    if acknowledgement != ACK:
+      raise PowerWaveError(f"Expected ACK or NAK after the scan request, got {acknowledgement!r}")
+
+    await self._read_status(timeout=timeout)
+
+    # Two wavelength lists precede the data. Both terminators are always sent,
+    # even when the list is empty.
+    calibrated = parse_scan_wavelength_list(await self._read_until(SUB, timeout=timeout))
+    first_pass = parse_scan_wavelength_list(await self._read_until(SUB, timeout=timeout))
+    logger.debug(
+      "[PowerWaveX %s] scan calibrated %s, first pass %s", self.port, calibrated, first_pass
+    )
+
+    # A single CR marks the start of the data, then one line per wavelength, then
+    # one ^Z and one checksum byte for the whole series.
+    try:
+      start_code = await self._read_exactly(1, timeout=timeout)
+    except TimeoutError as silence:
+      raise PowerWaveReadAbortedError(
+        f"No scan data arrived: the instrument sent nothing for {timeout:.0f}s after "
+        f"acknowledging the scan. It has halted and is waiting for the fault to be "
+        f"acknowledged at its front panel. Press the panel key, note the code it shows, "
+        f"then call self_test() to clear the latched 080."
+      ) from silence
+    if start_code == DLE:
+      await self._raise_read_aborted(0, len(expected))
+    if start_code != CR:
+      raise PowerWaveParseError(f"Expected CR data start code, got {start_code!r}")
+
+    section = await self._read_until(SUB, timeout=timeout)
+    checksum = (await self._read_exactly(1, timeout=timeout))[0]
+    verify_scan_checksum(section, checksum)
+
+    wavelengths, data = parse_scan_data(section, num_wells)
+
+    if wavelengths != expected:
+      logger.warning(
+        "[PowerWaveX %s] scan returned wavelengths %s, expected %s",
+        self.port,
+        wavelengths,
+        expected,
+      )
+
+    return SpectralScanResult(
+      wavelengths=wavelengths,
+      data=data,
+      column=target_column,
+      row=row if row != SCAN_WHOLE_STRIP else None,
+      calibrated=calibrated,
+      temperature=None,
+      timestamp=datetime.now(),
+    )
+
+  async def scan_plate(
+    self,
+    plate: Plate,
+    start_wavelength: int,
+    stop_wavelength: int,
+    step: int,
+    well: Optional[Well] = None,
+    column: Optional[int] = None,
+    calibrate: bool = False,
+    shake_time: int = 0,
+    shake_speed: ShakeSpeed = "slow",
+    series: ScanSeries = "single",
+  ) -> SpectralScanResult:
+    """Spectrally scan one well, or one whole strip (``'&'``, page B-14).
+
+    The monochromator sweeps from ``start_wavelength`` to ``stop_wavelength`` in
+    ``step`` increments, reading the selected well or column at each. This is a
+    different operation from :meth:`read_absorbance`, which reads the whole plate
+    at up to six fixed wavelengths.
+
+    Args:
+      plate: The plate loaded in the carrier.
+      start_wavelength: First wavelength in nm, 200 to 999.
+      stop_wavelength: Last wavelength in nm, above the start.
+      step: Increment in nm. At least two wavelengths must be scanned, so this
+        cannot exceed the span.
+      well: The single well to scan. Give exactly one of ``well`` or ``column``.
+      column: The 1-based column to scan in full, all rows at once.
+      calibrate: Calibrate every wavelength first. Without it the instrument
+        still calibrates any wavelength not scanned since power-up, and any with
+        a previous error. Recommended when absolute accuracy matters.
+      shake_time: Seconds to shake before scanning, 0 to 99.
+      shake_speed: ``"slow"``, ``"medium"``, ``"fast"`` or ``"variable"``, which
+        cycles through the speeds. Only consulted when ``shake_time`` is above
+        zero.
+      series: Use ``"first"``, ``"next"`` and ``"last"`` to scan adjacent strips
+        efficiently. They must be contiguous and go left to right, because the
+        first pass for the next strip is collected during the current one.
+
+    Returns:
+      A :class:`SpectralScanResult` whose ``data`` is indexed
+      ``[wavelength][well]``. Its temperature is ``None``; use
+      :meth:`request_current_temperature` to query the chamber temperature separately.
+
+    Raises:
+      ValueError: If neither or both of ``well`` and ``column`` are given, or any
+        argument is out of range. The instrument checks only the wavelength
+        bounds of a scan request: it accepts an impossible row, column, direction
+        or step (a step of 0 especially) with status ``000``, then stops
+        responding to every command, HALT included, until it is recovered at its
+        front panel. These checks are what prevents that, so do not relax them.
+      NotImplementedError: For a whole-strip scan of a plate that is not 8 rows;
+        the manual warns against row "00" on 384-well plates.
+
+    Note:
+      Scanning a whole strip takes two passes, because even-row detectors sit one
+      column to the left. The driver handles the first pass transparently.
+
+      The geometry command must precede a scan on any plate that is not the
+      standard 96-well, so it is sent before every scan.
+    """
+    if (well is None) == (column is None):
+      raise ValueError("Give exactly one of well or column")
+
+    if well is not None:
+      if well.parent is not plate:
+        raise ValueError("The well must belong to the specified plate")
+      row_index, column_index = well.get_row(), well.get_column()
+      row, target_column = row_index + 1, column_index + 1
+      num_wells = 1
+    else:
+      assert column is not None
+      if not 1 <= column <= plate.num_items_x:
+        raise ValueError(
+          f"column must be 1-{plate.num_items_x} for this {plate.num_items_y}x"
+          f"{plate.num_items_x} plate, got {column}. The instrument does not check "
+          f"this: it accepted row 99 and column 99 and then stopped responding."
+        )
+      if plate.num_items_y != 8:
+        raise NotImplementedError(
+          "Scanning a whole strip is only supported on 8-row plates. The manual warns "
+          'against row "00" on 384-well plates (page B-14); scan wells individually.'
+        )
+      row, target_column = SCAN_WHOLE_STRIP, column
+      num_wells = plate.num_items_y
+
+    request = encode_scan_request(
+      row=row,
+      column=target_column,
+      start_wavelength=start_wavelength,
+      stop_wavelength=stop_wavelength,
+      step=step,
+      series=series,
+      calibrate=calibrate,
+      shake_time=shake_time,
+      shake_speed=_shake_speed_code(shake_speed),
+    )
+    expected = scan_wavelengths(start_wavelength, stop_wavelength, step)
+
+    logger.info(
+      "[PowerWaveX %s] spectral scan: %s, %d-%d nm in %d nm steps, %d wavelengths",
+      self.port,
+      f"well row {row} column {target_column}" if row else f"strip {target_column}",
+      start_wavelength,
+      stop_wavelength,
+      step,
+      len(expected),
+    )
+
+    async with self._owns_port():
+      await self._set_plate_geometry(plate.num_items_y, plate.num_items_x)
+      return await self._scan_exchange(
+        plate, request, expected, num_wells, row, target_column, shake_time
+      )
+
+  # ------------------------------------------------------------------------------------
+  # Documented but not implemented
+  #
+  # These three Appendix B commands are deliberately unimplemented. They are private
+  # stubs that record why each is left out, so the gap is visible in the driver rather
+  # than only in the manual.
+  # ------------------------------------------------------------------------------------
+
+  async def _configure_wavelengths(self, wavelengths: Sequence[int]) -> None:
+    """Not implemented: write the calibration wavelength table (``'M'``, page B-8).
+
+    This rewrites the table in the instrument's **non-volatile memory**, and the
+    manual requires a self-test afterwards to recalibrate gains for the new set.
+    It is only correct after physically changing the optics, so it is left out.
+
+    The encoder exists and is tested, so wiring this up is small:
+    :func:`._protocol.encode_wavelength_table` builds the 24-byte payload, which
+    is sent after the command byte and followed by ``ETX``, then
+    :meth:`self_test`.
+
+    Raises:
+      NotImplementedError: Always.
+    """
+    raise NotImplementedError(
+      "CONFIGURE WAVELENGTHS ('M', page B-8) is not implemented. It rewrites the "
+      "calibration table in non-volatile memory and requires a self-test afterwards, "
+      "so it is only appropriate after the optics have been changed. See "
+      "encode_wavelength_table() if you need to send it yourself."
+    )
+
+  async def _request_plate_barcode(self) -> str:
+    """Not implemented: read the microplate barcode (``'s'``, page B-19).
+
+    Requires the barcode scanner option. The manual notes the instrument returns
+    a null string if no barcode is found after two passes of the carrier.
+
+    Raises:
+      NotImplementedError: Always.
+    """
+    raise NotImplementedError(
+      "GET PLATE BARCODE ('s', page B-19) is not implemented. It requires the barcode "
+      "scanner option, which was not available to develop against."
+    )
+
+  async def _close_plate_access_door(self) -> None:
+    """Not implemented: close the robotic access door (``')'``, page B-20).
+
+    Only meaningful on the robotic-access-door models, whose configuration words
+    are 0x00B0 to 0x00BA, 0x00F2 and 0x00FA. A model without the door NAKs the
+    command, so :attr:`model` tells you whether it could ever apply.
+
+    Raises:
+      NotImplementedError: Always.
+    """
+    raise NotImplementedError(
+      "CLOSE PLATE ACCESS DOOR (')', page B-20) is not implemented. It applies only to "
+      f"robotic-access-door models; this one reports {self._model or 'an unknown model'}."
+    )
+
+  def __str__(self) -> str:
+    model = self._model or "PowerWaveX (not yet identified)"
+    return f"{model} on {self.io.port if self._connected else '<not connected>'}"
