@@ -25,6 +25,7 @@ jobs and images independently, without importing the Celigo implementation.
 | [server.py](server.py) | `CeligoServer`: service registration and startup/shutdown around one session. |
 | [acquisition_job.py](acquisition_job.py) | Job execution, cancellation, progress, and completion. |
 | [job_specification.py](job_specification.py) | Concrete job settings and their persisted representation. |
+| [scan_serialization.py](scan_serialization.py) | Conversion between PLR scan specifications/plans and protobuf messages. |
 | [job_store.py](job_store.py) | SQLite job/image records, recovery, and retention. |
 | [image_encoding.py](image_encoding.py) | PNG encoding and image metadata conversion. |
 | [limits.py](limits.py) | Capture, image, and message limits. |
@@ -46,7 +47,7 @@ installation, connection setup, and the `plr dev celigo serve` and
 | Service | Methods |
 | --- | --- |
 | `pylabrobot.rpc.v1.DeviceService` | `GetDevice`, `GetStatus`, `WatchStatus` |
-| `celigo.v1.CeligoService` | `GetConfiguration`, `OpenDoor`, `CloseDoor`, `CreateInitialization`, `CreateBrightfieldCapture` |
+| `celigo.v1.CeligoService` | `GetConfiguration`, `BuildScanPlan`, `CreateScan`, `GetScanPlan`, `OpenDoor`, `CloseDoor`, `CreateInitialization`, `CreateBrightfieldCapture` |
 | `pylabrobot.rpc.v1.JobService` | `GetJob`, `GetJobByRequestId`, `StartJob`, `CancelJob`, `WatchJob` |
 | `pylabrobot.rpc.v1.ImageService` | `GetCapabilities`, `GetJobImageRetention`, `ReleaseJobImages`, `ListFrames`, `GetFrame`, `WatchPreview` |
 
@@ -86,9 +87,12 @@ metadata. Preview watches deliver whole images and never start acquisition.
 
 Limits include 32 MiB per encoded frame, 40 MiB per gRPC message, 8,388,608 pixels,
 and Mono8/Mono16 PNG. Default storage allows 256 MiB of image payload and 1024
-retained jobs. Storage quotas reserve space before acceptance; they do not bound
-total process memory. The implementation does not guarantee control latency under
-saturated RPC load.
+retained jobs. Set `plr dev celigo serve --image-storage-bytes BYTES` to increase
+image storage for larger scans. Admission reserves capacity for every planned
+frame, using worst-case Mono16 PNG size rather than the user's storage estimate.
+Scan execution persists frames individually without accumulating captured images
+in memory. Plans, RPC responses, and other process memory are outside this quota.
+The implementation does not guarantee control latency under saturated RPC load.
 
 ## Python client
 
@@ -123,6 +127,71 @@ and `await client.close_door(sample_x_mm=63.5, sample_y_mm=43.0)` to load it at 
 sample-relative position. Supply coordinates appropriate for the carrier; the
 server uses the existing driver methods `open_drawer()` and
 `close_drawer_to_sample_mm()` without requiring a server-side plate resource.
+
+## Scan planning and execution
+
+Use the same `ScanSpec`, `Capture`, `ScanRegion`, and `ScanEstimateModel` types as
+the [scan-planning notebook](../../../../docs/user_guide/revvity/celigo/scan-planning.ipynb).
+`client.build_scan_plan()` asks the server to compile a specification using the
+instrument's calibration and returns the ordinary PLR `ScanPlan`. Planning opens
+no hardware and works before initialization. The returned object contains the
+ordered blocks and frames, stage and galvo targets, well labels, and estimates.
+
+The transport supports named wells, explicit points, seeded random sampling, and
+full coverage, including block grids and ordered multichannel captures. A well
+specification resolves its plate to coordinates and labels on the client; the
+server does not require a plate resource or traverse resource children.
+
+For an initialized instrument, prepare and inspect a plan, then explicitly start
+its durable job:
+
+```python
+from pylabrobot.revvity.celigo import Capture, ScanSpec
+from pylabrobot.revvity.celigo.grpc.client import CeligoClient
+
+
+async def scan_wells(plate):
+  async with CeligoClient("127.0.0.1:50052", device_id="celigo-01") as client:
+    spec = ScanSpec.wells(
+      plate,
+      ["A1", "B2"],
+      block_shape=(2, 3),
+      captures=[Capture("brightfield", exposure_ms=1, gain=1)],
+      autofocus="image",
+    )
+    plan = await client.build_scan_plan(spec)
+    print(plan)
+    job = await client.create_scan("plate-001-scan-001", plan=plan)
+    await job.start()
+    return await job.wait()
+```
+
+Omitted exposure and gain resolve to the defaults advertised by
+`GetConfiguration`: 1 ms and gain 1. The compiled plan stores those explicit
+values. Auto-exposure and laser autofocus are not exposed. Image autofocus runs
+on the first frame of each block; its measured Z propagates to subsequent frames
+with the configured channel offsets. Without autofocus, the driver uses
+calibrated focus. Available channels come from the instrument configuration.
+
+`CreateScan` recompiles the submitted specification and checks that the complete
+plan matches, including its calibration fingerprint. It persists that exact plan
+and reserves storage without starting acquisition. Changed plans or stale
+calibration are rejected. `await job.get_scan_plan()` retrieves the persisted plan,
+including after `client.recover_job(request_id)` or a service restart.
+
+Each frame commits its complete PNG and progress together before the next
+acquisition. `job.list_frames(after_sequence=...)` and `job.get_frame(frame_id)`
+can retrieve completed images while the job runs. Frame metadata links pixels to
+the zero-based planned frame, block, tile, well label, and channel; image sequences
+are one-based. It also records actual camera settings, stage/Z/galvo positions,
+and the autofocus score when measured. Device preview watches publish the latest
+completed scan image; use retained frame listing to retrieve every image.
+
+Accepted scans continue when clients disconnect. Cancellation lets an in-flight
+acquisition finish and commits its image before ending the scan and cleaning up
+the driver. Failures preserve earlier committed frames. A service restart marks
+an active scan Interrupted without resuming motion; ready plans and retained
+results remain retrievable.
 
 ## Compatibility
 

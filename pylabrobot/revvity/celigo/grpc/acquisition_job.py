@@ -122,6 +122,19 @@ class AcquisitionJob:
         )
       return copy_message(self.status)
 
+  async def commit_frame(self, frame: stored_pb.ImageFrame) -> None:
+    """Persist a complete frame and its progress before publishing either."""
+    async with self.session.lock:
+      if frame.sequence != self.status.completed + 1:
+        raise ValueError("captured frames must follow the plan's sequence")
+      status = advance_job_status(self.status, completed=frame.sequence)
+      await self.session.run_storage_operation(self.session.store.commit_frame, frame, status)
+      self.publish_status(status)
+      if self.preview or self.spec.scan_plan is not None:
+        self.session.previews.publish(
+          image_pb.GetFrameRequest(job=self.ref, frame_id=frame.frame_id)
+        )
+
   async def run(self) -> None:
     error = ""
     interrupted = False
@@ -129,6 +142,9 @@ class AcquisitionJob:
       if self.status.kind == "Initialize":
         if not self.stop_requested.is_set():
           await run_owned_operation(self.session.initialize())
+      elif self.spec.scan_plan is not None:
+        if not self.stop_requested.is_set():
+          await run_owned_operation(self.session.execute_scan(self))
       else:
         for sequence in range(1, self.spec.frame_count + 1):
           if self.stop_requested.is_set():
@@ -142,14 +158,7 @@ class AcquisitionJob:
           frame = await run_owned_operation(self.session.capture_frame(self, sequence))
           if frame is None:
             break
-          async with self.session.lock:
-            status = advance_job_status(self.status, completed=sequence)
-            await self.session.run_storage_operation(self.session.store.commit_frame, frame, status)
-            self.publish_status(status)
-            if self.preview:
-              self.session.previews.publish(
-                image_pb.GetFrameRequest(job=self.ref, frame_id=frame.frame_id)
-              )
+          await self.commit_frame(frame)
           del frame  # Retention lives in SQLite; memory does not accumulate with scan length.
     except asyncio.CancelledError:
       interrupted = True

@@ -13,10 +13,10 @@ from pylabrobot.rpc.v1 import jobs_pb2_grpc as job_rpc
 class CeligoServer(DeviceServer):
   """Expose one instrument session through Celigo and shared RPC services."""
 
-  def __init__(self, session: CeligoSession, *, port: int = 0) -> None:
+  def __init__(self, session: CeligoSession, *, host: str = "127.0.0.1", port: int = 0) -> None:
     """Build transport around the session without opening physical hardware."""
     self.session = session
-    super().__init__(session, port=port, maximum_message_bytes=MAX_MESSAGE_BYTES)
+    super().__init__(session, host=host, port=port, maximum_message_bytes=MAX_MESSAGE_BYTES)
     job_rpc.add_JobServiceServicer_to_server(jobs.JobService(session), self.server)
     image_rpc.add_ImageServiceServicer_to_server(images.ImageService(session), self.server)
     rpc.add_CeligoServiceServicer_to_server(CeligoServicer(session), self.server)

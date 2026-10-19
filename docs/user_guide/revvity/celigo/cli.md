@@ -35,23 +35,25 @@ plr dev celigo inspect --help
 ## Run the service
 
 ```bash
-plr dev celigo serve --device-id celigo-01 --port 50052 \
-  --data-dir /path/to/device-data \
-  --config-root /path/to/Celigo --lucam-sdk /path/to/liblucamapi.so \
-  --usb-address 1-7 --hardware-lock /path/to/celigo.service.lock
+plr dev celigo serve --config-root /path/to/Celigo
 ```
 
-Use the actual controller USB topology and calibration for the instrument.
+Only the instrument's calibration/configuration location is required. The camera
+driver uses `LUCAM_SDK_LIBRARY` or system library discovery; set `--lucam-sdk` for
+a custom SDK location. Set `--usb-address` when automatic controller discovery
+does not identify the instrument.
 
 | Option | Meaning | Default |
 | --- | --- | --- |
-| `--data-dir` | Directory for durable jobs and images. | Required |
+| `--data-dir` | Directory for durable jobs and images. | `~/.pylabrobot/celigo/<device-id>` |
 | `--config-root` | Instrument installation root or configuration directory. | Required |
-| `--lucam-sdk` | Path to the Lumenera SDK library. | Required |
-| `--hardware-lock` | Path to the exclusive service lock for this instrument. | Required |
+| `--lucam-sdk` | Path to the Lumenera SDK library. | `LUCAM_SDK_LIBRARY` or system discovery |
+| `--hardware-lock` | Path to the exclusive service lock for this instrument. | `~/.pylabrobot/celigo/hardware.lock` |
 | `--usb-address` | Controller USB topology, such as `1-7`; supports devices without a serial number. | Automatic discovery |
 | `--device-id` | Device identity advertised by the service. | `celigo-01` |
+| `--host` | Interface address to listen on; `0.0.0.0` listens on all IPv4 interfaces. | `127.0.0.1` |
 | `--port` | Local gRPC listening port. | `50052` |
+| `--image-storage-bytes` | Capacity for retained images and reservations across jobs; increase for larger scans. | `268435456` (256 MiB) |
 
 Startup loads configuration and takes the service lock without opening the
 driver or moving hardware. It prints a JSON startup record with the endpoint,
@@ -62,18 +64,27 @@ Status starts as Uninitialized. Initialization requires creating and explicitly
 starting an initialization job through the RPC API. A restart requires
 initialization again; it never automatically repeats hardware work.
 
-Each process serves one device. Use a distinct device ID, port, and data directory
-for each instrument, with a lock path shared by services targeting the same
-instrument.
+Each process serves one device. The default data directory follows the device ID;
+the default lock is shared independently of device ID and data location. For
+multiple instruments on one computer, use distinct device IDs, ports, and
+`--hardware-lock` paths. Services targeting the same instrument must share a lock
+path, including services running as different OS users.
 
-The listener uses plaintext gRPC bound to loopback. Use an SSH tunnel for remote
-access. SSH supplies authentication and encryption for the remote connection;
-the RPC listener itself does not authenticate callers.
+The listener defaults to loopback. To accept connections from other computers:
+
+```bash
+plr dev celigo serve --config-root /path/to/Celigo --host 0.0.0.0
+```
+
+Supply a specific interface IP instead to bind only that interface. Clients
+connect to the server computer's IP or hostname. The listener uses plaintext gRPC
+without authentication. An SSH tunnel to the default loopback listener provides
+authenticated, encrypted remote access.
 
 ## Inspect a running service
 
 ```bash
-plr dev celigo inspect --device-id celigo-01 --endpoint 127.0.0.1:50052
+plr dev celigo inspect
 ```
 
 `inspect` connects to the supplied endpoint, verifies the device identity and API
@@ -83,17 +94,19 @@ accessing USB.
 
 | Option | Meaning | Default |
 | --- | --- | --- |
-| `--endpoint` | Address of the running service or local SSH tunnel, as `host:port`. | Required |
+| `--endpoint` | Address of the running service or local SSH tunnel, as `host:port`. | `127.0.0.1:50052` |
 | `--device-id` | Expected device identity; must match the service. | `celigo-01` |
 
 ## RPC operations
 
-The physical adapter supports initialization, drawer opening and closing, and one
-brightfield frame at explicit sample XY, fixed Z, exposure, and gain. Drawer
-commands require initialization and exclusive instrument ownership; closing uses
-explicit sample XY coordinates. Capture records actual acquisition metadata.
-Autofocus, auto-exposure, and full plate scanning are not exposed by this
-transport. Laser operation is disabled.
+The service supports initialization, drawer opening and closing, individual
+brightfield captures, and durable scan jobs. Scans use the same specifications
+as the scan-planning notebook: named wells, points, seeded random sampling, and
+full coverage, with block grids, multiple channels, and optional image autofocus.
+Planning is hardware-free; starting a scan requires initialization and exclusive
+instrument ownership. Each image is retained with its plan indices and actual
+acquisition metadata and can be retrieved while the scan continues. Auto-exposure
+is not exposed, and laser operation is disabled.
 
 See the [Celigo gRPC reference](https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/revvity/celigo/grpc/README.md)
 for the protocol, job lifecycle, Python client, and service development details.

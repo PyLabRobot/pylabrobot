@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pylabrobot.revvity.celigo.grpc.scan_serialization import decode_scan_plan
+from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
+from pylabrobot.revvity.celigo.scan import ScanPlan
 from pylabrobot.rpc.images import ImageClient
 from pylabrobot.rpc.jobs import Job
 from pylabrobot.rpc.v1 import images_pb2 as image_pb
@@ -16,12 +19,18 @@ class CeligoImagingJob(Job):
     self,
     stub: job_rpc.JobServiceAsyncStub,
     images: ImageClient,
+    operations: rpc.CeligoServiceAsyncStub,
     ref: job_pb.JobRef,
     timeout: float = 20,
   ) -> None:
     """Bind optional image access alongside the common job handle."""
     super().__init__(stub, ref, timeout)
     self.images = images
+    self.operations = operations
+
+  async def get_scan_plan(self) -> ScanPlan:
+    """Retrieve the plan used by this job, including after reconnecting."""
+    return decode_scan_plan(await self.operations.GetScanPlan(self.ref, timeout=self.timeout))
 
   async def release_images(self) -> image_pb.ImageRetention:
     """Explicitly release retained pixels after archiving them elsewhere."""

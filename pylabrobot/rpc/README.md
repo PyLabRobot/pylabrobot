@@ -45,8 +45,9 @@ async def inspect_device() -> None:
     print(identity.display_name, status.state, identity.services)
 ```
 
-`DeviceClient` verifies device ID and API version. `DeviceServer` binds to
-loopback using plaintext gRPC and registers only `DeviceService`; applications can
+`DeviceClient` verifies device ID and API version. `DeviceServer` defaults to
+`host="127.0.0.1"` using plaintext gRPC; pass `host="0.0.0.0"` or a specific
+interface address to change the listener. It registers only `DeviceService`; applications can
 register optional generated service adapters on its `server`. The device
 application owns backend startup, shutdown, and accepted tasks. Starting the
 transport does not initialize hardware.

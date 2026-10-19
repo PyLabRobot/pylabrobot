@@ -25,9 +25,9 @@ def make_config(width=64, height=48):
     image_height_pixels=height,
     calibrated_z_position=2.6,
   )
-  value.hardware.x_axis = make_linear_axis_config(min_position=-150, max_position=150)
-  value.hardware.y_axis = make_linear_axis_config(min_position=-100, max_position=100)
-  value.hardware.z_axis = make_linear_axis_config(min_position=0, max_position=6.5)
+  value.hardware.x_axis = make_linear_axis_config(axis_index=1, min_position=-150, max_position=150)
+  value.hardware.y_axis = make_linear_axis_config(axis_index=2, min_position=-100, max_position=100)
+  value.hardware.z_axis = make_linear_axis_config(axis_index=3, min_position=0, max_position=6.5)
   value.hardware.io = IOConfig(analog_ins=[], digital_ios=[], lighting_ios=[])
   value.channels_by_magnification[value.magnification] = {
     "brightfield": IlluminationChannelConfig(
@@ -101,8 +101,8 @@ def make_server(
     lambda: driver,
     directory / "hardware.lock",
     connection_id=connection_id,
+    image_storage_bytes=storage_quota,
   )
-  session.store.quota = storage_quota
   session.store.max_jobs = max_jobs
   return CeligoServer(session), driver
 

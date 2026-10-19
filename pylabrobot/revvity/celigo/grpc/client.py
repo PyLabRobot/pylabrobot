@@ -9,8 +9,15 @@ from typing_extensions import Self
 
 from pylabrobot.revvity.celigo.grpc.limits import MAX_MESSAGE_BYTES
 from pylabrobot.revvity.celigo.grpc.remote_job import CeligoImagingJob
+from pylabrobot.revvity.celigo.grpc.scan_serialization import (
+  decode_scan_plan,
+  encode_estimate_model,
+  encode_scan_plan,
+  encode_scan_specification,
+)
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2_grpc as rpc
+from pylabrobot.revvity.celigo.scan import ScanEstimateModel, ScanPlan, ScanSpec
 from pylabrobot.rpc.device import DeviceClient
 from pylabrobot.rpc.images import SERVICE_NAME as IMAGE_SERVICE
 from pylabrobot.rpc.images import ImageClient
@@ -60,7 +67,7 @@ class CeligoClient(DeviceClient):
   def bind_job(self, ref: job_pb.JobRef) -> CeligoImagingJob:
     """Bind a typed creation result to this device and its image client."""
     job = self.jobs.bind_job(ref)
-    return CeligoImagingJob(self.jobs.stub, self.images, job.ref, self.timeout)
+    return CeligoImagingJob(self.jobs.stub, self.images, self.operations, job.ref, self.timeout)
 
   async def recover_job(self, request_id: str) -> CeligoImagingJob:
     """Recover the original operation without creating another acquisition."""
@@ -75,6 +82,37 @@ class CeligoClient(DeviceClient):
   async def get_configuration(self) -> pb.CeligoConfiguration:
     """Read the calibration-derived configuration for request binding."""
     return await self.operations.GetConfiguration(self.request, timeout=self.timeout)
+
+  async def build_scan_plan(
+    self, spec: ScanSpec, *, estimate_model: ScanEstimateModel | None = None
+  ) -> ScanPlan:
+    """Compile a PLR scan specification using the remote instrument's calibration."""
+    return decode_scan_plan(
+      await self.operations.BuildScanPlan(
+        pb.BuildScanPlanRequest(
+          device_id=self.device_id,
+          specification=encode_scan_specification(spec),
+          estimate_model=encode_estimate_model(estimate_model)
+          if estimate_model is not None
+          else None,
+        ),
+        timeout=self.timeout,
+      )
+    )
+
+  async def create_scan(self, request_id: str, *, plan: ScanPlan) -> CeligoImagingJob:
+    """Create an inert scan job from the inspected plan without capture overrides."""
+    return self.bind_job(
+      await self.operations.CreateScan(
+        pb.CreateScanRequest(
+          device_id=self.device_id,
+          request_id=request_id,
+          configuration_id=self.configuration_id,
+          plan=encode_scan_plan(plan),
+        ),
+        timeout=self.timeout,
+      )
+    )
 
   async def open_door(self) -> None:
     """Eject the initialized instrument's drawer and wait for motion to finish."""

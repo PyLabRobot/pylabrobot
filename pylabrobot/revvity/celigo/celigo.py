@@ -1788,6 +1788,8 @@ class Celigo:
     *,
     on_frame: Optional[Callable[[FrameResult], Awaitable[None]]] = None,
     initial_brightfield_z_mm: Optional[float] = None,
+    retain_frames: bool = True,
+    before_frame: Optional[Callable[[PlannedFrame], Awaitable[None]]] = None,
   ) -> ScanResult:
     """Execute a compiled scan plan, optionally reporting each completed frame.
 
@@ -1799,10 +1801,13 @@ class Celigo:
       initial_brightfield_z_mm: Brightfield focus seed in millimeters for each block,
         with channel offsets applied. None uses calibrated focus. When autofocus
         is requested, its result sets the focus for subsequent frames in that block.
+      retain_frames: Keep images in the returned ScanResult. False requires on_frame
+        and releases each image after the callback, keeping image memory bounded.
+      before_frame: Async callback after stage positioning and before each acquisition.
+        It can check instrument state or stop execution by raising an exception.
 
     Returns:
-      All acquired frames and elapsed execution time, including time in callbacks.
-      Frames are retained in memory even when on_frame is provided.
+      Acquired frames when retain_frames is true, and elapsed time including callbacks.
 
     Raises:
       TypeError: plan is not a ScanPlan.
@@ -1810,6 +1815,8 @@ class Celigo:
     """
     if not isinstance(plan, ScanPlan):
       raise TypeError("plan must be a ScanPlan")
+    if not retain_frames and on_frame is None:
+      raise ValueError("on_frame is required when retain_frames is False")
     if not plan.matches_configuration(self.config):
       raise ValueError(
         "ScanPlan configuration does not match this Celigo; rebuild it with celigo.plan(...)"
@@ -1832,6 +1839,8 @@ class Celigo:
       focused_brightfield_z_mm = initial_brightfield_z_mm
       label = block.label if block.label is not None else f"block-{block.index}"
       for frame_index, planned_frame in enumerate(frames_by_block[block.index]):
+        if before_frame is not None:
+          await before_frame(planned_frame)
         capture = planned_frame.capture
         channel_config = self._require_channel_config(capture.channel)
         channel_z_mm = (
@@ -1859,7 +1868,8 @@ class Celigo:
           galvo_hardware_voltages=acquisition.galvo_hardware_voltages,
           focus=acquisition.focus,
         )
-        frame_results.append(frame_result)
+        if retain_frames:
+          frame_results.append(frame_result)
         if on_frame is not None:
           await on_frame(frame_result)
 

@@ -10,7 +10,7 @@ import logging
 import math
 import re
 from collections.abc import AsyncGenerator, Callable, Coroutine
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import BinaryIO, TypeVar
 from uuid import uuid4
@@ -20,14 +20,21 @@ from pylabrobot.revvity.celigo.celigo import Celigo
 from pylabrobot.revvity.celigo.config import CeligoConfig
 from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
 from pylabrobot.revvity.celigo.grpc.acquisition_job import AcquisitionJob, run_owned_operation
-from pylabrobot.revvity.celigo.grpc.image_encoding import build_public_image_frame, encode_frame
+from pylabrobot.revvity.celigo.grpc.image_encoding import (
+  build_public_image_frame,
+  encode_frame,
+  encode_scan_frame,
+)
 from pylabrobot.revvity.celigo.grpc.job_specification import Brightfield, JobSpecification
 from pylabrobot.revvity.celigo.grpc.job_store import (
+  DEFAULT_QUOTA,
   JobStore,
   advance_job_status,
   build_public_job_status,
 )
 from pylabrobot.revvity.celigo.grpc.limits import (
+  DEFAULT_SCAN_EXPOSURE_MS,
+  DEFAULT_SCAN_GAIN,
   MAX_EXPOSURE_MS,
   MAX_FRAME_BYTES,
   MAX_GAIN,
@@ -35,7 +42,14 @@ from pylabrobot.revvity.celigo.grpc.limits import (
 )
 from pylabrobot.revvity.celigo.grpc.v1 import service_pb2 as pb
 from pylabrobot.revvity.celigo.grpc.v1 import storage_pb2 as stored_pb
-from pylabrobot.revvity.celigo.scan import ScanSpec, build_scan_plan
+from pylabrobot.revvity.celigo.scan import (
+  FrameResult,
+  PlannedFrame,
+  ScanEstimateModel,
+  ScanPlan,
+  ScanSpec,
+  build_scan_plan,
+)
 from pylabrobot.rpc import device, images, jobs
 from pylabrobot.rpc.errors import BusyError, CapacityError, StateError, StorageError
 from pylabrobot.rpc.transport import API_VERSION, Latest, copy_message
@@ -47,12 +61,16 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
+class _ScanCancelled(Exception):
+  """End the driver's scan at a frame boundary after cooperative cancellation."""
+
+
 class CeligoSession:
   """Manage the driver and job lifecycle through ordinary Python methods."""
 
   device_type = "Celigo"
   display_name = "Celigo"
-  supported_operations = ("Initialize", "BrightfieldCapture", "OpenDoor", "CloseDoor")
+  supported_operations = ("Initialize", "BrightfieldCapture", "Scan", "OpenDoor", "CloseDoor")
 
   def __init__(
     self,
@@ -63,6 +81,7 @@ class CeligoSession:
     hardware_lock: Path,
     *,
     connection_id: str = "default",
+    image_storage_bytes: int = DEFAULT_QUOTA,
   ):
     self.config = config
     self.driver_factory = driver_factory
@@ -82,6 +101,7 @@ class CeligoSession:
     self.store = JobStore(
       directory,
       device_id,
+      quota=image_storage_bytes,
       decode_spec=JobSpecification.decode,
       spec_format="celigo.brightfield.v1",
     )
@@ -125,14 +145,17 @@ class CeligoSession:
       configuration_id=self.configuration_id,
       width=self.config.calibration.image_width_pixels,
       height=self.config.calibration.image_height_pixels,
-      channels=["brightfield"],
+      channels=list(self.config.channels),
       calibrated_brightfield_z_mm=self.config.calibration.calibrated_z_position
       + self.config.channels["brightfield"].z_offset_to_brightfield_mm,
       minimum_z_mm=z_axis.min_position,
       maximum_z_mm=z_axis.max_position,
       maximum_exposure_ms=MAX_EXPOSURE_MS,
       maximum_gain=MAX_GAIN,
-      capture_contract="One brightfield frame at explicit sample XY and fixed Z; no autofocus or auto-exposure.",
+      default_scan_exposure_ms=DEFAULT_SCAN_EXPOSURE_MS,
+      default_scan_gain=DEFAULT_SCAN_GAIN,
+      autofocus_methods=[pb.AUTOFOCUS_NONE, pb.AUTOFOCUS_IMAGE],
+      capture_contract="Fixed-Z brightfield captures or inspected scan plans with explicit camera settings and optional image autofocus.",
     )
 
   def build_job_specification(self, capture: Brightfield) -> JobSpecification:
@@ -143,7 +166,7 @@ class CeligoSession:
       self.config.calibration.image_height_pixels,
     )
 
-  def build_scan_plan(self, capture: Brightfield):
+  def build_brightfield_plan(self, capture: Brightfield) -> ScanPlan:
     """Calculate stage and galvo targets for a single brightfield frame."""
     return build_scan_plan(
       self.config,
@@ -155,11 +178,55 @@ class CeligoSession:
       ),
     )
 
+  def build_scan_plan(
+    self, spec: ScanSpec, estimate_model: ScanEstimateModel | None = None
+  ) -> ScanPlan:
+    """Resolve camera defaults and compile a complete scan without accessing hardware."""
+    captures = tuple(
+      replace(
+        capture,
+        exposure_ms=(
+          DEFAULT_SCAN_EXPOSURE_MS if capture.exposure_ms is None else capture.exposure_ms
+        ),
+        gain=DEFAULT_SCAN_GAIN if capture.gain is None else capture.gain,
+      )
+      for capture in spec.captures
+    )
+    z_axis = self.config.hardware.z_axis
+    assert z_axis is not None
+    for capture in captures:
+      assert capture.exposure_ms is not None and capture.gain is not None
+      if not 0 < capture.exposure_ms <= MAX_EXPOSURE_MS or not 0 <= capture.gain <= MAX_GAIN:
+        raise ValueError("exposure or gain exceeds the scan service limits")
+      if capture.channel not in self.config.channels:
+        raise ValueError(f"unknown imaging channel: {capture.channel}")
+      z = (
+        self.config.calibration.calibrated_z_position
+        + self.config.channels[capture.channel].z_offset_to_brightfield_mm
+      )
+      if not z_axis.min_position <= z <= z_axis.max_position:
+        raise ValueError("calibrated channel focus is outside Z travel")
+    return build_scan_plan(
+      self.config, replace(spec, captures=captures), estimate_model=estimate_model
+    )
+
   def validate_job_specification(self, spec: JobSpecification, initialize: bool) -> None:
     """Reject settings outside the configured capture contract and calibrated travel."""
     if initialize:
       if spec != JobSpecification():
         raise ValueError("initialization must not contain capture settings")
+      return
+    configuration = self.get_configuration()
+    if (spec.width, spec.height) != (configuration.width, configuration.height):
+      raise ValueError("image geometry no longer matches the configuration")
+    if spec.scan_plan is not None:
+      if spec.capture is not None:
+        raise ValueError("a scan job cannot also contain a single capture")
+      plan = spec.scan_plan
+      if not plan.matches_configuration(self.config):
+        raise StateError("scan plan configuration no longer matches the service")
+      if self.build_scan_plan(plan.spec, plan.estimate_model) != plan:
+        raise ValueError("scan plan differs from the compiled specification")
       return
     capture = spec.capture
     if capture is None:
@@ -168,12 +235,9 @@ class CeligoSession:
       raise ValueError("capture settings must be finite")
     if not 0 < capture.exposure_ms <= MAX_EXPOSURE_MS or not 0 <= capture.gain <= MAX_GAIN:
       raise ValueError("exposure or gain exceeds the brightfield service limits")
-    configuration = self.get_configuration()
     if not configuration.minimum_z_mm <= capture.z_mm <= configuration.maximum_z_mm:
       raise ValueError("Z is outside calibrated travel")
-    if (spec.width, spec.height) != (configuration.width, configuration.height):
-      raise ValueError("image geometry no longer matches the configuration")
-    self.build_scan_plan(
+    self.build_brightfield_plan(
       capture
     )  # Offline validation of stage and galvo targets before persisting intent.
 
@@ -181,6 +245,8 @@ class CeligoSession:
     """Reject reinitialization while a driver session already exists."""
     if job.status.kind == "Initialize" and self.driver is not None:
       raise StateError("already initialized; restart the service before reinitializing")
+    if job.spec.scan_plan is not None and not job.spec.scan_plan.matches_configuration(self.config):
+      raise StateError("scan plan configuration no longer matches the service")
 
   def publish_status(self) -> None:
     """Refresh the device's operational snapshot and notify subscribers."""
@@ -253,11 +319,19 @@ class CeligoSession:
     """Persist an inert job, reusing its request ID only when all settings match."""
     async with self.lock:
       self.ensure_available()
-      self.validate_job_specification(spec, initialize)
+      await asyncio.to_thread(self.validate_job_specification, spec, initialize)
       if not 1 <= len(request_id) <= 128:
         raise ValueError("request_id must be 1..128 characters")
       reservation = 0 if initialize else spec.calculate_storage_reservation()
-      kind = "Initialize" if initialize else "Preview" if preview else "Acquisition"
+      kind = (
+        "Initialize"
+        if initialize
+        else "Preview"
+        if preview
+        else "Scan"
+        if spec.scan_plan
+        else "Acquisition"
+      )
       configuration_id = configuration_id or self.configuration_id
       if preview and spec.frame_count != 1:
         raise ValueError("preview requires exactly one frame")
@@ -319,6 +393,31 @@ class CeligoSession:
       )
     )
 
+  async def create_scan(
+    self, request_id: str, plan: ScanPlan, configuration_id: str
+  ) -> AcquisitionJob:
+    """Validate and persist an inspected plan for an explicit job start."""
+    if not configuration_id:
+      raise ValueError("configuration_id is required")
+    return await self.run_command(
+      self.create_job(
+        request_id,
+        JobSpecification(
+          width=self.config.calibration.image_width_pixels,
+          height=self.config.calibration.image_height_pixels,
+          scan_plan=plan,
+        ),
+        configuration_id=configuration_id,
+      )
+    )
+
+  def get_scan_plan(self, job_id: str) -> ScanPlan:
+    """Read the exact persisted plan, including after a service restart."""
+    plan = self.jobs[job_id].spec.scan_plan
+    if plan is None:
+      raise StateError("job does not contain a scan plan")
+    return plan
+
   async def open(self) -> None:
     self.hardware_lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     self.lock_file = self.hardware_lock.open("a+b")
@@ -336,7 +435,7 @@ class CeligoSession:
     self.publish_status()
 
   async def check_imaging_status(self) -> None:
-    """Check controller health and a configured door input before brightfield work."""
+    """Check controller health and a configured door input before acquisition."""
     driver = self.driver
     if driver is None:
       raise StateError("driver is not initialized")
@@ -372,7 +471,7 @@ class CeligoSession:
     driver = self.driver
     if driver is None:
       raise StateError("driver is not initialized")
-    plan = self.build_scan_plan(settings)
+    plan = self.build_brightfield_plan(settings)
     await self.check_imaging_status()
     if job.stop_requested.is_set():
       return None
@@ -394,6 +493,39 @@ class CeligoSession:
     if (result.frame.width, result.frame.height) != (job.spec.width, job.spec.height):
       raise ValueError("camera returned dimensions different from calibration")
     return await asyncio.to_thread(encode_frame, job.ref, result, settings, self.configuration_id)
+
+  async def execute_scan(self, job: AcquisitionJob) -> None:
+    """Execute the stored plan, persisting each frame before allowing more motion."""
+    plan = job.spec.scan_plan
+    if plan is None or self.driver is None:
+      raise StateError("scan execution requires a plan and initialized driver")
+
+    async def check_before_frame(_frame: PlannedFrame) -> None:
+      """Check cancellation and controller state before exposing the next frame."""
+      if job.stop_requested.is_set():
+        raise _ScanCancelled()
+      await self.check_imaging_status()
+
+    async def store_frame(result: FrameResult) -> None:
+      """Commit pixels and progress together, then honor cooperative cancellation."""
+      if (result.frame.width, result.frame.height) != (job.spec.width, job.spec.height):
+        raise ValueError("camera returned dimensions different from calibration")
+      frame = await asyncio.to_thread(encode_scan_frame, job.ref, result, self.configuration_id)
+      await job.commit_frame(frame)
+      if job.stop_requested.is_set():
+        raise _ScanCancelled()
+
+    await self.check_imaging_status()
+    if job.stop_requested.is_set():
+      return
+    try:
+      await self.driver.execute(
+        plan, on_frame=store_frame, retain_frames=False, before_frame=check_before_frame
+      )
+      if job.status.completed != plan.frame_count:
+        raise StateError("scan execution finished before all planned frames were committed")
+    except _ScanCancelled:
+      pass
 
   async def close_driver(self) -> None:
     if self.driver is not None:

@@ -386,7 +386,7 @@ class JobStore:
     )
     for row in rows:
       metadata = stored_pb.ImageFrame.FromString(row["metadata"])
-      if metadata.representation == "Preview":
+      if metadata.representation in ("Preview", "Scan"):
         return image_pb.GetFrameRequest(job=metadata.job, frame_id=row["frame_id"])
     return None
 

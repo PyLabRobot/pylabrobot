@@ -159,14 +159,18 @@ class Capture:
 
 
 @dataclass(frozen=True)
-class _PointGeometry:
+class PointGeometry:
+  """Labeled sample centers and the frame grid acquired around each center."""
+
   centers_mm: Tuple[CoordinateMM, ...]
   labels: Tuple[Optional[str], ...]
   block_shape: BlockShape
 
 
 @dataclass(frozen=True)
-class _RandomGeometry:
+class RandomGeometry:
+  """Seeded block sampling within physical bounds."""
+
   bounds: ScanRegion
   count: int
   block_shape: BlockShape
@@ -175,25 +179,27 @@ class _RandomGeometry:
 
 
 @dataclass(frozen=True)
-class _FullCoverageGeometry:
+class FullCoverageGeometry:
+  """Physical bounds to cover with calibrated frame grids."""
+
   bounds: ScanRegion
 
 
-_SpecGeometry = Union[_PointGeometry, _RandomGeometry, _FullCoverageGeometry]
+ScanGeometry = Union[PointGeometry, RandomGeometry, FullCoverageGeometry]
 
 
 @dataclass(frozen=True)
 class ScanSpec:
   """A complete, reusable description of scan geometry and acquisition settings."""
 
-  geometry: _SpecGeometry
+  geometry: ScanGeometry
   captures: Tuple[Capture, ...]
   autofocus: Optional[AutofocusMethod]
 
   def __post_init__(self) -> None:
     if not isinstance(
       self.geometry,
-      (_PointGeometry, _RandomGeometry, _FullCoverageGeometry),
+      (PointGeometry, RandomGeometry, FullCoverageGeometry),
     ):
       raise TypeError("geometry must be created by a ScanSpec constructor")
     if not self.captures or any(not isinstance(capture, Capture) for capture in self.captures):
@@ -274,7 +280,7 @@ class ScanSpec:
     if not isinstance(non_overlapping, bool):
       raise ValueError("non_overlapping must be a boolean")
     return cls(
-      geometry=_RandomGeometry(
+      geometry=RandomGeometry(
         bounds=bounds,
         count=count,
         block_shape=validated_shape,
@@ -299,7 +305,7 @@ class ScanSpec:
     """Create a scan that covers all physical bounds."""
     _validate_scan_region(bounds)
     return cls(
-      geometry=_FullCoverageGeometry(bounds=bounds),
+      geometry=FullCoverageGeometry(bounds=bounds),
       captures=_normalize_captures(channel, exposure_ms, gain, captures),
       autofocus=autofocus,
     )
@@ -566,7 +572,7 @@ def _point_geometry(
   centers_mm: Sequence[CoordinateMM],
   block_shape: BlockShape,
   labels: Optional[Sequence[str]] = None,
-) -> _PointGeometry:
+) -> PointGeometry:
   centers = _normalize_centers(centers_mm)
   shape = _validate_block_shape(block_shape)
   if labels is None:
@@ -578,7 +584,7 @@ def _point_geometry(
     if any(not isinstance(label, str) or not label for label in values):
       raise ValueError("labels must contain non-empty strings")
     normalized_labels = tuple(values)
-  return _PointGeometry(
+  return PointGeometry(
     centers_mm=centers,
     labels=normalized_labels,
     block_shape=shape,
@@ -647,18 +653,18 @@ def _capture_geometry(config: CeligoConfig, capture: Capture) -> _CaptureGeometr
 
 
 def _build_layouts(
-  spec_geometry: _SpecGeometry,
+  spec_geometry: ScanGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
-  if isinstance(spec_geometry, _PointGeometry):
+  if isinstance(spec_geometry, PointGeometry):
     return _point_layouts(spec_geometry, capture_geometries)
-  if isinstance(spec_geometry, _RandomGeometry):
+  if isinstance(spec_geometry, RandomGeometry):
     return _random_layouts(spec_geometry, capture_geometries)
   return _full_coverage_layouts(spec_geometry, capture_geometries)
 
 
 def _point_layouts(
-  geometry: _PointGeometry,
+  geometry: PointGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   _validate_shape_for_captures(geometry.block_shape, capture_geometries)
@@ -676,7 +682,7 @@ def _point_layouts(
 
 
 def _random_layouts(
-  geometry: _RandomGeometry,
+  geometry: RandomGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   _validate_shape_for_captures(geometry.block_shape, capture_geometries)
@@ -842,7 +848,7 @@ def _path_length(
 
 
 def _full_coverage_layouts(
-  geometry: _FullCoverageGeometry,
+  geometry: FullCoverageGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   x_counts = [
@@ -1199,12 +1205,12 @@ def _union_area(regions: Sequence[ScanRegion]) -> float:
   return area
 
 
-def _describe_geometry(geometry: _SpecGeometry) -> str:
-  if isinstance(geometry, _PointGeometry):
+def _describe_geometry(geometry: ScanGeometry) -> str:
+  if isinstance(geometry, PointGeometry):
     columns, rows = geometry.block_shape
     kind = "wells" if any(label is not None for label in geometry.labels) else "points"
     return f"{kind}(count={len(geometry.centers_mm)}, block_shape={columns}x{rows})"
-  if isinstance(geometry, _RandomGeometry):
+  if isinstance(geometry, RandomGeometry):
     columns, rows = geometry.block_shape
     return (
       f"random(count={geometry.count}, block_shape={columns}x{rows}, "

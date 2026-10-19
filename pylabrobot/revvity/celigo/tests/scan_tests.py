@@ -9,6 +9,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 from typing import List, Optional
 from unittest.mock import AsyncMock, patch
+from weakref import ReferenceType, ref
 
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.revvity.celigo.camera import CameraFrame
@@ -528,6 +529,59 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
         move_to_scan_block.assert_awaited_once_with(plan.blocks[0])
         acquire_scan_position.assert_awaited_once()
         on_frame.assert_awaited_once()
+
+  async def test_execute_delivers_frames_without_retaining_images(self):
+    """A streaming consumer can release images as the scan advances."""
+    plan = self.celigo.plan(ScanSpec.points([(5, 5), (15, 15), (25, 25)], channel="brightfield"))
+    delivered: List[ReferenceType[FrameResult]] = []
+
+    async def acquire_scan_position(**kwargs):
+      return SimpleNamespace(
+        frame=_frame(),
+        x_mm=1.0,
+        y_mm=2.0,
+        z_mm=2.5,
+        galvo_hardware_voltages=(0.1, 0.2),
+        focus=None,
+      )
+
+    async def on_frame(frame: FrameResult) -> None:
+      self.assertTrue(all(previous() is None for previous in delivered))
+      self.assertEqual(frame.planned, plan.frames[len(delivered)])
+      delivered.append(ref(frame))
+
+    with (
+      patch.object(self.celigo, "move_to_scan_block", AsyncMock(return_value=(1.0, 2.0))),
+      patch.object(self.celigo, "acquire_scan_position", acquire_scan_position),
+    ):
+      result = await self.celigo.execute(plan, on_frame=on_frame, retain_frames=False)
+
+    self.assertEqual(result.frames, ())
+    self.assertEqual(len(delivered), plan.frame_count)
+    self.assertTrue(all(previous() is None for previous in delivered))
+
+  async def test_execute_requires_a_consumer_when_not_retaining_frames(self):
+    """Reject accidental image loss before moving the instrument."""
+    plan = self.celigo.plan(ScanSpec.points([(5, 5)], channel="brightfield"))
+    with (
+      patch.object(self.celigo, "move_to_scan_block", AsyncMock()) as move,
+      self.assertRaisesRegex(ValueError, "on_frame is required"),
+    ):
+      await self.celigo.execute(plan, retain_frames=False)
+    move.assert_not_awaited()
+
+  async def test_execute_checks_each_frame_before_acquisition(self):
+    """A failed state check prevents acquisition at the positioned block."""
+    plan = self.celigo.plan(ScanSpec.points([(5, 5)], channel="brightfield"))
+    before_frame = AsyncMock(side_effect=RuntimeError("interlock open"))
+    with (
+      patch.object(self.celigo, "move_to_scan_block", AsyncMock(return_value=(1.0, 2.0))),
+      patch.object(self.celigo, "acquire_scan_position", AsyncMock()) as acquire,
+      self.assertRaisesRegex(RuntimeError, "interlock open"),
+    ):
+      await self.celigo.execute(plan, before_frame=before_frame)
+    before_frame.assert_awaited_once_with(plan.frames[0])
+    acquire.assert_not_awaited()
 
   async def test_acquire_scan_position_extinguishes_illumination_on_every_outcome(self):
     plan = self.celigo.plan(ScanSpec.points([(5, 5)], channel="brightfield"))

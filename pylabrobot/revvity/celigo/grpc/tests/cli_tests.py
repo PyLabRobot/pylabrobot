@@ -34,8 +34,12 @@ class CeligoCLITests(unittest.TestCase):
           "/locks/celigo.lock",
           "--device-id",
           "celigo-test",
+          "--host",
+          "0.0.0.0",
           "--port",
           "50053",
+          "--image-storage-bytes",
+          "1073741824",
         ]
       )
     serve.assert_awaited_once()
@@ -47,12 +51,42 @@ class CeligoCLITests(unittest.TestCase):
     self.assertEqual(args.usb_address, "1-7")
     self.assertEqual(args.hardware_lock, Path("/locks/celigo.lock"))
     self.assertEqual(args.device_id, "celigo-test")
+    self.assertEqual(args.host, "0.0.0.0")
     self.assertEqual(args.port, 50053)
+    self.assertEqual(args.image_storage_bytes, 1073741824)
+
+  def test_serve_defaults_keep_the_hardware_lock_independent_of_data_and_identity(self) -> None:
+    """Renaming a server or relocating its data must not bypass the default hardware lock."""
+    home = Path("/home/test-user")
+    for options, data_dir in (
+      ([], home / ".pylabrobot/celigo/celigo-01"),
+      (["--device-id", "celigo-02"], home / ".pylabrobot/celigo/celigo-02"),
+      (["--data-dir", "/custom/data"], Path("/custom/data")),
+    ):
+      with (
+        self.subTest(options=options),
+        patch.object(Path, "home", return_value=home),
+        patch.object(cli, "serve") as serve,
+      ):
+        main(["dev", "celigo", "serve", "--config-root", "/config/Celigo", *options])
+      args = serve.call_args.args[0]
+      self.assertEqual(args.data_dir, data_dir)
+      self.assertEqual(args.hardware_lock, home / ".pylabrobot/celigo/hardware.lock")
+      self.assertIsNone(args.lucam_sdk)
+      self.assertIsNone(args.usb_address)
+      self.assertEqual(args.host, "127.0.0.1")
 
   def test_inspect_prints_json(self) -> None:
     """Inspect selects the client handler and prints its result with the requested identity."""
     result = {"device": {"device_id": "celigo-test"}, "status": {}, "configuration": {}}
-    for options, device_id in (([], "celigo-01"), (["--device-id", "celigo-test"], "celigo-test")):
+    for options, device_id, endpoint in (
+      ([], "celigo-01", "127.0.0.1:50052"),
+      (
+        ["--device-id", "celigo-test", "--endpoint", "celigo-host:50053"],
+        "celigo-test",
+        "celigo-host:50053",
+      ),
+    ):
       with self.subTest(options=options):
         output = io.StringIO()
         with (
@@ -60,11 +94,11 @@ class CeligoCLITests(unittest.TestCase):
           patch.object(cli, "inspect", return_value=result) as inspect,
           contextlib.redirect_stdout(output),
         ):
-          main(["dev", "celigo", "inspect", "--endpoint", "127.0.0.1:50052", *options])
+          main(["dev", "celigo", "inspect", *options])
         serve.assert_not_called()
         inspect.assert_awaited_once()
         args = inspect.call_args.args[0]
-        self.assertEqual(args.endpoint, "127.0.0.1:50052")
+        self.assertEqual(args.endpoint, endpoint)
         self.assertEqual(args.device_id, device_id)
         self.assertEqual(json.loads(output.getvalue()), result)
 
@@ -93,7 +127,7 @@ class CeligoCLITests(unittest.TestCase):
       [],
       ["unknown"],
       ["serve"],
-      ["inspect"],
+      ["inspect", "--endpoint"],
       ["inspect", "--endpoint", "127.0.0.1:50052", "--unknown"],
     ):
       with self.subTest(arguments=arguments):

@@ -79,12 +79,13 @@ class DeviceService(rpc.DeviceServiceServicer):
 
 
 class DeviceServer:
-  """Loopback gRPC transport hosting identity/status and explicitly added services."""
+  """gRPC transport hosting identity/status and explicitly added services."""
 
   def __init__(
     self,
     backend: DeviceBackend,
     *,
+    host: str = "127.0.0.1",
     port: int = 0,
     maximum_message_bytes: int = 4 * 1024 * 1024,
   ) -> None:
@@ -93,10 +94,11 @@ class DeviceServer:
       options=build_channel_options(maximum_message_bytes), maximum_concurrent_rpcs=32
     )
     rpc.add_DeviceServiceServicer_to_server(DeviceService(backend), self.server)
-    self.port = self.server.add_insecure_port(f"127.0.0.1:{port}")
+    bind_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    self.port = self.server.add_insecure_port(f"{bind_host}:{port}")
     if not self.port:
       raise RuntimeError("unable to bind device endpoint")
-    self.endpoint = f"127.0.0.1:{self.port}"
+    self.endpoint = f"{bind_host}:{self.port}"
 
   async def start(self) -> None:
     """Start accepting RPCs without operating the device."""

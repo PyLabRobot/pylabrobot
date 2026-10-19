@@ -194,6 +194,20 @@ async def pump_system():
 
 
 class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
+  async def test_server_listens_on_the_requested_host(self) -> None:
+    """Connect through both a wildcard listener and an explicitly selected interface."""
+    for host, target in (("0.0.0.0", "127.0.0.1"), ("127.0.0.2", "127.0.0.2")):
+      with self.subTest(host=host):
+        backend = StatusDevice("incubator-01", "IncubatorSimulator")
+        server = DeviceServer(backend, host=host)
+        await server.start()
+        try:
+          self.assertEqual(server.endpoint, f"{host}:{server.port}")
+          async with DeviceClient(f"{target}:{server.port}", backend.device_id) as client:
+            self.assertEqual((await client.get_device_info()).device_id, backend.device_id)
+        finally:
+          await server.stop()
+
   async def test_status_only_device_has_no_optional_services(self) -> None:
     """An incubator can appear in a dashboard without a job engine or image service."""
     backend = StatusDevice("incubator-01", "IncubatorSimulator")

@@ -35,6 +35,9 @@ class CeligoServiceStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> CeligoServiceAsyncStub: ...
     GetConfiguration: _grpc.UnaryUnaryMultiCallable[_device_pb2.DeviceRequest, _service_pb2.CeligoConfiguration]
+    BuildScanPlan: _grpc.UnaryUnaryMultiCallable[_service_pb2.BuildScanPlanRequest, _service_pb2.ScanPlan]
+    CreateScan: _grpc.UnaryUnaryMultiCallable[_service_pb2.CreateScanRequest, _jobs_pb2.JobRef]
+    GetScanPlan: _grpc.UnaryUnaryMultiCallable[_jobs_pb2.JobRef, _service_pb2.ScanPlan]
     OpenDoor: _grpc.UnaryUnaryMultiCallable[_device_pb2.DeviceRequest, _empty_pb2.Empty]
     """Drawer commands wait for motion to finish. Disconnecting does not stop motion."""
     CloseDoor: _grpc.UnaryUnaryMultiCallable[_service_pb2.CloseDoorRequest, _empty_pb2.Empty]
@@ -45,6 +48,9 @@ class CeligoServiceStub:
 class CeligoServiceAsyncStub(CeligoServiceStub):
     def __init__(self, channel: _aio.Channel) -> None: ...
     GetConfiguration: _aio.UnaryUnaryMultiCallable[_device_pb2.DeviceRequest, _service_pb2.CeligoConfiguration]  # type: ignore[assignment]
+    BuildScanPlan: _aio.UnaryUnaryMultiCallable[_service_pb2.BuildScanPlanRequest, _service_pb2.ScanPlan]  # type: ignore[assignment]
+    CreateScan: _aio.UnaryUnaryMultiCallable[_service_pb2.CreateScanRequest, _jobs_pb2.JobRef]  # type: ignore[assignment]
+    GetScanPlan: _aio.UnaryUnaryMultiCallable[_jobs_pb2.JobRef, _service_pb2.ScanPlan]  # type: ignore[assignment]
     OpenDoor: _aio.UnaryUnaryMultiCallable[_device_pb2.DeviceRequest, _empty_pb2.Empty]  # type: ignore[assignment]
     """Drawer commands wait for motion to finish. Disconnecting does not stop motion."""
     CloseDoor: _aio.UnaryUnaryMultiCallable[_service_pb2.CloseDoorRequest, _empty_pb2.Empty]  # type: ignore[assignment]
@@ -58,6 +64,27 @@ class CeligoServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _device_pb2.DeviceRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_service_pb2.CeligoConfiguration, _abc.Awaitable[_service_pb2.CeligoConfiguration]]: ...
+
+    @_abc_1.abstractmethod
+    def BuildScanPlan(
+        self,
+        request: _service_pb2.BuildScanPlanRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_service_pb2.ScanPlan, _abc.Awaitable[_service_pb2.ScanPlan]]: ...
+
+    @_abc_1.abstractmethod
+    def CreateScan(
+        self,
+        request: _service_pb2.CreateScanRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_jobs_pb2.JobRef, _abc.Awaitable[_jobs_pb2.JobRef]]: ...
+
+    @_abc_1.abstractmethod
+    def GetScanPlan(
+        self,
+        request: _jobs_pb2.JobRef,
+        context: _ServicerContext,
+    ) -> _typing.Union[_service_pb2.ScanPlan, _abc.Awaitable[_service_pb2.ScanPlan]]: ...
 
     @_abc_1.abstractmethod
     def OpenDoor(

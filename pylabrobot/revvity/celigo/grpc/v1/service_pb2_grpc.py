@@ -42,6 +42,21 @@ class CeligoServiceStub:
                 request_serializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.SerializeToString,
                 response_deserializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CeligoConfiguration.FromString,
                 _registered_method=True)
+        self.BuildScanPlan = channel.unary_unary(
+                '/celigo.v1.CeligoService/BuildScanPlan',
+                request_serializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.BuildScanPlanRequest.SerializeToString,
+                response_deserializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.ScanPlan.FromString,
+                _registered_method=True)
+        self.CreateScan = channel.unary_unary(
+                '/celigo.v1.CeligoService/CreateScan',
+                request_serializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CreateScanRequest.SerializeToString,
+                response_deserializer=pylabrobot_dot_rpc_dot_v1_dot_jobs__pb2.JobRef.FromString,
+                _registered_method=True)
+        self.GetScanPlan = channel.unary_unary(
+                '/celigo.v1.CeligoService/GetScanPlan',
+                request_serializer=pylabrobot_dot_rpc_dot_v1_dot_jobs__pb2.JobRef.SerializeToString,
+                response_deserializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.ScanPlan.FromString,
+                _registered_method=True)
         self.OpenDoor = channel.unary_unary(
                 '/celigo.v1.CeligoService/OpenDoor',
                 request_serializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.SerializeToString,
@@ -68,6 +83,24 @@ class CeligoServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
     def GetConfiguration(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def BuildScanPlan(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateScan(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetScanPlan(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -105,6 +138,21 @@ def add_CeligoServiceServicer_to_server(servicer, server):
                     servicer.GetConfiguration,
                     request_deserializer=pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.FromString,
                     response_serializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CeligoConfiguration.SerializeToString,
+            ),
+            'BuildScanPlan': grpc.unary_unary_rpc_method_handler(
+                    servicer.BuildScanPlan,
+                    request_deserializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.BuildScanPlanRequest.FromString,
+                    response_serializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.ScanPlan.SerializeToString,
+            ),
+            'CreateScan': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateScan,
+                    request_deserializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CreateScanRequest.FromString,
+                    response_serializer=pylabrobot_dot_rpc_dot_v1_dot_jobs__pb2.JobRef.SerializeToString,
+            ),
+            'GetScanPlan': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetScanPlan,
+                    request_deserializer=pylabrobot_dot_rpc_dot_v1_dot_jobs__pb2.JobRef.FromString,
+                    response_serializer=pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.ScanPlan.SerializeToString,
             ),
             'OpenDoor': grpc.unary_unary_rpc_method_handler(
                     servicer.OpenDoor,
@@ -154,6 +202,87 @@ class CeligoService:
             '/celigo.v1.CeligoService/GetConfiguration',
             pylabrobot_dot_rpc_dot_v1_dot_device__pb2.DeviceRequest.SerializeToString,
             pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CeligoConfiguration.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def BuildScanPlan(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/celigo.v1.CeligoService/BuildScanPlan',
+            pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.BuildScanPlanRequest.SerializeToString,
+            pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.ScanPlan.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateScan(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/celigo.v1.CeligoService/CreateScan',
+            pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.CreateScanRequest.SerializeToString,
+            pylabrobot_dot_rpc_dot_v1_dot_jobs__pb2.JobRef.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetScanPlan(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/celigo.v1.CeligoService/GetScanPlan',
+            pylabrobot_dot_rpc_dot_v1_dot_jobs__pb2.JobRef.SerializeToString,
+            pylabrobot_dot_revvity_dot_celigo_dot_grpc_dot_v1_dot_service__pb2.ScanPlan.FromString,
             options,
             channel_credentials,
             insecure,
