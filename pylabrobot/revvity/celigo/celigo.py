@@ -1799,7 +1799,7 @@ class Celigo:
         cleanup, before the next frame or stage move. Exceptions and cancellation
         propagate to the caller and stop execution of the remaining plan.
       initial_brightfield_z_mm: Brightfield focus seed in millimeters for each block,
-        with channel offsets applied. None uses calibrated focus. When autofocus
+        with channel offsets applied. None uses the plan's seed or calibrated focus. When autofocus
         is requested, its result sets the focus for subsequent frames in that block.
       retain_frames: Keep images in the returned ScanResult. False requires on_frame
         and releases each image after the callback, keeping image memory bounded.
@@ -1821,6 +1821,9 @@ class Celigo:
       raise ValueError(
         "ScanPlan configuration does not match this Celigo; rebuild it with celigo.plan(...)"
       )
+
+    if initial_brightfield_z_mm is None:
+      initial_brightfield_z_mm = plan.spec.initial_brightfield_z_mm
 
     started_at = time.monotonic()
     frame_results: List[FrameResult] = []

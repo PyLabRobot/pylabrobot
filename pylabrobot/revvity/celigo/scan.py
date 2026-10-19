@@ -196,6 +196,7 @@ class ScanSpec:
   geometry: ScanGeometry
   captures: Tuple[Capture, ...]
   autofocus: Optional[AutofocusMethod]
+  initial_brightfield_z_mm: Optional[float] = None
 
   def __post_init__(self) -> None:
     if not isinstance(
@@ -206,6 +207,8 @@ class ScanSpec:
     if not self.captures or any(not isinstance(capture, Capture) for capture in self.captures):
       raise ValueError("captures must contain at least one Capture")
     _validate_autofocus(self.autofocus)
+    if self.initial_brightfield_z_mm is not None:
+      _validate_finite(self.initial_brightfield_z_mm, "initial_brightfield_z_mm")
 
   @classmethod
   def wells(
@@ -220,6 +223,7 @@ class ScanSpec:
     machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create a scan at named well centers without retaining the plate."""
     if not isinstance(plate, Plate):
@@ -236,6 +240,7 @@ class ScanSpec:
       geometry=_point_geometry(centers, block_shape, normalized_wells),
       captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
   @classmethod
@@ -250,6 +255,7 @@ class ScanSpec:
     machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create an anonymous scan centered at explicit sample-relative points."""
     normalized_centers = _normalize_centers(centers_mm)
@@ -257,6 +263,7 @@ class ScanSpec:
       geometry=_point_geometry(normalized_centers, block_shape),
       captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
   @classmethod
@@ -274,6 +281,7 @@ class ScanSpec:
     machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create a reproducible random sample of blocks within physical bounds."""
     _validate_scan_region(bounds)
@@ -293,6 +301,7 @@ class ScanSpec:
       ),
       captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
   @classmethod
@@ -306,6 +315,7 @@ class ScanSpec:
     machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create a scan that covers all physical bounds."""
     _validate_scan_region(bounds)
@@ -313,6 +323,7 @@ class ScanSpec:
       geometry=FullCoverageGeometry(bounds=bounds),
       captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
 
@@ -473,6 +484,16 @@ def build_scan_plan(
     raise TypeError("estimate_model must be a ScanEstimateModel")
 
   capture_geometries = tuple(_capture_geometry(config, capture) for capture in spec.captures)
+  if spec.initial_brightfield_z_mm is not None:
+    z_axis = config.hardware.z_axis
+    if z_axis is None:
+      raise ValueError("Z travel must be configured for an explicit focus seed")
+    for capture in spec.captures:
+      z = (
+        spec.initial_brightfield_z_mm + config.channels[capture.channel].z_offset_to_brightfield_mm
+      )
+      if not z_axis.min_position <= z <= z_axis.max_position:
+        raise ValueError("initial channel focus is outside Z travel")
   layouts = _build_layouts(spec.geometry, capture_geometries)
   coordinate_systems = CoordinateSystems.from_config(
     config.calibration,

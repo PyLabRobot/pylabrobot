@@ -215,18 +215,20 @@ class CaptureSettings(_message.Message):
     def __init__(self, channel: _Optional[str] = ..., exposure_ms: _Optional[float] = ..., gain: _Optional[float] = ..., machine_auto_exposure: _Optional[bool] = ...) -> None: ...
 
 class ScanSpecification(_message.Message):
-    __slots__ = ("points", "random", "full_coverage", "captures", "autofocus")
+    __slots__ = ("points", "random", "full_coverage", "captures", "autofocus", "initial_brightfield_z_mm")
     POINTS_FIELD_NUMBER: _ClassVar[int]
     RANDOM_FIELD_NUMBER: _ClassVar[int]
     FULL_COVERAGE_FIELD_NUMBER: _ClassVar[int]
     CAPTURES_FIELD_NUMBER: _ClassVar[int]
     AUTOFOCUS_FIELD_NUMBER: _ClassVar[int]
+    INITIAL_BRIGHTFIELD_Z_MM_FIELD_NUMBER: _ClassVar[int]
     points: PointGeometry
     random: RandomGeometry
     full_coverage: ScanRegion
     captures: _containers.RepeatedCompositeFieldContainer[CaptureSettings]
     autofocus: AutofocusMethod
-    def __init__(self, points: _Optional[_Union[PointGeometry, _Mapping]] = ..., random: _Optional[_Union[RandomGeometry, _Mapping]] = ..., full_coverage: _Optional[_Union[ScanRegion, _Mapping]] = ..., captures: _Optional[_Iterable[_Union[CaptureSettings, _Mapping]]] = ..., autofocus: _Optional[_Union[AutofocusMethod, str]] = ...) -> None: ...
+    initial_brightfield_z_mm: float
+    def __init__(self, points: _Optional[_Union[PointGeometry, _Mapping]] = ..., random: _Optional[_Union[RandomGeometry, _Mapping]] = ..., full_coverage: _Optional[_Union[ScanRegion, _Mapping]] = ..., captures: _Optional[_Iterable[_Union[CaptureSettings, _Mapping]]] = ..., autofocus: _Optional[_Union[AutofocusMethod, str]] = ..., initial_brightfield_z_mm: _Optional[float] = ...) -> None: ...
 
 class ScanEstimateModel(_message.Message):
     __slots__ = ("seconds_per_frame", "seconds_per_stage_position", "seconds_per_autofocus", "bytes_per_pixel")

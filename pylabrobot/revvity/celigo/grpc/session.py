@@ -203,10 +203,11 @@ class CeligoSession:
         raise ValueError(f"unknown imaging channel: {capture.channel}")
       z = (
         self.config.calibration.calibrated_z_position
-        + self.config.channels[capture.channel].z_offset_to_brightfield_mm
-      )
+        if spec.initial_brightfield_z_mm is None
+        else spec.initial_brightfield_z_mm
+      ) + self.config.channels[capture.channel].z_offset_to_brightfield_mm
       if not z_axis.min_position <= z <= z_axis.max_position:
-        raise ValueError("calibrated channel focus is outside Z travel")
+        raise ValueError("initial channel focus is outside Z travel")
     return build_scan_plan(
       self.config, replace(spec, captures=captures), estimate_model=estimate_model
     )

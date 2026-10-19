@@ -129,6 +129,7 @@ message ScanSpecification {
   }
   repeated CaptureSettings captures = 4;
   AutofocusMethod autofocus = 5;
+  optional double initial_brightfield_z_mm = 6;
 }
 
 message ScanEstimateModel {

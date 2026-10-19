@@ -134,6 +134,7 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
       block_shape=(2, 3),
       captures=[Capture("brightfield", 1, 1), Capture("green", 20, 2, machine_auto_exposure=True)],
       autofocus="image",
+      initial_brightfield_z_mm=2.5,
     )
     with TemporaryDirectory() as directory:
       async with scan_system(Path(directory)) as (_, client, hardware):
@@ -198,6 +199,7 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
           self.assertEqual(call.kwargs["position"], planned.position)
           if planned.index % 12 == 0:
             self.assertEqual(call.kwargs["autofocus"], "image")
+            self.assertEqual(call.kwargs["z_mm"], 2.5)
             self.assertEqual(metadata.focus_score, 10)
           else:
             self.assertIsNone(call.kwargs["autofocus"])
@@ -241,7 +243,7 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
       async with scan_system(path) as (_, client, hardware):
         await initialize(client)
         plan = await client.build_scan_plan(
-          ScanSpec.points([(5, 5), (6, 6)], channel="brightfield")
+          ScanSpec.points([(5, 5), (6, 6)], channel="brightfield", initial_brightfield_z_mm=2.45)
         )
         job = await client.create_scan("reconnect", plan=plan)
         await client.create_scan("ready", plan=plan)
@@ -362,4 +364,25 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(grpc.aio.AioRpcError) as wrong_kind:
           await job.get_scan_plan()
         self.assertEqual(wrong_kind.exception.code(), grpc.StatusCode.FAILED_PRECONDITION)
+        self.assertEqual(hardware.method_calls, [])
+
+  async def test_focus_seed_rejects_invalid_travel_including_channel_offsets(self) -> None:
+    """Validate the requested seed before persisting a plan or touching hardware."""
+    with TemporaryDirectory() as directory:
+      async with scan_system(Path(directory)) as (_, client, hardware):
+        for seed in (-0.3, 6.4, float("nan"), float("inf")):
+          with self.subTest(seed=seed), self.assertRaises(grpc.aio.AioRpcError) as invalid:
+            await client.operations.BuildScanPlan(
+              pb.BuildScanPlanRequest(
+                device_id=client.device_id,
+                specification=pb.ScanSpecification(
+                  points=pb.PointGeometry(
+                    centers=[pb.SamplePoint(x_mm=5, y_mm=5)], block_columns=1, block_rows=1
+                  ),
+                  captures=[pb.CaptureSettings(channel="green")],
+                  initial_brightfield_z_mm=seed,
+                ),
+              )
+            )
+          self.assertEqual(invalid.exception.code(), grpc.StatusCode.INVALID_ARGUMENT)
         self.assertEqual(hardware.method_calls, [])

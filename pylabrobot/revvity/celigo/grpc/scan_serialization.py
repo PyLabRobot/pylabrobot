@@ -56,6 +56,7 @@ def encode_scan_specification(spec: ScanSpec) -> pb.ScanSpecification:
   value = pb.ScanSpecification(
     captures=[encode_capture(capture) for capture in spec.captures],
     autofocus=pb.AUTOFOCUS_IMAGE if spec.autofocus == "image" else pb.AUTOFOCUS_NONE,
+    initial_brightfield_z_mm=spec.initial_brightfield_z_mm,
   )
   geometry = spec.geometry
   if isinstance(geometry, PointGeometry):
@@ -93,6 +94,9 @@ def decode_scan_specification(value: pb.ScanSpecification) -> ScanSpec:
     raise ValueError("unsupported autofocus method")
   autofocus: AutofocusMethod | None = "image" if value.autofocus == pb.AUTOFOCUS_IMAGE else None
   captures = tuple(decode_capture(capture) for capture in value.captures)
+  initial_brightfield_z_mm = (
+    value.initial_brightfield_z_mm if value.HasField("initial_brightfield_z_mm") else None
+  )
   geometry = value.WhichOneof("geometry")
   if geometry == "points":
     spec = ScanSpec.points(
@@ -100,6 +104,7 @@ def decode_scan_specification(value: pb.ScanSpecification) -> ScanSpec:
       block_shape=(value.points.block_columns, value.points.block_rows),
       captures=captures,
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
     labels = tuple(
       point.label if point.HasField("label") else None for point in value.points.centers
@@ -119,10 +124,14 @@ def decode_scan_specification(value: pb.ScanSpecification) -> ScanSpec:
       ),
       captures=captures,
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
   if geometry == "full_coverage":
     return ScanSpec.full_coverage(
-      decode_region(value.full_coverage), captures=captures, autofocus=autofocus
+      decode_region(value.full_coverage),
+      captures=captures,
+      autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
   raise ValueError("scan geometry is required")
 

@@ -194,6 +194,13 @@ capture channel. The supplied exposure is the initial setting; image metadata
 reports the actual selected exposure and gain. `GetConfiguration` advertises
 auto-exposure support, and the setting remains part of the persisted plan/job.
 
+Supply `initial_brightfield_z_mm` to any `ScanSpec` constructor to start each block
+from a tuned brightfield Z. Channel offsets are applied before acquisition, and
+image autofocus updates the remaining frames in that block. Without autofocus,
+the supplied seed determines each channel's fixed Z. Omitting it uses instrument
+calibration. Planning checks every channel's initial position against Z travel.
+The seed is part of the inspectable, persisted plan and survives reconnect/restart.
+
 Accepted scans continue when clients disconnect. Cancellation lets an in-flight
 acquisition finish and commits its image before ending the scan and cleaning up
 the driver. Failures preserve earlier committed frames. A service restart marks
