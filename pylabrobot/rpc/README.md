@@ -23,8 +23,13 @@ dictionary or shared hardware executor.
 ## Installation and connection
 
 RPC requires Python 3.10 or later. Install `PyLabRobot[rpc]` for the common layer;
-this does not require NumPy, Pillow, psutil, or the Celigo driver extras. Ordinary
+this does not require NumPy, Pillow, or the Celigo driver extras. Ordinary
 local PLR use does not load the optional RPC modules.
+
+Device and transport extras compose independently: `PyLabRobot[celigo,rpc]`
+installs Celigo imaging support with RPC. The shared `rpc-dev` extra supplies
+test, code-generation, and typing tools for RPC development; combine it with a
+device extra when testing that device's service.
 
 ```python
 from pathlib import Path
@@ -113,8 +118,7 @@ python -m pytest -q pylabrobot/rpc/tests
 
 The common tests use a fake pump and a status-only incubator with real encrypted
 loopback connections. They cover independent devices, optional services,
-non-imaging job reconnect/cancellation, identity checks, and watch cleanup. They
-also check that common imports do not load Celigo, image libraries, or SQLite.
+non-imaging job reconnect/cancellation, identity checks, and watch cleanup.
 CI runs them in an environment without Celigo extras and runs the Celigo tests
 separately. See the Celigo README for regenerating all dependent bindings.
 

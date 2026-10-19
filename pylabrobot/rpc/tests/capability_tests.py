@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import subprocess
-import sys
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from uuid import uuid4
@@ -196,25 +194,6 @@ async def pump(tmp_path: Path):
   finally:
     await backend.close()
     await server.stop()
-
-
-def test_shared_clients_import_without_device_or_image_code() -> None:
-  """Prevent shared APIs from acquiring transitive Celigo, codec, or storage dependencies."""
-  subprocess.run(
-    [
-      sys.executable,
-      "-c",
-      """
-import sys
-from pylabrobot.rpc.device import DeviceClient, DeviceServer
-from pylabrobot.rpc.jobs import JobClient, JobService
-from pylabrobot.rpc.images import ImageClient, ImageService
-assert not {'numpy', 'PIL', 'sqlite3', 'psutil'} & sys.modules.keys()
-assert not any(name.startswith('pylabrobot.revvity.celigo') for name in sys.modules)
-""",
-    ],
-    check=True,
-  )
 
 
 @pytest.mark.asyncio

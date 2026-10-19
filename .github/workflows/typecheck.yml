@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: ${{ matrix.version }}
       - name: Install optional RPC dependencies
-        run: pip install -e '.[celigo-grpc-dev]' mypy==1.18.2
+        run: pip install -e '.[celigo,rpc-dev]' mypy==1.18.2
       - name: Check RPC types
         run: >-
           python -m mypy --follow-imports=silent

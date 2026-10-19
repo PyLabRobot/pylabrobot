@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import contextlib
 import hashlib
 import importlib.metadata
 import json
@@ -195,8 +194,6 @@ async def check(
 
 
 async def demo(report_path: Path | None) -> None:
-  import psutil
-
   with tempfile.TemporaryDirectory(prefix="celigo-grpc-") as temporary:
     directory = Path(temporary)
     certs = create_certificates(directory / "certificates")
@@ -215,8 +212,6 @@ async def demo(report_path: Path | None) -> None:
         stdout=asyncio.subprocess.PIPE,
         stderr=server_log,
       )
-      sampling = None
-      peaks = {"server_peak_rss_bytes": 0, "client_peak_rss_bytes": 0}
       try:
         assert process.stdout is not None
         ready = await asyncio.wait_for(process.stdout.readline(), 30)
@@ -224,25 +219,6 @@ async def demo(report_path: Path | None) -> None:
           server_log.seek(0)
           raise RuntimeError(f"simulator startup failed: {server_log.read()}")
         endpoint = json.loads(ready)["endpoint"]
-        server_process, client_process = psutil.Process(process.pid), psutil.Process()
-        baseline = {
-          "server_rss_bytes": server_process.memory_info().rss,
-          "client_rss_bytes": client_process.memory_info().rss,
-        }
-
-        async def sample_memory():
-          while True:
-            peaks["server_peak_rss_bytes"] = max(
-              peaks["server_peak_rss_bytes"],
-              server_process.memory_info().rss,
-            )
-            peaks["client_peak_rss_bytes"] = max(
-              peaks["client_peak_rss_bytes"],
-              client_process.memory_info().rss,
-            )
-            await asyncio.sleep(0.01)
-
-        sampling = asyncio.create_task(sample_memory())
         async with PrototypeClient(endpoint, certs) as client:
           initialization = await client.create_initialization("demo-initialize")
           await initialization.start()
@@ -259,24 +235,18 @@ async def demo(report_path: Path | None) -> None:
         report = {
           "measured_at": datetime.now(timezone.utc).isoformat(),
           "transport": "gRPC with mutual TLS",
-          "scope": "two local processes; synthetic images; SQLite persistence; includes encoding and codec buffers",
+          "scope": "two local processes; synthetic images; SQLite persistence",
           "grpcio_version": importlib.metadata.version("grpcio"),
           "protobuf_version": importlib.metadata.version("protobuf"),
           "python_version": sys.version.split()[0],
           "profiles": profiles,
           "cancellation_during_transfer": cancellation,
-          "baseline": baseline,
-          **peaks,
         }
         rendered = json.dumps(report, indent=2) + "\n"
         if report_path:
           report_path.write_text(rendered)
         print(rendered, end="")
       finally:
-        if sampling:
-          sampling.cancel()
-          with contextlib.suppress(asyncio.CancelledError):
-            await sampling
         if process.returncode is None:
           process.terminate()
           try:

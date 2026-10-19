@@ -23,15 +23,17 @@ The transport requires Python 3.10 or later. The server uses POSIX file locks
 and is tested on Linux. From a PLR checkout containing this package:
 
 ```bash
-python -m pip install -e '.[celigo-grpc]'
+python -m pip install -e '.[celigo,rpc]'
 ```
 
-Physical operation also needs the `ftdi` extra, the Lumenera SDK, USB access,
+The `celigo` and `rpc` extras are independent: combine device imaging dependencies
+with the shared transport when using Celigo remotely. Physical operation also
+needs the `ftdi` extra, the Lumenera SDK, USB access,
 and the instrument's vendor calibration/configuration files. These are not
 required for the simulator or remote client.
 
 ```bash
-python -m pip install -e '.[celigo-grpc,ftdi]'
+python -m pip install -e '.[celigo,rpc,ftdi]'
 ```
 
 ## Simulator and connection
@@ -181,7 +183,7 @@ Install the optional development dependencies and run the hardware-free tests
 from the PLR repository root:
 
 ```bash
-python -m pip install -e '.[celigo-grpc-dev]'
+python -m pip install -e '.[celigo,rpc-dev]'
 python -m pytest pylabrobot/rpc/tests pylabrobot/revvity/celigo/grpc/tests
 ```
 

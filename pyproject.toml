@@ -20,6 +20,7 @@ btx = ["pyserial", "numpy>=1.26", "Pillow"]
 modbus = ["pymodbus>=3.0.0,<3.7.0"]
 opentrons = ["opentrons-http-api-client==0.2.1", "httpx", "zeroconf>=0.131.0"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
+celigo = ["numpy", "Pillow"]
 rpc = ["grpcio==1.84.0", "protobuf==7.36.2", "cryptography"]
 rpc-dev = [
   "PyLabRobot[rpc,test]",
@@ -28,8 +29,6 @@ rpc-dev = [
   "types-grpcio",
   "types-protobuf",
 ]
-celigo-grpc = ["PyLabRobot[rpc]", "numpy", "Pillow", "psutil"]
-celigo-grpc-dev = ["PyLabRobot[celigo-grpc,rpc-dev]", "types-psutil"]
 cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]

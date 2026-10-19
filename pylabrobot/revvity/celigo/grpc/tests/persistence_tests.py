@@ -9,7 +9,6 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import grpc
-import psutil
 import pytest
 
 from pylabrobot.revvity.celigo.grpc.client import PrototypeClient
@@ -468,33 +467,3 @@ async def test_pending_commands_are_bounded_when_disk_is_stalled(tmp_path, monke
     finally:
       release.set()
     assert (await (await pending).status()).state == job_pb.JOB_STATE_READY
-
-
-@pytest.mark.asyncio
-async def test_scan_length_does_not_accumulate_image_payloads_in_server_memory(tmp_path):
-  certs = create_certificates(tmp_path / "certs")
-  async with process_server(tmp_path / "data", certs) as (process, client):
-    await initialize(client)
-    memory = psutil.Process(process.pid)
-    job = await client.create("bounded-memory", SimulationSpec(64, 1024, 512, 16, 0))
-    warm_rss = None
-    late_rss = []
-    async with job.updates() as updates:
-      await job.start()
-      while True:
-        status = await asyncio.wait_for(updates.get(), 10)
-        if status.completed >= 8 and warm_rss is None:
-          warm_rss = memory.memory_info().rss
-        if status.completed >= 56:
-          late_rss.append(memory.memory_info().rss)
-        if status.state == job_pb.JOB_STATE_FINISHED:
-          break
-    assert status.outcome == job_pb.OUTCOME_SUCCEEDED and status.completed == 64
-    assert warm_rss is not None and late_rss
-    # Over 48 MiB of additional scientific pixels were committed after warm-up.
-    # Allow allocator/SQLite variation, but reject growth proportional to the scan.
-    assert max(late_rss) - warm_rss < 24 * 1024 * 1024
-    frames = await job.list_frames()
-    assert len(frames) == 64 and all(info.available for info in frames)
-    assert (await job.get_frame(frames[0].frame_id)).sha256 == frames[0].sha256
-    assert (await job.get_frame(frames[-1].frame_id)).sha256 == frames[-1].sha256

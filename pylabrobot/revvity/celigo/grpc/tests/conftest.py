@@ -15,7 +15,6 @@ def transport_dependencies_available() -> bool:
         "cryptography",
         "numpy",
         "PIL",
-        "psutil",
         "pytest_asyncio",
       )
     )
