@@ -91,16 +91,3 @@ concurrent transfers, swap/gate completion, barcode cleanup, units, and cassette
 calibration. This implementation has not been validated on hardware. Validate the
 serial handshake and status queries first, then measured cassette positions, empty
 mechanism movements, and a supervised plate transfer on the specific instrument.
-
-## Migrating legacy calls
-
-Construct `StoreX` directly instead of `Incubator(ExperimentalLiconicBackend(...))`.
-Use `StoreXCassette` objects with explicit calibration and a physical cassette-number
-mapping. Fetch/store methods update inventory themselves; do not manually reassign
-plates after those operations. External robot handoffs still update the tray resource.
-
-`store_plate(plate, slot)` also handles cassette-to-cassette movement. The barcode
-reader is passed to `scan_barcode(slot, read_barcode)` as an async callable; its
-connection lifecycle remains with its owner. `start_shaking(speed=25)` accepts the
-vendor setting rather than the legacy, unverified Hz interpretation. Existing legacy
-imports remain available.
