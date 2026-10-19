@@ -89,12 +89,14 @@ class FTDIFramingTests(unittest.TestCase):
     ftdi_validate_frame(VERIFICATION_DATA_REPLY)
 
   def test_corrupted_byte_fails_checksum(self):
+    # Not a reader's reply: the recorded frame with one bit flipped.
     frame = bytearray(STATUS_REPLY_FRAME)
     frame[6] ^= 0x01
     with self.assertRaises(ChecksumError):
       ftdi_validate_frame(bytes(frame))
 
   def test_truncated_frame_fails(self):
+    # Not a reader's reply: the recorded frame cut short.
     with self.assertRaises(FrameError):
       ftdi_validate_frame(STATUS_REPLY_FRAME[:-1])
     with self.assertRaises(FrameError):

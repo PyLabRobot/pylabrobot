@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Set, 
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
 from pylabrobot.resources import Plate, Well
 
+from ..errors import FrameError
 from .measurement import (
   MODE_ABSORBANCE,
   Measurement,
@@ -511,7 +512,8 @@ class Absorbance(Measurement):
 
     The data takes about 0.05 s per wavelength to transfer for 96 wells (220-1000 nm: about 40 s
     of a 2.5 min read); a larger `step_size` or a narrower range shortens it. Cancelling the call
-    stops the run on the reader.
+    stops the run on the reader. A data page that arrives short stops the run, and the plate is
+    read once more.
 
     Args:
       wells: the wells to measure, on the plate; None measures every well.
@@ -533,6 +535,7 @@ class Absorbance(Measurement):
       ValueError: if an argument is out of range, the settings cannot read the wells of the plate,
         or the data pages are not this read's.
       TimeoutError: if the run takes longer than `timeout` seconds.
+      FrameError: if a data page arrives short on the second read too.
     """
     measurement = MeasurementSettings() if measurement_settings is None else measurement_settings
     plate, wells, parameters = self._get_spectrum_run_parameters(
@@ -561,9 +564,14 @@ class Absorbance(Measurement):
       measurement.well_scan,
       report,
     )
-    start_timestamp = datetime.now()
     values = (len(wavelengths) + 3) * (measured + 2)
-    pages, end_timestamp = await self._run_measurement(parameters, timeout, values)
+    try:
+      start_timestamp = datetime.now()
+      pages, end_timestamp = await self._run_measurement(parameters, timeout, values)
+    except FrameError as error:  # a page arrived short; the reader cannot send it again
+      logger.warning("absorbance spectrum: %s; the run was stopped, reading the plate again", error)
+      start_timestamp = datetime.now()
+      pages, end_timestamp = await self._run_measurement(parameters, timeout, values)
     samples, references, calibrations, reference_pair = _decode_spectrum_pages(
       pages, len(wavelengths)
     )

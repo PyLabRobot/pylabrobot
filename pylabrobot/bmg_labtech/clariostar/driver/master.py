@@ -293,6 +293,7 @@ class CLARIOstarDriver:
           remainder = await self._ftdi.read(expected_size - len(data))
           if remainder:
             data += remainder
+            last_data_time = time.time()
             end_byte_found = data[-1] == FTDI_CR
             if len(data) >= expected_size:
               break

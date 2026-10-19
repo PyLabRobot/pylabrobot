@@ -20,7 +20,9 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   PARAMETERS_REPLY,
   STATUS_IDLE,
   FakeFTDI,
+  load_session_replies,
   make_driver,
+  parse_status,
 )
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.biorad.plates import biorad_96_wellplate_200uL_Vb
@@ -147,7 +149,14 @@ class SimulatorTests(unittest.IsolatedAsyncioTestCase):
       Plate("plate", size_x=127.76, size_y=85.48, size_z=14.0, ordered_items={}),
       location=Coordinate.zero(),
     )
-    self.assertFalse(await self.reader.drawer.sense_plate_present())
+    simulated = await self.reader.driver.request_status()
+    # Step 9: the reader with the plate on the plate holder and the drawer out.
+    real = parse_status(
+      bytes.fromhex(load_session_replies()["step_9_status_drawer_out_plate_on_holder"])
+    )
+    self.assertEqual(
+      (simulated.drawer_open, simulated.plate_detected), (real.drawer_open, real.plate_detected)
+    )
     await self.reader.drawer.close()
     self.assertTrue(await self.reader.drawer.sense_plate_present())
 
