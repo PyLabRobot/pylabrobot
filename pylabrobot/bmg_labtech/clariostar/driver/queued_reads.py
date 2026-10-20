@@ -236,10 +236,12 @@ class QueuedReads:
 
     Bytes that arrived since the last wait end it at once; `take` hands them over.
     """
+    # Not wait_for: before Python 3.12 it drops a cancel that comes as the event is set.
+    timer = asyncio.get_running_loop().call_later(max(timeout, 0), self._wake.set)
     try:
-      await asyncio.wait_for(self._wake.wait(), timeout)
-    except asyncio.TimeoutError:
-      pass
+      await self._wake.wait()
+    finally:
+      timer.cancel()
     self._wake.clear()
 
   def stop(self) -> None:
