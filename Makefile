@@ -3,7 +3,7 @@ ifeq ($(shell test -e ./env/ && echo yes),yes)
 $(info Using virtualenv in env)
 endif
 
-.PHONY: docs docs-fast docs-check docs-linkcheck clean-docs lint lint-js format-js test
+.PHONY: docs docs-fast docs-check docs-linkcheck clean-docs lint lint-js format-js test generate-rpc
 
 docs:
 	sphinx-build -b html docs docs/build/ -j 16 -W
@@ -51,6 +51,12 @@ test:
 
 typecheck:
 	$(BIN)python -m mypy pylabrobot
+
+generate-rpc:
+	$(BIN)python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. --mypy_grpc_out=. \
+		pylabrobot/rpc/v1/device.proto pylabrobot/rpc/v1/jobs.proto \
+		pylabrobot/rpc/v1/images.proto pylabrobot/revvity/celigo/grpc/v1/service.proto \
+		pylabrobot/revvity/celigo/grpc/v1/storage.proto
 
 clear-pyc:
 	find . -name "*.pyc" | xargs rm
