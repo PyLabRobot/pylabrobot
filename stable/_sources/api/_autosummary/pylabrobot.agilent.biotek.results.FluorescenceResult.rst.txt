@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.results.FluorescenceResult
+====================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.results
+
+.. autoclass:: FluorescenceResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FluorescenceResult.data
+      ~FluorescenceResult.excitation_wavelength
+      ~FluorescenceResult.emission_wavelength
+      ~FluorescenceResult.temperature
+      ~FluorescenceResult.timestamp
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FluorescenceResult.__init__
+   
+   

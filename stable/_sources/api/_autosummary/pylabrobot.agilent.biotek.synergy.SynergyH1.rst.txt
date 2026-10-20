@@ -19,6 +19,7 @@ pylabrobot.agilent.biotek.synergy.SynergyH1
       ~SynergyH1.emission_range
       ~SynergyH1.excitation_range
       ~SynergyH1.focal_height_range
+      ~SynergyH1.serial_number
       ~SynergyH1.supports_active_cooling
       ~SynergyH1.supports_cooling
       ~SynergyH1.supports_heating
@@ -38,6 +39,7 @@ pylabrobot.agilent.biotek.synergy.SynergyH1
       ~SynergyH1.clear_plate
       ~SynergyH1.close
       ~SynergyH1.deactivate
+      ~SynergyH1.get_temperature
       ~SynergyH1.home
       ~SynergyH1.open
       ~SynergyH1.query_capability

@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.synergy\_ht.SynergyHT.read\_absorbance
+================================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy_ht
+
+.. automethod:: SynergyHT.read_absorbance
