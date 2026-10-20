@@ -1,5 +1,6 @@
 """Replies read through bulk-in transfers kept pending, over a model of the reader's FTDI chip."""
 
+import ast
 import asyncio
 import ctypes
 import gzip
@@ -16,6 +17,14 @@ from unittest.mock import patch
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
 from pylabrobot.bmg_labtech.clariostar.driver import pending_reads
 from pylabrobot.bmg_labtech.clariostar.driver.errors import FrameError
+from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
+  RUN_REPLY,
+  STATUS_MEASURED,
+  STOP_FRAME,
+  STOP_REPLY,
+  captured_96_well_plate,
+  make_absorbance,
+)
 from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload
 from pylabrobot.bmg_labtech.clariostar.driver.master import CLARIOstarDriver
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
@@ -26,6 +35,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   make_driver,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.pending_reads import PendingReads
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
 DATA_REQUEST = bytes.fromhex("05020000000000")
 DATA_REQUEST_FRAME = bytes.fromhex("02000f0c050200000000000000240d")  # as the pause hunt sent it
@@ -98,6 +108,11 @@ class ChipModel:
     with self._lock:
       return bool(self._packets)
 
+  def remaining(self) -> int:
+    """How many of the current reply's packets are still to come."""
+    with self._lock:
+      return len(self._packets)
+
   def stalled(self) -> bool:
     """Whether the next packet comes while the host stalls."""
     with self._lock:
@@ -158,6 +173,19 @@ class LibftdiFTDI(FakeFTDI):
       data += payload
     self._buffered = data[num_bytes:]
     return bytes(data[:num_bytes])
+
+
+class StreamedPurgeFTDI(LibftdiFTDI):
+  """`LibftdiFTDI` whose purge returns once the reply streaming has reached the pending reads:
+  libftdi's purge clears the chip, not the bytes the pending reads already received."""
+
+  async def usb_purge_rx_buffer(self) -> None:
+    await super().usb_purge_rx_buffer()
+    while self.chip.streaming():
+      await asyncio.sleep(0.001)
+    sent = self.chip.time
+    while self.chip.time <= sent + ChipModel._LATENCY:  # a packet later: the callback has run
+      await asyncio.sleep(0.001)
 
 
 class FakeLibusb:
@@ -236,13 +264,23 @@ class FakeLibusb:
     )
 
 
-def make_pending_driver(io: FakeFTDI, libusb: FakeLibusb, transfers: int = 128) -> CLARIOstarDriver:
-  """A driver writing to `io` and reading through `transfers` pending transfers on `libusb`."""
-  driver = make_driver(io)
+def keep_reads_pending(
+  driver: CLARIOstarDriver, libusb: FakeLibusb, transfers: int = pending_reads._TRANSFERS
+) -> PendingReads:
+  """Start `transfers` pending transfers on `libusb` for `driver` to read through."""
   driver._PACKET_READ_TIMEOUT, driver._FRAME_STALL_TIMEOUT = 1.0, 0.3
   reads = PendingReads(libusb.functions, 1, 2, transfers=transfers)
   reads.start()
   driver._pending_reads = reads
+  return reads
+
+
+def make_pending_driver(
+  io: FakeFTDI, libusb: FakeLibusb, transfers: int = pending_reads._TRANSFERS
+) -> CLARIOstarDriver:
+  """A driver writing to `io` and reading through `transfers` pending transfers on `libusb`."""
+  driver = make_driver(io)
+  keep_reads_pending(driver, libusb, transfers)
   return driver
 
 
@@ -261,12 +299,17 @@ class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
     chip = ChipModel(packets, stall=stall)
     io, libusb = LibftdiFTDI(chip), FakeLibusb(chip)
     driver = make_pending_driver(io, libusb)
-    self.assertEqual(await driver.exchange(DATA_REQUEST), ftdi_extract_payload(page))
+    # No sleep and no timeout ends a wait: the event thread's callbacks wake the read.
+    driver._PACKET_READ_TIMEOUT = driver._FRAME_STALL_TIMEOUT = 60.0
+    with patch.object(master_module.asyncio, "sleep", side_effect=AssertionError("polled")):
+      with self.assertNoLogs(pending_reads.logger, "WARNING"):  # the stall used 6 of 125
+        reply = await asyncio.wait_for(driver.exchange(DATA_REQUEST), 10)
+    self.assertEqual(reply, ftdi_extract_payload(page))
     self.assertEqual(chip.dropped, 0)
     self.assertEqual(io.written, [DATA_REQUEST_FRAME])
     driver._stop_pending_reads()
     self.assertEqual(sorted(libusb.freed), sorted(libusb.allocated))
-    self.assertEqual(len(libusb.allocated), 128)
+    self.assertEqual(len(libusb.allocated), 125)  # 0.25 s of 2 ms latency periods
 
   async def test_a_stall_longer_than_the_transfers_cover_is_warned(self):
     # 4 transfers, as the pause hunt's queued reader kept, cover 8 of the stall's 12.14 ms.
@@ -274,11 +317,14 @@ class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
     chip = ChipModel(packets, stall=stall)
     driver = make_pending_driver(LibftdiFTDI(chip), FakeLibusb(chip), transfers=4)
     self.addCleanup(driver._stop_pending_reads)
-    with self.assertLogs(master_module.logger, "WARNING") as logs:
+    with self.assertLogs("pylabrobot", "WARNING") as logs:
       with self.assertRaises(FrameError):
         await driver.exchange(DATA_REQUEST)
     self.assertGreater(chip.dropped, 0)
     self.assertTrue(any("flagged a line error" in line for line in logs.output))
+    stalls = [line for line in logs.output if "host stall" in line]
+    self.assertEqual(len(stalls), 1)  # once for the stall, not per transfer
+    self.assertIn("left 0 of 4 bulk-in transfers pending", stalls[0])
 
   async def test_bytes_read_before_a_command_are_not_its_reply(self):
     # Not a reader's reply: the reader sends nothing unasked; a status reply read before the
@@ -305,12 +351,49 @@ class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
     reads = driver._pending_reads
     assert reads is not None
     while reads.running:
-      await asyncio.sleep(0.001)
+      await reads.wait(1.0)  # the last transfer to fail wakes it
     with self.assertLogs(master_module.logger, "WARNING"):
       status = await driver.request_status()
     self.assertFalse(status.busy)
     self.assertIsNone(driver._pending_reads)
     self.assertEqual(sorted(libusb.freed), sorted(libusb.allocated))
+
+  async def test_a_cancelled_spectrum_leaves_the_reads_running_and_the_link_clean(self):
+    # Page 3 at its own packet times answers the data request; the read is cancelled early in
+    # the page, and the rest of it arrives during the purge before the STOP.
+    page, packets, _ = load_raw_run()
+    before = ([(0.0, reply)] for reply in (STATUS_IDLE, RUN_REPLY, STATUS_MEASURED))
+    chip = ChipModel(*before, packets, [(0.0, STOP_REPLY)], [(0.0, STATUS_IDLE)])
+    io, libusb = StreamedPurgeFTDI(chip), FakeLibusb(chip)
+    absorbance = make_absorbance(io, captured_96_well_plate())
+    driver = absorbance._driver
+    reads = keep_reads_pending(driver, libusb)
+    self.addCleanup(driver._stop_pending_reads)
+    with self.assertLogs("pylabrobot", LOG_LEVEL_IO) as logs:
+      task = asyncio.create_task(
+        absorbance.measure_spectrum(start_wavelength=220, end_wavelength=1000, step_size=1)
+      )
+      while DATA_REQUEST_FRAME not in io.written or chip.remaining() > 0.9 * len(packets):
+        await asyncio.sleep(0.001)
+      self.assertTrue(chip.streaming())
+      task.cancel()
+      with self.assertRaises(asyncio.CancelledError):
+        await task
+      status = await driver.request_status()
+    self.assertFalse(status.busy)
+    self.assertEqual(io.written[3:], [DATA_REQUEST_FRAME, STOP_FRAME, STATUS_QUERY_FRAME])
+    messages = [record.getMessage() for record in logs.records]
+    first_discard = next(i for i, m in enumerate(messages) if " discarded " in m)
+    read = next(m for m in reversed(messages[:first_discard]) if " read " in m)
+    taken = ast.literal_eval(read.split(" read ")[1])  # logged although the read was cancelled
+    late = ast.literal_eval(messages[first_discard].split(" discarded ")[1])
+    self.assertEqual(taken + late, page)  # the bytes after the cancel, before the STOP's write
+    self.assertGreater(len(late), len(page) // 2)
+    self.assertIs(driver._get_pending_reads(), reads)
+    self.assertTrue(reads.running)
+    self.assertEqual(reads.take(), (b"", 0))
+    self.assertEqual(chip.dropped, 0)
+    self.assertFalse(any("line error" in m or "not accepted" in m for m in messages))
 
 
 if __name__ == "__main__":

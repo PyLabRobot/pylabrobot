@@ -6,14 +6,16 @@ returns on each status-only packet, so a pause in a reply leaves the chip withou
 keep many libusb transfers pending, on the handle libftdi opened, from setup until stop; libftdi
 keeps the writes and control requests.
 
-Each transfer completes on one short packet, one per latency period (2 ms), and the kernel fills
-the pending ones in order without Python: 128 of them cover about 250 ms in which Python cannot
-submit them again.
+Each transfer completes on one short packet, one per latency period, and the kernel fills the
+pending ones in order without Python: enough are kept to cover a host stall of `_LONGEST_STALL`
+in which Python cannot submit them again.
 """
 
+import asyncio
 import atexit
 import ctypes
 import logging
+import math
 import threading
 import time
 from typing import Any, List, Optional, Tuple
@@ -62,6 +64,12 @@ _PACKET_SIZE = 512
 _LINE_ERRORS = 0x1E  # line status bits: overrun, parity, framing, break
 _EVENT_TIMEOUT = _Timeval(0, 100_000)  # the event thread looks at its state at least this often
 _STOP_TIMEOUT = 2.0  # seconds stop waits for cancelled transfers to complete
+LATENCY_TIMER = 2  # ms the chip waits before sending a short packet; set by the driver
+# Seconds of host stall the pending reads must ride out. The longest measured stall was 92 ms on
+# the reader (finding 15); the margin covers garbage collection and GIL pauses at negligible cost.
+_LONGEST_STALL = 0.25
+_TRANSFERS = math.ceil(_LONGEST_STALL * 1000 / LATENCY_TIMER)  # one per latency period
+_LOW_MARGIN = 0.1  # a stall leaving fewer than this share of the transfers pending is warned
 
 
 def _declare_libusb_functions(libusb: Any) -> None:
@@ -86,12 +94,27 @@ class PendingReads:
 
   A completed transfer is submitted again from its callback, after its data is copied out. One
   thread handles libusb's events; libftdi's own calls may handle them too, and so run callbacks.
+  A callback that copied out bytes, or left no transfer pending, wakes `wait` in the event loop
+  that started the reads.
   """
 
   error: Optional[str]  # the first failure: a transfer's status, or a submit's result
+  _loop: asyncio.AbstractEventLoop  # the loop `start` ran in, before any transfer is submitted
+  _wake: asyncio.Event  # set when bytes arrive or no transfer is pending; cleared by `wait`
+  _stopping: threading.Event  # set by `stop`
+  _stop_deadline: float  # when the event thread gives up on cancelled transfers
+  _completed: int  # transfers completed and submitted again since the last margin check
+
+  def _set_wake(self) -> None:
+    """Set `_wake` in the event loop that started the reads; nothing once that loop closed."""
+    try:
+      self._loop.call_soon_threadsafe(self._wake.set)
+    except RuntimeError:  # the loop closed
+      pass
 
   def _on_complete(self, pointer: Any) -> None:
     """Copy out a completed transfer's data, then submit it again unless stopping or failed."""
+    received = False
     try:
       transfer = pointer.contents
       status, length = transfer.status, transfer.actual_length
@@ -100,8 +123,11 @@ class PendingReads:
         for start in range(0, len(data), _PACKET_SIZE):
           if start + 1 < len(data) and data[start + 1] & _LINE_ERRORS:
             self._line_errors += 1
-          self._received += data[start + 2 : start + _PACKET_SIZE]
-        if status == _COMPLETED and not self._stopping:
+          payload = data[start + 2 : start + _PACKET_SIZE]
+          self._received += payload
+          received = received or bool(payload)
+        if status == _COMPLETED and not self._stopping.is_set():
+          self._completed += 1
           result = self._libusb.libusb_submit_transfer(pointer)
           if result == 0:
             return
@@ -109,22 +135,45 @@ class PendingReads:
         elif status not in (_COMPLETED, _CANCELLED):
           self.error = self.error or f"transfer status {status}"
         self._pending -= 1
+        received = received or self._pending == 0
     except Exception:  # an exception cannot leave a ctypes callback
       logger.exception("pending read callback failed")
       with self._lock:
         self._pending -= 1
+      received = True
+    finally:
+      if received:
+        self._set_wake()
+
+  def _check_margin(self) -> None:
+    """Warn once per stall that left fewer than `_LOW_MARGIN` of the transfers pending; re-armed
+    once the transfers are pending again.
+
+    The transfers completed since the last check, in one burst after a stall, were not pending.
+    """
+    with self._lock:
+      completed = self._completed
+      self._completed = 0
+    lowest = self._pool - completed
+    if lowest >= self._pool * _LOW_MARGIN:
+      self._margin_warned = False
+    elif not self._margin_warned:
+      self._margin_warned = True
+      logger.warning("a host stall left %d of %d bulk-in transfers pending", lowest, self._pool)
 
   def _handle_events(self) -> None:
     """Handle libusb's events until no transfer is pending, or `stop` has waited long enough."""
-    while True:
-      with self._lock:
-        if self._pending == 0 or (self._stopping and time.monotonic() > self._stop_deadline):
-          return
+    while self._pending > 0:
+      if self._stopping.is_set() and time.monotonic() > self._stop_deadline:
+        return
       self._libusb.libusb_handle_events_timeout_completed(
         self._usb_context, ctypes.byref(_EVENT_TIMEOUT), None
       )
+      self._check_margin()
 
-  def __init__(self, libusb: Any, usb_context: int, handle: int, *, transfers: int = 128) -> None:
+  def __init__(
+    self, libusb: Any, usb_context: int, handle: int, *, transfers: int = _TRANSFERS
+  ) -> None:
     """
     Args:
       libusb: the libusb library pylibftdi loaded.
@@ -139,8 +188,12 @@ class PendingReads:
     self._received = bytearray()
     self._line_errors = 0
     self._pending = 0
-    self._stopping = False
+    self._pool = 0  # transfers submitted by `start`
+    self._completed = 0
+    self._margin_warned = False
+    self._stopping = threading.Event()
     self._stop_deadline = 0.0
+    self._wake = asyncio.Event()
     self.error = None
     self._callback = _TRANSFER_CALLBACK(self._on_complete)  # alive as long as transfers may run
     self._buffers: List[Any] = []
@@ -162,8 +215,7 @@ class PendingReads:
   @property
   def running(self) -> bool:
     """Whether transfers are pending and `stop` has not been called."""
-    with self._lock:
-      return self._pending > 0 and not self._stopping
+    return self._pending > 0 and not self._stopping.is_set()
 
   def _free_transfers(self) -> None:
     """Free every allocated transfer; only when none is pending."""
@@ -179,34 +231,46 @@ class PendingReads:
       self._line_errors = 0
     return data, errors
 
+  async def wait(self, timeout: float) -> None:
+    """Wait until bytes arrive or no transfer is pending, at most `timeout` seconds.
+
+    Bytes that arrived since the last wait end it at once; `take` hands them over.
+    """
+    try:
+      await asyncio.wait_for(self._wake.wait(), timeout)
+    except asyncio.TimeoutError:
+      pass
+    self._wake.clear()
+
   def stop(self) -> None:
     """Cancel the transfers, wait for them to complete, and free them.
 
     A transfer still pending after ``_STOP_TIMEOUT`` stays allocated (freeing it is undefined).
     """
-    with self._lock:
-      if self._stopping:
-        return
-      self._stopping = True
-      self._stop_deadline = time.monotonic() + _STOP_TIMEOUT
+    if self._stopping.is_set():
+      return
+    self._stop_deadline = time.monotonic() + _STOP_TIMEOUT
+    self._stopping.set()
     atexit.unregister(self.stop)
     for pointer in self._transfers:
       self._libusb.libusb_cancel_transfer(pointer)  # a completed one answers NOT_FOUND
     if self._thread.is_alive():
       self._thread.join(_STOP_TIMEOUT + 1.0)
-    with self._lock:
-      pending = self._pending
+    pending = self._pending
     if pending == 0:
       self._free_transfers()
     else:
       logger.warning("%d bulk-in transfers still pending after stop; left allocated", pending)
 
   def start(self) -> None:
-    """Allocate and submit the transfers, then start the event thread.
+    """Allocate and submit the transfers, then start the event thread; `wait` runs in the
+    running event loop.
 
     Raises:
+      RuntimeError: if no event loop is running.
       OSError: if no transfer could be allocated and submitted.
     """
+    self._loop = asyncio.get_running_loop()
     result = 0
     for _ in range(self._transfer_count):
       pointer = self._libusb.libusb_alloc_transfer(0)
@@ -225,6 +289,7 @@ class PendingReads:
         if result != 0:
           break
         self._pending += 1
+    self._pool = self._pending
     if self._pending == 0:
       self._free_transfers()
       raise OSError(f"no bulk-in transfer submitted (libusb {result})")

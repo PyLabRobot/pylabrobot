@@ -53,7 +53,7 @@ from .framing import (
   usb_wrap_payload,
 )
 from .parameter_table import PARAMETER_TABLE, REPLY_OFFSET
-from .pending_reads import PendingReads
+from .pending_reads import LATENCY_TIMER, PendingReads
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,6 @@ class CLARIOstarDriver:
   # inside a reply, over about 26,000 replies including measurement data, was 0.44 s.
   _FRAME_STALL_TIMEOUT = 2.0
   _FRAME_HARD_CAP = 60.0  # seconds; ceiling on reading one FTDI frame
-  _FRAME_POLL_INTERVAL = 0.001  # seconds between looks at what the pending reads received
   _USB_PACKET_TIMEOUT = 5  # seconds to wait for one USB packet
   _RETRY_SETTLE = 0.08  # seconds between send_command attempts
 
@@ -249,6 +248,7 @@ class CLARIOstarDriver:
     libftdi (`_ftdi_read_frame`).
 
     Not while capture or validation is active: their replay needs every read to pass `FTDI.read`.
+    The pending reads belong to the event loop that ran setup.
     """
     if get_capture_or_validation_active():
       logger.info("capture or validation active: reading with libftdi")
@@ -273,7 +273,7 @@ class CLARIOstarDriver:
     await self._ftdi.setup()
     await self._ftdi.set_baudrate(125000)
     await self._ftdi.set_line_property(8, 0, 0)  # 8N1
-    await self._ftdi.set_latency_timer(2)
+    await self._ftdi.set_latency_timer(LATENCY_TIMER)
     self._start_pending_reads()
 
   async def _ftdi_write(self, frame: bytes) -> None:
@@ -370,10 +370,11 @@ class CLARIOstarDriver:
   async def _ftdi_read_pending_frame(self, reads: PendingReads) -> bytes:
     """Read one FTDI reply frame from the pending reads, with `_ftdi_read_frame`'s rules.
 
-    Bytes before an STX are dropped and the size field ends the frame. ``_PACKET_READ_TIMEOUT``
-    bounds the wait for the header; after it, a silence of ``_FRAME_STALL_TIMEOUT`` or the
-    ``_FRAME_HARD_CAP``. Packets flagging a line error (an overrun loses bytes) are warned about.
-    The IO log gets one line per reply: every byte taken, dropped ones included.
+    Bytes before an STX are dropped and the size field ends the frame. It waits until the pending
+    reads receive bytes: ``_PACKET_READ_TIMEOUT`` bounds the wait for the header; after it, a
+    silence of ``_FRAME_STALL_TIMEOUT`` or the ``_FRAME_HARD_CAP``. Packets flagging a line error
+    (an overrun loses bytes) are warned about. The IO log gets one line per reply: every byte
+    taken, dropped ones included.
 
     Returns:
       The frame, possibly short of its size field on a stall; the caller validates it.
@@ -384,32 +385,35 @@ class CLARIOstarDriver:
     line_errors = 0
     start = time.time()
     last_data_time = start
-    while True:
-      chunk, errors = reads.take()
-      line_errors += errors
-      now = time.time()
-      if chunk:
-        received += chunk
-        data += chunk
-        last_data_time = now
+    try:
+      while True:
+        chunk, errors = reads.take()
+        line_errors += errors
+        now = time.time()
+        if chunk:
+          received += chunk
+          data += chunk
+          last_data_time = now
+          if expected_size is None:
+            index = data.find(FTDI_STX)
+            del data[: index if index != -1 else len(data)]
+            if len(data) >= 3:
+              expected_size = int.from_bytes(data[1:3], "big")
+              start = now
+          if expected_size is not None and len(data) >= expected_size:
+            break
+        elif not reads.running:
+          break
         if expected_size is None:
-          index = data.find(FTDI_STX)
-          del data[: index if index != -1 else len(data)]
-          if len(data) >= 3:
-            expected_size = int.from_bytes(data[1:3], "big")
-            start = now
-        if expected_size is not None and len(data) >= expected_size:
+          deadline = start + self._PACKET_READ_TIMEOUT
+        else:
+          deadline = min(last_data_time + self._FRAME_STALL_TIMEOUT, start + self._FRAME_HARD_CAP)
+        if now > deadline:
           break
-      elif not reads.running:
-        break
-      elif expected_size is None:
-        if now - start > self._PACKET_READ_TIMEOUT:
-          break
-      elif now - last_data_time > self._FRAME_STALL_TIMEOUT or now - start > self._FRAME_HARD_CAP:
-        break
-      await asyncio.sleep(self._FRAME_POLL_INTERVAL)
-    if received:
-      logger.log(LOG_LEVEL_IO, "[%s] read %s", self._ftdi.device_id, bytes(received))
+        await reads.wait(deadline - now)
+    finally:  # a cancelled read's bytes too
+      if received:
+        logger.log(LOG_LEVEL_IO, "[%s] read %s", self._ftdi.device_id, bytes(received))
     if line_errors:
       logger.warning("%d packets of this reply flagged a line error (bytes lost)", line_errors)
     if expected_size is not None and len(data) >= expected_size:
