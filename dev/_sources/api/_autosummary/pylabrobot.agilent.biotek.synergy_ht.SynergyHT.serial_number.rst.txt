@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.synergy\_ht.SynergyHT.serial\_number
+==============================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy_ht
+
+.. autoproperty:: SynergyHT.serial_number

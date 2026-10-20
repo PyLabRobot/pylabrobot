@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.results.LuminescenceResult
+====================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.results
+
+.. autoclass:: LuminescenceResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LuminescenceResult.data
+      ~LuminescenceResult.temperature
+      ~LuminescenceResult.timestamp
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LuminescenceResult.__init__
+   
+   

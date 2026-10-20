@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.synergy\_ht.SynergyHT.set\_temperature
+================================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy_ht
+
+.. automethod:: SynergyHT.set_temperature

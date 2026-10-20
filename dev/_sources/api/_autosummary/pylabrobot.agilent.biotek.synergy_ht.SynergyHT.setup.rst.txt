@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.synergy\_ht.SynergyHT.setup
+=====================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy_ht
+
+.. automethod:: SynergyHT.setup

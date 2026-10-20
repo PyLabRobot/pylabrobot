@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.cytation.Cytation5.get\_temperature
+=============================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.cytation
+
+.. automethod:: Cytation5.get_temperature

@@ -19,6 +19,7 @@ pylabrobot.agilent.biotek.cytation.Cytation5
       ~Cytation5.emission_range
       ~Cytation5.excitation_range
       ~Cytation5.focal_height_range
+      ~Cytation5.serial_number
       ~Cytation5.supports_active_cooling
       ~Cytation5.supports_cooling
       ~Cytation5.supports_heating
@@ -38,6 +39,7 @@ pylabrobot.agilent.biotek.cytation.Cytation5
       ~Cytation5.clear_plate
       ~Cytation5.close
       ~Cytation5.deactivate
+      ~Cytation5.get_temperature
       ~Cytation5.home
       ~Cytation5.open
       ~Cytation5.query_capability

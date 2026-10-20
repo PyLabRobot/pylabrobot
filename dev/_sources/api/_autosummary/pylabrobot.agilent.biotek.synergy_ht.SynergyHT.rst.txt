@@ -1,0 +1,46 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.synergy\_ht.SynergyHT
+===============================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy_ht
+
+.. autoclass:: SynergyHT
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SynergyHT.serial_number
+      ~SynergyHT.temperature_range
+      ~SynergyHT.version
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SynergyHT.__init__
+      ~SynergyHT.close
+      ~SynergyHT.get_temperature
+      ~SynergyHT.open
+      ~SynergyHT.query_capability
+      ~SynergyHT.read_absorbance
+      ~SynergyHT.request_current_temperature
+      ~SynergyHT.request_firmware_version
+      ~SynergyHT.request_serial_number
+      ~SynergyHT.send_command
+      ~SynergyHT.set_temperature
+      ~SynergyHT.setup
+      ~SynergyHT.stop
+      ~SynergyHT.stop_heating
+   
+   
