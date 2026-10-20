@@ -18,7 +18,6 @@ FilterMax F5
     InstrumentInfo
     FilterMaxStatus
     InstalledFilterSlides
-    PlateGeometry
     KineticTiming
     ShakingSettings
     WellScanSettings

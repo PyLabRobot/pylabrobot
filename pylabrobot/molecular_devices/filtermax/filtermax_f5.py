@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 import time
 from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional, Sequence, Tuple, TypeVar
 
 from pylabrobot.io.serial import Serial
+from pylabrobot.resources import Plate, Well
 
 from .catalog import FilterSlideCatalog
 from .errors import (
@@ -31,7 +33,7 @@ from .models import (
   InstrumentInfo,
   KineticTiming,
   LuminescenceResult,
-  PlateGeometry,
+  PlateOrientation,
   ShakePattern,
   ShakeSpeed,
   ShakingSettings,
@@ -49,7 +51,6 @@ _Result = TypeVar("_Result")
 _F5_DEVICE_CODE = 57855
 _STARTUP_BAUDRATES = (38400, 9600)
 _ERROR_RE = re.compile(r"^- E(?P<code>\d+):\s*(?P<detail>.*)$", re.DOTALL)
-_WELL_RE = re.compile(r"^(?P<row>[A-Z]+)(?P<column>[1-9]\d*)$")
 _SHAKE_WIRE: Dict[ShakePattern, Tuple[str, int]] = {
   "linear": ("X", 0),
   "orbital": ("O", 2),
@@ -381,21 +382,83 @@ class FilterMaxF5:
     return self.filter_slide_catalog
 
   @staticmethod
-  def _plate_command(plate: PlateGeometry, read_height: float) -> str:
-    """Encode physical geometry and read height in hundredths of a millimetre."""
+  def _plate_command(plate: Plate, read_height: float) -> str:
+    """Encode a regular Plate's local geometry in hundredths of a millimetre.
+
+    Well size_z is the cavity depth. Origins are well centers measured from the
+    plate's left and back edges, independent of its position on a deck.
+    """
+    if not math.isfinite(read_height) or read_height < 0:
+      raise ValueError("read_height must be finite and non-negative")
+    if plate.rotation.x or plate.rotation.y or plate.rotation.z:
+      raise ValueError("Use an unrotated Plate and select the measurement orientation")
+    columns, rows = plate.num_items_x, plate.num_items_y
+    if columns < 2 or not 2 <= rows <= 26:
+      raise ValueError("FilterMax requires at least 2 columns and between 2 and 26 rows")
+    if plate.num_items != columns * rows:
+      raise ValueError("FilterMax requires a complete rectangular well grid")
+    first = plate.get_well("A1")
+    next_column = plate.get_well("A2")
+    next_row = plate.get_well("B1")
+    if first.location is None or next_column.location is None or next_row.location is None:
+      raise ValueError("All wells must have a location relative to the plate")
+    center = first.location + first.get_anchor(x="c", y="c")
+    column_spacing = next_column.location.x - first.location.x
+    row_spacing = first.location.y - next_row.location.y
+    dimensions = (
+      plate.get_size_x(),
+      plate.get_size_y(),
+      plate.get_size_z(),
+      first.get_size_x(),
+      first.get_size_y(),
+      first.get_size_z(),
+      column_spacing,
+      row_spacing,
+    )
+    if any(not math.isfinite(value) or value <= 0 for value in dimensions):
+      raise ValueError("Plate dimensions, well dimensions, and well spacing must be positive")
+    for row in range(rows):
+      for column in range(columns):
+        well = plate.get_well((row, column))
+        if well.location is None:
+          raise ValueError("All wells must have a location relative to the plate")
+        actual = (
+          well.location.x,
+          well.location.y,
+          well.location.z,
+          well.get_size_x(),
+          well.get_size_y(),
+          well.get_size_z(),
+          well.rotation.x,
+          well.rotation.y,
+          well.rotation.z,
+        )
+        expected = (
+          first.location.x + column * column_spacing,
+          first.location.y - row * row_spacing,
+          first.location.z,
+          first.get_size_x(),
+          first.get_size_y(),
+          first.get_size_z(),
+          0,
+          0,
+          0,
+        )
+        if any(not math.isclose(a, b, rel_tol=0, abs_tol=1e-6) for a, b in zip(actual, expected)):
+          raise ValueError("FilterMax requires equally spaced, unrotated wells of equal size")
     values = (
-      _hundredths(plate.length),
-      _hundredths(plate.width),
-      _hundredths(plate.height),
-      _hundredths(plate.well_depth),
-      _hundredths(plate.left_column_offset),
-      _hundredths(plate.top_row_offset),
-      plate.columns,
-      plate.rows,
-      _hundredths(plate.column_spacing),
-      _hundredths(plate.row_spacing),
-      _hundredths(plate.well_size_x),
-      _hundredths(plate.well_size_y),
+      _hundredths(plate.get_size_x()),
+      _hundredths(plate.get_size_y()),
+      _hundredths(plate.get_size_z()),
+      _hundredths(first.get_size_z()),
+      _hundredths(center.x),
+      _hundredths(plate.get_size_y() - center.y),
+      columns,
+      rows,
+      _hundredths(column_spacing),
+      _hundredths(row_spacing),
+      _hundredths(first.get_size_x()),
+      _hundredths(first.get_size_y()),
       0,
       300,
       0,
@@ -424,34 +487,26 @@ class FilterMaxF5:
       raise ValueError("FilterMax driver currently supports plate rows A-Z")
     return chr(ord("A") + index)
 
-  @classmethod
+  @staticmethod
   def _normalize_wells(
-    cls,
-    wells: Optional[Sequence[str]],
-    plate: PlateGeometry,
+    wells: Optional[Sequence[Well]],
+    plate: Plate,
   ) -> Tuple[Tuple[str, ...], int, int]:
-    """Validate well names and return the inclusive hardware row span."""
-    if wells is None:
-      normalized = tuple(
-        f"{cls._row_name(row)}{column + 1}"
-        for row in range(plate.rows)
-        for column in range(plate.columns)
-      )
-    else:
-      normalized = tuple(dict.fromkeys(well.upper() for well in wells))
-      if not normalized:
-        raise ValueError("wells must not be empty")
+    """Validate resource membership and return names and the hardware row span."""
+    selected = plate.get_all_items() if wells is None else wells
+    if not selected:
+      raise ValueError("wells must not be empty")
+    names = []
     row_indices = []
-    for well in normalized:
-      match = _WELL_RE.match(well)
-      if match is None or len(match.group("row")) != 1:
-        raise ValueError(f"Invalid well name {well!r}")
-      row = ord(match.group("row")) - ord("A")
-      column = int(match.group("column")) - 1
-      if not 0 <= row < plate.rows or not 0 <= column < plate.columns:
-        raise ValueError(f"Well {well!r} is outside the {plate.rows}x{plate.columns} plate")
-      row_indices.append(row)
-    return normalized, min(row_indices), max(row_indices)
+    for well in selected:
+      if not isinstance(well, Well) or well.parent is not plate:
+        raise ValueError("All wells must be Well resources belonging to the supplied Plate")
+      name = plate.get_child_identifier(well)
+      if plate.get_well(name) is not well:
+        raise ValueError("All wells must be Well resources belonging to the supplied Plate")
+      names.append(name)
+      row_indices.append(plate.get_child_row(well))
+    return tuple(dict.fromkeys(names)), min(row_indices), max(row_indices)
 
   @staticmethod
   def _parse_values(payload: str) -> List[float]:
@@ -491,11 +546,11 @@ class FilterMaxF5:
 
   async def _prepare_measurement(
     self,
-    plate: PlateGeometry,
+    plate_command: str,
     *,
     kind: FilterKind,
     slide_id: int,
-    read_height: float,
+    orientation: PlateOrientation,
     shaking: Optional[ShakingSettings],
   ) -> None:
     """Configure a measurement with cancellation checks between complete commands."""
@@ -516,9 +571,9 @@ class FilterMaxF5:
         duration=shaking.duration,
       )
     self._check_cancelled()
-    await self._command(self._plate_command(plate, read_height), timeout=10)
+    await self._command(plate_command, timeout=10)
     self._check_cancelled()
-    if plate.orientation == "portrait":
+    if orientation == "portrait":
       await self._command("SHIFT", timeout=10)
       self._check_cancelled()
     await self._send_filter_catalog(kind, slide_id)
@@ -546,10 +601,12 @@ class FilterMaxF5:
 
   async def _read_absorbance(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     wavelength: int,
     *,
-    wells: Optional[Sequence[str]] = None,
+    read_height: float,
+    orientation: PlateOrientation = "landscape",
+    wells: Optional[Sequence[Well]] = None,
     reference_wavelength: Optional[int] = None,
     slide_id: Optional[int] = None,
     filter_position: Optional[int] = None,
@@ -559,6 +616,9 @@ class FilterMaxF5:
     well_scan: Optional[WellScanSettings] = None,
   ) -> List[AbsorbanceResult]:
     """Measure and parse absorbance under exclusive operation ownership."""
+    plate_command = self._plate_command(plate, read_height)
+    if orientation not in ("landscape", "portrait"):
+      raise ValueError(f"Unsupported FilterMax orientation {orientation!r}")
     catalog = self._require_catalog()
     primary = catalog.resolve(
       kind="excitation",
@@ -590,10 +650,10 @@ class FilterMaxF5:
     completed = False
     try:
       await self._prepare_measurement(
-        plate,
+        plate_command,
         kind="excitation",
         slide_id=primary.slide_id,
-        read_height=plate.absorbance_z,
+        orientation=orientation,
         shaking=shaking,
       )
       kinetic_started = time.monotonic()
@@ -622,7 +682,7 @@ class FilterMaxF5:
           if reference is not None
           else f"1 {primary.wavelength}"
         )
-        orientation_code = 4 if plate.orientation == "portrait" else 3
+        orientation_code = 4 if orientation == "portrait" else 3
         command = (
           f"ABS {mode} {wavelengths} {first_row + 1} {last_row + 1} "
           f"{grid_x} {grid_y} {scan_code} 0 0 0 0 {orientation_code} 1 "
@@ -637,22 +697,22 @@ class FilterMaxF5:
           final_cycle=final_cycle,
         )
         data_messages = messages[:-1] if final_cycle else messages
-        data = empty_plate_data(plate.rows, plate.columns)
+        data = empty_plate_data(plate.num_items_y, plate.num_items_x)
         scan_points: Dict[str, Tuple[WellScanPoint, ...]] = {}
         for row_offset in range(row_count):
           row = first_row + row_offset
-          raw_values_by_column: List[List[float]] = [[] for _ in range(plate.columns)]
+          raw_values_by_column: List[List[float]] = [[] for _ in range(plate.num_items_x)]
           for scan_y in range(grid_y):
             message = data_messages[row_offset * grid_y + scan_y]
             values = self._parse_values(message.payload)
-            expected = plate.columns * grid_x
+            expected = plate.num_items_x * grid_x
             if len(values) != expected:
               raise FilterMaxProtocolError(
                 f"Expected {expected} absorbance values for row {row + 1}, got {len(values)}"
               )
-            for column in range(plate.columns):
+            for column in range(plate.num_items_x):
               raw_values_by_column[column].extend(values[column * grid_x : (column + 1) * grid_x])
-          for column in range(plate.columns):
+          for column in range(plate.num_items_x):
             well = f"{self._row_name(row)}{column + 1}"
             raw_points = raw_values_by_column[column]
             converted = [raw_points[index] / 1000 for index, _, _ in scan_layout]
@@ -689,19 +749,21 @@ class FilterMaxF5:
 
   async def _read_luminescence(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     *,
-    wells: Optional[Sequence[str]] = None,
+    wells: Optional[Sequence[Well]] = None,
     channels: int = 1,
     slide_id: Optional[int] = None,
     filter_position: Optional[int] = None,
     integration: float = 0.4,
     read_height: float = 1.0,
+    orientation: PlateOrientation = "landscape",
     kinetic: Optional[KineticTiming] = None,
     shaking: Optional[ShakingSettings] = None,
   ) -> List[LuminescenceResult]:
     """Measure and parse luminescence under exclusive operation ownership."""
-    if plate.orientation != "landscape":
+    plate_command = self._plate_command(plate, read_height)
+    if orientation != "landscape":
       raise FilterMaxUnsupportedOperationError(
         "Portrait orientation has been captured only for absorbance measurements"
       )
@@ -727,10 +789,10 @@ class FilterMaxF5:
     completed = False
     try:
       await self._prepare_measurement(
-        plate,
+        plate_command,
         kind="emission",
         slide_id=lum_filter.slide_id,
-        read_height=read_height,
+        orientation=orientation,
         shaking=shaking,
       )
       kinetic_started = time.monotonic()
@@ -760,13 +822,13 @@ class FilterMaxF5:
         )
         data_messages = messages[:-1] if final_cycle else messages
         for channel in range(channels):
-          data = empty_plate_data(plate.rows, plate.columns)
+          data = empty_plate_data(plate.num_items_y, plate.num_items_x)
           for row_offset in range(row_count):
             message = data_messages[channel * row_count + row_offset]
             values = self._parse_values(message.payload)
-            if len(values) != plate.columns:
+            if len(values) != plate.num_items_x:
               raise FilterMaxProtocolError(
-                f"Expected {plate.columns} luminescence values, got {len(values)}"
+                f"Expected {plate.num_items_x} luminescence values, got {len(values)}"
               )
             row = first_row + row_offset
             for column, value in enumerate(values):
@@ -830,7 +892,7 @@ class FilterMaxF5:
 
   async def _read_fluorescence(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     excitation_wavelength: int,
     emission_wavelength: int,
     *,
@@ -850,7 +912,7 @@ class FilterMaxF5:
 
   async def _read_time_resolved_fluorescence(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     excitation_wavelength: int,
     emission_wavelength: int,
     *,
@@ -870,7 +932,7 @@ class FilterMaxF5:
 
   async def _read_fluorescence_polarization(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     excitation_wavelength: int,
     emission_wavelength: int,
     *,
@@ -1017,10 +1079,12 @@ class FilterMaxF5:
 
   async def read_absorbance(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     wavelength: int,
     *,
-    wells: Optional[Sequence[str]] = None,
+    read_height: float,
+    orientation: PlateOrientation = "landscape",
+    wells: Optional[Sequence[Well]] = None,
     reference_wavelength: Optional[int] = None,
     slide_id: Optional[int] = None,
     filter_position: Optional[int] = None,
@@ -1031,7 +1095,13 @@ class FilterMaxF5:
   ) -> List[AbsorbanceResult]:
     """Queue absorbance measurements and eject the tray when finished.
 
-    Wavelengths are in nm, plate dimensions in mm, and kinetic intervals in seconds.
+    Pass an unrotated Plate with a regular grid and optional Well resources from
+    that plate. Geometry is derived from the resource's dimensions and local well
+    positions. read_height is the instrument's optical height in mm and must be
+    supplied for the loaded plate; the captured Costar configuration used 10.27.
+    orientation selects the reader's landscape or portrait scan mode without
+    changing the resource or the row/column indexing of results.
+    Wavelengths are in nm and kinetic intervals in seconds.
     Each result contains row-major optical densities, with unselected wells set to None.
     Hardware reads complete rows; wells only masks the returned data. A reference
     wavelength requests firmware subtraction. Scan values retain integer grid indices.
@@ -1049,25 +1119,30 @@ class FilterMaxF5:
         kinetic=kinetic,
         shaking=shaking,
         well_scan=well_scan,
+        read_height=read_height,
+        orientation=orientation,
       ),
       kind="read",
     )
 
   async def read_luminescence(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     *,
-    wells: Optional[Sequence[str]] = None,
+    wells: Optional[Sequence[Well]] = None,
     channels: int = 1,
     slide_id: Optional[int] = None,
     filter_position: Optional[int] = None,
     integration: float = 0.4,
     read_height: float = 1.0,
+    orientation: PlateOrientation = "landscape",
     kinetic: Optional[KineticTiming] = None,
     shaking: Optional[ShakingSettings] = None,
   ) -> List[LuminescenceResult]:
     """Queue luminescence measurements and eject the tray when finished.
 
+    Pass an unrotated Plate with a regular grid and optional Well resources from
+    that plate. Only landscape orientation is supported for luminescence.
     integration and kinetic intervals are seconds; read_height is in mm. Results
     contain row-major raw RLU and one-based channels, ordered by cycle then channel.
     Hardware reads complete rows; unselected wells are None in the returned data.
@@ -1082,6 +1157,7 @@ class FilterMaxF5:
         filter_position=filter_position,
         integration=integration,
         read_height=read_height,
+        orientation=orientation,
         kinetic=kinetic,
         shaking=shaking,
       ),
@@ -1090,7 +1166,7 @@ class FilterMaxF5:
 
   async def read_fluorescence(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     excitation_wavelength: int,
     emission_wavelength: int,
     *,
@@ -1110,7 +1186,7 @@ class FilterMaxF5:
 
   async def read_time_resolved_fluorescence(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     excitation_wavelength: int,
     emission_wavelength: int,
     *,
@@ -1130,7 +1206,7 @@ class FilterMaxF5:
 
   async def read_fluorescence_polarization(
     self,
-    plate: PlateGeometry,
+    plate: Plate,
     excitation_wavelength: int,
     emission_wavelength: int,
     *,

@@ -96,6 +96,17 @@ SF A 2 260 12 1 340 10 1 405 10 1 450 8 1 595 8 1 620 8 1
 SF B 1 595 35 2 535 25 2 535 25 4 535 25 4 625 35 10 0 0 16
 ```
 
+Measurements accept a `pylabrobot.resources.Plate` and optional `Well` resources belonging to
+that plate. The `PLATE` command derives its dimensions, well count, center offsets, pitch, and
+well dimensions from the resource. Well `size_z` supplies the physical cavity depth. Coordinates
+are local to the plate, so placing it on a deck does not change the command. The plate must have
+an unrotated, complete rectangular grid of equally spaced, equal-size wells.
+
+Absorbance requires an explicit `read_height` in millimetres; the captured geometry above used
+`read_height=10.27`. This is an optical setting, not inferred from plate height or well depth.
+Luminescence retains its 1 mm default. Pass `orientation="portrait"` to select the captured
+absorbance scan mode, keeping the resource unrotated and result indices in canonical plate order.
+
 ## Reads
 
 | Captured operation | Exact read payload | Result shape |
@@ -115,7 +126,7 @@ SF B 1 595 35 2 535 25 2 535 25 4 535 25 4 625 35 10 0 0 16
 Scan results expose zero-based `grid_column` and `grid_row` indices, not physical coordinates.
 Horizontal scans use grid row zero. Fill scans preserve the full square-grid indices after
 applying the circular mask. Physical point spacing has not been verified and is not configurable.
-Plate geometry uses millimetres, including the `well_depth` field.
+Plate and well dimensions use millimetres, including the well's `size_z` cavity depth.
 
 Absorbance values are returned in milli-OD and converted to OD. Luminescence values remain raw RLU.
 SoftMax exposed only row-order reads, only horizontal/fill well scans, and one absorbance wavelength

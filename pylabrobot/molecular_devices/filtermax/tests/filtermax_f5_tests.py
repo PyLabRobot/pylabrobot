@@ -1,11 +1,11 @@
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.molecular_devices.filtermax import (
   FilterMaxF5,
   FilterSlideCatalog,
   KineticTiming,
-  PlateGeometry,
   WellScanSettings,
 )
 from pylabrobot.molecular_devices.filtermax.errors import (
@@ -23,6 +23,37 @@ from pylabrobot.molecular_devices.filtermax.protocol import (
   FilterMaxTransport,
   build_frame,
 )
+from pylabrobot.resources import (
+  Coordinate,
+  Plate,
+  Resource,
+  Well,
+  cor_96_wellplate_360uL_Fb,
+  create_ordered_items_2d,
+)
+
+
+def make_plate() -> Plate:
+  """Represent the captured Costar dimensions with ordinary PLR resources."""
+  return Plate(
+    name="costar",
+    size_x=127.70,
+    size_y=85.70,
+    size_z=14.27,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.85,
+      dy=8.32,
+      dz=0,
+      item_dx=9.02,
+      item_dy=9.00,
+      size_x=6.40,
+      size_y=6.40,
+      size_z=10.69,
+    ),
+  )
 
 
 def device_message(payload: str) -> bytes:
@@ -68,6 +99,7 @@ def host_payloads(io: FakeSerial):
 
 class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
   def setUp(self) -> None:
+    self.plate = make_plate()
     self.catalog = FilterSlideCatalog.from_softmax_xml(
       Path(__file__).with_name("filtermax_slides.xml")
     )
@@ -78,6 +110,121 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     driver.io = io  # type: ignore[assignment]
     driver._transport = FilterMaxTransport(io)  # type: ignore[arg-type]
     return driver, io
+
+  def test_library_plate_geometry_is_local_to_plate(self) -> None:
+    """Use library well centers and depth, unaffected by deck placement."""
+    plate = cor_96_wellplate_360uL_Fb("library_plate")
+    deck = Resource("deck", size_x=500, size_y=500, size_z=100)
+    deck.assign_child_resource(plate, location=Coordinate(200, 100, 50))
+    self.assertEqual(
+      FilterMaxF5._plate_command(plate, read_height=7.5),
+      "PLATE Temp 12776 8548 1420 1067 1430 1128 12 8 900 900 686 686 0 300 0 750 1 1",
+    )
+
+  async def test_custom_plate_shape_spacing_and_well_selection(self) -> None:
+    """Encode asymmetric geometry and mask selected wells in a non-96-well plate."""
+    plate = Plate(
+      "custom",
+      size_x=100,
+      size_y=60,
+      size_z=20,
+      ordered_items=create_ordered_items_2d(
+        Well,
+        num_items_x=3,
+        num_items_y=2,
+        dx=12,
+        dy=8,
+        dz=2,
+        item_dx=20,
+        item_dy=25,
+        size_x=10,
+        size_y=6,
+        size_z=15,
+        cross_section_type="rectangle",
+      ),
+    )
+    incoming = b"".join(
+      (
+        exchange_response("+ 2 1"),
+        exchange_response("+"),
+        exchange_response("+"),
+        exchange_response("+"),
+        measurement_response("+ 100 200 300", "+ 400 500 600", "+ INFO"),
+        exchange_response("+ 25"),
+        exchange_response("+"),
+      )
+    )
+    driver, io = self.make_driver(incoming)
+    result = await driver.read_absorbance(
+      plate,
+      450,
+      wells=[plate.get_well("B3"), plate.get_well("A2"), plate.get_well("B3")],
+      read_height=8.75,
+    )
+    self.assertEqual(result[0].data, [[None, 0.2, None], [None, None, 0.6]])
+    self.assertIn(
+      "PLATE Temp 10000 6000 2000 1500 1700 2400 3 2 2000 2500 1000 600 0 300 0 875 1 1",
+      host_payloads(io),
+    )
+    self.assertIn("ABS 0 1 450 1 2 1 1 0 0 0 0 0 3 1 1 0 O e INFO", host_payloads(io))
+
+  async def test_invalid_geometry_is_rejected_before_io(self) -> None:
+    """Do not transmit geometry the single regular-grid command cannot represent."""
+    missing_location = make_plate()
+    missing_location.get_well("A1").location = None
+    irregular = make_plate()
+    irregular.get_well("C4").location = Coordinate(42, 52, 0)
+    rotated = make_plate()
+    rotated.rotate(z=90)
+    unequal = make_plate()
+    unequal.get_well("D5").rotate(z=90)
+    for plate in (missing_location, irregular, rotated, unequal):
+      for mode in ("absorbance", "luminescence"):
+        with self.subTest(plate=plate, mode=mode):
+          driver, _ = self.make_driver(b"")
+          with patch.object(driver._transport, "exchange", new_callable=AsyncMock) as exchange:
+            with self.assertRaises(ValueError):
+              if mode == "absorbance":
+                await driver.read_absorbance(plate, 450, read_height=10.27)
+              else:
+                await driver.read_luminescence(plate)
+            exchange.assert_not_awaited()
+
+  async def test_foreign_wells_and_empty_selection_are_rejected_before_io(self) -> None:
+    """Same-named wells from another plate cannot select this plate's wells."""
+    other = make_plate()
+    for wells in ([], [other.get_well("C4")], ["C4"]):
+      for mode in ("absorbance", "luminescence"):
+        with self.subTest(wells=wells, mode=mode):
+          driver, _ = self.make_driver(b"")
+          with patch.object(driver._transport, "exchange", new_callable=AsyncMock) as exchange:
+            with self.assertRaises(ValueError):
+              if mode == "absorbance":
+                await driver.read_absorbance(
+                  self.plate,
+                  450,
+                  wells=wells,  # type: ignore[arg-type]
+                  read_height=10.27,
+                )
+              else:
+                await driver.read_luminescence(self.plate, wells=wells)  # type: ignore[arg-type]
+            exchange.assert_not_awaited()
+
+  async def test_invalid_read_settings_are_rejected_before_io(self) -> None:
+    """Reject non-finite heights and unknown orientations without moving hardware."""
+    driver, _ = self.make_driver(b"")
+    with patch.object(driver._transport, "exchange", new_callable=AsyncMock) as exchange:
+      for height in (-1, float("nan"), float("inf")):
+        with self.subTest(read_height=height), self.assertRaises(ValueError):
+          await driver.read_absorbance(self.plate, 450, read_height=height)
+      with self.assertRaises(ValueError):
+        await driver.read_absorbance(
+          self.plate,
+          450,
+          read_height=10.27,
+          orientation="invalid",  # type: ignore[arg-type]
+        )
+      exchange.assert_not_awaited()
 
   async def test_setup_verifies_captured_f5_identity(self) -> None:
     identity = (
@@ -166,7 +313,7 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     )
     driver, io = self.make_driver(incoming)
     results = await driver.read_absorbance(
-      PlateGeometry.costar_96_clear_landscape(), 450, wells=["C4"]
+      self.plate, 450, wells=[self.plate.get_well("C4")], read_height=10.27
     )
     self.assertEqual(len(results), 1)
     value = results[0].data[2][3]
@@ -200,10 +347,7 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     )
     driver, io = self.make_driver(incoming)
     result = (
-      await driver.read_absorbance(
-        PlateGeometry.costar_96_clear_portrait(),
-        450,
-      )
+      await driver.read_absorbance(self.plate, 450, read_height=10.27, orientation="portrait")
     )[0]
 
     self.assertEqual((len(result.data), len(result.data[0])), (8, 12))
@@ -237,10 +381,11 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     driver, _ = self.make_driver(incoming)
     result = (
       await driver.read_absorbance(
-        PlateGeometry.costar_96_clear_landscape(),
+        self.plate,
         450,
-        wells=["C4"],
+        wells=[self.plate.get_well("C4")],
         well_scan=WellScanSettings(pattern="fill", density=5),
+        read_height=10.27,
       )
     )[0]
     self.assertEqual(len(result.scan_points["C4"]), 21)
@@ -272,10 +417,11 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     driver, _ = self.make_driver(incoming)
     result = (
       await driver.read_absorbance(
-        PlateGeometry.costar_96_clear_landscape(),
+        self.plate,
         450,
-        wells=["A2"],
+        wells=[self.plate.get_well("A2")],
         well_scan=WellScanSettings(pattern="horizontal", density=3),
+        read_height=10.27,
       )
     )[0]
     self.assertEqual(
@@ -307,10 +453,11 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     )
     driver, io = self.make_driver(incoming)
     results = await driver.read_absorbance(
-      PlateGeometry.costar_96_clear_landscape(),
+      self.plate,
       450,
-      wells=["C4"],
+      wells=[self.plate.get_well("C4")],
       kinetic=KineticTiming(interval=0.001, reads=3),
+      read_height=10.27,
     )
     self.assertEqual(len(results), 3)
     self.assertEqual([result.elapsed_time for result in results], [0.0, 0.001, 0.002])
@@ -336,8 +483,8 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     )
     driver, io = self.make_driver(incoming)
     results = await driver.read_luminescence(
-      PlateGeometry.costar_96_clear_landscape(),
-      wells=["C4"],
+      self.plate,
+      wells=[self.plate.get_well("C4")],
       kinetic=KineticTiming(interval=0.001, reads=3),
     )
     self.assertEqual(len(results), 3)
@@ -359,9 +506,7 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     driver, io = self.make_driver(incoming)
     with self.assertRaisesRegex(FilterMaxProtocolError, "Expected 12 absorbance values"):
       await driver.read_absorbance(
-        PlateGeometry.costar_96_clear_landscape(),
-        450,
-        wells=["C4"],
+        self.plate, 450, wells=[self.plate.get_well("C4")], read_height=10.27
       )
     self.assertEqual(host_payloads(io)[-1], "E P")
     self.assertNotIn("STOP", host_payloads(io))
@@ -381,10 +526,11 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     driver, _ = self.make_driver(incoming)
     with self.assertRaisesRegex(FilterMaxDeviceError, "E62"):
       await driver.read_absorbance(
-        PlateGeometry.costar_96_clear_landscape(),
+        self.plate,
         450,
-        wells=["C4"],
+        wells=[self.plate.get_well("C4")],
         reference_wavelength=595,
+        read_height=10.27,
       )
     errors = await driver.get_error_log()
     self.assertEqual(
@@ -409,7 +555,7 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     )
     driver, io = self.make_driver(incoming)
     results = await driver.read_luminescence(
-      PlateGeometry.costar_96_clear_landscape(), wells=["C4"], channels=2
+      self.plate, wells=[self.plate.get_well("C4")], channels=2
     )
     self.assertEqual([result.data[2][3] for result in results], [3, 23])
     self.assertIn(
@@ -424,14 +570,14 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
   async def test_portrait_luminescence_is_rejected_before_transmission(self) -> None:
     driver, io = self.make_driver(b"")
     with self.assertRaisesRegex(FilterMaxUnsupportedOperationError, "only for absorbance"):
-      await driver.read_luminescence(PlateGeometry.costar_96_clear_portrait())
+      await driver.read_luminescence(self.plate, orientation="portrait")
     self.assertEqual(io.writes, [])
 
   async def test_missing_excitation_slide_blocks_fluorescence(self) -> None:
     driver, io = self.make_driver(exchange_response("+ 2 1"))
     with self.assertRaises(FilterMaxSlideNotInstalledError):
       await driver.read_fluorescence(
-        PlateGeometry.costar_96_clear_landscape(),
+        self.plate,
         excitation_wavelength=485,
         emission_wavelength=535,
       )
@@ -443,5 +589,5 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     driver.io = io  # type: ignore[assignment]
     driver._transport = FilterMaxTransport(io)  # type: ignore[arg-type]
     with self.assertRaises(FilterMaxCatalogError):
-      await driver.read_absorbance(PlateGeometry.costar_96_clear_landscape(), 450)
+      await driver.read_absorbance(self.plate, 450, read_height=10.27)
     self.assertEqual(io.writes, [])

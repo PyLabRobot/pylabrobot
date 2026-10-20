@@ -11,7 +11,6 @@ from pylabrobot.molecular_devices.filtermax import (
   FilterMaxTimeoutError,
   FilterSlideCatalog,
   KineticTiming,
-  PlateGeometry,
 )
 from pylabrobot.molecular_devices.filtermax.protocol import (
   ACK,
@@ -25,6 +24,7 @@ from pylabrobot.molecular_devices.filtermax.tests.filtermax_f5_tests import (
   device_message,
   exchange_response,
   host_payloads,
+  make_plate,
   measurement_response,
 )
 
@@ -72,6 +72,10 @@ class PausingSerial(FakeSerial):
 class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
   """Test public APIs without creating a hardware connection."""
 
+  def setUp(self) -> None:
+    """Use the captured plate as a PLR resource."""
+    self.plate = make_plate()
+
   def make_driver(self, io: PausingSerial) -> FilterMaxF5:
     """Attach the byte-level serial double to the production transport."""
     catalog = FilterSlideCatalog.from_softmax_xml(Path(__file__).with_name("filtermax_slides.xml"))
@@ -89,7 +93,7 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
     )
     reader = self.make_driver(io)
     read = asyncio.create_task(
-      reader.read_absorbance(PlateGeometry.costar_96_clear_landscape(), 450, wells=["A1"])
+      reader.read_absorbance(self.plate, 450, wells=[self.plate.get_well("A1")], read_height=10.27)
     )
     await asyncio.wait_for(io.paused.wait(), 1)
     query = asyncio.create_task(reader.get_temperature())
@@ -122,11 +126,18 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
             prefix + message + RECOVERY, pause_at=len(prefix) + offset, empty_on_resume=empty
           )
           reader = self.make_driver(io)
-          plate = PlateGeometry.costar_96_clear_landscape()
+          plate = self.plate
           read = asyncio.create_task(
-            reader.read_absorbance(plate, 450, wells=["A1", "B1"])
+            reader.read_absorbance(
+              plate,
+              450,
+              wells=[self.plate.get_well("A1"), self.plate.get_well("B1")],
+              read_height=10.27,
+            )
             if mode == "absorbance"
-            else reader.read_luminescence(plate, wells=["A1", "B1"])
+            else reader.read_luminescence(
+              plate, wells=[self.plate.get_well("A1"), self.plate.get_well("B1")]
+            )
           )
           await asyncio.wait_for(io.paused.wait(), 1)
           cancellations = [asyncio.create_task(reader.cancel_read()) for _ in range(2)]
@@ -148,7 +159,7 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
     io = PausingSerial(slides + exchange_response("+ 6512"), pause_at=len(slides) - 1)
     reader = self.make_driver(io)
     read = asyncio.create_task(
-      reader.read_absorbance(PlateGeometry.costar_96_clear_landscape(), 450, wells=["A1"])
+      reader.read_absorbance(self.plate, 450, wells=[self.plate.get_well("A1")], read_height=10.27)
     )
     await asyncio.wait_for(io.paused.wait(), 1)
     cancel = asyncio.create_task(reader.cancel_read())
@@ -181,12 +192,16 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
             await original_wait(target)
 
           with patch.object(reader, "_wait_until", side_effect=wait_at_cycle):
-            plate = PlateGeometry.costar_96_clear_landscape()
+            plate = self.plate
             timing = KineticTiming(interval=interval, reads=3)
             read = asyncio.create_task(
-              reader.read_absorbance(plate, 450, wells=["A1"], kinetic=timing)
+              reader.read_absorbance(
+                plate, 450, wells=[self.plate.get_well("A1")], kinetic=timing, read_height=10.27
+              )
               if mode == "absorbance"
-              else reader.read_luminescence(plate, wells=["A1"], kinetic=timing)
+              else reader.read_luminescence(
+                plate, wells=[self.plate.get_well("A1")], kinetic=timing
+              )
             )
             await asyncio.wait_for(waiting.wait(), 1)
             cancel = asyncio.create_task(reader.cancel_read())
@@ -208,7 +223,12 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
     )
     reader = self.make_driver(io)
     read = asyncio.create_task(
-      reader.read_absorbance(PlateGeometry.costar_96_clear_landscape(), 450, wells=["A1", "B1"])
+      reader.read_absorbance(
+        self.plate,
+        450,
+        wells=[self.plate.get_well("A1"), self.plate.get_well("B1")],
+        read_height=10.27,
+      )
     )
     await asyncio.wait_for(io.paused.wait(), 1)
     query = asyncio.create_task(reader.get_temperature())
@@ -231,7 +251,9 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
     io = PausingSerial(prefix + message + RECOVERY, pause_at=len(prefix) + 10)
     reader = self.make_driver(io)
     read = asyncio.create_task(
-      reader.read_luminescence(PlateGeometry.costar_96_clear_landscape(), wells=["A1", "B1"])
+      reader.read_luminescence(
+        self.plate, wells=[self.plate.get_well("A1"), self.plate.get_well("B1")]
+      )
     )
     await asyncio.wait_for(io.paused.wait(), 1)
     stop = asyncio.create_task(reader.stop())
@@ -274,7 +296,7 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
     )
     reader = self.make_driver(io)
     read = asyncio.create_task(
-      reader.read_absorbance(PlateGeometry.costar_96_clear_landscape(), 450, wells=["A1"])
+      reader.read_absorbance(self.plate, 450, wells=[self.plate.get_well("A1")], read_height=10.27)
     )
     await asyncio.wait_for(io.paused.wait(), 1)
     cancel = asyncio.create_task(reader.cancel_read())
@@ -341,7 +363,7 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
     io = PausingSerial(read_response + exchange_response("+ 6512"), pause_at=len(read_response) - 1)
     reader = self.make_driver(io)
     read = asyncio.create_task(
-      reader.read_absorbance(PlateGeometry.costar_96_clear_landscape(), 450, wells=["A1"])
+      reader.read_absorbance(self.plate, 450, wells=[self.plate.get_well("A1")], read_height=10.27)
     )
     await asyncio.wait_for(io.paused.wait(), 1)
     cancel = asyncio.create_task(reader.cancel_read())

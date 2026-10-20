@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, patch
 from pylabrobot.molecular_devices.filtermax import (
   FilterMaxF5,
   FilterMaxReadCancelled,
-  PlateGeometry,
 )
+from pylabrobot.resources import Plate
 
 NOTEBOOK = (
   Path(__file__).resolve().parents[4]
@@ -36,7 +36,7 @@ class HelloWorldTests(unittest.IsolatedAsyncioTestCase):
     cancelled = asyncio.Event()
     real_sleep = asyncio.sleep
 
-    async def read_absorbance(plate: PlateGeometry, **kwargs: Any) -> list:
+    async def read_absorbance(plate: Plate, *, read_height: float, **kwargs: Any) -> list:
       """Keep the cancellation example active until it receives a cancel request."""
       kinetic = kwargs.get("kinetic")
       if kinetic is not None and kinetic.reads == 10:
@@ -116,7 +116,10 @@ class HelloWorldTests(unittest.IsolatedAsyncioTestCase):
         if index == 0:
           self.assertNotIn("wells", measurement.call_args.kwargs)
         else:
-          self.assertEqual(measurement.call_args.kwargs["wells"], ["C4", "C5"])
+          self.assertEqual(
+            measurement.call_args.kwargs["wells"],
+            [measurement.call_args.args[0].get_well(name) for name in ("C4", "C5")],
+          )
         if index == 6:
           reader.cancel_read.assert_awaited_once()
         else:
@@ -161,8 +164,14 @@ class HelloWorldTests(unittest.IsolatedAsyncioTestCase):
     )
     reader.read_absorbance.assert_awaited_once()
     reader.read_luminescence.assert_awaited_once()
-    self.assertEqual(reader.read_absorbance.call_args.kwargs["wells"], ["C4", "C5"])
-    self.assertEqual(reader.read_luminescence.call_args.kwargs["wells"], ["D6"])
+    self.assertEqual(
+      reader.read_absorbance.call_args.kwargs["wells"],
+      [reader.read_absorbance.call_args.args[0].get_well(name) for name in ["C4", "C5"]],
+    )
+    self.assertEqual(
+      reader.read_luminescence.call_args.kwargs["wells"],
+      [reader.read_luminescence.call_args.args[0].get_well(name) for name in ["D6"]],
+    )
 
   async def test_invalid_wells_stop_without_reading_or_reprompting(self) -> None:
     """Empty and invalid settings fail before a read instead of looping on stdin."""
