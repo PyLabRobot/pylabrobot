@@ -205,7 +205,7 @@ async def test_setup_and_idempotent_lifecycle(reader):
   with pytest.raises(RuntimeError, match="Firmware version is not set"):
     _ = device.version
   replay = attach(io, setup_events() * 2, 1)
-  with TestCase().assertLogs(SynergyHT.__module__, level="WARNING") as logs:
+  with TestCase().assertNoLogs(SynergyHT.__module__, level="WARNING"):
     await device.setup()
     await device.setup()
   assert not replay.events
@@ -219,7 +219,6 @@ async def test_setup_and_idempotent_lifecycle(reader):
   io.set_latency_timer.assert_awaited_with(16)
   io.set_rts.assert_awaited_with(True)
   io.set_dtr.assert_awaited_with(False)
-  assert any("not been verified on hardware" in message for message in logs.output)
   await device.stop()
   await device.stop()
   assert io.stop.await_count == 2

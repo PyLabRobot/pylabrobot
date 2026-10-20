@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 class SynergyHT(_BioTekReader):
   """BioTek Synergy HT using its legacy serial protocol.
 
-  This driver has offline coverage for basecode 7090202, firmware 2.24. Other
+  This driver is verified on hardware with basecode 7090202, firmware 2.24. Other
   basecodes and devices lacking the required protocol capabilities are rejected.
-  Hardware verification is pending. Shaking is supported before an absorbance read.
+  Shaking is supported before an absorbance read.
   Fluorescence, luminescence, standalone shaking, kinetics, and custom plate
   geometries are not implemented.
 
@@ -100,10 +100,6 @@ class SynergyHT(_BioTekReader):
 
   async def _initialize_reader(self) -> None:
     """Verify the legacy protocol profile and enable asynchronous result status."""
-    logger.warning(
-      "Synergy HT has not been verified on hardware. Please report successful hardware "
-      "verification so this warning can be removed."
-    )
     await super()._initialize_reader()
     if self._basecode != "7090202":
       raise NotImplementedError(f"Unsupported Synergy HT basecode: {self._basecode!r}")
