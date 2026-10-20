@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 class SynergyHT(_BioTekReader):
   """BioTek Synergy HT using its legacy serial protocol.
 
-  This driver has offline coverage for basecode 7090202, firmware 2.24. Other
+  This driver supports basecode 7090202 and has been tested on firmware 2.24. Other
   basecodes and devices lacking the required protocol capabilities are rejected.
-  Hardware verification is pending. Shaking is supported before an absorbance read.
+  Shaking is supported before an absorbance read.
   Fluorescence, luminescence, standalone shaking, kinetics, and custom plate
   geometries are not implemented.
 
@@ -57,12 +57,15 @@ class SynergyHT(_BioTekReader):
     await self.io.usb_purge_rx_buffer()
     await self.io.usb_purge_tx_buffer()
 
+  @staticmethod
+  def _check_status(status: bytes) -> None:
+    """Validate status codes with a hexadecimal digit or ASCII RS as the first byte."""
+    if status[:1] == b"\x1e":
+      status = b"0" + status[1:]
+    _BioTekReader._check_status(status)
+
   async def _initialize_reader(self) -> None:
     """Verify the legacy protocol profile and enable asynchronous result status."""
-    logger.warning(
-      "Synergy HT has not been verified on hardware. Please report successful hardware "
-      "verification so this warning can be removed."
-    )
     await super()._initialize_reader()
     if self._basecode != "7090202":
       raise NotImplementedError(f"Unsupported Synergy HT basecode: {self._basecode!r}")
@@ -83,7 +86,7 @@ class SynergyHT(_BioTekReader):
     self._temperature_range = (lower, upper)
     if self.version != "2.24":
       logger.warning(
-        "Synergy HT firmware %s has no capture-based regression coverage", self.version
+        "Synergy HT firmware %s has not been tested; tested version is 2.24", self.version
       )
 
   async def set_temperature(self, temperature: int) -> None:
