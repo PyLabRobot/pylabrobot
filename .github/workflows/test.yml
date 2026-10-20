@@ -53,4 +53,4 @@ jobs:
         if: matrix.extra == 'celigo,rpc-dev'
         run: |
           make generate-rpc
-          git diff --exit-code -- pylabrobot/rpc/v1 pylabrobot/revvity/celigo/grpc/v1
+          git diff --exit-code -- pylabrobot/rpc/v1 pylabrobot/revvity/celigo/grpc/v1 pylabrobot/agilent/vspin/grpc/v1
