@@ -65,7 +65,7 @@ _LINE_ERRORS = 0x1E  # line status bits: overrun, parity, framing, break
 _EVENT_TIMEOUT = _Timeval(0, 100_000)  # the event thread looks at its state at least this often
 _STOP_TIMEOUT = 2.0  # seconds stop waits for cancelled transfers to complete
 LATENCY_TIMER = 2  # ms the chip waits before sending a short packet; set by the driver
-# Seconds of host stall the pending reads must ride out. The longest measured stall was 92 ms on
+# Seconds of host stall the queued reads must ride out. The longest measured stall was 92 ms on
 # the reader (finding 15); the margin covers garbage collection and GIL pauses at negligible cost.
 _LONGEST_STALL = 0.25
 _TRANSFERS = math.ceil(_LONGEST_STALL * 1000 / LATENCY_TIMER)  # one per latency period
@@ -89,7 +89,7 @@ def _declare_libusb_functions(libusb: Any) -> None:
   libusb.libusb_handle_events_timeout_completed.restype = ctypes.c_int
 
 
-class PendingReads:
+class QueuedReads:
   """Bulk-in transfers kept pending from `start` until `stop`; `take` hands over what they read.
 
   A completed transfer is submitted again from its callback, after its data is copied out. One
@@ -137,7 +137,7 @@ class PendingReads:
         self._pending -= 1
         received = received or self._pending == 0
     except Exception:  # an exception cannot leave a ctypes callback
-      logger.exception("pending read callback failed")
+      logger.exception("queued read callback failed")
       with self._lock:
         self._pending -= 1
       received = True
@@ -198,10 +198,10 @@ class PendingReads:
     self._callback = _TRANSFER_CALLBACK(self._on_complete)  # alive as long as transfers may run
     self._buffers: List[Any] = []
     self._transfers: List[Any] = []
-    self._thread = threading.Thread(target=self._handle_events, name="pending reads", daemon=True)
+    self._thread = threading.Thread(target=self._handle_events, name="queued reads", daemon=True)
 
   @classmethod
-  def from_device(cls, device: Any) -> "PendingReads":
+  def from_device(cls, device: Any) -> "QueuedReads":
     """Reads on the libusb handle a pylibftdi `Device` opened, through the libusb it loaded.
 
     Raises:

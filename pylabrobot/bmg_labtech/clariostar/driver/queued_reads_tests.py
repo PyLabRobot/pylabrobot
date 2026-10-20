@@ -15,7 +15,7 @@ from typing import Any, Deque, List, Optional, Tuple
 from unittest.mock import patch
 
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
-from pylabrobot.bmg_labtech.clariostar.driver import pending_reads
+from pylabrobot.bmg_labtech.clariostar.driver import queued_reads
 from pylabrobot.bmg_labtech.clariostar.driver.errors import FrameError
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   RUN_REPLY,
@@ -34,7 +34,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   FakeFTDI,
   make_driver,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.pending_reads import PendingReads
+from pylabrobot.bmg_labtech.clariostar.driver.queued_reads import QueuedReads
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
 DATA_REQUEST = bytes.fromhex("05020000000000")
@@ -176,8 +176,8 @@ class LibftdiFTDI(FakeFTDI):
 
 
 class StreamedPurgeFTDI(LibftdiFTDI):
-  """`LibftdiFTDI` whose purge returns once the reply streaming has reached the pending reads:
-  libftdi's purge clears the chip, not the bytes the pending reads already received."""
+  """`LibftdiFTDI` whose purge returns once the reply streaming has reached the queued reads:
+  libftdi's purge clears the chip, not the bytes the queued reads already received."""
 
   async def usb_purge_rx_buffer(self) -> None:
     await super().usb_purge_rx_buffer()
@@ -200,7 +200,7 @@ class FakeLibusb:
       for pointer in ready:
         self.completed.remove(pointer)
     for pointer in ready:
-      pending_reads._TRANSFER_CALLBACK(pointer.contents.callback)(pointer)
+      queued_reads._TRANSFER_CALLBACK(pointer.contents.callback)(pointer)
     with self._lock:
       if self.submitted:
         pointer = self.submitted.popleft()
@@ -228,7 +228,7 @@ class FakeLibusb:
     self._lock = threading.Lock()
 
     def alloc(isochronous_packets: int) -> Any:
-      pointer = ctypes.pointer(pending_reads._Transfer())
+      pointer = ctypes.pointer(queued_reads._Transfer())
       self.allocated.append(ctypes.addressof(pointer.contents))
       return pointer
 
@@ -264,27 +264,27 @@ class FakeLibusb:
     )
 
 
-def keep_reads_pending(
-  driver: CLARIOstarDriver, libusb: FakeLibusb, transfers: int = pending_reads._TRANSFERS
-) -> PendingReads:
+def keep_reads_queued(
+  driver: CLARIOstarDriver, libusb: FakeLibusb, transfers: int = queued_reads._TRANSFERS
+) -> QueuedReads:
   """Start `transfers` pending transfers on `libusb` for `driver` to read through."""
   driver._PACKET_READ_TIMEOUT, driver._FRAME_STALL_TIMEOUT = 1.0, 0.3
-  reads = PendingReads(libusb.functions, 1, 2, transfers=transfers)
+  reads = QueuedReads(libusb.functions, 1, 2, transfers=transfers)
   reads.start()
-  driver._pending_reads = reads
+  driver._queued_reads = reads
   return reads
 
 
-def make_pending_driver(
-  io: FakeFTDI, libusb: FakeLibusb, transfers: int = pending_reads._TRANSFERS
+def make_queued_driver(
+  io: FakeFTDI, libusb: FakeLibusb, transfers: int = queued_reads._TRANSFERS
 ) -> CLARIOstarDriver:
   """A driver writing to `io` and reading through `transfers` pending transfers on `libusb`."""
   driver = make_driver(io)
-  keep_reads_pending(driver, libusb, transfers)
+  keep_reads_queued(driver, libusb, transfers)
   return driver
 
 
-class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
+class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
   async def test_a_stall_loses_bytes_with_libftdi_but_not_with_transfers_pending(self):
     page, packets, stall = load_raw_run()
 
@@ -298,16 +298,16 @@ class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
 
     chip = ChipModel(packets, stall=stall)
     io, libusb = LibftdiFTDI(chip), FakeLibusb(chip)
-    driver = make_pending_driver(io, libusb)
+    driver = make_queued_driver(io, libusb)
     # No sleep and no timeout ends a wait: the event thread's callbacks wake the read.
     driver._PACKET_READ_TIMEOUT = driver._FRAME_STALL_TIMEOUT = 60.0
     with patch.object(master_module.asyncio, "sleep", side_effect=AssertionError("polled")):
-      with self.assertNoLogs(pending_reads.logger, "WARNING"):  # the stall used 6 of 125
+      with self.assertNoLogs(queued_reads.logger, "WARNING"):  # the stall used 6 of 125
         reply = await asyncio.wait_for(driver.exchange(DATA_REQUEST), 10)
     self.assertEqual(reply, ftdi_extract_payload(page))
     self.assertEqual(chip.dropped, 0)
     self.assertEqual(io.written, [DATA_REQUEST_FRAME])
-    driver._stop_pending_reads()
+    driver._stop_queued_reads()
     self.assertEqual(sorted(libusb.freed), sorted(libusb.allocated))
     self.assertEqual(len(libusb.allocated), 125)  # 0.25 s of 2 ms latency periods
 
@@ -315,8 +315,8 @@ class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
     # 4 transfers, as the pause hunt's queued reader kept, cover 8 of the stall's 12.14 ms.
     _, packets, stall = load_raw_run()
     chip = ChipModel(packets, stall=stall)
-    driver = make_pending_driver(LibftdiFTDI(chip), FakeLibusb(chip), transfers=4)
-    self.addCleanup(driver._stop_pending_reads)
+    driver = make_queued_driver(LibftdiFTDI(chip), FakeLibusb(chip), transfers=4)
+    self.addCleanup(driver._stop_queued_reads)
     with self.assertLogs("pylabrobot", "WARNING") as logs:
       with self.assertRaises(FrameError):
         await driver.exchange(DATA_REQUEST)
@@ -331,8 +331,8 @@ class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
     # write stands in for one left by a cancelled exchange.
     chip = ChipModel([(0.0, STATUS_BUSY)], [(0.004, STATUS_IDLE)])
     io = LibftdiFTDI(chip)
-    driver = make_pending_driver(io, FakeLibusb(chip))
-    self.addCleanup(driver._stop_pending_reads)
+    driver = make_queued_driver(io, FakeLibusb(chip))
+    self.addCleanup(driver._stop_queued_reads)
     chip.start()
     while chip.streaming():
       await asyncio.sleep(0.001)
@@ -347,15 +347,15 @@ class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
     # Not a reader's reply: status 5 (no device) on every transfer, as libusb reports a removal.
     io, libusb = FakeFTDI(), FakeLibusb(ChipModel(), status=5)
     io.replies = [STATUS_IDLE]
-    driver = make_pending_driver(io, libusb)
-    reads = driver._pending_reads
+    driver = make_queued_driver(io, libusb)
+    reads = driver._queued_reads
     assert reads is not None
     while reads.running:
       await reads.wait(1.0)  # the last transfer to fail wakes it
     with self.assertLogs(master_module.logger, "WARNING"):
       status = await driver.request_status()
     self.assertFalse(status.busy)
-    self.assertIsNone(driver._pending_reads)
+    self.assertIsNone(driver._queued_reads)
     self.assertEqual(sorted(libusb.freed), sorted(libusb.allocated))
 
   async def test_a_cancelled_spectrum_leaves_the_reads_running_and_the_link_clean(self):
@@ -367,8 +367,8 @@ class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
     io, libusb = StreamedPurgeFTDI(chip), FakeLibusb(chip)
     absorbance = make_absorbance(io, captured_96_well_plate())
     driver = absorbance._driver
-    reads = keep_reads_pending(driver, libusb)
-    self.addCleanup(driver._stop_pending_reads)
+    reads = keep_reads_queued(driver, libusb)
+    self.addCleanup(driver._stop_queued_reads)
     with self.assertLogs("pylabrobot", LOG_LEVEL_IO) as logs:
       task = asyncio.create_task(
         absorbance.measure_spectrum(start_wavelength=220, end_wavelength=1000, step_size=1)
@@ -389,7 +389,7 @@ class PendingReadsTests(unittest.IsolatedAsyncioTestCase):
     late = ast.literal_eval(messages[first_discard].split(" discarded ")[1])
     self.assertEqual(taken + late, page)  # the bytes after the cancel, before the STOP's write
     self.assertGreater(len(late), len(page) // 2)
-    self.assertIs(driver._get_pending_reads(), reads)
+    self.assertIs(driver._get_queued_reads(), reads)
     self.assertTrue(reads.running)
     self.assertEqual(reads.take(), (b"", 0))
     self.assertEqual(chip.dropped, 0)
