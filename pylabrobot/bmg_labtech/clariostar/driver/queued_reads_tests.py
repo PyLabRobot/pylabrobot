@@ -11,7 +11,7 @@ import time
 import types
 import unittest
 from collections import deque
-from typing import Any, Deque, List, Optional, Tuple
+from typing import Any, Callable, Deque, List, Optional, Tuple
 from unittest.mock import patch
 
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
@@ -41,6 +41,16 @@ DATA_REQUEST = bytes.fromhex("05020000000000")
 DATA_REQUEST_FRAME = bytes.fromhex("02000f0c050200000000000000240d")
 
 Packets = List[Tuple[float, bytes]]
+
+
+async def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
+  """Poll `condition` every millisecond; raise TimeoutError after `timeout` seconds."""
+
+  async def poll() -> None:
+    while not condition():
+      await asyncio.sleep(0.001)
+
+  await asyncio.wait_for(poll(), timeout)
 
 
 def load_spectrum_page_transfers() -> Tuple[bytes, Packets, Tuple[int, float]]:
@@ -181,11 +191,9 @@ class StreamedPurgeFTDI(LibftdiFTDI):
 
   async def usb_purge_rx_buffer(self) -> None:
     await super().usb_purge_rx_buffer()
-    while self.chip.streaming():
-      await asyncio.sleep(0.001)
+    await wait_until(lambda: not self.chip.streaming())
     sent = self.chip.time
-    while self.chip.time <= sent + ChipModel._LATENCY:  # a packet later: the callback has run
-      await asyncio.sleep(0.001)
+    await wait_until(lambda: self.chip.time > sent + ChipModel._LATENCY)  # the callback has run
 
 
 class FakeLibusb:
@@ -334,11 +342,9 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
     driver = make_queued_driver(io, FakeLibusb(chip))
     self.addCleanup(driver._stop_queued_reads)
     chip.start()
-    while chip.streaming():
-      await asyncio.sleep(0.001)
+    await wait_until(lambda: not chip.streaming())
     sent = chip.time
-    while chip.time <= sent + ChipModel._LATENCY:  # a packet later: the callback has run
-      await asyncio.sleep(0.001)
+    await wait_until(lambda: chip.time > sent + ChipModel._LATENCY)  # the callback has run
     status = await driver.request_status()
     self.assertFalse(status.busy)
     self.assertEqual(io.written, [STATUS_QUERY_FRAME])
@@ -350,7 +356,9 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
     driver = make_queued_driver(io, libusb)
     reads = driver._queued_reads
     assert reads is not None
+    deadline = time.monotonic() + 5.0
     while reads.running:
+      self.assertLess(time.monotonic(), deadline)
       await reads.wait(1.0)  # the last transfer to fail wakes it
     with self.assertLogs(master_module.logger, "WARNING"):
       status = await driver.request_status()
@@ -373,8 +381,9 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
       task = asyncio.create_task(
         absorbance.measure_spectrum(start_wavelength=220, end_wavelength=1000, step_size=1)
       )
-      while DATA_REQUEST_FRAME not in io.written or chip.remaining() > 0.9 * len(packets):
-        await asyncio.sleep(0.001)
+      await wait_until(
+        lambda: DATA_REQUEST_FRAME in io.written and chip.remaining() <= 0.9 * len(packets)
+      )
       self.assertTrue(chip.streaming())
       task.cancel()
       with self.assertRaises(asyncio.CancelledError):
