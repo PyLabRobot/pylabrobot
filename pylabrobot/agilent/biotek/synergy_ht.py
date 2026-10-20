@@ -56,6 +56,47 @@ class SynergyHT(_BioTekReader):
     await self.io.set_dtr(False)
     await self.io.usb_purge_rx_buffer()
     await self.io.usb_purge_tx_buffer()
+    await self._drain_stale_output()
+
+  async def _drain_stale_output(self) -> None:
+    """Discard replies the reader queued for an earlier connection.
+
+    RTS/CTS flow control holds the reader's unsent output while the port is closed, so
+    it arrives after the purge once RTS is asserted again. Read until the line has been
+    quiet for about half a second, or give up after ten seconds.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 10
+    dropped = bytearray()
+    quiet = 0
+    while quiet < 10 and loop.time() < deadline:
+      chunk = await self.io.read(64)
+      if chunk:
+        dropped.extend(chunk)
+        quiet = 0
+      else:
+        quiet += 1
+        await asyncio.sleep(0.05)
+    if quiet < 10:
+      raise TimeoutError("Synergy HT kept sending data; wait until it is idle")
+    if dropped:
+      logger.warning(
+        "Discarded %s stale bytes from an earlier Synergy HT session: %r",
+        len(dropped),
+        bytes(dropped[:64]),
+      )
+    self._receive_buffer.clear()
+
+  @staticmethod
+  def _check_status(status: bytes) -> None:
+    """Accept the power-on flag that replaces the first status digit.
+
+    Gen5 captures show statuses of 0x1E followed by the error digits from power-on until
+    the host sends n 1, which setup() does. The remaining digits are checked as usual.
+    """
+    if status[:1] == b"\x1e":
+      status = b"0" + status[1:]
+    _BioTekReader._check_status(status)
 
   async def _initialize_reader(self) -> None:
     """Verify the legacy protocol profile and enable asynchronous result status."""

@@ -440,5 +440,23 @@
     "capture": "readAbsorbance600AllWells96WellPlate.pcap",
     "sha256": "e315b9506a9d5df79c4c99005ab255a0d28df356b35ccf348e048b6fe691e4ec"
   },
-  "extraction": "USB FTDI bulk payloads, status bytes removed; filtered by reader USB device address; no unrelated USB traffic included."
+  "extraction": "USB FTDI bulk payloads, status bytes removed; filtered by reader USB device address; no unrelated USB traffic included.",
+  "power_on": {
+    "capture": "startupSoftware.pcap",
+    "sha256": "157516b2245f6a0dd87d3b5a62c2b3351bec0139171aeb7a16dd0020ac436993",
+    "identities": {
+      "e": "0637303930323032202056657273696f6e20322e32342020201e30303003",
+      "C": "0631393638303420201e30303003"
+    },
+    "queries": {
+      "2000": "30303030303030303030303030303030301e30303003",
+      "1013": "31303030303030303030303030303030301e30303003",
+      "1006": "31313030303030303030303030303030301e30303003",
+      "1008": "31303030303030303030303030303030301e30303003",
+      "1009": "31303030303030303030303030303030301e30303003",
+      "1012": "31303030303030303030303030303030301e30303003",
+      "1020": "31303030303030303030303030303030301e30303003",
+      "1031": "3132322c35302c31322c37302c303030301e30303003"
+    }
+  }
 }

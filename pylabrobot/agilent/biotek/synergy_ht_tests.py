@@ -35,6 +35,7 @@ class Replay:
   def __init__(self, events, chunk_size=4096):
     self.events = deque((e["direction"], bytes.fromhex(e["hex"])) for e in events)
     self.chunk_size = chunk_size
+    self.idle_reads = 0
 
   def consume(self, direction, size):
     """Consume a bounded portion of the next event, preserving coalesced replies."""
@@ -52,7 +53,15 @@ class Replay:
     return len(data)
 
   async def read(self, size):
-    """Split incoming replies at arbitrary USB transfer boundaries."""
+    """Split incoming replies at arbitrary USB transfer boundaries.
+
+    Like FTDI, return no data while the device owes nothing (the next event is a write).
+    """
+    if self.events and self.events[0][0] == "tx":
+      self.idle_reads += 1
+      assert self.idle_reads < 1000, "Driver kept reading while a write was expected"
+      return b""
+    self.idle_reads = 0
     return self.consume("rx", min(size, self.chunk_size))
 
 
@@ -61,13 +70,13 @@ def events(*pairs):
   return [{"direction": d, "hex": b.hex()} for d, b in pairs]
 
 
-def setup_events():
+def setup_events(source=CAPTURES):
   """Use captured identity, capability, and status responses for setup replay."""
   result = events(
     ("tx", b"e"),
-    ("rx", bytes.fromhex(CAPTURES["identities"]["e"])),
+    ("rx", bytes.fromhex(source["identities"]["e"])),
     ("tx", b"C"),
-    ("rx", bytes.fromhex(CAPTURES["identities"]["C"])),
+    ("rx", bytes.fromhex(source["identities"]["C"])),
   )
   for number in (2000, 1013, 1006, 1008, 1009, 1012, 1020, 1031):
     result.extend(
@@ -75,7 +84,7 @@ def setup_events():
         ("tx", b"z"),
         ("rx", b"\x06"),
         ("tx", f"{number}\x03".encode()),
-        ("rx", bytes.fromhex(CAPTURES["queries"][str(number)])),
+        ("rx", bytes.fromhex(source["queries"][str(number)])),
       )
     )
   result.extend(events(("tx", b"n"), ("rx", b"\x06"), ("tx", b"1"), ("rx", b"0000\x03")))
@@ -232,13 +241,45 @@ async def test_setup_rejects_unsupported_or_malformed_responses(reader, failure)
     raw = bytes.fromhex(transcript[index]["hex"])
     transcript[index]["hex"] = ((b"1" if failure == "rdop22" else b"0") + raw[1:]).hex()
   elif failure == "status":
-    transcript[7]["hex"] = (b"0" * 17 + b"\x1e000\x03").hex()
+    transcript[7]["hex"] = (b"0" * 17 + b"\x1f000\x03").hex()
   else:
     transcript[-5]["hex"] = (b"122,XX,12,70,00000" + b"0000\x03").hex()
   attach(io, transcript)
   with pytest.raises((NotImplementedError, ValueError)):
     await device.setup()
   io.stop.assert_awaited_once()
+
+
+@async_test
+async def test_setup_after_power_on(reader):
+  # Until n 1, a freshly powered reader flags every status with 0x1E (startupSoftware.pcap).
+  device, io = reader
+  replay = attach(io, setup_events(CAPTURES["power_on"]), 1)
+  await device.setup()
+  assert not replay.events
+  assert device.version == "2.24"
+  assert device.serial_number == "196804"
+  assert device.temperature_range == (22, 50)
+
+
+def test_power_on_status_still_reports_errors():
+  SynergyHT._check_status(b"\x1e000\x03")
+  with pytest.raises(RuntimeError, match="0x0001"):
+    SynergyHT._check_status(b"\x1e001\x03")
+  with pytest.raises(ValueError):
+    SynergyHT._check_status(b"\x1f000\x03")
+
+
+@async_test
+async def test_setup_discards_output_queued_for_an_earlier_connection(reader):
+  device, io = reader
+  stale = events(("rx", b"0000\x03\x067090202  Version 2.24   0000\x03"))
+  replay = attach(io, stale + setup_events(), 4)
+  with TestCase().assertLogs(SynergyHT.__module__, level="WARNING") as logs:
+    await device.setup()
+  assert not replay.events
+  assert device.version == "2.24"
+  assert any("Discarded 35 stale bytes" in message for message in logs.output)
 
 
 def result_frame(values, checksum=None, temperature=b"237"):
