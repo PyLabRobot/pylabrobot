@@ -65,8 +65,8 @@ _LINE_ERRORS = 0x1E  # line status bits: overrun, parity, framing, break
 _EVENT_TIMEOUT = _Timeval(0, 100_000)  # the event thread looks at its state at least this often
 _STOP_TIMEOUT = 2.0  # seconds stop waits for cancelled transfers to complete
 LATENCY_TIMER = 2  # ms the chip waits before sending a short packet; set by the driver
-# Seconds of host stall the queued reads must ride out. The longest measured stall was 92 ms on
-# the reader (finding 15); the margin covers garbage collection and GIL pauses at negligible cost.
+# Seconds of host stall the queued reads must ride out. The longest stall measured on a reader was
+# 92 ms; the margin covers garbage collection and GIL pauses at negligible cost.
 _LONGEST_STALL = 0.25
 _TRANSFERS = math.ceil(_LONGEST_STALL * 1000 / LATENCY_TIMER)  # one per latency period
 _LOW_MARGIN = 0.1  # a stall leaving fewer than this share of the transfers pending is warned

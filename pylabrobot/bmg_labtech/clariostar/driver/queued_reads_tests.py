@@ -38,13 +38,13 @@ from pylabrobot.bmg_labtech.clariostar.driver.queued_reads import QueuedReads
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
 DATA_REQUEST = bytes.fromhex("05020000000000")
-DATA_REQUEST_FRAME = bytes.fromhex("02000f0c050200000000000000240d")  # as the pause hunt sent it
+DATA_REQUEST_FRAME = bytes.fromhex("02000f0c050200000000000000240d")
 
 Packets = List[Tuple[float, bytes]]
 
 
-def load_raw_run() -> Tuple[bytes, Packets, Tuple[int, float]]:
-  """Raw run 03 of the pause hunt: every transfer libusb completed, one pending at a time.
+def load_spectrum_page_transfers() -> Tuple[bytes, Packets, Tuple[int, float]]:
+  """Two pages of a spectrum read: every transfer libusb completed, one pending at a time.
 
   Returns:
     Page 3 as received whole; its packets' payloads at their times (s after the data request);
@@ -53,7 +53,7 @@ def load_raw_run() -> Tuple[bytes, Packets, Tuple[int, float]]:
     25,527 at that transfer.
   """
   path = os.path.join(
-    os.path.dirname(__file__), "features", "test_data", "pause_hunt_raw_run.json.gz"
+    os.path.dirname(__file__), "features", "test_data", "spectrum_page_transfers.json.gz"
   )
   with gzip.open(path, "rt") as f:
     run = json.load(f)
@@ -67,7 +67,7 @@ def load_raw_run() -> Tuple[bytes, Packets, Tuple[int, float]]:
 
 
 class ChipModel:
-  """Not a reader's reply: the FT232H as finding 14 of the pause hunt measured it.
+  """Not a reader's reply: the FT232H as measured on a reader.
 
   Each `start` begins the next reply: its packets come at their times. While a transfer is
   pending each goes to the host after the status bytes `02 60`; while none is, the chip keeps
@@ -286,7 +286,7 @@ def make_queued_driver(
 
 class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
   async def test_a_stall_loses_bytes_with_libftdi_but_not_with_transfers_pending(self):
-    page, packets, stall = load_raw_run()
+    page, packets, stall = load_spectrum_page_transfers()
 
     chip = ChipModel(packets, stall=stall)
     driver = make_driver(LibftdiFTDI(chip))
@@ -312,8 +312,8 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(libusb.allocated), 125)  # 0.25 s of 2 ms latency periods
 
   async def test_a_stall_longer_than_the_transfers_cover_is_warned(self):
-    # 4 transfers, as the pause hunt's queued reader kept, cover 8 of the stall's 12.14 ms.
-    _, packets, stall = load_raw_run()
+    # 4 transfers cover 8 of the stall's 12.14 ms.
+    _, packets, stall = load_spectrum_page_transfers()
     chip = ChipModel(packets, stall=stall)
     driver = make_queued_driver(LibftdiFTDI(chip), FakeLibusb(chip), transfers=4)
     self.addCleanup(driver._stop_queued_reads)
@@ -361,7 +361,7 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
   async def test_a_cancelled_spectrum_leaves_the_reads_running_and_the_link_clean(self):
     # Page 3 at its own packet times answers the data request; the read is cancelled early in
     # the page, and the rest of it arrives during the purge before the STOP.
-    page, packets, _ = load_raw_run()
+    page, packets, _ = load_spectrum_page_transfers()
     before = ([(0.0, reply)] for reply in (STATUS_IDLE, RUN_REPLY, STATUS_MEASURED))
     chip = ChipModel(*before, packets, [(0.0, STOP_REPLY)], [(0.0, STATUS_IDLE)])
     io, libusb = StreamedPurgeFTDI(chip), FakeLibusb(chip)
