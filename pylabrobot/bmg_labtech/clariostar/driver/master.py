@@ -52,8 +52,8 @@ from .framing import (
   usb_total_length,
   usb_wrap_payload,
 )
+from .ftdi_queued_reads import LATENCY_TIMER, QueuedReads
 from .parameter_table import PARAMETER_TABLE, REPLY_OFFSET
-from .queued_reads import LATENCY_TIMER, QueuedReads
 
 logger = logging.getLogger(__name__)
 

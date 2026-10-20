@@ -14,8 +14,8 @@ from collections import deque
 from typing import Any, Callable, Deque, List, Optional, Tuple
 from unittest.mock import patch
 
+from pylabrobot.bmg_labtech.clariostar.driver import ftdi_queued_reads
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
-from pylabrobot.bmg_labtech.clariostar.driver import queued_reads
 from pylabrobot.bmg_labtech.clariostar.driver.errors import FrameError
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   RUN_REPLY,
@@ -26,6 +26,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   make_absorbance,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload
+from pylabrobot.bmg_labtech.clariostar.driver.ftdi_queued_reads import QueuedReads
 from pylabrobot.bmg_labtech.clariostar.driver.master import CLARIOstarDriver
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_BUSY,
@@ -34,7 +35,6 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   FakeFTDI,
   make_driver,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.queued_reads import QueuedReads
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
 DATA_REQUEST = bytes.fromhex("05020000000000")
@@ -208,7 +208,7 @@ class FakeLibusb:
       for pointer in ready:
         self.completed.remove(pointer)
     for pointer in ready:
-      queued_reads._TRANSFER_CALLBACK(pointer.contents.callback)(pointer)
+      ftdi_queued_reads._TRANSFER_CALLBACK(pointer.contents.callback)(pointer)
     with self._lock:
       if self.submitted:
         pointer = self.submitted.popleft()
@@ -236,7 +236,7 @@ class FakeLibusb:
     self._lock = threading.Lock()
 
     def alloc(isochronous_packets: int) -> Any:
-      pointer = ctypes.pointer(queued_reads._Transfer())
+      pointer = ctypes.pointer(ftdi_queued_reads._Transfer())
       self.allocated.append(ctypes.addressof(pointer.contents))
       return pointer
 
@@ -273,7 +273,7 @@ class FakeLibusb:
 
 
 def keep_reads_queued(
-  driver: CLARIOstarDriver, libusb: FakeLibusb, transfers: int = queued_reads._TRANSFERS
+  driver: CLARIOstarDriver, libusb: FakeLibusb, transfers: int = ftdi_queued_reads._TRANSFERS
 ) -> QueuedReads:
   """Start `transfers` pending transfers on `libusb` for `driver` to read through."""
   driver._PACKET_READ_TIMEOUT, driver._FRAME_STALL_TIMEOUT = 1.0, 0.3
@@ -284,7 +284,7 @@ def keep_reads_queued(
 
 
 def make_queued_driver(
-  io: FakeFTDI, libusb: FakeLibusb, transfers: int = queued_reads._TRANSFERS
+  io: FakeFTDI, libusb: FakeLibusb, transfers: int = ftdi_queued_reads._TRANSFERS
 ) -> CLARIOstarDriver:
   """A driver writing to `io` and reading through `transfers` pending transfers on `libusb`."""
   driver = make_driver(io)
@@ -310,7 +310,7 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
     # No sleep and no timeout ends a wait: the event thread's callbacks wake the read.
     driver._PACKET_READ_TIMEOUT = driver._FRAME_STALL_TIMEOUT = 60.0
     with patch.object(master_module.asyncio, "sleep", side_effect=AssertionError("polled")):
-      with self.assertNoLogs(queued_reads.logger, "WARNING"):  # the stall used 6 of 125
+      with self.assertNoLogs(ftdi_queued_reads.logger, "WARNING"):  # the stall used 6 of 125
         reply = await asyncio.wait_for(driver.exchange(DATA_REQUEST), 10)
     self.assertEqual(reply, ftdi_extract_payload(page))
     self.assertEqual(chip.dropped, 0)
