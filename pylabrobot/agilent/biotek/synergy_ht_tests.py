@@ -1,4 +1,4 @@
-"""Offline replay of Synergy HT UART captures and protocol failure cases."""
+"""Synergy HT command sequences, measurement parsing, and protocol failure cases."""
 
 import asyncio
 import json
@@ -7,7 +7,6 @@ from collections import deque
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Literal, Tuple
 from unittest import TestCase
 from unittest.mock import AsyncMock, patch
 
@@ -18,19 +17,13 @@ from pylabrobot.agilent.biotek.synergy_ht import SynergyHT
 from pylabrobot.io.ftdi import FTDI
 
 DATA = Path(__file__).parent / "test_data"
-CAPTURES = json.loads((DATA / "synergy_ht.json").read_text())
-NATIVE_SETUP = json.loads((DATA / "synergy_ht_setup.json").read_text())
+FIXTURES = json.loads((DATA / "synergy_ht.json").read_text())
+ABSORBANCE_SETUPS = json.loads((DATA / "synergy_ht_setup.json").read_text())
 SHAKING = json.loads((DATA / "synergy_ht_shaking.json").read_text())
-SHAKE_INTENSITIES: Tuple[Literal["slow", "medium", "fast", "variable"], ...] = (
-  "slow",
-  "medium",
-  "fast",
-  "variable",
-)
 
 
 class Replay:
-  """Require the exact captured write stream and serve only the subsequent replies."""
+  """Require the expected write stream and serve only the subsequent replies."""
 
   def __init__(self, events, chunk_size=4096):
     self.events = deque((e["direction"], bytes.fromhex(e["hex"])) for e in events)
@@ -39,7 +32,7 @@ class Replay:
 
   def consume(self, direction, size):
     """Consume a bounded portion of the next event, preserving coalesced replies."""
-    assert self.events, "Unexpected I/O after the capture ended"
+    assert self.events, "Unexpected I/O after the transcript ended"
     actual_direction, data = self.events.popleft()
     assert actual_direction == direction, (direction, actual_direction, data)
     result, remaining = data[:size], data[size:]
@@ -70,8 +63,8 @@ def events(*pairs):
   return [{"direction": d, "hex": b.hex()} for d, b in pairs]
 
 
-def setup_events(source=CAPTURES):
-  """Use captured identity, capability, and status responses for setup replay."""
+def setup_events(source=FIXTURES):
+  """Build the identity, capability, and status exchanges for initialization."""
   result = events(
     ("tx", b"e"),
     ("rx", bytes.fromhex(source["identities"]["e"])),
@@ -128,19 +121,19 @@ def attach(io, transcript, chunk_size=4096):
 
 
 @pytest.mark.parametrize("chunk_size", [1, 2, 61, 64, 4096])
-@pytest.mark.parametrize("capture", CAPTURES["reads"], ids=lambda x: x["capture"])
+@pytest.mark.parametrize("read", FIXTURES["reads"], ids=lambda x: f"{x['rows']}x{x['columns']}")
 @async_test
-async def test_captured_endpoint_sequence(reader, capture, chunk_size):
+async def test_endpoint_sequence(reader, read, chunk_size):
   device, io = reader
-  replay = attach(io, capture["events"], chunk_size)
-  plate_type = "24-well" if capture["rows"] == 4 else "96-well"
+  replay = attach(io, read["events"], chunk_size)
+  plate_type = "24-well" if read["rows"] == 4 else "96-well"
   started = datetime.now()
   results = await device.read_absorbance(600, plate_type)
   completed = datetime.now()
   assert len(results) == 1
   result = results[0]
   assert isinstance(result, AbsorbanceResult)
-  assert result.data == [[0.0] * capture["columns"] for _ in range(capture["rows"])]
+  assert result.data == [[0.0] * read["columns"] for _ in range(read["rows"])]
   assert result.wavelength == 600
   assert result.temperature == (29.0 if plate_type == "24-well" else 19.9)
   assert started <= result.timestamp <= completed
@@ -149,48 +142,54 @@ async def test_captured_endpoint_sequence(reader, capture, chunk_size):
 
 
 @pytest.mark.parametrize(
-  "capture", CAPTURES["measurements"], ids=lambda x: f"{x['capture']}:{x['start_frame']}"
+  "measurement", FIXTURES["measurements"], ids=lambda x: f"{x['rows']}x{x['columns']}"
 )
-def test_all_captured_measurements(capture):
+def test_absorbance_measurements(measurement):
   data, _ = SynergyHT._parse_absorbance(
-    bytes.fromhex(capture["result"]), capture["rows"], capture["columns"]
+    bytes.fromhex(measurement["result"]), measurement["rows"], measurement["columns"]
   )
-  assert data == [[0.0] * capture["columns"] for _ in range(capture["rows"])]
+  assert data == [[0.0] * measurement["columns"] for _ in range(measurement["rows"])]
 
 
-@pytest.mark.parametrize("wavelength,expected", NATIVE_SETUP.items())
-def test_native_endpoint_serializer(wavelength, expected):
+@pytest.mark.parametrize("wavelength,expected", ABSORBANCE_SETUPS.items())
+def test_absorbance_setup_encoding(wavelength, expected):
   assert SynergyHT._absorbance_setup(int(wavelength)) == bytes.fromhex(expected)
 
 
-@pytest.mark.parametrize("setup", SHAKING["setups"], ids=lambda x: str(x["frame"]))
-def test_captured_shake_setup(setup):
+@pytest.mark.parametrize(
+  "setup", SHAKING["setups"], ids=lambda x: f"{x['duration']}s-{x['intensity']}"
+)
+def test_shake_setup_encoding(setup):
+  assert SynergyHT._absorbance_setup(600, setup["duration"], setup["intensity"]) == bytes.fromhex(
+    setup["hex"]
+  )
+
+
+@pytest.mark.parametrize(
+  "setup",
+  SHAKING["duration_setups"],
+  ids=lambda x: f"{x['wavelength']}nm-{x['duration']}s-{x['intensity']}",
+)
+def test_shake_duration_encoding(setup):
   assert SynergyHT._absorbance_setup(
-    600, setup["duration"], SHAKE_INTENSITIES[setup["intensity"]]
+    setup["wavelength"], setup["duration"], setup["intensity"]
   ) == bytes.fromhex(setup["hex"])
-
-
-@pytest.mark.parametrize("vector", SHAKING["native"]["vectors"])
-def test_native_shake_duration_encoding(vector):
-  assert SynergyHT._absorbance_setup(
-    vector["wavelength"], vector["duration"], SHAKE_INTENSITIES[vector["intensity"]]
-  ) == bytes.fromhex(vector["hex"])
 
 
 @pytest.mark.parametrize("chunk_size", [1, 2, 61, 64, 4096])
 @async_test
-async def test_captured_shake_then_read_without_shaking(reader, chunk_size):
+async def test_shake_then_read_without_shaking(reader, chunk_size):
   device, io = reader
-  capture = SHAKING["read"]
-  replay = attach(io, capture["events"] + CAPTURES["reads"][0]["events"], chunk_size)
+  read = SHAKING["read"]
+  replay = attach(io, read["events"] + FIXTURES["reads"][0]["events"], chunk_size)
   with patch("asyncio.wait_for", wraps=asyncio.wait_for) as wait_for:
     (result,) = await device.read_absorbance(
       600,
       "96-well",
-      shake_duration=capture["duration"],
-      shake_intensity=SHAKE_INTENSITIES[capture["intensity"]],
+      shake_duration=read["duration"],
+      shake_intensity=read["intensity"],
     )
-    assert wait_for.call_args.args[1] == device.read_timeout + capture["duration"]
+    assert wait_for.call_args.args[1] == device.read_timeout + read["duration"]
     assert result.data == [[0.0] * 12 for _ in range(8)]
     assert result.temperature == 32.0
     (unshaken,) = await device.read_absorbance(600, "96-well")
@@ -251,9 +250,9 @@ async def test_setup_rejects_unsupported_or_malformed_responses(reader, failure)
 
 @async_test
 async def test_setup_after_power_on(reader):
-  # Until n 1, a freshly powered reader flags every status with 0x1E (startupSoftware.pcap).
+  """Initialize a reader whose power-on statuses carry the 0x1E flag until n 1."""
   device, io = reader
-  replay = attach(io, setup_events(CAPTURES["power_on"]), 1)
+  replay = attach(io, setup_events(FIXTURES["power_on"]), 1)
   await device.setup()
   assert not replay.events
   assert device.version == "2.24"
@@ -355,7 +354,7 @@ async def test_selection_reads_bounding_rectangle_and_masks_other_wells(
   transcript = events(
     ("tx", b"V"),
     ("rx", b"\x06"),
-    ("tx", bytes.fromhex(NATIVE_SETUP["600"])),
+    ("tx", bytes.fromhex(ABSORBANCE_SETUPS["600"])),
     ("rx", b"0000\x03"),
     ("tx", b"{"),
     ("rx", b"\x06"),
@@ -532,8 +531,8 @@ async def test_short_async_error_does_not_wait_for_full_plate(reader, prefix):
 @async_test
 async def test_measurement_owns_connection_until_result_or_failure(reader, outcome, shake_duration):
   device, io = reader
-  capture = SHAKING["read"] if shake_duration else CAPTURES["reads"][0]
-  transcript = capture["events"] + events(("tx", b"h"), ("rx", b"\x062370000\x03"))
+  read = SHAKING["read"] if shake_duration else FIXTURES["reads"][0]
+  transcript = read["events"] + events(("tx", b"h"), ("rx", b"\x062370000\x03"))
   replay = attach(io, transcript)
   waiting = asyncio.Event()
   release = asyncio.Event()

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class SynergyHT(_BioTekReader):
   """BioTek Synergy HT using its legacy serial protocol.
 
-  This driver is verified on hardware with basecode 7090202, firmware 2.24. Other
+  This driver supports basecode 7090202 and has been tested on firmware 2.24. Other
   basecodes and devices lacking the required protocol capabilities are rejected.
   Shaking is supported before an absorbance read.
   Fluorescence, luminescence, standalone shaking, kinetics, and custom plate
@@ -50,14 +50,6 @@ class SynergyHT(_BioTekReader):
     super()._reset_state()
     self._temperature_range = None
 
-  async def _configure_serial(self) -> None:
-    """Apply the legacy reader's DTR and initial buffer settings."""
-    await super()._configure_serial()
-    await self.io.set_dtr(False)
-    await self.io.usb_purge_rx_buffer()
-    await self.io.usb_purge_tx_buffer()
-    await self._drain_stale_output()
-
   async def _drain_stale_output(self) -> None:
     """Discard replies the reader queued for an earlier connection.
 
@@ -87,12 +79,20 @@ class SynergyHT(_BioTekReader):
       )
     self._receive_buffer.clear()
 
+  async def _configure_serial(self) -> None:
+    """Apply the legacy reader's DTR and initial buffer settings."""
+    await super()._configure_serial()
+    await self.io.set_dtr(False)
+    await self.io.usb_purge_rx_buffer()
+    await self.io.usb_purge_tx_buffer()
+    await self._drain_stale_output()
+
   @staticmethod
   def _check_status(status: bytes) -> None:
     """Accept the power-on flag that replaces the first status digit.
 
-    Gen5 captures show statuses of 0x1E followed by the error digits from power-on until
-    the host sends n 1, which setup() does. The remaining digits are checked as usual.
+    After power-on, statuses begin with 0x1E until setup() sends n 1.
+    The remaining digits are checked as usual.
     """
     if status[:1] == b"\x1e":
       status = b"0" + status[1:]
@@ -120,7 +120,7 @@ class SynergyHT(_BioTekReader):
     self._temperature_range = (lower, upper)
     if self.version != "2.24":
       logger.warning(
-        "Synergy HT firmware %s has no capture-based regression coverage", self.version
+        "Synergy HT firmware %s has not been tested; tested version is 2.24", self.version
       )
 
   async def set_temperature(self, temperature: int) -> None:
