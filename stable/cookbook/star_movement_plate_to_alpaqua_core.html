@@ -7,7 +7,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Moving plate onto Alpaqua magnet using CORE grippers &#8212; PyLabRobot dev documentation</title>
+    <title>Moving a plate onto an Alpaqua magnet using CO-RE grippers &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -519,7 +519,7 @@
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active"><a aria-current="page" class="current reference internal" href="#">Moving plate onto Alpaqua magnet using CORE grippers</a></li>
+<li class="toctree-l1 current active"><a aria-current="page" class="current reference internal" href="#">Moving a plate onto an Alpaqua magnet using CO-RE grippers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="slack_notifications.html">Sending PyLabRobot notifications to Slack</a></li>
 <li class="toctree-l1"><a class="reference internal" href="manual_operator_jupyter.html">Manual operator actions in a Jupyter notebook</a></li>
 </ul>
@@ -565,7 +565,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">Cookbook</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Moving plate onto Alpaqua magnet using CORE grippers</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Moving a plate onto an Alpaqua magnet using CO-RE grippers</span></li>
   </ul>
 </nav>
 </div>
@@ -582,25 +582,24 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="moving-plate-onto-alpaqua-magnet-using-core-grippers">
-<h1>Moving plate onto Alpaqua magnet using CORE grippers<a class="headerlink" href="#moving-plate-onto-alpaqua-magnet-using-core-grippers" title="Link to this heading">#</a></h1>
+  <section class="tex2jax_ignore mathjax_ignore" id="moving-a-plate-onto-an-alpaqua-magnet-using-co-re-grippers">
+<h1>Moving a plate onto an Alpaqua magnet using CO-RE grippers<a class="headerlink" href="#moving-a-plate-onto-an-alpaqua-magnet-using-co-re-grippers" title="Link to this heading">#</a></h1>
 <ul class="simple">
 <li><p>tags: #resourcemovement #plateadapter #hamiltonstar</p></li>
-<li><p>Last updated: 2025-10-27</p></li>
 </ul>
 <section id="prerequisites">
 <h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Machines used:</p>
+<li><p>Devices used:</p>
 <ul>
-<li><p>Hamilton STAR</p></li>
+<li><p>Hamilton STARlet (on a STAR, build the device with <code class="docutils literal notranslate"><span class="pre">STAR</span></code> instead of <code class="docutils literal notranslate"><span class="pre">STARlet</span></code>)</p></li>
 </ul>
 </li>
 <li><p>Non-PLR dependencies: None</p></li>
 </ul>
 </section>
-<section id="preview-of-machine-behvaiour">
-<h2>Preview of Machine Behvaiour<a class="headerlink" href="#preview-of-machine-behvaiour" title="Link to this heading">#</a></h2>
+<section id="preview-of-device-behaviour">
+<h2>Preview of Device Behaviour<a class="headerlink" href="#preview-of-device-behaviour" title="Link to this heading">#</a></h2>
 <video width="640" controls autoplay loop>
   <source src="./assets/star_movement_plate_to_alpaqua_core/animation.mp4" type="video/mp4">
   Your browser does not support the video tag.
@@ -609,7 +608,7 @@
 <h2>Protocol Mode<a class="headerlink" href="#protocol-mode" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">protocol_mode</span> <span class="o">=</span> <span class="s2">"simulation"</span> <span class="c1"># "execution" or "simulation"</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">SIMULATION</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># False to drive a real STARlet</span>
 </pre></div>
 </div>
 </div>
@@ -622,31 +621,15 @@
 <h3>Non-PLR Dependencies<a class="headerlink" href="#non-plr-dependencies" title="Link to this heading">#</a></h3>
 <p>None</p>
 </section>
-<section id="machine-visualizer">
-<h3>Machine &amp; Visualizer<a class="headerlink" href="#machine-visualizer" title="Link to this heading">#</a></h3>
+<section id="device-visualizer">
+<h3>Device &amp; Visualizer<a class="headerlink" href="#device-visualizer" title="Link to this heading">#</a></h3>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
-<span class="o">%</span><span class="k">autoreload</span> 2
-       
-<span class="kn">import</span><span class="w"> </span><span class="nn">random</span> 
-<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling</span><span class="w"> </span><span class="kn">import</span> <span class="n">LiquidHandler</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARLetDeck</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.visualizer.visualizer</span><span class="w"> </span><span class="kn">import</span> <span class="n">Visualizer</span>
-
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"execution"</span><span class="p">:</span>
-
-  <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARBackend</span>
-
-  <span class="n">backend</span> <span class="o">=</span> <span class="n">STARBackend</span><span class="p">()</span>
-
-<span class="k">elif</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"simulation"</span><span class="p">:</span>
-
-  <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.backends.hamilton.STAR_chatterbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARChatterboxBackend</span>
-    
-  <span class="n">backend</span> <span class="o">=</span> <span class="n">STARChatterboxBackend</span><span class="p">()</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.hamilton.star</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARlet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.visualizer3D</span><span class="w"> </span><span class="kn">import</span> <span class="n">Viewer3D</span>
 </pre></div>
 </div>
 </div>
@@ -661,53 +644,34 @@
   <span class="n">hamilton_mfx_plateholder_DWP_metal_tapped</span><span class="p">,</span>
   <span class="n">hamilton_mfx_plateholder_DWP_flat</span><span class="p">,</span>
   <span class="n">alpaqua_96_plateadapter_magnum_flx</span><span class="p">,</span>
-  <span class="n">Azenta4titudeFrameStar_96_wellplate_200ul_Vb</span><span class="p">,</span>
+  <span class="n">azenta_96_wellplate_200uL_Vb_4titudeframestar</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 </div>
 </div>
-<p>Note: if you’re unsure whether you have the resources mentioned in a PLR automated Protocol, use Python’s inbuild <code class="docutils literal notranslate"><span class="pre">help</span></code> function to check out the resource definition’s docstring - they always contain the manufacturer’s catalogue/part number (and if available a direct link to the product page):</p>
+<p>Note: if you’re unsure whether you have the resources mentioned in a PLR automated protocol, use Python’s built-in <code class="docutils literal notranslate"><span class="pre">help</span></code> function to check out the resource definition’s docstring - they always contain the manufacturer’s catalogue/part number (and if available a direct link to the product page):</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">help</span><span class="p">(</span><span class="n">hamilton_mfx_plateholder_DWP_metal_tapped</span><span class="p">)</span> <span class="c1"># for more information visit the docs 'Resource Management' section</span>
 </pre></div>
 </div>
 </div>
-<div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Help on function hamilton_mfx_plateholder_DWP_metal_tapped in module pylabrobot.resources.hamilton.mfx_modules:
-
-hamilton_mfx_plateholder_DWP_metal_tapped(name: str) -&gt; pylabrobot.resources.carrier.PlateHolder
-    Hamilton MFX DWP Module (cat.-no. 188042 / 188042-00).
-    Hamilton name: 'MFX_DWP_rackbased_module'
-    It also contains metal clamps at the corners.
-    https://www.hamiltoncompany.com/other-robotics/188042
-</pre></div>
-</div>
-</div>
 </div>
 </section>
 </section>
-<section id="instantiate-frontend-connect-to-machine">
-<h2>Instantiate Frontend &amp; Connect to Machine<a class="headerlink" href="#instantiate-frontend-connect-to-machine" title="Link to this heading">#</a></h2>
+<section id="instantiate-device-connect">
+<h2>Instantiate Device &amp; Connect<a class="headerlink" href="#instantiate-device-connect" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">deck</span> <span class="o">=</span> <span class="n">STARLetDeck</span><span class="p">()</span>
-<span class="n">lh</span> <span class="o">=</span> <span class="n">LiquidHandler</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">deck</span><span class="o">=</span><span class="n">deck</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">star</span> <span class="o">=</span> <span class="n">STARlet</span><span class="p">(</span><span class="n">simulation</span><span class="o">=</span><span class="n">SIMULATION</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+<span class="n">deck</span> <span class="o">=</span> <span class="n">star</span><span class="o">.</span><span class="n">deck</span>
 
-<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
-
-<span class="n">vis</span> <span class="o">=</span> <span class="n">Visualizer</span><span class="p">(</span><span class="n">resource</span><span class="o">=</span><span class="n">lh</span><span class="p">)</span>
-<span class="k">await</span> <span class="n">vis</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
-
-<span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">disable_cover_control</span><span class="p">()</span> <span class="c1"># 😈</span>
-</pre></div>
-</div>
-</div>
-<div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Websocket server started at http://127.0.0.1:2121
-File server started at http://127.0.0.1:1337 . Open this URL in your browser.
-C0CDid0001
+<span class="n">viewer</span> <span class="o">=</span> <span class="n">Viewer3D</span><span class="p">(</span><span class="n">star</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"alpaqua_magnet_recipe"</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">viewer</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<span class="k">if</span> <span class="n">SIMULATION</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">viewer</span><span class="o">.</span><span class="n">wait_for_browser</span><span class="p">()</span>  <span class="c1"># a simulated run is over in milliseconds: watch it from the start</span>
 </pre></div>
 </div>
 </div>
@@ -720,7 +684,7 @@ C0CDid0001
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Setup MFX Carrier for Magnetic Bead Resuspension</span>
 
 <span class="n">mfx_plateholder_dwp_0</span> <span class="o">=</span> <span class="n">hamilton_mfx_plateholder_DWP_metal_tapped</span><span class="p">(</span>
-    <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"mfx_plateholder_dwp_tapped_dwp_0"</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"mfx_plateholder_dwp_tapped_dwp_0"</span>
 <span class="p">)</span>
 
 <span class="n">mfx_carrier_tapped_plate_holder_example</span> <span class="o">=</span> <span class="n">hamilton_mfx_carrier_L5_base</span><span class="p">(</span>
@@ -730,7 +694,7 @@ C0CDid0001
   <span class="p">}</span>
 <span class="p">)</span>
 
-<span class="n">mfx_carrier_tapped_plate_holder_example</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">Azenta4titudeFrameStar_96_wellplate_200ul_Vb</span><span class="p">(</span>
+<span class="n">mfx_carrier_tapped_plate_holder_example</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">azenta_96_wellplate_200uL_Vb_4titudeframestar</span><span class="p">(</span>
   <span class="n">name</span><span class="o">=</span><span class="s2">"wash_plate_0"</span>
 <span class="p">)</span>
 
@@ -738,8 +702,8 @@ C0CDid0001
 
 <span class="c1"># Setup Magnet-carrying MFX Carrier</span>
 
-<span class="n">plateholder_flat_0</span> <span class="o">=</span> <span class="n">hamilton_mfx_plateholder_DWP_flat</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"plateholder_flat_0"</span><span class="p">)</span>
-<span class="n">magnet_0</span> <span class="o">=</span> <span class="n">alpaqua_96_plateadapter_magnum_flx</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"alpaqua_magnet_0"</span><span class="p">)</span>
+<span class="n">plateholder_flat_0</span> <span class="o">=</span> <span class="n">hamilton_mfx_plateholder_DWP_flat</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plateholder_flat_0"</span><span class="p">)</span>
+<span class="n">magnet_0</span> <span class="o">=</span> <span class="n">alpaqua_96_plateadapter_magnum_flx</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"alpaqua_magnet_0"</span><span class="p">)</span>
 <span class="n">plateholder_flat_0</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">magnet_0</span><span class="p">)</span>
 
 <span class="n">mfx_carrier_magnet_example</span> <span class="o">=</span> <span class="n">hamilton_mfx_carrier_L5_base</span><span class="p">(</span>
@@ -749,9 +713,8 @@ C0CDid0001
   <span class="p">}</span>
 <span class="p">)</span>
 <span class="n">magnet_0</span><span class="o">.</span><span class="n">plate_z_offset</span> <span class="o">=</span> <span class="mf">0.62</span>  <span class="c1"># &lt;===== PLATE-SPECIFIC !</span>
-<span class="c1"># empirical: distance between Alpaqua magnet hole bottom to</span>
-<span class="c1"># cavity_bottom of the well that is placed on top of it</span>
-<span class="c1"># use ztouch_probing to measure both </span>
+<span class="c1"># measure for your plate: from the magnet's hole bottom to the cavity_bottom of the well on it</span>
+<span class="c1"># (e.g. by z-touch probing both)</span>
 
 <span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">mfx_carrier_magnet_example</span><span class="p">,</span> <span class="n">track</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
 </pre></div>
@@ -766,53 +729,40 @@ C0CDid0001
 <h3>Move Plate Onto Magnet PlateAdapter<a class="headerlink" href="#move-plate-onto-magnet-plateadapter" title="Link to this heading">#</a></h3>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate_index</span> <span class="o">=</span> <span class="mi">0</span> <span class="c1"># always design for throughput adaptivness ;)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate_index</span> <span class="o">=</span> <span class="mi">0</span> <span class="c1"># always design for throughput adaptiveness ;)</span>
 
-<span class="n">plate_to_move</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">"wash_plate_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<span class="n">move_target</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">"alpaqua_magnet_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">plate_to_move</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">"wash_plate_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">move_target</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">"alpaqua_magnet_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
+<span class="c1"># Reduce wear &amp; tear on any single channel: the tools ride front_channel - 1 and front_channel</span>
+<span class="n">front_channel</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">star</span><span class="o">.</span><span class="n">pipettes</span><span class="o">.</span><span class="n">num_channels</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
 
-<span class="n">back_channel_idx</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>  <span class="c1"># Reduce wear &amp; tear on any single channel</span>
+<span class="k">if</span> <span class="n">SIMULATION</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"simulation"</span><span class="p">:</span>
-  <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-    
-<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">move_plate</span><span class="p">(</span>
-  <span class="n">plate</span><span class="o">=</span><span class="n">plate_to_move</span><span class="p">,</span>
-  <span class="n">to</span><span class="o">=</span><span class="n">move_target</span><span class="p">,</span>
-  <span class="n">use_arm</span><span class="o">=</span><span class="s2">"core"</span><span class="p">,</span>
-  <span class="n">channel_1</span><span class="o">=</span><span class="n">back_channel_idx</span><span class="p">,</span>
-  <span class="n">channel_2</span><span class="o">=</span><span class="n">back_channel_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+<span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">pick_up_tools</span><span class="p">(</span><span class="n">front_channel</span><span class="o">=</span><span class="n">front_channel</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">pick_up_resource</span><span class="p">(</span>
+  <span class="n">plate_to_move</span><span class="p">,</span>
   <span class="n">pickup_distance_from_top</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
-  <span class="n">core_grip_strength</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span>
-  <span class="n">return_core_gripper</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+  <span class="n">grip_strength</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">place_resource</span><span class="p">(</span><span class="n">move_target</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"execution"</span><span class="p">:</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">SIMULATION</span><span class="p">:</span>
   <span class="c1"># "smart" command, will ask operator for input if it cannot find plate in move_target location</span>
-  <span class="c1"># place into condition for simulation mode</span>
-
   <span class="c1"># (1) check transfer success, (2) push plate flush</span>
-  <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">core_check_resource_exists_at_location_center</span><span class="p">(</span>
-    <span class="n">location</span><span class="o">=</span><span class="n">plate_to_move</span><span class="o">.</span><span class="n">get_absolute_location</span><span class="p">(),</span>
+  <span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">probe_resource_exists_using_ztouch</span><span class="p">(</span>
+    <span class="n">location</span><span class="o">=</span><span class="n">plate_to_move</span><span class="o">.</span><span class="n">get_location_wrt</span><span class="p">(</span><span class="n">deck</span><span class="p">),</span>
     <span class="n">resource</span><span class="o">=</span><span class="n">plate_to_move</span><span class="p">,</span>
     <span class="n">gripper_y_margin</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span>
     <span class="n">enable_recovery</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">audio_feedback</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
   <span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="n">backend</span><span class="o">.</span><span class="n">core_parked</span><span class="p">)</span>
-<span class="c1"># &gt;&gt;&gt; False # save time - keep CORE grippers on channels during magnetisation time</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">tools_mounted</span><span class="p">)</span>
+<span class="c1"># &gt;&gt;&gt; True # save time - keep CO-RE grippers on channels during magnetisation time</span>
 
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"simulation"</span><span class="p">:</span>
-  <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>C0ZPid0002xs01679xd0yj1147yv0050zj1932zy0500yo0885yg0825yw40th2800te2800
-C0ZRid0003xs03254xd0yj1138zj2162zi000zy0500yo0885th2800te2800
-False
+<span class="k">if</span> <span class="n">SIMULATION</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -822,47 +772,43 @@ False
 <h3>Move Plate back onto tapped PlateHolder<a class="headerlink" href="#move-plate-back-onto-tapped-plateholder" title="Link to this heading">#</a></h3>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">move_target</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">"mfx_plateholder_dwp_tapped_dwp_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">move_target</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">"mfx_plateholder_dwp_tapped_dwp_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
-<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">move_plate</span><span class="p">(</span>
-  <span class="n">plate</span><span class="o">=</span><span class="n">plate_to_move</span><span class="p">,</span>
-  <span class="n">to</span><span class="o">=</span><span class="n">move_target</span><span class="p">,</span>
-  <span class="n">use_arm</span><span class="o">=</span><span class="s2">"core"</span><span class="p">,</span>
-  <span class="n">channel_1</span><span class="o">=</span><span class="n">back_channel_idx</span><span class="p">,</span>
-  <span class="n">channel_2</span><span class="o">=</span><span class="n">back_channel_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+<span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">pick_up_resource</span><span class="p">(</span>
+  <span class="n">plate_to_move</span><span class="p">,</span>
   <span class="n">pickup_distance_from_top</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
-  <span class="n">core_grip_strength</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span>
-  <span class="n">return_core_gripper</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+  <span class="n">grip_strength</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">place_resource</span><span class="p">(</span><span class="n">move_target</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"execution"</span><span class="p">:</span>
-
-  <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">core_check_resource_exists_at_location_center</span><span class="p">(</span>
-    <span class="n">location</span><span class="o">=</span><span class="n">plate_to_move</span><span class="o">.</span><span class="n">get_absolute_location</span><span class="p">(),</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">SIMULATION</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">probe_resource_exists_using_ztouch</span><span class="p">(</span>
+    <span class="n">location</span><span class="o">=</span><span class="n">plate_to_move</span><span class="o">.</span><span class="n">get_location_wrt</span><span class="p">(</span><span class="n">deck</span><span class="p">),</span>
     <span class="n">resource</span><span class="o">=</span><span class="n">plate_to_move</span><span class="p">,</span>
     <span class="n">gripper_y_margin</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span>
     <span class="n">enable_recovery</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">audio_feedback</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
   <span class="p">)</span>
-   
-<span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">return_core_gripper_tools</span><span class="p">()</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="n">backend</span><span class="o">.</span><span class="n">core_parked</span><span class="p">)</span>
-<span class="c1"># &gt;&gt;&gt; True</span>
-</pre></div>
-</div>
-</div>
-<div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>C0ZPid0004xs03254xd0yj1138yv0050zj2162zy0500yo0885yg0825yw40th2800te2800
-C0ZRid0005xs01679xd0yj1147zj1932zi000zy0500yo0885th2800te2800
-C0ZSid0006xs07975xd0ya1250yb1070tp2150tz2050th2800te2800
-True
+<span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">return_tools</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">star</span><span class="o">.</span><span class="n">core_grippers</span><span class="o">.</span><span class="n">tools_mounted</span><span class="p">)</span>
+<span class="c1"># &gt;&gt;&gt; False</span>
 </pre></div>
 </div>
 </div>
 </div>
-<hr class="docutils" />
-<iframe width="640" height="360" src="https://www.youtube.com/embed/cKg4QXuHT6k" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></section>
+</section>
+</section>
+<section id="disconnect">
+<h2>Disconnect<a class="headerlink" href="#disconnect" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">viewer</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
 </section>
 </section>
 
@@ -914,21 +860,22 @@ True
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisites">Prerequisites</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#preview-of-machine-behvaiour">Preview of Machine Behvaiour</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#preview-of-device-behaviour">Preview of Device Behaviour</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-mode">Protocol Mode</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#import-statements">Import Statements</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#non-plr-dependencies">Non-PLR Dependencies</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#machine-visualizer">Machine &amp; Visualizer</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#device-visualizer">Device &amp; Visualizer</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#required-resources">Required Resources</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instantiate-frontend-connect-to-machine">Instantiate Frontend &amp; Connect to Machine</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instantiate-device-connect">Instantiate Device &amp; Connect</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configure-deck-layout">Configure Deck Layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#execution">Execution</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#move-plate-onto-magnet-plateadapter">Move Plate Onto Magnet PlateAdapter</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#move-plate-back-onto-tapped-plateholder">Move Plate back onto tapped PlateHolder</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#disconnect">Disconnect</a></li>
 </ul>
   </nav></div>
 
