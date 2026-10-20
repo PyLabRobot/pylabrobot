@@ -11,8 +11,10 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, cast
 
+from pylabrobot.io.capture import get_capture_or_validation_active
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
 from .configuration import (
   DECODED_FIRMWARE,
@@ -51,6 +53,7 @@ from .framing import (
   usb_wrap_payload,
 )
 from .parameter_table import PARAMETER_TABLE, REPLY_OFFSET
+from .pending_reads import PendingReads
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +101,7 @@ class CLARIOstarDriver:
   # inside a reply, over about 26,000 replies including measurement data, was 0.44 s.
   _FRAME_STALL_TIMEOUT = 2.0
   _FRAME_HARD_CAP = 60.0  # seconds; ceiling on reading one FTDI frame
+  _FRAME_POLL_INTERVAL = 0.001  # seconds between looks at what the pending reads received
   _USB_PACKET_TIMEOUT = 5  # seconds to wait for one USB packet
   _RETRY_SETTLE = 0.08  # seconds between send_command attempts
 
@@ -224,6 +228,8 @@ class CLARIOstarDriver:
     # overlap.
     self._lock = asyncio.Lock()
     self._last_warning: Optional[Tuple[int, int, int, int, int]] = None
+    # FTDI only: bulk-in transfers kept pending from setup to stop; None reads through libftdi.
+    self._pending_reads: Optional[PendingReads] = None
     self.drawer = Drawer(self)
     # Built by `discover` only if the reader reports a temperature controller, absorbance, and
     # a fluorescence channel.
@@ -238,12 +244,37 @@ class CLARIOstarDriver:
     """The io, as an FTDI."""
     return cast(FTDI, self.io)
 
+  def _start_pending_reads(self) -> None:
+    """Keep bulk-in transfers pending on the open FTDI chip; if they cannot start, read with
+    libftdi (`_ftdi_read_frame`).
+
+    Not while capture or validation is active: their replay needs every read to pass `FTDI.read`.
+    """
+    if get_capture_or_validation_active():
+      logger.info("capture or validation active: reading with libftdi")
+      return
+    try:
+      reads = PendingReads.from_device(self._ftdi.dev)
+      reads.start()
+    except Exception as e:  # no open pylibftdi device, no libusb handle, nothing submitted
+      logger.warning("bulk-in transfers not kept pending (%s); reading with libftdi", e)
+      return
+    self._pending_reads = reads
+
+  def _stop_pending_reads(self) -> None:
+    """Cancel and free the pending bulk-in transfers, if any; libftdi reads from then on."""
+    reads, self._pending_reads = self._pending_reads, None
+    if reads is not None:
+      reads.stop()
+
   async def _ftdi_setup(self) -> None:
-    """Open the FTDI port at 125000 baud, 8N1, latency 2 ms."""
+    """Open the FTDI port at 125000 baud, 8N1, latency 2 ms, and keep bulk-in transfers pending."""
+    self._stop_pending_reads()  # a second setup reopens the device under them
     await self._ftdi.setup()
     await self._ftdi.set_baudrate(125000)
     await self._ftdi.set_line_property(8, 0, 0)  # 8N1
     await self._ftdi.set_latency_timer(2)
+    self._start_pending_reads()
 
   async def _ftdi_write(self, frame: bytes) -> None:
     """Write a whole frame; raise OSError on a short write."""
@@ -320,10 +351,77 @@ class CLARIOstarDriver:
       return data[:expected_size]
     return data
 
+  def _get_pending_reads(self) -> Optional[PendingReads]:
+    """The pending reads while they run; None once they stopped by themselves (e.g. the device
+    was removed), and libftdi reads from then on."""
+    reads = self._pending_reads
+    if reads is not None and not reads.running:
+      logger.warning("bulk-in transfers stopped (%s); reading with libftdi", reads.error)
+      self._stop_pending_reads()
+      return None
+    return reads
+
+  def _discard_unread(self, reads: PendingReads) -> None:
+    """Drop the bytes the pending reads hold unread, logging them at the I/O level."""
+    data, _ = reads.take()
+    if data:
+      logger.log(LOG_LEVEL_IO, "[%s] discarded %s", self._ftdi.device_id, data)
+
+  async def _ftdi_read_pending_frame(self, reads: PendingReads) -> bytes:
+    """Read one FTDI reply frame from the pending reads, with `_ftdi_read_frame`'s rules.
+
+    Bytes before an STX are dropped and the size field ends the frame. ``_PACKET_READ_TIMEOUT``
+    bounds the wait for the header; after it, a silence of ``_FRAME_STALL_TIMEOUT`` or the
+    ``_FRAME_HARD_CAP``. Packets flagging a line error (an overrun loses bytes) are warned about.
+
+    Returns:
+      The frame, possibly short of its size field on a stall; the caller validates it.
+    """
+    data = bytearray()
+    expected_size: Optional[int] = None
+    line_errors = 0
+    start = time.time()
+    last_data_time = start
+    while True:
+      chunk, errors = reads.take()
+      line_errors += errors
+      now = time.time()
+      if chunk:
+        logger.log(LOG_LEVEL_IO, "[%s] read %s", self._ftdi.device_id, chunk)
+        data += chunk
+        last_data_time = now
+        if expected_size is None:
+          index = data.find(FTDI_STX)
+          del data[: index if index != -1 else len(data)]
+          if len(data) >= 3:
+            expected_size = int.from_bytes(data[1:3], "big")
+            start = now
+        if expected_size is not None and len(data) >= expected_size:
+          break
+      elif not reads.running:
+        break
+      elif expected_size is None:
+        if now - start > self._PACKET_READ_TIMEOUT:
+          break
+      elif now - last_data_time > self._FRAME_STALL_TIMEOUT or now - start > self._FRAME_HARD_CAP:
+        break
+      await asyncio.sleep(self._FRAME_POLL_INTERVAL)
+    if line_errors:
+      logger.warning("%d packets of this reply flagged a line error (bytes lost)", line_errors)
+    if expected_size is not None and len(data) >= expected_size:
+      return bytes(data[:expected_size])
+    return bytes(data)
+
   async def _ftdi_exchange(self, payload: bytes) -> bytes:
     """Send one payload over FTDI and return the validated reply payload."""
-    await self._ftdi_write(ftdi_wrap_payload(payload))
-    frame = await self._ftdi_read_frame()
+    reads = self._get_pending_reads()
+    if reads is None:
+      await self._ftdi_write(ftdi_wrap_payload(payload))
+      frame = await self._ftdi_read_frame()
+    else:
+      self._discard_unread(reads)  # bytes read before the command is sent are not its reply
+      await self._ftdi_write(ftdi_wrap_payload(payload))
+      frame = await self._ftdi_read_pending_frame(reads)
     ftdi_validate_frame(frame)
     return ftdi_extract_payload(frame)
 
@@ -387,6 +485,8 @@ class CLARIOstarDriver:
     """Discard unread reply bytes."""
     if self.use_io == "ftdi":
       await self._ftdi.usb_purge_rx_buffer()
+      if self._pending_reads is not None:
+        self._discard_unread(self._pending_reads)
     else:
       await self._usb.drain()
 
@@ -918,4 +1018,5 @@ class CLARIOstarDriver:
         drawer is opened and the connection stays open.
     """
     await self._shut_down(accept_plate_left_in_device)
+    self._stop_pending_reads()  # before the device handle under them is closed
     await self.io.stop()
