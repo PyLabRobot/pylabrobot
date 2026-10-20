@@ -373,11 +373,13 @@ class CLARIOstarDriver:
     Bytes before an STX are dropped and the size field ends the frame. ``_PACKET_READ_TIMEOUT``
     bounds the wait for the header; after it, a silence of ``_FRAME_STALL_TIMEOUT`` or the
     ``_FRAME_HARD_CAP``. Packets flagging a line error (an overrun loses bytes) are warned about.
+    The IO log gets one line per reply: every byte taken, dropped ones included.
 
     Returns:
       The frame, possibly short of its size field on a stall; the caller validates it.
     """
     data = bytearray()
+    received = bytearray()
     expected_size: Optional[int] = None
     line_errors = 0
     start = time.time()
@@ -387,7 +389,7 @@ class CLARIOstarDriver:
       line_errors += errors
       now = time.time()
       if chunk:
-        logger.log(LOG_LEVEL_IO, "[%s] read %s", self._ftdi.device_id, chunk)
+        received += chunk
         data += chunk
         last_data_time = now
         if expected_size is None:
@@ -406,6 +408,8 @@ class CLARIOstarDriver:
       elif now - last_data_time > self._FRAME_STALL_TIMEOUT or now - start > self._FRAME_HARD_CAP:
         break
       await asyncio.sleep(self._FRAME_POLL_INTERVAL)
+    if received:
+      logger.log(LOG_LEVEL_IO, "[%s] read %s", self._ftdi.device_id, bytes(received))
     if line_errors:
       logger.warning("%d packets of this reply flagged a line error (bytes lost)", line_errors)
     if expected_size is not None and len(data) >= expected_size:
