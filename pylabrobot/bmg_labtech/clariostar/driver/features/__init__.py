@@ -8,6 +8,7 @@ from .drawer import Drawer
 from .fluorescence import (
   CLARIOstarFluorescenceResult,
   CLARIOstarFluorescenceSpectrumResult,
+  CLARIOstarZProfileResult,
   Fluorescence,
   FluorescenceConfiguration,
 )

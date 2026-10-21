@@ -5,7 +5,7 @@ or a cytometer.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pylabrobot.lib.optics.filters import DichroicFilter, OpticalFilter
 
@@ -14,7 +14,7 @@ def _check_excitation_or_emission(
   excitation_or_emission: str,
   wavelength: Optional[float],
   bandwidth: Optional[float],
-  optical_filter: Optional[OpticalFilter],
+  optical_filter: Optional[Union[OpticalFilter, int, str]],
 ) -> List[str]:
   """The violations of excitation or emission.
 
@@ -34,7 +34,7 @@ def _check_excitation_or_emission(
 
 
 def _check_dichroic(
-  dichroic_filter: Optional[DichroicFilter], split_wavelength: Optional[float]
+  dichroic_filter: Optional[Union[DichroicFilter, int, str]], split_wavelength: Optional[float]
 ) -> List[str]:
   """The violations of the dichroic: a fixed dichroic with a tunable split, a split not positive."""
   errors = []
@@ -60,23 +60,26 @@ class FluorescenceChannel:
   Attributes:
     excitation_wavelength: nm through a monochromator or a tunable source; None with a filter.
     excitation_bandwidth: nm about `excitation_wavelength`; None with a filter or the default.
-    excitation_filter: the excitation filter instead of a wavelength.
+    excitation_filter: the excitation filter instead of a wavelength: a filter, or its slot or name
+      on the device's slides.
     dichroic_split_wavelength: nm where a tunable dichroic splits excitation from emission; None
       otherwise.
-    dichroic_filter: a fixed dichroic instead of a split.
+    dichroic_filter: a fixed dichroic instead of a split: a filter, or its slot or name on the
+      device's slides.
     emission_wavelength: nm through a monochromator; None with a filter.
     emission_bandwidth: nm about `emission_wavelength`; None with a filter or the default.
-    emission_filter: the emission filter instead of a wavelength.
+    emission_filter: the emission filter instead of a wavelength: a filter, or its slot or name on
+      the device's slides.
   """
 
   excitation_wavelength: Optional[float] = None
   excitation_bandwidth: Optional[float] = None
-  excitation_filter: Optional[OpticalFilter] = None
+  excitation_filter: Optional[Union[OpticalFilter, int, str]] = None
   dichroic_split_wavelength: Optional[float] = None
-  dichroic_filter: Optional[DichroicFilter] = None
+  dichroic_filter: Optional[Union[DichroicFilter, int, str]] = None
   emission_wavelength: Optional[float] = None
   emission_bandwidth: Optional[float] = None
-  emission_filter: Optional[OpticalFilter] = None
+  emission_filter: Optional[Union[OpticalFilter, int, str]] = None
 
   def __post_init__(self) -> None:
     """Raise listing every component of the wrong combination or sign.
