@@ -591,7 +591,8 @@
 <dt class="sig sig-object py" id="pylabrobot.brooks.precise_flex.PreciseFlexDriver.discover">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexDriver.</span></span><span class="sig-name descname"><span class="pre">discover</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlexConfiguration.html#pylabrobot.brooks.precise_flex.PreciseFlexConfiguration" title="pylabrobot.brooks.precise_flex.driver.configuration.PreciseFlexConfiguration"><span class="pre">PreciseFlexConfiguration</span></a></span></span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexDriver.discover" title="Link to this definition">#</a></dt>
 <dd><p>Read the controller’s configuration and adopt it. No motion.</p>
-<p>Raises if the read fails: without it IK solves for another arm and the gripper has no limits.</p>
+<p>Raises if the read fails: without it IK solves for another arm and the gripper has no limits.
+Raises too if a declared configuration does not describe this device.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The configuration, also kept as <code class="docutils literal notranslate"><span class="pre">configuration</span></code>.</p>

@@ -15,9 +15,11 @@ pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration
    .. autosummary::
       :toctree: .
    
+      ~PreciseFlexConfiguration.camera_count
       ~PreciseFlexConfiguration.gripper_width_range
       ~PreciseFlexConfiguration.hard_limits
       ~PreciseFlexConfiguration.has_rail
+      ~PreciseFlexConfiguration.has_vision_gripper
       ~PreciseFlexConfiguration.is_dual_gripper
       ~PreciseFlexConfiguration.is_vision_gripper
       ~PreciseFlexConfiguration.kinematics

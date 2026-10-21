@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDriver.save\_configuration
+=====================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexDriver.save_configuration
