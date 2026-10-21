@@ -1,8 +1,12 @@
+import math
+
 import pytest
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.utils import (
+  compute_circle_child_poses,
+  create_ordered_items_2d,
   label_to_row_index,
   query,
   row_index_to_label,
@@ -83,3 +87,82 @@ def test_deep():
   child1.assign_child_resource(grandchild, location=Coordinate(1, 1, 0))
 
   assert query(root, Resource) == [child1, grandchild]
+
+
+def test_item_spacing_none_for_single_item_dimension():
+  """item_dx/item_dy=None declares a dimension that holds a single item: the item
+  is placed at (dx, dy, dz) with no spacing, and passing None where the dimension
+  spans more than one item raises ValueError."""
+  # None on a 1x1 grid -> the sole item sits at the origin offset, no phantom shift
+  items = create_ordered_items_2d(
+    Well,
+    num_items_x=1,
+    num_items_y=1,
+    dx=5,
+    dy=6,
+    dz=7,
+    item_dx=None,
+    item_dy=None,
+    size_x=8,
+    size_y=8,
+    size_z=8,
+  )
+  assert items["A1"].location == Coordinate(5, 6, 7)
+
+  # None where the dimension actually spans (>1 items) is a misuse, not "no spacing"
+  with pytest.raises(ValueError):
+    create_ordered_items_2d(
+      Well,
+      num_items_x=2,
+      num_items_y=1,
+      dx=0,
+      dy=0,
+      dz=0,
+      item_dx=None,
+      item_dy=None,
+      size_x=8,
+      size_y=8,
+      size_z=8,
+    )
+
+
+def test_compute_circle_child_poses():
+  poses = compute_circle_child_poses(4, 3, z=2)
+  expected = [((6, 3), 90), ((3, 6), 180), ((0, 3), 270), ((3, 0), 0)]
+  for (p, rotation_z), ((x, y), expected_rotation_z) in zip(poses, expected):
+    assert p.x == pytest.approx(x)
+    assert p.y == pytest.approx(y)
+    assert p.z == 2
+    assert rotation_z == pytest.approx(expected_rotation_z)
+  with pytest.raises(ValueError):
+    compute_circle_child_poses(0, 3)
+
+
+@pytest.mark.parametrize("orientation, sign", [("outwards", 1), ("inwards", -1)])
+def test_compute_circle_child_poses_children_face_orientation(orientation, sign):
+  parent = Resource(name="parent", size_x=80, size_y=80, size_z=10)
+  poses = compute_circle_child_poses(8, 40, orientation=orientation)
+  for i, (p, rotation_z) in enumerate(poses):
+    child = Resource(name=f"child_{i}", size_x=8, size_y=12, size_z=5)
+    center = child.get_anchor("c", "c", "b")
+    parent.assign_child_resource(child, location=p - center)
+    child.rotate(z=rotation_z, pivot_coordinate=center)
+    child_center = child.get_absolute_location("c", "c", "b")
+    front = child.get_absolute_location("c", "f", "b")
+    assert child_center.x == pytest.approx(p.x)
+    assert child_center.y == pytest.approx(p.y)
+    expected = (sign * (child_center.x - 40), sign * (child_center.y - 40))
+    facing = (front.x - child_center.x, front.y - child_center.y)
+    angle = math.degrees(math.atan2(facing[1], facing[0]) - math.atan2(expected[1], expected[0]))
+    assert (angle + 180) % 360 - 180 == pytest.approx(0, abs=1e-3)
+
+
+def test_compute_circle_child_poses_without_orientation():
+  poses = compute_circle_child_poses(4, 3, orientation=None)
+  assert [rotation_z for _, rotation_z in poses] == [0.0] * 4
+  assert [(p.x, p.y) for p, _ in poses] == [(p.x, p.y) for p, _ in compute_circle_child_poses(4, 3)]
+
+
+def test_compute_circle_child_poses_rejects_unknown_orientation():
+  with pytest.raises(ValueError):
+    compute_circle_child_poses(4, 3, orientation="sideways")  # type: ignore[arg-type]

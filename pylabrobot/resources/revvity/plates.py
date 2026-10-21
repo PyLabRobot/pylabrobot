@@ -76,5 +76,6 @@ def Revvity_384_wellplate_28ul_Ub(name: str, with_lid: bool = False) -> Plate:
       material_z_thickness=1.0,
       cross_section_type=CrossSectionType.CIRCLE,
       compute_volume_from_height=_compute_volume_from_height_Revvity_384_wellplate_28ul_Ub,
+      name_prefix=name,
     ),
   )

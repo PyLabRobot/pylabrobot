@@ -1,4 +1,5 @@
-from typing import Optional
+import math
+from typing import Any, Mapping, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -13,14 +14,16 @@ def get_child_location(resource: Resource) -> Coordinate:
   """
   if not resource.rotation.y == resource.rotation.x == 0:
     raise ValueError("Resource rotation must be 0 around the x and y axes")
-  if not resource.rotation.z % 90 == 0:
+  z = resource.rotation.z % 360
+  snapped_z = round(z / 90) * 90
+  if not math.isclose(z, snapped_z, rel_tol=0, abs_tol=1e-7):
     raise ValueError("Resource rotation must be a multiple of 90 degrees on the z axis")
   location = {
     0.0: Coordinate(x=0, y=0, z=0),
     90.0: Coordinate(x=resource.get_size_y(), y=0, z=0),
     180.0: Coordinate(x=resource.get_size_x(), y=resource.get_size_y(), z=0),
     270.0: Coordinate(x=0, y=resource.get_size_x(), z=0),
-  }[resource.rotation.z % 360]
+  }[snapped_z % 360]
   return location
 
 
@@ -42,6 +45,7 @@ class ResourceHolder(Resource):
     model=None,
     child_location: Coordinate = Coordinate.zero(),
     preferred_pickup_location: Optional[Coordinate] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     Resource.__init__(
       self,
@@ -53,6 +57,7 @@ class ResourceHolder(Resource):
       category=category,
       model=model,
       preferred_pickup_location=preferred_pickup_location,
+      metadata=metadata,
     )
     self.child_location = child_location
 

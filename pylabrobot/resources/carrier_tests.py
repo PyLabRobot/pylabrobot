@@ -1,7 +1,9 @@
 import unittest
 
 from pylabrobot.resources.hamilton.mfx_carriers import hamilton_mfx_carrier_L5_base
-from pylabrobot.resources.hamilton.mfx_modules import MFX_TIP_module
+from pylabrobot.resources.hamilton.mfx_modules import (
+  hamilton_mfx_tiprackholder_standard,
+)
 
 from .carrier import (
   Carrier,
@@ -221,13 +223,7 @@ class CarrierTests(unittest.TestCase):
         "size_x": 135.0,
         "size_y": 497.0,
         "size_z": 13.0,
-        "location": None,
-        "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
         "category": "tip_carrier",
-        "model": None,
-        "barcode": None,
-        "preferred_pickup_location": None,
-        "parent_name": None,
         "children": [
           {
             "name": "tip_car-0",
@@ -241,14 +237,9 @@ class CarrierTests(unittest.TestCase):
               "y": 20,
               "z": 30,
             },
-            "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
-            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
-            "children": [],
             "parent_name": "tip_car",
-            "model": None,
-            "barcode": None,
-            "preferred_pickup_location": None,
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
           },
           {
             "name": "tip_car-1",
@@ -262,14 +253,9 @@ class CarrierTests(unittest.TestCase):
               "y": 50,
               "z": 30,
             },
-            "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
-            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
-            "children": [],
             "parent_name": "tip_car",
-            "model": None,
-            "barcode": None,
-            "preferred_pickup_location": None,
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
           },
           {
             "name": "tip_car-2",
@@ -283,14 +269,9 @@ class CarrierTests(unittest.TestCase):
               "y": 80,
               "z": 30,
             },
-            "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
-            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
-            "children": [],
             "parent_name": "tip_car",
-            "model": None,
-            "barcode": None,
-            "preferred_pickup_location": None,
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
           },
           {
             "name": "tip_car-3",
@@ -304,14 +285,9 @@ class CarrierTests(unittest.TestCase):
               "y": 130,
               "z": 30,
             },
-            "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
-            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
-            "children": [],
             "parent_name": "tip_car",
-            "model": None,
-            "barcode": None,
-            "preferred_pickup_location": None,
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
           },
           {
             "name": "tip_car-4",
@@ -325,14 +301,9 @@ class CarrierTests(unittest.TestCase):
               "y": 160,
               "z": 30,
             },
-            "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
-            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
-            "children": [],
             "parent_name": "tip_car",
-            "model": None,
-            "barcode": None,
-            "preferred_pickup_location": None,
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
           },
         ],
       },
@@ -362,6 +333,7 @@ class CarrierTests(unittest.TestCase):
         size_x=1,
         size_y=1,
         size_z=1,
+        name_prefix="plate1",
       ),
     )
     plate2 = Plate(
@@ -381,6 +353,7 @@ class CarrierTests(unittest.TestCase):
         size_x=1,
         size_y=1,
         size_z=1,
+        name_prefix="plate2",
       ),
     )
     carrier = PlateCarrier(
@@ -424,11 +397,11 @@ class CarrierTests(unittest.TestCase):
 
 class MFXCarrierTests(unittest.TestCase):
   def test_init(self):
-    MFX_TIP_module_1 = MFX_TIP_module(name="MFX_TIP_module_1")
-    MFX_TIP_module_2 = MFX_TIP_module(name="MFX_TIP_module_2")
-    MFX_TIP_module_3 = MFX_TIP_module(name="MFX_TIP_module_3")
-    MFX_TIP_module_4 = MFX_TIP_module(name="MFX_TIP_module_4")
-    MFX_TIP_module_5 = MFX_TIP_module(name="MFX_TIP_module_5")
+    MFX_TIP_module_1 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_1")
+    MFX_TIP_module_2 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_2")
+    MFX_TIP_module_3 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_3")
+    MFX_TIP_module_4 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_4")
+    MFX_TIP_module_5 = hamilton_mfx_tiprackholder_standard(name="MFX_TIP_module_5")
 
     mfx_carrier = hamilton_mfx_carrier_L5_base(
       name="mfx_tip_carrier_1",

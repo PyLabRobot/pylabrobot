@@ -90,6 +90,7 @@ class DeckTests(unittest.TestCase):
         size_x=1,
         size_y=1,
         make_tip=hamilton_tip_300uL_filter,
+        name_prefix="tips",
       ),
     )
     pc = PlateCarrier(
@@ -123,6 +124,7 @@ class DeckTests(unittest.TestCase):
         size_x=1,
         size_y=1,
         size_z=1,
+        name_prefix="plate",
       ),
     )
     custom_1.assign_child_resource(tc, location=Coordinate(0, 0, 0))

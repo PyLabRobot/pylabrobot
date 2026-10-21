@@ -105,8 +105,6 @@ class Well(Container):
     self.bottom_type = bottom_type
     self.cross_section_type = cross_section_type
 
-    self.tracker.register_callback(self._state_updated)
-
   def serialize(self):
     return {
       **super().serialize(),

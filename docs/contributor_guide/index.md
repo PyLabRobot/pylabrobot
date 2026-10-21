@@ -15,8 +15,10 @@ command-prefix-conventions
 :maxdepth: 2
 :caption: Adding Backends/Drivers
 
-new-machine-type
-new-concrete-backend
+device-driver-guide
+device-registry
+event-bus
+event-schemas
 ```
 
 <hr>

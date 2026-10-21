@@ -1,14 +1,21 @@
-from typing import Dict, Optional, Union, cast
+from typing import ClassVar, Dict, Optional, Union
 
+from .container_rack import ContainerRack
 from .coordinate import Coordinate
-from .itemized_resource import ItemizedResource
 from .resource import Resource
 from .resource_holder import ResourceHolder
 from .tube import Tube
 
 
-class TubeRack(ItemizedResource[ResourceHolder]):
-  """Tube rack resource."""
+class TubeRack(ContainerRack[Tube]):
+  """A rack of tubes.
+
+  Specialization of :class:`ContainerRack` that restricts slot contents to
+  :class:`Tube` resources (statically via ``ContainerRack[Tube]`` and at
+  runtime via ``_content_type``).
+  """
+
+  _content_type: ClassVar[type] = Tube
 
   def __init__(
     self,
@@ -18,23 +25,15 @@ class TubeRack(ItemizedResource[ResourceHolder]):
     size_z: float,
     ordered_items: Optional[Dict[str, ResourceHolder]] = None,
     model: Optional[str] = None,
+    category: str = "tube_rack",
   ):
-    """Initialize a TubeRack resource.
-
-    Args:
-      name: Name of the tube rack.
-      size_x: Size of the tube rack in the x direction.
-      size_y: Size of the tube rack in the y direction.
-      size_z: Size of the tube rack in the z direction.
-      items: List of lists of wells.
-      model: Model of the tube rack.
-    """
     super().__init__(
       name=name,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
       ordered_items=ordered_items,
+      category=category,
       model=model,
     )
 
@@ -47,25 +46,8 @@ class TubeRack(ItemizedResource[ResourceHolder]):
     assert location is not None, "Location must be specified for resource."
     return super().assign_child_resource(resource, location=location, reassign=reassign)
 
-  def __repr__(self) -> str:
-    return (
-      f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
-      f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})"
-    )
-
-  def __setitem__(self, key: Union[int, str], value: Tube) -> None:
-    if not isinstance(value, Tube):
-      raise ValueError("Only Tubes resources can be added to a TubeRack.")
-    self.get_item(key).resource = value
-
   def get_tube(self, key: Union[int, str]) -> Optional[Tube]:
-    """Get the tube at the given position.
-
-    Args:
-      key: Position of the tube to get. Can be an integer index or a string name.
-
-    Returns:
-      The tube at the given position, or None if there is no tube at that position.
-    """
-    holder = self.get_item(key)
-    return cast(Optional[Tube], holder.resource) if holder.resource is not None else None
+    """Get the tube at the given position, or None if the position is empty."""
+    if not self.has_container(key):
+      return None
+    return self.get_container(key)

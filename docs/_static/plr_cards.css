@@ -121,7 +121,7 @@
   justify-content: center;
   align-items: flex-start;
   padding: 1.5rem 1.7rem;
-  width: 60%;
+  width: 100%;
 }
 
 .plr-card-text h4 {
@@ -151,60 +151,6 @@
   margin-left: -1rem;
 }
 
-/* ==== Image & Video ==== */
-
-.plr-card-image {
-  max-width: 320px;
-  overflow: hidden;
-  position: relative;
-  border-left: 1px solid var(--pst-color-border, #e0e0e0);
-  background: var(--pst-color-surface, #fafafa);
-  transition: transform 0.35s ease, box-shadow 0.35s ease;
-}
-
-.plr-card-image img,
-.plr-card-image video {
-  position: relative;
-  z-index: 2;
-  display: block;
-  width: 100%;
-
-  object-fit: cover;
-  border-radius: 0;
-  transition: transform 0.35s ease, filter 0.3s ease, opacity 0.25s ease-in-out;
-  will-change: transform, filter, opacity;
-  isolation: isolate;
-  contain: paint;
-  backface-visibility: hidden;
-}
-
-.plr-card-image video {
-  display: none;
-  position: absolute;
-  inset: 0;
-}
-
-/* Image visual feedback */
-.plr-card:hover .plr-card-image img {
-  transform: scale(1.05);
-  filter: brightness(1.05);
-}
-
-/* Add depth with subtle overlay */
-.plr-card-image::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.05), transparent);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  z-index: 1;
-}
-
-.plr-card:hover .plr-card-image::after {
-  opacity: 1;
-}
-
 /* ==== Animations ==== */
 
 @keyframes plrFadeIn {
@@ -229,15 +175,6 @@
   .plr-card-text {
     padding: 1rem 1.25rem;
     width: 100%;
-  }
-
-  .plr-card-image {
-    width: 100%;
-    border-left: none;
-    border-top: 1px solid var(--pst-color-border, #e0e0e0);
-    max-width: none;
-    /* show before content */
-    order: -1;
   }
 
   .plr-filter-btn {

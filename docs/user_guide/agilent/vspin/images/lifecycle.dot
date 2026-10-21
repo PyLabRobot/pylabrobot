@@ -1,0 +1,45 @@
+digraph vspin_lifecycle {
+  graph [bgcolor="#f8fafc", pad=0.2, rankdir=TB, ranksep=0.35, nodesep=0.4];
+  node [shape=box, style="rounded,filled", fillcolor="#e0f2fe", color="#0284c7",
+        fontcolor="#0f172a", fontname="Helvetica", fontsize=14, margin="0.12,0.09"];
+  edge [color="#475569", fontcolor="#475569", fontname="Helvetica", fontsize=12];
+
+  connection [label="Connection", shape=plain, fontname="Helvetica-Bold"];
+  initialization [label="Initialization", shape=plain, fontname="Helvetica-Bold"];
+  homing [label="Homing", shape=plain, fontname="Helvetica-Bold"];
+  disconnected [label="DISCONNECTED\ninit/home UNKNOWN"];
+  connecting [label="CONNECTING"];
+  connected [label="CONNECTED"];
+  disconnecting [label="DISCONNECTING"];
+  init_unknown [label="UNKNOWN"];
+  initializing [label="INITIALIZING"];
+  initialized [label="INITIALIZED"];
+  home_unknown [label="UNKNOWN"];
+  home_in_progress [label="HOMING"];
+  homed [label="HOMED"];
+
+  {rank=same; connection; initialization; homing;}
+  {rank=same; disconnected; init_unknown; home_unknown;}
+  {rank=same; connecting; initializing; home_in_progress;}
+  {rank=same; connected; initialized; homed;}
+
+  connection -> disconnected [style=invis];
+  initialization -> init_unknown [style=invis];
+  homing -> home_unknown [style=invis];
+  disconnected -> connecting [label="setup"];
+  connecting -> connected [label="transport open"];
+  connected -> disconnecting [label="stop"];
+  disconnecting -> disconnected [constraint=false, label="closed"];
+  init_unknown -> initializing [label="initialize"];
+  initializing -> initialized [label="confirmed"];
+  home_unknown -> home_in_progress [label="home"];
+  home_in_progress -> homed [label="confirmed"];
+
+  connected -> initializing [label="required", color="#0369a1", fontcolor="#0369a1", style=dashed, constraint=false];
+  initialized -> home_in_progress [label="required", color="#0369a1", fontcolor="#0369a1", style=dashed, constraint=false];
+  ready [label="Semantic readiness\nIDLE + no recovery required", fillcolor="#dcfce7", color="#16a34a"];
+  connected -> ready [style=dashed, color="#0369a1"];
+  initialized -> ready [style=dashed, color="#0369a1"];
+  homed -> ready [style=dashed, color="#0369a1"];
+  disconnecting -> ready [style=invis];
+}

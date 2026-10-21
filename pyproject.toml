@@ -6,28 +6,42 @@ build-backend = "setuptools.build_meta"
 name = "PyLabRobot"
 description = "A hardware agnostic platform for lab automation"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["typing_extensions", "websockets"]
+dependencies = ["typing_extensions", "websockets>=14"]
+
+[project.scripts]
+plr = "pylabrobot.cli:main"
 
 [project.optional-dependencies]
 serial = ["pyserial"]
 usb = ["pyusb", "libusb-package"]
 ftdi = ["pylibftdi", "pyusb"]
 hid = ["hid"]
+btx = ["pyserial", "numpy>=1.26", "Pillow"]
 modbus = ["pymodbus>=3.0.0,<3.7.0"]
-opentrons = ["opentrons-http-api-client==0.2.0"]
+opentrons = ["opentrons-http-api-client==0.2.1", "httpx", "zeroconf>=0.131.0"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
-microscopy = ["numpy>=1.26", "opencv-python"]
-pico = ["PyLabRobot[microscopy,sila]"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila]"]
+celigo = ["numpy", "Pillow"]
+rpc = ["grpcio==1.84.0", "protobuf==7.36.2"]
+rpc-dev = [
+  "PyLabRobot[rpc,test]",
+  "grpcio-tools==1.84.0",
+  "mypy-protobuf==5.1.0",
+  "types-grpcio",
+  "types-protobuf",
+]
+cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
+pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
+xarm = ["xarm-python-sdk"]
+odyssey = ["Pillow"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
 test = [
   "pytest",
-  "pytest-timeout",
 ]
 dev = [
-  "PyLabRobot[all,test]",
+  "PyLabRobot[all,test,celigo,rpc-dev]",
 
   # lint/type
   "mypy==1.18.2",
@@ -49,15 +63,45 @@ Homepage = "https://github.com/pylabrobot/pylabrobot"
 version = {file = "pylabrobot/version.txt"}
 
 [tool.setuptools.packages.find]
-namespaces = false
-exclude = ["tools*", "docs*"]
+namespaces = true
+include = ["pylabrobot", "pylabrobot.*"]
+exclude = ["*.__pycache__"]
 
 [tool.setuptools.package-data]
-pylabrobot = ["visualizer/*", "version.txt"]
+"pylabrobot.revvity.celigo.grpc.v1" = ["*.proto", "*.pyi"]
+"pylabrobot.rpc.v1" = ["*.proto", "*.pyi"]
+"*" = [
+  "*.css",
+  "*.csv",
+  "*.glb",
+  "*.html",
+  "*.js",
+  "*.json",
+  "*.md",
+  "*.pdf",
+  "*.png",
+  "*.stl",
+  "*.ts",
+  "*.txt",
+  "*.wasm",
+  "LICENSE",
+  "NOTICE",
+]
 
 [tool.ruff]
 line-length = 100
 indent-width = 2
+force-exclude = true
+extend-exclude = [
+  "pylabrobot/rpc/v1/*_pb2.py",
+  "pylabrobot/rpc/v1/*_pb2.pyi",
+  "pylabrobot/rpc/v1/*_pb2_grpc.py",
+  "pylabrobot/rpc/v1/*_pb2_grpc.pyi",
+  "pylabrobot/revvity/celigo/grpc/v1/*_pb2.py",
+  "pylabrobot/revvity/celigo/grpc/v1/*_pb2.pyi",
+  "pylabrobot/revvity/celigo/grpc/v1/*_pb2_grpc.py",
+  "pylabrobot/revvity/celigo/grpc/v1/*_pb2_grpc.pyi",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]

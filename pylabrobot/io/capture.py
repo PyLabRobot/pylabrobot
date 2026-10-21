@@ -102,14 +102,24 @@ class CaptureReader:
     return command
 
   def done(self):
-    if self._command_idx < len(self.commands):
-      left = len(self.commands) - self._command_idx
-      next_command = self.commands[self._command_idx]
-      raise ValidationError(
-        f"Log file not fully read, {left} lines left. First command: {next_command}"
-      )
-    print("Validation successful!")
-    self.reset()
+    """Assert the capture was fully consumed, then end validation.
+
+    Ending it is what lets the next validation build its io objects; they are
+    refused while a capture or validation is active. It happens even when the
+    assertion fails, so one short replay cannot strand every io after it.
+    """
+    global _capture_or_validation_active
+    try:
+      if self._command_idx < len(self.commands):
+        left = len(self.commands) - self._command_idx
+        next_command = self.commands[self._command_idx]
+        raise ValidationError(
+          f"Log file not fully read, {left} lines left. First command: {next_command}"
+        )
+      print("Validation successful!")
+    finally:
+      self._command_idx = 0
+      _capture_or_validation_active = False
 
   def reset(self):
     self._command_idx = 0
