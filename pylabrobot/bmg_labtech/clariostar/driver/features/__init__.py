@@ -5,5 +5,10 @@ from .absorbance import (
   CLARIOstarAbsorbanceSpectrumResult,
 )
 from .drawer import Drawer
+from .fluorescence import (
+  CLARIOstarFluorescenceResult,
+  Fluorescence,
+  FluorescenceConfiguration,
+)
 from .measurement import MeasurementSettings, ShakeSettings
 from .temperature_controller import TemperatureController

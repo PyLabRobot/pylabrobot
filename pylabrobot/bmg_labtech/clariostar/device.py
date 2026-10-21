@@ -9,6 +9,7 @@ from pylabrobot.resources import Coordinate, PlateHolder, Resource
 
 from .driver.features.absorbance import Absorbance
 from .driver.features.drawer import Drawer
+from .driver.features.fluorescence import Fluorescence
 from .driver.features.temperature_controller import TemperatureController
 from .driver.master import CLARIOstarDriver
 from .driver.simulator import CLARIOstarSimulationDriver
@@ -182,6 +183,11 @@ class CLARIOstarDevice(Resource):
   def absorbance(self) -> Optional[Absorbance]:
     """Absorbance measurement, or None if the reader has none; known after `setup`."""
     return self.driver.absorbance
+
+  @property
+  def fluorescence(self) -> Optional[Fluorescence]:
+    """Fluorescence measurement, or None if the reader has none; known after `setup`."""
+    return self.driver.fluorescence
 
   async def setup(self) -> None:
     """Connect, initialize the reader (about 13 s), and check it is the model this device is.

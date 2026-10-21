@@ -4,7 +4,7 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple
 
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
 from pylabrobot.resources import Plate, Well
@@ -349,15 +349,6 @@ class Absorbance(Measurement):
       configuration: the absorbance's device facts. Defaults to `AbsorbanceConfiguration()`.
     """
     super().__init__(driver, configuration or AbsorbanceConfiguration())
-    self._warned_untested: Set[str] = set()
-
-  def _warn_untested(self, what: str) -> None:
-    """Warn once per reader that `what` has not run on hardware with this driver."""
-    if what not in self._warned_untested:
-      logger.warning(
-        "%s has not been tested on hardware with this driver; please report how it works", what
-      )
-      self._warned_untested.add(what)
 
   def _get_run_parameters(
     self,

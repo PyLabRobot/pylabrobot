@@ -79,6 +79,7 @@ class TestReaderNegotiation(unittest.IsolatedAsyncioTestCase):
 
     self.reader = BioTekPlateReaderDriver()
     self.io = create_autospec(FTDI, instance=True)
+    self.io.write.side_effect = len
     self.reader.io = self.io
     self.plate = cellvis_96_wellplate_350uL_Fb("plate")
 
