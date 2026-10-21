@@ -470,9 +470,9 @@ class Measurement:
     except BaseException:  # a timeout, a cancelled call, a bad reply: stop the run first
       logger.warning("stopping the measurement run")
       try:
-        # A cancel between a write and its read leaves that reply unread: drop it before STOP,
-        # and drop whatever STOP left after it, so the next command reads its own reply.
-        await self._driver._purge_rx()
+        # The reader sends a reply it has started to its end: drain it before STOP, and drop
+        # whatever STOP left after it, so the next command reads its own reply.
+        await self._driver._drain_rx()
         await self._driver.send_command(
           self._driver.CommandFamily.STOP, parameters=b"\x00", when_idle=False
         )
