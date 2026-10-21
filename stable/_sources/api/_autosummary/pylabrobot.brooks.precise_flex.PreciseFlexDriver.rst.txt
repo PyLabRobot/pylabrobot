@@ -118,6 +118,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlexDriver
       ~PreciseFlexDriver.request_tool_transformation_values
       ~PreciseFlexDriver.request_version
       ~PreciseFlexDriver.reset
+      ~PreciseFlexDriver.save_configuration
       ~PreciseFlexDriver.select_robot
       ~PreciseFlexDriver.send_command
       ~PreciseFlexDriver.set_axis_parameter

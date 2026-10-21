@@ -590,13 +590,22 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.brooks.precise_flex.PreciseFlexDriver.send_command">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexDriver.</span></span><span class="sig-name descname"><span class="pre">send_command</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">command</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexDriver.send_command" title="Link to this definition">#</a></dt>
-<dd><p>Send one firmware command while retaining its enclosing operation context.</p>
+<dd><p>Send a command and return the accepted <code class="docutils literal notranslate"><span class="pre">&lt;code&gt;</span> <span class="pre">&lt;data&gt;</span></code> payload.</p>
+<p>Writes the command and reads one reply line (as one locked exchange), then applies the standard
+acceptance gate (<code class="docutils literal notranslate"><span class="pre">_ensure_successful</span></code>): a non-zero reply code raises, otherwise the data
+payload is returned. A reply in a different grammar goes through the same <code class="docutils literal notranslate"><span class="pre">_locked_exchange</span></code>
+and is parsed by the caller instead.</p>
+<p>The exchange is wrapped in the firmware-command events so a command keeps its enclosing
+operation context.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>command</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>)</p>
+<dd class="field-odd"><p><strong>command</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – the command line, without its line ending.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)">str</a></p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlexError.html#pylabrobot.brooks.precise_flex.PreciseFlexError" title="pylabrobot.brooks.precise_flex.PreciseFlexError"><strong>PreciseFlexError</strong></a> – on an empty reply or a non-zero reply code.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)">str</a></p>
 </dd>
 </dl>
 </dd></dl>

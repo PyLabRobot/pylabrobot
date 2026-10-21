@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.has\_vision\_gripper
+=============================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoproperty:: PreciseFlexConfiguration.has_vision_gripper
