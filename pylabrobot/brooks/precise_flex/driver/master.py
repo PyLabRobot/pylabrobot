@@ -1,5 +1,7 @@
 """PreciseFlex driver: the controller link, its lifecycle, and the configuration."""
 
+import asyncio
+import json
 import logging
 import warnings
 from typing import (
@@ -12,8 +14,11 @@ from typing import (
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.driver.configuration import (
+  DEVICE_FEATURE_CONFIGURATIONS,
   Axis,
   PreciseFlexConfiguration,
+  read_configuration,
+  to_jsonable,
 )
 from pylabrobot.brooks.precise_flex.kinematics import JointState
 from pylabrobot.events import emit_event, evented_operation
@@ -58,6 +63,7 @@ class PreciseFlexDriver:
     read_kinematics_from_device: bool = True,
     recover_out_of_range: bool = True,
     parking_position: Optional[JointState] = None,
+    declared_configuration_json: Optional[str] = None,
   ) -> None:
     """
     Args:
@@ -88,10 +94,22 @@ class PreciseFlexDriver:
         ``park()`` moves to. Leave None (the default) and setup fills the generic default RIGHT pose
         (planar fold, Z column at 3/4 of the discovered travel); reassign it any time to park
         elsewhere. While unset (no configuration), ``park()`` falls back to ``movetosafe``.
+      declared_configuration_json: path to a JSON file holding a declared configuration, as
+        `save_configuration` writes one. The only way a configuration is read from a file.
+        Discovery cross-checks it against what the device answers.
     """
     super().__init__()
+    # What was declared this device is, read once here: the one place a configuration comes off a
+    # file. Empty when nothing was declared.
+    self.declared_configuration_json = declared_configuration_json
+    self.declared: Dict[str, Any] = (
+      {} if declared_configuration_json is None else read_configuration(declared_configuration_json)
+    )
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
     self.timeout = timeout
+    # Serializes each request->reply exchange over the single shared controller socket; the
+    # rationale (and why it is kept though uncontended today) is in _locked_exchange.
+    self._io_lock = asyncio.Lock()
     # Built only on an arm that has a rail; discovery decides at setup.
     self.rail: Optional[PreciseFlexRail] = PreciseFlexRail(self) if has_rail else None
     self.arm = PreciseFlexArm(self)
@@ -125,17 +143,62 @@ class PreciseFlexDriver:
       "port": self.io._port,
     }
 
+  async def _locked_exchange(self, command: str) -> str:
+    """Write one command and read its one reply line, with the lock held.
+
+    The controller takes one connection (port 10100 refuses a second), and a reply is matched to its
+    command only by order, so two interleaved exchanges would read each other's replies. The lock is
+    held per exchange, not across a move's wait; the interrupt halt bypasses it (see
+    ``_wait_for_eom``). The newline is added here; the reply is decoded and stripped.
+    """
+    async with self._io_lock:
+      await self.io.write(command.encode("utf-8") + b"\n")
+      return (await self.io.readline()).decode("utf-8").strip()
+
+  def _ensure_successful(self, reply: str) -> str:
+    """Return the data of a ``<code> <data>`` reply, raising unless the code is 0.
+
+    Args:
+      reply: one decoded, stripped reply line.
+
+    Returns:
+      The line with its leading reply code removed.
+
+    Raises:
+      PreciseFlexError: on an empty reply or a non-zero reply code.
+    """
+    if not reply:
+      raise PreciseFlexError(-1, "Empty reply from device.")
+    code, _, data = reply.partition(" ")
+    replycode = int(code)
+    if replycode != 0:
+      raise PreciseFlexError(replycode, data)
+    return data
+
   async def send_command(self, command: str) -> str:
-    """Send one firmware command while retaining its enclosing operation context."""
+    """Send a command and return the accepted ``<code> <data>`` payload.
+
+    Writes the command and reads one reply line (as one locked exchange), then applies the standard
+    acceptance gate (``_ensure_successful``): a non-zero reply code raises, otherwise the data
+    payload is returned. A reply in a different grammar goes through the same ``_locked_exchange``
+    and is parsed by the caller instead.
+
+    The exchange is wrapped in the firmware-command events so a command keeps its enclosing
+    operation context.
+
+    Args:
+      command: the command line, without its line ending.
+
+    Raises:
+      PreciseFlexError: on an empty reply or a non-zero reply code.
+    """
     event_data = {
       "device": self._controller_reference(),
       "command": command,
     }
     emit_event("precise_flex.firmware_command.started", **event_data)
     try:
-      await self.io.write(command.encode("utf-8") + b"\n")
-      reply = await self.io.readline()
-      result = self._parse_reply_ensure_successful(reply)
+      result = self._ensure_successful(await self._locked_exchange(command))
     except BaseException as error:
       emit_event(
         "precise_flex.firmware_command.failed",
@@ -146,26 +209,6 @@ class PreciseFlexDriver:
       raise
     emit_event("precise_flex.firmware_command.completed", **event_data, response=result)
     return result
-
-  def _parse_reply_ensure_successful(self, reply: bytes) -> str:
-    """Parse reply from Precise Flex.
-
-    Expected format: b'replycode data message\r\n'
-    - replycode is an integer at the beginning
-    - data is rest of the line (excluding CRLF)
-    """
-    text = reply.decode().strip()
-    if not text:
-      raise PreciseFlexError(-1, "Empty reply from device.")
-    parts = text.split(" ", 1)
-    if len(parts) == 1:
-      replycode = int(parts[0])
-      data = ""
-    else:
-      replycode, data = int(parts[0]), parts[1]
-    if replycode != 0:
-      raise PreciseFlexError(replycode, data)
-    return data
 
   # -- lifecycle -------------------------------------------------------------
 
@@ -197,15 +240,53 @@ class PreciseFlexDriver:
     await self.set_response_mode("pc")
     logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
+  def _check_declared_against(self, discovered: "PreciseFlexConfiguration") -> None:
+    """Raise if what was declared cannot stand for what the device answered.
+
+    Only what decides whether the two are the same kind of arm, set up the same way: what is
+    fitted, its link and tool lengths, and its soft limits. Identity is left out: a declaration
+    taken off one arm describes another of the same build.
+
+    Args:
+      discovered: what the device answered.
+
+    Raises:
+      ValueError: If any of those disagree, naming each.
+    """
+    declared = self.declared.get("device")
+    if declared is None:
+      return
+    arm, gripper = declared.arm, declared.gripper
+    must_match = (
+      ("robot_type", declared.robot_type, discovered.robot_type),
+      ("has_rail", declared.has_rail, discovered.has_rail),
+      ("gripper.is_dual_gripper", gripper.is_dual_gripper, discovered.gripper.is_dual_gripper),
+      ("arm.kinematics", arm.kinematics, discovered.arm.kinematics),
+      ("arm.soft_limits", arm.soft_limits, discovered.arm.soft_limits),
+      ("gripper.soft_limit_range", gripper.soft_limit_range, discovered.gripper.soft_limit_range),
+    )
+    differences = [
+      f"{name}: declared {was_declared!r}, device answers {answered!r}"
+      for name, was_declared, answered in must_match
+      if was_declared != answered
+    ]
+    if differences:
+      raise ValueError(
+        "the declared configuration does not describe this device:\n  " + "\n  ".join(differences)
+      )
+
   async def discover(self) -> "PreciseFlexConfiguration":
     """Read the controller's configuration and adopt it. No motion.
 
     Raises if the read fails: without it IK solves for another arm and the gripper has no limits.
+    Raises too if a declared configuration does not describe this device.
 
     Returns:
       The configuration, also kept as ``configuration``.
     """
-    self._configuration = await self._request_configuration()
+    configuration = await self._request_configuration()
+    self._check_declared_against(configuration)
+    self._configuration = configuration
     self._adopt_configuration(self._configuration)
     if self.arm.parking_position is None:
       self.arm.parking_position = self.arm.PARKING_POSITION_RIGHT
@@ -625,15 +706,25 @@ class PreciseFlexDriver:
 
     Read-only (no motion, no homing required), so it is safe to call at setup.
     Link lengths and tool length are read from the controller; per-arm flags are
-    derived from the joint set, the axis mask, and the model name.
+    derived from the joint set, the axis mask, and the camera count.
     """
     soft_limits = await self.arm.request_joint_limits()
     axis_mask = await self.request_axis_mask()
     robot_name = await self.request_robot_name()
-    name_tokens = robot_name.split()
-    suffix = name_tokens[-1].upper().lstrip("0123456789") if name_tokens else ""
     # The version command reports the TCS app version then its loaded modules.
     tcs_version, *modules = (seg.strip() for seg in (await self.request_version()).split(","))
+    # A vision gripper is its cameras: counted through the controller, where its vision module is
+    # loaded. An arm that will not say has none.
+    camera_count = 0
+    if any("intelliguide" in module.lower() for module in modules):
+      try:
+        camera_count = max(0, int(await self._locked_exchange("VToolProperty System CameraCount")))
+      except Exception as exc:
+        logger.warning(
+          "[PreciseFlex %s] the controller did not say how many cameras it has: %s",
+          self.io._host,
+          exc,
+        )
 
     # Combine the per-axis 100% references with the global percent caps into the
     # effective per-joint maxima, so consumers get usable limits, not raw factors.
@@ -738,7 +829,7 @@ class PreciseFlexDriver:
         is_dual_gripper=bool(axis_mask & 0x80),
       ),
       rail=rail,
-      is_vision_gripper=suffix[:1] == "V",
+      camera_count=camera_count,
       _power_state=power_state,
     )
 
@@ -801,7 +892,7 @@ class PreciseFlexDriver:
       label
       for present, label in (
         (config.gripper.is_dual_gripper, "dual gripper"),
-        (config.is_vision_gripper, "vision gripper"),
+        (config.has_vision_gripper, "vision gripper"),
       )
       if present
     ]
@@ -824,6 +915,42 @@ class PreciseFlexDriver:
       config.arm.kinematics.l2,
       ", ".join(config.modules),
     )
+
+  # -- configuration system -----------------------------------------------------------------
+
+  def _saved_configuration(self) -> Dict[str, Any]:
+    """Every configuration this device holds, shaped as the device is.
+
+    The device's own configuration, then whatever is fitted to it, each under its feature's name.
+
+    Returns:
+      What `save_configuration` writes.
+
+    Raises:
+      RuntimeError: If nothing has been read off the device yet.
+    """
+    device = to_jsonable(self.configuration)
+    saved: Dict[str, Any] = {
+      "device": {n: v for n, v in device.items() if n not in DEVICE_FEATURE_CONFIGURATIONS}
+    }
+    for name, feature in (("arm", self.arm), ("gripper", self.gripper), ("rail", self.rail)):
+      if feature is not None and feature.configuration is not None:
+        saved[name] = to_jsonable(feature.configuration)
+    return saved
+
+  def save_configuration(self, path: str, indent: Optional[int] = 2) -> None:
+    """Write what this device reported to a file, to be declared from later.
+
+    Args:
+      path: where to write it.
+      indent: how far to indent the JSON, or None to write it on one line.
+
+    Raises:
+      RuntimeError: If nothing has been read off the device yet.
+    """
+    saved = self._saved_configuration()  # before the file is opened, so a refusal leaves none
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump(saved, f, indent=indent)
 
   # -- homing & range recovery --------------------------------------------------------------
 
