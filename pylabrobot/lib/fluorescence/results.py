@@ -31,3 +31,30 @@ class FluorescenceResult:
   temperature: Optional[float]
   start_timestamp: datetime
   end_timestamp: datetime
+
+
+@dataclass
+class FluorescenceSpectrumResult:
+  """Fluorescence spectra from one read of a plate: excitation or emission scanned, one fixed.
+
+  Attributes:
+    data: each measured well's spectrum, intensity in the reader's counts by the scanned
+      wavelength in nm in scan order, keyed by well identifier (``"B3"``), row by row; wells not
+      measured are not in it.
+    excitation_wavelength: the fixed excitation wavelength in nm; None when excitation is scanned.
+    excitation_bandwidth: the excitation bandwidth in nm the read used; None if not known.
+    emission_wavelength: the fixed emission wavelength in nm; None when emission is scanned.
+    emission_bandwidth: the emission bandwidth in nm the read used; None if not known.
+    temperature: temperature in degrees C, or ``None`` if the reader did not measure one.
+    start_timestamp: when the read started.
+    end_timestamp: when the read's data was in.
+  """
+
+  data: Dict[str, Dict[int, float]]
+  excitation_wavelength: Optional[float]
+  excitation_bandwidth: Optional[float]
+  emission_wavelength: Optional[float]
+  emission_bandwidth: Optional[float]
+  temperature: Optional[float]
+  start_timestamp: datetime
+  end_timestamp: datetime

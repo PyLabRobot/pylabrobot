@@ -151,9 +151,7 @@ class SimulatorTests(unittest.IsolatedAsyncioTestCase):
     )
     simulated = await self.reader.driver.request_status()
     # As the reader answered with the plate on the plate holder and the drawer out.
-    real = parse_status(
-      bytes.fromhex(load_session_replies()["step_9_status_drawer_out_plate_on_holder"])
-    )
+    real = parse_status(bytes.fromhex(load_session_replies()["status_drawer_out_plate_on_holder"]))
     self.assertEqual(
       (simulated.drawer_open, simulated.plate_detected), (real.drawer_open, real.plate_detected)
     )

@@ -83,6 +83,8 @@ class DeviceConfiguration:
   firmware_version: Optional[str] = None
   extended_red_photomultiplier_tube: Optional[bool] = None
   dual_photomultiplier_tubes: Optional[bool] = None
+  # Dual photomultipliers swapped (cross-over): fluorescence on the standard one.
+  photomultiplier_tube_crossover: Optional[bool] = None
   excitation_slide_positions: Optional[int] = None
   spectrometer: Optional[bool] = None
   monochromator_slides: Optional[Dict[str, Dict[int, str]]] = None
@@ -145,6 +147,7 @@ class DeviceConfiguration:
     measurement = _subsystem(subsystems, 0x09, 1)[0]
     self.dual_photomultiplier_tubes = _bit(measurement, 2)
     self.extended_red_photomultiplier_tube = _bit(measurement, 1) or _bit(measurement, 2)
+    self.photomultiplier_tube_crossover = _bit(measurement, 1) and _bit(measurement, 2)
     self.excitation_slide_positions = 4 if _bit(measurement, 3) else 3
 
     self.spectrometer = _bit(_subsystem(subsystems, 0x1F, 1)[0], 0)

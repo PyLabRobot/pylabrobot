@@ -1,23 +1,34 @@
-"""Fluorescence tests over a fake io: what the driver sends is pinned to vendor captures (F-A01 to
-F-J01), but for the band edges, which this driver sends at their nominal values."""
+"""Fluorescence tests over a fake io: what the driver sends is pinned to the vendor's frames.
 
+Except for the band edges, which this driver sends at their nominal values, and the scan byte's
+bit 4, which it leaves clear in flying mode, enhanced dynamic range and a matrix.
+"""
+
+import functools
+import gzip
+import json
+import os
 import unittest
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import replace
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from unittest.mock import patch
 
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
-from pylabrobot.bmg_labtech.clariostar.driver.features import fluorescence
+from pylabrobot.bmg_labtech.clariostar.driver.features import measurement as measurement_module
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   COLUMN_1_DATA_REPLY,
+  DATA_FRAME,
   RUN_REPLY,
   STATUS_MEASURED,
   STATUS_MEASURING,
+  STOP_FRAME,
+  STOP_REPLY,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.features.drawer_tests import make_plate_holder
 from pylabrobot.bmg_labtech.clariostar.driver.features.fluorescence import (
+  CLARIOstarFluorescenceSpectrumResult,
   Fluorescence,
   _compute_band_edges,
-  _decode_data_reply,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
   MeasurementSettings,
@@ -30,10 +41,12 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   load_session_replies,
   make_driver,
 )
+from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
+from pylabrobot.lib.fluorescence.results import FluorescenceSpectrumResult
 from pylabrobot.lib.optics.filters import DichroicFilter, OpticalFilter
 from pylabrobot.resources import Plate, Well, cor_96_wellplate_360uL_Fb, create_ordered_items_2d
 
-# F-A01
+# The vendor's default read: 485/15 to 528/20 nm, gain 1000, 8.5 mm, 10 flashes.
 BASELINE_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -41,7 +54,7 @@ BASELINE_RUN_FRAME = bytes.fromhex(
   "000001000a00010000141b0d"
 )
 
-# F-B01
+# 540 to 590 nm.
 WAVELENGTHS_540_590_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -49,7 +62,7 @@ WAVELENGTHS_540_590_RUN_FRAME = bytes.fromhex(
   "000001000a0001000014940d"
 )
 
-# F-B03
+# 620 to 680 nm.
 WAVELENGTHS_620_680_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -57,7 +70,7 @@ WAVELENGTHS_620_680_RUN_FRAME = bytes.fromhex(
   "000001000a00010000153e0d"
 )
 
-# F-C02
+# Emission 600 nm, 100 nm wide.
 EMISSION_BANDWIDTH_100_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -65,7 +78,7 @@ EMISSION_BANDWIDTH_100_RUN_FRAME = bytes.fromhex(
   "000001000a0001000014610d"
 )
 
-# F-D01
+# Gain 500.
 GAIN_500_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -73,7 +86,7 @@ GAIN_500_RUN_FRAME = bytes.fromhex(
   "000001000a0001000014250d"
 )
 
-# F-E01
+# Focal height 4.0 mm.
 FOCAL_HEIGHT_4_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -81,7 +94,7 @@ FOCAL_HEIGHT_4_RUN_FRAME = bytes.fromhex(
   "000001000a0001000014570d"
 )
 
-# F-G01
+# Orbital averaging, 3 mm, 7 flashes.
 ORBITAL_RUN_FRAME = bytes.fromhex(
   "0200a10c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a300000000000000000000000000000000000000000000000000000"
@@ -89,7 +102,7 @@ ORBITAL_RUN_FRAME = bytes.fromhex(
   "000000010000000100070001000014d00d"
 )
 
-# F-H01
+# Shaken orbital at 300 rpm for 5 s first.
 SHAKE_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000020000000000020005000000000000"
@@ -97,7 +110,7 @@ SHAKE_RUN_FRAME = bytes.fromhex(
   "000001000a0001000014240d"
 )
 
-# F-I01
+# Settling 0.5 s.
 SETTLING_05_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -105,7 +118,7 @@ SETTLING_05_RUN_FRAME = bytes.fromhex(
   "000001000a00010000142f0d"
 )
 
-# F-J01
+# Row by row.
 ROW_BY_ROW_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000"
@@ -113,7 +126,7 @@ ROW_BY_ROW_RUN_FRAME = bytes.fromhex(
   "000001000a0001000014130d"
 )
 
-# F-K01, at 37 C
+# The default read's reply at 37 C.
 TEMPERATURE_37_DATA_REPLY = bytes.fromhex(
   "0201aa0c020506260000a1006000600003f7a0010001006001000100000001010000000001720000008d0000008f0000"
   "00a50000009d00000093000000980000009600000093000000950000009400000ac5000000950000009a000000970000"
@@ -126,7 +139,7 @@ TEMPERATURE_37_DATA_REPLY = bytes.fromhex(
   "008e000000940000008f0000008a000000960000008c00000090000000930000008e00000089003fd70d"
 )
 
-# F-K01: the vendor software's export of the same read, row by row.
+# The same read as the vendor's software reports it, row by row.
 TEMPERATURE_37_EXPORT = [
   [141, 143, 165, 157, 147, 152, 150, 147, 149, 148, 2757, 149],
   [154, 151, 157, 155, 145, 147, 163, 155, 1816, 174, 2125, 149],
@@ -138,7 +151,7 @@ TEMPERATURE_37_EXPORT = [
   [138, 149, 142, 148, 143, 138, 150, 140, 144, 147, 142, 137],
 ]
 
-# F-D02, gain 4000: every well at the detector's ceiling
+# Gain 4000: every well at the detector's ceiling
 SATURATED_DATA_REPLY = bytes.fromhex(
   "0201aa0c020506260000a1006000600003f7a0010001006001000100000001010000000000000003f7a00003f7a00003"
   "f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003"
@@ -151,7 +164,7 @@ SATURATED_DATA_REPLY = bytes.fromhex(
   "f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a00003f7a0009e0d0d"
 )
 
-# F-Lf01
+# Excitation, dichroic and emission through filters.
 FILTERS_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -159,7 +172,7 @@ FILTERS_RUN_FRAME = bytes.fromhex(
   "000001000a0001000011dd0d"
 )
 
-# F-Lf02
+# Excitation 400 nm through its monochromator, dichroic and emission through filters.
 EMISSION_FILTER_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -167,7 +180,7 @@ EMISSION_FILTER_RUN_FRAME = bytes.fromhex(
   "000001000a00010000133a0d"
 )
 
-# F-Lf03
+# Excitation and dichroic through filters, emission 528 nm through its monochromator.
 EXCITATION_FILTER_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -175,7 +188,7 @@ EXCITATION_FILTER_RUN_FRAME = bytes.fromhex(
   "000001000a0001000012460d"
 )
 
-# F-L01
+# A dichroic split at 510 nm.
 DICHROIC_SPLIT_510_RUN_FRAME = bytes.fromhex(
   "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
@@ -184,9 +197,103 @@ DICHROIC_SPLIT_510_RUN_FRAME = bytes.fromhex(
 )
 
 
+# The bottom optic: pre-separator byte 0 `40`
+BOTTOM_RUN_FRAME = bytes.fromhex(
+  "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
+  "00000000000000000000000000000000000000000a400000000000000000000000000000000000000000000000000000"
+  "00000000270f270f05035200000100000000000c03e8133b12a913bc1501143f00040003000000000000000000000100"
+  "000001000a00010000145b0d"
+)
+
+# Two fluorescence channels: 485/15 to 528/20 nm, then 610/30 to 675/50 nm
+DUAL_RUN_FRAME = bytes.fromhex(
+  "0200b00c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
+  "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
+  "00000000270f270f05035200000200000000000c03e8133b12a913bc1501143f000400030000000c03e81868174018e7"
+  "1b54196800040003000000000000000000000100000001000a0001000017f40d"
+)
+
+# Flying mode: scan byte `1e`, settling `01`, 1 flash
+FLYING_MODE_RUN_FRAME = bytes.fromhex(
+  "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
+  "00000000000000000000000000000000000000001e000000000000000000000000000000000000000000000000000000"
+  "00000000270f270f01035200000100000000000c03e8133b12a913bc1501143f00040003000000000000000000000100"
+  "00000100010001000014220d"
+)
+
+# Enhanced dynamic range: scan byte `1a`, pre-separator byte 1 `40`
+ENHANCED_DYNAMIC_RANGE_RUN_FRAME = bytes.fromhex(
+  "02009c0c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
+  "00000000000000000000000000000000000000001a004000000000000000000000000000000000000000000000000000"
+  "00000000270f270f05035200000100000000000c03e8133b12a913bc1501143f00040003000000000000000000000100"
+  "000001000a00010000146b0d"
+)
+
+# A 3 x 3 matrix of 3 mm on A1, 10 flashes: scan byte `1a`, pre-separator `10`,
+# well-scan field `03 03 02 7b 00`
+MATRIX_RUN_FRAME = bytes.fromhex(
+  "0200a10c0431ec2166059604602c561d060c080080000000000000000000000000000000000000000000000000000000"
+  "00000000000000000000000000000000000000001a100000000000000000000000000000000000000000000000000000"
+  "00000000270f270f0303027b0005035200000100000000000c03e8133b12a913bc1501143f0004000300000000000000"
+  "0000000100000001000a00010000094f0d"
+)
+
+# The matrix read's reply: A1's 9 points
+MATRIX_DATA_REPLY = bytes.fromhex(
+  "02004e0c020506260000a1000900090003f7a00100010001030009000000010100000000000000000091000000930000"
+  "008e000000880000009000000090000000890000008e0000008b0007e90d"
+)
+
+# A 384-well plate at 5.0 mm
+PLATE_384_RUN_FRAME = bytes.fromhex(
+  "02009c0c0431ec216604bc03832d301de3181000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  "ffffffffffffffffffffffffffffffffffffffff0a000000000000000000000000000000000000000000000000000000"
+  "00000000270f270f0501f400000100000000000c03e8133b12a913bc1501143f00040003000000000000000000000100"
+  "000001000a0001000039aa0d"
+)
+
+# A1 alone
+SINGLE_WELL_RUN_FRAME = bytes.fromhex(
+  "02009c0c0431ec2166059604602c561d060c080080000000000000000000000000000000000000000000000000000000"
+  "00000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000"
+  "00000000270f270f05035200000100000000000c03e8133b12a913bc1501143f00040003000000000000000000000100"
+  "000001000a0001000008a70d"
+)
+
+# An excitation spectrum: 400 to 620 nm 10 nm wide, emission 800/20 nm, on A1, B1, C2, D2
+EXCITATION_SPECTRUM_RUN_FRAME = bytes.fromhex(
+  "0200b00c0431ec2166059604602c561d060c080080080040040000000000000000000000000000000000000000000000"
+  "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  "00000000270f270f0503520200dd00000000000c03e80fce0f7217571fa01ee0000300020000000c03e8186818081ba3"
+  "1fa01ee0000300020000000000000000000001000000010005000100000f330d"
+)
+
+# An emission spectrum: 500 to 600 nm 10 nm wide, excitation 400/10 nm, on A1, B1, C2, D2
+EMISSION_SPECTRUM_RUN_FRAME = bytes.fromhex(
+  "0200b00c0431ec2166059604602c561d060c080080080040040000000000000000000000000000000000000000000000"
+  "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  "00000000270f270f05035202006500000000000c03e80fce0f72119413b81358000200030000000c03e80fce0f721388"
+  "17a01740000200030000000000000000000001000000010005000100000e570d"
+)
+
+# A1 alone, the replies after the RUN in order: its data comes while the reader is still busy.
+SINGLE_WELL_REPLIES = [
+  bytes.fromhex(
+    "0200350c0325040600000001770000000005010000000d00000001010000000000000001000000010001000000"
+    "0100000700010d0d"
+  ),
+  bytes.fromhex("0200180c012504260000040100000400000000e000015f0d"),
+  bytes.fromhex("0200180c012507260000040100000300000000e00001610d"),
+  bytes.fromhex(
+    "02002e0c022506260000a1000100010003f7a001000100010100010000000101000000000000000000910003640d"
+  ),
+  bytes.fromhex("0200180c010506260000000000000000000000e00001380d"),
+]
+
+
 def fluorescence_plate() -> Plate:
-  """A plate of the F-series geometry: 127.80 x 85.50 mm, A1 centre 14.30 / 11.20 mm, H12 centre
-  113.50 / 74.30 mm, 6.35 mm wells (F-G01)."""
+  """The fluorescence plate's geometry: 127.80 x 85.50 mm, A1 centre 14.30 / 11.20 mm, H12 centre
+  113.50 / 74.30 mm, 6.35 mm wells."""
   return Plate(
     "fluorescence",
     size_x=127.80,
@@ -223,126 +330,178 @@ EX_TR = OpticalFilter(1, "Ex TR", passbands=((282.2, 371.8),))
 LP_TR = DichroicFilter(1, "LP TR", transmission_bands=((421.8, None),))
 EM_615_18 = OpticalFilter(1, "615-18", passbands=((604.9, 623.2),))
 
-# The captured reads' arguments, as F-A01 but for what each capture varies.
-BASELINE: Dict[str, Any] = dict(
-  excitation_wavelength=485, emission_wavelength=528, gain=1000, focal_height=8.5
-)
-CAPTURED_READS: Dict[str, Tuple[bytes, Dict[str, Any], Dict[str, Any], Optional[ShakeSettings]]] = {
-  "F-A01": (BASELINE_RUN_FRAME, {}, {}, None),
-  "F-B01": (
+
+# The default read's fluorescence channel; the reads below vary it or the read-wide settings.
+BASELINE = FluorescenceChannel(excitation_wavelength=485, emission_wavelength=528)
+TEN_FLASHES = MeasurementSettings(flashes=10)
+CAPTURED_FOCAL_HEIGHT = 8.5  # mm, the vendor's default, every capture's
+CAPTURED_READS: Dict[str, Tuple[bytes, FluorescenceChannel, Dict[str, Any]]] = {
+  "default": (BASELINE_RUN_FRAME, BASELINE, {}),
+  "540_590_nm": (
     WAVELENGTHS_540_590_RUN_FRAME,
-    dict(excitation_wavelength=540, emission_wavelength=590),
+    replace(BASELINE, excitation_wavelength=540, emission_wavelength=590),
     {},
-    None,
   ),
-  "F-B03": (
+  "620_680_nm": (
     WAVELENGTHS_620_680_RUN_FRAME,
-    dict(excitation_wavelength=620, emission_wavelength=680),
+    replace(BASELINE, excitation_wavelength=620, emission_wavelength=680),
     {},
-    None,
   ),
-  "F-C02": (
+  "emission_100_nm_wide": (
     EMISSION_BANDWIDTH_100_RUN_FRAME,
-    dict(emission_wavelength=600, emission_bandwidth=100),
+    replace(BASELINE, emission_wavelength=600, emission_bandwidth=100),
     {},
-    None,
   ),
-  "F-D01": (GAIN_500_RUN_FRAME, dict(gain=500), {}, None),
-  "F-E01": (FOCAL_HEIGHT_4_RUN_FRAME, dict(focal_height=4.0), {}, None),
-  "F-G01": (ORBITAL_RUN_FRAME, {}, dict(well_scan="orbital", scan_diameter=3, flashes=7), None),
-  "F-H01": (SHAKE_RUN_FRAME, {}, {}, ShakeSettings("orbital", 300, 5)),
-  "F-I01": (SETTLING_05_RUN_FRAME, {}, dict(settling_time=0.5), None),
-  "F-J01": (ROW_BY_ROW_RUN_FRAME, {}, dict(vertical=False), None),
-  "F-L01": (DICHROIC_SPLIT_510_RUN_FRAME, dict(dichroic_split=510.0), {}, None),
-  "F-Lf01": (
+  "gain_500": (GAIN_500_RUN_FRAME, BASELINE, dict(gain=500)),
+  "focal_height_4_mm": (FOCAL_HEIGHT_4_RUN_FRAME, BASELINE, dict(focal_height=4.0)),
+  "orbital": (
+    ORBITAL_RUN_FRAME,
+    BASELINE,
+    dict(measurement_settings=MeasurementSettings(well_scan="orbital", scan_diameter=3, flashes=7)),
+  ),
+  "shaken": (SHAKE_RUN_FRAME, BASELINE, dict(shake_settings=ShakeSettings("orbital", 300, 5))),
+  "settling_0_5_s": (
+    SETTLING_05_RUN_FRAME,
+    BASELINE,
+    dict(measurement_settings=MeasurementSettings(settling_time=0.5, flashes=10)),
+  ),
+  "row_by_row": (
+    ROW_BY_ROW_RUN_FRAME,
+    BASELINE,
+    dict(measurement_settings=MeasurementSettings(reading_direction="row_major", flashes=10)),
+  ),
+  "dichroic_split_wavelength_510_nm": (
+    DICHROIC_SPLIT_510_RUN_FRAME,
+    replace(BASELINE, dichroic_split_wavelength=510.0),
+    {},
+  ),
+  "three_filters": (
     FILTERS_RUN_FRAME,
-    dict(
-      excitation_wavelength=None,
-      emission_wavelength=None,
-      excitation_filter=EX_TR,
-      emission_filter=EM_615_18,
-      dichroic_filter=LP_TR,
-    ),
+    FluorescenceChannel(excitation_filter=EX_TR, dichroic_filter=LP_TR, emission_filter=EM_615_18),
     {},
-    None,
   ),
-  "F-Lf02": (
+  "emission_filter": (
     EMISSION_FILTER_RUN_FRAME,
-    dict(
-      excitation_wavelength=400,
-      emission_wavelength=None,
-      emission_filter=EM_615_18,
-      dichroic_filter=LP_TR,
+    FluorescenceChannel(
+      excitation_wavelength=400, dichroic_filter=LP_TR, emission_filter=EM_615_18
     ),
     {},
-    None,
   ),
-  "F-Lf03": (
+  "excitation_filter": (
     EXCITATION_FILTER_RUN_FRAME,
-    dict(excitation_wavelength=None, excitation_filter=EX_TR, dichroic_filter=LP_TR),
+    FluorescenceChannel(excitation_filter=EX_TR, dichroic_filter=LP_TR, emission_wavelength=528),
     {},
-    None,
   ),
 }
 
 
-def with_nominal_edges(captured: bytes, arguments: Dict[str, Any]) -> bytes:
-  """`captured`'s payload with the band edges of each side read through its monochromator set to
-  their nominal values: the vendor software sends each band narrower (F-A01: 14.6 nm of 15,
-  19.4 nm of 20)."""
+def with_nominal_edges(
+  captured: bytes, fluorescence_channels: Sequence[FluorescenceChannel]
+) -> bytes:
+  """`captured`'s payload with each monochromator's band edges at their nominal values.
+
+  The vendor software sends each band narrower (14.6 nm of 15, 19.4 nm of 20).
+  """
   payload = bytearray(ftdi_extract_payload(captured))
-  pair = len(payload) - 36  # gain, then the excitation edges, the dichroic and the emission edges
-  for side, offset, default in (("excitation", 2, 15), ("emission", 8, 20)):
-    wavelength = arguments.get(f"{side}_wavelength")
-    if wavelength is None:
-      continue
-    edges = _compute_band_edges(wavelength, arguments.get(f"{side}_bandwidth") or default)
-    for index, value in enumerate(edges):
-      start = pair + offset + 2 * index
-      payload[start : start + 2] = value.to_bytes(2, "big")
+  # Each fluorescence channel is gain, the excitation edges, the dichroic, the emission edges, the
+  # wavelength selectors and `00 00 0c`; the last is followed by 19 bytes.
+  first = len(payload) - 36 - 20 * (len(fluorescence_channels) - 1)
+  for number, fluorescence_channel in enumerate(fluorescence_channels):
+    start_of_fluorescence_channel = first + 20 * number
+    for wavelength, bandwidth, offset in (
+      (
+        fluorescence_channel.excitation_wavelength,
+        fluorescence_channel.excitation_bandwidth or 15,
+        2,
+      ),
+      (fluorescence_channel.emission_wavelength, fluorescence_channel.emission_bandwidth or 20, 8),
+    ):
+      if wavelength is None:
+        continue
+      for index, value in enumerate(_compute_band_edges(wavelength, bandwidth)):
+        start = start_of_fluorescence_channel + offset + 2 * index
+        payload[start : start + 2] = value.to_bytes(2, "big")
   return bytes(payload)
 
 
-async def read(io: FakeFTDI, reply: bytes, **arguments):
-  """A read of the whole fluorescence plate answered by `reply`; the feature and the result."""
+def without_equidistant_cycles(payload: bytes) -> bytes:
+  """`payload` with scan byte bit 4 clear: the vendor's equidistant kinetic cycles, which this
+  driver does not send (flying mode `1e`, enhanced dynamic range and a matrix `1a`)."""
+  patched = bytearray(payload)
+  patched[64] &= ~0x10  # the family byte, the 63-byte plate block, then the scan byte
+  return bytes(patched)
+
+
+async def read(
+  io: FakeFTDI, reply: bytes, fluorescence_channel: FluorescenceChannel = BASELINE, **arguments
+):
+  """A read of the whole fluorescence plate through `fluorescence_channel` answered by `reply`; the
+  feature and the result."""
   io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, reply]
   feature = make_fluorescence(io, fluorescence_plate())
-  return feature, await feature.measure(**{**BASELINE, **arguments})
+  return feature, await feature.measure(
+    fluorescence_channel, **{"gain": 1000, "focal_height": CAPTURED_FOCAL_HEIGHT, **arguments}
+  )
 
 
 # The driver's asyncio.Lock needs an event loop on Python 3.9: build drivers inside one.
 class RunParametersTests(unittest.IsolatedAsyncioTestCase):
-  async def test_captured_reads_but_their_band_edges(self):
-    for name, (captured, arguments, settings, shake) in CAPTURED_READS.items():
+  async def test_a_set_default_bandwidth_is_sent_and_checked(self):
+    io = FakeFTDI()
+    io.replies = [
+      STATUS_IDLE,
+      RUN_REPLY,
+      STATUS_MEASURING,
+      STATUS_MEASURED,
+      TEMPERATURE_37_DATA_REPLY,
+    ]
+    feature = make_fluorescence(io, fluorescence_plate())
+    with self.assertRaises(ValueError):  # below `bandwidth_range`
+      feature.default_emission_bandwidth = 7
+    feature.default_emission_bandwidth = 100
+    await feature.measure(
+      replace(BASELINE, emission_wavelength=600),
+      measurement_settings=TEN_FLASHES,
+      gain=1000,
+      focal_height=CAPTURED_FOCAL_HEIGHT,
+    )
+    given = replace(BASELINE, emission_wavelength=600, emission_bandwidth=100)
+    self.assertEqual(  # emission 600 nm, 100 nm wide
+      ftdi_extract_payload(io.written[1]),
+      with_nominal_edges(EMISSION_BANDWIDTH_100_RUN_FRAME, [given]),
+    )
+
+  async def test_captured_reads_are_sent_with_nominal_band_edges(self):
+    for name, (captured, fluorescence_channel, arguments) in CAPTURED_READS.items():
       with self.subTest(name):
         io = FakeFTDI()
         _, result = await read(
           io,
           TEMPERATURE_37_DATA_REPLY,
-          measurement_settings=MeasurementSettings(**{"flashes": 10, **settings}),
-          shake_settings=shake,
-          **arguments,
+          fluorescence_channel,
+          **{"measurement_settings": TEN_FLASHES, **arguments},
         )
-        given = {**BASELINE, **arguments}
-        self.assertEqual(ftdi_extract_payload(io.written[1]), with_nominal_edges(captured, given))
+        self.assertEqual(
+          ftdi_extract_payload(io.written[1]), with_nominal_edges(captured, [fluorescence_channel])
+        )
         # The result says what the read used: a filter's passband, or the monochromator's band.
         excitation_filter, emission_filter = (
-          given.get("excitation_filter"),
-          given.get("emission_filter"),
+          fluorescence_channel.excitation_filter,
+          fluorescence_channel.emission_filter,
         )
         self.assertEqual(
           result.excitation_bandwidth,
           excitation_filter.bandwidth
           if excitation_filter is not None
-          else given.get("excitation_bandwidth") or 15,
+          else fluorescence_channel.excitation_bandwidth or 15,
         )
         self.assertEqual(
           result.emission_bandwidth,
           emission_filter.bandwidth
           if emission_filter is not None
-          else given.get("emission_bandwidth") or 20,
+          else fluorescence_channel.emission_bandwidth or 20,
         )
-        self.assertEqual(result.gain, given["gain"])
+        self.assertEqual(result.gain, arguments.get("gain", 1000))
 
 
 class FilterPositionTests(unittest.IsolatedAsyncioTestCase):
@@ -359,16 +518,17 @@ class FilterPositionTests(unittest.IsolatedAsyncioTestCase):
           await read(
             io,
             TEMPERATURE_37_DATA_REPLY,
-            excitation_wavelength=None,
-            emission_wavelength=None,
-            excitation_filter=OpticalFilter(slot),
-            emission_filter=OpticalFilter(slot),
-            dichroic_filter=DichroicFilter(dichroic),
+            FluorescenceChannel(
+              excitation_filter=OpticalFilter(slot),
+              dichroic_filter=DichroicFilter(dichroic),
+              emission_filter=OpticalFilter(slot),
+            ),
           )
           payload = ftdi_extract_payload(io.written[1])
-          pair = len(payload) - 36
+          fluorescence_channel = len(payload) - 36
           fields = [
-            int.from_bytes(payload[pair + i : pair + i + 2], "big") for i in (2, 4, 6, 8, 10)
+            int.from_bytes(payload[fluorescence_channel + i : fluorescence_channel + i + 2], "big")
+            for i in (2, 4, 6, 8, 10)
           ]
           self.assertEqual(fields, [*excitation[slot], dichroic + 1, *emission[slot]])
 
@@ -386,45 +546,98 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result.temperature, 37.0)
 
   async def test_saturated_wells_warn(self):
-    with patch.object(fluorescence.logger, "warning") as warning:
+    with patch.object(measurement_module.logger, "warning") as warning:
       _, result = await read(FakeFTDI(), SATURATED_DATA_REPLY, gain=4000)
     self.assertEqual(set(result.data.values()), {260000.0})
     self.assertIn(96, warning.call_args.args)
 
-  def test_another_modes_reply_is_refused(self):
-    with self.assertRaises(ValueError):
-      _decode_data_reply(ftdi_extract_payload(COLUMN_1_DATA_REPLY), 8)
+  def test_a_reply_not_of_this_read_is_refused(self):
+    reply = ftdi_extract_payload(TEMPERATURE_37_DATA_REPLY)
+    for wrong, fluorescence_channels, wells in (
+      (ftdi_extract_payload(COLUMN_1_DATA_REPLY), 1, 8),  # absorbance's layout
+      (reply, 2, 96),
+      (reply, 1, 95),
+      (reply[:-4], 1, 96),  # Not a reader's reply: the last count cut off.
+    ):
+      with self.subTest(fluorescence_channels=fluorescence_channels, wells=wells):
+        with self.assertRaises(ValueError):
+          make_fluorescence(FakeFTDI())._decode_data_reply(wrong, fluorescence_channels, wells)
 
   async def test_out_of_range_reads_send_nothing(self):
     io = FakeFTDI()
     feature = make_fluorescence(io, fluorescence_plate())
-    refused: List[Dict[str, Any]] = [
-      dict(excitation_wavelength=319),
-      dict(emission_wavelength=841),
-      dict(excitation_bandwidth=7),
-      dict(emission_bandwidth=101),
-      dict(excitation_wavelength=520, emission_wavelength=528),  # bands overlap
-      dict(excitation_wavelength=330, emission_wavelength=345),  # split below 340 nm
-      dict(gain=4096),
-      dict(gain=1000.0),
-      dict(focal_height=25.1),
-      dict(focal_height=8.55),
-      dict(measurement_settings=MeasurementSettings(pause_before_reading=5)),
-      dict(timeout=0),
-      dict(excitation_wavelength=None),  # neither a wavelength nor a filter
-      dict(excitation_filter=EX_TR),  # both
-      dict(excitation_wavelength=None, excitation_filter=EX_TR),  # no dichroic filter
-      dict(excitation_wavelength=None, excitation_filter=OpticalFilter(5), dichroic_filter=LP_TR),
-      dict(emission_wavelength=None, emission_filter=OpticalFilter(0), dichroic_filter=LP_TR),
-      dict(dichroic_filter=DichroicFilter(4)),
-      dict(dichroic_filter=LP_TR, dichroic_split=510.0),
-      dict(dichroic_split=480.0),  # not between the wavelengths
-      dict(dichroic_split=510.05),
+    fractional_gain: Any = 1000.0
+    # `_check_fluorescence_channel`'s refusals, then the read-wide settings'.
+    refused: List[Tuple[FluorescenceChannel, Dict[str, Any]]] = [
+      (replace(BASELINE, excitation_wavelength=None), {}),  # no wavelength, no filter
+      (replace(BASELINE, emission_wavelength=528.0), {}),
+      (replace(BASELINE, emission_bandwidth=20.5), {}),
+      (replace(BASELINE, dichroic_split_wavelength=510.05), {}),
+      (BASELINE, dict(gain=fractional_gain)),
+      (replace(BASELINE, excitation_wavelength=319), {}),
+      (replace(BASELINE, emission_wavelength=841), {}),
+      (replace(BASELINE, excitation_bandwidth=7), {}),
+      (replace(BASELINE, emission_bandwidth=101), {}),
+      (replace(BASELINE, excitation_wavelength=520), {}),  # the bands overlap
+      (replace(BASELINE, excitation_wavelength=320, emission_wavelength=345), {}),
+      (BASELINE, dict(gain=4096)),
+      (  # a filter without a dichroic filter
+        replace(BASELINE, excitation_wavelength=None, excitation_filter=EX_TR),
+        {},
+      ),
+      (
+        FluorescenceChannel(
+          excitation_filter=OpticalFilter(5), dichroic_filter=LP_TR, emission_wavelength=528
+        ),
+        {},
+      ),
+      (
+        FluorescenceChannel(
+          excitation_wavelength=485, dichroic_filter=LP_TR, emission_filter=OpticalFilter(0)
+        ),
+        {},
+      ),
+      (replace(BASELINE, dichroic_filter=DichroicFilter(4)), {}),
+      (replace(BASELINE, dichroic_split_wavelength=480.0), {}),  # not between the wavelengths
+      (BASELINE, dict(focal_height=25.1)),
+      (BASELINE, dict(focal_height=8.55)),
+      (BASELINE, dict(measurement_settings=MeasurementSettings(pause_before_reading=5))),
+      (BASELINE, dict(timeout=0)),
     ]
-    for arguments in refused:
-      with self.subTest(arguments), self.assertRaises(ValueError):
-        await feature.measure(**{**BASELINE, **arguments})
+    for fluorescence_channel, arguments in refused:
+      with (
+        self.subTest(fluorescence_channel=fluorescence_channel, arguments=arguments),
+        self.assertRaises(ValueError),
+      ):
+        await feature.measure(
+          fluorescence_channel, **{"gain": 1000, "focal_height": CAPTURED_FOCAL_HEIGHT, **arguments}
+        )
+    with self.assertRaises(ValueError) as raised:
+      await feature.measure(replace(BASELINE, emission_wavelength=528.0), gain=fractional_gain)
+    self.assertIn("emission_wavelength", str(raised.exception))
+    self.assertIn("gain", str(raised.exception))
     self.assertEqual(io.written, [])
+
+
+class ExcitationAboveEmissionTests(unittest.IsolatedAsyncioTestCase):
+  async def test_a_read_is_sent_with_the_split_between_the_bands_and_warns(self):
+    """Not captured: excitation 600/15 nm above emission 500/20 nm; the split lies midway between
+    the bands' facing edges, 510.0 and 592.5 nm: 551.2 nm."""
+    io = FakeFTDI()
+    with patch.object(measurement_module.logger, "warning") as warning:
+      await read(
+        io,
+        TEMPERATURE_37_DATA_REPLY,
+        replace(BASELINE, excitation_wavelength=600, emission_wavelength=500),
+      )
+    payload = ftdi_extract_payload(io.written[1])
+    fluorescence_channel = len(payload) - 36  # the last fluorescence channel starts with its gain
+    fields = [
+      int.from_bytes(payload[fluorescence_channel + i : fluorescence_channel + i + 2], "big")
+      for i in (2, 4, 6, 8, 10)
+    ]
+    self.assertEqual(fields, [6075, 5925, 5512, 5100, 4900])
+    self.assertIn("excitation above emission", warning.call_args.args[1])
 
 
 class SessionTests(unittest.IsolatedAsyncioTestCase):
@@ -434,13 +647,527 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
     session = load_session_replies()
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED]
-    io.replies.append(bytes.fromhex(session["step_16_reply"]))
+    io.replies.append(bytes.fromhex(session["fluorescence_column_1_reply"]))
     plate = cor_96_wellplate_360uL_Fb("plate")
     result = await make_fluorescence(io, plate).measure(
-      wells=plate.get_items("A1:H1"), excitation_wavelength=485, emission_wavelength=528, gain=1000
+      BASELINE, wells=plate.get_items("A1:H1"), gain=1000, focal_height=CAPTURED_FOCAL_HEIGHT
     )
-    self.assertEqual(io.written[1], bytes.fromhex(session["step_16_run"]))
+    self.assertEqual(io.written[1], bytes.fromhex(session["fluorescence_column_1_run"]))
     self.assertEqual(list(result.data.values()), [68.0, 62.0, 72.0, 64.0, 67.0, 69.0, 67.0, 68.0])
+
+
+class DefaultFocalHeightTests(unittest.IsolatedAsyncioTestCase):
+  async def read_column_1(self, plate: Plate, percent: Optional[float], **arguments) -> bytes:
+    session = load_session_replies()
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED]
+    io.replies.append(bytes.fromhex(session["fluorescence_column_1_reply"]))
+    feature = make_fluorescence(io, plate)
+    if percent is not None:
+      feature.default_focal_height_percent_of_well_depth = percent
+    await feature.measure(BASELINE, wells=plate.get_items("A1:H1"), gain=1000, **arguments)
+    return io.written[1]
+
+  async def test_none_reads_at_the_percent_of_the_well_depth_above_its_floor(self):
+    # Corning 96 360 uL: the well at 3.03 mm, its floor 0.50 mm, its depth 10.67 mm.
+    for percent, focal_height in ((None, 6.2), (50, 8.9), (0, 3.5), (100, 14.2)):
+      with self.subTest(percent=percent):
+        plate = cor_96_wellplate_360uL_Fb("plate")
+        self.assertEqual(
+          await self.read_column_1(plate, percent),
+          await self.read_column_1(
+            cor_96_wellplate_360uL_Fb("plate"), None, focal_height=focal_height
+          ),
+        )
+
+  async def test_the_percent_is_checked_when_set(self):
+    feature = make_fluorescence(FakeFTDI(), cor_96_wellplate_360uL_Fb("plate"))
+    self.assertEqual(feature.default_focal_height_percent_of_well_depth, 25)
+    for refused in (-1, 100.5, "25", True):
+      with self.subTest(refused=refused), self.assertRaises(ValueError):
+        feature.default_focal_height_percent_of_well_depth = refused  # type: ignore[assignment]
+    self.assertEqual(feature.default_focal_height_percent_of_well_depth, 25)
+
+  async def test_a_well_without_a_floor_thickness_sends_nothing(self):
+    io = FakeFTDI()
+    feature = make_fluorescence(io, fluorescence_plate())
+    with self.assertRaisesRegex(ValueError, "floor thickness; give focal_height"):
+      await feature.measure(BASELINE, gain=1000)
+    self.assertEqual(io.written, [])
+
+
+@functools.lru_cache(maxsize=None)
+def load_captures() -> Dict[str, Any]:
+  """Larger frames, as hex: replies with the same read as the vendor's software reports it.
+
+  Row by row, one grid per fluorescence channel; each spectrum's replies in order.
+  """
+  path = os.path.join(os.path.dirname(__file__), "test_data", "fluorescence_captures.json.gz")
+  with gzip.open(path, "rt") as f:
+    return dict(json.load(f))
+
+
+def keyed_by_well(export: List[List[int]]) -> Dict[str, float]:
+  """An export grid, row by row, keyed by well identifier."""
+  return {
+    f"{'ABCDEFGHIJKLMNOP'[row]}{column + 1}": float(value)
+    for row, values in enumerate(export)
+    for column, value in enumerate(values)
+  }
+
+
+async def read_capture(
+  reply: bytes,
+  fluorescence_channels: Union[FluorescenceChannel, Sequence[FluorescenceChannel]] = BASELINE,
+  plate: Optional[Plate] = None,
+  bottom_measurement_available=None,
+  **arguments,
+):
+  """A read through `fluorescence_channels` answered by `reply`; what was written and the result."""
+  io = FakeFTDI(chunk=4096)
+  io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, reply]
+  feature = make_fluorescence(io, fluorescence_plate() if plate is None else plate)
+  feature._driver.configuration.bottom_measurement_available = bottom_measurement_available
+  return io, await feature.measure(
+    fluorescence_channels, **{"gain": 1000, "focal_height": CAPTURED_FOCAL_HEIGHT, **arguments}
+  )
+
+
+class BottomOpticTests(unittest.IsolatedAsyncioTestCase):
+  async def test_a_bottom_read_is_the_vendors(self):
+    capture = load_captures()["bottom_optic"]
+    io, result = await read_capture(
+      bytes.fromhex(capture["reply"]),
+      bottom_measurement_available=True,
+      optic_position="bottom",
+      measurement_settings=TEN_FLASHES,
+    )
+    self.assertEqual(
+      ftdi_extract_payload(io.written[1]), with_nominal_edges(BOTTOM_RUN_FRAME, [BASELINE])
+    )
+    self.assertEqual(result.data, keyed_by_well(capture["export"]))
+
+  async def test_the_default_optic_position_is_read_with_and_checked(self):
+    capture = load_captures()["bottom_optic"]
+    io = FakeFTDI(chunk=4096)
+    io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED]
+    io.replies.append(bytes.fromhex(capture["reply"]))
+    feature = make_fluorescence(io, fluorescence_plate())
+    feature._driver.configuration.bottom_measurement_available = True
+    self.assertEqual(feature.default_optic_position, "top")
+    feature.default_optic_position = "bottom"
+    await feature.measure(
+      BASELINE, measurement_settings=TEN_FLASHES, gain=1000, focal_height=CAPTURED_FOCAL_HEIGHT
+    )
+    self.assertEqual(
+      ftdi_extract_payload(io.written[1]), with_nominal_edges(BOTTOM_RUN_FRAME, [BASELINE])
+    )
+    feature._driver.configuration.bottom_measurement_available = False
+    for refused in ("side", "bottom"):
+      with self.subTest(refused), self.assertRaises(ValueError):
+        feature.default_optic_position = refused  # type: ignore[assignment]
+
+  async def test_no_bottom_optic_or_an_unknown_one_sends_nothing(self):
+    for available, position in ((False, "bottom"), (True, "side")):
+      io = FakeFTDI()
+      feature = make_fluorescence(io, fluorescence_plate())
+      feature._driver.configuration.bottom_measurement_available = available
+      with self.subTest(position), self.assertRaises(ValueError):
+        await feature.measure(  # type: ignore[call-overload]
+          BASELINE, optic_position=position, gain=1000, focal_height=CAPTURED_FOCAL_HEIGHT
+        )
+      self.assertEqual(io.written, [])
+
+
+DUAL_FLUORESCENCE_CHANNELS = [
+  BASELINE,
+  FluorescenceChannel(
+    excitation_wavelength=610,
+    excitation_bandwidth=30,
+    emission_wavelength=675,
+    emission_bandwidth=50,
+  ),
+]
+
+
+class FluorescenceChannelsTests(unittest.IsolatedAsyncioTestCase):
+  async def test_two_fluorescence_channels_are_the_vendors_read(self):
+    capture = load_captures()["two_fluorescence_channels"]
+    io, results = await read_capture(
+      bytes.fromhex(capture["reply"]), DUAL_FLUORESCENCE_CHANNELS, measurement_settings=TEN_FLASHES
+    )
+    expected = with_nominal_edges(DUAL_RUN_FRAME, DUAL_FLUORESCENCE_CHANNELS)
+    self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
+    self.assertEqual(
+      [result.data for result in results], [keyed_by_well(grid) for grid in capture["export"]]
+    )
+    self.assertEqual([result.excitation_wavelength for result in results], [485, 610])
+    self.assertEqual([result.emission_bandwidth for result in results], [20, 50])
+
+  async def test_each_fluorescence_channel_is_sent_with_its_own_gain(self):
+    capture = load_captures()["two_fluorescence_channels"]
+    io, results = await read_capture(
+      bytes.fromhex(capture["reply"]),
+      DUAL_FLUORESCENCE_CHANNELS,
+      gain=[1000, 1500],
+      measurement_settings=TEN_FLASHES,
+    )
+    # Not a reader's frame: the two fluorescence channels' read with the second one's gain 1500,
+    # at its start.
+    expected = bytearray(with_nominal_edges(DUAL_RUN_FRAME, DUAL_FLUORESCENCE_CHANNELS))
+    second = len(expected) - 36
+    expected[second : second + 2] = (1500).to_bytes(2, "big")
+    self.assertEqual(ftdi_extract_payload(io.written[1]), bytes(expected))
+    self.assertEqual([result.gain for result in results], [1000, 1500])
+
+  async def test_out_of_range_fluorescence_channels_send_nothing(self):
+    io = FakeFTDI()
+    feature = make_fluorescence(io, fluorescence_plate())
+    refused: List[Tuple[List[FluorescenceChannel], Any]] = [
+      ([], 1000),
+      ([BASELINE] * 6, 1000),
+      ([BASELINE, replace(BASELINE, emission_wavelength=841)], 1000),
+      (DUAL_FLUORESCENCE_CHANNELS, [1000]),  # not one gain per fluorescence channel
+      (DUAL_FLUORESCENCE_CHANNELS, [1000, 4096]),
+    ]
+    for fluorescence_channels, gain in refused:
+      with (
+        self.subTest(fluorescence_channels=fluorescence_channels, gain=gain),
+        self.assertRaises(ValueError),
+      ):
+        await feature.measure(fluorescence_channels, gain=gain)
+    self.assertEqual(io.written, [])
+
+
+class FlyingModeTests(unittest.IsolatedAsyncioTestCase):
+  async def test_flying_mode_is_the_vendors_read(self):
+    capture = load_captures()["flying_mode"]
+    io, result = await read_capture(
+      bytes.fromhex(capture["reply"]),
+      flying_mode=True,
+      measurement_settings=MeasurementSettings(settling_time=0, flashes=1),
+    )
+    expected = with_nominal_edges(FLYING_MODE_RUN_FRAME, [BASELINE])
+    self.assertEqual(ftdi_extract_payload(io.written[1]), without_equidistant_cycles(expected))
+    self.assertEqual(result.data, keyed_by_well(capture["export"]))
+
+  async def test_what_flying_mode_cannot_read_sends_nothing(self):
+    io = FakeFTDI()
+    feature = make_fluorescence(io, fluorescence_plate())
+    for settings, enhanced in (
+      (MeasurementSettings(settling_time=0, flashes=1, well_scan="orbital"), False),
+      (MeasurementSettings(settling_time=0, flashes=5), False),
+      (MeasurementSettings(settling_time=0.1, flashes=1), False),
+      (MeasurementSettings(settling_time=0, flashes=1), True),
+    ):
+      with self.subTest(settings=settings, enhanced=enhanced), self.assertRaises(ValueError):
+        await feature.measure(
+          BASELINE,
+          flying_mode=True,
+          enhanced_dynamic_range=enhanced,
+          measurement_settings=settings,
+          gain=1000,
+          focal_height=CAPTURED_FOCAL_HEIGHT,
+        )
+    self.assertEqual(io.written, [])
+
+
+class EnhancedDynamicRangeTests(unittest.IsolatedAsyncioTestCase):
+  async def test_enhanced_dynamic_range_is_the_vendors_read(self):
+    capture = load_captures()["enhanced_dynamic_range"]
+    reply = bytes.fromhex(capture["reply"])
+    with patch.object(measurement_module.logger, "warning") as warning:
+      io, result = await read_capture(
+        reply, enhanced_dynamic_range=True, measurement_settings=TEN_FLASHES
+      )
+    expected = with_nominal_edges(ENHANCED_DYNAMIC_RANGE_RUN_FRAME, [BASELINE])
+    self.assertEqual(ftdi_extract_payload(io.written[1]), without_equidistant_cycles(expected))
+    self.assertEqual(result.data, keyed_by_well(capture["export"]))
+    decode = make_fluorescence(FakeFTDI())._decode_data_reply
+    _, ceiling, _ = decode(ftdi_extract_payload(reply), 1, 96)
+    self.assertEqual(ceiling, 700_000_000)
+    warning.assert_not_called()  # 127,000 counts are far below its ceiling
+
+  async def test_with_orbital_or_spiral_averaging_sends_nothing(self):
+    io = FakeFTDI()
+    feature = make_fluorescence(io, fluorescence_plate())
+    for well_scan in ("orbital", "spiral"):
+      with self.subTest(well_scan), self.assertRaises(ValueError):
+        await feature.measure(
+          BASELINE,
+          enhanced_dynamic_range=True,
+          measurement_settings=MeasurementSettings(well_scan=well_scan),  # type: ignore[arg-type]
+          gain=1000,
+          focal_height=CAPTURED_FOCAL_HEIGHT,
+        )
+    self.assertEqual(io.written, [])
+
+
+class MatrixTests(unittest.IsolatedAsyncioTestCase):
+  async def test_a_matrix_returns_every_point(self):
+    plate = fluorescence_plate()
+    io, result = await read_capture(
+      MATRIX_DATA_REPLY,
+      plate=plate,
+      wells=[plate.get_well("A1")],
+      measurement_settings=MeasurementSettings(
+        well_scan="matrix", matrix_size=3, scan_diameter=3, flashes=10
+      ),
+    )
+    expected = with_nominal_edges(MATRIX_RUN_FRAME, [BASELINE])
+    self.assertEqual(ftdi_extract_payload(io.written[1]), without_equidistant_cycles(expected))
+    points = [145.0, 147.0, 142.0, 136.0, 144.0, 144.0, 137.0, 142.0, 139.0]
+    self.assertEqual(result.matrix_points, {"A1": points})
+    # The plain mean: the driver's choice, not the vendor's (its export reads 141).
+    self.assertEqual(result.data, {"A1": sum(points) / 9})
+
+  async def test_a_matrix_of_several_wells_sends_nothing(self):
+    io = FakeFTDI()
+    plate = fluorescence_plate()
+    feature = make_fluorescence(io, plate)
+    settings = MeasurementSettings(well_scan="matrix", matrix_size=3)
+    with self.assertRaises(ValueError):  # no fluorescence matrix of several wells is captured
+      await feature.measure(
+        BASELINE,
+        wells=plate.get_items("A1:B1"),
+        measurement_settings=settings,
+        gain=1000,
+        focal_height=CAPTURED_FOCAL_HEIGHT,
+      )
+    self.assertEqual(io.written, [])
+
+
+def plate_384() -> Plate:
+  """The 384-well plate's geometry: 127.80 x 85.50 mm, A1 centre 12.12 / 8.99 mm from the back,
+  P24 centre 115.68 / 76.51 mm; its pitch is 103.56 / 23 and 67.52 / 15 mm, not 4.5."""
+  return Plate(
+    "plate_384",
+    size_x=127.80,
+    size_y=85.50,
+    size_z=14.0,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=24,
+      num_items_y=16,
+      dx=12.12 - 1.8,
+      dy=8.99 - 1.8,
+      dz=1.0,
+      item_dx=103.56 / 23,
+      item_dy=67.52 / 15,
+      size_x=3.6,
+      size_y=3.6,
+      size_z=10.0,
+    ),
+  )
+
+
+class PlateTests(unittest.IsolatedAsyncioTestCase):
+  async def test_384_wells_are_the_vendors_read(self):
+    capture = load_captures()["plate_384"]
+    io, result = await read_capture(
+      bytes.fromhex(capture["reply"]),
+      plate=plate_384(),
+      focal_height=5.0,
+      measurement_settings=TEN_FLASHES,
+    )
+    self.assertEqual(
+      ftdi_extract_payload(io.written[1]), with_nominal_edges(PLATE_384_RUN_FRAME, [BASELINE])
+    )
+    self.assertEqual(result.data, keyed_by_well(capture["export"]))
+
+  async def test_a_single_well_as_the_reader_answered(self):
+    io = FakeFTDI(chunk=4096)
+    io.replies = [STATUS_IDLE, *SINGLE_WELL_REPLIES]
+    plate = fluorescence_plate()
+    result = await make_fluorescence(io, plate).measure(
+      BASELINE,
+      wells=[plate.get_well("A1")],
+      measurement_settings=TEN_FLASHES,
+      gain=1000,
+      focal_height=CAPTURED_FOCAL_HEIGHT,
+    )
+    expected = with_nominal_edges(SINGLE_WELL_RUN_FRAME, [BASELINE])
+    self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
+    self.assertEqual(result.data, {"A1": 145.0})
+
+
+# The spectra's fixed excitation or emission and their scans, as the captures read them.
+SPECTRUM_WELLS = ["A1", "B1", "C2", "D2"]
+EXCITATION_SPECTRUM: Dict[str, Any] = dict(
+  scan="excitation",
+  start_wavelength=400,
+  end_wavelength=620,
+  excitation_bandwidth=10,
+  emission_wavelength=800,
+  emission_bandwidth=20,
+)
+EMISSION_SPECTRUM: Dict[str, Any] = dict(
+  scan="emission",
+  start_wavelength=500,
+  end_wavelength=600,
+  excitation_wavelength=400,
+  excitation_bandwidth=10,
+  emission_bandwidth=10,
+)
+
+
+def spectrum_replies(name: str) -> List[bytes]:
+  """The reader's replies to capture `name`'s RUN, status polls and data requests, in order: each
+  page after a status with data ready, the last status idle."""
+  return [bytes.fromhex(frame) for frame in load_captures()[name]["replies"]]
+
+
+def spectrum_pages(name: str) -> List[bytes]:
+  """The data pages of capture `name`, in the order received."""
+  replies = [ftdi_extract_payload(reply) for reply in spectrum_replies(name)]
+  return [reply for reply in replies if reply[0] == 0x02]
+
+
+def counts_at(result: FluorescenceSpectrumResult, wavelength: int) -> Dict[str, float]:
+  """Each well's count at `wavelength`, in the result's well order."""
+  return {well: spectrum[wavelength] for well, spectrum in result.data.items()}
+
+
+def count_data_requests(io: FakeFTDI) -> int:
+  """The data requests the driver sent."""
+  return sum(frame == DATA_FRAME for frame in io.written)
+
+
+class SpectrumTests(unittest.IsolatedAsyncioTestCase):
+  async def measure(self, replies: List[bytes], arguments: Dict[str, Any]):
+    """A spectrum of `SPECTRUM_WELLS` with `arguments` answered by `replies`; the io and the
+    result."""
+    io = FakeFTDI(chunk=4096)
+    io.replies = list(replies)
+    plate = fluorescence_plate()
+    feature = make_fluorescence(io, plate)
+    result = await feature.measure_spectrum(
+      wells=[plate.get_well(well) for well in SPECTRUM_WELLS],
+      **{"gain": 1000, "focal_height": CAPTURED_FOCAL_HEIGHT, **arguments},
+    )
+    return io, result
+
+  async def test_an_excitation_spectrum_is_the_vendors_read(self):
+    io, result = await self.measure(spectrum_replies("excitation_spectrum"), EXCITATION_SPECTRUM)
+    fluorescence_channels = [
+      FluorescenceChannel(
+        excitation_wavelength=wavelength,
+        excitation_bandwidth=10,
+        emission_wavelength=800,
+        emission_bandwidth=20,
+      )
+      for wavelength in (400, 620)
+    ]
+    expected = with_nominal_edges(EXCITATION_SPECTRUM_RUN_FRAME, fluorescence_channels)
+    self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
+    self.assertEqual(count_data_requests(io), 4)  # the page repeated after the last is not
+    self.assertEqual(list(result.data), SPECTRUM_WELLS)
+    self.assertEqual(list(result.data["A1"]), list(range(400, 621)))
+    self.assertEqual((result.excitation_wavelength, result.excitation_bandwidth), (None, 10))
+    self.assertEqual((result.emission_wavelength, result.emission_bandwidth), (800, 20))
+    self.assertEqual(result.gain, 1000)
+    # The raw counts: the vendor's export is spectrally corrected.
+    self.assertEqual(counts_at(result, 400), {"A1": 41.0, "B1": 31.0, "C2": 22.0, "D2": 25.0})
+    self.assertEqual(list(counts_at(result, 620).values()), [46.0, 14.0, 17.0, 22.0])
+
+  async def test_an_emission_spectrum_is_the_vendors_read(self):
+    io, result = await self.measure(spectrum_replies("emission_spectrum"), EMISSION_SPECTRUM)
+    fluorescence_channels = [
+      FluorescenceChannel(
+        excitation_wavelength=400,
+        excitation_bandwidth=10,
+        emission_wavelength=wavelength,
+        emission_bandwidth=10,
+      )
+      for wavelength in (500, 600)
+    ]
+    expected = with_nominal_edges(EMISSION_SPECTRUM_RUN_FRAME, fluorescence_channels)
+    self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
+    self.assertEqual(count_data_requests(io), 4)
+    self.assertEqual(list(result.data["A1"]), list(range(500, 601)))
+    self.assertEqual((result.excitation_wavelength, result.emission_wavelength), (400, None))
+    assert isinstance(result, CLARIOstarFluorescenceSpectrumResult)
+    self.assertEqual(result.gain, 1000)
+    self.assertEqual(counts_at(result, 500), {"A1": 73.0, "B1": 49.0, "C2": 32.0, "D2": 30.0})
+    self.assertEqual(list(counts_at(result, 501).values()), [70.0, 40.0, 29.0, 24.0])
+    self.assertEqual(list(counts_at(result, 600).values()), [20.0, 31.0, 71.0, 62.0])
+
+  def test_each_page_is_its_wells_whatever_its_place(self):
+    plate = fluorescence_plate()
+    pages = spectrum_pages("emission_spectrum")
+    decode = make_fluorescence(FakeFTDI())._decode_spectrum_pages
+    in_order = decode(pages, plate, SPECTRUM_WELLS, 101)
+    # Not a reader's reply: the pages reversed, one missing, one repeated.
+    self.assertEqual(decode(pages[::-1], plate, SPECTRUM_WELLS, 101), in_order)
+    for wrong in (pages[:3], [*pages, pages[3]]):
+      with self.assertRaises(ValueError):
+        decode(wrong, plate, SPECTRUM_WELLS, 101)
+
+  def test_a_page_not_of_this_read_is_refused(self):
+    plate = fluorescence_plate()
+    pages = spectrum_pages("emission_spectrum")
+    off_plate = bytearray(pages[0])
+    off_plate[23:25] = (13).to_bytes(2, "big")  # Not a reader's reply: column 13 of 12.
+    for wrong, wavelengths in (
+      (pages, 100),
+      (pages[:-1] + [pages[-1][:-4]], 101),  # Not a reader's reply: the last count cut off.
+      ([bytes(off_plate), *pages[1:]], 101),
+    ):
+      with self.subTest(wavelengths=wavelengths), self.assertRaises(ValueError):
+        make_fluorescence(FakeFTDI())._decode_spectrum_pages(
+          wrong, plate, SPECTRUM_WELLS, wavelengths
+        )
+
+  async def test_a_short_page_stops_the_run_and_the_plate_is_read_again(self):
+    replies = spectrum_replies("emission_spectrum")
+    first_page = next(index for index, reply in enumerate(replies) if reply[4] == 0x02)
+    # Not a reader's reply: the first page cut short, as an absorbance page arrived
+    # (ShortPageTests); no short fluorescence page is captured.
+    short = replies[:first_page] + [replies[first_page][:200], STOP_REPLY]
+    io, result = await self.measure(short + replies, EMISSION_SPECTRUM)
+    runs = [frame for frame in io.written if ftdi_extract_payload(frame)[0] == 0x04]
+    self.assertEqual(len(runs), 2)
+    self.assertIn(STOP_FRAME, io.written)
+    self.assertEqual(count_data_requests(io), 5)
+    self.assertEqual(list(counts_at(result, 500).values()), [73.0, 49.0, 32.0, 30.0])
+
+  async def test_a_run_ending_before_its_last_page_stops(self):
+    replies = spectrum_replies("emission_spectrum")
+    # Not a reader's reply: the run ending idle after three of its four pages.
+    ended = replies[:13] + [replies[-1], STOP_REPLY]
+    with self.assertRaisesRegex(RuntimeError, "3 of 4 pages"):
+      await self.measure(ended, EMISSION_SPECTRUM)
+
+  async def test_out_of_range_spectra_send_nothing(self):
+    io = FakeFTDI()
+    feature = make_fluorescence(io, fluorescence_plate())
+    refused: List[Dict[str, Any]] = [
+      dict(EMISSION_SPECTRUM, scan="both"),
+      dict(EMISSION_SPECTRUM, step_size=2),
+      dict(EMISSION_SPECTRUM, end_wavelength=500),
+      dict(EMISSION_SPECTRUM, end_wavelength=841),
+      dict(EMISSION_SPECTRUM, start_wavelength=319),
+      dict(EMISSION_SPECTRUM, emission_wavelength=550),  # the scanned emission's
+      dict(EMISSION_SPECTRUM, excitation_wavelength=None),  # no fixed excitation
+      dict(EXCITATION_SPECTRUM, end_wavelength=800),  # overlap
+      dict(EMISSION_SPECTRUM, gain=4096),
+      dict(EMISSION_SPECTRUM, focal_height=25.1),  # `_check_read`
+      dict(
+        EMISSION_SPECTRUM,
+        measurement_settings=MeasurementSettings(well_scan="matrix", matrix_size=3),
+      ),
+      dict(
+        EMISSION_SPECTRUM, measurement_settings=MeasurementSettings(reading_direction="row_major")
+      ),
+      dict(EMISSION_SPECTRUM, measurement_settings=MeasurementSettings(corner="top_right")),
+      dict(EMISSION_SPECTRUM, measurement_settings=MeasurementSettings(bidirectional=False)),
+    ]
+    for arguments in refused:
+      with self.subTest(arguments=arguments), self.assertRaises(ValueError):
+        await feature.measure_spectrum(
+          **{"gain": 1000, "focal_height": CAPTURED_FOCAL_HEIGHT, **arguments}
+        )
+    self.assertEqual(io.written, [])
 
 
 class GatingTests(unittest.IsolatedAsyncioTestCase):
@@ -456,6 +1183,30 @@ class GatingTests(unittest.IsolatedAsyncioTestCase):
 
   def test_no_fluorescence_is_not_built(self):
     self.assertIsNone(self.build_with(0).fluorescence)
+
+  def test_the_wavelength_limits_follow_the_photomultipliers(self):
+    # (extended red, dual, crossed over): the highest wavelength and dichroic split.
+    for photomultipliers, highest in (
+      ((True, True, False), (840, 760.0)),  # the captured reader
+      ((True, True, True), (740, 740.0)),
+      ((True, False, False), (840, 760.0)),
+      ((False, False, False), (740, 740.0)),
+    ):
+      with self.subTest(photomultipliers=photomultipliers):
+        driver = make_driver(FakeFTDI())
+        driver.configuration = decoded()
+        driver.configuration.fluorescence_channels = 1
+        (
+          driver.configuration.extended_red_photomultiplier_tube,
+          driver.configuration.dual_photomultiplier_tubes,
+          driver.configuration.photomultiplier_tube_crossover,
+        ) = photomultipliers
+        driver._discover_features()
+        assert driver.fluorescence is not None
+        configuration = driver.fluorescence.configuration
+        self.assertEqual(
+          (configuration.wavelength_range[1], configuration.dichroic_range[1]), highest
+        )
 
 
 if __name__ == "__main__":

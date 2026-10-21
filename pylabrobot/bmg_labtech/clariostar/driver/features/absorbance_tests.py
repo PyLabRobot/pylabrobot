@@ -20,12 +20,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance import (
   AbsorbanceConfiguration,
   CLARIOstarAbsorbanceResult,
   CLARIOstarAbsorbanceSpectrumResult,
-  _check_spectrum_arguments,
   _compute_readings,
-  _compute_run_parameters,
-  _compute_spectrum_run_parameters,
-  _decode_data_reply,
-  _decode_spectrum_pages,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.features.drawer_tests import make_plate_holder
 from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
@@ -45,19 +40,19 @@ from pylabrobot.lib.absorbance.results import AbsorbanceResult
 from pylabrobot.resources import Plate, Well, cor_96_wellplate_360uL_Fb, create_ordered_items_2d
 from pylabrobot.resources.biorad.plates import biorad_96_wellplate_200uL_Vb
 
-# The vendor's default endpoint read (DOE_Baseline): 600 nm, every well of its plate.
+# The vendor's default endpoint read: 600 nm, every well of its plate.
 BASELINE_RUN_FRAME = bytes.fromhex(
   "0200900c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a020000000000000000000000000000000000000000000000000000"
   "00000000270f270f0501177000000064232826ca0000006400000005020000000000010000000100050001000013090d"
 )
-# DOE_Baseline with 200 flashes (DOE_REF02).
+# The default read with 200 flashes.
 FLASHES_200_RUN_FRAME = bytes.fromhex(
   "0200900c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a020000000000000000000000000000000000000000000000000000"
   "00000000270f270f0501177000000064232826ca0000006400000005020000000000010000000100c80001000013cc0d"
 )
-# Five wavelengths at 1 flash (L06), every well of a 12776 x 8548 plate.
+# Five wavelengths at 1 flash, every well of a 12776 x 8548 plate.
 FIVE_WAVELENGTHS_RUN_FRAME = bytes.fromhex(
   "0200980c0431e82164059e04642c4a1d000c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a020000000000000000000000000000000000000000000000000000"
@@ -65,14 +60,14 @@ FIVE_WAVELENGTHS_RUN_FRAME = bytes.fromhex(
   "0100010000153f0d"
 )
 
-# Orbital, 3 mm, the vendor's 7 flashes, 0.1 s settling (M02), on 6.58 mm wells.
+# Orbital, 3 mm, the vendor's 7 flashes, 0.1 s settling, on 6.58 mm wells.
 ORBITAL_RUN_FRAME = bytes.fromhex(
   "0200950c0431e82164059e04642c4a1d000c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a320000000000000000000000000000000000000000000000000000"
   "00000000270f270f02030292000501177000000064232826ca0000006400000005020000000000010000000100070001"
   "000013cd0d"
 )
-# Spiral, 4 mm, the vendor's 15 flashes, unidirectional, no settling (B1); its pause sends 0 s.
+# Spiral, 4 mm, the vendor's 15 flashes, unidirectional, no settling; its pause sends 0 s.
 SPIRAL_RUN_FRAME = bytes.fromhex(
   "0200950c0431e82164059e04642c4a1d000c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000008a060000000000000000000000000000000000000000000000000000"
@@ -80,14 +75,14 @@ SPIRAL_RUN_FRAME = bytes.fromhex(
   "000014210d"
 )
 
-# Orbital, shaken orbital at 300 rpm for 5 s first (F01); its pause sends 0 s.
+# Orbital, shaken orbital at 300 rpm for 5 s first; its pause sends 0 s.
 SHAKE_RUN_FRAME = bytes.fromhex(
   "0200950c0431e82164059e04642c4a1d000c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a320000000000000000000000020000000000020005000000000000"
   "00000000270f270f02030292000501177000000064232826ca0000006400000000020000000000010000000100070001"
   "000013d10d"
 )
-# The pre-separators of F01-F05: (pattern, rpm, seconds) as the captures are named.
+# The vendor's pre-separators of five shaken reads, by (pattern, rpm, seconds).
 SHAKE_PRE_SEPARATORS = {
   ("orbital", 300, 5): "32000000000000000000000002000000000002000500000000000000000000",
   ("orbital", 500, 5): "32000000000000000000000002000000000004000500000000000000000000",
@@ -96,14 +91,14 @@ SHAKE_PRE_SEPARATORS = {
   ("linear", 300, 5): "32000000000000000000000002000000000102000500000000000000000000",
 }
 
-# A 5 s pause before reading, otherwise the vendor's default read, on the A-series plate (P01).
+# A 5 s pause before reading, otherwise the vendor's default read, on the captured plate.
 PAUSE_RUN_FRAME = bytes.fromhex(
   "0200900c0431e82164059e04642c4a1d000c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a020000000000000000000000000000000000000000000000000000"
   "00000000270f270f0501177000000064232826ca0000006400010005020000000000010000000100050001000012fe0d"
 )
 
-# One read of column 1 at 600 nm (A03): the replies, in order.
+# One read of column 1 at 600 nm: the replies, in order.
 RUN_REPLY = bytes.fromhex(
   "0200350c03250406000000002a9d0000002c010000000e00000001010000000000000001000000040001000000010000"
   "200001a00d"
@@ -119,8 +114,8 @@ COLUMN_1_DATA_REPLY = bytes.fromhex(
   "000047900000000000297a0d"
 )
 
-# Spectrum RUNs as the vendor sent them, all on the captured plate: 300-700/1 nm (H01),
-# 400-600/1 (H02), 300-700/5 (H03), column 1 (H04), orbital (H05), and the verification read:
+# Spectrum RUNs as the vendor sent them, all on the captured plate: 300-700/1 nm,
+# 400-600/1, 300-700/5, column 1, orbital, and the verification read:
 # 220-1000/1, spiral, unidirectional, 20 flashes, double orbital shaking, 5 s pause.
 SPECTRUM_300_700_1_RUN_FRAME = bytes.fromhex(
   "0200900c0431e82164059e04642c4a1d000c0800ffffffffffffffffffffffff00000000000000000000000000000000"
@@ -158,7 +153,7 @@ SPECTRUM_VERIFICATION_RUN_FRAME = bytes.fromhex(
 # A timeout that ends a read right after its RUN, so a test can pin the RUN and the STOP.
 IMMEDIATE_TIMEOUT = 1e-9
 
-# Column 1 at 600 nm, unidirectional, on the captured plate (A03): RUN_REPLY, STATUS_MEASURED and
+# Column 1 at 600 nm, unidirectional, on the captured plate: RUN_REPLY, STATUS_MEASURED and
 # COLUMN_1_DATA_REPLY are this read's replies.
 COLUMN_1_RUN_FRAME = bytes.fromhex(
   "0200900c0431e82164059e04642c4a1d000c080080080080080080080080080000000000000000000000000000000000"
@@ -166,7 +161,7 @@ COLUMN_1_RUN_FRAME = bytes.fromhex(
   "00000000270f270f0501177000000064232826ca0000006400000000020000000000010000000100050001000009a40d"
 )
 
-# STOP during a run (stop_pause_resume captures): accepted.
+# STOP during a run: accepted.
 STOP_FRAME = bytes.fromhex("02000a0c0b000000230d")
 STOP_REPLY = bytes.fromhex("0200180c0125062600000b0000000000000000c00001430d")
 
@@ -220,7 +215,7 @@ VERIFICATION_EXPORT = [
 
 
 def baseline_plate() -> Plate:
-  """A plate of DOE_Baseline's geometry: 127.80 x 85.50 mm, A1 centre 14.30 / 11.20 mm."""
+  """The default read's plate geometry: 127.80 x 85.50 mm, A1 centre 14.30 / 11.20 mm."""
   return Plate(
     "baseline",
     size_x=127.80,
@@ -243,7 +238,7 @@ def baseline_plate() -> Plate:
 
 
 def captured_96_well_plate() -> Plate:
-  """A plate of the A- to M-series geometry with the vendor database's 6.58 mm wells:
+  """The captured plate's geometry, with the vendor database's 6.58 mm wells:
   127.76 x 85.48 mm, A1 centre 14.38 / 11.24 mm, 9 mm pitch."""
   return Plate(
     "captured",
@@ -316,8 +311,13 @@ def settings_from(
   return MeasurementSettings(**measurement), shake
 
 
+def absorbance_feature() -> Absorbance:
+  """An absorbance feature without a plate, for its RUN parameters and its decoding."""
+  return make_absorbance(FakeFTDI())
+
+
 def run_parameters(plate, wells, wavelengths, flashes, **settings) -> bytes:
-  return _compute_run_parameters(
+  return absorbance_feature()._compute_run_parameters(
     plate, wells, wavelengths, *settings_from(flashes=flashes, **settings)
   )
 
@@ -350,7 +350,7 @@ COLUMN_1 = [f"{row}1" for row in "ABCDEFGH"]
 
 
 def without_pause_seconds(payload: bytes) -> bytes:
-  """`payload` with the no-pause seconds set to v1's 5: the vendor sends 5 (DOE_Baseline) or 0."""
+  """`payload` with the no-pause seconds set to v1's 5: the vendor sends 5 or 0."""
   payload = bytearray(payload)
   pause_seconds = len(payload) - 17
   if payload[pause_seconds - 3 : pause_seconds + 1] == bytes(4):
@@ -430,20 +430,35 @@ class RunParametersTests(unittest.TestCase):
 class SettingsTests(unittest.TestCase):
   def test_the_defaults_are_the_vendors_default_read(self):
     plate = baseline_plate()
-    parameters = _compute_run_parameters(
+    parameters = absorbance_feature()._compute_run_parameters(
       plate, plate.get_all_items(), [600], MeasurementSettings(), None
     )
     self.assertEqual(b"\x04" + parameters, ftdi_extract_payload(BASELINE_RUN_FRAME))
 
   def test_every_error_is_listed_at_once(self):
     with self.assertRaises(ValueError) as context:
-      MeasurementSettings(corner="TL", well_scan="matrix", flashes=2.5)  # type: ignore[arg-type]
-    for field_name in ("corner", "well_scan", "flashes"):
+      MeasurementSettings(
+        corner="TL",  # type: ignore[arg-type]
+        reading_direction="vertical",  # type: ignore[arg-type]
+        well_scan="grid",  # type: ignore[arg-type]
+        flashes=2.5,  # type: ignore[arg-type]
+      )
+    for field_name in ("corner", "reading_direction", "well_scan", "flashes"):
       self.assertIn(field_name, str(context.exception))
     with self.assertRaises(ValueError) as context:
       ShakeSettings("meander", 150, 2.5)  # type: ignore[arg-type]
     for field_name in ("pattern", "speed", "duration"):
       self.assertIn(field_name, str(context.exception))
+
+  def test_a_matrix_size_goes_with_a_matrix_well_scan(self):
+    for arguments in (
+      dict(well_scan="matrix"),
+      dict(well_scan="matrix", matrix_size=11),
+      dict(well_scan="matrix", matrix_size=3.0),
+      dict(well_scan="point", matrix_size=3),
+    ):
+      with self.subTest(arguments), self.assertRaises(ValueError):
+        MeasurementSettings(**arguments)  # type: ignore[arg-type]
 
   def test_every_range_error_is_listed_at_once(self):
     plate = baseline_plate()
@@ -463,7 +478,7 @@ class SpectrumRunParametersTests(unittest.TestCase):
   def spectrum_payload(self, start, end, step, flashes, wells=None, shake=None, **measurement):
     plate = captured_96_well_plate()
     wells = plate.get_all_items() if wells is None else wells(plate)
-    return b"\x04" + _compute_spectrum_run_parameters(
+    return b"\x04" + absorbance_feature()._compute_spectrum_run_parameters(
       plate, wells, start, end, step, MeasurementSettings(flashes=flashes, **measurement), shake
     )
 
@@ -487,7 +502,7 @@ class SpectrumRunParametersTests(unittest.TestCase):
     self.assert_matches_but_its_pause_seconds(payload, SPECTRUM_ORBITAL_RUN_FRAME)
 
   def test_out_of_range_spectra_are_refused(self):
-    configuration = AbsorbanceConfiguration()
+    absorbance = absorbance_feature()
     for start, end, step in (
       (219, 700, 1),
       (300, 1001, 1),
@@ -498,14 +513,14 @@ class SpectrumRunParametersTests(unittest.TestCase):
       (300.5, 700, 1),
     ):
       with self.assertRaises(ValueError):
-        _check_spectrum_arguments(
+        absorbance._check_spectrum_arguments(
           start,  # type: ignore[arg-type]
           end,
           step,
           "optical_density",
-          configuration,
+          MeasurementSettings(),
         )
-    _check_spectrum_arguments(220, 1000, 1, "raw", configuration)
+    absorbance._check_spectrum_arguments(220, 1000, 1, "raw", MeasurementSettings())
 
 
 def load_verification_spectrum() -> Tuple[List[bytes], List[int], Dict[str, List[float]]]:
@@ -577,9 +592,9 @@ class SpectrumReadTests(unittest.IsolatedAsyncioTestCase):
     pages = [ftdi_extract_payload(frame) for frame in load_verification_spectrum()[0]]
     for wrong in ([pages[1], pages[0], *pages[2:]], pages[:4], [*pages, pages[4]]):
       with self.assertRaises(ValueError):
-        _decode_spectrum_pages(wrong, 781)
+        absorbance_feature()._decode_spectrum_pages(wrong, 781)
     with self.assertRaises(ValueError):
-      _decode_spectrum_pages(pages, 780)  # another read's wavelength count
+      absorbance_feature()._decode_spectrum_pages(pages, 780)  # another read's wavelength count
 
   async def test_a_timeout_not_positive_is_refused(self):
     io = FakeFTDI()
@@ -635,7 +650,9 @@ class SimulatedSpectrumTests(unittest.IsolatedAsyncioTestCase):
 
 class OpticalDensityTests(unittest.TestCase):
   def test_matches_the_vendor_export(self):
-    decoded = _decode_data_reply(ftdi_extract_payload(VERIFICATION_DATA_REPLY), [600])
+    decoded = absorbance_feature()._decode_data_reply(
+      ftdi_extract_payload(VERIFICATION_DATA_REPLY), [600]
+    )
     densities = _compute_readings(*decoded, "optical_density")[0]
     exported = [value for row in VERIFICATION_EXPORT for value in row]
     for density, value in zip(densities, exported):
@@ -643,7 +660,9 @@ class OpticalDensityTests(unittest.TestCase):
 
   def test_a_reply_for_other_wavelengths_is_refused(self):
     with self.assertRaises(ValueError):
-      _decode_data_reply(ftdi_extract_payload(VERIFICATION_DATA_REPLY), [450, 600])
+      absorbance_feature()._decode_data_reply(
+        ftdi_extract_payload(VERIFICATION_DATA_REPLY), [450, 600]
+      )
 
 
 class ReadTests(unittest.IsolatedAsyncioTestCase):
@@ -798,15 +817,15 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       absorbance.default_read_timeout = 0
 
   async def test_scan_and_settling_bytes_are_the_vendors(self):
-    # (arguments, scan byte, settling byte) as the vendor sent them: C01-C05, P01, P02, M01,
-    # M06, M04 (the last three orbital reads, same field).
+    # (arguments, scan byte, settling byte) as the vendor sent them: the corners and
+    # directions, the pauses and three orbital reads (the same field).
     cases: List[Tuple[Dict[str, Any], int, int]] = [
       ({}, 0x0A, 0x05),
       ({"corner": "top_right"}, 0x2A, 0x05),
       ({"corner": "bottom_left"}, 0x4A, 0x05),
       ({"corner": "bottom_right"}, 0x6A, 0x05),
       ({"bidirectional": False}, 0x8A, 0x05),
-      ({"vertical": False}, 0x02, 0x05),
+      ({"reading_direction": "row_major"}, 0x02, 0x05),
       ({"settling_time": 0.0}, 0x0A, 0x01),
       ({"settling_time": 0.2}, 0x0A, 0x0A),
       ({"settling_time": 0.5}, 0x0A, 0x19),
@@ -863,13 +882,20 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     io = FakeFTDI()
     absorbance = make_absorbance(io, captured_96_well_plate())
     for arguments in (
-      {"well_scan": "matrix"},
+      {"well_scan": "matrix", "matrix_size": 3},  # captured, its data not decoded
       {"well_scan": "orbital", "scan_diameter": 0},
       {"well_scan": "spiral", "scan_diameter": 7},  # wider than the 6.58 mm well
       {"well_scan": "spiral", "scan_diameter": 3.5},
     ):
       with self.assertRaises(ValueError):
         await measure_with(absorbance, [600], **arguments)  # type: ignore[arg-type]
+    with self.assertRaises(ValueError):
+      await absorbance.measure_spectrum(
+        start_wavelength=300,
+        end_wavelength=700,
+        step_size=1,
+        measurement_settings=MeasurementSettings(well_scan="matrix", matrix_size=3),
+      )
     plate_384 = Plate(
       "plate_384",
       size_x=127.76,
@@ -966,9 +992,13 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
     return result
 
   async def test_one_eight_and_a_spectrum_of_wavelengths_agree(self):
-    (single,) = await self.read("step_12", wavelengths=[600])
-    eight = await self.read("step_15", wavelengths=[260, 280, 350, 450, 530, 600, 700, 750])
-    spectrum = await self.read("step_17", start_wavelength=300, end_wavelength=700, step_size=1)
+    (single,) = await self.read("absorbance_600_nm", wavelengths=[600])
+    eight = await self.read(
+      "absorbance_8_wavelengths", wavelengths=[260, 280, 350, 450, 530, 600, 700, 750]
+    )
+    spectrum = await self.read(
+      "absorbance_spectrum", start_wavelength=300, end_wavelength=700, step_size=1
+    )
     self.assertEqual([r.wavelength for r in eight], [260, 280, 350, 450, 530, 600, 700, 750])
     at_600 = eight[5].data
     self.assertLess(max(abs(at_600[well] - single.data[well]) for well in single.data), 0.002)
@@ -984,8 +1014,10 @@ class ShortPageTests(unittest.IsolatedAsyncioTestCase):
 
   def setUp(self):
     session = load_session_replies()
-    self.short = b"".join(bytes.fromhex(data) for _, data in session["step_17_first_attempt_reads"])
-    self.whole = bytes.fromhex(session["step_17_page"])
+    self.short = b"".join(
+      bytes.fromhex(data) for _, data in session["absorbance_spectrum_short_page_reads"]
+    )
+    self.whole = bytes.fromhex(session["absorbance_spectrum_page"])
 
   async def read(self, io: FakeFTDI):
     plate = cor_96_wellplate_360uL_Fb("plate")
