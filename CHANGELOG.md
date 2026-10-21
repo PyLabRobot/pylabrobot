@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Python 3.10 is the minimum supported version; Python 3.9 is no longer supported.
 - `HamiltonDeck` and `HamiltonSTARDeck`: `num_tracks` replaces `num_rails` and `track=` replaces `rails=`; the old names are deprecated but keep working, as do decks saved with `num_rails`. A STAR deck counts two fewer tracks than it counted rails (STARlet 30, STAR 54) at the same positions, so a count passed positionally to `HamiltonSTARDeck` is now read as tracks.
 
 - Background reader task on `pylabrobot.hamilton.transport.tcp.HamiltonTCPClient` that owns the socket for the session, so `on_event` subscribers receive events between commands and a response arriving with no command waiting is dropped and logged instead of being handed to the next command (#1195).

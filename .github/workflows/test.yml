@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        version: [3.9, "3.10", 3.11, 3.12, 3.13, 3.14]
+        version: ["3.10", 3.11, 3.12, 3.13, 3.14]
 
     name: ${{ github.event_name == 'pull_request_review' && 'Review notification' || 'Tests' }} (all, py${{ matrix.version }})
     runs-on: ${{ matrix.os }}
@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        extra: ["<none>", serial, usb, ftdi, hid, btx, modbus, opentrons, sila, cytation-microscopy, pico]
+        extra: ["<none>", serial, usb, ftdi, hid, btx, modbus, opentrons, sila, cytation-microscopy, pico, rpc-dev, "celigo,rpc-dev"]
 
     name: ${{ github.event_name == 'pull_request_review' && 'Review notification' || 'Tests' }} (${{ matrix.extra }}, py3.12)
     runs-on: ${{ matrix.os }}
@@ -48,3 +48,9 @@ jobs:
         with:
           version: "3.12"
           extra: ${{ matrix.extra }}
+
+      - name: Verify generated bindings
+        if: matrix.extra == 'celigo,rpc-dev'
+        run: |
+          make generate-rpc
+          git diff --exit-code -- pylabrobot/rpc/v1 pylabrobot/revvity/celigo/grpc/v1
