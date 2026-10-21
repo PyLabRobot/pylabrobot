@@ -498,6 +498,39 @@ class CLARIOstarDriver:
     else:
       await self._usb.drain()
 
+  async def _drain_rx(self) -> None:
+    """Discard reply bytes until none has come for ``_FRAME_STALL_TIMEOUT``, at most
+    ``_FRAME_HARD_CAP``: the rest of a reply the reader is still sending.
+
+    The reader sends a reply it has started to its end, a data page too (61,508 B over about
+    7 s); after a cancelled read its rest would reach the next command's read. The queued reads'
+    bytes are logged on one I/O line, libftdi's by `FTDI.read`.
+    """
+    if self.use_io != "ftdi":
+      await self._usb.drain()
+      return
+    reads = self._get_queued_reads()
+    drained = bytearray()
+    start = last_data_time = time.monotonic()
+    while True:
+      if reads is not None:
+        data, _ = reads.take()
+      else:
+        data = await self._ftdi.read(self._FTDI_READ_CHUNK)
+      now = time.monotonic()
+      if data:
+        drained += data
+        last_data_time = now
+      deadline = min(last_data_time + self._FRAME_STALL_TIMEOUT, start + self._FRAME_HARD_CAP)
+      if now >= deadline:
+        break
+      if reads is not None:
+        await reads.wait(deadline - now)
+      elif not data:
+        await asyncio.sleep(LATENCY_TIMER / 1000)  # the chip sends at least once per period
+    if reads is not None and drained:
+      logger.log(LOG_LEVEL_IO, "[%s] discarded %s", self._ftdi.device_id, bytes(drained))
+
   async def exchange(self, payload: bytes) -> bytes:
     """Send one logical payload and return the reply payload.
 

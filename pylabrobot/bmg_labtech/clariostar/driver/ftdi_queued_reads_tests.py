@@ -11,6 +11,7 @@ import time
 import types
 import unittest
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Deque, List, Optional, Tuple
 from unittest.mock import patch
 
@@ -79,7 +80,8 @@ def load_spectrum_page_transfers() -> Tuple[bytes, Packets, Tuple[int, float]]:
 class ChipModel:
   """Not a reader's reply: the FT232H as measured on a reader.
 
-  Each `start` begins the next reply: its packets come at their times. While a transfer is
+  Each `start` queues the next reply behind the one still streaming, which the reader sends to
+  its end: its packets come at their times. While a transfer is
   pending each goes to the host after the status bytes `02 60`; while none is, the chip keeps
   16 bytes, drops the rest and flags the overrun (`02 62`) in the next packet. With no reply
   streaming it sends status-only packets every 2 ms.
@@ -105,21 +107,22 @@ class ChipModel:
     self.dropped = 0
 
   def start(self) -> None:
-    """Begin the next reply, as the reader answers a write."""
+    """Queue the next reply, as the reader answers a write: after the reply still streaming."""
     with self._lock:
       packets = self._replies.popleft()
-      self._packets = deque((i, self.time + t, payload) for i, (t, payload) in enumerate(packets))
+      begin = self._packets[-1][1] if self._packets else self.time
+      self._packets.extend((i, begin + t, payload) for i, (t, payload) in enumerate(packets))
       if self._stall is not None:
         after, seconds = self._stall
-        begin = self.time + packets[after][0]
-        self._stall_window, self._stall = (begin, begin + seconds), None
+        stall_begin = begin + packets[after][0]
+        self._stall_window, self._stall = (stall_begin, stall_begin + seconds), None
 
   def streaming(self) -> bool:
     with self._lock:
       return bool(self._packets)
 
   def remaining(self) -> int:
-    """How many of the current reply's packets are still to come."""
+    """How many of the queued replies' packets are still to come."""
     with self._lock:
       return len(self._packets)
 
@@ -159,13 +162,15 @@ class ChipModel:
 
 class LibftdiFTDI(FakeFTDI):
   """`FTDI.read` as libftdi reads the chip model: one transfer pending at a time, until
-  `num_bytes` are in or a status-only packet ends the read; excess bytes kept for the next."""
+  `num_bytes` are in or a status-only packet ends the read; excess bytes kept for the next. As
+  `FTDI`, one executor thread reads, so a cancelled read finishes in it."""
 
   def __init__(self, chip: ChipModel) -> None:
     super().__init__()
     self._device_id = "test"
     self.chip = chip
     self._buffered = bytearray()
+    self._executor = ThreadPoolExecutor(max_workers=1)
 
   async def write(self, data: bytes) -> int:
     self.written.append(bytes(data))
@@ -173,6 +178,10 @@ class LibftdiFTDI(FakeFTDI):
     return len(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(self._executor, self._read_now, num_bytes)
+
+  def _read_now(self, num_bytes: int) -> bytes:
     data = self._buffered
     while len(data) < num_bytes:
       while self.chip.stalled():  # the host submits nothing
@@ -185,15 +194,37 @@ class LibftdiFTDI(FakeFTDI):
     return bytes(data[:num_bytes])
 
 
-class StreamedPurgeFTDI(LibftdiFTDI):
-  """`LibftdiFTDI` whose purge returns once the reply streaming has reached the queued reads:
-  libftdi's purge clears the chip, not the bytes the queued reads already received."""
+class PacedChipModel(ChipModel):
+  """Not a reader's reply: `ChipModel` sending each packet no earlier than `pace` times its time
+  after the reply's start, in real seconds, so the reader still streams while the host acts;
+  status-only packets in between."""
 
-  async def usb_purge_rx_buffer(self) -> None:
-    await super().usb_purge_rx_buffer()
-    await wait_until(lambda: not self.chip.streaming())
-    sent = self.chip.time
-    await wait_until(lambda: self.chip.time > sent + ChipModel._LATENCY)  # the callback has run
+  def __init__(self, *replies: Packets, pace: float) -> None:
+    """
+    Args:
+      replies: as `ChipModel`'s.
+      pace: real seconds per second of the replies' times.
+    """
+    super().__init__(*replies)
+    self._pace = pace
+    self._anchor = (0.0, 0.0)
+
+  def start(self) -> None:
+    idle = not self.streaming()
+    super().start()
+    if idle:
+      self._anchor = (time.monotonic(), self.time)
+
+  def _next_payload(self) -> bytes:
+    """The next packet's payload once it is due; until then, one latency period later, none: the
+    chip's status-only packet."""
+    if self._packets:
+      real, chip = self._anchor
+      wait = real + (self._packets[0][1] - chip) * self._pace - time.monotonic()
+      if wait > 0:
+        time.sleep(min(wait, self._LATENCY))
+        return b""
+    return super()._next_payload()
 
 
 class FakeLibusb:
@@ -367,12 +398,12 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(sorted(libusb.freed), sorted(libusb.allocated))
 
   async def test_a_cancelled_spectrum_leaves_the_reads_running_and_the_link_clean(self):
-    # Page 3 at its own packet times answers the data request; the read is cancelled early in
-    # the page, and the rest of it arrives during the purge before the STOP.
+    # Page 3 at a quarter of its packet times answers the data request; the read is cancelled
+    # early in it, the reader sends it to its end, and the drain takes the rest before the STOP.
     page, packets, _ = load_spectrum_page_transfers()
     before = ([(0.0, reply)] for reply in (STATUS_IDLE, RUN_REPLY, STATUS_MEASURED))
-    chip = ChipModel(*before, packets, [(0.0, STOP_REPLY)], [(0.0, STATUS_IDLE)])
-    io, libusb = StreamedPurgeFTDI(chip), FakeLibusb(chip)
+    chip = PacedChipModel(*before, packets, [(0.0, STOP_REPLY)], [(0.0, STATUS_IDLE)], pace=0.25)
+    io, libusb = LibftdiFTDI(chip), FakeLibusb(chip)
     absorbance = make_absorbance(io, captured_96_well_plate())
     driver = absorbance._driver
     reads = keep_reads_queued(driver, libusb)
@@ -396,13 +427,43 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
     read = next(m for m in reversed(messages[:first_discard]) if " read " in m)
     taken = ast.literal_eval(read.split(" read ")[1])  # logged although the read was cancelled
     late = ast.literal_eval(messages[first_discard].split(" discarded ")[1])
-    self.assertEqual(taken + late, page)  # the bytes after the cancel, before the STOP's write
+    self.assertEqual(taken + late, page)  # the drained rest, before the STOP's write
     self.assertGreater(len(late), len(page) // 2)
     self.assertIs(driver._get_queued_reads(), reads)
     self.assertTrue(reads.running)
     self.assertEqual(reads.take(), (b"", 0))
     self.assertEqual(chip.dropped, 0)
-    self.assertFalse(any("line error" in m or "not accepted" in m for m in messages))
+    self.assertFalse(
+      any("line error" in m or "not accepted" in m or "failed (attempt" in m for m in messages)
+    )
+
+  async def test_a_cancelled_spectrum_through_libftdi_leaves_the_link_clean(self):
+    # As above with no reads queued: libftdi's reads drain the page's rest before the STOP.
+    _, packets, _ = load_spectrum_page_transfers()
+    before = ([(0.0, reply)] for reply in (STATUS_IDLE, RUN_REPLY, STATUS_MEASURED))
+    chip = PacedChipModel(*before, packets, [(0.0, STOP_REPLY)], [(0.0, STATUS_IDLE)], pace=0.25)
+    io = LibftdiFTDI(chip)
+    absorbance = make_absorbance(io, captured_96_well_plate())
+    driver = absorbance._driver
+    driver._PACKET_READ_TIMEOUT, driver._FRAME_STALL_TIMEOUT = 1.0, 0.3
+    self.assertIsNone(driver._queued_reads)
+    with self.assertLogs("pylabrobot", LOG_LEVEL_IO) as logs:
+      task = asyncio.create_task(
+        absorbance.measure_spectrum(start_wavelength=220, end_wavelength=1000, step_size=1)
+      )
+      await wait_until(
+        lambda: DATA_REQUEST_FRAME in io.written and chip.remaining() <= 0.9 * len(packets)
+      )
+      self.assertTrue(chip.streaming())
+      task.cancel()
+      with self.assertRaises(asyncio.CancelledError):
+        await task
+      status = await driver.request_status()
+    self.assertFalse(status.busy)
+    self.assertEqual(io.written[3:], [DATA_REQUEST_FRAME, STOP_FRAME, STATUS_QUERY_FRAME])
+    self.assertFalse(chip.streaming())
+    messages = [record.getMessage() for record in logs.records]
+    self.assertFalse(any("not accepted" in m or "failed (attempt" in m for m in messages))
 
 
 if __name__ == "__main__":
