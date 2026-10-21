@@ -56,7 +56,7 @@ from pylabrobot.resources.resource_state import (
   queue_volume_transfers,
   successes_from_failed_channels,
 )
-from pylabrobot.resources.tip_rack import TipSpot, tip_origin
+from pylabrobot.resources.tip_rack import TipSpot, check_tip_racks_available, tip_origin
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import does_volume_tracking
 
@@ -547,6 +547,7 @@ class Head8:
     self._require_all_channels(use_channels, "pick_up_tips")
     if len(tip_spots) != NUM_PROBES:
       raise ValueError(f"pick_up_tips requires {NUM_PROBES} tip spots, got {len(tip_spots)}")
+    check_tip_racks_available(tip_spots, "pick up tips from")
     resolved_end = self._resolve_traverse_height(minimum_traverse_height_end)
 
     for ch in use_channels:
@@ -643,6 +644,10 @@ class Head8:
     self._require_all_channels(use_channels, "drop_tips")
     if len(destinations) != NUM_PROBES:
       raise ValueError(f"drop_tips requires {NUM_PROBES} destinations, got {len(destinations)}")
+    check_tip_racks_available(
+      [destination for destination in destinations if isinstance(destination, TipSpot)],
+      "drop tips into",
+    )
     tip = self._require_mounted_tip()
     resolved_end = self._resolve_traverse_height(minimum_traverse_height_end)
 

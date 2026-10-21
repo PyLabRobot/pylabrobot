@@ -86,7 +86,7 @@ from pylabrobot.resources.resource_state import (
   queue_volume_transfers,
   successes_from_failed_channels,
 )
-from pylabrobot.resources.tip_rack import TipSpot, tip_origin
+from pylabrobot.resources.tip_rack import TipSpot, check_tip_racks_available, tip_origin
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 
@@ -4649,6 +4649,7 @@ class Pipettes:
     offsets_list = list(offsets) if offsets is not None else [Coordinate.zero()] * len(tip_spots)
     if len(offsets_list) != len(tip_spots):
       raise ValueError("len(offsets) must equal len(tip_spots)")
+    check_tip_racks_available(tip_spots, "pick up tips from")
 
     # The fewest groups of spots the channels can reach without moving the gantry between them
     batches = plan_batches(
@@ -4919,6 +4920,10 @@ class Pipettes:
     offsets_list = list(offsets) if offsets is not None else [Coordinate.zero()] * len(destinations)
     if len(offsets_list) != len(destinations):
       raise ValueError("len(offsets) must equal len(destinations)")
+    check_tip_racks_available(
+      [destination for destination in destinations if isinstance(destination, TipSpot)],
+      "drop tips into",
+    )
 
     if all(isinstance(destination, Trash) for destination in destinations):
       await self._drop_tips_in_one_move(

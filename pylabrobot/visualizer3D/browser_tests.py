@@ -68,8 +68,8 @@ class Browser:
   questions. Each one has a devtools port of its own: the last may still be letting go of its."""
 
   def __init__(self) -> None:
-    self._cdp_port = free_ports(1)[0]
     self._profile = tempfile.mkdtemp()
+    self._stderr = tempfile.TemporaryFile(mode="w+b")
     self._chrome: Optional[subprocess.Popen] = None
     self._socket: Any = None
     self._id = 0
@@ -79,7 +79,7 @@ class Browser:
       [
         CHROME,
         "--headless=new",
-        f"--remote-debugging-port={self._cdp_port}",
+        "--remote-debugging-port=0",
         f"--user-data-dir={self._profile}",
         "--enable-unsafe-webgpu",
         *PLATFORM_FLAGS,
@@ -88,20 +88,28 @@ class Browser:
         "about:blank",
       ],
       stdout=subprocess.DEVNULL,
-      stderr=subprocess.DEVNULL,
+      stderr=self._stderr,
     )
     # A browser nobody attached to would outlive the test, so a failed attach lets go of it.
     try:
       deadline = time.monotonic() + 30
       while True:
         try:
-          tabs = json.load(urllib.request.urlopen(f"http://127.0.0.1:{self._cdp_port}/json"))
+          with open(os.path.join(self._profile, "DevToolsActivePort")) as active_port:
+            port = int(active_port.readline())
+          with urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=1) as response:
+            tabs = json.load(response)
           url = next(t["webSocketDebuggerUrl"] for t in tabs if t["type"] == "page")
-          self._socket = await websockets.connect(url, max_size=None)
+          self._socket = await websockets.connect(url, max_size=None, open_timeout=1)
           return self
-        except Exception:
-          if time.monotonic() >= deadline:
-            raise RuntimeError("could not attach to a headless browser") from None
+        except Exception as error:
+          if self._chrome.poll() is not None or time.monotonic() >= deadline:
+            self._stderr.seek(0)
+            diagnostics = self._stderr.read().decode(errors="replace")
+            raise RuntimeError(
+              f"could not attach to a headless browser (exit code {self._chrome.poll()}):\n"
+              f"{diagnostics}"
+            ) from error
           await asyncio.sleep(0.1)
     except BaseException:
       await self.__aexit__()
@@ -116,6 +124,7 @@ class Browser:
       self._chrome.wait(timeout=5)  # reaped, or every test leaves a zombie behind
       self._chrome = None
     shutil.rmtree(self._profile, ignore_errors=True)
+    self._stderr.close()
 
   async def _call(self, method: str, params: Optional[dict] = None, timeout: float = 20.0) -> Any:
     """Send one command and wait for its reply, stepping over the notifications in between.
@@ -183,6 +192,11 @@ class Browser:
       if time.monotonic() >= deadline:
         raise AssertionError(f"the page never answered within {seconds:.0f}s: {expression}")
       await asyncio.sleep(0.1)
+
+  async def reload(self) -> None:
+    """Wait for the old document to be replaced before inspecting the reloaded page."""
+    await self.evaluate("window.__plrReloading = true; location.reload()")
+    await self.settle("window.__plrReloading === undefined && document.readyState === 'complete'")
 
   async def frames(self, count: int = 2) -> None:
     """Wait for `count` animation frames: what the page drew before them is on screen by then."""
@@ -484,7 +498,9 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
     async with Browser() as browser:
       await self.page(browser, "carrier")
       self.assertEqual(await browser.evaluate("location.href"), f"{self.viewer.url.split('#')[0]}")
-      await browser.evaluate("location.reload()")
+      loaded_at = await browser.evaluate("performance.timeOrigin")
+      await browser.reload()
+      self.assertNotEqual(await browser.evaluate("performance.timeOrigin"), loaded_at)
       await browser.settle("window.plrViewer && window.plrViewer.resources().length", 30)
       self.assertIn(self.viewer.token, await browser.evaluate("window.WS_URL"))
 

@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_READ_TRANSFER_SIZE = 4000
+
 
 @dataclass
 class USBCommand(Command):
@@ -168,16 +170,31 @@ class USB(IOBase):
       data=data.decode("utf-8", errors="backslashreplace"),
     )
 
+  def _read_size(self, size: Optional[int], endpoint: Optional[int]) -> int:
+    """Use the caller's byte limit or a default buffer rounded up to whole endpoint packets."""
+    if size is not None:
+      return size
+    if self.dev is None or self.read_endpoint is None:
+      raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
+    packet_size: int = self.read_endpoint.wMaxPacketSize
+    if endpoint is not None:
+      interface = self.dev.get_active_configuration()[(0, 0)]
+      ep = usb.util.find_descriptor(interface, bEndpointAddress=endpoint)
+      if ep is None:
+        raise ValueError(f"Endpoint 0x{endpoint:02x} not found.")
+      packet_size = ep.wMaxPacketSize
+    return ((_DEFAULT_READ_TRANSFER_SIZE + packet_size - 1) // packet_size) * packet_size
+
   def _read_packet(
     self,
     size: Optional[int] = None,
     timeout: Optional[float] = None,
     endpoint: Optional[int] = None,
   ) -> Optional[bytearray]:
-    """Read a packet from the machine.
+    """Read one USB transfer, which can contain multiple endpoint packets.
 
     Args:
-      size: The maximum number of bytes to read. If `None`, read up to wMaxPacketSize bytes.
+      size: The maximum number of bytes to read. If `None`, use the default transfer size.
       timeout: The timeout for reading from the device in seconds. If `None`, use the default
         timeout (specified by the `packet_read_timeout` attribute).
       endpoint: The endpoint address to read from. If `None`, use the default read endpoint.
@@ -193,23 +210,7 @@ class USB(IOBase):
     if ep is None:
       raise RuntimeError("Read endpoint not found. Call setup() first.")
 
-    # Get max packet size if size is not provided
-    if size is None:
-      if isinstance(ep, int):
-        # Find endpoint object to get max packet size
-        cfg = self.dev.get_active_configuration()
-        intf = cfg[(0, 0)]
-        ep_obj = usb.util.find_descriptor(
-          intf,
-          custom_match=lambda e: e.bEndpointAddress == ep,
-        )
-        if ep_obj is None:
-          raise ValueError(f"Endpoint 0x{ep:02x} not found.")
-        read_size = ep_obj.wMaxPacketSize
-      else:
-        read_size = ep.wMaxPacketSize
-    else:
-      read_size = size
+    read_size = self._read_size(size, endpoint)
 
     if timeout is None:
       timeout = self.packet_read_timeout
@@ -239,8 +240,8 @@ class USB(IOBase):
     Args:
       timeout: The timeout for reading from the device in seconds. If `None`, use the default
         timeout (specified by the `read_timeout` attribute).
-      size: The maximum number of bytes to read. If `None`, read all available data until no
-        more packets arrive.
+      size: The maximum number of bytes to read. If `None`, read until a short transfer or
+        timeout, using a 4,000-byte buffer rounded up to a multiple of the endpoint packet size.
       endpoint: The endpoint address to read from. If `None`, use the configured read endpoint.
     """
 
@@ -251,22 +252,21 @@ class USB(IOBase):
       timeout = self.read_timeout
 
     def read_or_timeout() -> bytes:
-      # Attempt to read packets until timeout, or when we identify the right id.
+      """Read through the terminating short transfer or the caller's explicit byte limit."""
       timeout_time = time.time() + timeout
+      transfer_size = self._read_size(size, endpoint)
 
       while time.time() < timeout_time:
-        # read response from endpoint, and keep reading until the packet is smaller than the max
-        # packet size: if the packet is that size, it means that there may be more data to read.
         resp = bytearray()
         last_packet: Optional[bytearray] = None
-        while True:  # read while we have data, and while the last packet is the max size.
-          remaining = size - len(resp) if size is not None else None
+        while True:
+          remaining = size - len(resp) if size is not None else transfer_size
           last_packet = self._read_packet(size=remaining, endpoint=endpoint)
           if last_packet is not None:
             resp += last_packet
-          if self.read_endpoint is None:
-            raise RuntimeError("Read endpoint is None. Call setup() first.")
-          if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
+          # A transfer shorter than requested has consumed the short packet (including a ZLP).
+          # Its data length can still be an exact multiple of the endpoint packet size.
+          if last_packet is None or len(last_packet) < remaining:
             break
           if size is not None and len(resp) >= size:
             break
@@ -306,7 +306,7 @@ class USB(IOBase):
     self,
     endpoint: Optional[int] = None,
     timeout: float = 0.05,
-    size: int = 512,
+    size: Optional[int] = None,
     max_duration: float = 1,
   ) -> None:
     """Discard queued input from an endpoint until no packet arrives before the timeout."""
@@ -644,7 +644,7 @@ class USBValidator(USB):
     self,
     endpoint: Optional[int] = None,
     timeout: float = 0.05,
-    size: int = 512,
+    size: Optional[int] = None,
     max_duration: float = 1,
   ) -> None:
     pass
