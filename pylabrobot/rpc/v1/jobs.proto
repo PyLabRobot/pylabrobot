@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package pylabrobot.rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message JobRef {
+  string device_id = 1;
+  string job_id = 2;
+}
+message RequestLookup {
+  string device_id = 1;
+  string request_id = 2;
+}
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  JOB_STATE_READY = 1;
+  JOB_STATE_RUNNING = 2;
+  JOB_STATE_FINISHED = 3;
+}
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  OUTCOME_PENDING = 1;
+  OUTCOME_SUCCEEDED = 2;
+  OUTCOME_CANCELLED = 3;
+  OUTCOME_FAILED = 4;
+  OUTCOME_INTERRUPTED = 5;
+}
+message JobStatus {
+  JobRef job = 1;
+  string request_id = 2;
+  string kind = 3;
+  JobState state = 4;
+  Outcome outcome = 5;
+  string phase = 6;
+  bool cancellation_requested = 7;
+  uint32 completed = 8;
+  uint32 total = 9;
+  string progress_unit = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  string error = 13;
+  uint64 revision = 14;
+  string configuration_id = 15;
+  reserved 16; // Result retention belongs to its optional capability service.
+  bool state_durable = 17;
+}
+
+service JobService {
+  rpc GetJob(JobRef) returns (JobStatus);
+  rpc GetJobByRequestId(RequestLookup) returns (JobRef);
+  rpc StartJob(JobRef) returns (JobStatus);
+  rpc CancelJob(JobRef) returns (JobStatus);
+  // First response is current state, followed by bounded/coalesced snapshots.
+  // Ends after a Finished snapshot. Cancelling this RPC does not cancel the job.
+  rpc WatchJob(JobRef) returns (stream JobStatus);
+}

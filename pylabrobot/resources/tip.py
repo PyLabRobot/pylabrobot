@@ -33,6 +33,7 @@ class Tip(HeadTool):
     category: str = "tip",
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
+    is_conductive: Optional[bool] = None,
   ):
     """Initialize a tip with its resource dimensions and liquid handling properties."""
     super().__init__(
@@ -44,6 +45,7 @@ class Tip(HeadTool):
       category=category,
       model=model,
       pick_up_location=pick_up_location,
+      is_conductive=is_conductive,
     )
     self.has_filter = has_filter
     self.maximal_volume = maximal_volume

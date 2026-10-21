@@ -6,13 +6,14 @@ import random
 import tempfile
 import unittest
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
-from unittest.mock import AsyncMock, patch
+from unittest.mock import DEFAULT, AsyncMock, patch
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR, RECORDING_STARLET
 from pylabrobot.hamilton.star.driver.configuration import read_configuration
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.head96 import Head96, Head96Configuration
+from pylabrobot.hamilton.star.driver.features.head384 import Head384, Head384Configuration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm
 from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
@@ -85,8 +86,8 @@ class TestDriveDefaults(unittest.IsolatedAsyncioTestCase):
       (200.0, 300.0, 50.0, 250.0),
     )
 
-  async def test_the_96_head_takes_its_dispensing_and_squeezer_defaults_too(self):
-    """`Head96.discover` reads four drive parameters on top of the Y and Z ones every head shares,
+  async def test_the_96_head_takes_its_squeezer_defaults_too(self):
+    """`Head96.discover` reads two drive parameters on top of the Y and Z ones every head shares,
     and its defaults answer with what it reported for them. Apart from the test above because it
     covers the override rather than the base: the 384-head adds no reads of its own.
 
@@ -96,8 +97,6 @@ class TestDriveDefaults(unittest.IsolatedAsyncioTestCase):
     decoded rather than handed over whole."""
     declared = dataclasses.replace(
       RECORDED_HEAD96,
-      dispensing_drive_speed_firmware_reported=400.0,
-      dispensing_drive_acceleration_firmware_reported=9000.0,
       squeezer_drive_speed_firmware_reported=12.0,
       squeezer_drive_acceleration_firmware_reported=50.0,
     )
@@ -109,14 +108,36 @@ class TestDriveDefaults(unittest.IsolatedAsyncioTestCase):
     c = cast(Head96, driver.x_arm.head96).configuration
     for read, declared_value in zip(
       (
-        c.dispensing_drive_speed_default,
-        c.dispensing_drive_acceleration_default,
         c.squeezer_drive_speed_default,
         c.squeezer_drive_acceleration_default,
       ),
-      (400.0, 9000.0, 12.0, 50.0),
+      (12.0, 50.0),
     ):
       self.assertAlmostEqual(read, declared_value, places=1)
+
+  async def test_a_head_with_firmware_from_before_2010_gets_its_lower_dispensing_acceleration(self):
+    declared = dataclasses.replace(RECORDED_HEAD96, firmware_version="1.0S 2008-11-11 (H0)")
+    driver = STARSimulationDriver(
+      deck=STARDeck(), declared_configuration_json=declaring(head96=declared)
+    )
+    await driver.setup()
+    head = cast(Head96, driver.x_arm.head96)
+    self.assertEqual(head.default_dispensing_drive_acceleration, 2900.0)
+
+  async def test_a_default_outside_the_range_of_its_drive_is_refused_when_assigned(self):
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    await driver.setup()
+    head = cast(Head96, driver.x_arm.head96)
+    with self.assertRaisesRegex(ValueError, "default_dispensing_drive_speed must be between"):
+      head.default_dispensing_drive_speed = 5000.0
+    with self.assertRaisesRegex(ValueError, "default_dispensing_drive_acceleration must be"):
+      head.default_dispensing_drive_acceleration = 50.0
+    self.assertEqual(
+      (head.default_dispensing_drive_speed, head.default_dispensing_drive_acceleration),
+      (250.0, 17000.0),
+    )
+    head.default_dispensing_drive_speed = 200.0
+    self.assertEqual(head.default_dispensing_drive_speed, 200.0)
 
   async def test_a_head_that_will_not_say_keeps_what_its_firmware_documents(self):
     """A head that refuses the read leaves discovery with nothing to record, and the defaults fall
@@ -158,7 +179,12 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     from pylabrobot.resources import set_tip_tracking
-    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL_filter
+    from pylabrobot.resources.hamilton import (
+      TIP_CAR_480_A00,
+      hamilton_96_tiprack_300uL_filter,
+      hamilton_96_tiprack_raised_core_ii,
+      hamilton_tip_300uL_filter,
+    )
 
     set_tip_tracking(True)
     self.addCleanup(set_tip_tracking, False)
@@ -169,8 +195,12 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     await self.driver.setup()
     self.head = cast(Head96, self.driver.head96)
     self.head_resource = cast(NChannelPipette, self.head.resource)
-    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    self.tip_car = tip_car = TIP_CAR_480_A00(name="tip carrier")
     tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    # A rack without a frame, which the head may be placed past the edge of.
+    tip_car[3] = self.frameless_tip_rack = hamilton_96_tiprack_raised_core_ii(
+      name="frameless_tip_rack", make_tip=hamilton_tip_300uL_filter
+    )
     self.deck.assign_child_resource(tip_car, track=1)
     self.sent: List[str] = []
     log = self.driver._log_exchange
@@ -182,6 +212,22 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
 
     self.driver._log_exchange = recorded  # type: ignore[method-assign]
 
+  async def test_a_covered_rack_is_not_picked_up_from_nor_dropped_into(self):
+    from pylabrobot.resources.lid import Lid
+
+    self.tip_rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    with self.assertRaisesRegex(ValueError, "pick up tips from 'tip_rack_01': it is not available"):
+      await self.head.pick_up_tips(self.tip_rack)
+    self.assertEqual(self.sent, [])
+
+    self.tip_rack.lid.unassign()
+    await self.head.pick_up_tips(self.tip_rack)
+    self.tip_rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    self.sent.clear()
+    with self.assertRaisesRegex(ValueError, "drop tips into 'tip_rack_01': it is not available"):
+      await self.head.drop_tips(self.tip_rack)
+    self.assertEqual(self.sent, [])
+
   async def test_pick_up_and_drop_send_what_legacy_sends(self):
     await self.head.pick_up_tips(self.tip_rack)
     await self.head.drop_tips(self.tip_rack)
@@ -191,10 +237,10 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
       self.sent,
       [
         "C0TTtt01tf1tl0519tv03600tg2tu0",
-        "H0DQdq11281dv13500du00000dr900000dw15",
+        "H0DQdq11281dv12926du00000dr878965dw15",
         "C0EPxs01179xd0yh2418tt01wu0za2164zh2450ze2450",
         "C0ERxs01179xd0yh2418za2164zh2450ze2450",
-        "H0DQdq11281dv13500du00000dr900000dw15",
+        "H0DQdq11281dv12926du00000dr878965dw15",
         "C0EPxs01179xd0yh2418tt01wu0za2164zh2450ze2450",
         # The trash drop centres the array; legacy put A1 4.5 mm right and 58.5 mm forward of this.
         "C0ERxs00465xd1yh1788za2164zh2450ze2450",
@@ -228,6 +274,59 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(shaft.has_tip() for shaft in shafts))
         self.tip_rack.fill()
 
+  async def test_tip_commands_travel_in_z_then_in_x_and_y_together_then_only_descend(self):
+    every: List[str] = []
+    log = self.driver._log_exchange
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      every.append(written[:4])
+      log(written, read)
+
+    self.driver._log_exchange = recorded  # type: ignore[method-assign]
+    for command, tip_command in (
+      (self.head.pick_up_tips, "C0EP"),
+      (self.head.drop_tips, "C0ER"),
+    ):
+      every.clear()
+      await command(self.frameless_tip_rack)
+      # The arm's channels up, then X and Y; the tip command comes after them all.
+      order = [every.index(c) for c in ("C0ZA", "X0XP", "H0YA", tip_command)]
+      self.assertEqual(order, sorted(order), every)
+      # The head is raised, if at all, before X and Y move.
+      if "H0ZA" in every:
+        self.assertLess(every.index("H0ZA"), every.index("X0XP"), every)
+      self.assertNotIn("X0XP", every[every.index(tip_command) :])
+
+  async def test_an_offset_moves_the_head_but_not_which_spot_each_channel_takes_from(self):
+    rack, shafts = self.frameless_tip_rack, self.head_resource
+    tips = [spot.tip for spot in rack.get_all_items()]
+
+    # A correction of a few mm: the head goes 2 mm right, each channel still takes its own spot.
+    await self.head.pick_up_tips(rack, offset=Coordinate(2, 0, 0))
+
+    self.assertEqual([shaft.tip for shaft in shafts.get_all_items()], tips)
+    plain = rack.get_item("A1").get_location_wrt(self.deck, "c", "c", "b")
+    self.assertIn(f"xs{round((plain.x + 2) * 10):05}", self.sent[-1])
+
+  async def test_a_channel_placed_over_a_spot_takes_only_the_tips_under_the_head(self):
+    # Channel H12 over spot D6: channels E7 to H12 stand over spots A1 to D6, the rest past the rack.
+    rack, shafts = self.frameless_tip_rack, self.head_resource
+    rack.get_item("A2").unassign_tip()
+    under = {
+      f"{'EFGH'[row]}{column + 7}": rack.get_item(f"{'ABCD'[row]}{column + 1}")
+      for row in range(4)
+      for column in range(6)
+    }
+    tips = {channel: spot.tip for channel, spot in under.items()}
+
+    await self.head.pick_up_tips(rack, channel="H12", tip_spot="D6")
+
+    # Channel A1 ends 6 columns left and 4 rows behind spot A1 (xs01179 yh4338): -54 mm X, +36 mm Y.
+    self.assertEqual(self.sent[-1], "C0EPxs00639xd0yh4698tt01wu0za2310zh2450ze2450")
+    for shaft in shafts.get_all_items():
+      channel = shafts.get_child_identifier(shaft)
+      self.assertIs(shaft.tip, tips.get(channel), channel)
+
   async def test_tips_dropped_in_the_trash_belong_to_nothing(self):
     await self.head.pick_up_tips(self.tip_rack)
     tips = [shaft.tip for shaft in self.head_resource.get_all_items()]
@@ -248,8 +347,8 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_failed_pickup_takes_what_the_firmware_holds_and_reads_where_it_stopped(self):
     shafts = self.head_resource.get_all_items()
-    # The guard reads no tips; after the failure the firmware holds that they are on.
-    held = AsyncMock(side_effect=[False, True])
+    # The guard and the travel read no tips; after the failure the firmware holds that they are on.
+    held = AsyncMock(side_effect=[False, False, True])
     read_z = AsyncMock(wraps=self.head.request_z_position)
     with self.failing_on("EP"), patch.object(self.head, "request_tip_presence", held):
       with patch.object(self.head, "request_z_position", read_z):
@@ -295,6 +394,96 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([spot.tip for spot in self.tip_rack.get_all_items()], tips)
     self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
 
+  async def test_a_drop_that_would_let_a_tip_go_beside_the_rack_is_refused(self):
+    await self.head.pick_up_tips(self.tip_rack)
+    self.sent.clear()
+    with self.assertRaisesRegex(ValueError, "would drop a tip beside frameless_tip_rack"):
+      await self.head.drop_tips(self.frameless_tip_rack, channel="A1", tip_spot="A10")
+    self.assertEqual(self.sent, [])
+
+  async def test_a_drop_that_would_put_a_tip_on_a_tip_is_refused_before_anything_moves(self):
+    rack = self.frameless_tip_rack
+    await self.head.pick_up_tips(rack, channel="H12", tip_spot="A1")  # one tip, on H12
+    self.sent.clear()
+    # Spot B1 still holds its tip.
+    with self.assertRaisesRegex(ValueError, r"channels \['H12'\] would put a tip on a tip"):
+      await self.head.drop_tips(rack, channel="H12", tip_spot="B1")
+    self.assertEqual(self.sent, [])
+    self.assertTrue(self.head_resource.get_item("H12").has_tip())
+
+  async def test_a_rack_turned_half_round_is_picked_up_whole_with_h12_over_a1(self):
+    from pylabrobot.resources.hamilton import (
+      hamilton_96_tiprack_raised_core_ii,
+      hamilton_tip_300uL_filter,
+    )
+
+    rack = hamilton_96_tiprack_raised_core_ii("turned_rack", make_tip=hamilton_tip_300uL_filter)
+    rack.rotate(z=180)
+    self.tip_car[4] = rack
+    tips = {spot.name: spot.tip for spot in rack.get_all_items()}
+
+    await self.head.pick_up_tips(rack, channel="H12", tip_spot="A1")
+
+    deck = self.deck
+    for shaft in self.head_resource.get_all_items():
+      tip = shaft.tip
+      spot = next(s for s in rack.get_all_items() if tips[s.name] is tip)
+      # Each tip came from the spot right under its channel.
+      here = shaft.get_location_wrt(deck, "c", "c", "b")
+      there = spot.get_location_wrt(deck, "c", "c", "b")
+      self.assertAlmostEqual(here.x, there.x, places=1, msg=shaft.name)
+      self.assertAlmostEqual(here.y, there.y, places=1, msg=shaft.name)
+    self.assertTrue(all(spot.tip is None for spot in rack.get_all_items()))
+
+  async def test_with_tip_tracking_off_a_pick_up_leaves_the_rack_and_a_drop_into_it_is_refused(
+    self,
+  ):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(False)
+    rack = self.frameless_tip_rack
+    await self.head.pick_up_tips(rack)
+    self.assertTrue(all(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+    self.assertTrue(all(spot.tip is not None for spot in rack.get_all_items()))
+    self.sent.clear()
+    with self.assertRaisesRegex(ValueError, "dropping into a tip rack needs tip tracking"):
+      await self.head.drop_tips(rack)
+    with self.assertRaisesRegex(ValueError, "needs tip tracking"):
+      await self.head.return_tips()
+    self.assertEqual(self.sent, [])
+    await self.head.discard_tips()
+    self.assertFalse(any(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+
+  async def test_with_tip_tracking_off_a_rack_modelled_empty_still_hands_out_tips(self):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(False)
+    rack = self.frameless_tip_rack
+    for spot in rack.get_all_items():
+      spot.unassign_tip()
+    await self.head.pick_up_tips(rack)
+    self.assertTrue(all(shaft.has_tip() for shaft in self.head_resource.get_all_items()))
+
+  async def test_a_rack_with_a_frame_takes_the_head_only_channel_a1_over_spot_a1(self):
+    with self.assertRaisesRegex(ValueError, "come down on the frame of tip_rack_01"):
+      await self.head.pick_up_tips(self.tip_rack, channel="H12", tip_spot="D6")
+    self.assertEqual(self.sent, [])
+    await self.head.pick_up_tips(self.frameless_tip_rack, channel="H12", tip_spot="D6")
+    self.sent.clear()
+    with self.assertRaisesRegex(ValueError, "come down on the frame of tip_rack_01"):
+      await self.head.drop_tips(self.tip_rack, channel="H12", tip_spot="D6")
+    self.assertEqual(self.sent, [])
+
+  async def test_return_tips_puts_them_back_under_the_channels_that_took_them(self):
+    rack = self.frameless_tip_rack
+    rack.get_item("A2").unassign_tip()
+    tips = [spot.tip for spot in rack.get_all_items()]
+    await self.head.pick_up_tips(rack, channel="H12", tip_spot="D6")
+    self.sent.clear()
+    await self.head.return_tips()
+    self.assertEqual(self.sent, ["C0ERxs00639xd0yh4698za2310zh2450ze2450"])
+    self.assertEqual([spot.tip for spot in rack.get_all_items()], tips)
+
   async def test_discard_tips_drops_them_in_the_96_trash(self):
     await self.head.pick_up_tips(self.tip_rack)
     self.sent.clear()
@@ -317,7 +506,7 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     shaft.release_tip()
     shaft.mount_tip(other_rack.get_item(5).tip_for_pickup())
     self.sent.clear()
-    with self.assertRaisesRegex(RuntimeError, "not from spot 5 of tip_rack_01"):
+    with self.assertRaisesRegex(RuntimeError, "did not stand under it in tip_rack_01"):
       await self.head.return_tips()
     self.assertEqual(self.sent, [])
 
@@ -340,7 +529,7 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     def failing(failed: str):
       async def answering(module: str, command: str, **kwargs: Any):
         if command == failed:
-          check_fw_string_error(f"C0{failed}id0001er99/00")
+          check_fw_string_error(f"{module}{failed}id0001er99/00")
         return await answer(module, command, **kwargs)
 
       return answering
@@ -351,10 +540,27 @@ class TestHead96Tips(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(all(spot.has_tip() for spot in spots))
     self.assertFalse(any(shaft.has_tip() for shaft in shafts))
 
+    # The head's Y move on the way over fails: nothing is picked up, and the command never goes.
+    self.sent.clear()
+    with patch.object(self.driver, "_answer", failing("YA")):
+      with self.assertRaises(STARFirmwareError):
+        await self.head.pick_up_tips(self.tip_rack)
+    self.assertNotIn("C0EP", [written[:4] for written in self.sent])
+    self.assertTrue(all(spot.has_tip() for spot in spots))
+    self.assertFalse(any(shaft.has_tip() for shaft in shafts))
+
     await self.head.pick_up_tips(self.tip_rack)
     with patch.object(self.driver, "_answer", failing("ER")):
       with self.assertRaises(STARFirmwareError):
         await self.head.drop_tips(self.tip_rack)
+    self.assertTrue(all(shaft.has_tip() for shaft in shafts))
+    self.assertFalse(any(spot.has_tip() for spot in spots))
+
+    self.sent.clear()
+    with patch.object(self.driver, "_answer", failing("YA")):
+      with self.assertRaises(STARFirmwareError):
+        await self.head.drop_tips(self.tip_rack)
+    self.assertNotIn("C0ER", [written[:4] for written in self.sent])
     self.assertTrue(all(shaft.has_tip() for shaft in shafts))
     self.assertFalse(any(spot.has_tip() for spot in spots))
 
@@ -538,7 +744,7 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
   async def test_under_clld_the_air_goes_in_first_and_the_head_rises_once(self):
     well = self.plate.get_item("A1")
     bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    overhang = await self.head._overhang_that_probes()
+    overhang = await self.head.request_tip_overhang()
     c = self.head.configuration
     order = await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 5.0 + overhang))
     await self.head.mix(
@@ -572,7 +778,7 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
   async def test_probe_liquid_height_averages_the_rounds_from_the_cavity_bottom(self):
     well = self.plate.get_item("A1")
     bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    overhang = await self.head._overhang_that_probes()
+    overhang = await self.head.request_tip_overhang()
     c = self.head.configuration
     order = await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 4.0 + overhang))
     height = await self.head.probe_liquid_height(self.plate, n_replicates=2)
@@ -589,7 +795,7 @@ class TestMix(unittest.IsolatedAsyncioTestCase):
   async def test_probe_liquid_volume_is_the_volume_at_the_height(self):
     well = self.plate.get_item("A1")
     bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    overhang = await self.head._overhang_that_probes()
+    overhang = await self.head.request_tip_overhang()
     c = self.head.configuration
     await self._record_lld(rh=c.z_drive_mm_to_increments(bottom + 4.0 + overhang))
     volume = await self.head.probe_liquid_volume(self.plate)
@@ -635,12 +841,76 @@ class TestHead96InSimulation(unittest.IsolatedAsyncioTestCase):
   async def test_rh_is_the_stop_disc_zi_below_where_the_head_stops(self):
     self.plate.get_item("A1").tracker.set_volume(150.0)
     # The search does not move in X or Y: the head goes over the plate first.
-    await self.head._move_over(self.head._get_target(self.plate, None)[1], None, None)
+    a1 = self.head._get_target(self.plate, None)[1]
+    await self.head.move_to_xy_position(a1.x, a1.y)
     await self.head.probe_z_using_clld(post_detection_distance=4.0)
     self.assertAlmostEqual(
       await self.head.request_z_position(),
       await self.head.request_last_lld_z_position() + 4.0,
       delta=0.01,
+    )
+
+  async def test_the_traverse_height_raises_a_lower_head_and_leaves_a_higher_one(self):
+    a1 = self.head._get_target(self.plate, None)[1]
+    top = self.head.configuration.z_range[1] - await self.head.request_tip_overhang()
+    await self.head.move_tool_bottom_to_z_position(top - 50.0)
+    await self.head.move_to_xy_position(a1.x, a1.y, minimum_traverse_height_start=top - 20.0)
+    self.assertAlmostEqual((await self.head.request_location()).z, top - 20.0, delta=0.05)
+    await self.head.move_to_xy_position(a1.x, a1.y, minimum_traverse_height_start=top - 40.0)
+    self.assertAlmostEqual((await self.head.request_location()).z, top - 20.0, delta=0.05)
+
+  async def test_every_drive_setting_reaches_its_move(self):
+    a1 = self.head._get_target(self.plate, None)[1]
+    moves = dict.fromkeys(("move_to_safe_z", "move_to_x_position", "move_to_y_position"), DEFAULT)
+    with patch.multiple(self.head, new_callable=AsyncMock, **moves) as mocked:
+      await self.head.move_to_xy_position(
+        a1.x,
+        a1.y,
+        x_acceleration_level=4,
+        x_current_limit=5,
+        y_speed=100.0,
+        y_acceleration=200.0,
+        y_current_limit=10,
+        z_speed=50.0,
+        z_acceleration=300.0,
+      )
+    mocked["move_to_safe_z"].assert_awaited_once_with(speed=50.0, acceleration=300.0)
+    mocked["move_to_x_position"].assert_awaited_once_with(
+      a1.x, acceleration_level=4, current_limit=5
+    )
+    mocked["move_to_y_position"].assert_awaited_once_with(
+      a1.y, speed=100.0, acceleration=200.0, current_limit=10
+    )
+
+  async def test_an_unreachable_traverse_height_is_refused_as_a_tip_bottom(self):
+    a1 = self.head._get_target(self.plate, None)[1]
+    with self.assertRaisesRegex(ValueError, "the tool bottom reaches .* not 1000.0"):
+      await self.head.move_to_xy_position(a1.x, a1.y, minimum_traverse_height_start=1000.0)
+
+  async def test_mix_rises_at_the_drive_default_not_its_descent_speed(self):
+    with patch.object(self.head, "move_to_safe_z", AsyncMock()) as raised:
+      await self.head.mix(self.plate, Mix(volume=50.0, repetitions=1, flow_rate=100.0))
+    self.assertEqual(raised.await_args_list[0].kwargs, {"speed": None, "acceleration": None})
+
+  async def test_an_unreachable_y_is_refused_before_the_head_is_raised(self):
+    a1 = self.head._get_target(self.plate, None)[1]
+    top = self.head.configuration.z_range[1] - await self.head.request_tip_overhang()
+    await self.head.move_tool_bottom_to_z_position(top - 50.0)
+    with self.assertRaises(ValueError):
+      await self.head.move_to_xy_position(a1.x, 10_000.0, minimum_traverse_height_start=top - 20.0)
+    self.assertAlmostEqual((await self.head.request_location()).z, top - 50.0, delta=0.05)
+
+  async def test_without_tips_probing_and_mixing_are_refused_before_moving(self):
+    await self.head.discard_tips()
+    x, y = await self.head.request_x_position(), await self.head.request_y_position()
+    for command in (
+      self.head.probe_liquid_height(self.plate),
+      self.head.mix(self.plate, Mix(volume=100.0, repetitions=1, flow_rate=200.0)),
+    ):
+      with self.assertRaisesRegex(RuntimeError, "pick up tips first"):
+        await command
+    self.assertEqual(
+      (await self.head.request_x_position(), await self.head.request_y_position()), (x, y)
     )
 
   async def test_an_empty_well_reads_zero(self):
@@ -889,6 +1159,52 @@ class TestHead96PistonModel(unittest.IsolatedAsyncioTestCase):
           await move()
         expected = self.head.configuration.dispensing_drive_increments_to_uL(1234)
         self.assertEqual(self.head.piston_position, expected)
+
+
+class TestDispensingDriveUnits(unittest.IsolatedAsyncioTestCase):
+  """`DQ` is written in the units and field widths each head's drive counts in."""
+
+  async def test_the_384_head_counts_speed_in_tens_and_acceleration_in_thousands(self):
+    driver = _WireOnly()
+    head = Head384(cast(Any, driver), Head384Configuration(head_type="High volume head"))
+    with patch("pylabrobot.hamilton.star.driver.features.head.Head.discover", AsyncMock()):
+      await head.discover()
+    await head.move_dispensing_drive_to_position(10.0)
+    increments = head.configuration.dispensing_drive_uL_to_increments(10.0)
+    self.assertEqual(driver.sent, [f"D0DQdq{increments:05}dv05000du00000dr9000dw15"])
+
+  async def test_a_2008_96_head_counts_acceleration_in_thousands_in_narrower_fields(self):
+    driver = _WireOnly()
+    configuration = Head96Configuration(firmware_date=datetime.date(2008, 6, 1))
+    head = Head96(cast(Any, driver), configuration)
+    head._apply_firmware_generation()
+    await head.move_dispensing_drive_to_position(100.0, speed=200.0, current_limit=7)
+    self.assertEqual(driver.sent, ["H0DQdq05170dv10341du00000dr150dw7"])
+    # Its window reaches 411 thousands, the same field width.
+    top = configuration.dispensing_drive_acceleration_range[1]
+    self.assertEqual(configuration.dispensing_drive_acceleration_uL_to_increments(top), 411)
+
+  def test_the_384_head_has_no_default_until_its_type_is_known(self):
+    head = Head384(cast(Any, _WireOnly()))
+    with self.assertRaises(RuntimeError):
+      head.default_dispensing_drive_speed
+
+  def test_a_first_generation_head_takes_its_own_resolutions(self):
+    for head_type, year, uL, squeezer, acceleration in (
+      ("High volume head", 2008, 0.018509877, 0.000459073, 2776.48),
+      ("96 head II", 2021, 0.019340933, 0.0002086672009, 17000.0),
+      ("96 head TADM", 2021, 0.019340933, 0.0002086672009, 17000.0),
+    ):
+      with self.subTest(head_type=head_type):
+        configuration = Head96Configuration(
+          head_type=head_type, firmware_date=datetime.date(year, 6, 1)
+        )
+        head = Head96(cast(Any, _WireOnly()), configuration)
+        head._apply_firmware_generation()
+        head._apply_head_type()
+        self.assertEqual(configuration.dispensing_drive_uL_per_increment, uL)
+        self.assertEqual(configuration.squeezer_drive_mm_per_increment, squeezer)
+        self.assertEqual(head.default_dispensing_drive_acceleration, acceleration)
 
 
 class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
