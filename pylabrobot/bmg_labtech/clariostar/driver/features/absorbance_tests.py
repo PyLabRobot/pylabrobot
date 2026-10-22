@@ -1,5 +1,5 @@
-"""Absorbance tests over a fake io: what the driver sends is pinned to vendor captures, the
-optical densities to the vendor software's own export of the same reply."""
+"""Absorbance tests over a fake io: what the driver sends, and the optical densities it computes,
+are pinned to the ground truth."""
 
 import asyncio
 import gzip
@@ -40,7 +40,7 @@ from pylabrobot.lib.absorbance.results import AbsorbanceResult
 from pylabrobot.resources import Plate, Well, cor_96_wellplate_360uL_Fb, create_ordered_items_2d
 from pylabrobot.resources.biorad.plates import biorad_96_wellplate_200uL_Vb
 
-# The vendor's default endpoint read: 600 nm, every well of its plate.
+# The default read: 600 nm, every well of the plate.
 BASELINE_RUN_FRAME = bytes.fromhex(
   "0200900c0431ec2166059604602c561d060c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a020000000000000000000000000000000000000000000000000000"
@@ -60,14 +60,14 @@ FIVE_WAVELENGTHS_RUN_FRAME = bytes.fromhex(
   "0100010000153f0d"
 )
 
-# Orbital, 3 mm, the vendor's 7 flashes, 0.1 s settling, on 6.58 mm wells.
+# Orbital, 3 mm, 7 flashes, 0.1 s settling, on 6.58 mm wells.
 ORBITAL_RUN_FRAME = bytes.fromhex(
   "0200950c0431e82164059e04642c4a1d000c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a320000000000000000000000000000000000000000000000000000"
   "00000000270f270f02030292000501177000000064232826ca0000006400000005020000000000010000000100070001"
   "000013cd0d"
 )
-# Spiral, 4 mm, the vendor's 15 flashes, unidirectional, no settling; its pause sends 0 s.
+# Spiral, 4 mm, 15 flashes, unidirectional, no settling; its pause sends 0 s.
 SPIRAL_RUN_FRAME = bytes.fromhex(
   "0200950c0431e82164059e04642c4a1d000c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000008a060000000000000000000000000000000000000000000000000000"
@@ -82,7 +82,7 @@ SHAKE_RUN_FRAME = bytes.fromhex(
   "00000000270f270f02030292000501177000000064232826ca0000006400000000020000000000010000000100070001"
   "000013d10d"
 )
-# The vendor's pre-separators of five shaken reads, by (pattern, rpm, seconds).
+# The pre-separators of five shaken reads, by (pattern, rpm, seconds).
 SHAKE_PRE_SEPARATORS = {
   ("orbital", 300, 5): "32000000000000000000000002000000000002000500000000000000000000",
   ("orbital", 500, 5): "32000000000000000000000002000000000004000500000000000000000000",
@@ -91,7 +91,7 @@ SHAKE_PRE_SEPARATORS = {
   ("linear", 300, 5): "32000000000000000000000002000000000102000500000000000000000000",
 }
 
-# A 5 s pause before reading, otherwise the vendor's default read, on the captured plate.
+# A 5 s pause before reading, otherwise the default read, on the ground-truth plate.
 PAUSE_RUN_FRAME = bytes.fromhex(
   "0200900c0431e82164059e04642c4a1d000c0800ffffffffffffffffffffffff00000000000000000000000000000000"
   "00000000000000000000000000000000000000000a020000000000000000000000000000000000000000000000000000"
@@ -114,7 +114,7 @@ COLUMN_1_DATA_REPLY = bytes.fromhex(
   "000047900000000000297a0d"
 )
 
-# Spectrum RUNs as the vendor sent them, all on the captured plate: 300-700/1 nm,
+# Spectrum RUNs, all on the ground-truth plate: 300-700/1 nm,
 # 400-600/1, 300-700/5, column 1, orbital, and the verification read:
 # 220-1000/1, spiral, unidirectional, 20 flashes, double orbital shaking, 5 s pause.
 SPECTRUM_300_700_1_RUN_FRAME = bytes.fromhex(
@@ -153,7 +153,7 @@ SPECTRUM_VERIFICATION_RUN_FRAME = bytes.fromhex(
 # A timeout that ends a read right after its RUN, so a test can pin the RUN and the STOP.
 IMMEDIATE_TIMEOUT = 1e-9
 
-# Column 1 at 600 nm, unidirectional, on the captured plate: RUN_REPLY, STATUS_MEASURED and
+# Column 1 at 600 nm, unidirectional, on the ground-truth plate: RUN_REPLY, STATUS_MEASURED and
 # COLUMN_1_DATA_REPLY are this read's replies.
 COLUMN_1_RUN_FRAME = bytes.fromhex(
   "0200900c0431e82164059e04642c4a1d000c080080080080080080080080080000000000000000000000000000000000"
@@ -165,7 +165,7 @@ COLUMN_1_RUN_FRAME = bytes.fromhex(
 STOP_FRAME = bytes.fromhex("02000a0c0b000000230d")
 STOP_REPLY = bytes.fromhex("0200180c0125062600000b0000000000000000c00001430d")
 
-# A 96-well read at 600 nm (verification plate) and the vendor software's export of it.
+# A 96-well read at 600 nm (verification plate) and its ground-truth optical densities.
 VERIFICATION_DATA_REPLY = bytes.fromhex(
   "02064c0c020506260000a901880188001dffe20220030001006001000100000001010000000000f10000645800005e80"
   "00deccd0001278e10001ffe700008b42000070eb000070f500006f6400006b1c00cad94700dcfc9700e7389600005f28"
@@ -202,7 +202,7 @@ VERIFICATION_DATA_REPLY = bytes.fromhex(
   "00004790000047830000477c0000475b0000475c0000474c000047400000473e0000472b00004758012ce63d00028ec6"
   "0076afa900028c2e0038e03700028ec3000048320000000001c4620d"
 )
-VERIFICATION_EXPORT = [
+VERIFICATION_GROUND_TRUTH = [
   [2.885, 2.909, 0.126, 1.208, 2.173, 2.738, 2.829, 2.828, 2.834, 2.852, 0.165, 0.128],
   [0.114, 2.906, 2.865, 2.878, 2.95, 2.967, 2.842, 2.844, 2.752, 2.69, 0.142, 0.147],
   [0.147, 0.149, 0.097, 0.108, 0.141, 0.159, 0.149, 0.167, 2.308, 2.275, 0.132, 0.107],
@@ -237,11 +237,11 @@ def baseline_plate() -> Plate:
   )
 
 
-def captured_96_well_plate() -> Plate:
-  """The captured plate's geometry, with the vendor database's 6.58 mm wells:
+def ground_truth_96_well_plate() -> Plate:
+  """The ground-truth plate's geometry, with 6.58 mm wells:
   127.76 x 85.48 mm, A1 centre 14.38 / 11.24 mm, 9 mm pitch."""
   return Plate(
-    "captured",
+    "ground_truth",
     size_x=127.76,
     size_y=85.48,
     size_z=14.0,
@@ -350,7 +350,7 @@ COLUMN_1 = [f"{row}1" for row in "ABCDEFGH"]
 
 
 def without_pause_seconds(payload: bytes) -> bytes:
-  """`payload` with the no-pause seconds set to v1's 5: the vendor sends 5 or 0."""
+  """`payload` with the no-pause seconds set to v1's 5: the ground truth has 5 or 0."""
   payload = bytearray(payload)
   pause_seconds = len(payload) - 17
   if payload[pause_seconds - 3 : pause_seconds + 1] == bytes(4):
@@ -360,14 +360,14 @@ def without_pause_seconds(payload: bytes) -> bytes:
 
 class RunParametersTests(unittest.TestCase):
   def test_orbital(self):
-    plate = captured_96_well_plate()
+    plate = ground_truth_96_well_plate()
     parameters = run_parameters(
       plate, plate.get_all_items(), [600], 7, well_scan="orbital", scan_diameter=3
     )
     self.assertEqual(b"\x04" + parameters, ftdi_extract_payload(ORBITAL_RUN_FRAME))
 
   def test_spiral_but_its_pause_seconds(self):
-    plate = captured_96_well_plate()
+    plate = ground_truth_96_well_plate()
     payload = b"\x04" + run_parameters(
       plate,
       plate.get_all_items(),
@@ -387,7 +387,7 @@ class RunParametersTests(unittest.TestCase):
     )
 
   def test_shake_but_its_pause_seconds(self):
-    plate = captured_96_well_plate()
+    plate = ground_truth_96_well_plate()
     payload = b"\x04" + run_parameters(
       plate,
       plate.get_all_items(),
@@ -407,7 +407,7 @@ class RunParametersTests(unittest.TestCase):
     )
 
   def test_shake_patterns_speeds_and_durations(self):
-    plate = captured_96_well_plate()
+    plate = ground_truth_96_well_plate()
     for (pattern, speed, duration), recorded in SHAKE_PRE_SEPARATORS.items():
       parameters = run_parameters(
         plate,
@@ -428,7 +428,7 @@ class RunParametersTests(unittest.TestCase):
 
 
 class SettingsTests(unittest.TestCase):
-  def test_the_defaults_are_the_vendors_default_read(self):
+  def test_the_defaults_are_the_ground_truth(self):
     plate = baseline_plate()
     parameters = absorbance_feature()._compute_run_parameters(
       plate, plate.get_all_items(), [600], MeasurementSettings(), None
@@ -476,7 +476,7 @@ class SettingsTests(unittest.TestCase):
 
 class SpectrumRunParametersTests(unittest.TestCase):
   def spectrum_payload(self, start, end, step, flashes, wells=None, shake=None, **measurement):
-    plate = captured_96_well_plate()
+    plate = ground_truth_96_well_plate()
     wells = plate.get_all_items() if wells is None else wells(plate)
     return b"\x04" + absorbance_feature()._compute_spectrum_run_parameters(
       plate, wells, start, end, step, MeasurementSettings(flashes=flashes, **measurement), shake
@@ -524,14 +524,14 @@ class SpectrumRunParametersTests(unittest.TestCase):
 
 
 def load_verification_spectrum() -> Tuple[List[bytes], List[int], Dict[str, List[float]]]:
-  """The 220-1000 nm verification read: its 5 data pages as received, its wavelengths, and the
-  vendor software's export of it, optical density per well and wavelength."""
+  """The 220-1000 nm verification read: its 5 data pages as received, its wavelengths, and its
+  ground-truth optical densities, per well and wavelength."""
   path = os.path.join(
     os.path.dirname(__file__), "test_data", "absorbance_spectrum_verification.json.gz"
   )
   with gzip.open(path, "rt") as f:
     data = json.load(f)
-  return [bytes.fromhex(page) for page in data["pages"]], data["wavelengths"], data["export"]
+  return [bytes.fromhex(page) for page in data["pages"]], data["wavelengths"], data["expected"]
 
 
 # The verification read's settings, as its RUN encodes them.
@@ -543,10 +543,10 @@ VERIFICATION_SPECTRUM_SHAKE = ShakeSettings("double_orbital", 300, 10)
 
 class SpectrumReadTests(unittest.IsolatedAsyncioTestCase):
   async def read_verification_spectrum(self, report="optical_density"):
-    pages, wavelengths, export = load_verification_spectrum()
+    pages, wavelengths, expected = load_verification_spectrum()
     io = FakeFTDI(chunk=4096)
     io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURED, *pages]
-    absorbance = make_absorbance(io, captured_96_well_plate())
+    absorbance = make_absorbance(io, ground_truth_96_well_plate())
     result = await absorbance.measure_spectrum(
       start_wavelength=220,
       end_wavelength=1000,
@@ -555,10 +555,10 @@ class SpectrumReadTests(unittest.IsolatedAsyncioTestCase):
       shake_settings=VERIFICATION_SPECTRUM_SHAKE,
       report=report,
     )
-    return io, result, wavelengths, export
+    return io, result, wavelengths, expected
 
-  async def test_the_verification_read_matches_the_vendor_export(self):
-    io, result, wavelengths, export = await self.read_verification_spectrum()
+  async def test_the_verification_read_matches_the_ground_truth(self):
+    io, result, wavelengths, expected = await self.read_verification_spectrum()
     self.assertEqual(
       io.written,
       [STATUS_QUERY_FRAME, SPECTRUM_VERIFICATION_RUN_FRAME, STATUS_QUERY_FRAME] + [DATA_FRAME] * 5,
@@ -567,16 +567,16 @@ class SpectrumReadTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(list(result.data["A1"]), wavelengths)
     differences = [
       abs(result.data[well][wavelength] - value)
-      for well, values in export.items()
+      for well, values in expected.items()
       for wavelength, value in zip(wavelengths, values)
     ]
     self.assertEqual(len(differences), 74_976)
-    self.assertLess(max(differences), 0.0006)  # the export rounds to 3 decimals
+    self.assertLess(max(differences), 0.0006)  # the ground truth rounds to 3 decimals
     self.assertEqual(result.temperature, 24.1)
     self.assertLessEqual(result.start_timestamp, result.end_timestamp)
 
   async def test_raw_counts_compute_the_optical_densities(self):
-    _, raw, wavelengths, export = await self.read_verification_spectrum(report="raw")
+    _, raw, wavelengths, expected = await self.read_verification_spectrum(report="raw")
     assert isinstance(raw, CLARIOstarAbsorbanceSpectrumResult)
     assert raw.references is not None and raw.calibration is not None
     assert raw.reference_calibration is not None
@@ -585,8 +585,8 @@ class SpectrumReadTests(unittest.IsolatedAsyncioTestCase):
         fraction = (raw.data[well][wavelength] / raw.calibration[wavelength][0]) * (
           raw.reference_calibration[0] / raw.references[well]
         )
-        expected = export[well][wavelengths.index(wavelength)]
-        self.assertAlmostEqual(-math.log10(fraction), expected, delta=0.0006)
+        expected_density = expected[well][wavelengths.index(wavelength)]
+        self.assertAlmostEqual(-math.log10(fraction), expected_density, delta=0.0006)
 
   def test_pages_out_of_order_or_missing_are_refused(self):
     pages = [ftdi_extract_payload(frame) for frame in load_verification_spectrum()[0]]
@@ -598,7 +598,7 @@ class SpectrumReadTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_timeout_not_positive_is_refused(self):
     io = FakeFTDI()
-    absorbance = make_absorbance(io, captured_96_well_plate())
+    absorbance = make_absorbance(io, ground_truth_96_well_plate())
     for timeout in (0, -1):
       with self.assertRaises(ValueError):
         await measure_with(absorbance, [600], timeout=timeout)
@@ -613,7 +613,7 @@ class SimulatedSpectrumTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.reader = CLARIOstarPlus(simulation=True)
     await self.reader.setup()
-    self.plate = captured_96_well_plate()
+    self.plate = ground_truth_96_well_plate()
     await self.reader.drawer.open()
     self.reader.plate_holder.assign_child_resource(self.plate)
     await self.reader.drawer.close()
@@ -630,8 +630,8 @@ class SimulatedSpectrumTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(list(spectrum), list(range(400, 501, 10)))
       self.assertTrue(all(0.0 <= value <= 4.0 for value in spectrum.values()))
 
-  async def test_a_captured_spectrum_is_returned_again(self):
-    captured = await self.absorbance.measure_spectrum(
+  async def test_an_earlier_spectrum_is_returned_again(self):
+    earlier = await self.absorbance.measure_spectrum(
       start_wavelength=400, end_wavelength=500, step_size=10
     )
     replayed = await self.absorbance.measure_spectrum(
@@ -639,23 +639,23 @@ class SimulatedSpectrumTests(unittest.IsolatedAsyncioTestCase):
       start_wavelength=400,
       end_wavelength=500,
       step_size=10,
-      simulated_data=captured,
+      simulated_data=earlier,
     )
-    self.assertEqual(replayed.data, {well: captured.data[well] for well in COLUMN_1})
-    with self.assertRaises(ValueError):  # 405 nm was not captured
+    self.assertEqual(replayed.data, {well: earlier.data[well] for well in COLUMN_1})
+    with self.assertRaises(ValueError):  # 405 nm was not read
       await self.absorbance.measure_spectrum(
-        start_wavelength=400, end_wavelength=500, step_size=5, simulated_data=captured
+        start_wavelength=400, end_wavelength=500, step_size=5, simulated_data=earlier
       )
 
 
 class OpticalDensityTests(unittest.TestCase):
-  def test_matches_the_vendor_export(self):
+  def test_matches_the_ground_truth(self):
     decoded = absorbance_feature()._decode_data_reply(
       ftdi_extract_payload(VERIFICATION_DATA_REPLY), [600]
     )
     densities = _compute_readings(*decoded, "optical_density")[0]
-    exported = [value for row in VERIFICATION_EXPORT for value in row]
-    for density, value in zip(densities, exported):
+    expected = [value for row in VERIFICATION_GROUND_TRUTH for value in row]
+    for density, value in zip(densities, expected):
       self.assertAlmostEqual(density, value, delta=0.001)
 
   def test_a_reply_for_other_wavelengths_is_refused(self):
@@ -669,7 +669,7 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
   async def test_read_column_1(self):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, COLUMN_1_DATA_REPLY]
-    plate = captured_96_well_plate()
+    plate = ground_truth_96_well_plate()
     column_1 = plate.get_items("A1:H1")
     results = await measure_with(
       make_absorbance(io, plate), [600], wells=column_1, bidirectional=False
@@ -686,7 +686,7 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     # As the reader answered: a poll sent right after the RUN's reply went unanswered.
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, COLUMN_1_DATA_REPLY]
-    plate = captured_96_well_plate()
+    plate = ground_truth_96_well_plate()
     absorbance = make_absorbance(io, plate)
     absorbance._driver.default_poll_interval = 0.25
     waits = []
@@ -722,7 +722,7 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_cancel_between_a_write_and_its_reply_leaves_the_link_clean(self):
     io = YieldingFTDI()
-    absorbance = make_absorbance(io, captured_96_well_plate())
+    absorbance = make_absorbance(io, ground_truth_96_well_plate())
     task = asyncio.create_task(absorbance.measure(wavelengths=[600], timeout=10))
     io.cancel_on_status = task  # cancelled after the first STATUS of the run is written
     with self.assertRaises(asyncio.CancelledError):
@@ -773,20 +773,20 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
         await measure_with(absorbance, [600], **arguments)  # type: ignore[arg-type]
     self.assertEqual(io.written, [])
 
-  async def test_raw_counts_compute_the_vendors_optical_densities(self):
+  async def test_raw_counts_compute_the_ground_truth_optical_densities(self):
     readings = {}
     for report in ("optical_density", "raw"):
       io = FakeFTDI()
       io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURED, VERIFICATION_DATA_REPLY]
       (readings[report],) = await measure_with(
-        make_absorbance(io, captured_96_well_plate()), [600], report=report
+        make_absorbance(io, ground_truth_96_well_plate()), [600], report=report
       )  # type: ignore[arg-type]
     density, raw = readings["optical_density"], readings["raw"]
     self.assertIs(type(density), AbsorbanceResult)
     assert isinstance(raw, CLARIOstarAbsorbanceResult)
     assert raw.references is not None and raw.calibration and raw.reference_calibration
-    exported = [value for row in VERIFICATION_EXPORT for value in row]
-    for well, value in zip(density.data, exported):  # both row by row
+    expected = [value for row in VERIFICATION_GROUND_TRUTH for value in row]
+    for well, value in zip(density.data, expected):  # both row by row
       fraction = (raw.data[well] / raw.calibration[0]) * (
         raw.reference_calibration[0] / raw.references[well]
       )
@@ -816,8 +816,8 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       absorbance.default_read_timeout = 0
 
-  async def test_scan_and_settling_bytes_are_the_vendors(self):
-    # (arguments, scan byte, settling byte) as the vendor sent them: the corners and
+  async def test_scan_and_settling_bytes_are_the_ground_truth(self):
+    # (arguments, scan byte, settling byte) as the ground truth has them: the corners and
     # directions, the pauses and three orbital reads (the same field).
     cases: List[Tuple[Dict[str, Any], int, int]] = [
       ({}, 0x0A, 0x05),
@@ -860,7 +860,7 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       for spectrum in (False, True):
         io = FakeFTDI()
         io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING]
-        absorbance = make_absorbance(io, captured_96_well_plate())
+        absorbance = make_absorbance(io, ground_truth_96_well_plate())
         settings = MeasurementSettings(well_scan=well_scan)
         with self.assertRaises(TimeoutError):
           if spectrum:
@@ -880,9 +880,9 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_well_scans_out_of_range_send_nothing(self):
     io = FakeFTDI()
-    absorbance = make_absorbance(io, captured_96_well_plate())
+    absorbance = make_absorbance(io, ground_truth_96_well_plate())
     for arguments in (
-      {"well_scan": "matrix", "matrix_size": 3},  # captured, its data not decoded
+      {"well_scan": "matrix", "matrix_size": 3},  # its data not decoded
       {"well_scan": "orbital", "scan_diameter": 0},
       {"well_scan": "spiral", "scan_diameter": 7},  # wider than the 6.58 mm well
       {"well_scan": "spiral", "scan_diameter": 3.5},
@@ -1098,25 +1098,25 @@ class SimulatedDataTests(unittest.IsolatedAsyncioTestCase):
     assert isinstance(absorbance, CLARIOstarSimulationAbsorbance)
     self.absorbance = absorbance
 
-  async def test_captured_results_are_returned_again(self):
-    captured = await measure_with(self.absorbance, [450, 600])
-    replayed = await measure_with(self.absorbance, [450, 600], simulated_data=captured)
-    self.assertEqual([r.data for r in replayed], [r.data for r in captured])
+  async def test_earlier_results_are_returned_again(self):
+    earlier = await measure_with(self.absorbance, [450, 600])
+    replayed = await measure_with(self.absorbance, [450, 600], simulated_data=earlier)
+    self.assertEqual([r.data for r in replayed], [r.data for r in earlier])
 
-  async def test_a_subset_reads_its_wells_of_the_captured_plate(self):
-    (captured,) = await measure_with(self.absorbance, [600])
+  async def test_a_subset_reads_its_wells_of_the_earlier_plate(self):
+    (earlier,) = await measure_with(self.absorbance, [600])
     column_1 = self.plate.get_items("A1:H1")
     (replayed,) = await measure_with(
-      self.absorbance, [600], wells=column_1, simulated_data=[captured]
+      self.absorbance, [600], wells=column_1, simulated_data=[earlier]
     )
-    self.assertEqual(replayed.data, {well: captured.data[well] for well in COLUMN_1})
+    self.assertEqual(replayed.data, {well: earlier.data[well] for well in COLUMN_1})
 
   async def test_raw_counts_need_simulated_data(self):
     with self.assertRaises(NotImplementedError):
       await measure_with(self.absorbance, [600], report="raw")
 
-  async def test_captured_raw_results_are_returned_again(self):
-    captured = CLARIOstarAbsorbanceResult(
+  async def test_earlier_raw_results_are_returned_again(self):
+    earlier = CLARIOstarAbsorbanceResult(
       data={well: 1000.0 for well in COLUMN_1},
       wavelength=600,
       temperature=None,
@@ -1131,15 +1131,15 @@ class SimulatedDataTests(unittest.IsolatedAsyncioTestCase):
       [600],
       wells=self.plate.get_items("A1:H1"),
       report="raw",
-      simulated_data=[captured],
+      simulated_data=[earlier],
     )
     assert isinstance(replayed, CLARIOstarAbsorbanceResult)
     self.assertEqual(
       (replayed.data, replayed.references, replayed.calibration, replayed.reference_calibration),
-      (captured.data, captured.references, captured.calibration, captured.reference_calibration),
+      (earlier.data, earlier.references, earlier.calibration, earlier.reference_calibration),
     )
     with self.assertRaises(ValueError):
-      await measure_with(self.absorbance, [600], simulated_data=[captured])
+      await measure_with(self.absorbance, [600], simulated_data=[earlier])
 
   async def test_simulated_data_must_match_the_measurement(self):
     (whole_plate,) = await measure_with(self.absorbance, [600])

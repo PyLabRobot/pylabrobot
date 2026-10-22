@@ -1,9 +1,8 @@
 """CLARIOstar fluorescence: plate reads, spectra, filter detection and z-profiles.
 
-A plate read goes through one to five fluorescence channels in one pass (`FluorescenceChannel`, the
-vendor's chromatics), from the top or the bottom optic. Excitation and emission each select their
-wavelength through a monochromator or a filter. A spectrum scans the excitation or the emission
-monochromator.
+A plate read goes through one to five fluorescence channels in one pass (`FluorescenceChannel`),
+from the top or the bottom optic. Excitation and emission each select their wavelength through a
+monochromator or a filter. A spectrum scans the excitation or the emission monochromator.
 Filter detection scans every filter position; a z-profile reads one well over its focal heights,
 and with a target the reader fits the gain at its peak.
 """
@@ -69,8 +68,7 @@ class CLARIOstarFluorescenceResult(FluorescenceResult):
     gain: the detector gain, within `FluorescenceConfiguration.gain_range`.
     matrix_points: a matrix scan's counts, every measured point of each well in the order the
       reader sends them, keyed as ``data``; None for any other well scan. ``data`` then holds
-      the plain mean of each well's points; the vendor's own reduction is not verified (its
-      export of a 3 x 3 matrix reads 141 where the mean is 141.78).
+      the plain mean of each well's points.
   """
 
   gain: int
@@ -93,7 +91,7 @@ class CLARIOstarZProfileResult:
       target; None without a target.
     peak_focal_height: the focal height the firmware computes as the z-profile's maximum, in mm.
     temperature: temperature in degrees C; None: no z-scan with the temperature controller on is
-      captured, so the reply's temperature, if it holds one, is not decoded.
+      verified, so the reply's temperature, if it holds one, is not decoded.
     start_timestamp: when the z-scan started.
     end_timestamp: when its result was in.
   """
@@ -126,29 +124,29 @@ class FluorescenceConfiguration(MeasurementConfiguration):
   """Device facts of the fluorescence measurement."""
 
   wavelength_range: Tuple[int, int] = (320, 840)
-  """Excitation and emission wavelengths, in nm (the operating manual's monochromator range with
-  an extended-red photomultiplier; up to 740 without, `Fluorescence._get_reader_configuration`)."""
+  """Excitation and emission wavelengths, in nm, with an extended-red photomultiplier; up to 740
+  without (`Fluorescence._get_reader_configuration`)."""
   bandwidth_range: Tuple[int, int] = (8, 100)
-  """Excitation and emission bandwidths, in nm (the operating manual)."""
+  """Excitation and emission bandwidths, in nm."""
   dichroic_range: Tuple[float, float] = (340.0, 760.0)
-  """Where the dichroic mirror splits excitation from emission, in nm (the operating manual; up
-  to 740 without an extended-red photomultiplier)."""
+  """Where the dichroic mirror splits excitation from emission, in nm; up to 740 without an
+  extended-red photomultiplier."""
   gain_range: Tuple[int, int] = (0, 4095)
-  """Detector gain (the vendor software manual: 0 to 4095)."""
+  """Detector gain (0 to 4095)."""
   focal_height_range: Tuple[float, float] = (0.0, 25.0)
-  """Focal height, in mm, in 0.1 mm steps (the vendor software manual: up to 25 mm)."""
+  """Focal height, in mm, in 0.1 mm steps (up to 25 mm)."""
   excitation_filter_slots: int = 4
-  """Excitation filter positions (the vendor software manual: up to 4)."""
+  """Excitation filter positions (up to 4)."""
   dichroic_filter_slots: int = 3
-  """Dichroic filter positions (the vendor software manual: up to 3)."""
+  """Dichroic filter positions (up to 3)."""
   emission_filter_slots: int = 4
-  """Emission filter positions (the vendor software manual: up to 4)."""
+  """Emission filter positions (up to 4)."""
   filter_slots_per_slide: int = 2
   """Filter positions on each of the two excitation or emission slides (filter detection)."""
-  maximum_chromatics: int = 5
-  """Fluorescence channels per read, the vendor's chromatics (the vendor software: up to 5)."""
+  maximum_fluorescence_channels: int = 5
+  """Fluorescence channels per read (up to 5)."""
   maximum_spectrum_wavelengths: int = 1000
-  """Wavelengths per spectrum (the vendor software manual: up to 1000 measurement points)."""
+  """Wavelengths per spectrum (up to 1000)."""
 
 
 # ----------------------------------------
@@ -159,13 +157,13 @@ class FluorescenceConfiguration(MeasurementConfiguration):
 def _compute_band_edges(wavelength: float, bandwidth: float) -> Tuple[int, int]:
   """The band's upper and lower edge in 0.1 nm: `wavelength` +/- half `bandwidth`.
 
-  The nominal edges; the vendor software sends each band narrower (14.6 nm of 15).
+  The nominal edges.
   """
   return round((wavelength + bandwidth / 2) * 10), round((wavelength - bandwidth / 2) * 10)
 
 
 def _compute_dichroic(excitation: Tuple[int, int], emission: Tuple[int, int]) -> int:
-  """The default dichroic split in 0.1 nm, rounded half to even, as the vendor's.
+  """The default dichroic split in 0.1 nm, rounded half to even.
 
   Midway between the two bands' facing edges: the excitation band's top and the emission band's
   bottom, or the other way round with excitation above emission. Each band is (upper, lower) edge
@@ -200,8 +198,8 @@ class Fluorescence(Measurement):
   _WELL_SCAN_CODE = 0x03
   _TRAILER_START = 0x00
 
-  # Without an extended-red photomultiplier reading fluorescence, the vendor software refuses
-  # excitation, emission or a dichroic split above 740 nm.
+  # Without an extended-red photomultiplier reading fluorescence, excitation, emission and a
+  # dichroic split above 740 nm are refused.
   _STANDARD_WAVELENGTH_RANGE = (320, 740)
   _STANDARD_DICHROIC_RANGE = (340.0, 740.0)
 
@@ -235,9 +233,9 @@ class Fluorescence(Measurement):
         (`_get_reader_configuration`).
     """
     super().__init__(driver, configuration or self._get_reader_configuration(driver.configuration))
-    self._default_excitation_bandwidth = 15  # nm, the vendor's default
-    self._default_emission_bandwidth = 20  # nm, the vendor's default
-    self._default_optic_position: OpticPosition = "top"  # the vendor's default
+    self._default_excitation_bandwidth = 15  # nm
+    self._default_emission_bandwidth = 20  # nm
+    self._default_optic_position: OpticPosition = "top"
     # The filters each slide holds, by slot: `detect_all_filters`, or assigned; None until then.
     self.excitation_filter_slide: Optional[ExcitationFilterSlide] = None
     self.dichroic_filter_slide: Optional[DichroicFilterSlide] = None
@@ -256,7 +254,7 @@ class Fluorescence(Measurement):
 
   @property
   def default_excitation_bandwidth(self) -> int:
-    """Excitation bandwidth, nm, of a monochromator read given none (the vendor's: 15)."""
+    """Excitation bandwidth, nm, of a monochromator read given none (15 by default)."""
     return self._default_excitation_bandwidth
 
   @default_excitation_bandwidth.setter
@@ -267,7 +265,7 @@ class Fluorescence(Measurement):
 
   @property
   def default_emission_bandwidth(self) -> int:
-    """Emission bandwidth, nm, of a monochromator read given none (the vendor's: 20)."""
+    """Emission bandwidth, nm, of a monochromator read given none (20 by default)."""
     return self._default_emission_bandwidth
 
   @default_emission_bandwidth.setter
@@ -292,7 +290,7 @@ class Fluorescence(Measurement):
 
   @property
   def default_optic_position(self) -> OpticPosition:
-    """The optic a read uses given none (the vendor's: top)."""
+    """The optic a read uses given none (top by default)."""
     return self._default_optic_position
 
   @default_optic_position.setter
@@ -493,7 +491,7 @@ class Fluorescence(Measurement):
         f"dichroic_split_wavelength must lie between {lower} and {upper} nm, got {split}"
       )
     if emission[0] < excitation[1]:
-      # TODO(device): no read with excitation above emission is captured.
+      # TODO(device): no read with excitation above emission is verified.
       self._warn_untested("a fluorescence read with excitation above emission")
     lowest_split, highest_split = self.configuration.dichroic_range
     if not lowest_split <= split <= highest_split:
@@ -536,7 +534,7 @@ class Fluorescence(Measurement):
       fluorescence_channel.excitation_filter is not None
       or fluorescence_channel.emission_filter is not None
     ):
-      # No read with an excitation or emission filter and the dichroic mirror is captured.
+      # No read with an excitation or emission filter and the dichroic mirror is verified.
       errors.append("an excitation or emission filter needs a dichroic_filter")
     split = fluorescence_channel.dichroic_split_wavelength
     if split is not None and (
@@ -592,8 +590,8 @@ class Fluorescence(Measurement):
   # After the focal height: the kind of read, discrete 00 or spectrum 02.
   _DISCRETE = 0x00
   _SPECTRUM = 0x02
-  # Between two of the vendor's chromatics, one per fluorescence channel.
-  _CHROMATIC_SEPARATOR = bytes.fromhex("00000c")
+  # Between two fluorescence channels' blocks.
+  _FLUORESCENCE_CHANNEL_SEPARATOR = bytes.fromhex("00000c")
   # The excitation and emission wavelength selectors, after the emission edges: a plate read's
   # monochromator or filter; a spectrum's scanned and fixed monochromators.
   _WAVELENGTH_SELECTORS: Dict[str, int] = {
@@ -603,7 +601,7 @@ class Fluorescence(Measurement):
     "scanned_monochromator": 0x02,
     "fixed_monochromator": 0x03,
   }
-  # Pause before reading: off. No fluorescence read with a pause is captured.
+  # Pause before reading: off. No fluorescence read with a pause is verified.
   _NO_PAUSE = bytes(3)
 
   def _compute_optics(
@@ -683,7 +681,7 @@ class Fluorescence(Measurement):
     gain: int,
     selectors: Optional[Tuple[int, int]] = None,
   ) -> bytes:
-    """One fluorescence channel's 17 bytes, the vendor's chromatic: gain u16 BE, the optics, `00`.
+    """One fluorescence channel's 17 bytes: gain u16 BE, the optics, `00`.
 
     Args:
       selectors: the wavelength selectors, emission then excitation; None for each one's
@@ -704,7 +702,7 @@ class Fluorescence(Measurement):
     focal_height: float,
     kind: int,
     count: int,
-    chromatics: Sequence[bytes],
+    encoded_fluorescence_channels: Sequence[bytes],
     optics: int = 0,
     flying_mode: bool = False,
     enhanced_dynamic_range: bool = False,
@@ -714,11 +712,11 @@ class Fluorescence(Measurement):
 
     The run start (`_compute_run_start`, with `optics`, `flying_mode`, `enhanced_dynamic_range`
     and `scan_byte`), the focal height in 0.01 mm, `kind`, `count` u16 BE and `00 00 00 00 00 0c`,
-    the `chromatics` (`_encode_fluorescence_channel`), no pause, the run end.
+    the `encoded_fluorescence_channels` (`_encode_fluorescence_channel`), no pause, the run end.
 
     Args:
-      kind: `_DISCRETE`, or `_SPECTRUM` with the start and end chromatics between which the reader
-        steps.
+      kind: `_DISCRETE`, or `_SPECTRUM` with the start and end fluorescence channels between
+        which the reader steps.
       count: the fluorescence channels of a discrete read, or a spectrum's wavelengths.
     """
     return (
@@ -737,7 +735,7 @@ class Fluorescence(Measurement):
       + count.to_bytes(2, "big")
       + bytes(5)
       + b"\x0c"
-      + self._CHROMATIC_SEPARATOR.join(chromatics)
+      + self._FLUORESCENCE_CHANNEL_SEPARATOR.join(encoded_fluorescence_channels)
       + self._NO_PAUSE
       + self._compute_run_end(measurement.flashes)
     )
@@ -804,11 +802,11 @@ class Fluorescence(Measurement):
   # Filter detection
   # ----------------------------------------
 
-  # Filter detection `24`, mode byte: the slide's code OR bit 5, which the vendor always sets.
+  # Filter detection `24`, mode byte: the slide's code OR bit 5, always set.
   _FILTER_SCAN_SLIDES: Dict[str, int] = {"excitation": 0x00, "emission": 0x01, "dichroic": 0x03}
   _FILTER_SCAN_BIT_5 = 0x20
-  # The emission detector gains an emission scan sends before the slide positions, as the vendor
-  # sends them; excitation and dichroic scans send zeros.
+  # The emission detector gains an emission scan sends before the slide positions; excitation and
+  # dichroic scans send zeros.
   _EMISSION_SCAN_GAINS = (1100, 1200, 1100, 1150)
   # Seconds one position may take: excitation and dichroic 6.4 s at most, emission 48.6 s.
   _FILTER_SCAN_TIMEOUT = 20.0
@@ -874,10 +872,10 @@ class Fluorescence(Measurement):
   ) -> Optional[OpticalFilter]:
     """The excitation or emission filter a FILTER_RESULT describes; None for an empty position.
 
-    As the vendor decides:
+    By the result's fields:
     - a bandwidth: a band-pass between the edges;
     - else a first edge with a slope: a long-pass, open above;
-    - else a second edge with a slope: a short-pass, its band not stated (not captured).
+    - else a second edge with a slope: a short-pass, its band not stated (not verified).
     """
     bandwidth, first_edge, second_edge, first_slope, second_slope = result
     if bandwidth > 0:
@@ -885,7 +883,7 @@ class Fluorescence(Measurement):
     if first_edge > 0 and first_slope != 0:
       return OpticalFilter(slot, passbands=((first_edge / 10, None),))
     if second_edge > 0 and second_slope != 0:
-      # TODO(device): no short-pass filter is captured; state its band once a reader reports one.
+      # TODO(device): no short-pass filter is verified; state its band once a reader reports one.
       logger.warning(
         "filter %d is a short-pass up to %s nm; its band is not stated", slot, second_edge / 10
       )
@@ -898,15 +896,15 @@ class Fluorescence(Measurement):
   ) -> Optional[DichroicFilter]:
     """The dichroic a FILTER_RESULT describes; None for an empty position.
 
-    As the vendor decides:
+    By the result's fields:
     - a first edge: a long-pass that transmits from it, open above;
-    - else a second edge: a short-pass, its bands not stated (not captured).
+    - else a second edge: a short-pass, its bands not stated (not verified).
     """
     _, first_edge, second_edge, _, _ = result
     if first_edge > 0:
       return DichroicFilter(slot, transmission_bands=((first_edge / 10, None),))
     if second_edge > 0:
-      # TODO(device): no short-pass dichroic is captured; state its bands once a reader reports one.
+      # TODO(device): no short-pass dichroic is verified; state its bands once a reader reports one.
       logger.warning(
         "dichroic %d is a short-pass at %s nm; its bands are not stated", slot, second_edge / 10
       )
@@ -918,7 +916,7 @@ class Fluorescence(Measurement):
   async def _detect_filter(self, slide: str, slot: int) -> bytes:
     """Scan one filter position (`24`) and return its FILTER_RESULT reply.
 
-    As the vendor: status until the data is ready (the reader may still be busy), SPECTRAL_DATA
+    Status until the data is ready (the reader may still be busy), SPECTRAL_DATA
     (`05 11`, not decoded) then FILTER_RESULT (`05 1b`), then status until idle. Any failure, a
     timeout or a cancelled call stops the scan (`0b 00`) first.
 
@@ -973,7 +971,7 @@ class Fluorescence(Measurement):
   async def detect_all_filters(
     self,
   ) -> Tuple[ExcitationFilterSlide, DichroicFilterSlide, EmissionFilterSlide]:
-    """Detect the filters in every position, as the vendor's "Detect all filters".
+    """Detect the filters in every position.
 
     - One scan each: excitation 1 to 4, dichroic A to C, emission 5 to 8 (slots 1 to 4).
     - Excitation and dichroic positions take about 8 s each, emission about 49 s: about 4 minutes.
@@ -987,8 +985,8 @@ class Fluorescence(Measurement):
 
     Raises:
       RuntimeError: if the reader reports no spectrometer (absorbance), or no extended-red
-        photomultiplier for the emission scans, whose captured limits are its; if a scan ends
-        without its data.
+        photomultiplier for the emission scans, whose limits are verified only with one; if a
+        scan ends without its data.
       TimeoutError: if a position takes longer than its timeout (`_FILTER_SCAN_TIMEOUT`,
         `_EMISSION_FILTER_SCAN_TIMEOUT` for emission).
       ValueError: if a FILTER_RESULT is not one of its position.
@@ -999,7 +997,7 @@ class Fluorescence(Measurement):
     if device.extended_red_photomultiplier_tube is False:
       raise RuntimeError(
         "the reader reports no extended-red photomultiplier; the emission scans' limits are only "
-        "captured with one"
+        "verified with one"
       )
     excitation_slide = ExcitationFilterSlide(self.configuration.excitation_filter_slots)
     dichroic_slide = DichroicFilterSlide(self.configuration.dichroic_filter_slots)
@@ -1035,11 +1033,11 @@ class Fluorescence(Measurement):
   # Z-profiles
   # ----------------------------------------
 
-  # The gain definition bytes of `09`, the z-scan, as the vendor sends them.
+  # The gain definition bytes of `09`, the z-scan.
   _Z_PROFILE_GAIN_DEFINITION = bytes([0x04, 0x08])
-  # The step between focal heights, in 0.01 mm: the only one captured.
+  # The step between focal heights, in 0.01 mm: the only one verified.
   _Z_PROFILE_RESOLUTION = 10
-  # Before the optics, as the end of the RUN's chromatic header.
+  # Before the optics, as the end of a RUN's fluorescence channel header.
   _Z_PROFILE_OPTICS_HEADER = bytes.fromhex("0000000c")
   # Status reply byte 2 bit 5: the z-profile is ready.
   _Z_PROFILE_RESULT_READY = 0x20
@@ -1164,7 +1162,7 @@ class Fluorescence(Measurement):
       peak_detector_percent=percent / 100 if percent else None,
       average_signal=int.from_bytes(reply[19:23], "big"),
       z_profile=z_profile,
-      # TODO(device): no z-scan with the temperature controller on is captured.
+      # TODO(device): no z-scan with the temperature controller on is verified.
       temperature=None,
       start_timestamp=start_timestamp,
       end_timestamp=end_timestamp,
@@ -1274,7 +1272,7 @@ class Fluorescence(Measurement):
   # Discrete reads
   # ----------------------------------------
 
-  # Flashes per well flying mode reads with (the vendor software manual: 1 or 3).
+  # Flashes per well flying mode reads with (1 or 3).
   _FLYING_MODE_FLASHES = (1, 3)
   # Data reply layout byte [6], with the temperature controller on or off.
   _DATA_LAYOUT = 0xA1
@@ -1298,15 +1296,15 @@ class Fluorescence(Measurement):
     The keywords are `measure`'s.
 
     Raises:
-      ValueError: listing every violation: not 1 to `maximum_chromatics` fluorescence channels,
-        not one gain per fluorescence channel, a fluorescence channel's
+      ValueError: listing every violation: not 1 to `maximum_fluorescence_channels` fluorescence
+        channels, not one gain per fluorescence channel, a fluorescence channel's
         (`_check_fluorescence_channel`, `_check_gain`; prefixed `fluorescence_channels[i]` when
         there are several), `_check_read`'s, `_check_optic_position`'s; flying mode with a well
         scan, with flashes other than
         `_FLYING_MODE_FLASHES`, with settling time or with enhanced dynamic range; enhanced
         dynamic range with orbital or spiral averaging.
     """
-    maximum = self.configuration.maximum_chromatics
+    maximum = self.configuration.maximum_fluorescence_channels
     count = len(fluorescence_channels)
     errors = (
       [] if 1 <= count <= maximum else [f"give 1 to {maximum} fluorescence channels, got {count}"]
@@ -1359,7 +1357,7 @@ class Fluorescence(Measurement):
     - Bytes 11-14: the ceiling a saturated count reads (700,000,000 with enhanced dynamic range).
     - Bytes 32-33: the temperature in 0.1 C, 0 when not monitored.
     - From byte 34: u32 BE counts, by fluorescence channel, then by well, a well's points
-      together (an absorbance matrix's layout; no fluorescence matrix of several wells captured).
+      together (an absorbance matrix's layout; no fluorescence matrix of several wells verified).
 
     Raises:
       ValueError: if the reply is incomplete or not the layout of this read.
@@ -1501,13 +1499,13 @@ class Fluorescence(Measurement):
 
     Args:
       fluorescence_channels: one `FluorescenceChannel` (`pylabrobot.lib.fluorescence`), or 1 to
-        `configuration.maximum_chromatics` of them, each within `_check_fluorescence_channel`; a
-        bandwidth None is the default bandwidth, a filter given as a slot or a name the slides'
-        (`detect_all_filters`).
+        `configuration.maximum_fluorescence_channels` of them, each within
+        `_check_fluorescence_channel`; a bandwidth None is the default bandwidth, a filter given
+        as a slot or a name the slides' (`detect_all_filters`).
       gain: the detector gain within `configuration.gain_range`: one for every fluorescence
         channel, or one per fluorescence channel in the order given.
       wells: the wells to measure, on the plate; None measures every well. A matrix scan reads
-        one well (no fluorescence matrix of several wells is captured).
+        one well (no fluorescence matrix of several wells is verified).
       focal_height: mm above the plate's base, within `configuration.focal_height_range`, in
         0.1 mm steps. None reads at `default_focal_height_percent_of_well_depth` (25: a quarter
         up the well, for low and moderate fills). For full wells, or the most signal, focus on a
@@ -1552,7 +1550,7 @@ class Fluorescence(Measurement):
     if focal_height is None:
       focal_height = self._get_default_focal_height(wells)
     if measurement.well_scan == "matrix" and len(wells) > 1:
-      # No fluorescence matrix of several wells is captured: its reply layout is unknown.
+      # No fluorescence matrix of several wells is verified: its reply layout is unknown.
       raise ValueError(f"a fluorescence matrix scan reads one well, got {len(wells)}")
     parameters = self._compute_run_parameters(
       plate,
@@ -1562,7 +1560,7 @@ class Fluorescence(Measurement):
       focal_height=focal_height,
       kind=self._DISCRETE,
       count=len(filled),
-      chromatics=[
+      encoded_fluorescence_channels=[
         self._encode_fluorescence_channel(fluorescence_channel, gain)
         for fluorescence_channel, gain in zip(filled, gains)
       ],
@@ -1611,7 +1609,7 @@ class Fluorescence(Measurement):
   # ----------------------------------------
 
   _SCANS = ("excitation", "emission")
-  # A spectrum's scan byte: read well by well, in no reading direction, as the vendor sends it.
+  # A spectrum's scan byte: read well by well, in no reading direction.
   # A plate read's scan byte (`0a`) makes the reader send pages of another layout.
   _SPECTRUM_SCAN_BYTE = 0x00
   # A spectrum page's layout byte [6].
@@ -1668,7 +1666,7 @@ class Fluorescence(Measurement):
         errors.append(f"{name} must be a whole {lowest} to {highest} nm, got {value!r}")
         ends_valid = False
     if step_size != 1:
-      errors.append(f"step_size must be 1 nm, the only one captured, got {step_size!r}")
+      errors.append(f"step_size must be 1 nm, the only one verified, got {step_size!r}")
     if ends_valid:
       maximum = self.configuration.maximum_spectrum_wavelengths
       count = end_wavelength - start_wavelength + 1
@@ -1806,7 +1804,7 @@ class Fluorescence(Measurement):
       emission_bandwidth: nm; None for `default_emission_bandwidth`.
       gain: the detector gain within `configuration.gain_range`.
       wells: the wells to measure, on the plate; None measures every well.
-      step_size: nm between wavelengths: 1, the only one captured.
+      step_size: nm between wavelengths: 1, the only one verified.
       focal_height: mm above the plate's base, within `configuration.focal_height_range`, in
         0.1 mm steps. None reads at `default_focal_height_percent_of_well_depth` (25: a quarter
         up the well, for low and moderate fills). For full wells, or the most signal, focus on a
@@ -1866,7 +1864,7 @@ class Fluorescence(Measurement):
       focal_height=focal_height,
       kind=self._SPECTRUM,
       count=len(wavelengths),
-      chromatics=[
+      encoded_fluorescence_channels=[
         self._encode_fluorescence_channel(start, gain, selectors),
         self._encode_fluorescence_channel(end, gain, selectors),
       ],

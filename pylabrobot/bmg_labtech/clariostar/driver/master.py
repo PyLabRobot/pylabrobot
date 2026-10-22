@@ -34,6 +34,7 @@ from .errors import (
 from .features.absorbance import Absorbance
 from .features.drawer import Drawer
 from .features.fluorescence import Fluorescence
+from .features.luminescence import Luminescence
 from .features.temperature_controller import TemperatureController
 from .framing import (
   FTDI_CR,
@@ -91,8 +92,7 @@ class CLARIOstarDriver:
 
   # Seconds a command may keep the reader busy, when waited on (``read_timeout`` None).
   _default_read_timeout: float = 150.0
-  # Seconds between status polls while waiting: with a ~38 ms exchange, close to the vendor
-  # software's polling (302 ms median over 39,373 polls).
+  # Seconds between status polls while waiting, with a ~38 ms exchange.
   default_poll_interval: float = 0.25
 
   _FTDI_READ_CHUNK = 25  # bytes per read; a shorter read marks the end of a burst
@@ -238,11 +238,12 @@ class CLARIOstarDriver:
     # FTDI only: bulk-in transfers kept pending from setup to stop; None reads through libftdi.
     self._queued_reads: Optional[QueuedReads] = None
     self.drawer = Drawer(self)
-    # Built by `discover` only if the reader reports a temperature controller, absorbance, and
-    # a fluorescence channel.
+    # Built by `discover` only if the reader reports a temperature controller, absorbance, a
+    # fluorescence channel, and a luminescence channel.
     self.temperature_controller: Optional[TemperatureController] = None
     self.absorbance: Optional[Absorbance] = None
     self.fluorescence: Optional[Fluorescence] = None
+    self.luminescence: Optional[Luminescence] = None
 
   # -- FTDI interface --------------------------------------------------------
 
@@ -826,6 +827,8 @@ class CLARIOstarDriver:
       self.absorbance = Absorbance(self)
     if self.configuration.fluorescence_channels and self.fluorescence is None:
       self.fluorescence = Fluorescence(self)
+    if self.configuration.luminescence_channels and self.luminescence is None:
+      self.luminescence = Luminescence(self)
 
   def _check_firmware_compatibility(self) -> None:
     """Log a warning if the firmware version has not been checked on hardware."""
@@ -845,7 +848,7 @@ class CLARIOstarDriver:
     on hardware.
     """
     versions = {"INIT reply": self.configuration.firmware_version}
-    # The stored parameters first, as the vendor software reads them right after INIT.
+    # The stored parameters first, right after INIT.
     try:
       parameters = await self.request_parameters()
     except ValueError as e:

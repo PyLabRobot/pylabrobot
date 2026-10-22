@@ -51,7 +51,7 @@ INIT_REPLY = bytes.fromhex(
   "0001310007000000000000000071710d"
 )
 
-# Frames the vendor software exchanged with the same reader.
+# Ground-truth frames of the same reader.
 # Idle at power-on, motors off.
 STATUS_MOTORS_OFF = bytes.fromhex("0200180c010500040000000000000000000000c00000f00d")
 # Stored parameters; the project and serial number, reply bytes 161-164, are zeroed and the checksum

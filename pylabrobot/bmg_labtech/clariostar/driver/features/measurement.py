@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# The well mask holds 384 bits; a 1536-well plate has no captured encoding.
+# The well mask holds 384 bits; a 1536-well plate has no verified encoding.
 _WELL_MASK_SIZE = 48
 
 Corner = Literal["top_left", "top_right", "bottom_left", "bottom_right"]
@@ -36,12 +36,12 @@ _READING_DIRECTIONS: Dict[str, int] = {"column_major": 0x08, "row_major": 0x00}
 WellScan = Literal["point", "orbital", "spiral", "matrix"]
 # Pre-separator byte 0 bits: how each well is read (orbital `32`, spiral `06`, matrix `10`).
 _WELL_SCANS: Dict[str, int] = {"point": 0x00, "orbital": 0x30, "spiral": 0x04, "matrix": 0x10}
-# The matrix sizes, points per side, the vendor software offers.
+# The matrix sizes, points per side.
 _MATRIX_SIZES = (2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30)
 
 ShakePattern = Literal["orbital", "linear", "double_orbital"]
 # Shaking before reading, pre-separator: [12] = 02 before the (endpoint) read, [17] pattern,
-# [18] speed code = rpm / 100 - 1, [20] seconds. Meander is not captured in a RUN.
+# [18] speed code = rpm / 100 - 1, [20] seconds. Meander is not verified in a RUN.
 _SHAKE_PATTERNS: Dict[str, int] = {"orbital": 0x00, "linear": 0x01, "double_orbital": 0x02}
 
 
@@ -61,17 +61,17 @@ class MeasurementConfiguration:
   """Device facts every measurement mode shares."""
 
   settling_time_range: Tuple[float, float] = (0.0, 1.0)
-  """Seconds before each well is read (0, 0.1, 0.2, 0.5 and 1.0 captured)."""
+  """Seconds before each well is read (0, 0.1, 0.2, 0.5 and 1.0 verified)."""
   flashes_range: Tuple[int, int] = (1, 200)
-  """Flashes per well, every well scan (the vendor software manual: up to 200 per well)."""
+  """Flashes per well, every well scan (up to 200 per well)."""
   pause_range: Tuple[int, int] = (1, 3600)
-  """Pause before reading, seconds (the vendor software manual: up to 3600 s)."""
+  """Pause before reading, seconds (up to 3600 s)."""
   orbital_maximum_wells: int = 384
-  """Orbital averaging works on plates of up to 384 wells (the vendor software manual: 6 to 384)."""
+  """Orbital averaging works on plates of up to 384 wells (6 to 384)."""
   matrix_maximum_wells: int = 384
-  """A matrix scan works on plates of up to 384 wells (the vendor software: up to 384)."""
+  """A matrix scan works on plates of up to 384 wells (up to 384)."""
   shake_speed_range: Tuple[int, int] = (100, 700)
-  """Shaking before the read, rpm (the standalone shake's captured 100-700; 300, 500 in a RUN)."""
+  """Shaking before the read, rpm (100-700; 300 and 500 verified in a RUN)."""
   shake_duration_range: Tuple[int, int] = (1, 255)
   """Shaking before the read, seconds: one byte until a longer duration settles its order."""
 
@@ -143,8 +143,8 @@ class MeasurementSettings:
       diameter.
     flashes: whole flashes per well (per point of a matrix), within the configuration's
       `flashes_range`.
-    matrix_size: points per side of a matrix scan, one of 2 to 10, 15, 20, 25, 30 (the vendor
-      software's); None for any other well scan.
+    matrix_size: points per side of a matrix scan, one of 2 to 10, 15, 20, 25, 30; None
+      for any other well scan.
 
   Raises:
     ValueError: on construction, listing every field of the wrong kind (see `check` for the
@@ -155,10 +155,10 @@ class MeasurementSettings:
   corner: Corner = "top_left"
   reading_direction: ReadingDirection = "column_major"
   bidirectional: bool = True
-  settling_time: float = 0.1  # the vendor's default
+  settling_time: float = 0.1
   well_scan: WellScan = "point"
-  scan_diameter: int = 3  # the vendor's
-  flashes: int = 5  # as the vendor's default endpoint read
+  scan_diameter: int = 3
+  flashes: int = 5
   matrix_size: Optional[int] = None
 
   def __post_init__(self) -> None:
@@ -194,7 +194,7 @@ class MeasurementSettings:
   ) -> None:
     """Raise if these settings cannot read `wells` of `plate` on the reader.
 
-    The scan diameter's upper bound is inferred: 3 to 5 mm are captured, all on 6.58 mm wells.
+    The scan diameter's upper bound is inferred: 3 to 5 mm are verified, all on 6.58 mm wells.
 
     Raises:
       ValueError: listing every rule broken: a field outside the configuration's range, no wells,
@@ -468,14 +468,14 @@ class Measurement:
 
   # -- scan and settling bytes ---------------------------------------------------------------------
 
-  # Scan byte bit 2: flying mode. Bit 4, the vendor's equidistant kinetic cycles, stays 0.
+  # Scan byte bit 2: flying mode. Bit 4, equidistant kinetic cycles, stays 0.
   _FLYING_MODE = 0x04
 
   def _compute_scan_byte(self, settings: MeasurementSettings, *, flying_mode: bool = False) -> int:
     """The scan byte of a read; `flying_mode` sets bit 2.
 
     Bit 7 unidirectional, bits 6-5 the start corner, bit 3 column-major, bit 2 flying mode, bit 1
-    set. Captured: `0a` (default), `2a`, `4a`, `6a` (corners), `8a` (unidirectional), `02`
+    set. Verified: `0a` (default), `2a`, `4a`, `6a` (corners), `8a` (unidirectional), `02`
     (row-major), `0e` (flying mode).
     """
     return (
@@ -576,8 +576,7 @@ class Measurement:
   def _compute_run_end(self, flashes: int) -> bytes:
     """The RUN parameters of an endpoint read after the mode's own fields.
 
-    `_TRAILER_START`, the trailer, 1 cycle, the flashes (u16 BE), a 1 s cycle time, `00`, as the
-    vendor sends them.
+    `_TRAILER_START`, the trailer, 1 cycle, the flashes (u16 BE), a 1 s cycle time, `00`.
     """
     return (
       bytes([self._TRAILER_START])
@@ -619,7 +618,7 @@ class Measurement:
     are in.
 
     A spectrum's data comes as several data replies, its pages, each sized to fit a frame (3 to 5
-    in the captured spectra); each `05 02 00 00 00 00 00` returns the next.
+    in a spectrum); each `05 02 00 00 00 00 00` returns the next.
 
     Raises:
       FrameError: if a page arrives short or malformed.
@@ -671,7 +670,7 @@ class Measurement:
   ) -> Tuple[List[bytes], datetime]:
     """Send RUN and return the data replies, and when they were read.
 
-    As the vendor ends a read: status until the reader reports the data ready, then REQUEST DATA
+    A read ends with status until the reader reports the data ready, then REQUEST DATA
     for the whole data set (`05 02 00 00 00 00 00`), once or once per page, then status until idle.
     Data that comes a page at a time while the run continues is requested whenever the data ready
     bit is set, which each request clears, until all its pages are in.
@@ -695,8 +694,8 @@ class Measurement:
     read_at = datetime.now()
     start = time.monotonic()
     try:
-      # A poll sent right after the RUN's reply goes unanswered, as the reader answered; the
-      # vendor's first poll follows the reply after 46 ms or more.
+      # A poll sent right after the RUN's reply goes unanswered, as the reader answered: wait
+      # one poll interval first.
       await asyncio.sleep(self._driver.default_poll_interval)
       while True:
         status = await self._driver.send_command(self._driver.CommandFamily.STATUS, retries=5)

@@ -76,7 +76,7 @@ class AbsorbanceConfiguration(MeasurementConfiguration):
   wavelength_range: Tuple[int, int] = (220, 1000)
   """Wavelengths a read accepts, in nm (the manufacturer's spectrometer range)."""
   maximum_wavelengths: int = 8
-  """Wavelengths per read (the vendor software manual: up to 8; 8 read on hardware)."""
+  """Wavelengths per read (up to 8; 8 read on hardware)."""
 
 
 # ----------------------------------------
@@ -155,10 +155,10 @@ class Absorbance(Measurement):
   # ----------------------------------------
 
   # Water pathlength correction after the wavelength fields, in nm: two wavelengths, a third
-  # unused, and its bandwidth, as the vendor always sends them.
+  # unused, and its bandwidth, always sent.
   _PATHLENGTH_CORRECTION = (900.0, 993.0, 0.0, 10.0)
-  # Pause, u16 BE each: when (0 off, 1 before plate reading), then seconds. Off, the vendor sends
-  # 5 s; on, 5 s captured.
+  # Pause, u16 BE each: when (0 off, 1 before plate reading), then seconds; off, 5 s are sent,
+  # and on, 5 s is verified.
   _NO_PAUSE = bytes.fromhex("00000005")
   _PAUSE_BEFORE_READING = 0x0001
 
@@ -177,7 +177,7 @@ class Absorbance(Measurement):
   # Decoding
   # ----------------------------------------
 
-  # Data reply layout byte [6]: the only one captured, with the temperature controller on or off.
+  # Data reply layout byte [6]: the only one verified, with the temperature controller on or off.
   _DATA_LAYOUT = 0xA9
 
   @staticmethod
@@ -195,8 +195,8 @@ class Absorbance(Measurement):
     """The samples per wavelength and the references, in the reply's well order (row by row), the
     wavelengths' calibration pairs and the reference's.
 
-    The reply holds n + 3 groups of one u32 per well (the n samples, chromatics 2 and 3, the
-    reference), then n + 3 calibration pairs, in the same order.
+    The reply holds n + 3 groups of one u32 per well (the n samples, two groups not decoded,
+    the reference), then n + 3 calibration pairs, in the same order.
 
     Raises:
       ValueError: if the reply is incomplete or not the layout of this read.
@@ -271,8 +271,8 @@ class Absorbance(Measurement):
 
     Raises:
       ValueError: listing every violation: not 1 to `maximum_wavelengths` wavelengths, a wavelength
-        not a whole nm within `wavelength_range`, an unknown report, a matrix well scan (captured
-        but not decoded), a timeout not positive.
+        not a whole nm within `wavelength_range`, an unknown report, a matrix well scan (not
+        decoded), a timeout not positive.
     """
     errors = []
     maximum = self.configuration.maximum_wavelengths
@@ -350,7 +350,7 @@ class Absorbance(Measurement):
       wells: the wells to measure, on the plate; None measures every well.
       wavelengths: 1 to `configuration.maximum_wavelengths` wavelengths, each a whole nm within
         `configuration.wavelength_range`; all read in one pass.
-      measurement_settings: how to read; None reads with the defaults (the vendor's).
+      measurement_settings: how to read; None reads with the defaults.
       shake_settings: shake the plate before the read; None does not shake.
       report: what the results hold: optical density, or the raw sample counts with the reference
         counts and calibration pairs that compute it (`CLARIOstarAbsorbanceResult`).
