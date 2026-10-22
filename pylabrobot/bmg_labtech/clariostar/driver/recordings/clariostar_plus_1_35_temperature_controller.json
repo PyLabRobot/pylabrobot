@@ -6,6 +6,7 @@
     "firmware_version": "1.35",
     "extended_red_photomultiplier_tube": true,
     "dual_photomultiplier_tubes": true,
+    "photomultiplier_tube_crossover": false,
     "excitation_slide_positions": 4,
     "spectrometer": true,
     "monochromator_slides": {

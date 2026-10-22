@@ -206,7 +206,7 @@ class StatusTests(unittest.TestCase):
   def test_no_plate_is_reported_with_the_drawer_out(self):
     # As the reader answered with the plate on the plate holder and the drawer out.
     status = parse_status(
-      bytes.fromhex(load_session_replies()["step_9_status_drawer_out_plate_on_holder"])
+      bytes.fromhex(load_session_replies()["status_drawer_out_plate_on_holder"])
     )
     self.assertEqual((status.drawer_open, status.plate_detected), (True, False))
 
@@ -261,7 +261,7 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
     # 1.65 s, and the page stayed 421 bytes short.
     reads = [
       (at, bytes.fromhex(data))
-      for at, data in load_session_replies()["step_17_first_attempt_reads"]
+      for at, data in load_session_replies()["absorbance_spectrum_short_page_reads"]
     ]
     clock = [0.0]
     driver = make_driver(SessionReadsFTDI(reads, clock))

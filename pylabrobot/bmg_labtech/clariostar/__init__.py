@@ -10,6 +10,7 @@ from .driver import (
   CLARIOstarAbsorbanceSpectrumResult,
   CLARIOstarDriver,
   CLARIOstarFluorescenceResult,
+  CLARIOstarFluorescenceSpectrumResult,
   CLARIOstarSimulationDriver,
   CLARIOstarStatus,
   CommandRefusedError,

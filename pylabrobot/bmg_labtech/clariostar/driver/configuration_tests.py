@@ -37,6 +37,7 @@ class DecodeTests(unittest.TestCase):
     )
     self.assertTrue(c.extended_red_photomultiplier_tube)
     self.assertTrue(c.dual_photomultiplier_tubes)
+    self.assertFalse(c.photomultiplier_tube_crossover)
     self.assertEqual(c.excitation_slide_positions, 4)
     self.assertTrue(c.spectrometer)
     self.assertTrue(c.linear_variable_filters)
