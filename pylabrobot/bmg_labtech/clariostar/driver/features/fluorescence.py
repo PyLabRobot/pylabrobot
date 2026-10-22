@@ -1469,6 +1469,61 @@ class Fluorescence(Measurement):
 
   # -- measuring -----------------------------------------------------------------------------------
 
+  def _get_run_parameters(
+    self,
+    fluorescence_channels: Sequence[FluorescenceChannel],
+    gains: Sequence[int],
+    focal_height: Optional[float],
+    measurement: MeasurementSettings,
+    shake: Optional[ShakeSettings],
+    wells: Optional[List[Well]],
+    *,
+    timeout: Optional[float],
+    optic_position: OpticPosition,
+    flying_mode: bool,
+    enhanced_dynamic_range: bool,
+  ) -> Tuple[Plate, List[Well], bytes]:
+    """The plate, the wells and the RUN parameters of a read, every argument checked.
+
+    Raises:
+      RuntimeError: if no plate is in the plate holder.
+      ValueError: if an argument is out of range (`_check_arguments`), a matrix scan has several
+        wells, or the settings cannot read the wells of the plate (`_get_plate_and_wells`).
+    """
+    self._check_arguments(
+      fluorescence_channels,
+      gains,
+      focal_height,
+      measurement,
+      timeout=timeout,
+      optic_position=optic_position,
+      flying_mode=flying_mode,
+      enhanced_dynamic_range=enhanced_dynamic_range,
+    )
+    plate, measured = self._get_plate_and_wells(measurement, shake, wells)
+    if focal_height is None:
+      focal_height = self._get_default_focal_height(measured)
+    if measurement.well_scan == "matrix" and len(measured) > 1:
+      # No fluorescence matrix of several wells is verified: its reply layout is unknown.
+      raise ValueError(f"a fluorescence matrix scan reads one well, got {len(measured)}")
+    parameters = self._compute_run_parameters(
+      plate,
+      measured,
+      measurement,
+      shake,
+      focal_height=focal_height,
+      kind=self._DISCRETE,
+      count=len(fluorescence_channels),
+      encoded_fluorescence_channels=[
+        self._encode_fluorescence_channel(fluorescence_channel, gain)
+        for fluorescence_channel, gain in zip(fluorescence_channels, gains)
+      ],
+      optics=self._OPTIC_POSITIONS[optic_position],
+      flying_mode=flying_mode,
+      enhanced_dynamic_range=enhanced_dynamic_range,
+    )
+    return plate, measured, parameters
+
   def _get_fluorescence_channels_and_gains(
     self,
     fluorescence_channels: Union[FluorescenceChannel, Sequence[FluorescenceChannel]],
@@ -1579,35 +1634,15 @@ class Fluorescence(Measurement):
     if optic_position is None:
       optic_position = self._default_optic_position
     filled, gains = self._get_fluorescence_channels_and_gains(fluorescence_channels, gain)
-    self._check_arguments(
+    plate, wells, parameters = self._get_run_parameters(
       filled,
       gains,
       focal_height,
       measurement,
+      shake_settings,
+      wells,
       timeout=timeout,
       optic_position=optic_position,
-      flying_mode=flying_mode,
-      enhanced_dynamic_range=enhanced_dynamic_range,
-    )
-    plate, wells = self._get_plate_and_wells(measurement, shake_settings, wells)
-    if focal_height is None:
-      focal_height = self._get_default_focal_height(wells)
-    if measurement.well_scan == "matrix" and len(wells) > 1:
-      # No fluorescence matrix of several wells is verified: its reply layout is unknown.
-      raise ValueError(f"a fluorescence matrix scan reads one well, got {len(wells)}")
-    parameters = self._compute_run_parameters(
-      plate,
-      wells,
-      measurement,
-      shake_settings,
-      focal_height=focal_height,
-      kind=self._DISCRETE,
-      count=len(filled),
-      encoded_fluorescence_channels=[
-        self._encode_fluorescence_channel(fluorescence_channel, gain)
-        for fluorescence_channel, gain in zip(filled, gains)
-      ],
-      optics=self._OPTIC_POSITIONS[optic_position],
       flying_mode=flying_mode,
       enhanced_dynamic_range=enhanced_dynamic_range,
     )

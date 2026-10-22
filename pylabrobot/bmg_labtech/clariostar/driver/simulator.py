@@ -4,11 +4,31 @@ import logging
 import os
 import random
 from datetime import datetime
-from typing import Callable, Dict, List, Literal, Optional, Sequence, TypeVar, Union
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+  TypeVar,
+  Union,
+  overload,
+)
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
+from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
+from pylabrobot.lib.fluorescence.results import FluorescenceResult
+from pylabrobot.lib.luminescence.results import LuminescenceResult
+from pylabrobot.lib.optics.holders import (
+  DichroicFilterSlide,
+  EmissionFilterSlide,
+  ExcitationFilterSlide,
+)
 from pylabrobot.resources import Plate, Well
 
 from .configuration import configuration_from_json, read_configuration
@@ -20,6 +40,14 @@ from .features.absorbance import (
   _get_spectrum_wavelengths,
 )
 from .features.drawer import Drawer
+from .features.fluorescence import (
+  CLARIOstarFluorescenceResult,
+  CLARIOstarFluorescenceSpectrumResult,
+  CLARIOstarZProfileResult,
+  Fluorescence,
+  OpticPosition,
+)
+from .features.luminescence import CLARIOstarLuminescenceResult, Luminescence
 from .features.measurement import (
   MeasurementSettings,
   ShakeSettings,
@@ -39,6 +67,11 @@ SIMULATED_LINK = "[simulation]"
 # The manufacturer's absorbance range and resolution, in OD.
 _OPTICAL_DENSITY_RANGE = (0.0, 4.0)
 _OPTICAL_DENSITY_RESOLUTION = 3  # decimals: 0.001 OD
+# The detector's ceilings the reader states in its replies: fluorescence, fluorescence with
+# enhanced dynamic range, luminescence.
+_FLUORESCENCE_CEILING = 260_000
+_ENHANCED_DYNAMIC_RANGE_CEILING = 700_000_000
+_LUMINESCENCE_CEILING = 210_000_000
 
 
 def _require_read(value: Optional[T], name: str) -> T:
@@ -46,6 +79,21 @@ def _require_read(value: Optional[T], name: str) -> T:
   if value is None:
     raise RuntimeError(f"{name} is not read yet; call `setup` first")
   return value
+
+
+def _get_measured_values(
+  plate: Plate, wells: List[Well], values: Dict[str, float], what: str
+) -> Dict[str, float]:
+  """The values of the measured wells in `values`, keyed by well identifier, row by row.
+
+  Raises:
+    ValueError: if `values` has no value for a measured well.
+  """
+  identifiers = _get_measured_identifiers(plate, wells)
+  missing = [identifier for identifier in identifiers if identifier not in values]
+  if missing:
+    raise ValueError(f"{what} has no value for {missing}")
+  return {identifier: float(values[identifier]) for identifier in identifiers}
 
 
 class CLARIOstarSimulationDrawer(Drawer):
@@ -118,21 +166,6 @@ class CLARIOstarSimulationTemperatureController(TemperatureController):
 class CLARIOstarSimulationAbsorbance(Absorbance):
   """Absorbance on a simulated reader: the read is checked and encoded, and every well reads a
   random optical density within the reader's range, or its value in `simulated_data`."""
-
-  @staticmethod
-  def _get_measured_values(
-    plate: Plate, wells: List[Well], values: Dict[str, float], what: str
-  ) -> Dict[str, float]:
-    """The values of the measured wells in `values`, keyed by well identifier, row by row.
-
-    Raises:
-      ValueError: if `values` has no value for a measured well.
-    """
-    identifiers = _get_measured_identifiers(plate, wells)
-    missing = [identifier for identifier in identifiers if identifier not in values]
-    if missing:
-      raise ValueError(f"{what} has no value for {missing}")
-    return {identifier: float(values[identifier]) for identifier in identifiers}
 
   async def measure(
     self,
@@ -209,13 +242,11 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     logger.debug("%s read: simulation: simulated_data", SIMULATED_LINK)
     for result in simulated_data:
       what = f"simulated_data at {result.wavelength} nm"
-      data = self._get_measured_values(plate, wells, result.data, what)
+      data = _get_measured_values(plate, wells, result.data, what)
       if isinstance(result, CLARIOstarAbsorbanceResult):
         if result.references is None:
           raise ValueError(f"{what} is raw but holds no references")
-        references = self._get_measured_values(
-          plate, wells, result.references, what + " references"
-        )
+        references = _get_measured_values(plate, wells, result.references, what + " references")
         results.append(
           CLARIOstarAbsorbanceResult(
             data=data,
@@ -332,7 +363,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     if isinstance(simulated_data, CLARIOstarAbsorbanceSpectrumResult):
       if simulated_data.references is None or simulated_data.calibration is None:
         raise ValueError("simulated_data is raw but holds no references or calibration")
-      references = self._get_measured_values(
+      references = _get_measured_values(
         plate, wells, simulated_data.references, "simulated_data references"
       )
       return CLARIOstarAbsorbanceSpectrumResult(
@@ -348,6 +379,273 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
       )
     return AbsorbanceSpectrumResult(
       data=data, temperature=temperature, start_timestamp=timestamp, end_timestamp=timestamp
+    )
+
+
+class CLARIOstarSimulationFluorescence(Fluorescence):
+  """Fluorescence on a simulated reader: each read is checked and encoded, nothing is sent.
+
+  Every well reads random counts within the detector's range, or its counts in `simulated_data`.
+  Spectra, filter detection and z-profiles are not simulated yet.
+  """
+
+  def _get_simulated_counts(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    fluorescence_channels: Sequence[FluorescenceChannel],
+    simulated_data: Sequence[FluorescenceResult],
+    points: int,
+  ) -> List[List[List[int]]]:
+    """Each fluorescence channel's counts of the measured wells in `simulated_data`, by point.
+
+    Raises:
+      ValueError: if `simulated_data` is not one result per fluorescence channel with its
+        optics, with every measured well, and for a matrix scan its points.
+    """
+    if len(simulated_data) != len(fluorescence_channels):
+      raise ValueError(
+        f"simulated_data holds {len(simulated_data)} results for "
+        f"{len(fluorescence_channels)} fluorescence channels"
+      )
+    identifiers = _get_measured_identifiers(plate, wells)
+    counts = []
+    for index, (fluorescence_channel, result) in enumerate(
+      zip(fluorescence_channels, simulated_data)
+    ):
+      what = f"simulated_data[{index}]"
+      optics = self._get_result_optics(fluorescence_channel)
+      given = {name: getattr(result, name) for name in optics}
+      if given != optics:
+        raise ValueError(f"{what} holds {given}, measuring {optics}")
+      if points > 1:
+        matrix = result.matrix_points if isinstance(result, CLARIOstarFluorescenceResult) else None
+        if matrix is None or any(len(matrix.get(well, [])) != points for well in identifiers):
+          raise ValueError(f"{what} has no {points} matrix points for every measured well")
+        counts.append([[round(value) for value in matrix[well]] for well in identifiers])
+      else:
+        values = _get_measured_values(plate, wells, result.data, what)
+        counts.append([[round(values[well])] for well in identifiers])
+    return counts
+
+  @overload
+  async def measure(
+    self,
+    fluorescence_channels: FluorescenceChannel,
+    *,
+    gain: int,
+    wells: Optional[List[Well]] = ...,
+    focal_height: Optional[float] = ...,
+    optic_position: Optional[OpticPosition] = ...,
+    flying_mode: bool = ...,
+    enhanced_dynamic_range: bool = ...,
+    measurement_settings: Optional[MeasurementSettings] = ...,
+    shake_settings: Optional[ShakeSettings] = ...,
+    timeout: Optional[float] = ...,
+    simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
+  ) -> CLARIOstarFluorescenceResult: ...
+
+  @overload
+  async def measure(
+    self,
+    fluorescence_channels: Sequence[FluorescenceChannel],
+    *,
+    gain: Union[int, Sequence[int]],
+    wells: Optional[List[Well]] = ...,
+    focal_height: Optional[float] = ...,
+    optic_position: Optional[OpticPosition] = ...,
+    flying_mode: bool = ...,
+    enhanced_dynamic_range: bool = ...,
+    measurement_settings: Optional[MeasurementSettings] = ...,
+    shake_settings: Optional[ShakeSettings] = ...,
+    timeout: Optional[float] = ...,
+    simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
+  ) -> List[CLARIOstarFluorescenceResult]: ...
+
+  async def measure(
+    self,
+    fluorescence_channels: Union[FluorescenceChannel, Sequence[FluorescenceChannel]],
+    *,
+    gain: Union[int, Sequence[int]],
+    wells: Optional[List[Well]] = None,
+    focal_height: Optional[float] = None,
+    optic_position: Optional[OpticPosition] = None,
+    flying_mode: bool = False,
+    enhanced_dynamic_range: bool = False,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
+    timeout: Optional[float] = None,
+    simulated_data: Optional[Sequence[FluorescenceResult]] = None,
+  ) -> Union[CLARIOstarFluorescenceResult, List[CLARIOstarFluorescenceResult]]:
+    """Check and encode the read; every measured well reads random counts.
+
+    The temperature is the temperature controller's target, as the simulated status reports it.
+
+    Args:
+      fluorescence_channels, gain, wells, focal_height, optic_position, flying_mode,
+        enhanced_dynamic_range, measurement_settings, shake_settings, timeout: as
+        `Fluorescence.measure`.
+      simulated_data: results an earlier `measure` returned, one per fluorescence channel with
+        its optics, on a reader or in simulation; each measured well reads its counts there (for
+        a matrix scan, its points) instead of random ones.
+
+    Raises:
+      RuntimeError: if no plate is in the plate holder.
+      ValueError: as `Fluorescence.measure` for the arguments, or if `simulated_data` does not
+        match the read (`_get_simulated_counts`).
+    """
+    measurement = MeasurementSettings() if measurement_settings is None else measurement_settings
+    if optic_position is None:
+      optic_position = self._default_optic_position
+    filled, gains = self._get_fluorescence_channels_and_gains(fluorescence_channels, gain)
+    plate, wells, _ = self._get_run_parameters(
+      filled,
+      gains,
+      focal_height,
+      measurement,
+      shake_settings,
+      wells,
+      timeout=timeout,
+      optic_position=optic_position,
+      flying_mode=flying_mode,
+      enhanced_dynamic_range=enhanced_dynamic_range,
+    )
+    matrix = measurement.well_scan == "matrix"
+    points = measurement.matrix_size**2 if matrix and measurement.matrix_size else 1
+    identifiers = _get_measured_identifiers(plate, wells)
+    logger.info(
+      "fluorescence: %d fluorescence channels, %d of %d wells of %s, %s scan, %s optic",
+      len(filled),
+      len(identifiers),
+      plate.num_items,
+      plate.name,
+      measurement.well_scan,
+      optic_position,
+    )
+    temperature = (await self._driver.request_status()).temperature_bottom
+    timestamp = datetime.now()
+    if simulated_data is None:
+      logger.debug("%s read: simulation: random counts", SIMULATED_LINK)
+      ceiling = _ENHANCED_DYNAMIC_RANGE_CEILING if enhanced_dynamic_range else _FLUORESCENCE_CEILING
+      counts = [
+        [[random.randint(0, ceiling) for _ in range(points)] for _ in identifiers] for _ in filled
+      ]
+    else:
+      logger.debug("%s read: simulation: simulated_data", SIMULATED_LINK)
+      counts = self._get_simulated_counts(plate, wells, filled, simulated_data, points)
+    results = self._get_results(
+      filled,
+      gains,
+      counts,
+      identifiers,
+      matrix=matrix,
+      temperature=temperature,
+      start_timestamp=timestamp,
+      end_timestamp=timestamp,
+    )
+    return results[0] if isinstance(fluorescence_channels, FluorescenceChannel) else results
+
+  async def measure_spectrum(
+    self, *args: Any, **kwargs: Any
+  ) -> CLARIOstarFluorescenceSpectrumResult:
+    """Raise: a fluorescence spectrum is not simulated yet."""
+    raise NotImplementedError("a fluorescence spectrum is not simulated yet")
+
+  async def detect_all_filters(
+    self, *args: Any, **kwargs: Any
+  ) -> Tuple[ExcitationFilterSlide, DichroicFilterSlide, EmissionFilterSlide]:
+    """Raise: filter detection is not simulated yet."""
+    raise NotImplementedError("filter detection is not simulated yet")
+
+  async def measure_z_profile(self, *args: Any, **kwargs: Any) -> CLARIOstarZProfileResult:
+    """Raise: a z-profile is not simulated yet."""
+    raise NotImplementedError("a z-profile is not simulated yet")
+
+
+class CLARIOstarSimulationLuminescence(Luminescence):
+  """Luminescence on a simulated reader: each read is checked and encoded, nothing is sent; every
+  well reads random counts within the detector's range, or its counts in `simulated_data`."""
+
+  async def measure(
+    self,
+    *,
+    wells: Optional[List[Well]] = None,
+    emission_wavelength: int = 580,
+    emission_bandwidth: int = 80,
+    gain: int = 3500,
+    focal_height: Optional[float] = None,
+    normalization_time: float = 1.0,
+    measurement_interval: float = 0.8,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
+    timeout: Optional[float] = None,
+    simulated_data: Optional[LuminescenceResult] = None,
+  ) -> CLARIOstarLuminescenceResult:
+    """Check and encode the read; every measured well reads random counts.
+
+    Args:
+      wells, emission_wavelength, emission_bandwidth, gain, focal_height, normalization_time,
+        measurement_interval, measurement_settings, shake_settings, timeout: as
+        `Luminescence.measure`.
+      simulated_data: a result an earlier `measure` returned with the same emission band, on a
+        reader or in simulation; each measured well reads its counts there instead.
+
+    Raises:
+      RuntimeError: if no plate is in the plate holder.
+      ValueError: as `Luminescence.measure` for the arguments, or if `simulated_data` is of
+        another emission band or has no value for a measured well.
+    """
+    measurement = (
+      MeasurementSettings(settling_time=0.0)
+      if measurement_settings is None
+      else measurement_settings
+    )
+    plate, wells, _ = self._get_run_parameters(
+      emission_wavelength,
+      emission_bandwidth,
+      gain,
+      focal_height,
+      normalization_time,
+      measurement_interval,
+      measurement,
+      shake_settings,
+      wells,
+      timeout=timeout,
+    )
+    identifiers = _get_measured_identifiers(plate, wells)
+    logger.info(
+      "luminescence: %d/%d nm, gain %d, %d of %d wells of %s",
+      emission_wavelength,
+      emission_bandwidth,
+      gain,
+      len(identifiers),
+      plate.num_items,
+      plate.name,
+    )
+    temperature = (await self._driver.request_status()).temperature_bottom
+    timestamp = datetime.now()
+    if simulated_data is None:
+      logger.debug("%s read: simulation: random counts", SIMULATED_LINK)
+      data = {
+        identifier: float(random.randint(0, _LUMINESCENCE_CEILING)) for identifier in identifiers
+      }
+    else:
+      band = (simulated_data.emission_wavelength, simulated_data.emission_bandwidth)
+      if band != (emission_wavelength, emission_bandwidth):
+        raise ValueError(
+          f"simulated_data is of {band[0]}/{band[1]} nm, measuring "
+          f"{emission_wavelength}/{emission_bandwidth} nm"
+        )
+      logger.debug("%s read: simulation: simulated_data", SIMULATED_LINK)
+      data = _get_measured_values(plate, wells, simulated_data.data, "simulated_data")
+    return CLARIOstarLuminescenceResult(
+      data=data,
+      emission_wavelength=emission_wavelength,
+      emission_bandwidth=emission_bandwidth,
+      gain=gain,
+      temperature=temperature,
+      start_timestamp=timestamp,
+      end_timestamp=timestamp,
     )
 
 
@@ -482,6 +780,10 @@ class CLARIOstarSimulationDriver(CLARIOstarDriver):
       self.temperature_controller = CLARIOstarSimulationTemperatureController(self)
     if self.configuration.absorbance_available and self.absorbance is None:
       self.absorbance = CLARIOstarSimulationAbsorbance(self)
+    if self.configuration.fluorescence_channels and self.fluorescence is None:
+      self.fluorescence = CLARIOstarSimulationFluorescence(self)
+    if self.configuration.luminescence_channels and self.luminescence is None:
+      self.luminescence = CLARIOstarSimulationLuminescence(self)
 
   def _describe_link(self) -> str:
     """The simulated link, and the configuration it answers from."""

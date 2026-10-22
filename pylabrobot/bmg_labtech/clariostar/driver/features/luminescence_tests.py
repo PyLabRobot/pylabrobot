@@ -9,6 +9,7 @@ tested with absorbance and fluorescence; only luminescence's own fields and repl
 import unittest
 from typing import Any, Dict, List
 
+from pylabrobot.bmg_labtech.clariostar.device import CLARIOstarPlus
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   RUN_REPLY,
@@ -30,6 +31,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   FakeFTDI,
   make_driver,
 )
+from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationLuminescence
 from pylabrobot.resources import Plate, cor_96_wellplate_360uL_Fb
 
 # The ground truth: every well, 580-80 nm, gain 3500, focal height 8.5 mm, settling 0.0 s,
@@ -231,3 +233,32 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
       driver.configuration.luminescence_channels = channels
       driver._discover_features()
       self.assertEqual(isinstance(driver.luminescence, Luminescence), built)
+
+
+class SimulatedLuminescenceTests(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    reader = CLARIOstarPlus(simulation=True)
+    await reader.setup()
+    self.plate = cor_96_wellplate_360uL_Fb("plate")
+    await reader.drawer.open()
+    reader.plate_holder.assign_child_resource(self.plate)
+    await reader.drawer.close()
+    luminescence = reader.luminescence
+    assert isinstance(luminescence, CLARIOstarSimulationLuminescence)
+    self.luminescence = luminescence
+
+  async def test_a_read_is_checked_and_reads_within_the_detectors_range(self):
+    result = await self.luminescence.measure(wells=self.plate.get_items("A1:H1"), gain=2000)
+    self.assertEqual(list(result.data), [f"{row}1" for row in "ABCDEFGH"])
+    self.assertTrue(all(0 <= value <= 210_000_000 for value in result.data.values()))
+    self.assertEqual((result.emission_wavelength, result.gain), (580, 2000))
+    with self.assertRaises(ValueError):  # `_check_arguments`
+      await self.luminescence.measure(measurement_interval=0.805)
+
+  async def test_earlier_results_are_returned_again(self):
+    earlier = await self.luminescence.measure()
+    column_1 = self.plate.get_items("A1:H1")
+    replayed = await self.luminescence.measure(wells=column_1, simulated_data=earlier)
+    self.assertEqual(replayed.data, {f"{row}1": earlier.data[f"{row}1"] for row in "ABCDEFGH"})
+    with self.assertRaises(ValueError):  # another emission band
+      await self.luminescence.measure(emission_wavelength=560, simulated_data=earlier)

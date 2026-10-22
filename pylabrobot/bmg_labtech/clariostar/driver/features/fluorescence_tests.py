@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from unittest.mock import patch
 
+from pylabrobot.bmg_labtech.clariostar.device import CLARIOstarPlus
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
 from pylabrobot.bmg_labtech.clariostar.driver.features import fluorescence
 from pylabrobot.bmg_labtech.clariostar.driver.features import measurement as measurement_module
@@ -43,6 +44,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   load_session_replies,
   make_driver,
 )
+from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationFluorescence
 from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
 from pylabrobot.lib.fluorescence.results import FluorescenceSpectrumResult
 from pylabrobot.lib.optics.filters import DichroicFilter, OpticalFilter
@@ -1640,6 +1642,87 @@ class ZProfileTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await feature.measure_z_profile(BASELINE, well=other)  # type: ignore[arg-type]
     self.assertEqual(io.written, [])
+
+
+async def simulated_reader():
+  """A set-up simulated CLARIOstar Plus with a Corning 96 plate in its drawer; the fluorescence
+  and the plate."""
+  reader = CLARIOstarPlus(simulation=True)
+  await reader.setup()
+  plate = cor_96_wellplate_360uL_Fb("plate")
+  await reader.drawer.open()
+  reader.plate_holder.assign_child_resource(plate)
+  await reader.drawer.close()
+  feature = reader.fluorescence
+  assert isinstance(feature, CLARIOstarSimulationFluorescence)
+  return feature, plate
+
+
+class SimulatedFluorescenceTests(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    self.fluorescence, self.plate = await simulated_reader()
+    self.column_1 = self.plate.get_items("A1:H1")
+    self.identifiers = [f"{row}1" for row in "ABCDEFGH"]
+
+  async def test_a_read_is_checked_and_reads_within_the_detectors_range(self):
+    mcherry = replace(BASELINE, excitation_wavelength=570, emission_wavelength=620)
+    fitc_result, mcherry_result = await self.fluorescence.measure(
+      [BASELINE, mcherry], gain=[1000, 1500], wells=self.column_1
+    )
+    self.assertEqual((fitc_result.gain, mcherry_result.gain), (1000, 1500))
+    self.assertEqual(mcherry_result.emission_wavelength, 620)
+    for result in (fitc_result, mcherry_result):
+      self.assertEqual(list(result.data), self.identifiers)
+      self.assertTrue(all(0 <= value <= 260_000 for value in result.data.values()))
+    bright = await self.fluorescence.measure(BASELINE, gain=1000, enhanced_dynamic_range=True)
+    self.assertTrue(all(0 <= value <= 700_000_000 for value in bright.data.values()))
+    for refused in (
+      dict(flying_mode=True, enhanced_dynamic_range=True),  # `_check_arguments`
+      dict(focal_height=25.1),
+      dict(
+        wells=self.column_1,
+        measurement_settings=MeasurementSettings(well_scan="matrix", matrix_size=3),
+      ),
+    ):
+      with self.subTest(refused=refused), self.assertRaises(ValueError):
+        await self.fluorescence.measure(BASELINE, gain=1000, **refused)
+
+  async def test_a_matrix_reads_every_point_and_their_mean(self):
+    result = await self.fluorescence.measure(
+      BASELINE,
+      gain=1000,
+      wells=[self.plate.get_well("A1")],
+      measurement_settings=MeasurementSettings(well_scan="matrix", matrix_size=3),
+    )
+    assert result.matrix_points is not None
+    points = result.matrix_points["A1"]
+    self.assertEqual(len(points), 9)
+    self.assertEqual(result.data["A1"], sum(points) / 9)
+
+  async def test_earlier_results_are_returned_again(self):
+    earlier = await self.fluorescence.measure(BASELINE, gain=1000)
+    replayed = await self.fluorescence.measure(
+      BASELINE, gain=1000, wells=self.column_1, simulated_data=[earlier]
+    )
+    self.assertEqual(replayed.data, {well: earlier.data[well] for well in self.identifiers})
+    other = replace(BASELINE, emission_wavelength=600)
+    with self.assertRaises(ValueError):  # another fluorescence channel's result
+      await self.fluorescence.measure(other, gain=1000, simulated_data=[earlier])
+
+  async def test_spectra_filter_detection_and_z_profiles_are_not_simulated_yet(self):
+    for call in (
+      self.fluorescence.measure_spectrum(
+        scan="emission",
+        start_wavelength=510,
+        end_wavelength=600,
+        excitation_wavelength=485,
+        gain=1000,
+      ),
+      self.fluorescence.detect_all_filters(),
+      self.fluorescence.measure_z_profile(BASELINE, well=self.plate.get_well("A1")),
+    ):
+      with self.assertRaises(NotImplementedError):
+        await call
 
 
 if __name__ == "__main__":
