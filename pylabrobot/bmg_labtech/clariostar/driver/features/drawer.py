@@ -3,7 +3,7 @@
 import logging
 from typing import TYPE_CHECKING, Optional
 
-from pylabrobot.resources import Coordinate, PlateHolder
+from pylabrobot.resources import Coordinate, Plate, PlateHolder
 
 if TYPE_CHECKING:
   from ..master import CLARIOstarDriver
@@ -25,6 +25,9 @@ class Drawer:
   default_move_timeout: float = 20.0
   # Seconds between status polls while the drawer moves; as the driver's `default_poll_interval`.
   default_poll_interval: float = 0.25
+  # The tallest plate, lid included, the drawer closes with, in mm: a cautious limit until the
+  # reader's clearance is measured.
+  _maximum_plate_size_z: float = 20.0
 
   def __init__(self, driver: "CLARIOstarDriver"):
     """
@@ -102,7 +105,33 @@ class Drawer:
     await self._move(open_drawer=True)
     logger.info("drawer open")
 
+  def _check_plate_size_z(self) -> None:
+    """Raise if the plate on the plate holder, with its lid, is taller than the drawer takes.
+
+    Raises:
+      ValueError: if the plate is above `_maximum_plate_size_z`.
+    """
+    plate = self.plate_holder.resource if self.plate_holder is not None else None
+    if plate is None:
+      return
+    height = plate.get_size_z()
+    lid = plate.lid if isinstance(plate, Plate) else None
+    if lid is not None:
+      height = max(height, plate.get_lid_location(lid).z + lid.get_size_z())
+    if height > self._maximum_plate_size_z:
+      with_lid = " with its lid" if lid is not None else ""
+      raise ValueError(
+        f"cannot close the drawer: {plate.name} is {height:g} mm high{with_lid}; the drawer takes"
+        f" at most {self._maximum_plate_size_z:g} mm"
+      )
+
   async def close(self) -> None:
-    """Move the drawer in (about 8 s)."""
+    """Move the drawer in (about 8 s).
+
+    Raises:
+      ValueError: if the plate on the plate holder, with its lid, is above
+        `_maximum_plate_size_z`; nothing is sent.
+    """
+    self._check_plate_size_z()
     await self._move(open_drawer=False)
     logger.info("drawer closed")

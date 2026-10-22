@@ -1219,6 +1219,8 @@ class CLARIOstarDriver:
     Raises:
       RuntimeError: if a plate is still in the reader, unless `accept_plate_left_in_device`; the
         drawer is opened and the connection stays open.
+      ValueError: if the plate on the plate holder is too tall to close the drawer with; the
+        drawer stays open and the connection stays open.
     """
     await self._shut_down(accept_plate_left_in_device)
     self._stop_queued_reads()  # before the device handle under them is closed
