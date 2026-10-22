@@ -17,6 +17,7 @@ from pylabrobot.io.usb import USB
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
 from .configuration import (
+  BARCODE_READER_POSITIONS,
   DECODED_FIRMWARE,
   FITTED_FIELDS,
   DeviceConfiguration,
@@ -54,9 +55,16 @@ from .framing import (
   usb_wrap_payload,
 )
 from .ftdi_queued_reads import LATENCY_TIMER, QueuedReads
-from .parameter_table import PARAMETER_TABLE, REPLY_OFFSET
+from .parameter_table import (
+  PARAMETER_TABLE,
+  REPLY_OFFSET,
+  SERIAL_NUMBER_ADDRESSES,
+  SIGNED_PARAMETERS,
+)
 
 logger = logging.getLogger(__name__)
+
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 @dataclass(frozen=True)
@@ -82,6 +90,11 @@ def _configure_usb_device(dev: Any) -> None:
   except NotImplementedError:  # libusb on Windows and macOS has no kernel-driver query
     pass
   dev.set_configuration()
+
+
+def _flag(channels: Optional[int]) -> Optional[bool]:
+  """Whether a reported channel count is non-zero; None if it was not read."""
+  return None if channels is None else bool(channels)
 
 
 class CLARIOstarDriver:
@@ -130,6 +143,7 @@ class CLARIOstarDriver:
     DATA = 0x02
     FOCUS_RESULT = 0x05
     PARAMETERS = 0x07
+    FIRMWARE_INFO = 0x09
     SPECTRAL_DATA = 0x11
     FILTER_RESULT = 0x1B
     # SET_PARAMETER; seen only writing the two-byte test-run counter
@@ -731,77 +745,143 @@ class CLARIOstarDriver:
       timeout=self.default_read_timeout, poll_interval=self.default_poll_interval
     )
 
-  async def request_parameters(self) -> Dict[str, int]:
-    """Request the reader's stored parameters, by the reader's own names (see ``PARAMETER_TABLE``).
-
-    The reader answers all of them in one reply. Its project and serial number are left out.
+  async def _request_parameters_reply(self) -> bytes:
+    """Request the reader's stored parameters (REQUEST `07`) and return the whole reply.
 
     Raises:
-      ValueError: if the reply is not a whole parameters reply, or comes from firmware outside
-        ``DECODED_FIRMWARE``.
+      ValueError: if the reply is not a whole stored parameters reply.
     """
     payload = await self.send_command(
       self.CommandFamily.REQUEST, self.Command.PARAMETERS, parameters=b"\x00\x00\x00\x00\x00"
     )
     if not payload or payload[0] != self.Command.PARAMETERS or len(payload) < 260:
-      raise ValueError(f"not a whole parameters reply: {len(payload)} bytes")
+      raise ValueError(f"not a whole stored parameters reply: {len(payload)} bytes")
+    return payload
+
+  @staticmethod
+  def _decode_parameters(payload: bytes) -> Dict[str, int]:
+    """A stored parameters reply's values, by key (see ``PARAMETER_TABLE``).
+
+    Raises:
+      ValueError: if the reply comes from firmware outside ``DECODED_FIRMWARE``.
+    """
     parameters = {
       name: int.from_bytes(
-        payload[address + REPLY_OFFSET : address + REPLY_OFFSET + size], "little"
+        payload[address + REPLY_OFFSET : address + REPLY_OFFSET + size],
+        "little",
+        signed=name in SIGNED_PARAMETERS,
       )
       for name, address, size in PARAMETER_TABLE
     }
-    if not DECODED_FIRMWARE[0] <= parameters["Firmware version"] <= DECODED_FIRMWARE[1]:
-      raise ValueError(f"parameters of firmware {parameters['Firmware version']} are not decoded")
+    if not DECODED_FIRMWARE[0] <= parameters["firmware_version"] <= DECODED_FIRMWARE[1]:
+      raise ValueError(
+        f"stored parameters of firmware {parameters['firmware_version']} are not decoded"
+      )
     return parameters
+
+  @staticmethod
+  def _decode_serial_number(payload: bytes) -> str:
+    """A stored parameters reply's serial number, "NNN-NNNN" (``SERIAL_NUMBER_ADDRESSES``)."""
+    first, second = (
+      int.from_bytes(payload[address + REPLY_OFFSET : address + REPLY_OFFSET + 2], "little")
+      for address in SERIAL_NUMBER_ADDRESSES
+    )
+    return f"{first:03d}-{second:04d}"
+
+  def _get_link_serial_number(self) -> Optional[str]:
+    """The serial number the reader was opened by: the FTDI chip's or the USB device's; None if
+    it was opened by address."""
+    fields = self.io.serialize()
+    if fields.get("usb_address") or fields.get("device_address"):
+      return None
+    return fields.get("device_id") or fields.get("serial_number")
+
+  async def request_parameters(self) -> Dict[str, int]:
+    """Request the reader's stored parameters, by key (see ``PARAMETER_TABLE``).
+
+    The reader answers all of them in one reply. Its serial number is left out: `discover` reads
+    it.
+
+    Raises:
+      ValueError: if the reply is not a whole stored parameters reply, or comes from firmware
+        outside ``DECODED_FIRMWARE``.
+    """
+    return self._decode_parameters(await self._request_parameters_reply())
 
   async def request_fluorescence_channels(self) -> int:
     """Request the number of fluorescence measurement channels."""
-    return (await self.request_parameters())["No. of fluorescence measurement channels"]
+    return (await self.request_parameters())["fluorescence_measurement_channel_count"]
 
   async def request_luminescence_channels(self) -> int:
     """Request the number of luminescence measurement channels."""
-    return (await self.request_parameters())["No. of luminescence measurement channels"]
+    return (await self.request_parameters())["luminescence_measurement_channel_count"]
 
   async def request_time_resolved_fluorescence_channels(self) -> int:
     """Request the number of time-resolved fluorescence measurement channels."""
     parameters = await self.request_parameters()
-    return parameters["No. of time-resolved fluorescence meas. channels"]
+    return parameters["time_resolved_fluorescence_measurement_channel_count"]
 
   async def request_absorbance_available(self) -> bool:
     """Request whether absorbance measurements are available."""
-    return (await self.request_parameters())["Absorbance measurement option"] != 0
+    return (await self.request_parameters())["absorbance_measurement_option"] != 0
 
   async def request_alpha_screen_available(self) -> bool:
     """Request whether AlphaScreen measurements are available."""
-    return (await self.request_parameters())["AlphaScreen measurement option"] != 0
+    return (await self.request_parameters())["alpha_screen_measurement_option"] != 0
 
   async def request_fluorescence_polarization_available(self) -> bool:
     """Request whether fluorescence polarization measurements are available."""
     parameters = await self.request_parameters()
-    return parameters["Fluorescence polarization measurement option"] != 0
+    return parameters["fluorescence_polarization_measurement_option"] != 0
 
   async def request_bottom_measurement_available(self) -> bool:
     """Request whether measurements from below the plate are available."""
-    return (await self.request_parameters())["Bottom measurement option"] != 0
+    return (await self.request_parameters())["bottom_measurement_option"] != 0
 
   async def request_extended_temperature_range(self) -> bool:
     """Request whether the extended temperature range (10 to 65 C) is built in."""
-    return (await self.request_parameters())["Extended incubator"] != 0
+    return (await self.request_parameters())["extended_incubator"] != 0
 
   async def request_high_speed_shaking_allowed(self) -> bool:
     """Request whether shaking at 800-1100 rpm is allowed."""
-    return (await self.request_parameters())["High speed shaking allowed"] != 0
+    return (await self.request_parameters())["high_speed_shaking_allowed"] != 0
 
   async def request_well_1536_plates_supported(self) -> bool:
     """Request whether the reader is set up for 1536-well plates, an upgrade fitted to it."""
-    return (await self.request_parameters())["1536 well measurements enabled"] != 0
+    return (await self.request_parameters())["well_1536_measurements_enabled"] != 0
+
+  @staticmethod
+  def _decode_firmware_build_date(payload: bytes) -> str:
+    """A firmware info reply's compile date ("Nov 20 2020" at bytes 8-19), as "YYYY-MM-DD".
+
+    Raises:
+      ValueError: if the payload is not a firmware info reply, or its date is not one.
+    """
+    if not payload or payload[0] != 0x0A or len(payload) < 20:
+      raise ValueError(f"not a firmware info reply: {payload[:1].hex()}, {len(payload)} bytes")
+    text = payload[8:20].split(b"\x00")[0].decode("ascii", errors="replace")
+    try:
+      month, day, year = text.split()
+      return f"{int(year):04d}-{_MONTHS.index(month) + 1:02d}-{int(day):02d}"
+    except ValueError:
+      raise ValueError(f"not a firmware build date: {text!r}") from None
+
+  async def request_firmware_build_date(self) -> str:
+    """Request the day the reader's firmware was compiled (REQUEST `09`), as "YYYY-MM-DD".
+
+    Raises:
+      ValueError: if the reply is not a firmware info reply with a date.
+    """
+    payload = await self.send_command(
+      self.CommandFamily.REQUEST, self.Command.FIRMWARE_INFO, parameters=b"\x00" * 5
+    )
+    return self._decode_firmware_build_date(payload)
 
   async def _set_parameter(self, name: str, value: int) -> None:
     """Write one of the reader's stored parameters (see ``PARAMETER_TABLE``).
 
     Args:
-      name: the parameter, by the reader's own name.
+      name: the parameter's key in ``PARAMETER_TABLE``.
       value: the new value, unsigned, within the parameter's size.
 
     Raises:
@@ -841,21 +921,35 @@ class CLARIOstarDriver:
       )
 
   async def discover(self) -> None:
-    """Read the stored parameters into ``configuration``.
+    """Read the stored parameters into ``configuration``, the serial number with them, and the
+    firmware build date.
 
-    Fields stay unchanged when the reply is not decoded. The firmware version is reported twice
+    Fields stay unchanged when a reply is not decoded. The firmware version is reported twice
     (INIT reply, stored parameters); logs a warning if they disagree, or for a version not checked
-    on hardware.
+    on hardware, and if the serial number is not the one the reader was opened by.
     """
     versions = {"INIT reply": self.configuration.firmware_version}
     # The stored parameters first, right after INIT.
     try:
-      parameters = await self.request_parameters()
+      payload = await self._request_parameters_reply()
+      parameters = self._decode_parameters(payload)
     except ValueError as e:
       logger.warning("stored parameters not decoded (%s)", e)
     else:
-      versions["stored parameters"] = f"{parameters['Firmware version'] / 1000:.2f}"
+      versions["stored parameters"] = f"{parameters['firmware_version'] / 1000:.2f}"
       self.configuration.update_from_parameters(parameters)
+      self.configuration.serial_number = self._decode_serial_number(payload)
+      opened_by = self._get_link_serial_number()
+      if opened_by is not None and opened_by != self.configuration.serial_number:
+        logger.warning(
+          "the reader's serial number %s is not the one it was opened by, %s",
+          self.configuration.serial_number,
+          opened_by,
+        )
+    try:
+      self.configuration.firmware_build_date = await self.request_firmware_build_date()
+    except ValueError as e:
+      logger.warning("firmware build date not read (%s)", e)
     reported = {source: version for source, version in versions.items() if version is not None}
     if len(set(reported.values())) > 1:
       logger.warning(
@@ -924,8 +1018,8 @@ class CLARIOstarDriver:
     return link + (f" ({', '.join(named)})" if named else "")
 
   def format_setup_summary(self) -> str:
-    """One block describing the reader that was found: how it is reached, its model and firmware,
-    and what is fitted.
+    """One block describing the reader that was found: how it is reached and every field of its
+    configuration; a field that was not read shows None.
 
     Returns:
       A multi-line summary, or a note that setup has not run.
@@ -933,39 +1027,96 @@ class CLARIOstarDriver:
     c = self.configuration
     if c.model is None:
       return f"[{self.name}] not discovered yet"
-    temperature = "none"
-    if c.temperature_controller:
-      temperature = "10-65 C" if c.extended_temperature_range else "25-45 C"
-    measurements = [
-      label
-      for label, available in (
-        ("absorbance", c.absorbance_available),
-        ("fluorescence", c.fluorescence_channels),
-        ("luminescence", c.luminescence_channels),
-        ("time-resolved fluorescence", c.time_resolved_fluorescence_channels),
-        ("fluorescence polarization", c.fluorescence_polarization_available),
-        ("AlphaScreen", c.alpha_screen_available),
-      )
-      if available
-    ]
-    fitted = [
-      label
-      for label, present in (
-        ("pumps", c.pumps and any(c.pumps)),
-        ("stacker", c.stacker_connected),
-        ("barcode readers", c.barcode_readers),
-        ("atmospheric control unit", c.atmospheric_control_unit_connected),
-      )
-      if present
-    ]
+    standard = c.extended_red_photomultiplier_tube
+    if standard is not None:
+      standard = not c.extended_red_photomultiplier_tube or bool(c.dual_photomultiplier_tubes)
+    pumps = c.pumps or (None, None, None)
+    barcode_readers = c.barcode_readers
+    groups: Tuple[Tuple[str, Tuple[Tuple[str, Any], ...]], ...] = (
+      (
+        "Measurement modes",
+        (
+          ("absorbance", c.absorbance_available),
+          ("fluorescence", _flag(c.fluorescence_channels)),
+          ("luminescence", _flag(c.luminescence_channels)),
+          ("time-resolved fluorescence", _flag(c.time_resolved_fluorescence_channels)),
+          ("fluorescence polarization, visible", c.fluorescence_polarization_available),
+          (
+            "fluorescence polarization, ultraviolet",
+            c.fluorescence_polarization_ultraviolet_available,
+          ),
+          ("AlphaScreen", c.alpha_screen_available),
+        ),
+      ),
+      (
+        "Detectors",
+        (
+          ("standard photomultiplier", standard),
+          ("extended-red photomultiplier", c.extended_red_photomultiplier_tube),
+          ("dual photomultipliers", c.dual_photomultiplier_tubes),
+          ("crossover", c.photomultiplier_tube_crossover),
+        ),
+      ),
+      (
+        "Optics",
+        (
+          ("monochromators", c.linear_variable_filters),
+          ("spectrometer", c.spectrometer),
+          ("bottom optic", c.bottom_measurement_available),
+        ),
+      ),
+    )
+    details = [f"build {c.firmware_build}"] if c.firmware_build is not None else []
+    details += [f"built {c.firmware_build_date}"] if c.firmware_build_date else []
+    firmware_details = f" ({', '.join(details)})" if details else ""
     lines = [
       f"[{self.name}] Connected on {self._describe_link()}",
       f"  Model: {c.model}",
-      f"  Firmware: {c.firmware_version or 'unknown'}",
-      f"  Measurements: {', '.join(measurements) or 'none reported'}",
-      f"  Temperature control: {temperature}",
-      f"  Fitted: {', '.join(fitted) or 'nothing else'}",
+      f"  Serial number: {c.serial_number}",
+      f"  Firmware: {c.firmware_version}{firmware_details}",
+      f"  Mainboard revision: {c.mainboard_revision}",
     ]
+
+    def add_group(title: str, rows: Tuple[Tuple[str, Any], ...]) -> None:
+      lines.append(f"  {title}:")
+      lines.extend(f"    - {label}: {value}" for label, value in rows)
+
+    for title, rows in groups:
+      add_group(title, rows)
+    if self.fluorescence is not None:
+      slots = self.fluorescence.configuration
+      defaults = Fluorescence._compute_filter_slots(c.monochromator_slides) is None
+      lines.append(
+        f"  Filter slots: excitation {slots.excitation_filter_slots}, dichroic "
+        f"{slots.dichroic_filter_slots}, emission {slots.emission_filter_slots}"
+        + (" (defaults: the slides are not reported)" if defaults else "")
+      )
+    add_group(
+      "Temperature control",
+      (
+        ("temperature controller", c.temperature_controller),
+        ("channels", c.temperature_controller_channels),
+        ("extended range (10-65 C)", c.extended_temperature_range),
+      ),
+    )
+    lines.append(f"  High-speed shaking: {c.high_speed_shaking_allowed}")
+    lines.append(f"  1536-well plates: {c.well_1536_plates_supported}")
+    add_group(
+      "Pumps",
+      tuple(
+        (f"pump {index}", None if c.pumps is None else kind or False)
+        for index, kind in enumerate(pumps, 1)
+      ),
+    )
+    add_group(
+      "Barcode readers",
+      tuple(
+        (position, None if barcode_readers is None else barcode_readers.get(position, False))
+        for position in BARCODE_READER_POSITIONS
+      ),
+    )
+    lines.append(f"  Stacker: {c.stacker_connected}")
+    lines.append(f"  Atmospheric control unit: {c.atmospheric_control_unit_connected}")
     return "\n".join(lines)
 
   async def setup(self) -> None:

@@ -23,6 +23,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.temperature_controller_te
   OFF_REPLY,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
+  FIRMWARE_INFO_REPLY,
   INIT_REPLY,
   PARAMETERS_REPLY,
   STATUS_BUSY,
@@ -32,6 +33,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   FakeFTDI,
   make_driver,
 )
+from pylabrobot.bmg_labtech.clariostar.driver.simulator_tests import decoded_with_parameters
 from pylabrobot.resources import Resource
 
 
@@ -50,7 +52,54 @@ class DeviceTests(unittest.IsolatedAsyncioTestCase):
     reader.driver.configuration = decoded()
     summary = reader.driver.format_setup_summary()
     self.assertTrue(summary.startswith("[reader_2] Connected on FakeFTDI 0x0403:0xbb68"), summary)
-    self.assertIn("Firmware: 1.35", summary)
+    self.assertIn("  Firmware: 1.35 (build 1)\n  Mainboard revision: 2\n", summary)
+    self.assertIn(
+      "  Detectors:\n    - standard photomultiplier: True\n"
+      "    - extended-red photomultiplier: True\n    - dual photomultipliers: True\n"
+      "    - crossover: False\n",
+      summary,
+    )
+    # The INIT reply only: the stored parameters are not read.
+    self.assertIn("  Serial number: None\n", summary)
+    self.assertIn("    - absorbance: None\n", summary)
+    self.assertIn("    - bottom optic: None\n", summary)
+    reader.driver.configuration.photomultiplier_tube_crossover = True
+    self.assertIn("    - crossover: True\n", reader.driver.format_setup_summary())
+
+  async def test_the_setup_summary_shows_the_modes_and_filter_slots(self):
+    reader = CLARIOstar("reader", io=FakeFTDI())
+    reader.driver.configuration = await decoded_with_parameters()
+    reader.driver._discover_features()
+    summary = reader.driver.format_setup_summary()
+    self.assertIn(
+      "  Measurement modes:\n    - absorbance: True\n    - fluorescence: True\n"
+      "    - luminescence: True\n    - time-resolved fluorescence: True\n"
+      "    - fluorescence polarization, visible: False\n"
+      "    - fluorescence polarization, ultraviolet: False\n    - AlphaScreen: False\n",
+      summary,
+    )
+    self.assertIn("  Filter slots: excitation 4, dichroic 3, emission 4\n", summary)
+    reader.driver.configuration.monochromator_slides = None
+    self.assertIn("(defaults: the slides are not reported)", reader.driver.format_setup_summary())
+
+  async def test_the_setup_summary_shows_the_options(self):
+    reader = CLARIOstar("reader", io=FakeFTDI())
+    c = await decoded_with_parameters()
+    c.serial_number = "123-4567"
+    c.high_speed_shaking_allowed = c.well_1536_plates_supported = True
+    c.pumps = ("XCalibur", None, "NextGen")
+    c.barcode_readers = {"front": "SE 923", "right": "CSE 600"}
+    reader.driver.configuration = c
+    summary = reader.driver.format_setup_summary()
+    self.assertIn("  Model: CLARIOstarPlus\n  Serial number: 123-4567\n", summary)
+    self.assertIn("  High-speed shaking: True\n  1536-well plates: True\n", summary)
+    self.assertIn(
+      "  Pumps:\n    - pump 1: XCalibur\n    - pump 2: False\n    - pump 3: NextGen\n"
+      "  Barcode readers:\n    - front: SE 923\n    - right: CSE 600\n"
+      "    - optional 1: False\n    - optional 2: False\n"
+      "  Stacker: False\n  Atmospheric control unit: False",
+      summary,
+    )
 
   async def setup_reader(self, reader: CLARIOstarDevice) -> None:
     assert isinstance(reader.driver.io, FakeFTDI)
@@ -61,6 +110,8 @@ class DeviceTests(unittest.IsolatedAsyncioTestCase):
       STATUS_IDLE,
       STATUS_IDLE,
       PARAMETERS_REPLY,
+      STATUS_IDLE,
+      FIRMWARE_INFO_REPLY,
       STATUS_IDLE,  # temperature monitoring: sensors off
       STATUS_IDLE,
       MONITOR_REPLY,

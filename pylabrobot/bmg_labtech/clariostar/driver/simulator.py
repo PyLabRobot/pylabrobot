@@ -463,6 +463,10 @@ class CLARIOstarSimulationDriver(CLARIOstarDriver):
     """Whether the reader is set up for 1536-well plates, from the configuration."""
     return _require_read(self.configuration.well_1536_plates_supported, "1536-well plates")
 
+  async def request_firmware_build_date(self) -> str:
+    """The day the firmware was compiled, from the configuration."""
+    return _require_read(self.configuration.firmware_build_date, "firmware build date")
+
   async def discover(self) -> None:
     """Read the configuration from ``declared_configuration_json``."""
     if self.declared_configuration_json is None:

@@ -1191,6 +1191,50 @@ class GatingTests(unittest.IsolatedAsyncioTestCase):
           (configuration.wavelength_range[1], configuration.dichroic_range[1]), highest
         )
 
+  def test_the_filter_slots_are_the_readers_slides(self):
+    def slots(slides):
+      device = decoded()
+      device.monochromator_slides = slides
+      configuration = Fluorescence._get_reader_configuration(device)
+      return (
+        configuration.excitation_filter_slots,
+        configuration.dichroic_filter_slots,
+        configuration.emission_filter_slots,
+        configuration.filter_slots_per_slide,
+      )
+
+    self.assertEqual(slots(decoded().monochromator_slides), (4, 3, 4, 2))  # the reader read
+    one_each = {name: {1: "open", 2: "Ex 482-16"} for name in ("EX_SP", "EX_LP", "EM_SP", "EM_LP")}
+    self.assertEqual(
+      slots({**one_each, "BSP": {1: "open", 2: "LP 504", 3: "LP 560"}}), (2, 2, 2, 1)
+    )
+    defaults = (4, 3, 4, 2)
+    self.assertEqual(slots(None), defaults)
+    self.assertEqual(slots(one_each), defaults)  # no dichroic slide
+    with patch.object(fluorescence.logger, "warning") as warning:
+      uneven = {**one_each, "EM_LP": {1: "open", 2: "a", 3: "b"}, "BSP": {1: "open", 2: "c"}}
+      self.assertEqual(slots(uneven), defaults)
+    warning.assert_called_once()
+
+  async def test_without_a_monochromator_only_filters_read(self):
+    """Not a reader's configuration: linear variable filters reported absent."""
+    io = FakeFTDI()
+    feature = make_fluorescence(io, fluorescence_plate())
+    feature._driver.configuration.linear_variable_filters = False
+    with self.assertRaisesRegex(ValueError, "no monochromator"):
+      await feature.measure(BASELINE, gain=1000, focal_height=GROUND_TRUTH_FOCAL_HEIGHT)
+    with self.assertRaisesRegex(ValueError, "no monochromator"):
+      await feature.measure_spectrum(
+        **EMISSION_SPECTRUM, gain=1000, focal_height=GROUND_TRUTH_FOCAL_HEIGHT
+      )
+    self.assertEqual(io.written, [])
+    through_filters = FluorescenceChannel(
+      excitation_filter=EX_TR, dichroic_filter=LP_TR, emission_filter=EM_615_18
+    )
+    self.assertEqual(feature._check_fluorescence_channel(through_filters), [])
+    feature._driver.configuration.linear_variable_filters = None  # unknown: let through
+    self.assertEqual(feature._check_fluorescence_channel(BASELINE), [])
+
 
 def load_filter_detection() -> List[Dict[str, Any]]:
   """The reader's filter detection, its 11 positions in order.

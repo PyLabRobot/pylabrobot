@@ -4,6 +4,8 @@
     "serial_number": "000-0000",
     "mainboard_revision": 2,
     "firmware_version": "1.35",
+    "firmware_build": 1,
+    "firmware_build_date": null,
     "extended_red_photomultiplier_tube": true,
     "dual_photomultiplier_tubes": true,
     "photomultiplier_tube_crossover": false,
