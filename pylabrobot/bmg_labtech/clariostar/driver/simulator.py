@@ -184,7 +184,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     results: List[AbsorbanceResult] = []
     if simulated_data is None:
       if report == "raw":
-        raise NotImplementedError("raw counts are not simulated; give captured simulated_data")
+        raise NotImplementedError("raw counts are not simulated; give simulated_data")
       measured = len({id(well) for well in wells})
       logger.debug("%s read: simulation: random optical densities", SIMULATED_LINK)
       for wavelength in wavelengths:
@@ -298,7 +298,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     timestamp = datetime.now()
     if simulated_data is None:
       if report == "raw":
-        raise NotImplementedError("raw counts are not simulated; give captured simulated_data")
+        raise NotImplementedError("raw counts are not simulated; give simulated_data")
       logger.debug("%s read: simulation: random optical densities", SIMULATED_LINK)
       data = {
         identifier: {

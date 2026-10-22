@@ -12,5 +12,10 @@ from .fluorescence import (
   Fluorescence,
   FluorescenceConfiguration,
 )
+from .luminescence import (
+  CLARIOstarLuminescenceResult,
+  Luminescence,
+  LuminescenceConfiguration,
+)
 from .measurement import MeasurementSettings, ShakeSettings
 from .temperature_controller import TemperatureController
