@@ -125,6 +125,7 @@ class CLARIOstarDriver:
     RUN = 0x04
     REQUEST = 0x05
     TEMPERATURE_CONTROLLER = 0x06
+    PLATE_MAP_SCAN = 0x07
     FOCUS_WELL = 0x09
     STOP = 0x0B
     SET_PARAMETER = 0x0E
@@ -141,9 +142,11 @@ class CLARIOstarDriver:
     DRAWER_OPEN = 0x01
     # REQUEST
     DATA = 0x02
+    PLATE_MAP_XY = 0x04
     FOCUS_RESULT = 0x05
     PARAMETERS = 0x07
     FIRMWARE_INFO = 0x09
+    PLATE_MAP_CONFIG = 0x0D
     SPECTRAL_DATA = 0x11
     FILTER_RESULT = 0x1B
     # SET_PARAMETER; seen only writing the two-byte test-run counter
@@ -157,6 +160,7 @@ class CLARIOstarDriver:
       CommandFamily.STOP,
       CommandFamily.STATUS,
       CommandFamily.TEMPERATURE_CONTROLLER,
+      CommandFamily.PLATE_MAP_SCAN,
       CommandFamily.FOCUS_WELL,
       CommandFamily.FILTER_SCAN,
     }

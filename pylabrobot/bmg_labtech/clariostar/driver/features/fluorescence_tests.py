@@ -12,7 +12,7 @@ import unittest
 from dataclasses import replace
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.bmg_labtech.clariostar.device import CLARIOstarPlus
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
@@ -30,6 +30,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
 from pylabrobot.bmg_labtech.clariostar.driver.features.drawer_tests import make_plate_holder
 from pylabrobot.bmg_labtech.clariostar.driver.features.fluorescence import (
   CLARIOstarFluorescenceSpectrumResult,
+  CLARIOstarZProfileResult,
   Fluorescence,
   _compute_band_edges,
 )
@@ -37,9 +38,10 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
   MeasurementSettings,
   ShakeSettings,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload
+from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload, ftdi_wrap_payload
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_IDLE,
+  STATUS_QUERY_FRAME,
   FakeFTDI,
   load_session_replies,
   make_driver,
@@ -53,7 +55,13 @@ from pylabrobot.lib.optics.holders import (
   EmissionFilterSlide,
   ExcitationFilterSlide,
 )
-from pylabrobot.resources import Plate, Well, cor_96_wellplate_360uL_Fb, create_ordered_items_2d
+from pylabrobot.resources import (
+  Coordinate,
+  Plate,
+  Well,
+  cor_96_wellplate_360uL_Fb,
+  create_ordered_items_2d,
+)
 
 # The default read: 485/15 to 528/20 nm, gain 1000, 8.5 mm, 10 flashes.
 BASELINE_RUN_FRAME = bytes.fromhex(
@@ -1723,6 +1731,184 @@ class SimulatedFluorescenceTests(unittest.IsolatedAsyncioTestCase):
     ):
       with self.assertRaises(NotImplementedError):
         await call
+
+
+def load_grid_ground_truth() -> Dict[str, Any]:
+  """The reader's scan of a 96-well plate's A1 and H12 from the top: its frame (`07`) and the
+  replies the driver reads, as hex: the status before it, the reply to it, PLATE_MAP_CONFIG, the
+  statuses and the two grids, PLATE_MAP_XY."""
+  path = os.path.join(os.path.dirname(__file__), "test_data", "grid_ground_truth.json.gz")
+  with gzip.open(path, "rt") as f:
+    return dict(json.load(f))
+
+
+def grid_plate() -> Plate:
+  """The scanned plate's geometry: 127.76 x 85.48 mm, A1 centre 14.30 / 11.20 mm, H12 centre
+  113.46 / 74.28 mm (from the back edge), 6.86 mm wells."""
+  return Plate(
+    "scanned",
+    size_x=127.76,
+    size_y=85.48,
+    size_z=14.2,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=14.30 - 6.86 / 2,
+      dy=11.20 - 6.86 / 2,
+      dz=1.0,
+      item_dx=(113.46 - 14.30) / 11,
+      item_dy=(74.28 - 11.20) / 7,
+      size_x=6.86,
+      size_y=6.86,
+      size_z=10.67,
+    ),
+  )
+
+
+# The scan's optics: 488 nm excitation and 535 nm emission, split at 507.5 nm.
+GRID_CHANNEL = FluorescenceChannel(
+  excitation_wavelength=488,
+  excitation_bandwidth=14,
+  emission_wavelength=535,
+  emission_bandwidth=30,
+  dichroic_split_wavelength=507.5,
+)
+
+
+def with_nominal_scan_edges(ground_truth: bytes) -> bytes:
+  """`ground_truth`'s frame with 488/14 and 535/30 nm at their nominal edges.
+
+  The ground truth has each band narrower (13.6 nm of 14, 29.4 nm of 30); the optics start at
+  payload byte 21.
+  """
+  payload = bytearray(ftdi_extract_payload(ground_truth))
+  for offset, edges in ((21, _compute_band_edges(488, 14)), (27, _compute_band_edges(535, 30))):
+    for index, value in enumerate(edges):
+      payload[offset + 2 * index : offset + 2 * index + 2] = value.to_bytes(2, "big")
+  return ftdi_wrap_payload(bytes(payload))
+
+
+async def scan_ground_truth(**arguments):
+  """The ground truth's scan of A1 and H12 answered by its replies; the io and the result."""
+  ground_truth = load_grid_ground_truth()["corner_scan_96_top"]
+  io = FakeFTDI(chunk=4096)
+  io.replies = [bytes.fromhex(reply) for reply in ground_truth["replies"]]
+  feature = make_fluorescence(io, grid_plate())
+  feature._driver.default_poll_interval = 0
+  results = await feature.measure_well_centers(GRID_CHANNEL, **arguments)
+  return io, ground_truth, results
+
+
+class GridTests(unittest.IsolatedAsyncioTestCase):
+  async def test_a_scan_of_the_first_and_last_well_is_sent_and_decoded_as_the_ground_truth(self):
+    io, ground_truth, results = await scan_ground_truth(focal_height=15.0, gain=2239)
+    payloads = [ftdi_extract_payload(frame) for frame in io.written]
+    self.assertEqual(
+      io.written[:2],
+      [STATUS_QUERY_FRAME, with_nominal_scan_edges(bytes.fromhex(ground_truth["frame"]))],
+    )
+    self.assertEqual(payloads[2], bytes.fromhex("050d0000000000"))
+    self.assertEqual(payloads.count(bytes.fromhex("05020000000000")), 2)
+    self.assertEqual(payloads[-1], bytes.fromhex("05040000000000"))
+    self.assertEqual([result.well for result in results], ["A1", "H12"])
+    first, last = results
+    assert first.center is not None and last.center is not None
+    self.assertAlmostEqual(first.center.x, 14.45)
+    self.assertAlmostEqual(first.center.y, 85.48 - 11.35)
+    self.assertAlmostEqual(last.center.x, 113.33)
+    self.assertAlmostEqual(last.center.y, 85.48 - 74.00)
+    self.assertEqual((first.spacing, first.focal_height, first.gain), (0.33, 15.0, 2239))
+    for result in results:
+      self.assertEqual([len(row) for row in result.counts], [31] * 31)
+      # Read from byte 34, every count is within the detector's 260,000.
+      self.assertLessEqual(max(max(row) for row in result.counts), 260_000)
+    grid = bytes.fromhex(ground_truth["replies"][5])
+    self.assertEqual(first.counts[0][0], int.from_bytes(ftdi_extract_payload(grid)[34:38], "big"))
+
+  async def test_given_points_make_up_a_plate_around_them(self):
+    feature = make_fluorescence(FakeFTDI())
+    two = feature._encode_grid_geometry(
+      (127.76, 85.48), [Coordinate(20, 30, 0), Coordinate(50, 60, 0)]
+    )
+    self.assertEqual(two.hex(), "31e8216407d015ac138809f40201")
+    one = feature._encode_grid_geometry((127.76, 85.48), [Coordinate(20, 30, 0)])
+    self.assertEqual(one[4:12], two[4:8] * 2)
+    self.assertEqual(one[12:], bytes([1, 1]))
+
+  async def test_given_points_are_checked_and_warned_untested(self):
+    feature = make_fluorescence(FakeFTDI())
+    for positions in ([], [Coordinate(1, 1, 0)] * 3, [Coordinate(200, 10, 0)]):
+      with self.assertRaises(ValueError):
+        await feature.measure_grid(GRID_CHANNEL, positions=positions, gain=2239, focal_height=15.0)
+    with (
+      patch.object(feature, "_get_grids", AsyncMock(return_value=[])),
+      self.assertLogs(measurement_module.logger, "WARNING") as logs,
+    ):
+      await feature.measure_grid(
+        GRID_CHANNEL, positions=[Coordinate(20, 30, 0)], gain=2239, focal_height=15.0
+      )
+    self.assertIn("has not been tested on hardware", logs.output[0])
+
+  async def test_a_z_scan_runs_only_without_a_focal_height(self):
+    plate = grid_plate()
+    feature = make_fluorescence(FakeFTDI(), plate)
+    z_profile = CLARIOstarZProfileResult(
+      well="A1",
+      gain=2239,
+      z_profile=[],
+      average_signal=0,
+      peak_counts=None,
+      peak_detector_percent=None,
+      peak_focal_height=14.9,
+      temperature=None,
+      start_timestamp=datetime.now(),
+      end_timestamp=datetime.now(),
+    )
+    with (
+      patch.object(feature, "measure_z_profile", AsyncMock(return_value=z_profile)) as z_scan,
+      patch.object(feature, "_get_grids", AsyncMock(return_value=[])) as scan,
+    ):
+      await feature.measure_well_centers(GRID_CHANNEL)
+      self.assertIs(z_scan.call_args.kwargs["well"], plate.get_well("A1"))
+      self.assertEqual(z_scan.call_args.kwargs["gain_target_percent"], 50.0)
+      self.assertEqual(scan.call_args.args[4:6], (14.9, 2239))
+      await feature.measure_well_centers(GRID_CHANNEL, gain=1000)
+      self.assertIsNone(z_scan.call_args.kwargs["gain_target_percent"])
+      self.assertEqual(scan.call_args.args[4:6], (14.9, 1000))
+      await feature.measure_well_centers(GRID_CHANNEL, focal_height=10.0, gain=1000)
+      self.assertEqual(z_scan.call_count, 2)
+      self.assertEqual(scan.call_args.args[4:6], (10.0, 1000))
+
+  async def test_wells_are_scanned_two_at_a_time(self):
+    plate = grid_plate()
+    feature = make_fluorescence(FakeFTDI(), plate)
+    wells = [plate.get_well(name) for name in ("B2", "G11", "D6")]
+    with (
+      patch.object(feature, "_get_grids", AsyncMock(return_value=[])) as scan,
+      self.assertLogs(measurement_module.logger, "WARNING"),
+    ):
+      await feature.measure_well_centers(GRID_CHANNEL, wells=wells, focal_height=15.0, gain=2239)
+    self.assertEqual([call.args[2] for call in scan.call_args_list], [["B2", "G11"], ["D6"]])
+    first_pair, last = (call.args[0] for call in scan.call_args_list)
+    self.assertEqual((first_pair[13], first_pair[14]), (2, 1))
+    self.assertEqual((last[13], last[14]), (1, 1))
+
+  async def test_invalid_arguments_send_nothing(self):
+    io = FakeFTDI()
+    feature = make_fluorescence(io, grid_plate())
+    cases: List[Dict[str, Any]] = [
+      dict(focal_height=15.0),  # no gain
+      dict(optic_position="bottom"),  # the z-scan reads from the top
+      dict(gain=5000, focal_height=15.0),
+      dict(gain=2239, focal_height=30.0),
+      dict(gain_target_percent=0),
+      dict(wells=[]),
+    ]
+    for arguments in cases:
+      with self.subTest(arguments=arguments), self.assertRaises(ValueError):
+        await feature.measure_well_centers(GRID_CHANNEL, **arguments)
+    self.assertEqual(io.written, [])
 
 
 if __name__ == "__main__":
