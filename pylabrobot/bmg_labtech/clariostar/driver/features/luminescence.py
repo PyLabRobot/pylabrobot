@@ -151,13 +151,14 @@ class Luminescence(Measurement):
     The arguments are `measure`'s.
 
     Raises:
-      ValueError: listing every violation: an emission wavelength not a whole nm within
+      ValueError: listing every violation: a reader without a monochromator
+        (`_check_monochromator`), an emission wavelength not a whole nm within
         `wavelength_range`, `_check_bandwidth`'s, `_check_gain`'s, `_check_focal_height`'s (None
         is the default's, checked with the plate), a normalization time or measurement interval
         not in 0.01 s steps within `time_range`, a well scan other than a point, a pause before
         reading, a timeout not positive.
     """
-    errors = []
+    errors = self._check_monochromator("luminescence")
     lowest, highest = self.configuration.wavelength_range
     if not isinstance(emission_wavelength, int) or not lowest <= emission_wavelength <= highest:
       errors.append(

@@ -192,6 +192,17 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
         await feature.measure(**arguments)
     self.assertEqual(io.written, [])
 
+  async def test_without_a_monochromator_nothing_is_sent(self):
+    """Not a reader's configuration: linear variable filters reported absent."""
+    io = FakeFTDI()
+    feature = make_luminescence(io, plate())
+    feature._driver.configuration.linear_variable_filters = False
+    with self.assertRaisesRegex(ValueError, "no monochromator"):
+      await feature.measure(focal_height=GROUND_TRUTH_FOCAL_HEIGHT)
+    self.assertEqual(io.written, [])
+    feature._driver.configuration.linear_variable_filters = None  # unknown: let through
+    self.assertEqual(feature._check_monochromator("luminescence"), [])
+
   def test_the_wavelength_limits_follow_the_photomultipliers(self):
     # (extended red, dual, crossed over): the highest emission wavelength.
     for photomultipliers, highest in (

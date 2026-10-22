@@ -4,11 +4,16 @@ import json
 import os
 import tempfile
 import unittest
+from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
 
+from pylabrobot.bmg_labtech.clariostar.driver import configuration as configuration_module
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
-from pylabrobot.bmg_labtech.clariostar.driver.configuration import DeviceConfiguration
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload
+from pylabrobot.bmg_labtech.clariostar.driver.configuration import (
+  DeviceConfiguration,
+  _parse_monochromator_slides,
+)
+from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload, ftdi_wrap_payload
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   FIRMWARE_INFO_REPLY,
   INIT_REPLY,
@@ -18,6 +23,12 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_QUERY_FRAME,
   FakeFTDI,
   make_driver,
+)
+from pylabrobot.bmg_labtech.clariostar.driver.parameter_table import (
+  PARAMETER_TABLE,
+  REPLY_OFFSET,
+  SERIAL_NUMBER_ADDRESSES,
+  SIGNED_PARAMETERS,
 )
 
 INIT_PAYLOAD = ftdi_extract_payload(INIT_REPLY)
@@ -71,6 +82,27 @@ class DecodeTests(unittest.TestCase):
       )
       self.assertIsNone(configuration.spectrometer)
 
+  def test_a_missing_block_leaves_only_its_fields_unknown(self):
+    # Not a reader's reply: the recorded one without its block `2F`, the slides.
+    payload, offset = bytearray(INIT_PAYLOAD), 6
+    while payload[offset] != 0x2F:
+      offset += 3 + int.from_bytes(payload[offset + 1 : offset + 3], "big")
+    del payload[offset : offset + 3 + int.from_bytes(payload[offset + 1 : offset + 3], "big")]
+    configuration = DeviceConfiguration()
+    with patch.object(configuration_module.logger, "warning") as warning:
+      configuration.update_from_init_reply(bytes(payload))
+    self.assertIn("0x2f", warning.call_args.args[1].args[0])
+    self.assertIsNone(configuration.monochromator_slides)
+    self.assertIsNone(configuration.linear_variable_filters)
+    complete = decoded()
+    for field in ("spectrometer", "temperature_controller", "pumps", "barcode_readers"):
+      self.assertEqual(getattr(configuration, field), getattr(complete, field), field)
+    self.assertTrue(configuration.temperature_controller)
+
+  def test_an_unreadable_slide_position_is_left_out(self):
+    slides = _parse_monochromator_slides("BSP:1=open,x=Filter 1,3=Filter 2\nEM_SP:1=open")
+    self.assertEqual(slides, {"BSP": {1: "open", 3: "Filter 2"}, "EM_SP": {1: "open"}})
+
   def test_not_an_init_reply(self):
     with self.assertRaises(ValueError):
       DeviceConfiguration().update_from_init_reply(ftdi_extract_payload(STATUS_IDLE))
@@ -90,7 +122,7 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_parameters_agreeing_with_init_do_not_warn(self):
     io = FakeFTDI()
-    io.replies = [STATUS_IDLE, PARAMETERS_REPLY]
+    io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, FIRMWARE_INFO_REPLY]
     driver = make_driver(io)
     driver.configuration = decoded()
     with patch.object(master_module.logger, "warning") as warning:
@@ -99,7 +131,7 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_parameters_disagreeing_with_init_warn(self):
     io = FakeFTDI()
-    io.replies = [STATUS_IDLE, PARAMETERS_REPLY]
+    io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, FIRMWARE_INFO_REPLY]
     driver = make_driver(io)
     driver.configuration.firmware_version = "1.34"
     with self.assertLogs(master_module.logger, "WARNING") as logs:
@@ -116,15 +148,31 @@ class ParametersTests(unittest.IsolatedAsyncioTestCase):
     io.replies = [STATUS_IDLE, PARAMETERS_REPLY] * replies_of_parameters
     return make_driver(io), io
 
+  def test_the_parameter_table_keys_and_addresses(self):
+    keys = [key for key, _, _ in PARAMETER_TABLE]
+    self.assertEqual(len(keys), len(set(keys)))
+    owners: Dict[int, List[str]] = {}
+    for key, address, size in PARAMETER_TABLE:
+      self.assertLessEqual(address + size, 256, key)
+      for byte in range(address, address + size):
+        owners.setdefault(byte, []).append(key)
+    for address in SERIAL_NUMBER_ADDRESSES:
+      self.assertNotIn(address, owners)
+    self.assertEqual([byte for byte, owner in owners.items() if len(owner) > 1], [])
+    self.assertLessEqual(set(SIGNED_PARAMETERS), set(keys))
+
   async def test_request_parameters_from_real_reply(self):
     driver, io = self.make_driver()
     parameters = await driver.request_parameters()
     self.assertEqual(io.written, [STATUS_QUERY_FRAME, PARAMETERS_FRAME])
-    self.assertEqual(parameters["Firmware version"], 1350)
-    self.assertEqual(parameters["No. of fluorescence measurement channels"], 1)
-    self.assertEqual(parameters["Fluorescence AutoGain gain value level 1 (PMT1)"], 494)
-    self.assertNotIn("Serial number of the reader", parameters)
-    self.assertNotIn("Project number", parameters)
+    self.assertEqual(parameters["firmware_version"], 1350)
+    self.assertEqual(parameters["fluorescence_measurement_channel_count"], 1)
+    self.assertEqual(parameters["fluorescence_auto_gain_level_1_photomultiplier_tube_1"], 494)
+    self.assertEqual(parameters["top_bottom_slide_offset"], -5)
+    self.assertEqual(parameters["x_transport_lock_position"], -168)
+    self.assertEqual(parameters["temperature_sensor_1_offset"], 20)
+    self.assertNotIn("serial_number", parameters)
+    self.assertNotIn("project_number", parameters)
 
   async def test_convenience_methods(self):
     driver, _ = self.make_driver(replies_of_parameters=4)
@@ -147,6 +195,36 @@ class ParametersTests(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(c.extended_temperature_range)
     self.assertFalse(c.high_speed_shaking_allowed)
     self.assertFalse(c.well_1536_plates_supported)
+
+  async def test_discover_reads_the_serial_number_and_checks_the_link(self):
+    # Not a reader's reply: the recorded one, its serial cleaned to zeros, given made-up ones.
+    def reply_with_serial(first: int, second: int) -> bytes:
+      payload = bytearray(ftdi_extract_payload(PARAMETERS_REPLY))
+      for address, value in zip(SERIAL_NUMBER_ADDRESSES, (first, second)):
+        payload[address + REPLY_OFFSET : address + REPLY_OFFSET + 2] = value.to_bytes(2, "little")
+      return ftdi_wrap_payload(bytes(payload))
+
+    cases: List[Tuple[Tuple[int, int], Dict[str, Optional[str]], str, bool]] = [
+      ((123, 4567), {"device_id": None}, "123-4567", False),
+      ((123, 4567), {"device_id": "123-4567"}, "123-4567", False),
+      ((123, 4567), {"device_id": "999-0001"}, "123-4567", True),
+      ((12, 345), {"device_id": "012-0345"}, "012-0345", False),  # padded as the link has it
+      ((123, 4567), {"device_id": "1:4", "usb_address": "1:4"}, "123-4567", False),  # by address
+    ]
+    for serial, link, expected, warns in cases:
+      io = FakeFTDI()
+      io.replies = [STATUS_IDLE, reply_with_serial(*serial), STATUS_IDLE, FIRMWARE_INFO_REPLY]
+      driver = make_driver(io)
+      driver.configuration = decoded()
+      with (
+        self.subTest(link=link),
+        patch.object(io, "serialize", return_value={"vid": 0x0403, "pid": 0xBB68, **link}),
+        patch.object(master_module.logger, "warning") as warning,
+      ):
+        await driver.discover()
+        self.assertEqual(driver.configuration.serial_number, expected)
+        mismatch = any("serial number" in str(call.args[0]) for call in warning.call_args_list)
+        self.assertEqual(mismatch, warns)
 
   async def test_other_reply_is_not_decoded(self):
     io = FakeFTDI()

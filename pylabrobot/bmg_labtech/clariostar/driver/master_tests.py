@@ -305,10 +305,31 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
 class FirmwareTests(unittest.IsolatedAsyncioTestCase):
   async def test_discover_applies_the_stored_parameters(self):
     io = FakeFTDI()
-    io.replies = [STATUS_IDLE, PARAMETERS_REPLY]
+    io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, FIRMWARE_INFO_REPLY]
     driver = make_driver(io)
     await driver.discover()
     self.assertEqual(driver.configuration.extended_temperature_range, False)
+
+  async def test_discover_reads_the_firmware_build_date(self):
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, FIRMWARE_INFO_REPLY]
+    driver = make_driver(io)
+    driver.configuration.model = "CLARIOstarPlus"
+    driver.configuration.firmware_build = 1
+    await driver.discover()
+    self.assertEqual(io.written[-1], FIRMWARE_INFO_FRAME)
+    build_date = driver.configuration.firmware_build_date
+    self.assertRegex(build_date or "", r"^\d{4}-\d{2}-\d{2}$")
+    self.assertIn(f"Firmware: None (build 1, built {build_date})", driver.format_setup_summary())
+
+  async def test_a_reply_without_a_build_date_warns(self):
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, PARAMETERS_REPLY]
+    driver = make_driver(io)
+    with self.assertLogs(master_module.logger, "WARNING") as logs:
+      await driver.discover()
+    self.assertTrue(any("firmware build date not read" in line for line in logs.output))
+    self.assertIsNone(driver.configuration.firmware_build_date)
 
   def test_unconfirmed_firmware_warns(self):
     driver = make_driver(FakeFTDI())
@@ -325,10 +346,15 @@ class WhenIdleTests(unittest.IsolatedAsyncioTestCase):
       STATUS_BUSY,
       STATUS_IDLE,
       PARAMETERS_REPLY,
+      STATUS_IDLE,
+      FIRMWARE_INFO_REPLY,
     ]
     driver = make_driver(io)
     await driver.discover()
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME] * 3 + [PARAMETERS_FRAME])
+    self.assertEqual(
+      io.written,
+      [STATUS_QUERY_FRAME] * 3 + [PARAMETERS_FRAME, STATUS_QUERY_FRAME, FIRMWARE_INFO_FRAME],
+    )
 
   async def test_when_idle_false_sends_at_once(self):
     io = FakeFTDI()
@@ -394,6 +420,8 @@ class StatusRefusalAndWarningTests(unittest.IsolatedAsyncioTestCase):
       STATUS_WARNING,
       STATUS_IDLE,
       PARAMETERS_REPLY,
+      STATUS_IDLE,
+      FIRMWARE_INFO_REPLY,
     ]
     driver = make_driver(io)
     with self.assertLogs(master_module.logger, "WARNING") as logs:

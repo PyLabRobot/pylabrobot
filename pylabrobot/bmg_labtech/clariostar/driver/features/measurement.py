@@ -325,6 +325,17 @@ class Measurement:
       return [f"{name} must be a whole {narrowest} to {widest} nm, got {bandwidth!r}"]
     return []
 
+  def _check_monochromator(self, what: str) -> List[str]:
+    """The violation of `what` through a monochromator on a reader that reports none.
+
+    The monochromators are linear variable filters. Refused only when the reader reports them
+    absent; unknown lets the read through. One bit for excitation, dichroic and emission
+    together; read as all or none (no reader without them is verified).
+    """
+    if self._driver.configuration.linear_variable_filters is False:
+      return [f"the reader reports no monochromator, which {what} needs"]
+    return []
+
   @staticmethod
   def _check_gain(gain: int, gain_range: Tuple[int, int]) -> List[str]:
     """The violation of a gain: not whole within `gain_range`."""

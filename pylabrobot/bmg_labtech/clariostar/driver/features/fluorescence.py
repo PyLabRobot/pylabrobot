@@ -136,13 +136,13 @@ class FluorescenceConfiguration(MeasurementConfiguration):
   focal_height_range: Tuple[float, float] = (0.0, 25.0)
   """Focal height, in mm, in 0.1 mm steps (up to 25 mm)."""
   excitation_filter_slots: int = 4
-  """Excitation filter positions (up to 4)."""
+  """Excitation filter positions (up to 4); the reader's (`Fluorescence._compute_filter_slots`)."""
   dichroic_filter_slots: int = 3
-  """Dichroic filter positions (up to 3)."""
+  """Dichroic filter positions (up to 3); the reader's."""
   emission_filter_slots: int = 4
-  """Emission filter positions (up to 4)."""
+  """Emission filter positions (up to 4); the reader's."""
   filter_slots_per_slide: int = 2
-  """Filter positions on each of the two excitation or emission slides (filter detection)."""
+  """Filter positions on each of the two excitation or emission slides; the reader's."""
   maximum_fluorescence_channels: int = 5
   """Fluorescence channels per read (up to 5)."""
   maximum_spectrum_wavelengths: int = 1000
@@ -203,14 +203,53 @@ class Fluorescence(Measurement):
   _STANDARD_WAVELENGTH_RANGE = (320, 740)
   _STANDARD_DICHROIC_RANGE = (340.0, 740.0)
 
+  # The reader's slides holding filters: two for excitation, two for emission, one for dichroics.
+  _EXCITATION_SLIDES = ("EX_SP", "EX_LP")
+  _EMISSION_SLIDES = ("EM_SP", "EM_LP")
+  _DICHROIC_SLIDE = "BSP"
+
+  @classmethod
+  def _compute_filter_slots(
+    cls, slides: Optional[Dict[str, Dict[int, str]]]
+  ) -> Optional[Tuple[int, int]]:
+    """The filters per excitation or emission slide, and the dichroic filters, in `slides`.
+
+    A slide's positions other than "open" hold filters. None keeps the defaults: a slide not
+    reported, or excitation and emission slides of different sizes (one size serves them all).
+    """
+    names = (*cls._EXCITATION_SLIDES, *cls._EMISSION_SLIDES, cls._DICHROIC_SLIDE)
+    if slides is None or any(name not in slides for name in names):
+      return None
+    filters = {
+      name: sum(label.strip().lower() != "open" for label in slides[name].values())
+      for name in names
+    }
+    per_slide = {filters[name] for name in (*cls._EXCITATION_SLIDES, *cls._EMISSION_SLIDES)}
+    if len(per_slide) != 1 or not filters[cls._DICHROIC_SLIDE]:
+      logger.warning("filter slides of %s are not decoded; the default filter slots stay", filters)
+      return None
+    (size,) = per_slide
+    return (size, filters[cls._DICHROIC_SLIDE]) if size else None
+
   @classmethod
   def _get_reader_configuration(cls, device: "DeviceConfiguration") -> FluorescenceConfiguration:
-    """The fluorescence facts of the reader `device` describes: its wavelength limits.
+    """The fluorescence facts of the reader `device` describes: wavelength limits, filter slots.
 
     The extended range needs the extended-red photomultiplier on the fluorescence path: fitted,
-    and on a dual-photomultiplier reader not crossed over. Unknown hardware keeps the defaults.
+    and on a dual-photomultiplier reader not crossed over. The filter slots are its slides'
+    (`_compute_filter_slots`). Unknown hardware keeps the defaults.
     """
     configuration = FluorescenceConfiguration()
+    slots = cls._compute_filter_slots(device.monochromator_slides)
+    if slots is not None:
+      per_slide, dichroic = slots
+      configuration = replace(
+        configuration,
+        excitation_filter_slots=2 * per_slide,
+        dichroic_filter_slots=dichroic,
+        emission_filter_slots=2 * per_slide,
+        filter_slots_per_slide=per_slide,
+      )
     standard = device.extended_red_photomultiplier_tube is False or bool(
       device.dual_photomultiplier_tubes and device.photomultiplier_tube_crossover
     )
@@ -418,8 +457,8 @@ class Fluorescence(Measurement):
     """The violations of excitation or emission on the reader.
 
     Neither a wavelength nor a filter (unless `scanned`), a wavelength not a whole nm within
-    `wavelength_range`, a bandwidth `_check_bandwidth` refuses, a filter slot outside its filter
-    slots.
+    `wavelength_range` or on a reader without a monochromator (`_check_monochromator`), a
+    bandwidth `_check_bandwidth` refuses, a filter slot outside its filter slots.
 
     Args:
       excitation_or_emission: "excitation" or "emission", the prefix of the fields named in the
@@ -436,6 +475,10 @@ class Fluorescence(Measurement):
         ]
       return []
     errors = []
+    if wavelength is not None or scanned:
+      errors += self._check_monochromator(
+        f"{excitation_or_emission}_wavelength; give {excitation_or_emission}_filter"
+      )
     if wavelength is None:
       if not scanned:
         errors.append(
