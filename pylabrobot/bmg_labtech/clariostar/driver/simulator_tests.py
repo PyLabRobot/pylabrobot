@@ -26,6 +26,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
 )
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.biorad.plates import biorad_96_wellplate_200uL_Vb
+from pylabrobot.resources.corning.plates import cor_96_wellplate_2mL_Vb
 
 LOCATION_IN = Coordinate(10, 20, 30)  # made up: the real ones are not measured yet
 LOCATION_OUT = Coordinate(10, -200, 30)
@@ -132,6 +133,16 @@ class SimulatorTests(unittest.IsolatedAsyncioTestCase):
       await self.reader.stop()
     self.assertTrue(await self.reader.drawer.sense_drawer_open())
     await self.reader.stop(accept_plate_left_in_device=True)
+
+  async def test_stop_with_a_plate_too_tall_raises_and_leaves_the_drawer_open(self):
+    await self.reader.drawer.open()
+    tall = cor_96_wellplate_2mL_Vb("deep_well")  # 43.5 mm
+    self.reader.plate_holder.assign_child_resource(tall)
+    with self.assertRaises(ValueError):
+      await self.reader.stop()
+    self.assertTrue(await self.reader.drawer.sense_drawer_open())
+    tall.unassign()
+    await self.reader.stop()
 
   async def test_stop_switches_heating_off_and_closes_the_drawer(self):
     temperature_controller = self.reader.temperature_controller
