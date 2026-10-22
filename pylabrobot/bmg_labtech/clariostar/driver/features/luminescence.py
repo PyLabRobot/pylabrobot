@@ -269,6 +269,54 @@ class Luminescence(Measurement):
 
   # -- measuring -----------------------------------------------------------------------------------
 
+  def _get_run_parameters(
+    self,
+    emission_wavelength: int,
+    emission_bandwidth: int,
+    gain: int,
+    focal_height: Optional[float],
+    normalization_time: float,
+    measurement_interval: float,
+    measurement: MeasurementSettings,
+    shake: Optional[ShakeSettings],
+    wells: Optional[List[Well]],
+    *,
+    timeout: Optional[float],
+  ) -> Tuple[Plate, List[Well], bytes]:
+    """The plate, the wells and the RUN parameters of a read, every argument checked.
+
+    Raises:
+      RuntimeError: if no plate is in the plate holder.
+      ValueError: if an argument is out of range (`_check_arguments`), or the settings cannot
+        read the wells of the plate (`_get_plate_and_wells`).
+    """
+    self._check_arguments(
+      emission_wavelength,
+      emission_bandwidth,
+      gain,
+      focal_height,
+      normalization_time,
+      measurement_interval,
+      measurement,
+      timeout=timeout,
+    )
+    plate, measured = self._get_plate_and_wells(measurement, shake, wells)
+    if focal_height is None:
+      focal_height = self._get_default_focal_height(measured)
+    parameters = self._compute_run_parameters(
+      plate,
+      measured,
+      measurement,
+      shake,
+      emission_wavelength=emission_wavelength,
+      emission_bandwidth=emission_bandwidth,
+      gain=gain,
+      focal_height=focal_height,
+      normalization_time=normalization_time,
+      measurement_interval=measurement_interval,
+    )
+    return plate, measured, parameters
+
   async def measure(
     self,
     *,
@@ -322,7 +370,7 @@ class Luminescence(Measurement):
       if measurement_settings is None
       else measurement_settings
     )
-    self._check_arguments(
+    plate, wells, parameters = self._get_run_parameters(
       emission_wavelength,
       emission_bandwidth,
       gain,
@@ -330,22 +378,9 @@ class Luminescence(Measurement):
       normalization_time,
       measurement_interval,
       measurement,
-      timeout=timeout,
-    )
-    plate, wells = self._get_plate_and_wells(measurement, shake_settings, wells)
-    if focal_height is None:
-      focal_height = self._get_default_focal_height(wells)
-    parameters = self._compute_run_parameters(
-      plate,
-      wells,
-      measurement,
       shake_settings,
-      emission_wavelength=emission_wavelength,
-      emission_bandwidth=emission_bandwidth,
-      gain=gain,
-      focal_height=focal_height,
-      normalization_time=normalization_time,
-      measurement_interval=measurement_interval,
+      wells,
+      timeout=timeout,
     )
     timeout = self.default_read_timeout if timeout is None else timeout
     # TODO(device): no luminescent sample has been read yet, only an empty plate.
