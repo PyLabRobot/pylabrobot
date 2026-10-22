@@ -8,6 +8,7 @@ from .features import (
   CLARIOstarAbsorbanceSpectrumResult,
   CLARIOstarFluorescenceResult,
   CLARIOstarFluorescenceSpectrumResult,
+  CLARIOstarZProfileResult,
   Drawer,
   Fluorescence,
   FluorescenceConfiguration,

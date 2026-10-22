@@ -112,8 +112,10 @@ class CLARIOstarDriver:
     RUN = 0x04
     REQUEST = 0x05
     TEMPERATURE_CONTROLLER = 0x06
+    FOCUS_WELL = 0x09
     STOP = 0x0B
     SET_PARAMETER = 0x0E
+    FILTER_SCAN = 0x24
     STATUS = 0x80
 
   class Command:
@@ -126,17 +128,23 @@ class CLARIOstarDriver:
     DRAWER_OPEN = 0x01
     # REQUEST
     DATA = 0x02
+    FOCUS_RESULT = 0x05
     PARAMETERS = 0x07
+    SPECTRAL_DATA = 0x11
+    FILTER_RESULT = 0x1B
     # SET_PARAMETER; seen only writing the two-byte test-run counter
     SET_PARAMETER_WORD = 0x0B
 
-  # Families whose payload is the family byte plus parameters, without a command byte.
+  # Families whose payload is the family byte plus parameters, without a command byte; FILTER_SCAN's
+  # first parameter is a mode bit field.
   _NO_COMMAND_FAMILIES = frozenset(
     {
       CommandFamily.RUN,
       CommandFamily.STOP,
       CommandFamily.STATUS,
       CommandFamily.TEMPERATURE_CONTROLLER,
+      CommandFamily.FOCUS_WELL,
+      CommandFamily.FILTER_SCAN,
     }
   )
 

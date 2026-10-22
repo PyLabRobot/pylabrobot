@@ -10,10 +10,12 @@ import json
 import os
 import unittest
 from dataclasses import replace
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from unittest.mock import patch
 
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
+from pylabrobot.bmg_labtech.clariostar.driver.features import fluorescence
 from pylabrobot.bmg_labtech.clariostar.driver.features import measurement as measurement_module
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   COLUMN_1_DATA_REPLY,
@@ -44,6 +46,11 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
 from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
 from pylabrobot.lib.fluorescence.results import FluorescenceSpectrumResult
 from pylabrobot.lib.optics.filters import DichroicFilter, OpticalFilter
+from pylabrobot.lib.optics.holders import (
+  DichroicFilterSlide,
+  EmissionFilterSlide,
+  ExcitationFilterSlide,
+)
 from pylabrobot.resources import Plate, Well, cor_96_wellplate_360uL_Fb, create_ordered_items_2d
 
 # The vendor's default read: 485/15 to 528/20 nm, gain 1000, 8.5 mm, 10 flashes.
@@ -492,45 +499,16 @@ class RunParametersTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
           result.excitation_bandwidth,
           excitation_filter.bandwidth
-          if excitation_filter is not None
+          if isinstance(excitation_filter, OpticalFilter)
           else fluorescence_channel.excitation_bandwidth or 15,
         )
         self.assertEqual(
           result.emission_bandwidth,
           emission_filter.bandwidth
-          if emission_filter is not None
+          if isinstance(emission_filter, OpticalFilter)
           else fluorescence_channel.emission_bandwidth or 20,
         )
         self.assertEqual(result.gain, arguments.get("gain", 1000))
-
-
-class FilterPositionTests(unittest.IsolatedAsyncioTestCase):
-  async def test_every_slot_moves_its_slides(self):
-    """Excitation (slide 1, slide 2), emission (slide 2, slide 1), dichroic slot + 1; 1 is a
-    slide's home, 2 its first filter (the filter detection capture). Only slot 1 and dichroic A
-    are a reader's (F-Lf01); the others are predictions no reader has answered."""
-    excitation = {1: (2, 1), 2: (3, 1), 3: (1, 2), 4: (1, 3)}
-    emission = {1: (1, 2), 2: (1, 3), 3: (2, 1), 4: (3, 1)}
-    for slot in range(1, 5):
-      for dichroic in range(1, 4):
-        with self.subTest(slot=slot, dichroic=dichroic):
-          io = FakeFTDI()
-          await read(
-            io,
-            TEMPERATURE_37_DATA_REPLY,
-            FluorescenceChannel(
-              excitation_filter=OpticalFilter(slot),
-              dichroic_filter=DichroicFilter(dichroic),
-              emission_filter=OpticalFilter(slot),
-            ),
-          )
-          payload = ftdi_extract_payload(io.written[1])
-          fluorescence_channel = len(payload) - 36
-          fields = [
-            int.from_bytes(payload[fluorescence_channel + i : fluorescence_channel + i + 2], "big")
-            for i in (2, 4, 6, 8, 10)
-          ]
-          self.assertEqual(fields, [*excitation[slot], dichroic + 1, *emission[slot]])
 
 
 class ReadTests(unittest.IsolatedAsyncioTestCase):
@@ -1207,6 +1185,409 @@ class GatingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
           (configuration.wavelength_range[1], configuration.dichroic_range[1]), highest
         )
+
+
+def load_filter_detection() -> List[Dict[str, Any]]:
+  """The reader's filter detection, its 11 positions in order.
+
+  Each holds its `24` frame and the replies the driver reads, as hex: the status before the `24`,
+  the reply to it, to `80` until data ready, to `05 11`, to `05 1b`, then the next status.
+  """
+  path = os.path.join(os.path.dirname(__file__), "test_data", "filter_detection_captures.json.gz")
+  with gzip.open(path, "rt") as f:
+    return list(json.load(f)["positions"])
+
+
+# The detection's positions, in its order (excitation 1-4, dichroic A-C, emission 5-8).
+DETECTION_POSITIONS = [
+  *(("excitation", slot) for slot in range(1, 5)),
+  *(("dichroic", slot) for slot in range(1, 4)),
+  *(("emission", slot) for slot in range(1, 5)),
+]
+
+
+def detection_result(slide: str, slot: int) -> bytes:
+  """The payload of the FILTER_RESULT the reader sent for a position, the reply to `05 1b`."""
+  position = load_filter_detection()[DETECTION_POSITIONS.index((slide, slot))]
+  return ftdi_extract_payload(bytes.fromhex(position["replies"][-2]))
+
+
+def decode_filter_result(reply: bytes, slide: str) -> Tuple[int, int, int, int, int]:
+  """`Fluorescence._decode_filter_result` of a feature without a plate."""
+  return make_fluorescence(FakeFTDI())._decode_filter_result(reply, slide)
+
+
+def make_detecting_fluorescence(io: FakeFTDI) -> Fluorescence:
+  """A fluorescence feature of the captured reader, answered by the whole detection capture."""
+  io.replies = [
+    bytes.fromhex(reply) for position in load_filter_detection() for reply in position["replies"]
+  ]
+  return make_fluorescence(io)
+
+
+class FilterDetectionTests(unittest.IsolatedAsyncioTestCase):
+  async def test_detection_as_the_reader_answered(self):
+    """The reader's filters: excitation 1, dichroic A and emission 5, every other position empty."""
+    io = FakeFTDI(chunk=4096)
+    feature = make_detecting_fluorescence(io)
+    feature.excitation_filter_slide = ExcitationFilterSlide(4)  # a slide the detection replaces
+    feature.excitation_filter_slide.register(OpticalFilter(3, "old"))
+    excitation, dichroic, emission = await feature.detect_all_filters()
+    self.assertIs(feature.excitation_filter_slide, excitation)
+    self.assertIs(feature.dichroic_filter_slide, dichroic)
+    self.assertIs(feature.emission_filter_slide, emission)
+    self.assertEqual(excitation[1], OpticalFilter(1, passbands=((282.2, 371.8),)))
+    self.assertEqual(dichroic[1], DichroicFilter(1, transmission_bands=((421.8, None),)))
+    self.assertEqual(emission[1], OpticalFilter(1, passbands=((604.9, 623.2),)))
+    self.assertEqual(repr(excitation), "ExcitationFilterSlide(4 slots, {1: (unnamed)})")
+    self.assertEqual(repr(dichroic), "DichroicFilterSlide(3 slots, {1: (unnamed)})")
+    self.assertEqual(repr(emission), "EmissionFilterSlide(4 slots, {1: (unnamed)})")
+    # Each position: status, `24`, status until data ready, `05 11` and `05 1b` without a status
+    # before them (the reader still busy), status until idle.
+    expected: List[bytes] = []
+    for position in load_filter_detection():
+      polls = len(position["replies"]) - 5
+      expected += [b"\x80", ftdi_extract_payload(bytes.fromhex(position["request"]))]
+      expected += [b"\x80"] * polls + [bytes.fromhex("05110000000000")]
+      expected += [bytes.fromhex("051b0000000000"), b"\x80"]
+    self.assertEqual([ftdi_extract_payload(frame) for frame in io.written], expected)
+    self.assertEqual(io.replies, [])
+
+  def test_long_pass_and_short_pass_filters_are_decoded(self):
+    """No long-pass or short-pass filter is captured: the replies are real results edited."""
+    # Not a reader's reply: excitation 1's without its bandwidth, then also without its first edge.
+    long_pass = bytearray(detection_result("excitation", 1))
+    long_pass[9:11] = bytes(2)
+    result = decode_filter_result(bytes(long_pass), "excitation")
+    self.assertEqual(
+      Fluorescence._compute_optical_filter(1, result), OpticalFilter(1, passbands=((282.2, None),))
+    )
+    long_pass[11:13] = bytes(2)
+    result = decode_filter_result(bytes(long_pass), "excitation")
+    with patch.object(fluorescence.logger, "warning") as warning:
+      self.assertEqual(Fluorescence._compute_optical_filter(1, result), OpticalFilter(1))
+    warning.assert_called_once()  # a short-pass, its band not stated
+    # Not a reader's reply: dichroic A's with its edge moved to the second.
+    short_pass = bytearray(detection_result("dichroic", 1))
+    short_pass[13:15], short_pass[11:13] = short_pass[11:13], bytes(2)
+    result = decode_filter_result(bytes(short_pass), "dichroic")
+    with patch.object(fluorescence.logger, "warning") as warning:
+      self.assertEqual(Fluorescence._compute_dichroic_filter(1, result), DichroicFilter(1))
+    warning.assert_called_once()
+
+  def test_a_reply_not_of_its_position_is_refused(self):
+    reply = detection_result("excitation", 1)
+    for wrong, slide in (
+      (reply, "emission"),
+      (reply[:-9], "excitation"),  # Not a reader's reply: cut short.
+    ):
+      with self.subTest(slide=slide, length=len(wrong)), self.assertRaises(ValueError):
+        decode_filter_result(wrong, slide)
+
+  async def test_a_scan_ending_without_data_stops(self):
+    """Not a reader's sequence: the idle status before the first `24`, again after it."""
+    first = load_filter_detection()[0]["replies"]
+    io = FakeFTDI(chunk=4096)
+    io.replies = [bytes.fromhex(first[0]), bytes.fromhex(first[1]), bytes.fromhex(first[0])]
+    io.replies.append(STOP_REPLY)
+    feature = make_fluorescence(io)
+    with self.assertRaises(RuntimeError):
+      await feature.detect_all_filters()
+    self.assertEqual(io.written[-1], STOP_FRAME)
+    self.assertIsNone(feature.excitation_filter_slide)
+
+  async def test_no_spectrometer_or_extended_red_sends_nothing(self):
+    for field in ("spectrometer", "absorbance_available", "extended_red_photomultiplier_tube"):
+      io = FakeFTDI()
+      feature = make_fluorescence(io)
+      configuration = feature._driver.configuration
+      if field == "spectrometer":
+        configuration.spectrometer = False
+      elif field == "absorbance_available":
+        configuration.absorbance_available = False
+      else:
+        configuration.extended_red_photomultiplier_tube = False
+      with self.subTest(field), self.assertRaises(RuntimeError):
+        await feature.detect_all_filters()
+      self.assertEqual(io.written, [])
+
+
+def make_detected_slides(fluorescence_feature: Fluorescence) -> None:
+  """Give the feature the reader's slides as it detected them, named as the vendor names them."""
+  excitation = ExcitationFilterSlide(4)
+  dichroic = DichroicFilterSlide(3)
+  emission = EmissionFilterSlide(4)
+  for filter_slide, slide, name in (
+    (excitation, "excitation", "Ex TR"),
+    (emission, "emission", "615-18"),
+  ):
+    detected = Fluorescence._compute_optical_filter(
+      1, decode_filter_result(detection_result(slide, 1), slide)
+    )
+    assert detected is not None
+    filter_slide.register(replace(detected, name=name))
+  result = decode_filter_result(detection_result("dichroic", 1), "dichroic")
+  mirror = Fluorescence._compute_dichroic_filter(1, result)
+  assert mirror is not None
+  dichroic.register(replace(mirror, name="LP TR"))
+  fluorescence_feature.excitation_filter_slide = excitation
+  fluorescence_feature.dichroic_filter_slide = dichroic
+  fluorescence_feature.emission_filter_slide = emission
+
+
+async def read_with_slides(io: FakeFTDI, fluorescence_channel: FluorescenceChannel, **arguments):
+  """A whole-plate read through `fluorescence_channel`, gain 1000, the captured slides; feature,
+  result."""
+  io.replies = [
+    STATUS_IDLE,
+    RUN_REPLY,
+    STATUS_MEASURING,
+    STATUS_MEASURED,
+    TEMPERATURE_37_DATA_REPLY,
+  ]
+  feature = make_fluorescence(io, fluorescence_plate())
+  make_detected_slides(feature)
+  return feature, await feature.measure(
+    fluorescence_channel, **{"gain": 1000, "focal_height": CAPTURED_FOCAL_HEIGHT, **arguments}
+  )
+
+
+class FilterSlideTests(unittest.IsolatedAsyncioTestCase):
+  async def test_slots_and_names_are_the_vendors_reads(self):
+    """The three filters' read by slot and by name; the one-filter reads by slot."""
+    reads: Dict[str, Tuple[bytes, List[FluorescenceChannel]]] = {
+      "three_filters": (
+        FILTERS_RUN_FRAME,
+        [
+          FluorescenceChannel(excitation_filter=1, dichroic_filter=1, emission_filter=1),
+          FluorescenceChannel(
+            excitation_filter="Ex TR", dichroic_filter="LP TR", emission_filter="615-18"
+          ),
+        ],
+      ),
+      "emission_filter": (
+        EMISSION_FILTER_RUN_FRAME,
+        [FluorescenceChannel(excitation_wavelength=400, dichroic_filter=1, emission_filter=1)],
+      ),
+      "excitation_filter": (
+        EXCITATION_FILTER_RUN_FRAME,
+        [FluorescenceChannel(excitation_filter=1, dichroic_filter=1, emission_wavelength=528)],
+      ),
+    }
+    for name, (captured, fluorescence_channels) in reads.items():
+      for fluorescence_channel in fluorescence_channels:
+        with self.subTest(name, fluorescence_channel=fluorescence_channel):
+          io = FakeFTDI()
+          _, result = await read_with_slides(
+            io, fluorescence_channel, measurement_settings=TEN_FLASHES
+          )
+          expected = with_nominal_edges(captured, [fluorescence_channel])
+          self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
+          if fluorescence_channel.excitation_filter is not None:
+            self.assertEqual(result.excitation_wavelength, (282.2 + 371.8) / 2)
+          if fluorescence_channel.emission_filter is not None:
+            self.assertEqual(result.emission_bandwidth, 623.2 - 604.9)
+
+  async def test_every_slot_is_its_detection_position(self):
+    """No RUN through slots 2 to 4 or dichroic B and C is captured: their RUN fields are the slide
+    positions of the detection's `24`."""
+    words = {
+      (slide, slot): [int.from_bytes(request[i : i + 2], "big") for i in range(10, 28, 2)]
+      for (slide, slot), request in zip(
+        DETECTION_POSITIONS,
+        (ftdi_extract_payload(bytes.fromhex(p["request"])) for p in load_filter_detection()),
+      )
+    }
+    for slot in range(1, 5):
+      for dichroic in range(1, 4):
+        with self.subTest(slot=slot, dichroic=dichroic):
+          io = FakeFTDI()
+          await read_with_slides(
+            io,
+            FluorescenceChannel(
+              excitation_filter=slot, dichroic_filter=dichroic, emission_filter=slot
+            ),
+          )
+          payload = ftdi_extract_payload(io.written[1])
+          fluorescence_channel = len(payload) - 36
+          fields = [
+            int.from_bytes(payload[fluorescence_channel + i : fluorescence_channel + i + 2], "big")
+            for i in (2, 4, 6, 8, 10)
+          ]
+          # The detection's words: two slits, EX_SP, EX_LP, BSP, EM_SP, EM_LP, ...
+          excitation = words[("excitation", slot)][2:4]
+          mirror = words[("dichroic", dichroic)][4]
+          emission = words[("emission", slot)][5:7]
+          self.assertEqual(fields, [*excitation, mirror, *emission])
+
+  async def test_unknown_slots_and_names_send_nothing(self):
+    io = FakeFTDI()
+    feature = make_fluorescence(io, fluorescence_plate())
+    unresolved = FluorescenceChannel(
+      excitation_filter=1, dichroic_filter=LP_TR, emission_wavelength=528
+    )
+    with self.assertRaisesRegex(ValueError, "detect_all_filters"):
+      await feature.measure(unresolved, gain=1000)
+    make_detected_slides(feature)
+    refused: List[Tuple[Union[OpticalFilter, int, str], Union[DichroicFilter, int, str]]] = [
+      (5, 1),
+      (0, 1),
+      ("Ex XX", 1),
+      (1, 4),
+      (1, "LP XX"),
+    ]
+    for excitation_filter, dichroic_filter in refused:
+      fluorescence_channel = FluorescenceChannel(
+        excitation_filter=excitation_filter,
+        dichroic_filter=dichroic_filter,
+        emission_wavelength=528,
+      )
+      with self.subTest(fluorescence_channel=fluorescence_channel), self.assertRaises(ValueError):
+        await feature.measure(fluorescence_channel, gain=1000)
+    self.assertEqual(io.written, [])
+
+
+def load_z_profile_captures() -> Dict[str, Any]:
+  """The reader's z-scans: of A1 without a target, of D6 to 90 %, and a brightest-well search.
+
+  Each holds its frame (`09`; the search `0c`, which the driver does not send, kept for its result)
+  and the replies the driver reads, as hex: the status before it, the reply to it, to `80`, to
+  `05 05`.
+  """
+  path = os.path.join(os.path.dirname(__file__), "test_data", "z_profile_captures.json.gz")
+  with gzip.open(path, "rt") as f:
+    return dict(json.load(f))
+
+
+def with_nominal_z_scan_edges(captured: bytes) -> bytes:
+  """`captured`'s payload with 485/15 and 528/20 nm at their nominal edges (`with_nominal_edges`).
+
+  The optics are the last 14 bytes.
+  """
+  payload = bytearray(ftdi_extract_payload(captured))
+  for offset, edges in ((-14, _compute_band_edges(485, 15)), (-8, _compute_band_edges(528, 20))):
+    for index, value in enumerate(edges):
+      start = len(payload) + offset + 2 * index
+      payload[start : start + 2] = value.to_bytes(2, "big")
+  return bytes(payload)
+
+
+async def run_z_profile(name: str, well: str, **arguments):
+  """Capture `name`'s z-scan of `well` answered by its replies; the io, the capture, the result."""
+  capture = load_z_profile_captures()[name]
+  io = FakeFTDI(chunk=4096)
+  io.replies = [bytes.fromhex(reply) for reply in capture["replies"]]
+  plate = fluorescence_plate()
+  feature = make_fluorescence(io, plate)
+  result = await feature.measure_z_profile(BASELINE, well=plate.get_well(well), **arguments)
+  return io, capture, result
+
+
+class ZProfileTests(unittest.IsolatedAsyncioTestCase):
+  async def test_z_scans_are_sent_and_decoded_as_the_vendors(self):
+    """A1 without a target and D6 to 90 %."""
+    z_scans = {
+      "z_profile_without_target": ("A1", None, (15.0, None, "A1", None, None, 60920)),
+      "z_profile_with_gain_target": ("D6", 90, (10.3, 1968, "D6", 231622, 89.08, 43243)),
+    }
+    for name, (well, target, expected) in z_scans.items():
+      with self.subTest(name):
+        io, capture, result = await run_z_profile(name, well, gain_target_percent=target)
+        self.assertEqual(
+          ftdi_extract_payload(io.written[1]),
+          with_nominal_z_scan_edges(bytes.fromhex(capture["request"])),
+        )
+        self.assertEqual(
+          (
+            result.peak_focal_height,
+            result.gain,
+            result.well,
+            result.peak_counts,
+            result.peak_detector_percent,
+            result.average_signal,
+          ),
+          expected,
+        )
+        self.assertEqual(len(result.z_profile), 144)
+        self.assertEqual(result.z_profile[0][0], 15.0)
+        self.assertEqual(result.z_profile[-1][0], 0.7)
+        self.assertLessEqual(result.start_timestamp, result.end_timestamp)
+        self.assertIsNone(result.temperature)
+        # `05 05` follows the idle status without one of its own.
+        self.assertEqual(ftdi_extract_payload(io.written[-1]), bytes.fromhex("05050000000000"))
+        self.assertEqual(io.replies, [])
+
+  def test_a_height_below_0_is_decoded(self):
+    """Not a reader's reply: the brightest-well search's result, last point and peak -0.60 mm."""
+    reply = bytearray(
+      ftdi_extract_payload(
+        bytes.fromhex(load_z_profile_captures()["brightest_well_search"]["replies"][-1])
+      )
+    )
+    points = int.from_bytes(reply[23:25], "big")
+    last = 25 + 8 * (points - 1)
+    reply[last : last + 4] = (-60).to_bytes(4, "big", signed=True)
+    reply[17:19] = (-60).to_bytes(2, "big", signed=True)  # the peak there too
+    now = datetime.now()
+    result = Fluorescence._decode_z_profile_result(
+      bytes(reply), fluorescence_plate(), start_timestamp=now, end_timestamp=now
+    )
+    self.assertEqual(result.z_profile[-1][0], -0.6)
+    self.assertEqual(result.peak_focal_height, -0.6)
+
+  def test_a_reply_not_of_this_plate_is_refused(self):
+    """The brightest-well search's result, B11, cut short; then of column 13 (not a reply)."""
+    reply = ftdi_extract_payload(
+      bytes.fromhex(load_z_profile_captures()["brightest_well_search"]["replies"][-1])
+    )
+    off_plate = bytearray(reply)
+    off_plate[15] = 13
+    for wrong in (reply[:-8], bytes(off_plate)):
+      with self.subTest(length=len(wrong)), self.assertRaises(ValueError):
+        Fluorescence._decode_z_profile_result(
+          wrong, fluorescence_plate(), start_timestamp=datetime.now(), end_timestamp=datetime.now()
+        )
+
+  async def test_a_z_scan_ending_without_its_result_stops(self):
+    """Not a reader's reply: an idle status with byte 2 bit 5 clear right after the `09`."""
+    capture = load_z_profile_captures()["z_profile_without_target"]
+    io = FakeFTDI()
+    replies = [bytes.fromhex(reply) for reply in capture["replies"]]
+    io.replies = [replies[0], replies[1], replies[0], STOP_REPLY]
+    plate = fluorescence_plate()
+    with self.assertRaises(RuntimeError):
+      await make_fluorescence(io, plate).measure_z_profile(BASELINE, well=plate.get_well("A1"))
+    self.assertEqual(io.written[-1], STOP_FRAME)
+
+  async def test_out_of_range_z_scans_send_nothing(self):
+    io = FakeFTDI()
+    plate = fluorescence_plate()
+    feature = make_fluorescence(io, plate)
+    refused: List[Tuple[FluorescenceChannel, Dict[str, Any]]] = [
+      (BASELINE, dict(maximum_focal_height=0.0)),  # the reader refuses it
+      (BASELINE, dict(maximum_focal_height=25.1)),
+      (BASELINE, dict(maximum_focal_height=8.55)),
+      (BASELINE, dict(gain_target_percent=0)),
+      (BASELINE, dict(gain_target_percent=101)),
+      (BASELINE, dict(timeout=0)),
+      (replace(BASELINE, excitation_wavelength=None), {}),
+      (
+        FluorescenceChannel(excitation_filter=1, dichroic_filter=1, emission_wavelength=528),
+        {},
+      ),  # no slides
+    ]
+    for fluorescence_channel, arguments in refused:
+      with (
+        self.subTest(fluorescence_channel=fluorescence_channel, arguments=arguments),
+        self.assertRaises(ValueError),
+      ):
+        await feature.measure_z_profile(
+          fluorescence_channel, well=plate.get_well("A1"), **arguments
+        )
+    other = Plate("other", 127.8, 85.5, 14.0, ordered_items={})
+    with self.assertRaises(ValueError):
+      await feature.measure_z_profile(BASELINE, well=other)  # type: ignore[arg-type]
+    self.assertEqual(io.written, [])
 
 
 if __name__ == "__main__":

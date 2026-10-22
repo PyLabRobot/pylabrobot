@@ -427,14 +427,12 @@ class Measurement:
   # -- plate block ---------------------------------------------------------------------------------
 
   @staticmethod
-  def _encode_plate_block(plate: Plate, wells: Sequence[Well]) -> bytes:
-    """The 63-byte plate block: geometry in 0.01 mm (u16 BE), columns, rows, `00`, well mask.
+  def _encode_plate_geometry(plate: Plate) -> bytes:
+    """The plate's 14 bytes: size, first and last well centre in 0.01 mm (u16 BE), columns, rows.
 
-    Y is measured from the plate's back edge. The mask bit of a well is row * columns + column,
-    most significant bit first.
+    Y is measured from the plate's back edge.
     """
     items = plate.get_all_items()
-    columns, rows = plate.num_items_x, plate.num_items_y
 
     def center_from_back(well: Well):
       if well.location is None:
@@ -446,15 +444,27 @@ class Measurement:
     last_x, last_y = center_from_back(items[-1])
     geometry = (plate.get_size_x(), plate.get_size_y(), first_x, first_y, last_x, last_y)
     block = b"".join(round(value * 100).to_bytes(2, "big") for value in geometry)
-    block += bytes([columns, rows, 0x00])
+    return block + bytes([plate.num_items_x, plate.num_items_y])
 
+  @staticmethod
+  def _encode_well_mask(plate: Plate, wells: Sequence[Well]) -> bytes:
+    """The 48-byte well mask, a bit per well of `wells`.
+
+    The bit of a well is row * columns + column, most significant bit first.
+    """
+    items = plate.get_all_items()
+    columns, rows = plate.num_items_x, plate.num_items_y
     mask = bytearray(_WELL_MASK_SIZE)
     selected = {id(well) for well in wells}
     for index, well in enumerate(items):  # column-major: A1, B1, ..., A2, ...
       if id(well) in selected:
         bit = (index % rows) * columns + index // rows
         mask[bit // 8] |= 0x80 >> (bit % 8)
-    return block + bytes(mask)
+    return bytes(mask)
+
+  def _encode_plate_block(self, plate: Plate, wells: Sequence[Well]) -> bytes:
+    """The 63-byte plate block: `_encode_plate_geometry`, `00`, then `_encode_well_mask`."""
+    return self._encode_plate_geometry(plate) + b"\x00" + self._encode_well_mask(plate, wells)
 
   # -- scan and settling bytes ---------------------------------------------------------------------
 
@@ -631,6 +641,26 @@ class Measurement:
       if received >= values:
         return replies
 
+  async def _drain_and_stop(self, what: str) -> None:
+    """Drain the reply still streaming, send STOP (`0b 00`) and drop what STOP left.
+
+    A refused STOP only warns.
+
+    Args:
+      what: what is stopped, for the log.
+    """
+    logger.warning("stopping the %s", what)
+    try:
+      # The reader sends a reply it has started to its end: drain it before STOP, and drop
+      # whatever STOP left after it, so the next command reads its own reply.
+      await self._driver._drain_rx()
+      await self._driver.send_command(
+        self._driver.CommandFamily.STOP, parameters=b"\x00", when_idle=False
+      )
+      await self._driver._purge_rx()
+    except (CommandRefusedError, FrameError) as e:  # e.g. the run ended meanwhile (214)
+      logger.warning("STOP not accepted: %s", e)
+
   async def _run_measurement(
     self,
     parameters: bytes,
@@ -692,15 +722,5 @@ class Measurement:
           raise TimeoutError(f"the measurement took longer than {timeout} s")
         await asyncio.sleep(self._driver.default_poll_interval)
     except BaseException:  # a timeout, a cancelled call, a bad reply: stop the run first
-      logger.warning("stopping the measurement run")
-      try:
-        # The reader sends a reply it has started to its end: drain it before STOP, and drop
-        # whatever STOP left after it, so the next command reads its own reply.
-        await self._driver._drain_rx()
-        await self._driver.send_command(
-          self._driver.CommandFamily.STOP, parameters=b"\x00", when_idle=False
-        )
-        await self._driver._purge_rx()
-      except (CommandRefusedError, FrameError) as e:  # e.g. the run ended meanwhile (214)
-        logger.warning("STOP not accepted: %s", e)
+      await self._drain_and_stop("measurement run")
       raise

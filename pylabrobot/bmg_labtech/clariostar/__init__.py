@@ -13,6 +13,7 @@ from .driver import (
   CLARIOstarFluorescenceSpectrumResult,
   CLARIOstarSimulationDriver,
   CLARIOstarStatus,
+  CLARIOstarZProfileResult,
   CommandRefusedError,
   DeviceConfiguration,
   Drawer,
