@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import math
 import re
 import unittest
@@ -7,6 +8,7 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union, ca
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
+from pylabrobot.hamilton.star.driver.configuration import EXTENDED_PIP_PARAMETERS_SINCE
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.pipettes import (
   Pipettes,
@@ -4183,6 +4185,41 @@ class TestDispenseFirmware(unittest.IsolatedAsyncioTestCase):
         "mv00000 00000mc00 00mp000 000ms1000 1000mh0000 0000gi000 000gj0gk0"
       ],
     )
+
+
+class TestAMasterOlderThanTheExtendedPipParameters(unittest.IsolatedAsyncioTestCase):
+  """A master built before them is sent none of them, on the commands that carry them."""
+
+  async def asyncSetUp(self):
+    self.pipettes, self.rack, _ = await channels_over_a_rack()
+    device = cast(Any, self.pipettes._driver.configuration)
+    device.firmware_date = EXTENDED_PIP_PARAMETERS_SINCE - datetime.timedelta(days=1)
+    self.send = unittest.mock.AsyncMock(wraps=self.pipettes._driver.send_command)
+    self.pipettes._driver.send_command = self.send  # type: ignore[method-assign]
+
+  def sent(self, command: str) -> Mapping[str, Any]:
+    return next(c.kwargs for c in self.send.call_args_list if c.kwargs.get("command") == command)
+
+  async def test_the_tip_commands(self):
+    await self.pipettes.initialize()
+    await self.pipettes.pick_up_tips([self.rack.get_item("A1")])
+    await self.pipettes.drop_tips([self.rack.get_item("A1")])
+    self.assertNotIn("ti", self.sent("DI"))
+    self.assertNotIn("td", self.sent("TP"))
+    self.assertNotIn("ti", self.sent("TR"))
+
+  async def test_aspirate_and_dispense(self):
+    self.pipettes.get_mounted_tip = unittest.mock.Mock(  # type: ignore[method-assign]
+      return_value=self.rack.get_item("A1").tip
+    )
+    self.pipettes._record_after_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    places = [Coordinate(300.0, 300.0, 150.0)]
+    await self.pipettes._aspirate_in_one_move([0], places, [180.0], [120.0], [100.0])
+    await self.pipettes._dispense_in_one_move([0], places, [180.0], [120.0], [100.0])
+    for parameter in ("gi", "gj", "gk", "lk", "ik", "se", "sz", "po"):
+      self.assertNotIn(parameter, self.sent("AS"))
+    for parameter in ("gi", "gj", "gk", "po"):
+      self.assertNotIn(parameter, self.sent("DS"))
 
 
 class TestDispenseInOneMove(unittest.IsolatedAsyncioTestCase):
