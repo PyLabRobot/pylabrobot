@@ -61,13 +61,18 @@ PLATFORM_FLAGS = (
   else ["--use-angle=swiftshader", "--no-sandbox", "--disable-dev-shm-usage"]
 )
 FS_PORT, WS_PORT = free_ports(2)
+# Seconds a browser has to come up: a test's, and the module's first, which on a fresh runner also
+# loads Chrome, its fonts and its software renderer from cold (up to tens of seconds).
+ATTACH_TIMEOUT = 30.0
+FIRST_ATTACH_TIMEOUT = 120.0
 
 
 class Browser:
   """Headless Chrome, driven over the devtools protocol. Enough of it to load a page and ask it
   questions. Each one has a devtools port of its own: the last may still be letting go of its."""
 
-  def __init__(self) -> None:
+  def __init__(self, attach_timeout: float = ATTACH_TIMEOUT) -> None:
+    self._attach_timeout = attach_timeout
     self._profile = tempfile.mkdtemp()
     self._stderr = tempfile.TemporaryFile(mode="w+b")
     self._chrome: Optional[subprocess.Popen] = None
@@ -92,7 +97,7 @@ class Browser:
     )
     # A browser nobody attached to would outlive the test, so a failed attach lets go of it.
     try:
-      deadline = time.monotonic() + 30
+      deadline = time.monotonic() + self._attach_timeout
       while True:
         try:
           with open(os.path.join(self._profile, "DevToolsActivePort")) as active_port:
@@ -208,6 +213,17 @@ class Browser:
         "awaitPromise": True,
       },
     )
+
+
+async def _warm_up() -> None:
+  async with Browser(attach_timeout=FIRST_ATTACH_TIMEOUT):
+    pass
+
+
+def setUpModule() -> None:
+  """Start and close one browser before any test, so a cold start is not one test's to pay."""
+  if CHROME:
+    asyncio.run(_warm_up())
 
 
 def _png_luminance(png: bytes) -> List[List[int]]:
