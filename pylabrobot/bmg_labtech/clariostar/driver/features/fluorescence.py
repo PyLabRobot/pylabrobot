@@ -24,6 +24,7 @@ from typing import (
   overload,
 )
 
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
 from pylabrobot.lib.fluorescence.results import FluorescenceResult, FluorescenceSpectrumResult
 from pylabrobot.lib.optics.filters import DichroicFilter, OpticalFilter
@@ -36,7 +37,6 @@ from pylabrobot.lib.optics.holders import (
 )
 from pylabrobot.resources import Coordinate, Plate, Well
 
-from ..errors import FrameError
 from .measurement import (
   Measurement,
   MeasurementConfiguration,

@@ -2,15 +2,6 @@
 
 from typing import Dict, Optional, Tuple
 
-
-class FrameError(Exception):
-  """A reply frame is malformed, truncated, or missing."""
-
-
-class ChecksumError(FrameError):
-  """An FTDI reply frame's checksum does not match its bytes."""
-
-
 # Reply byte 1 bits that put quit codes in bytes 6-10 of a type 0x01 reply.
 REFUSED_BIT = 1 << 4
 WARNING_BIT = 1 << 7

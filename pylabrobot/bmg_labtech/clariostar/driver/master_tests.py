@@ -10,13 +10,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
 from pylabrobot.bmg_labtech.clariostar.driver.errors import (
   CommandRefusedError,
-  FrameError,
   parse_quit_codes,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import (
+from pylabrobot.bmg_labtech.clariostar.driver.master import CLARIOstarDriver
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.bmg_labtech.protocol.framing import (
   ftdi_extract_payload,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.master import CLARIOstarDriver
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
 

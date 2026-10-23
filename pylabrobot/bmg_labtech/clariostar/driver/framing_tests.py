@@ -2,10 +2,6 @@
 
 import unittest
 
-from pylabrobot.bmg_labtech.clariostar.driver.errors import (
-  ChecksumError,
-  FrameError,
-)
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   VERIFICATION_DATA_REPLY,
 )
@@ -16,9 +12,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.drawer_tests import (
   OPEN_DRAWER_REPLY,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.framing import (
-  ftdi_extract_payload,
-  ftdi_validate_frame,
-  ftdi_wrap_payload,
+  FTDI_HEADER,
   usb_packet_type,
   usb_total_length,
   usb_wrap_payload,
@@ -41,6 +35,12 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_TEMPERATURES,
   STATUS_TRUNCATED,
   STATUS_WARNING,
+)
+from pylabrobot.bmg_labtech.protocol.errors import ChecksumError, FrameError
+from pylabrobot.bmg_labtech.protocol.framing import (
+  ftdi_extract_payload,
+  ftdi_validate_frame,
+  ftdi_wrap_payload,
 )
 
 # Every recorded exchange whose reply arrived whole.
@@ -70,37 +70,37 @@ STATUS_REPLY_FRAME = STATUS_PLATE_DETECTED
 class FTDIFramingTests(unittest.TestCase):
   def test_wrap_reproduces_every_real_sent_frame(self):
     for sent, _ in REAL_EXCHANGES:
-      self.assertEqual(ftdi_wrap_payload(ftdi_extract_payload(sent)), sent)
-    self.assertEqual(ftdi_wrap_payload(b"\x80"), STATUS_QUERY_FRAME)
+      self.assertEqual(ftdi_wrap_payload(ftdi_extract_payload(sent), header=FTDI_HEADER), sent)
+    self.assertEqual(ftdi_wrap_payload(b"\x80", header=FTDI_HEADER), STATUS_QUERY_FRAME)
 
   def test_every_real_frame_validates(self):
     for sent, received in REAL_EXCHANGES:
-      ftdi_validate_frame(sent)
-      ftdi_validate_frame(received)
+      ftdi_validate_frame(sent, header=FTDI_HEADER)
+      ftdi_validate_frame(received, header=FTDI_HEADER)
       self.assertEqual(len(ftdi_extract_payload(received)), len(received) - 8)
 
   def test_real_truncated_reply_fails(self):
     with self.assertRaises(FrameError):
-      ftdi_validate_frame(STATUS_TRUNCATED)
+      ftdi_validate_frame(STATUS_TRUNCATED, header=FTDI_HEADER)
 
   def test_a_checksum_past_16_bits_validates(self):
     # The 96-well verification read's data reply: its checksum is 0x01c462.
     self.assertGreater(int.from_bytes(VERIFICATION_DATA_REPLY[-4:-1], "big"), 0xFFFF)
-    ftdi_validate_frame(VERIFICATION_DATA_REPLY)
+    ftdi_validate_frame(VERIFICATION_DATA_REPLY, header=FTDI_HEADER)
 
   def test_corrupted_byte_fails_checksum(self):
     # Not a reader's reply: the recorded frame with one bit flipped.
     frame = bytearray(STATUS_REPLY_FRAME)
     frame[6] ^= 0x01
     with self.assertRaises(ChecksumError):
-      ftdi_validate_frame(bytes(frame))
+      ftdi_validate_frame(bytes(frame), header=FTDI_HEADER)
 
   def test_truncated_frame_fails(self):
     # Not a reader's reply: the recorded frame cut short.
     with self.assertRaises(FrameError):
-      ftdi_validate_frame(STATUS_REPLY_FRAME[:-1])
+      ftdi_validate_frame(STATUS_REPLY_FRAME[:-1], header=FTDI_HEADER)
     with self.assertRaises(FrameError):
-      ftdi_validate_frame(STATUS_REPLY_FRAME[:5])
+      ftdi_validate_frame(STATUS_REPLY_FRAME[:5], header=FTDI_HEADER)
 
 
 class USBFramingTests(unittest.TestCase):

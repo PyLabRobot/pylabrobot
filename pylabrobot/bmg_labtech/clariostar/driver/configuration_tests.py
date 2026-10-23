@@ -13,7 +13,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.configuration import (
   DeviceConfiguration,
   _parse_monochromator_slides,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload, ftdi_wrap_payload
+from pylabrobot.bmg_labtech.clariostar.driver.framing import FTDI_HEADER
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   FIRMWARE_INFO_REPLY,
   INIT_REPLY,
@@ -30,6 +30,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.parameter_table import (
   SERIAL_NUMBER_ADDRESSES,
   SIGNED_PARAMETERS,
 )
+from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload, ftdi_wrap_payload
 
 INIT_PAYLOAD = ftdi_extract_payload(INIT_REPLY)
 
@@ -202,7 +203,7 @@ class ParametersTests(unittest.IsolatedAsyncioTestCase):
       payload = bytearray(ftdi_extract_payload(PARAMETERS_REPLY))
       for address, value in zip(SERIAL_NUMBER_ADDRESSES, (first, second)):
         payload[address + REPLY_OFFSET : address + REPLY_OFFSET + 2] = value.to_bytes(2, "little")
-      return ftdi_wrap_payload(bytes(payload))
+      return ftdi_wrap_payload(bytes(payload), header=FTDI_HEADER)
 
     cases: List[Tuple[Tuple[int, int], Dict[str, Optional[str]], str, bool]] = [
       ((123, 4567), {"device_id": None}, "123-4567", False),
