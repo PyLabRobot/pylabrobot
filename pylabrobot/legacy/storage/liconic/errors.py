@@ -1,6 +1,12 @@
 from typing import Dict, Tuple, Type
 
 from pylabrobot.legacy.storage.liconic.constants import ControllerError, HandlingError
+from pylabrobot.liconic.errors import (
+  CONTROLLER_ERRORS as _CONTROLLER_ERRORS,
+)
+from pylabrobot.liconic.errors import (
+  HANDLING_ERRORS as _HANDLING_ERRORS,
+)
 
 
 class LiconicControllerRelayError(Exception):
@@ -30,27 +36,27 @@ class LiconicControllerBaseUnitError(Exception):
 controller_error_map: Dict[ControllerError, Tuple[Type[Exception], str]] = {
   ControllerError.RELAY_ERROR: (
     LiconicControllerRelayError,
-    "Controller system error. Undefined timer, counter, data memory, check if requested unit is valid",
+    _CONTROLLER_ERRORS[ControllerError.RELAY_ERROR.value],
   ),
   ControllerError.COMMAND_ERROR: (
     LiconicControllerCommandError,
-    "Controller system error. Invalid command, check if communication is opened by CR, check command sent to controller, check for interruptions during string transmission",
+    _CONTROLLER_ERRORS[ControllerError.COMMAND_ERROR.value],
   ),
   ControllerError.PROGRAM_ERROR: (
     LiconicControllerProgramError,
-    "Controller system error. Firmware lost, reprogram controller",
+    _CONTROLLER_ERRORS[ControllerError.PROGRAM_ERROR.value],
   ),
   ControllerError.HARDWARE_ERROR: (
     LiconicControllerHardwareError,
-    "Controller hardware error, turn controller ON/OFF, controller is faulty has to be replaced",
+    _CONTROLLER_ERRORS[ControllerError.HARDWARE_ERROR.value],
   ),
   ControllerError.WRITE_PROTECTED_ERROR: (
     LiconicControllerWriteProtectedError,
-    "Controller system error. Unauthorized Access",
+    _CONTROLLER_ERRORS[ControllerError.WRITE_PROTECTED_ERROR.value],
   ),
   ControllerError.BASE_UNIT_ERROR: (
     LiconicControllerBaseUnitError,
-    "Controller system error. Unauthorized Access",
+    _CONTROLLER_ERRORS[ControllerError.BASE_UNIT_ERROR.value],
   ),
 }
 
@@ -90,386 +96,386 @@ class LiconicHandlerGeneralError(Exception):
 handler_error_map: Dict[HandlingError, Tuple[Type[Exception], str]] = {
   HandlingError.GENERAL_HANDLING_ERROR: (
     LiconicHandlerGeneralError,
-    "Handling action could not be performed in time",
+    _HANDLING_ERRORS[HandlingError.GENERAL_HANDLING_ERROR.value],
   ),
   HandlingError.GATE_OPEN_ERROR: (
     LiconicHandlerGeneralError,
-    "Gate could not reach upper position or Gate did not reach upper position in time",
+    _HANDLING_ERRORS[HandlingError.GATE_OPEN_ERROR.value],
   ),
   HandlingError.GATE_CLOSE_ERROR: (
     LiconicHandlerGeneralError,
-    "Gate could not reach lower position or Gate did not reach lower position in time",
+    _HANDLING_ERRORS[HandlingError.GATE_CLOSE_ERROR.value],
   ),
   HandlingError.GENERAL_LIFT_POSITIONING_ERROR: (
     LiconicHandlerGeneralError,
-    "Handler-Lift could not reach desired level position or does not move",
+    _HANDLING_ERRORS[HandlingError.GENERAL_LIFT_POSITIONING_ERROR.value],
   ),
   HandlingError.USER_ACCESS_ERROR: (
     LiconicHandlerGeneralError,
-    "Unauthorized user access in combination with manual rotation of carrousel",
+    _HANDLING_ERRORS[HandlingError.USER_ACCESS_ERROR.value],
   ),
   HandlingError.STACKER_SLOT_ERROR: (
     LiconicHandlerGeneralError,
-    "Stacker slot cannot be reached",
+    _HANDLING_ERRORS[HandlingError.STACKER_SLOT_ERROR.value],
   ),
   HandlingError.REMOTE_ACCESS_LEVEL_ERROR: (
     LiconicHandlerGeneralError,
-    "Undefined stacker level has been requested",
+    _HANDLING_ERRORS[HandlingError.REMOTE_ACCESS_LEVEL_ERROR.value],
   ),
   HandlingError.PLATE_TRANSFER_DETECTION_ERROR: (
     LiconicHandlerGeneralError,
-    "Export operation while plate is on transfer station",
+    _HANDLING_ERRORS[HandlingError.PLATE_TRANSFER_DETECTION_ERROR.value],
   ),
   HandlingError.LIFT_INITIALIZATION_ERROR: (
     LiconicHandlerGeneralError,
-    "Lift could not be initialized",
+    _HANDLING_ERRORS[HandlingError.LIFT_INITIALIZATION_ERROR.value],
   ),
   HandlingError.PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerGeneralError,
-    "Trying to load a plate, when a plate is already on the shovel",
+    _HANDLING_ERRORS[HandlingError.PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.NO_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerGeneralError,
-    "Trying to remove or place plate with no plate on the shovel",
+    _HANDLING_ERRORS[HandlingError.NO_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.NO_RECOVERY: (
     LiconicHandlerGeneralError,
-    "Recovery was not possible",
+    _HANDLING_ERRORS[HandlingError.NO_RECOVERY.value],
   ),
   HandlingError.IMPORT_PLATE_STACKER_POSITIONING_ERROR: (
     LiconicHandlerImportPlateError,
-    "Carrousel could not reach desired radial position during Import Plate procedure or Lift could not reach transfer level during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_STACKER_POSITIONING_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_HANDLER_TRANSFER_TURN_OUT_ERROR: (
     LiconicHandlerImportPlateError,
-    "Handler could not reach outer turn position at transfer level during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_HANDLER_TRANSFER_TURN_OUT_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_SHOVEL_TRANSFER_OUTER_ERROR: (
     LiconicHandlerImportPlateError,
-    "Shovel could not reach outer position at transfer level during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_SHOVEL_TRANSFER_OUTER_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_LIFT_TRANSFER_ERROR: (
     LiconicHandlerImportPlateError,
-    "Lift did not reach upper pick position at transfer level during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_LIFT_TRANSFER_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_SHOVEL_TRANSFER_INNER_ERROR: (
     LiconicHandlerImportPlateError,
-    "Shovel could not reach inner position at transfer level during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_SHOVEL_TRANSFER_INNER_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_HANDLER_TRANSFER_TURN_IN_ERROR: (
     LiconicHandlerImportPlateError,
-    "Handler could not reach inner turn position at transfer level during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_HANDLER_TRANSFER_TURN_IN_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_LIFT_STACKER_TRAVEL_ERROR: (
     LiconicHandlerImportPlateError,
-    "Lift could not reach desired stacker level during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_LIFT_STACKER_TRAVEL_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_SHOVEL_STACKER_FRONT_ERROR: (
     LiconicHandlerImportPlateError,
-    "Shovel could not reach front position on stacker access during Plate Import procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_SHOVEL_STACKER_FRONT_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_LIFT_STACKER_PLACE_ERROR: (
     LiconicHandlerImportPlateError,
-    "Lift could not reach stacker place level during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_LIFT_STACKER_PLACE_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_SHOVEL_STACKER_INNER_ERROR: (
     LiconicHandlerImportPlateError,
-    "Shovel could not reach inner position at stacker plate placement during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_SHOVEL_STACKER_INNER_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_LIFT_TRAVEL_BACK_ERROR: (
     LiconicHandlerImportPlateError,
-    "Lift could not reach zero level during Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_LIFT_TRAVEL_BACK_ERROR.value],
   ),
   HandlingError.IMPORT_PLATE_LIFT_INIT_ERROR: (
     LiconicHandlerImportPlateError,
-    "Lift could not be initialized after Import Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.IMPORT_PLATE_LIFT_INIT_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_LIFT_STACKER_TRAVEL_ERROR: (
     LiconicHandlerExportPlateError,
-    "Carrousel could not reach desired radial position during Export Plate procedure or Lift could not reach desired stacker level during Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_LIFT_STACKER_TRAVEL_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_SHOVEL_STACKER_FRONT_ERROR: (
     LiconicHandlerExportPlateError,
-    "Shovel could not reach front position on stacker access during Plate Export procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_SHOVEL_STACKER_FRONT_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_LIFT_STACKER_IMPORT_ERROR: (
     LiconicHandlerExportPlateError,
-    "Lift could not reach stacker pick level during Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_LIFT_STACKER_IMPORT_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_SHOVEL_STACKER_INNER_ERROR: (
     LiconicHandlerExportPlateError,
-    "Shovel could not reach inner position at stacker plate pick during Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_SHOVEL_STACKER_INNER_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_LIFT_TRANSFER_POSITIONING_ERROR: (
     LiconicHandlerExportPlateError,
-    "Lift could not reach transfer level during Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_LIFT_TRANSFER_POSITIONING_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_HANDLER_TRANSFER_TURN_OUT_ERROR: (
     LiconicHandlerExportPlateError,
-    "Handler could not reach outer turn position at transfer level during Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_HANDLER_TRANSFER_TURN_OUT_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_SHOVEL_TRANSFER_OUTER_ERROR: (
     LiconicHandlerExportPlateError,
-    "Shovel could not reach outer position at transfer level during Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_SHOVEL_TRANSFER_OUTER_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_LIFT_TRANSFER_PLACE_ERROR: (
     LiconicHandlerExportPlateError,
-    "Lift did not reach lower place position at transfer level during Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_LIFT_TRANSFER_PLACE_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_SHOVEL_TRANSFER_INNER_ERROR: (
     LiconicHandlerExportPlateError,
-    "Shovel could not reach inner position at transfer level during Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_SHOVEL_TRANSFER_INNER_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_HANDLER_TRANSFER_TURN_IN_ERROR: (
     LiconicHandlerExportPlateError,
-    "Handler could not reach inner turn position at transfer level during Export Plate procedure",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_HANDLER_TRANSFER_TURN_IN_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_LIFT_TRAVEL_BACK_ERROR: (
     LiconicHandlerExportPlateError,
-    "Lift could not reach Zero position during Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_LIFT_TRAVEL_BACK_ERROR.value],
   ),
   HandlingError.EXPORT_PLATE_LIFT_INITIALIZING_ERROR: (
     LiconicHandlerExportPlateError,
-    "Lift could not be initialized after Export Plate procedure.",
+    _HANDLING_ERRORS[HandlingError.EXPORT_PLATE_LIFT_INITIALIZING_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_GENERAL_HANDLING_ERROR: (
     LiconicHandlerPlateRemoveError,
-    "Handling action could not be performed in time.",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_GENERAL_HANDLING_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_GATE_OPEN_ERROR: (
     LiconicHandlerPlateRemoveError,
-    "Gate could not reach upper position or Gate did not reach upper position in time",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_GATE_OPEN_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_GATE_CLOSE_ERROR: (
     LiconicHandlerPlateRemoveError,
-    "Gate could not reach lower position or Gate did not reach lower position in time",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_GATE_CLOSE_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_GENERAL_LIFT_POSITIONING_ERROR: (
     LiconicHandlerPlateRemoveError,
-    "Handler-Lift could not reach desired level position or does not move",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_GENERAL_LIFT_POSITIONING_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_USER_ACCESS_ERROR: (
     LiconicHandlerPlateRemoveError,
-    "Unauthorized user access in combination with manual rotation of carrousel",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_USER_ACCESS_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_STACKER_SLOT_ERROR: (
     LiconicHandlerPlateRemoveError,
-    "Stacker slot cannot be reached",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_STACKER_SLOT_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_REMOTE_ACCESS_LEVEL_ERROR: (
     LiconicHandlerPlateRemoveError,
-    "Undefined stacker level has been requested",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_REMOTE_ACCESS_LEVEL_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_PLATE_TRANSFER_DETECTION_ERROR: (
     LiconicHandlerPlateRemoveError,
-    "Export operation while plate is on transfer station",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_PLATE_TRANSFER_DETECTION_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_LIFT_INITIALIZATION_ERROR: (
     LiconicHandlerPlateRemoveError,
-    "Lift could not be initialized",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_LIFT_INITIALIZATION_ERROR.value],
   ),
   HandlingError.PLATE_REMOVE_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerPlateRemoveError,
-    "Trying to load a plate, when a plate is already on the shovel",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.PLATE_REMOVE_NO_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerPlateRemoveError,
-    "Trying to remove or place plate with no plate on the shovel",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_NO_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.PLATE_REMOVE_NO_RECOVERY: (
     LiconicHandlerPlateRemoveError,
-    "Recovery was not possible",
+    _HANDLING_ERRORS[HandlingError.PLATE_REMOVE_NO_RECOVERY.value],
   ),
   HandlingError.BARCODE_READ_GENERAL_HANDLING_ERROR: (
     LiconicHandlerBarcodeReadError,
-    "Handling action could not be performed in time.",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_GENERAL_HANDLING_ERROR.value],
   ),
   HandlingError.BARCODE_READ_GATE_OPEN_ERROR: (
     LiconicHandlerBarcodeReadError,
-    "Gate could not reach upper position or Gate did not reach upper position in time",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_GATE_OPEN_ERROR.value],
   ),
   HandlingError.BARCODE_READ_GATE_CLOSE_ERROR: (
     LiconicHandlerBarcodeReadError,
-    "Gate could not reach lower position or Gate did not reach lower position in time",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_GATE_CLOSE_ERROR.value],
   ),
   HandlingError.BARCODE_READ_GENERAL_LIFT_POSITIONING_ERROR: (
     LiconicHandlerBarcodeReadError,
-    "Handler-Lift could not reach desired level position or does not move",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_GENERAL_LIFT_POSITIONING_ERROR.value],
   ),
   HandlingError.BARCODE_READ_USER_ACCESS_ERROR: (
     LiconicHandlerBarcodeReadError,
-    "Unauthorized user access in combination with manual rotation of carrousel",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_USER_ACCESS_ERROR.value],
   ),
   HandlingError.BARCODE_READ_STACKER_SLOT_ERROR: (
     LiconicHandlerBarcodeReadError,
-    "Stacker slot cannot be reached",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_STACKER_SLOT_ERROR.value],
   ),
   HandlingError.BARCODE_READ_REMOTE_ACCESS_LEVEL_ERROR: (
     LiconicHandlerBarcodeReadError,
-    "Undefined stacker level has been requested",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_REMOTE_ACCESS_LEVEL_ERROR.value],
   ),
   HandlingError.BARCODE_READ_PLATE_TRANSFER_DETECTION_ERROR: (
     LiconicHandlerBarcodeReadError,
-    "Export operation while plate is on transfer station",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_PLATE_TRANSFER_DETECTION_ERROR.value],
   ),
   HandlingError.BARCODE_READ_LIFT_INITIALIZATION_ERROR: (
     LiconicHandlerBarcodeReadError,
-    "Lift could not be initialized",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_LIFT_INITIALIZATION_ERROR.value],
   ),
   HandlingError.BARCODE_READ_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerBarcodeReadError,
-    "Trying to load a plate, when a plate is already on the shovel",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.BARCODE_READ_NO_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerBarcodeReadError,
-    "Trying to remove or place plate with no plate on the shovel",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_NO_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.BARCODE_READ_NO_RECOVERY: (
     LiconicHandlerBarcodeReadError,
-    "Recovery was not possible",
+    _HANDLING_ERRORS[HandlingError.BARCODE_READ_NO_RECOVERY.value],
   ),
   HandlingError.PLATE_PLACE_GENERAL_HANDLING_ERROR: (
     LiconicHandlerPlatePlaceError,
-    "Handling action could not be performed in time.",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_GENERAL_HANDLING_ERROR.value],
   ),
   HandlingError.PLATE_PLACE_GATE_OPEN_ERROR: (
     LiconicHandlerPlatePlaceError,
-    "Gate could not reach upper position or Gate did not reach upper position in time",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_GATE_OPEN_ERROR.value],
   ),
   HandlingError.PLATE_PLACE_GATE_CLOSE_ERROR: (
     LiconicHandlerPlatePlaceError,
-    "Gate could not reach lower position or Gate did not reach lower position in time",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_GATE_CLOSE_ERROR.value],
   ),
   HandlingError.PLATE_PLACE_GENERAL_LIFT_POSITIONING_ERROR: (
     LiconicHandlerPlatePlaceError,
-    "Handler-Lift could not reach desired level position or does not move",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_GENERAL_LIFT_POSITIONING_ERROR.value],
   ),
   HandlingError.PLATE_PLACE_USER_ACCESS_ERROR: (
     LiconicHandlerPlatePlaceError,
-    "Unauthorized user access in combination with manual rotation of carrousel",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_USER_ACCESS_ERROR.value],
   ),
   HandlingError.PLATE_PLACE_STACKER_SLOT_ERROR: (
     LiconicHandlerPlatePlaceError,
-    "Stacker slot cannot be reached",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_STACKER_SLOT_ERROR.value],
   ),
   HandlingError.PLATE_PLACE_REMOTE_ACCESS_LEVEL_ERROR: (
     LiconicHandlerPlatePlaceError,
-    "Undefined stacker level has been requested",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_REMOTE_ACCESS_LEVEL_ERROR.value],
   ),
   HandlingError.PLATE_PLACE_PLATE_TRANSFER_DETECTION_ERROR: (
     LiconicHandlerPlatePlaceError,
-    "Export operation while plate is on transfer station",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_PLATE_TRANSFER_DETECTION_ERROR.value],
   ),
   HandlingError.PLATE_PLACE_LIFT_INITIALIZATION_ERROR: (
     LiconicHandlerPlatePlaceError,
-    "Lift could not be initialized",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_LIFT_INITIALIZATION_ERROR.value],
   ),
   HandlingError.PLATE_PLACE_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerPlatePlaceError,
-    "Trying to load a plate, when a plate is already on the shovel",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.PLATE_PLACE_NO_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerPlatePlaceError,
-    "Trying to remove or place plate with no plate on the shovel",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_NO_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.PLATE_PLACE_NO_RECOVERY: (
     LiconicHandlerPlatePlaceError,
-    "Recovery was not possible",
+    _HANDLING_ERRORS[HandlingError.PLATE_PLACE_NO_RECOVERY.value],
   ),
   HandlingError.PLATE_SET_GENERAL_HANDLING_ERROR: (
     LiconicHandlerPlateSetError,
-    "Handling action could not be performed in time.",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_GENERAL_HANDLING_ERROR.value],
   ),
   HandlingError.PLATE_SET_GATE_OPEN_ERROR: (
     LiconicHandlerPlateSetError,
-    "Gate could not reach upper position or Gate did not reach upper position in time",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_GATE_OPEN_ERROR.value],
   ),
   HandlingError.PLATE_SET_GATE_CLOSE_ERROR: (
     LiconicHandlerPlateSetError,
-    "Gate could not reach lower position or Gate did not reach lower position in time",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_GATE_CLOSE_ERROR.value],
   ),
   HandlingError.PLATE_SET_GENERAL_LIFT_POSITIONING_ERROR: (
     LiconicHandlerPlateSetError,
-    "Handler-Lift could not reach desired level position or does not move",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_GENERAL_LIFT_POSITIONING_ERROR.value],
   ),
   HandlingError.PLATE_SET_USER_ACCESS_ERROR: (
     LiconicHandlerPlateSetError,
-    "Unauthorized user access in combination with manual rotation of carrousel",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_USER_ACCESS_ERROR.value],
   ),
   HandlingError.PLATE_SET_STACKER_SLOT_ERROR: (
     LiconicHandlerPlateSetError,
-    "Stacker slot cannot be reached",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_STACKER_SLOT_ERROR.value],
   ),
   HandlingError.PLATE_SET_REMOTE_ACCESS_LEVEL_ERROR: (
     LiconicHandlerPlateSetError,
-    "Undefined stacker level has been requested",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_REMOTE_ACCESS_LEVEL_ERROR.value],
   ),
   HandlingError.PLATE_SET_PLATE_TRANSFER_DETECTION_ERROR: (
     LiconicHandlerPlateSetError,
-    "Export operation while plate is on transfer station",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_PLATE_TRANSFER_DETECTION_ERROR.value],
   ),
   HandlingError.PLATE_SET_LIFT_INITIALIZATION_ERROR: (
     LiconicHandlerPlateSetError,
-    "Lift could not be initialized",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_LIFT_INITIALIZATION_ERROR.value],
   ),
   HandlingError.PLATE_SET_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerPlateSetError,
-    "Trying to load a plate, when a plate is already on the shovel",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.PLATE_SET_NO_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerPlateSetError,
-    "Trying to remove or place plate with no plate on the shovel",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_NO_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.PLATE_SET_NO_RECOVERY: (
     LiconicHandlerPlateSetError,
-    "Recovery was not possible",
+    _HANDLING_ERRORS[HandlingError.PLATE_SET_NO_RECOVERY.value],
   ),
   HandlingError.PLATE_GET_GENERAL_HANDLING_ERROR: (
     LiconicHandlerPlateGetError,
-    "Handling action could not be performed in time.",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_GENERAL_HANDLING_ERROR.value],
   ),
   HandlingError.PLATE_GET_GATE_OPEN_ERROR: (
     LiconicHandlerPlateGetError,
-    "Gate could not reach upper position or Gate did not reach upper position in time",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_GATE_OPEN_ERROR.value],
   ),
   HandlingError.PLATE_GET_GATE_CLOSE_ERROR: (
     LiconicHandlerPlateGetError,
-    "Gate could not reach lower position or Gate did not reach lower position in time",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_GATE_CLOSE_ERROR.value],
   ),
   HandlingError.PLATE_GET_GENERAL_LIFT_POSITIONING_ERROR: (
     LiconicHandlerPlateGetError,
-    "Handler-Lift could not reach desired level position or does not move",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_GENERAL_LIFT_POSITIONING_ERROR.value],
   ),
   HandlingError.PLATE_GET_USER_ACCESS_ERROR: (
     LiconicHandlerPlateGetError,
-    "Unauthorized user access in combination with manual rotation of carrousel",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_USER_ACCESS_ERROR.value],
   ),
   HandlingError.PLATE_GET_STACKER_SLOT_ERROR: (
     LiconicHandlerPlateGetError,
-    "Stacker slot cannot be reached",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_STACKER_SLOT_ERROR.value],
   ),
   HandlingError.PLATE_GET_REMOTE_ACCESS_LEVEL_ERROR: (
     LiconicHandlerPlateGetError,
-    "Undefined stacker level has been requested",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_REMOTE_ACCESS_LEVEL_ERROR.value],
   ),
   HandlingError.PLATE_GET_PLATE_TRANSFER_DETECTION_ERROR: (
     LiconicHandlerPlateGetError,
-    "Export operation while plate is on transfer station",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_PLATE_TRANSFER_DETECTION_ERROR.value],
   ),
   HandlingError.PLATE_GET_LIFT_INITIALIZATION_ERROR: (
     LiconicHandlerPlateGetError,
-    "Lift could not be initialized",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_LIFT_INITIALIZATION_ERROR.value],
   ),
   HandlingError.PLATE_GET_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerPlateGetError,
-    "Trying to load a plate, when a plate is already on the shovel",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.PLATE_GET_NO_PLATE_ON_SHOVEL_DETECTION: (
     LiconicHandlerPlateGetError,
-    "Trying to remove or place plate with no plate on the shovel",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_NO_PLATE_ON_SHOVEL_DETECTION.value],
   ),
   HandlingError.PLATE_GET_NO_RECOVERY: (
     LiconicHandlerPlateGetError,
-    "Recovery was not possible during get plate",
+    _HANDLING_ERRORS[HandlingError.PLATE_GET_NO_RECOVERY.value],
   ),
 }
