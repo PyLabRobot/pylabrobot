@@ -56,7 +56,8 @@ generate-rpc:
 	$(BIN)python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. --mypy_grpc_out=. \
 		pylabrobot/rpc/v1/device.proto pylabrobot/rpc/v1/jobs.proto \
 		pylabrobot/rpc/v1/images.proto pylabrobot/revvity/celigo/grpc/v1/service.proto \
-		pylabrobot/revvity/celigo/grpc/v1/storage.proto
+		pylabrobot/revvity/celigo/grpc/v1/storage.proto \
+		pylabrobot/agilent/vspin/grpc/v1/service.proto
 
 clear-pyc:
 	find . -name "*.pyc" | xargs rm
