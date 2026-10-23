@@ -1252,10 +1252,14 @@ class Fluorescence(Measurement):
 
     Raises:
       TimeoutError: if the z-scan takes longer than `timeout` seconds.
-      RuntimeError: if it ends without reporting its result ready.
+      RuntimeError: if the drawer is open (nothing is sent), or the z-scan ends without reporting
+        its result ready.
     """
     driver = self._driver
-    await driver.send_command(driver.CommandFamily.FOCUS_WELL, parameters=parameters)
+    await self._wait_until_idle_with_drawer_in()
+    await driver.send_command(
+      driver.CommandFamily.FOCUS_WELL, parameters=parameters, when_idle=False
+    )
     start = time.monotonic()
     stage: Optional[int] = None
     try:
@@ -1495,9 +1499,13 @@ class Fluorescence(Measurement):
 
     Raises:
       TimeoutError: if the scan takes longer than `timeout` seconds.
+      RuntimeError: if the drawer is open; nothing is sent.
     """
     driver = self._driver
-    await driver.send_command(driver.CommandFamily.PLATE_MAP_SCAN, parameters=parameters)
+    await self._wait_until_idle_with_drawer_in()
+    await driver.send_command(
+      driver.CommandFamily.PLATE_MAP_SCAN, parameters=parameters, when_idle=False
+    )
     start = time.monotonic()
     grids: List[bytes] = []
     try:
