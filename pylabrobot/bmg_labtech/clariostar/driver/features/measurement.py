@@ -19,7 +19,7 @@ from pylabrobot.resources import Plate, Well
 from ..errors import CommandRefusedError
 
 if TYPE_CHECKING:
-  from ..master import CLARIOstarDriver
+  from ..master import CLARIOstarDriver, CLARIOstarStatus
 
 logger = logging.getLogger(__name__)
 
@@ -607,9 +607,35 @@ class Measurement:
   # clears it (every cycle of a kinetic read too).
   _DATA_READY = 0x01
 
+  async def _wait_until_idle_with_drawer_in(self) -> None:
+    """Poll status until the reader is idle, as `send_command` does before a command, and raise if
+    that status shows the drawer out: a run, a z-scan and a grid scan move the plate under the
+    optics. The command then goes without a second wait (`when_idle=False`).
+
+    Raises:
+      RuntimeError: if the drawer is open; nothing is sent after the status.
+    """
+    statuses: List["CLARIOstarStatus"] = []
+
+    def idle(status: "CLARIOstarStatus") -> bool:
+      statuses.append(status)
+      return not status.busy
+
+    await self._driver._wait_until_ready(
+      timeout=self._driver.default_read_timeout,
+      poll_interval=self._driver.default_poll_interval,
+      until=idle,
+    )
+    if statuses[-1].drawer_open:
+      raise RuntimeError("the drawer is open; close it first")
+
   async def _unchecked_fw_run(self, parameters: bytes) -> None:
-    """Send RUN with `parameters`, the bytes after the family byte."""
-    await self._driver.send_command(self._driver.CommandFamily.RUN, parameters=parameters)
+    """Send RUN with `parameters`, the bytes after the family byte, once the reader is idle with
+    the drawer in (`_wait_until_idle_with_drawer_in`)."""
+    await self._wait_until_idle_with_drawer_in()
+    await self._driver.send_command(
+      self._driver.CommandFamily.RUN, parameters=parameters, when_idle=False
+    )
 
   async def _request_page(self, retries: int) -> bytes:
     """Request one data page (`05 02 00 00 00 00 00`) while the reader may still be busy.
@@ -697,7 +723,8 @@ class Measurement:
 
     Raises:
       TimeoutError: if the run takes longer than `timeout` seconds.
-      RuntimeError: if the run ends without reporting its data ready, or before all its pages.
+      RuntimeError: if the drawer is open (nothing is sent), or the run ends without reporting its
+        data ready, or before all its pages.
       ValueError: if a data page holds no values.
     """
     await self._unchecked_fw_run(parameters)
