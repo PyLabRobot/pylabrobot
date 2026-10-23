@@ -15,3 +15,6 @@ env/*
 .venv
 .env
 dist/*
+
+# uv writes this on every run; upstream does not track a lockfile.
+uv.lock
