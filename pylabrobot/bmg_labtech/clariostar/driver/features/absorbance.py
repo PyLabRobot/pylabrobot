@@ -386,8 +386,8 @@ class Absorbance(Measurement):
       one result per wavelength, in the order given.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, the run ends without its data, or the last
-        write to the results directory failed.
+      RuntimeError: if no plate is in the plate holder, the drawer is open, the run ends without its
+        data, or the last write to the results directory failed.
       ValueError: if the wavelengths or report are out of range, the settings cannot read the
         wells of the plate, or the results directory cannot be created or written.
       TimeoutError: if the run takes longer than `timeout` seconds.
@@ -577,8 +577,8 @@ class Absorbance(Measurement):
       each measured well's spectrum, keyed by well identifier.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, the run ends without its data, or the last
-        write to the results directory failed.
+      RuntimeError: if no plate is in the plate holder, the drawer is open, the run ends without its
+        data, or the last write to the results directory failed.
       ValueError: if an argument is out of range, the settings cannot read the wells of the plate,
         the data pages are not this read's, or the results directory cannot be created or written.
       TimeoutError: if the run takes longer than `timeout` seconds.

@@ -40,6 +40,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
 )
 from pylabrobot.bmg_labtech.clariostar.driver.framing import FTDI_HEADER
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
+  STATUS_DRAWER_OPEN,
   STATUS_IDLE,
   STATUS_QUERY_FRAME,
   FakeFTDI,
@@ -1921,6 +1922,25 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       with self.subTest(arguments=arguments), self.assertRaises(ValueError):
         await feature.measure_well_centers(GRID_CHANNEL, **arguments)
     self.assertEqual(io.written, [])
+
+
+class DrawerOpenTests(unittest.IsolatedAsyncioTestCase):
+  async def test_a_z_scan_and_a_grid_scan_with_the_drawer_out_are_refused(self):
+    plate, grid = fluorescence_plate(), grid_plate()
+    calls = {
+      "z-scan": lambda feature: feature.measure_z_profile(BASELINE, well=plate.get_well("A1")),
+      "grid scan": lambda feature: feature.measure_well_centers(
+        GRID_CHANNEL, focal_height=15.0, gain=2239
+      ),
+    }
+    for name, call in calls.items():
+      with self.subTest(name):
+        io = FakeFTDI()
+        io.replies = [STATUS_DRAWER_OPEN]
+        feature = make_fluorescence(io, grid if name == "grid scan" else plate)
+        with self.assertRaisesRegex(RuntimeError, "the drawer is open"):
+          await call(feature)
+        self.assertEqual(io.written, [STATUS_QUERY_FRAME])
 
 
 if __name__ == "__main__":

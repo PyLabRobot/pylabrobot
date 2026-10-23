@@ -213,7 +213,9 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
       measurement.well_scan,
       report,
     )
-    temperature = (await self._driver.request_status()).temperature_bottom
+    status = await self._driver.request_status()
+    self._check_drawer_in(status)
+    temperature = status.temperature_bottom
     timestamp = datetime.now()
     results: List[AbsorbanceResult] = []
     if simulated_data is None:
@@ -329,7 +331,9 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
       measurement.well_scan,
       report,
     )
-    temperature = (await self._driver.request_status()).temperature_bottom
+    status = await self._driver.request_status()
+    self._check_drawer_in(status)
+    temperature = status.temperature_bottom
     timestamp = datetime.now()
     if simulated_data is None:
       if report == "raw":
@@ -534,7 +538,9 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
       measurement.well_scan,
       optic_position,
     )
-    temperature = (await self._driver.request_status()).temperature_bottom
+    status = await self._driver.request_status()
+    self._check_drawer_in(status)
+    temperature = status.temperature_bottom
     timestamp = datetime.now()
     if simulated_data is None:
       logger.debug("%s read: simulation: random counts", SIMULATED_LINK)
@@ -638,7 +644,9 @@ class CLARIOstarSimulationLuminescence(Luminescence):
       plate.num_items,
       plate.name,
     )
-    temperature = (await self._driver.request_status()).temperature_bottom
+    status = await self._driver.request_status()
+    self._check_drawer_in(status)
+    temperature = status.temperature_bottom
     timestamp = datetime.now()
     if simulated_data is None:
       logger.debug("%s read: simulation: random counts", SIMULATED_LINK)

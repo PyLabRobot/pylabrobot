@@ -1269,10 +1269,14 @@ class Fluorescence(Measurement):
 
     Raises:
       TimeoutError: if the z-scan takes longer than `timeout` seconds.
-      RuntimeError: if it ends without reporting its result ready.
+      RuntimeError: if the drawer is open (nothing is sent), or the z-scan ends without reporting
+        its result ready.
     """
     driver = self._driver
-    await driver.send_command(driver.CommandFamily.FOCUS_WELL, parameters=parameters)
+    await self._wait_until_idle_with_drawer_in()
+    await driver.send_command(
+      driver.CommandFamily.FOCUS_WELL, parameters=parameters, when_idle=False
+    )
     start = time.monotonic()
     stage: Optional[int] = None
     try:
@@ -1330,7 +1334,8 @@ class Fluorescence(Measurement):
       the z-profile, its peak, and the gain with a target.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, or the z-scan ends without a result.
+      RuntimeError: if no plate is in the plate holder, the drawer is open, or the z-scan ends
+        without a result.
       ValueError: if an argument is out of range (`_check_z_profile_arguments`, `_get_filter`),
         the well is not on the plate, or the reply is not a z-profile.
       TimeoutError: if the z-scan takes longer than `timeout` seconds.
@@ -1512,9 +1517,13 @@ class Fluorescence(Measurement):
 
     Raises:
       TimeoutError: if the scan takes longer than `timeout` seconds.
+      RuntimeError: if the drawer is open; nothing is sent.
     """
     driver = self._driver
-    await driver.send_command(driver.CommandFamily.PLATE_MAP_SCAN, parameters=parameters)
+    await self._wait_until_idle_with_drawer_in()
+    await driver.send_command(
+      driver.CommandFamily.PLATE_MAP_SCAN, parameters=parameters, when_idle=False
+    )
     start = time.monotonic()
     grids: List[bytes] = []
     try:
@@ -1622,7 +1631,7 @@ class Fluorescence(Measurement):
     Raises:
       ValueError: if an argument is out of range, or a reply is not what the scan sends.
       TimeoutError: if the scan takes longer than `timeout` seconds.
-      RuntimeError: if the scan returns another number of grids than points.
+      RuntimeError: if the drawer is open, or the scan returns another number of grids than points.
     """
     filled = self._get_filled_fluorescence_channel(fluorescence_channel)
     optic = self.default_optic_position if optic_position is None else optic_position
@@ -1679,8 +1688,8 @@ class Fluorescence(Measurement):
       a grid for each well, in order, its centre and `center` relative to the plate.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, the z-scan fits no gain, or a scan returns
-        another number of grids than wells.
+      RuntimeError: if no plate is in the plate holder, the drawer is open, the z-scan fits no gain,
+        or a scan returns another number of grids than wells.
       ValueError: if an argument is out of range, a well is not on the plate, or a reply is not
         what the scan sends.
       TimeoutError: if a scan takes longer than `timeout` seconds.
@@ -2061,8 +2070,8 @@ class Fluorescence(Measurement):
       in the order given.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, the run ends without its data, or the last
-        write to the results directory failed.
+      RuntimeError: if no plate is in the plate holder, the drawer is open, the run ends without its
+        data, or the last write to the results directory failed.
       ValueError: if an argument is out of range (`_check_arguments`), a filter's slot or name has
         no slide or is not on it (`_get_filter`), a matrix scan has several wells, the settings
         cannot read the wells of the plate, the reply is not this read's (`_decode_data_reply`),
@@ -2346,8 +2355,8 @@ class Fluorescence(Measurement):
       gain.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, the run ends without all its data, or the
-        last write to the results directory failed.
+      RuntimeError: if no plate is in the plate holder, the drawer is open, the run ends without all
+        its data, or the last write to the results directory failed.
       ValueError: if an argument is out of range (`_check_spectrum_arguments`), the settings
         cannot read the wells of the plate, the data pages are not this read's, or the results
         directory cannot be created or written.
