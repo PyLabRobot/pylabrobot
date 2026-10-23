@@ -34,12 +34,48 @@ def Tube_CAR_24_A00(name: str) -> TubeCarrier:
 
 def Tube_CAR_32_A00(name: str) -> TubeCarrier:
   warnings.warn(
-    "The true dimensions of a Tube_CAR_32_A00 (SMP_CAR_32_A00) are not known. "
-    "The hamilton definitions are with inserts. "
-    "Do you want to use `hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL` instead?",
+    "`Tube_CAR_32_A00` is deprecated. "
+    "Use `hamilton_tube_carrier_32_a00` for the carrier without inserts or "
+    "`hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL` for the carrier "
+    "with Eppendorf 1.5 mL inserts.",
     DeprecationWarning,
+    stacklevel=2,
   )
-  return hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL(name)
+  return hamilton_tube_carrier_32_a00(name)
+
+
+def hamilton_tube_carrier_32_a00(name: str) -> TubeCarrier:
+  """Hamilton cat. no.: 173410 without inserts.
+  Hamilton name: 'SMP_CAR_32_A00'.
+  'Sample' carrier for 32 tubes.
+  1 track(T) wide.
+
+  The 15 mm site pitch and centerline are inherited from the verified
+  insert-specific definition. The bare-hole diameter and tube-support Z were
+  measured directly.
+  """
+  hole_diameter = 13.4
+  return TubeCarrier(
+    name=name,
+    size_x=22.5,  # 1 track
+    size_y=497.0,  # standard
+    size_z=60.0,  # measured without inserts
+    sites=create_homogeneous_resources(
+      klass=ResourceHolder,
+      locations=[
+        Coordinate(
+          14.5 - hole_diameter / 2,
+          14.5 - hole_diameter / 2 + x * 15,
+          50.2,
+        )
+        for x in range(32)
+      ],
+      resource_size_x=hole_diameter,
+      resource_size_y=hole_diameter,
+      name_prefix=name,
+    ),
+    model=hamilton_tube_carrier_32_a00.__name__,
+  )
 
 
 def hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL(name: str) -> TubeCarrier:
