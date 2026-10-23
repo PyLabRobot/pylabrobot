@@ -645,6 +645,21 @@
     "oem": "https://www.highres.com/lab-instruments/sample-storage"
   },
   {
+    "id": "hse-evifluor-duo",
+    "vendor": "HSE AG",
+    "name": "eviFluor Duo",
+    "kind": "fluorometer",
+    "capabilities": ["fluorescence"],
+    "status": "wip",
+    "needs_hardware_testing": true,
+    "api": "pylabrobot.hse.EviFluor",
+    "api_version": "v1",
+    "code_slug": "hse/evifluor",
+    "doc_slug": "hse/evifluor/hello-world",
+    "oem": "https://www.on-deck-fluorometer.com/",
+    "notes": "470 nm measurements and concentration calibration; awaiting hardware validation."
+  },
+  {
     "id": "inheco-cpac",
     "vendor": "Inheco",
     "name": "CPAC",
