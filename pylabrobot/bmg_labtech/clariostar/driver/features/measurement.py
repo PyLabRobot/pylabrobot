@@ -13,9 +13,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Set, Tuple
 
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.resources import Plate, Well
 
-from ..errors import CommandRefusedError, FrameError
+from ..errors import CommandRefusedError
 
 if TYPE_CHECKING:
   from ..master import CLARIOstarDriver

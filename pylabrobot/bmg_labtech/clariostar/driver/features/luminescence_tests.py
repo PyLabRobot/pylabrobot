@@ -25,13 +25,13 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
   Measurement,
   MeasurementSettings,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_IDLE,
   FakeFTDI,
   make_driver,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationLuminescence
+from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload
 from pylabrobot.resources import Plate, cor_96_wellplate_360uL_Fb
 
 # The ground truth: every well, 580-80 nm, gain 3500, focal height 8.5 mm, settling 0.0 s,

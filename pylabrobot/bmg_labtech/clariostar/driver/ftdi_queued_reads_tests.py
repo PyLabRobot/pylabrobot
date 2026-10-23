@@ -17,7 +17,6 @@ from unittest.mock import patch
 
 from pylabrobot.bmg_labtech.clariostar.driver import ftdi_queued_reads
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
-from pylabrobot.bmg_labtech.clariostar.driver.errors import FrameError
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   RUN_REPLY,
   STATUS_MEASURED,
@@ -26,7 +25,6 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   ground_truth_96_well_plate,
   make_absorbance,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload
 from pylabrobot.bmg_labtech.clariostar.driver.ftdi_queued_reads import QueuedReads
 from pylabrobot.bmg_labtech.clariostar.driver.master import CLARIOstarDriver
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
@@ -36,6 +34,8 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   FakeFTDI,
   make_driver,
 )
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
 DATA_REQUEST = bytes.fromhex("05020000000000")

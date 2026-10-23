@@ -11,6 +11,14 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, cast
 
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.bmg_labtech.protocol.framing import (
+  FTDI_CR,
+  FTDI_STX,
+  ftdi_extract_payload,
+  ftdi_validate_frame,
+  ftdi_wrap_payload,
+)
 from pylabrobot.io.capture import get_capture_or_validation_active
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
@@ -27,7 +35,6 @@ from .configuration import (
 from .confirmed_firmware_versions import CONFIRMED_FIRMWARE_VERSIONS
 from .errors import (
   CommandRefusedError,
-  FrameError,
   describe_quit_codes,
   parse_quit_codes,
   parse_warning_codes,
@@ -38,8 +45,7 @@ from .features.fluorescence import Fluorescence
 from .features.luminescence import Luminescence
 from .features.temperature_controller import TemperatureController
 from .framing import (
-  FTDI_CR,
-  FTDI_STX,
+  FTDI_HEADER,
   USB_ACK,
   USB_CONTINUATION,
   USB_FIRST,
@@ -47,9 +53,6 @@ from .framing import (
   USB_HOST_ACK,
   USB_PACKET_SIZE,
   USB_SINGLE,
-  ftdi_extract_payload,
-  ftdi_validate_frame,
-  ftdi_wrap_payload,
   usb_packet_type,
   usb_total_length,
   usb_wrap_payload,
@@ -451,13 +454,13 @@ class CLARIOstarDriver:
     """Send one payload over FTDI and return the validated reply payload."""
     reads = self._get_queued_reads()
     if reads is None:
-      await self._ftdi_write(ftdi_wrap_payload(payload))
+      await self._ftdi_write(ftdi_wrap_payload(payload, header=FTDI_HEADER))
       frame = await self._ftdi_read_frame()
     else:
       self._discard_unread(reads)  # bytes read before the command is sent are not its reply
-      await self._ftdi_write(ftdi_wrap_payload(payload))
+      await self._ftdi_write(ftdi_wrap_payload(payload, header=FTDI_HEADER))
       frame = await self._ftdi_read_queued_frame(reads)
-    ftdi_validate_frame(frame)
+    ftdi_validate_frame(frame, header=FTDI_HEADER)
     return ftdi_extract_payload(frame)
 
   # -- USB interface ---------------------------------------------------------

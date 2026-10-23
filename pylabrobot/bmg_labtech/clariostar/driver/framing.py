@@ -3,11 +3,8 @@
 Both interfaces carry the same logical payloads (command family, command, parameters); only
 the framing around them differs.
 
-FTDI (VID 0x0403 / PID 0xBB68), one frame per message, 8 bytes of overhead::
-
-  STX (1) | size (2 BE, whole frame) | 0x0C (1) | payload (n) | checksum (3 BE) | CR (1)
-
-The checksum is the 24-bit sum of every byte from STX through the end of the payload.
+FTDI (VID 0x0403 / PID 0xBB68): BMG's FTDI frame (`pylabrobot.bmg_labtech.protocol.framing`)
+with the CLARIOstar's header byte, 0x0C.
 
 USB (VID 0x0483 / PID 0xA29A), 64-byte packets, each with a 7-byte header::
 
@@ -21,55 +18,10 @@ USB (VID 0x0483 / PID 0xA29A), 64-byte packets, each with a 7-byte header::
 
 from typing import List
 
-from .errors import ChecksumError, FrameError
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
 
-# -- FTDI --------------------------------------------------------------------
-
-FTDI_STX = 0x02
+# The CLARIOstar's header byte, in its FTDI frames and its USB packets.
 FTDI_HEADER = 0x0C
-FTDI_CR = 0x0D
-FTDI_OVERHEAD = 8  # STX + size(2) + header + checksum(3) + CR
-
-
-def ftdi_wrap_payload(payload: bytes) -> bytes:
-  """Frame a logical payload for the FTDI interface."""
-  frame = bytearray([FTDI_STX])
-  frame.extend((len(payload) + FTDI_OVERHEAD).to_bytes(2, "big"))
-  frame.append(FTDI_HEADER)
-  frame.extend(payload)
-  frame.extend((sum(frame) & 0xFFFFFF).to_bytes(3, "big"))
-  frame.append(FTDI_CR)
-  return bytes(frame)
-
-
-def ftdi_validate_frame(frame: bytes) -> None:
-  """Check an FTDI frame's delimiters, size field and checksum.
-
-  Raises:
-    FrameError: on a wrong STX, CR, header or size field.
-    ChecksumError: on a checksum mismatch.
-  """
-  if len(frame) < FTDI_OVERHEAD:
-    raise FrameError(f"Reply too short ({len(frame)} bytes): {frame.hex()}")
-  if frame[0] != FTDI_STX:
-    raise FrameError(f"Expected STX 0x{FTDI_STX:02x}, got 0x{frame[0]:02x}")
-  if frame[-1] != FTDI_CR:
-    raise FrameError(f"Expected CR 0x{FTDI_CR:02x}, got 0x{frame[-1]:02x}")
-  if frame[3] != FTDI_HEADER:
-    raise FrameError(f"Expected header 0x{FTDI_HEADER:02x} at byte 3, got 0x{frame[3]:02x}")
-  size = int.from_bytes(frame[1:3], "big")
-  if size != len(frame):
-    raise FrameError(f"Size field says {size} bytes, got {len(frame)}")
-  received = int.from_bytes(frame[-4:-1], "big")
-  computed = sum(frame[:-4]) & 0xFFFFFF
-  if received != computed:
-    raise ChecksumError(f"Checksum 0x{received:06x}, computed 0x{computed:06x}")
-
-
-def ftdi_extract_payload(frame: bytes) -> bytes:
-  """Return the logical payload of a validated FTDI frame."""
-  return frame[4:-4]
-
 
 # -- USB ---------------------------------------------------------------------
 

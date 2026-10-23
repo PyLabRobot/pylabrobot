@@ -13,7 +13,6 @@ from unittest.mock import patch
 
 from pylabrobot.bmg_labtech.clariostar.device import CLARIOstarPlus
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
-from pylabrobot.bmg_labtech.clariostar.driver.errors import FrameError
 from pylabrobot.bmg_labtech.clariostar.driver.features import measurement as measurement_module
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance import (
   Absorbance,
@@ -27,7 +26,6 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
   MeasurementSettings,
   ShakeSettings,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_IDLE,
   STATUS_QUERY_FRAME,
@@ -36,6 +34,8 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   make_driver,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationAbsorbance
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload
 from pylabrobot.lib.absorbance.results import AbsorbanceResult
 from pylabrobot.resources import Plate, Well, cor_96_wellplate_360uL_Fb, create_ordered_items_2d
 from pylabrobot.resources.biorad.plates import biorad_96_wellplate_200uL_Vb
