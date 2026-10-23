@@ -9,6 +9,60 @@ from pylabrobot.io import usb as usb_module
 from pylabrobot.io.usb import USB
 
 
+class USBReconnectTests(unittest.IsolatedAsyncioTestCase):
+  """Follow a restarted device by physical port without selecting a different instrument."""
+
+  async def asyncSetUp(self) -> None:
+    """Provide two matching USB devices, including one at the stale address."""
+    self.old = Mock(bus=1, address=6, port_numbers=(1, 4))
+    self.replacement = Mock(bus=1, address=7, port_numbers=(1, 4))
+    self.replacement.get_active_configuration.return_value = {(0, 0): Mock()}
+    self.other = Mock(bus=1, address=6, port_numbers=(1, 5))
+    self.find = Mock(return_value=[self.other, self.replacement])
+    backend = SimpleNamespace(
+      util=SimpleNamespace(dispose_resources=Mock(), find_descriptor=Mock())
+    )
+    for name, value in (
+      ("usb", backend),
+      ("libusb_package", SimpleNamespace(find=self.find)),
+      ("USE_USB", True),
+    ):
+      patcher = patch.object(usb_module, name, value, create=True)
+      patcher.start()
+      self.addCleanup(patcher.stop)
+    self.configure = Mock()
+    self.io = USB(1, 2, "restarting USB", device_address=6, configuration_callback=self.configure)
+    self.io.dev = self.old
+    self.io._read_packet = Mock(return_value=None)  # type: ignore[method-assign]
+
+  async def asyncTearDown(self) -> None:
+    """Release any transport workers created by the actual setup implementation."""
+    await self.io.stop()
+
+  async def test_reconnect_follows_port_when_address_changes(self) -> None:
+    """Do not select another device that inherited the old numeric address."""
+    await self.io.reconnect()
+    self.assertIs(self.io.dev, self.replacement)
+    self.configure.assert_called_once_with(self.replacement)
+    self.assertEqual(self.io.serialize()["device_address"], 7)
+
+  async def test_missing_port_does_not_fall_back_to_another_device(self) -> None:
+    """Fail closed even when another instrument matches the original address."""
+    self.find.return_value = [self.other, Mock(bus=2, address=7, port_numbers=(1, 4))]
+    with self.assertRaisesRegex(RuntimeError, "USB device not found"):
+      await self.io.reconnect()
+    self.configure.assert_not_called()
+    self.assertIsNone(self.io.dev)
+
+  async def test_missing_topology_keeps_existing_handle(self) -> None:
+    """A backend without physical identity cannot safely choose the replacement."""
+    self.old.port_numbers = None
+    with self.assertRaisesRegex(RuntimeError, "bus and port numbers"):
+      await self.io.reconnect()
+    self.assertIs(self.io.dev, self.old)
+    self.configure.assert_not_called()
+
+
 class USBReadTests(unittest.IsolatedAsyncioTestCase):
   """Keep USB transfer completion separate from individual endpoint packets."""
 

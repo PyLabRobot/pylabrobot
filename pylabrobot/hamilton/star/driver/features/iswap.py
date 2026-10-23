@@ -8,6 +8,7 @@ import enum
 import logging
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import (
   TYPE_CHECKING,
   Callable,
@@ -24,6 +25,11 @@ from typing import (
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import NoElementError, STARFirmwareError
+from pylabrobot.hamilton.star.driver.firmware_update import (
+  FirmwareUpdateResult,
+  _firmware_version_parts,
+  _FirmwareDownloader,
+)
 from pylabrobot.hamilton.star.resource_model import iSWAPHead
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
@@ -762,6 +768,53 @@ class iSWAP:
     """
     resp: str = await self._driver.send_command(module="R0", command="RF")
     return resp.split("rf")[-1], parse_firmware_version_date(resp)
+
+  def _invalidate_firmware_version(self) -> None:
+    """Clear cached versions before the board leaves its application."""
+    self.configuration.firmware_version = None
+    self.configuration.firmware_date = None
+    self._driver.firmware.pop("iswap", None)
+
+  async def _request_firmware_cycle_counts(self) -> Dict[str, int]:
+    """Read the gripping cycle count for comparison across an update."""
+    reply = await self._driver.send_command("R0", "RV", fmt="na##########")
+    return {"gripping_cycles": reply["na"]}
+
+  async def update_firmware(
+    self,
+    firmware_file: Union[str, Path],
+    *,
+    expected_version: str,
+    allow_downgrade: bool = False,
+  ) -> FirmwareUpdateResult:
+    """Update the iSWAP with a compatible manufacturer ACH image.
+
+    Validates the entire file, requires the same controller generation, and checks saved
+    calibration and identity after programming. An older build date requires allow_downgrade.
+    No movement or initialization is commanded. Power-cycle and initialize after success.
+    A failed transfer is not retried or restarted. Keep power and the connection stable.
+
+    Args:
+      firmware_file: path to the manufacturer's component-specific .ACH file.
+      expected_version: complete embedded version, including date and any hardware suffix.
+      allow_downgrade: explicitly allow an older build within the same controller generation.
+
+    Returns:
+      Verified version, image digest, record count, and before/after cycle counts.
+    """
+    downloader = _FirmwareDownloader(self._driver, "R0")
+    result = await downloader.update_component(
+      firmware_file,
+      expected_version=expected_version,
+      allow_downgrade=allow_downgrade,
+      invalidate_version=self._invalidate_firmware_version,
+      read_state=downloader._request_stored_state,
+      read_cycle_counts=self._request_firmware_cycle_counts,
+    )
+    self.configuration.firmware_version = result.version
+    _, self.configuration.firmware_date = _firmware_version_parts(result.version)
+    self._driver.firmware["iswap"] = result.version
+    return result
 
   async def elbow_request_x_offset(self) -> float:
     """Request the X distance from the X-arm carriage centre to the elbow.
