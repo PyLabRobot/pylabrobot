@@ -247,13 +247,14 @@ class OT2LabwareTests(unittest.IsolatedAsyncioTestCase):
     self.rack = opentrons_96_filtertiprack_20ul("tips")
     self.robot.deck.assign_child_at_slot(self.rack, 1)
 
-  async def test_official_rack_uses_builtin_definition_for_calibration(self) -> None:
+  async def test_official_rack_uploads_generated_definition(self) -> None:
+    identity = LabwareIdentity("pylabrobot", "uploaded", 1)
+    self.registry.define.return_value = identity
+
     await self.robot._load_tip_rack(self.rack, self.rack.get_item("A1").get_tip())
 
-    self.registry.load.assert_awaited_once_with(
-      self.rack, "1", LabwareIdentity("opentrons", "opentrons_96_filtertiprack_20ul", 1)
-    )
-    self.registry.define.assert_not_awaited()
+    self.registry.define.assert_awaited_once()
+    self.registry.load.assert_awaited_once_with(self.rack, "1", identity)
 
   async def test_custom_rack_passes_its_geometry_to_the_registry(self) -> None:
     self.rack.model = None
