@@ -97,6 +97,37 @@ StopDiscType = Literal["core_i", "core_ii"]
 PressureADC = Literal["Renesas_X9268", "Analog_Devices_AD5263"]
 
 
+@dataclass(frozen=True)
+class PipetteChannelParameters:
+  """Stored parameters changed by tip handling, Z motion, and cLLD searches.
+
+  Positions and distances are in mm, speeds in mm/s, acceleration in mm/s², and the
+  pickup piston position in µL. Detection thresholds and current limit are firmware levels.
+  Values retain enough precision to restore every original drive increment.
+  """
+
+  z_target_position: float
+  lld_search_end_position: float
+  lld_search_start_position: float
+  lld_post_detection_distance: float
+  lld_post_detection_direction: Literal["down", "up"]
+  z_speed: float
+  lld_search_speed: float
+  z_acceleration: float
+  z_current_limit: int
+  clld_detection_edge: int
+  clld_detection_drop: int
+  tip_pickup_piston_position: float
+
+
+@dataclass(frozen=True)
+class ZDriveCounters:
+  """Controller and hardware Z readings in native increments."""
+
+  controller_counts: int
+  hardware_counts: int
+
+
 @dataclass
 class PipetteConfiguration:
   """The hardware fitted to a single pipetting channel.
@@ -907,6 +938,15 @@ class Pipettes:
     resp = await self._driver.send_command(module="C0", command="RZ", fmt="rz#### (n)")
     return [round(increments / 10, 1) for increments in cast(List[int], resp["rz"])]
 
+  async def request_z_counters(self, channel: int) -> ZDriveCounters:
+    """Read both native Z counters (`Px RZ`); reject a reply missing either counter."""
+    self._require_channel(channel)
+    raw = await self._driver.send_command(module=self.channel_id(channel), command="RZ")
+    match = re.search(r"rz([+-]\d{5}) ([+-]\d{5})(?=[a-z]|$)", raw.strip())
+    if match is None:
+      raise RuntimeError(f"Expected both Z counters from channel {channel}: {raw!r}")
+    return ZDriveCounters(int(match[1]), int(match[2]))
+
   async def request_stop_disc_z_position(self, channel: int) -> float:
     """Read where one channel's stop disc is, regardless of whether a tool (e.g. tip,
     core_gripper, suction_gripper, ...) is mounted.
@@ -1032,6 +1072,19 @@ class Pipettes:
 
   # -- the raw register access these share --
 
+  async def _request_channel_parameter(self, channel: int, parameter: str, width: int) -> int:
+    """Read one stored integer parameter (`Px RA`), preserving its native precision."""
+    self._require_channel(channel)
+    response = await self._driver.send_command(
+      module=self.channel_id(channel), command="RA", ra=parameter, fmt=parameter + "#" * width
+    )
+    return cast(int, response[parameter])
+
+  async def _write_channel_parameters(self, channel: int, parameters: Dict[str, Any]) -> None:
+    """Write encoded parameter values without executing a motion command (`Px AA`)."""
+    self._require_channel(channel)
+    await self._driver.send_command(module=self.channel_id(channel), command="AA", **parameters)
+
   def _require_drive_parameter(self, parameter: str) -> int:
     """The wire width of a channel's stored drive parameter.
 
@@ -1086,10 +1139,8 @@ class Pipettes:
     """
     self._require_channel(channel)
     width = self._require_drive_parameter(parameter)
-    resp = await self._driver.send_command(
-      module=self.channel_id(channel), command="RA", ra=parameter, fmt=f"{parameter}{'#' * width}"
-    )
-    return self._drive_parameter_to_mm(parameter, cast(int, resp[parameter]))
+    value = await self._request_channel_parameter(channel, parameter, width)
+    return self._drive_parameter_to_mm(parameter, value)
 
   async def _set_drive_parameter(self, channel: int, parameter: str, value: float) -> None:
     """Write a channel's stored drive parameter (`Px AA`).
@@ -1115,7 +1166,7 @@ class Pipettes:
       raise ValueError(f"{parameter} must be between {low} and {high}, is {value}")
     increments = self._drive_parameter_to_increments(parameter, value)
     written: Dict[str, Any] = {parameter: f"{increments:0{width}}"}
-    await self._driver.send_command(module=self.channel_id(channel), command="AA", **written)
+    await self._write_channel_parameters(channel, written)
 
   @asynccontextmanager
   async def _temporary_drive_profile(
@@ -1290,6 +1341,125 @@ class Pipettes:
       await self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
       await self._set_z_speed(channel, self.default_z_speed)
       await self._set_z_acceleration(channel, self.default_z_acceleration)
+
+  async def request_z_target_position(self, channel: int) -> float:
+    """Read the stored Z target in mm (`Px RA za`), rather than the current position."""
+    return (
+      await self._request_channel_parameter(channel, "za", 5)
+      * self.configuration.z_drive_mm_per_increment
+    )
+
+  async def request_lld_search_end_position(self, channel: int) -> float:
+    """Read the lowest permitted stop-disc height for LLD, in mm (`Px RA zh`)."""
+    return (
+      await self._request_channel_parameter(channel, "zh", 5)
+      * self.configuration.z_drive_mm_per_increment
+    )
+
+  async def request_lld_search_start_position(self, channel: int) -> float:
+    """Read the stop-disc height at which LLD search starts, in mm (`Px RA zc`)."""
+    return (
+      await self._request_channel_parameter(channel, "zc", 5)
+      * self.configuration.z_drive_mm_per_increment
+    )
+
+  async def request_lld_post_detection_distance(self, channel: int) -> float:
+    """Read the travel after LLD detection, in mm (`Px RA zi`)."""
+    return (
+      await self._request_channel_parameter(channel, "zi", 4)
+      * self.configuration.z_drive_mm_per_increment
+    )
+
+  async def request_lld_post_detection_direction(self, channel: int) -> Literal["down", "up"]:
+    """Read whether detection is followed by immersion or withdrawal (`Px RA zj`)."""
+    value = await self._request_channel_parameter(channel, "zj", 1)
+    if value not in (0, 1):
+      raise ValueError(f"Unexpected post-detection direction: {value}")
+    return "down" if value == 0 else "up"
+
+  async def request_lld_search_speed(self, channel: int) -> float:
+    """Read the lower-section LLD search speed, in mm/s (`Px RA zl`)."""
+    return (
+      await self._request_channel_parameter(channel, "zl", 5)
+      * self.configuration.z_drive_mm_per_increment
+    )
+
+  async def request_z_current_limit(self, channel: int) -> int:
+    """Read the Z motor current-limit level (`Px RA zw`)."""
+    return await self._request_channel_parameter(channel, "zw", 1)
+
+  async def request_clld_detection_edge(self, channel: int) -> int:
+    """Read the capacitive detection edge-steepness threshold (`Px RA gt`)."""
+    return await self._request_channel_parameter(channel, "gt", 4)
+
+  async def request_clld_detection_drop(self, channel: int) -> int:
+    """Read the offset after capacitive edge detection (`Px RA gl`)."""
+    return await self._request_channel_parameter(channel, "gl", 4)
+
+  async def request_dispensing_drive_speed_increments(self, channel: int) -> int:
+    """Read the dispensing drive speed in motor increments/s (`Px RA dv`)."""
+    return await self._request_channel_parameter(channel, "dv", 5)
+
+  async def request_dispensing_drive_acceleration_increments(self, channel: int) -> int:
+    """Read the dispensing drive acceleration in 1000 motor increments/s² (`Px RA dr`)."""
+    return await self._request_channel_parameter(channel, "dr", 3)
+
+  async def request_dispensing_drive_current_limit(self, channel: int) -> int:
+    """Read the dispensing motor current-limit level (`Px RA dw`)."""
+    return await self._request_channel_parameter(channel, "dw", 1)
+
+  async def request_tip_pickup_piston_position(self, channel: int) -> float:
+    """Read the piston position used during tip pickup, in µL (`Px RA dp`)."""
+    return (
+      await self._request_channel_parameter(channel, "dp", 5)
+      * self.configuration.dispensing_drive_uL_per_increment
+    )
+
+  async def set_tip_pickup_piston_position(self, channel: int, position: float) -> None:
+    """Set the piston position for a subsequent tip pickup, in µL (`Px AA dp`); no motion."""
+    steps = self.configuration.dispensing_drive_uL_to_increments(position)
+    low, high = self.configuration.dispensing_drive_volume_range_increments
+    if not low <= steps <= high:
+      raise ValueError(f"Pickup piston position is out of range: {position} µL")
+    await self._write_channel_parameters(channel, {"dp": f"{steps:05}"})
+
+  async def request_channel_parameters(self, channel: int) -> PipetteChannelParameters:
+    """Snapshot the stored parameters affected by tip handling and cLLD, without changing them."""
+    return PipetteChannelParameters(
+      z_target_position=await self.request_z_target_position(channel),
+      lld_search_end_position=await self.request_lld_search_end_position(channel),
+      lld_search_start_position=await self.request_lld_search_start_position(channel),
+      lld_post_detection_distance=await self.request_lld_post_detection_distance(channel),
+      lld_post_detection_direction=await self.request_lld_post_detection_direction(channel),
+      z_speed=await self.request_z_speed(channel),
+      lld_search_speed=await self.request_lld_search_speed(channel),
+      z_acceleration=await self.request_z_acceleration(channel),
+      z_current_limit=await self.request_z_current_limit(channel),
+      clld_detection_edge=await self.request_clld_detection_edge(channel),
+      clld_detection_drop=await self.request_clld_detection_drop(channel),
+      tip_pickup_piston_position=await self.request_tip_pickup_piston_position(channel),
+    )
+
+  async def restore_channel_parameters(self, channel: int, saved: PipetteChannelParameters) -> None:
+    """Restore a snapshot obtained from this channel, preserving original drive increments."""
+    c = self.configuration
+    await self._write_channel_parameters(
+      channel,
+      {
+        "za": f"{c.z_drive_mm_to_increments(saved.z_target_position):05}",
+        "zh": f"{c.z_drive_mm_to_increments(saved.lld_search_end_position):05}",
+        "zc": f"{c.z_drive_mm_to_increments(saved.lld_search_start_position):05}",
+        "zi": f"{c.z_drive_mm_to_increments(saved.lld_post_detection_distance):04}",
+        "zj": "0" if saved.lld_post_detection_direction == "down" else "1",
+        "zv": f"{c.z_drive_mm_to_increments(saved.z_speed):05}",
+        "zl": f"{c.z_drive_mm_to_increments(saved.lld_search_speed):05}",
+        "zr": f"{c.z_drive_acceleration_mm_to_increments(saved.z_acceleration):03}",
+        "zw": str(saved.z_current_limit),
+        "gt": f"{saved.clld_detection_edge:04}",
+        "gl": f"{saved.clld_detection_drop:04}",
+        "dp": f"{c.dispensing_drive_uL_to_increments(saved.tip_pickup_piston_position):05}",
+      },
+    )
 
   # -- x position --------------------------------------------------------------------------------
 
@@ -2004,9 +2174,38 @@ class Pipettes:
       return None
     return cast(Tip, shaft.release_tip())
 
+  async def ensure_traverse_height(self, height: float, movable_channels: Iterable[int]) -> None:
+    """Verify all tool bottoms against both Z counters before permitting lateral motion.
+
+    Tip sensors must agree with the model. Only selected channels may retract, with a 0.5 mm
+    margin; an unexpectedly low unselected channel aborts.
+    """
+    if not math.isfinite(height) or height < 0:
+      raise ValueError("Traverse height must be finite and nonnegative")
+    mounted = [self.get_mounted_tip(channel) for channel in range(self.num_channels)]
+    if await self.sense_tip_presence() != [int(tip is not None) for tip in mounted]:
+      raise RuntimeError("Unexpected mounted tools; no lateral motion is permitted")
+    overhangs = [0.0 if tip is None else tip.get_size_z() - tip.fitting_depth for tip in mounted]
+    movable = set(movable_channels)
+    for channel in movable:
+      self._require_channel(channel)
+      self._check_reachable("z", height + 0.5 + overhangs[channel])
+    for channel, overhang in enumerate(overhangs):
+      reading = await self.request_z_counters(channel)
+      lowest = min(reading.controller_counts, reading.hardware_counts)
+      if lowest * self.configuration.z_drive_mm_per_increment - overhang < height:
+        if channel not in movable:
+          raise RuntimeError(f"Unselected channel {channel} is below traverse height")
+        await self.move_stop_disc_to_z_position(channel, height + 0.5 + overhang, speed=20)
+        reading = await self.request_z_counters(channel)
+        lowest = min(reading.controller_counts, reading.hardware_counts)
+      bottom = lowest * self.configuration.z_drive_mm_per_increment - overhang
+      if bottom < height:
+        raise RuntimeError(f"Channel {channel} failed to reach traverse height: {bottom:.4f} mm")
+
   # -- emptying tips -------------------------------------------------------------------------------
 
-  async def _unchecked_fw_dispensing_drive_move(
+  async def dispensing_drive_move(
     self,
     channel: int,
     distance: int,
@@ -2014,7 +2213,9 @@ class Pipettes:
     acceleration: int,
     current_limit: int,
   ) -> None:
-    """Send the piston move as it is given, in dispensing drive increments. `Px DS`.
+    """Move the piston relatively in native motor increments (`Px DS`).
+
+    Use `dispensing_drive_move_to_uL_position` for absolute positions in µL and piston tracking.
 
     Args:
       channel: 0-indexed from the back.
@@ -2022,7 +2223,20 @@ class Pipettes:
       speed: in increments/s (`dv`).
       acceleration: in thousands of increments/s2 (`dr`).
       current_limit: 0 to 7 (`dw`).
+
+    Raises:
+      ValueError: If the channel or a drive parameter is out of range.
     """
+    self._require_channel(channel)
+    c = self.configuration
+    for value, (low, high), name in (
+      (abs(distance), c.dispensing_drive_volume_range_increments, "distance"),
+      (speed, c.dispensing_drive_speed_range_increments, "speed"),
+      (acceleration, c.dispensing_drive_move_acceleration_range_increments, "acceleration"),
+      (current_limit, c.dispensing_drive_current_limit_range, "current_limit"),
+    ):
+      if not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {value}")
     await self._driver.send_command(
       module=self.channel_id(channel),
       command="DS",
@@ -2032,6 +2246,12 @@ class Pipettes:
       dr=f"{acceleration:03}",
       dw=f"{current_limit}",
     )
+
+  async def initialize_dispensing_drive(self, channel: int) -> None:
+    """Home one channel's empty dispensing drive (`Px DI`) and record its piston position."""
+    self._require_channel(channel)
+    await self._driver.send_command(module=self.channel_id(channel), command="DI")
+    await self.dispensing_drive_request_uL_position(channel)
 
   async def dispensing_drive_move_to_uL_position(
     self,
@@ -2073,7 +2293,7 @@ class Pipettes:
     standing = await self.dispensing_drive_request_uL_position(channel)
     moved = round(position - standing, 1)
     distance = c.dispensing_drive_uL_to_increments(abs(moved))
-    await self._unchecked_fw_dispensing_drive_move(
+    await self.dispensing_drive_move(
       channel, distance if moved >= 0 else -distance, dv, dr, current_limit
     )
     if moved < 0:
@@ -2609,6 +2829,28 @@ class Pipettes:
       zi=f"{post_detection_distance:04}",
     )
 
+  async def set_lld_measurement(
+    self, channel: int, enabled: bool, mode: Optional[Literal["capacitive", "pressure"]] = None
+  ) -> None:
+    """Switch LLD measurement on or off (`Px AL`); retain the selected sensor when mode is None."""
+    self._require_channel(channel)
+    parameters: Dict[str, Any] = {"al": int(enabled)}
+    if mode is not None:
+      if mode not in ("capacitive", "pressure"):
+        raise ValueError(f"Unknown LLD measurement mode: {mode}")
+      parameters["lc"] = 0 if mode == "capacitive" else 1
+    await self._driver.send_command(module=self.channel_id(channel), command="AL", **parameters)
+
+  async def request_clld_detection(self, channel: int) -> bool:
+    """Read the capacitive detection latch (`Px RN`); inactive or invalid readings raise."""
+    self._require_channel(channel)
+    response = await self._driver.send_command(
+      module=self.channel_id(channel), command="RN", fmt="rn#"
+    )
+    if response["rn"] not in (0, 1):
+      raise ValueError(f"Unexpected cLLD detection state: {response['rn']}")
+    return bool(response["rn"] == 1)
+
   async def request_last_lld_z_positions(self) -> List[float]:
     """Request where each channel last detected liquid, by cLLD or pLLD. `C0 RL`.
 
@@ -2698,10 +2940,11 @@ class Pipettes:
     allow_without_tip: bool = False,
     post_detection_distance: float = 2.0,
     move_to_safe_z_position_after: bool = False,
+    approach_speed: Optional[float] = None,
   ) -> Optional[float]:
     """Lower a channel's tip until its cLLD triggers, and read the height it detected at.
 
-    Z safety first on a firmware error; None when nothing was found.
+    Return None when nothing was found. Other firmware errors raise after Z retraction.
 
     Args:
       channel: which channel, 0-indexed from the back.
@@ -2716,7 +2959,9 @@ class Pipettes:
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
       post_detection_distance: how far it moves after detection, in mm.
       move_to_safe_z_position_after: whether to raise every channel to Z safety afterwards,
-        instead of resting where the search left it.
+        including when nothing was detected, instead of resting where the search left it.
+      approach_speed: speed above the search start, in mm/s. None leaves the channel's speed
+        unchanged; an explicit value remains set after the search.
 
     Returns:
       The height the channel detected at, in mm, or None if the search found nothing.
@@ -2747,6 +2992,8 @@ class Pipettes:
         f"search_start_position must be between {search_end_position} and {top} mm, "
         f"is {search_start_position}"
       )
+    if approach_speed is not None:
+      await self._set_z_speed(channel, approach_speed)
     try:
       await self._clld_search(
         channel,
@@ -2760,9 +3007,11 @@ class Pipettes:
         post_detection_distance=post_detection_distance,
       )
     except STARFirmwareError as error:
-      await self.move_to_safe_z()
       if not self._found_nothing(error, self.channel_id(channel)):
+        await self.move_to_safe_z()
         raise
+      if move_to_safe_z_position_after:
+        await self.move_to_safe_z()
       return None
     if move_to_safe_z_position_after:
       await self.move_to_safe_z()
@@ -4866,6 +5115,17 @@ class Pipettes:
     self._require_channel(channel)
     resp = await self._driver.send_command(module=self.channel_id(channel), command="RP")
     return int(resp.split("rp")[-1].strip())
+
+  async def adjust_pressure_sensor_for_measurement(
+    self, channel: int, polarity: Literal["positive", "negative"]
+  ) -> None:
+    """Prepare a channel's sensor to measure positive or negative pressure (`Px BP`)."""
+    self._require_channel(channel)
+    if polarity not in ("positive", "negative"):
+      raise ValueError(f"Unknown pressure polarity: {polarity}")
+    await self._driver.send_command(
+      module=self.channel_id(channel), command="BP", bp=0 if polarity == "positive" else 1
+    )
 
   async def auto_adjust_pressure_sensor(self, channel: int) -> None:
     """Auto-adjust a channel's pressure sensor gain and offset. `Px AC`.
