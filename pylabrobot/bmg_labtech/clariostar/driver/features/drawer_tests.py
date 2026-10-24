@@ -2,7 +2,7 @@
 
 import unittest
 
-from pylabrobot.bmg_labtech.clariostar.driver.errors import CommandRefusedError, FrameError
+from pylabrobot.bmg_labtech.clariostar.driver.errors import CommandRefusedError
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_BUSY,
   STATUS_DRAWER_OPEN,
@@ -12,6 +12,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   FakeFTDI,
   make_driver,
 )
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.resources import Coordinate, PlateHolder
 from pylabrobot.resources.corning.plates import cor_96_wellplate_2mL_Vb, cor_96_wellplate_360uL_Fb
 

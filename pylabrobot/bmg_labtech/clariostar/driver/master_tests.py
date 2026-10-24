@@ -10,13 +10,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
 from pylabrobot.bmg_labtech.clariostar.driver.errors import (
   CommandRefusedError,
-  FrameError,
   parse_quit_codes,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import (
+from pylabrobot.bmg_labtech.clariostar.driver.master import CLARIOstarDriver
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.bmg_labtech.protocol.framing import (
   ftdi_extract_payload,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.master import CLARIOstarDriver
+from pylabrobot.bmg_labtech.transport import ftdi_interface as ftdi_interface_module
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
 
@@ -153,8 +154,8 @@ def parse_status(frame: bytes):
 
 def make_driver(io: FakeFTDI) -> CLARIOstarDriver:
   driver = CLARIOstarDriver(io=io)
-  driver._PACKET_READ_TIMEOUT = 0.01
-  driver._FRAME_STALL_TIMEOUT = 0.05
+  driver._ftdi._packet_read_timeout = 0.01
+  driver._ftdi._frame_stall_timeout = 0.05
   driver._RETRY_SETTLE = 0
   driver.default_poll_interval = 0
   driver.drawer.default_poll_interval = 0
@@ -265,9 +266,10 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
     ]
     clock = [0.0]
     driver = make_driver(SessionReadsFTDI(reads, clock))
-    driver._PACKET_READ_TIMEOUT, driver._FRAME_STALL_TIMEOUT = 1.0, 2.0  # the driver's own
-    with patch.object(master_module.time, "time", side_effect=lambda: clock[0]):
-      frame = await driver._ftdi_read_frame()
+    driver._ftdi._packet_read_timeout = CLARIOstarDriver._PACKET_READ_TIMEOUT
+    driver._ftdi._frame_stall_timeout = CLARIOstarDriver._FRAME_STALL_TIMEOUT
+    with patch.object(ftdi_interface_module.time, "time", side_effect=lambda: clock[0]):
+      frame = await driver._ftdi._read_frame()
     self.assertEqual(frame, b"".join(data for _, data in reads))
     self.assertGreaterEqual(clock[0], reads[-1][0] + 2.0)  # 2 s of silence after the last bytes
 

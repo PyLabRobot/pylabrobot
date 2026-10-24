@@ -38,7 +38,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
   MeasurementSettings,
   ShakeSettings,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload, ftdi_wrap_payload
+from pylabrobot.bmg_labtech.clariostar.driver.framing import FTDI_HEADER
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_IDLE,
   STATUS_QUERY_FRAME,
@@ -47,6 +47,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   make_driver,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationFluorescence
+from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload, ftdi_wrap_payload
 from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
 from pylabrobot.lib.fluorescence.results import FluorescenceSpectrumResult
 from pylabrobot.lib.optics.filters import DichroicFilter, OpticalFilter
@@ -1786,7 +1787,7 @@ def with_nominal_scan_edges(ground_truth: bytes) -> bytes:
   for offset, edges in ((21, _compute_band_edges(488, 14)), (27, _compute_band_edges(535, 30))):
     for index, value in enumerate(edges):
       payload[offset + 2 * index : offset + 2 * index + 2] = value.to_bytes(2, "big")
-  return ftdi_wrap_payload(bytes(payload))
+  return ftdi_wrap_payload(bytes(payload), header=FTDI_HEADER)
 
 
 async def scan_ground_truth(**arguments):

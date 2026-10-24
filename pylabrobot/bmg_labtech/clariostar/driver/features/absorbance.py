@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple
 
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
 from pylabrobot.resources import Plate, Well
 
-from ..errors import FrameError
 from .measurement import (
   Measurement,
   MeasurementConfiguration,
