@@ -6,6 +6,7 @@ import gzip
 import json
 import math
 import os
+import tempfile
 import unittest
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -37,6 +38,8 @@ from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulat
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload
 from pylabrobot.lib.absorbance.results import AbsorbanceResult
+from pylabrobot.lib.results import directory as directory_module
+from pylabrobot.lib.results.reading import load_rows
 from pylabrobot.resources import Plate, Well, cor_96_wellplate_360uL_Fb, create_ordered_items_2d
 from pylabrobot.resources.biorad.plates import biorad_96_wellplate_200uL_Vb
 
@@ -1158,6 +1161,38 @@ class SimulatedDataTests(unittest.IsolatedAsyncioTestCase):
     ):
       with self.assertRaises(ValueError):
         await measure_with(self.absorbance, wavelengths, simulated_data=simulated_data)
+
+
+class ResultsDirectoryTests(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    temporary = tempfile.TemporaryDirectory()
+    self.addCleanup(temporary.cleanup)
+    self.directory = os.path.join(temporary.name, "run")
+
+  async def read_column_1(self, **arguments):
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, COLUMN_1_DATA_REPLY]
+    plate = ground_truth_96_well_plate()
+    return await make_absorbance(io, plate).measure(
+      wells=plate.get_items("A1:H1"), wavelengths=[600], **arguments
+    )
+
+  async def test_a_read_appends_its_rows(self):
+    results = await self.read_column_1(results_directory=self.directory)
+    await self.read_column_1(results_directory=self.directory)
+    rows = load_rows(self.directory)
+    self.assertEqual([row["read"] for row in rows], [0] * 8 + [1] * 8)
+    self.assertEqual([row["value"] for row in rows[:8]], list(results[0].data.values()))
+
+  async def test_a_failed_write_still_returns_the_result_and_is_raised_by_the_next_read(self):
+    with (
+      patch.object(directory_module.os, "fsync", side_effect=OSError(28, "No space left")),
+      self.assertLogs(directory_module.logger, "ERROR"),
+    ):
+      results = await self.read_column_1(results_directory=self.directory)
+    self.assertEqual(list(results[0].data), COLUMN_1)
+    with self.assertRaisesRegex(RuntimeError, "not all written"):
+      await self.read_column_1(results_directory=self.directory)
 
 
 if __name__ == "__main__":

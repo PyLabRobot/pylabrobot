@@ -11,9 +11,10 @@ import math
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Set, Tuple
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.lib.results.directory import append_results, check_directory
 from pylabrobot.resources import Plate, Well
 
 from ..errors import CommandRefusedError
@@ -315,6 +316,19 @@ class Measurement:
         len(counts),
         ceiling,
       )
+
+  # -- results directory ---------------------------------------------------------------------------
+
+  @staticmethod
+  def _check_results_directory(results_directory: Optional[str]) -> Optional[str]:
+    """`results_directory` as an absolute path, checked before the run (`check_directory`)."""
+    return None if results_directory is None else check_directory(results_directory)
+
+  @staticmethod
+  async def _append_results(results_directory: Optional[str], results: Sequence[Any]) -> None:
+    """Append the rows of `results` to `results_directory` (`append_results`); None writes none."""
+    if results_directory is not None:
+      await append_results(results_directory, results)
 
   # -- checks of the detector's modes, fluorescence and luminescence -------------------------------
 

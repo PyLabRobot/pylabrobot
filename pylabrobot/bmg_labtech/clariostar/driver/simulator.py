@@ -176,6 +176,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     shake_settings: Optional[ShakeSettings] = None,
     report: Report = "optical_density",
     timeout: Optional[float] = None,
+    results_directory: Optional[str] = None,
     simulated_data: Optional[List[AbsorbanceResult]] = None,
   ) -> List[AbsorbanceResult]:
     """Check and encode the measurement; every measured well reads a random optical density.
@@ -183,8 +184,8 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     The temperature is the temperature controller's target, as the simulated status reports it.
 
     Args:
-      wells, wavelengths, measurement_settings, shake_settings, report, timeout: as
-        `Absorbance.measure`.
+      wells, wavelengths, measurement_settings, shake_settings, report, timeout,
+        results_directory: as `Absorbance.measure`.
       simulated_data: results an earlier `measure` returned with the same report and
         wavelengths, on a reader or in simulation; each measured well reads its values there
         instead of random ones.
@@ -234,6 +235,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
             end_timestamp=timestamp,
           )
         )
+      await self._append_results(self._check_results_directory(results_directory), results)
       return results
     raw = [isinstance(result, CLARIOstarAbsorbanceResult) for result in simulated_data]
     given = [result.wavelength for result in simulated_data]
@@ -269,6 +271,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
             end_timestamp=timestamp,
           )
         )
+    await self._append_results(self._check_results_directory(results_directory), results)
     return results
 
   async def measure_spectrum(
@@ -282,6 +285,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     shake_settings: Optional[ShakeSettings] = None,
     report: Report = "optical_density",
     timeout: Optional[float] = None,
+    results_directory: Optional[str] = None,
     simulated_data: Optional[AbsorbanceSpectrumResult] = None,
   ) -> AbsorbanceSpectrumResult:
     """Check and encode the spectrum; every measured well reads a random optical density at
@@ -289,7 +293,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
 
     Args:
       wells, start_wavelength, end_wavelength, step_size, measurement_settings, shake_settings,
-        report, timeout: as `Absorbance.measure_spectrum`.
+        report, timeout, results_directory: as `Absorbance.measure_spectrum`.
       simulated_data: a spectrum an earlier `measure_spectrum` returned with the same report, on a
         reader or in simulation; each measured well reads its spectrum there instead of random
         values.
@@ -338,9 +342,11 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
         }
         for identifier in identifiers
       }
-      return AbsorbanceSpectrumResult(
+      spectrum: AbsorbanceSpectrumResult = AbsorbanceSpectrumResult(
         data=data, temperature=temperature, start_timestamp=timestamp, end_timestamp=timestamp
       )
+      await self._append_results(self._check_results_directory(results_directory), [spectrum])
+      return spectrum
     raw = isinstance(simulated_data, CLARIOstarAbsorbanceSpectrumResult)
     if raw != (report == "raw"):
       raise ValueError(f"simulated_data is not a {report} spectrum")
@@ -366,7 +372,7 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
       references = _get_measured_values(
         plate, wells, simulated_data.references, "simulated_data references"
       )
-      return CLARIOstarAbsorbanceSpectrumResult(
+      spectrum = CLARIOstarAbsorbanceSpectrumResult(
         data=data,
         temperature=temperature,
         start_timestamp=timestamp,
@@ -377,9 +383,12 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
         },
         reference_calibration=simulated_data.reference_calibration,
       )
-    return AbsorbanceSpectrumResult(
-      data=data, temperature=temperature, start_timestamp=timestamp, end_timestamp=timestamp
-    )
+    else:
+      spectrum = AbsorbanceSpectrumResult(
+        data=data, temperature=temperature, start_timestamp=timestamp, end_timestamp=timestamp
+      )
+    await self._append_results(self._check_results_directory(results_directory), [spectrum])
+    return spectrum
 
 
 class CLARIOstarSimulationFluorescence(Fluorescence):
@@ -442,6 +451,7 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
     measurement_settings: Optional[MeasurementSettings] = ...,
     shake_settings: Optional[ShakeSettings] = ...,
     timeout: Optional[float] = ...,
+    results_directory: Optional[str] = ...,
     simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
   ) -> CLARIOstarFluorescenceResult: ...
 
@@ -459,6 +469,7 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
     measurement_settings: Optional[MeasurementSettings] = ...,
     shake_settings: Optional[ShakeSettings] = ...,
     timeout: Optional[float] = ...,
+    results_directory: Optional[str] = ...,
     simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
   ) -> List[CLARIOstarFluorescenceResult]: ...
 
@@ -475,6 +486,7 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
     timeout: Optional[float] = None,
+    results_directory: Optional[str] = None,
     simulated_data: Optional[Sequence[FluorescenceResult]] = None,
   ) -> Union[CLARIOstarFluorescenceResult, List[CLARIOstarFluorescenceResult]]:
     """Check and encode the read; every measured well reads random counts.
@@ -483,8 +495,8 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
 
     Args:
       fluorescence_channels, gain, wells, focal_height, optic_position, flying_mode,
-        enhanced_dynamic_range, measurement_settings, shake_settings, timeout: as
-        `Fluorescence.measure`.
+        enhanced_dynamic_range, measurement_settings, shake_settings, timeout,
+        results_directory: as `Fluorescence.measure`.
       simulated_data: results an earlier `measure` returned, one per fluorescence channel with
         its optics, on a reader or in simulation; each measured well reads its counts there (for
         a matrix scan, its points) instead of random ones.
@@ -545,6 +557,7 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
       focal_height=self._get_default_focal_height(wells) if focal_height is None else focal_height,
       optic_position=optic_position,
     )
+    await self._append_results(self._check_results_directory(results_directory), results)
     return results[0] if isinstance(fluorescence_channels, FluorescenceChannel) else results
 
   async def measure_spectrum(
@@ -581,14 +594,15 @@ class CLARIOstarSimulationLuminescence(Luminescence):
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
     timeout: Optional[float] = None,
+    results_directory: Optional[str] = None,
     simulated_data: Optional[LuminescenceResult] = None,
   ) -> CLARIOstarLuminescenceResult:
     """Check and encode the read; every measured well reads random counts.
 
     Args:
       wells, emission_wavelength, emission_bandwidth, gain, focal_height, normalization_time,
-        measurement_interval, measurement_settings, shake_settings, timeout: as
-        `Luminescence.measure`.
+        measurement_interval, measurement_settings, shake_settings, timeout,
+        results_directory: as `Luminescence.measure`.
       simulated_data: a result an earlier `measure` returned with the same emission band, on a
         reader or in simulation; each measured well reads its counts there instead.
 
@@ -640,7 +654,7 @@ class CLARIOstarSimulationLuminescence(Luminescence):
         )
       logger.debug("%s read: simulation: simulated_data", SIMULATED_LINK)
       data = _get_measured_values(plate, wells, simulated_data.data, "simulated_data")
-    return CLARIOstarLuminescenceResult(
+    result = CLARIOstarLuminescenceResult(
       data=data,
       emission_wavelength=emission_wavelength,
       emission_bandwidth=emission_bandwidth,
@@ -650,6 +664,8 @@ class CLARIOstarSimulationLuminescence(Luminescence):
       start_timestamp=timestamp,
       end_timestamp=timestamp,
     )
+    await self._append_results(self._check_results_directory(results_directory), [result])
+    return result
 
 
 class CLARIOstarSimulationDriver(CLARIOstarDriver):

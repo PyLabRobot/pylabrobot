@@ -1989,6 +1989,7 @@ class Fluorescence(Measurement):
     measurement_settings: Optional[MeasurementSettings] = ...,
     shake_settings: Optional[ShakeSettings] = ...,
     timeout: Optional[float] = ...,
+    results_directory: Optional[str] = ...,
   ) -> CLARIOstarFluorescenceResult: ...
 
   @overload
@@ -2005,6 +2006,7 @@ class Fluorescence(Measurement):
     measurement_settings: Optional[MeasurementSettings] = ...,
     shake_settings: Optional[ShakeSettings] = ...,
     timeout: Optional[float] = ...,
+    results_directory: Optional[str] = ...,
   ) -> List[CLARIOstarFluorescenceResult]: ...
 
   async def measure(
@@ -2020,6 +2022,7 @@ class Fluorescence(Measurement):
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
     timeout: Optional[float] = None,
+    results_directory: Optional[str] = None,
   ) -> Union[CLARIOstarFluorescenceResult, List[CLARIOstarFluorescenceResult]]:
     """Measure the plate through one fluorescence channel, or several in one pass.
 
@@ -2049,6 +2052,8 @@ class Fluorescence(Measurement):
       measurement_settings: how to read, without a pause; None reads with the defaults.
       shake_settings: shake the plate before the read; None does not shake.
       timeout: seconds the run may take; `default_read_timeout` when None.
+      results_directory: the directory the read's rows are appended to once it is complete
+        (`pylabrobot.lib.results.directory`); None writes none.
 
     Returns:
       the counts of the measured wells, with the optics, gain, focal height and optic position they
@@ -2056,10 +2061,12 @@ class Fluorescence(Measurement):
       in the order given.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, or the run ends without its data.
+      RuntimeError: if no plate is in the plate holder, the run ends without its data, or the last
+        write to the results directory failed.
       ValueError: if an argument is out of range (`_check_arguments`), a filter's slot or name has
         no slide or is not on it (`_get_filter`), a matrix scan has several wells, the settings
-        cannot read the wells of the plate, or the reply is not this read's (`_decode_data_reply`).
+        cannot read the wells of the plate, the reply is not this read's (`_decode_data_reply`),
+        or the results directory cannot be created or written.
       TimeoutError: if the run takes longer than `timeout` seconds.
     """
     measurement = MeasurementSettings() if measurement_settings is None else measurement_settings
@@ -2093,6 +2100,7 @@ class Fluorescence(Measurement):
       measurement.well_scan,
       optic_position,
     )
+    results_directory = self._check_results_directory(results_directory)
     start_timestamp = datetime.now()
     replies, end_timestamp = await self._run_measurement(parameters, timeout)
     identifiers = _get_measured_identifiers(plate, wells)
@@ -2116,6 +2124,7 @@ class Fluorescence(Measurement):
       focal_height=focal_height,
       optic_position=optic_position,
     )
+    await self._append_results(results_directory, results)
     return results[0] if isinstance(fluorescence_channels, FluorescenceChannel) else results
 
   # ----------------------------------------
@@ -2297,6 +2306,7 @@ class Fluorescence(Measurement):
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
     timeout: Optional[float] = None,
+    results_directory: Optional[str] = None,
   ) -> CLARIOstarFluorescenceSpectrumResult:
     """Measure a fluorescence spectrum: excitation or emission scanned, the other fixed.
 
@@ -2328,15 +2338,19 @@ class Fluorescence(Measurement):
       shake_settings: shake the plate before the read; None does not shake.
       timeout: seconds the run may take; `default_read_timeout` when None, too short for a full
         plate of a long spectrum (14 s per well at 221 wavelengths).
+      results_directory: the directory the read's rows are appended to once it is complete
+        (`pylabrobot.lib.results.directory`); None writes none.
 
     Returns:
       each measured well's counts by the scanned wavelength, with the fixed one's optics and the
       gain.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, or the run ends without all its data.
+      RuntimeError: if no plate is in the plate holder, the run ends without all its data, or the
+        last write to the results directory failed.
       ValueError: if an argument is out of range (`_check_spectrum_arguments`), the settings
-        cannot read the wells of the plate, or the data pages are not this read's.
+        cannot read the wells of the plate, the data pages are not this read's, or the results
+        directory cannot be created or written.
       TimeoutError: if the run takes longer than `timeout` seconds.
       FrameError: if a data page arrives short on the second read too.
     """
@@ -2399,6 +2413,7 @@ class Fluorescence(Measurement):
       plate.name,
       measurement.well_scan,
     )
+    results_directory = self._check_results_directory(results_directory)
     try:
       start_timestamp = datetime.now()
       pages, end_timestamp = await self._run_measurement(
@@ -2416,7 +2431,7 @@ class Fluorescence(Measurement):
     self._warn_saturated(
       "fluorescence", [value for spectrum in spectra.values() for value in spectrum], ceiling
     )
-    return self._get_spectrum_result(
+    result = self._get_spectrum_result(
       fixed,
       gain,
       wavelengths,
@@ -2425,3 +2440,5 @@ class Fluorescence(Measurement):
       start_timestamp=start_timestamp,
       end_timestamp=end_timestamp,
     )
+    await self._append_results(results_directory, [result])
+    return result
