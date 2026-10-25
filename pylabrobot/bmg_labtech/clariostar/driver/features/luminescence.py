@@ -9,7 +9,7 @@ are fixed.
 import logging
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.lib.luminescence.results import LuminescenceResult
 from pylabrobot.resources import Plate, Well
@@ -47,6 +47,10 @@ class CLARIOstarLuminescenceResult(LuminescenceResult):
 
   gain: int
   focal_height: Optional[float] = None
+
+  def _get_base_row(self, read: int, **columns: Any) -> Dict[str, Any]:
+    """The columns every row shares, with the gain and focal height."""
+    return super()._get_base_row(read, gain=self.gain, focal_height=self.focal_height, **columns)
 
 
 @dataclass
