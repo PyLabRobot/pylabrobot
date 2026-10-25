@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import (
   TYPE_CHECKING,
+  Any,
   Dict,
   List,
   Literal,
@@ -77,6 +78,16 @@ class CLARIOstarFluorescenceResult(FluorescenceResult):
   matrix_points: Optional[Dict[str, List[float]]] = None
   focal_height: Optional[float] = None
   optic_position: Optional[OpticPosition] = None
+
+  def _get_base_row(self, read: int, **columns: Any) -> Dict[str, Any]:
+    """The columns every row shares, with the gain, focal height and optic position."""
+    return super()._get_base_row(
+      read,
+      gain=self.gain,
+      focal_height=self.focal_height,
+      optic_position=self.optic_position,
+      **columns,
+    )
 
 
 @dataclass(frozen=True)
@@ -151,6 +162,10 @@ class CLARIOstarFluorescenceSpectrumResult(FluorescenceSpectrumResult):
   """
 
   gain: int
+
+  def _get_base_row(self, read: int, **columns: Any) -> Dict[str, Any]:
+    """The columns every row shares, with the gain."""
+    return super()._get_base_row(read, gain=self.gain, **columns)
 
 
 @dataclass
@@ -850,9 +865,7 @@ class Fluorescence(Measurement):
     )
     return f"{excitation} -> {emission}" + ("" if gain is None else f", gain {gain}")
 
-  def _get_result_optics(
-    self, fluorescence_channel: FluorescenceChannel
-  ) -> Dict[str, Optional[float]]:
+  def _get_result_optics(self, fluorescence_channel: FluorescenceChannel) -> Dict[str, Any]:
     """A fluorescence channel's optics as a result's keyword arguments.
 
     Excitation's and emission's filter passband, or monochromator wavelength and the bandwidth the
@@ -860,7 +873,7 @@ class Fluorescence(Measurement):
     """
     excitation_filter = self._get_resolved_filter(fluorescence_channel.excitation_filter)
     emission_filter = self._get_resolved_filter(fluorescence_channel.emission_filter)
-    optics: Dict[str, Optional[float]] = {}
+    optics: Dict[str, Any] = {}
     if excitation_filter is not None:
       optics["excitation_wavelength"] = excitation_filter.center_wavelength
       optics["excitation_bandwidth"] = excitation_filter.bandwidth

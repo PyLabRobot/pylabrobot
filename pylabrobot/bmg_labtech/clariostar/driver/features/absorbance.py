@@ -4,10 +4,11 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Tuple
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
+from pylabrobot.lib.results.table import get_spectrum_rows, get_well_rows
 from pylabrobot.resources import Plate, Well
 
 from .measurement import (
@@ -52,6 +53,16 @@ class CLARIOstarAbsorbanceResult(AbsorbanceResult):
   calibration: Optional[Tuple[int, int]] = None
   reference_calibration: Optional[Tuple[int, int]] = None
 
+  def _get_base_row(self, read: int, **columns: Any) -> Dict[str, Any]:
+    """The columns every row shares: raw counts, not optical densities."""
+    return {**super()._get_base_row(read, **columns), "quantity": "counts"}
+
+  def get_rows(self, read: int) -> List[Dict[str, Any]]:
+    """One row per well of sample counts, then one per well of reference counts."""
+    base = self._get_base_row(read)
+    reference_base = {**base, "quantity": "reference_counts"}
+    return get_well_rows(base, self.data) + get_well_rows(reference_base, self.references or {})
+
 
 @dataclass
 class CLARIOstarAbsorbanceSpectrumResult(AbsorbanceSpectrumResult):
@@ -67,6 +78,18 @@ class CLARIOstarAbsorbanceSpectrumResult(AbsorbanceSpectrumResult):
   references: Optional[Dict[str, float]] = None
   calibration: Optional[Dict[int, Tuple[int, int]]] = None
   reference_calibration: Optional[Tuple[int, int]] = None
+
+  def _get_base_row(self, read: int, **columns: Any) -> Dict[str, Any]:
+    """The columns every row shares: raw counts, not optical densities."""
+    return {**super()._get_base_row(read, **columns), "quantity": "counts"}
+
+  def get_rows(self, read: int) -> List[Dict[str, Any]]:
+    """One row per well and wavelength of sample counts, then one per well of reference counts."""
+    base = self._get_base_row(read)
+    reference_base = {**base, "quantity": "reference_counts"}
+    return get_spectrum_rows(base, self.data, "wavelength") + get_well_rows(
+      reference_base, self.references or {}
+    )
 
 
 @dataclass
