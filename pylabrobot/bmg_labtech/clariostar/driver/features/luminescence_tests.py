@@ -128,6 +128,12 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
       ftdi_extract_payload(io.written[1]), with_fields(LUMINESCENCE_RUN_FRAME, NOMINAL_EDGES)
     )
 
+  async def test_the_result_carries_the_focal_height_read_at(self):
+    self.assertEqual((await read(FakeFTDI())).focal_height, GROUND_TRUTH_FOCAL_HEIGHT)
+    feature = make_luminescence(FakeFTDI(), plate())
+    default = feature._get_default_focal_height(plate().get_all_items())
+    self.assertEqual((await read(FakeFTDI(), focal_height=None)).focal_height, default)
+
   async def test_each_field_is_sent_where_the_ground_truth_has_it(self):
     """Every luminescence field changed at once, to values a CLARIOstarPlus (firmware 1.35)
     accepted."""

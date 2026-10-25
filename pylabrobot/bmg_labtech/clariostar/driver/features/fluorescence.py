@@ -69,10 +69,14 @@ class CLARIOstarFluorescenceResult(FluorescenceResult):
     matrix_points: a matrix scan's counts, every measured point of each well in the order the
       reader sends them, keyed as ``data``; None for any other well scan. ``data`` then holds
       the plain mean of each well's points.
+    focal_height: mm above the plate's base; None if not known.
+    optic_position: the optic read from, "top" or "bottom"; None if not known.
   """
 
   gain: int
   matrix_points: Optional[Dict[str, List[float]]] = None
+  focal_height: Optional[float] = None
+  optic_position: Optional[OpticPosition] = None
 
 
 @dataclass(frozen=True)
@@ -1854,6 +1858,8 @@ class Fluorescence(Measurement):
     temperature: Optional[float],
     start_timestamp: datetime,
     end_timestamp: datetime,
+    focal_height: Optional[float] = None,
+    optic_position: Optional[OpticPosition] = None,
   ) -> List[CLARIOstarFluorescenceResult]:
     """One result per fluorescence channel: each well's mean, and with `matrix` its points."""
     results = []
@@ -1873,6 +1879,8 @@ class Fluorescence(Measurement):
           start_timestamp=start_timestamp,
           end_timestamp=end_timestamp,
           matrix_points=points if matrix else None,
+          focal_height=focal_height,
+          optic_position=optic_position,
         )
       )
     return results
@@ -2030,8 +2038,9 @@ class Fluorescence(Measurement):
       timeout: seconds the run may take; `default_read_timeout` when None.
 
     Returns:
-      the counts of the measured wells, with the optics and the gain they were read with; for a
-      sequence of fluorescence channels, one result per fluorescence channel in the order given.
+      the counts of the measured wells, with the optics, gain, focal height and optic position they
+      were read with; for a sequence of fluorescence channels, one result per fluorescence channel
+      in the order given.
 
     Raises:
       RuntimeError: if no plate is in the plate holder, or the run ends without its data.
@@ -2057,6 +2066,8 @@ class Fluorescence(Measurement):
       enhanced_dynamic_range=enhanced_dynamic_range,
     )
     timeout = self.default_read_timeout if timeout is None else timeout
+    if focal_height is None:
+      focal_height = self._get_default_focal_height(wells)
     logger.info(
       "fluorescence: %s, %d of %d wells of %s, %s scan, %s optic",
       "; ".join(
@@ -2089,6 +2100,8 @@ class Fluorescence(Measurement):
       temperature=temperature,
       start_timestamp=start_timestamp,
       end_timestamp=end_timestamp,
+      focal_height=focal_height,
+      optic_position=optic_position,
     )
     return results[0] if isinstance(fluorescence_channels, FluorescenceChannel) else results
 

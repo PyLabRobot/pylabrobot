@@ -542,6 +542,8 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
       temperature=temperature,
       start_timestamp=timestamp,
       end_timestamp=timestamp,
+      focal_height=self._get_default_focal_height(wells) if focal_height is None else focal_height,
+      optic_position=optic_position,
     )
     return results[0] if isinstance(fluorescence_channels, FluorescenceChannel) else results
 
@@ -643,6 +645,7 @@ class CLARIOstarSimulationLuminescence(Luminescence):
       emission_wavelength=emission_wavelength,
       emission_bandwidth=emission_bandwidth,
       gain=gain,
+      focal_height=self._get_default_focal_height(wells) if focal_height is None else focal_height,
       temperature=temperature,
       start_timestamp=timestamp,
       end_timestamp=timestamp,
