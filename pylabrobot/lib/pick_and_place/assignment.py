@@ -6,7 +6,6 @@ from pylabrobot.lib.pick_and_place.locations import get_rotation_wrt, get_rotati
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_stack import ResourceStack
-from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
 
 
@@ -47,7 +46,5 @@ def assign_placed_resource(
   else:
     # Where the move put it, along the destination's own axes.
     frame = get_rotation_wrt(destination, deck)
-    child = (location - destination.get_location_wrt(deck)).rotated(
-      Rotation(x=-frame.x, y=-frame.y, z=-frame.z)
-    )
+    child = (location - destination.get_location_wrt(deck)).rotated(frame.inverse())
     destination.assign_child_resource(resource, location=child)
