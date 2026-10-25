@@ -38,13 +38,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CLARIOstarLuminescenceResult(LuminescenceResult):
-  """A CLARIOstar luminescence result, with the detector gain it was read with.
+  """A CLARIOstar luminescence result, with the detector gain and focal height it was read with.
 
   Attributes:
     gain: the detector gain, within `LuminescenceConfiguration.gain_range`.
+    focal_height: mm above the plate's base; None if not known.
   """
 
   gain: int
+  focal_height: Optional[float] = None
 
 
 @dataclass
@@ -357,7 +359,8 @@ class Luminescence(Measurement):
         96-well plate in about 105 s.
 
     Returns:
-      the counts of the measured wells, with the emission band and the gain they were read with.
+      the counts of the measured wells, with the emission band, the gain and the focal height they
+      were read with.
 
     Raises:
       RuntimeError: if no plate is in the plate holder, or the run ends without its data.
@@ -383,6 +386,8 @@ class Luminescence(Measurement):
       timeout=timeout,
     )
     timeout = self.default_read_timeout if timeout is None else timeout
+    if focal_height is None:
+      focal_height = self._get_default_focal_height(wells)
     # TODO(device): no luminescent sample has been read yet, only an empty plate.
     self._warn_untested("luminescence")
     logger.info(
@@ -405,6 +410,7 @@ class Luminescence(Measurement):
       emission_wavelength=emission_wavelength,
       emission_bandwidth=emission_bandwidth,
       gain=gain,
+      focal_height=focal_height,
       temperature=temperature,
       start_timestamp=start_timestamp,
       end_timestamp=end_timestamp,

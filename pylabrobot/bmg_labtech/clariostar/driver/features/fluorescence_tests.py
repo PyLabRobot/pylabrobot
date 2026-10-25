@@ -671,6 +671,17 @@ class DefaultFocalHeightTests(unittest.IsolatedAsyncioTestCase):
           ),
         )
 
+  async def test_the_result_carries_the_focal_height_read_at(self):
+    session = load_session_replies()
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED]
+    io.replies.append(bytes.fromhex(session["fluorescence_column_1_reply"]))
+    plate = cor_96_wellplate_360uL_Fb("plate")
+    result = await make_fluorescence(io, plate).measure(
+      BASELINE, wells=plate.get_items("A1:H1"), gain=1000
+    )
+    self.assertEqual(result.focal_height, 6.2)  # a quarter up the well, as the RUN sent
+
   async def test_the_percent_is_checked_when_set(self):
     feature = make_fluorescence(FakeFTDI(), cor_96_wellplate_360uL_Fb("plate"))
     self.assertEqual(feature.default_focal_height_percent_of_well_depth, 25)
