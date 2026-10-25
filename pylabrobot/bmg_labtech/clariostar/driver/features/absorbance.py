@@ -4,12 +4,13 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Tuple
 
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
+from pylabrobot.lib.results.table import get_spectrum_rows, get_well_rows
 from pylabrobot.resources import Plate, Well
 
-from ..errors import FrameError
 from .measurement import (
   Measurement,
   MeasurementConfiguration,
@@ -52,6 +53,16 @@ class CLARIOstarAbsorbanceResult(AbsorbanceResult):
   calibration: Optional[Tuple[int, int]] = None
   reference_calibration: Optional[Tuple[int, int]] = None
 
+  def _get_base_row(self, read: int, **columns: Any) -> Dict[str, Any]:
+    """The columns every row shares: raw counts, not optical densities."""
+    return {**super()._get_base_row(read, **columns), "quantity": "counts"}
+
+  def get_rows(self, read: int) -> List[Dict[str, Any]]:
+    """One row per well of sample counts, then one per well of reference counts."""
+    base = self._get_base_row(read)
+    reference_base = {**base, "quantity": "reference_counts"}
+    return get_well_rows(base, self.data) + get_well_rows(reference_base, self.references or {})
+
 
 @dataclass
 class CLARIOstarAbsorbanceSpectrumResult(AbsorbanceSpectrumResult):
@@ -67,6 +78,18 @@ class CLARIOstarAbsorbanceSpectrumResult(AbsorbanceSpectrumResult):
   references: Optional[Dict[str, float]] = None
   calibration: Optional[Dict[int, Tuple[int, int]]] = None
   reference_calibration: Optional[Tuple[int, int]] = None
+
+  def _get_base_row(self, read: int, **columns: Any) -> Dict[str, Any]:
+    """The columns every row shares: raw counts, not optical densities."""
+    return {**super()._get_base_row(read, **columns), "quantity": "counts"}
+
+  def get_rows(self, read: int) -> List[Dict[str, Any]]:
+    """One row per well and wavelength of sample counts, then one per well of reference counts."""
+    base = self._get_base_row(read)
+    reference_base = {**base, "quantity": "reference_counts"}
+    return get_spectrum_rows(base, self.data, "wavelength") + get_well_rows(
+      reference_base, self.references or {}
+    )
 
 
 @dataclass
@@ -341,6 +364,7 @@ class Absorbance(Measurement):
     shake_settings: Optional[ShakeSettings] = None,
     report: Report = "optical_density",
     timeout: Optional[float] = None,
+    results_directory: Optional[str] = None,
   ) -> List[AbsorbanceResult]:
     """Measure the plate in the plate holder at every wavelength, each well read once for all.
 
@@ -355,14 +379,17 @@ class Absorbance(Measurement):
       report: what the results hold: optical density, or the raw sample counts with the reference
         counts and calibration pairs that compute it (`CLARIOstarAbsorbanceResult`).
       timeout: seconds the run may take; `default_read_timeout` when None.
+      results_directory: the directory the read's rows are appended to once it is complete
+        (`pylabrobot.lib.results.directory`); None writes none.
 
     Returns:
       one result per wavelength, in the order given.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, or the run ends without its data.
-      ValueError: if the wavelengths or report are out of range, or the settings cannot read the
-        wells of the plate.
+      RuntimeError: if no plate is in the plate holder, the run ends without its data, or the last
+        write to the results directory failed.
+      ValueError: if the wavelengths or report are out of range, the settings cannot read the
+        wells of the plate, or the results directory cannot be created or written.
       TimeoutError: if the run takes longer than `timeout` seconds.
     """
     measurement = MeasurementSettings() if measurement_settings is None else measurement_settings
@@ -379,6 +406,7 @@ class Absorbance(Measurement):
       measurement.well_scan,
       report,
     )
+    results_directory = self._check_results_directory(results_directory)
     start_timestamp = datetime.now()
     replies, end_timestamp = await self._run_measurement(parameters, timeout)
     reply = replies[0]
@@ -416,6 +444,7 @@ class Absorbance(Measurement):
             end_timestamp=end_timestamp,
           )
         )
+    await self._append_results(results_directory, results)
     return results
 
   # ----------------------------------------
@@ -520,6 +549,7 @@ class Absorbance(Measurement):
     shake_settings: Optional[ShakeSettings] = None,
     report: Report = "optical_density",
     timeout: Optional[float] = None,
+    results_directory: Optional[str] = None,
   ) -> AbsorbanceSpectrumResult:
     """Measure the absorbance spectrum of the plate in the plate holder, every wavelength in one
     pass.
@@ -540,14 +570,17 @@ class Absorbance(Measurement):
       report: optical density, or the raw sample counts with the reference counts and calibration
         pairs that compute it (`CLARIOstarAbsorbanceSpectrumResult`).
       timeout: seconds the run may take; `default_read_timeout` when None.
+      results_directory: the directory the read's rows are appended to once it is complete
+        (`pylabrobot.lib.results.directory`); None writes none.
 
     Returns:
       each measured well's spectrum, keyed by well identifier.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, or the run ends without its data.
+      RuntimeError: if no plate is in the plate holder, the run ends without its data, or the last
+        write to the results directory failed.
       ValueError: if an argument is out of range, the settings cannot read the wells of the plate,
-        or the data pages are not this read's.
+        the data pages are not this read's, or the results directory cannot be created or written.
       TimeoutError: if the run takes longer than `timeout` seconds.
       FrameError: if a data page arrives short on the second read too.
     """
@@ -577,6 +610,7 @@ class Absorbance(Measurement):
       report,
     )
     values = (len(wavelengths) + 3) * (measured + 2)
+    results_directory = self._check_results_directory(results_directory)
     try:
       start_timestamp = datetime.now()
       pages, end_timestamp = await self._run_measurement(parameters, timeout, values)
@@ -597,8 +631,9 @@ class Absorbance(Measurement):
     for wavelength, wavelength_readings in zip(wavelengths, readings):  # row by row over the wells
       for identifier, value in zip(identifiers, wavelength_readings):
         data[identifier][wavelength] = value
+    result: AbsorbanceSpectrumResult
     if report == "raw":
-      return CLARIOstarAbsorbanceSpectrumResult(
+      result = CLARIOstarAbsorbanceSpectrumResult(
         data=data,
         temperature=temperature,
         start_timestamp=start_timestamp,
@@ -607,9 +642,12 @@ class Absorbance(Measurement):
         calibration=dict(zip(wavelengths, calibrations)),
         reference_calibration=reference_pair,
       )
-    return AbsorbanceSpectrumResult(
-      data=data,
-      temperature=temperature,
-      start_timestamp=start_timestamp,
-      end_timestamp=end_timestamp,
-    )
+    else:
+      result = AbsorbanceSpectrumResult(
+        data=data,
+        temperature=temperature,
+        start_timestamp=start_timestamp,
+        end_timestamp=end_timestamp,
+      )
+    await self._append_results(results_directory, [result])
+    return result

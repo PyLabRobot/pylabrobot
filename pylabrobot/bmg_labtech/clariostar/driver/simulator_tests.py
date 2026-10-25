@@ -1,6 +1,7 @@
 """Simulator tests, and the recording it takes its configuration from."""
 
 import os
+import tempfile
 import unittest
 
 from pylabrobot.bmg_labtech.clariostar.device import (
@@ -24,9 +25,12 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   make_driver,
   parse_status,
 )
+from pylabrobot.lib.results.reading import load_rows
+from pylabrobot.lib.results.table import get_table
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.biorad.plates import biorad_96_wellplate_200uL_Vb
 from pylabrobot.resources.corning.plates import cor_96_wellplate_2mL_Vb
+from pylabrobot.utils.timing import run_cycles
 
 LOCATION_IN = Coordinate(10, 20, 30)  # made up: the real ones are not measured yet
 LOCATION_OUT = Coordinate(10, -200, 30)
@@ -174,6 +178,28 @@ class SimulatorTests(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(await driver.request_absorbance_available())
     self.assertEqual(await driver.request_fluorescence_channels(), 1)
     self.assertFalse(await driver.request_well_1536_plates_supported())
+
+  async def test_reads_in_a_run_carry_their_cycle_on_the_result_in_the_table_and_the_rows(self):
+    await self.reader.drawer.open()
+    self.reader.plate_holder.assign_child_resource(make_plate("plate"))
+    await self.reader.drawer.close()
+    absorbance = self.reader.absorbance
+    assert absorbance is not None
+    directory = tempfile.mkdtemp()
+
+    async def read(cycle: int):
+      (result,) = await absorbance.measure(wavelengths=[600], results_directory=directory)
+      return result
+
+    results = [r for r in await run_cycles(read, cycle_time=0.05, cycles=2) if r is not None]
+    self.assertEqual([result.current_cycle["cycle"] for result in results], [0, 1])
+    self.assertEqual([row["cycle"] for row in get_table(results)[::96]], [0, 1])  # after the run
+    rows = load_rows(directory)
+    self.assertEqual([row["cycle"] for row in rows[::96]], [0, 1])
+    due = results[1].current_cycle["due_timestamp"]
+    self.assertEqual(rows[96]["due_timestamp"], due.isoformat())
+    (outside,) = await absorbance.measure(wavelengths=[600])
+    self.assertIsNone(outside.current_cycle["cycle"])
 
   async def test_nothing_reaches_a_wire(self):
     driver = self.reader.driver

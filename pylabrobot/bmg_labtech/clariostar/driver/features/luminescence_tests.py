@@ -25,13 +25,13 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
   Measurement,
   MeasurementSettings,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_IDLE,
   FakeFTDI,
   make_driver,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationLuminescence
+from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload
 from pylabrobot.resources import Plate, cor_96_wellplate_360uL_Fb
 
 # The ground truth: every well, 580-80 nm, gain 3500, focal height 8.5 mm, settling 0.0 s,
@@ -127,6 +127,12 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       ftdi_extract_payload(io.written[1]), with_fields(LUMINESCENCE_RUN_FRAME, NOMINAL_EDGES)
     )
+
+  async def test_the_result_carries_the_focal_height_read_at(self):
+    self.assertEqual((await read(FakeFTDI())).focal_height, GROUND_TRUTH_FOCAL_HEIGHT)
+    feature = make_luminescence(FakeFTDI(), plate())
+    default = feature._get_default_focal_height(plate().get_all_items())
+    self.assertEqual((await read(FakeFTDI(), focal_height=None)).focal_height, default)
 
   async def test_each_field_is_sent_where_the_ground_truth_has_it(self):
     """Every luminescence field changed at once, to values a CLARIOstarPlus (firmware 1.35)

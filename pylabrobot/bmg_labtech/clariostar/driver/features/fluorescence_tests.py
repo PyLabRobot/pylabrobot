@@ -38,7 +38,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
   MeasurementSettings,
   ShakeSettings,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import ftdi_extract_payload, ftdi_wrap_payload
+from pylabrobot.bmg_labtech.clariostar.driver.framing import FTDI_HEADER
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   STATUS_IDLE,
   STATUS_QUERY_FRAME,
@@ -47,6 +47,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   make_driver,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationFluorescence
+from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload, ftdi_wrap_payload
 from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
 from pylabrobot.lib.fluorescence.results import FluorescenceSpectrumResult
 from pylabrobot.lib.optics.filters import DichroicFilter, OpticalFilter
@@ -669,6 +670,17 @@ class DefaultFocalHeightTests(unittest.IsolatedAsyncioTestCase):
             cor_96_wellplate_360uL_Fb("plate"), None, focal_height=focal_height
           ),
         )
+
+  async def test_the_result_carries_the_focal_height_read_at(self):
+    session = load_session_replies()
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED]
+    io.replies.append(bytes.fromhex(session["fluorescence_column_1_reply"]))
+    plate = cor_96_wellplate_360uL_Fb("plate")
+    result = await make_fluorescence(io, plate).measure(
+      BASELINE, wells=plate.get_items("A1:H1"), gain=1000
+    )
+    self.assertEqual(result.focal_height, 6.2)  # a quarter up the well, as the RUN sent
 
   async def test_the_percent_is_checked_when_set(self):
     feature = make_fluorescence(FakeFTDI(), cor_96_wellplate_360uL_Fb("plate"))
@@ -1786,7 +1798,7 @@ def with_nominal_scan_edges(ground_truth: bytes) -> bytes:
   for offset, edges in ((21, _compute_band_edges(488, 14)), (27, _compute_band_edges(535, 30))):
     for index, value in enumerate(edges):
       payload[offset + 2 * index : offset + 2 * index + 2] = value.to_bytes(2, "big")
-  return ftdi_wrap_payload(bytes(payload))
+  return ftdi_wrap_payload(bytes(payload), header=FTDI_HEADER)
 
 
 async def scan_ground_truth(**arguments):
