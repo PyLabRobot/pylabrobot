@@ -6,20 +6,36 @@ mode's own. The reply data comes back row by row over the measured wells.
 """
 
 import asyncio
+import functools
 import logging
 import math
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Set, Tuple
+from typing import (
+  TYPE_CHECKING,
+  Any,
+  Awaitable,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Set,
+  Tuple,
+  TypeVar,
+  cast,
+)
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.lib.results.directory import append_results, check_directory
 from pylabrobot.resources import Plate, Well
 
 from ..errors import CommandRefusedError
 
 if TYPE_CHECKING:
-  from ..master import CLARIOstarDriver
+  from ..master import CLARIOstarDriver, CLARIOstarStatus
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +71,29 @@ def _get_well_diameter(plate: Plate) -> float:
   """The plate's well diameter in mm: the smaller side of its first well."""
   well = plate.get_all_items()[0]
   return min(well.get_size_x(), well.get_size_y())
+
+
+_Run = TypeVar("_Run", bound=Callable[..., Awaitable[Any]])
+
+
+def _enforce_one_measurement_at_a_time(run: _Run) -> _Run:
+  """Refuse `run` while another measurement runs on the same reader; nothing is sent.
+
+  Raises:
+    RuntimeError: if a measurement is running on the reader already.
+  """
+
+  @functools.wraps(run)
+  async def guarded(self: "Measurement", *args: Any, **kwargs: Any) -> Any:
+    if self._driver._measuring:
+      raise RuntimeError("a measurement is already running on this reader; wait for it to end")
+    self._driver._measuring = True
+    try:
+      return await run(self, *args, **kwargs)
+    finally:
+      self._driver._measuring = False
+
+  return cast(_Run, guarded)
 
 
 @dataclass
@@ -315,6 +354,19 @@ class Measurement:
         len(counts),
         ceiling,
       )
+
+  # -- results directory ---------------------------------------------------------------------------
+
+  @staticmethod
+  def _check_results_directory(results_directory: Optional[str]) -> Optional[str]:
+    """`results_directory` as an absolute path, checked before the run (`check_directory`)."""
+    return None if results_directory is None else check_directory(results_directory)
+
+  @staticmethod
+  async def _append_results(results_directory: Optional[str], results: Sequence[Any]) -> None:
+    """Append the rows of `results` to `results_directory` (`append_results`); None writes none."""
+    if results_directory is not None:
+      await append_results(results_directory, results)
 
   # -- checks of the detector's modes, fluorescence and luminescence -------------------------------
 
@@ -607,9 +659,46 @@ class Measurement:
   # clears it (every cycle of a kinetic read too).
   _DATA_READY = 0x01
 
+  @staticmethod
+  def _check_drawer_in(status: "CLARIOstarStatus") -> None:
+    """Raise if `status` shows the drawer out.
+
+    Raises:
+      RuntimeError: if the drawer is open.
+    """
+    if status.drawer_open:
+      raise RuntimeError("the drawer is open; close it first")
+
+  async def _wait_until_idle_with_drawer_in(self) -> None:
+    """Poll status until the reader is idle, as `send_command` does before a command, and raise if
+    that status shows the drawer out: a run, a z-scan and a grid scan move the plate under the
+    optics. The command then goes without a second wait (`when_idle=False`).
+
+    Raises:
+      RuntimeError: if the drawer is open; nothing is sent after the status.
+    """
+    last: Optional["CLARIOstarStatus"] = None
+
+    def idle(status: "CLARIOstarStatus") -> bool:
+      nonlocal last
+      last = status
+      return not status.busy
+
+    await self._driver._wait_until_ready(
+      timeout=self._driver.default_read_timeout,
+      poll_interval=self._driver.default_poll_interval,
+      until=idle,
+    )
+    assert last is not None  # the wait returns on a status
+    self._check_drawer_in(last)
+
   async def _unchecked_fw_run(self, parameters: bytes) -> None:
-    """Send RUN with `parameters`, the bytes after the family byte."""
-    await self._driver.send_command(self._driver.CommandFamily.RUN, parameters=parameters)
+    """Send RUN with `parameters`, the bytes after the family byte, once the reader is idle with
+    the drawer in (`_wait_until_idle_with_drawer_in`)."""
+    await self._wait_until_idle_with_drawer_in()
+    await self._driver.send_command(
+      self._driver.CommandFamily.RUN, parameters=parameters, when_idle=False
+    )
 
   async def _request_page(self, retries: int) -> bytes:
     """Request one data page (`05 02 00 00 00 00 00`) while the reader may still be busy.
@@ -672,6 +761,7 @@ class Measurement:
     except (CommandRefusedError, FrameError) as e:  # e.g. the run ended meanwhile (214)
       logger.warning("STOP not accepted: %s", e)
 
+  @_enforce_one_measurement_at_a_time
   async def _run_measurement(
     self,
     parameters: bytes,
@@ -697,7 +787,8 @@ class Measurement:
 
     Raises:
       TimeoutError: if the run takes longer than `timeout` seconds.
-      RuntimeError: if the run ends without reporting its data ready, or before all its pages.
+      RuntimeError: if the drawer is open (nothing is sent), or the run ends without reporting its
+        data ready, or before all its pages.
       ValueError: if a data page holds no values.
     """
     await self._unchecked_fw_run(parameters)
