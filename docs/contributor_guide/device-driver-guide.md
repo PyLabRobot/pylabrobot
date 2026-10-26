@@ -24,6 +24,26 @@ Keep it small and idiomatic to PyLabRobot.
 - **Prefer string `Literal[...]` over enums**, especially anything user-facing. A `Literal["standard", "head", "pump"]` argument plus an internal dict mapping to wire codes reads better at the call site than an enum import. `IntEnum` is fine in narrow internal cases (e.g. a fixed set of wire/register codes never exposed to callers).
 - **API docs:** add `docs/api/pylabrobot.<vendor>.rst` plus a line in `docs/api/pylabrobot.rst`.
 
+### Name methods by prefix
+
+A method's prefix says what it touches and what it does, following the [PLR command prefix proposal](https://discuss.pylabrobot.org/t/standardised-plr-command-prefix-proposal/403).
+
+| prefix | meaning | examples |
+|---|---|---|
+| `move_`, `aspirate_`, `dispense_`, `pickup_`, `shake_` | the device does work | `move_to_y_position`, `move_to_safe_z` |
+| `start_`, `stop_` | start or stop a process left running on the device | `start_temperature_control`, `start_shaking` |
+| `measure_`, `sense_`, `read_`, `capture_` | a sensor reading taken at the moment of asking | `measure_weight`, `sense_tip_presence`, `sense_drawer_open`, `read_absorbance` |
+| `probe_` | a measurement taken by moving | `probe_z_max`, `gripper_probe_for_object` |
+| `request_` | read device memory: a value the device answers from its registers | `request_y_positions`, `request_parameters` |
+| `set_` | write device memory, nothing else | `set_drive_parameter`, `set_loading_indicators` |
+| `get_` | read the resource model, computed with no I/O | `elbow_drive_get_angle` |
+| `update_`, `assign_`, `unassign_` | write the resource model | `elbow_drive_update_angle`, `assign_child_resource` |
+
+- A process left running is a `start_` / `stop_` pair, never `set_`: `start_temperature_control` / `stop_temperature_control`.
+- On a feature with several drives, the drive's name comes first: `gripper_request_width`, `elbow_drive_get_angle`.
+- Lifecycle methods take no prefix: `discover`, `initialize`, `park`.
+- Don't use synonyms of these prefixes: `query_`, `fetch_`, `retrieve_`, `obtain_`, `poll_` (use `request_` or `get_`), `write_`, `put_` (use `set_`). Propose a missing prefix on the forum before adding one.
+
 ### Share nothing between device drivers
 
 Each driver stands alone: one device's package never imports another's. What more than one device needs goes in
