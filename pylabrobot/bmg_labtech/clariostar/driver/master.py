@@ -245,6 +245,9 @@ class CLARIOstarDriver:
     # One lock over the link: a reply belongs to the last command written, so exchanges never
     # overlap.
     self._lock = asyncio.Lock()
+    # Whether a measurement is running; the reader runs only one at a time
+    # (`_enforce_one_measurement_at_a_time`).
+    self._measuring = False
     self._last_warning: Optional[Tuple[int, int, int, int, int]] = None
     # Built on first use over the current io (`_ftdi`).
     self._ftdi_interface: Optional[BMGFTDIInterface] = None

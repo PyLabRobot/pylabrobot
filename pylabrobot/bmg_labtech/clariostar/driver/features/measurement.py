@@ -6,12 +6,27 @@ mode's own. The reply data comes back row by row over the measured wells.
 """
 
 import asyncio
+import functools
 import logging
 import math
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Set, Tuple
+from typing import (
+  TYPE_CHECKING,
+  Any,
+  Awaitable,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Set,
+  Tuple,
+  TypeVar,
+  cast,
+)
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.lib.results.directory import append_results, check_directory
@@ -56,6 +71,29 @@ def _get_well_diameter(plate: Plate) -> float:
   """The plate's well diameter in mm: the smaller side of its first well."""
   well = plate.get_all_items()[0]
   return min(well.get_size_x(), well.get_size_y())
+
+
+_Run = TypeVar("_Run", bound=Callable[..., Awaitable[Any]])
+
+
+def _enforce_one_measurement_at_a_time(run: _Run) -> _Run:
+  """Refuse `run` while another measurement runs on the same reader; nothing is sent.
+
+  Raises:
+    RuntimeError: if a measurement is running on the reader already.
+  """
+
+  @functools.wraps(run)
+  async def guarded(self: "Measurement", *args: Any, **kwargs: Any) -> Any:
+    if self._driver._measuring:
+      raise RuntimeError("a measurement is already running on this reader; wait for it to end")
+    self._driver._measuring = True
+    try:
+      return await run(self, *args, **kwargs)
+    finally:
+      self._driver._measuring = False
+
+  return cast(_Run, guarded)
 
 
 @dataclass
@@ -723,6 +761,7 @@ class Measurement:
     except (CommandRefusedError, FrameError) as e:  # e.g. the run ended meanwhile (214)
       logger.warning("STOP not accepted: %s", e)
 
+  @_enforce_one_measurement_at_a_time
   async def _run_measurement(
     self,
     parameters: bytes,

@@ -43,6 +43,7 @@ from .measurement import (
   MeasurementConfiguration,
   MeasurementSettings,
   ShakeSettings,
+  _enforce_one_measurement_at_a_time,
   _get_measured_identifiers,
 )
 
@@ -1260,6 +1261,7 @@ class Fluorescence(Measurement):
 
   # -- measuring -----------------------------------------------------------------------------------
 
+  @_enforce_one_measurement_at_a_time
   async def _run_z_profile(self, parameters: bytes, timeout: float) -> bytes:
     """Send a z-scan (`09`) and return its FOCUS_RESULT reply.
 
@@ -1503,6 +1505,7 @@ class Fluorescence(Measurement):
 
   # -- measuring -----------------------------------------------------------------------------------
 
+  @_enforce_one_measurement_at_a_time
   async def _run_grid(
     self, parameters: bytes, timeout: float
   ) -> Tuple[int, float, List[bytes], bytes]:

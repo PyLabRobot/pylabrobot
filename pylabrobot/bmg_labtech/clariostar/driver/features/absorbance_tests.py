@@ -23,6 +23,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance import (
   _compute_readings,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.features.drawer_tests import make_plate_holder
+from pylabrobot.bmg_labtech.clariostar.driver.features.fluorescence import Fluorescence
 from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
   MeasurementSettings,
   ShakeSettings,
@@ -40,6 +41,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulat
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload
 from pylabrobot.lib.absorbance.results import AbsorbanceResult
+from pylabrobot.lib.fluorescence import FluorescenceChannel
 from pylabrobot.lib.results import directory as directory_module
 from pylabrobot.lib.results.reading import load_rows
 from pylabrobot.resources import Plate, Well, cor_96_wellplate_360uL_Fb, create_ordered_items_2d
@@ -734,6 +736,31 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       await task
     self.assertIn(STOP_FRAME, io.written)
     self.assertEqual(io._pending, b"")  # no reply left for the next command to read
+
+  async def test_a_second_measurement_on_the_reader_is_refused_before_anything_is_sent(self):
+    io = YieldingFTDI()
+    absorbance = make_absorbance(io, ground_truth_96_well_plate())
+    fluorescence = Fluorescence(absorbance._driver)
+    first = asyncio.create_task(absorbance.measure(wavelengths=[600], timeout=10))
+    while not io.running:
+      await asyncio.sleep(0)
+    written = len(io.written)
+    second = {
+      "absorbance": lambda: absorbance.measure(wavelengths=[600]),
+      "fluorescence": lambda: fluorescence.measure(
+        FluorescenceChannel(excitation_wavelength=485, emission_wavelength=528),
+        gain=1000,
+        focal_height=8.5,
+      ),
+    }
+    for name, read in second.items():
+      with self.subTest(name), self.assertRaisesRegex(RuntimeError, "already running"):
+        await read()
+    self.assertEqual(len(io.written), written)  # nothing sent
+    first.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await first
+    self.assertFalse(absorbance._driver._measuring)
 
   async def test_out_of_range_reads_send_nothing(self):
     io = FakeFTDI()
