@@ -28,6 +28,8 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
   ShakeSettings,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
+  STATUS_BUSY,
+  STATUS_DRAWER_OPEN,
   STATUS_IDLE,
   STATUS_QUERY_FRAME,
   FakeFTDI,
@@ -1193,6 +1195,24 @@ class ResultsDirectoryTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(list(results[0].data), COLUMN_1)
     with self.assertRaisesRegex(RuntimeError, "not all written"):
       await self.read_column_1(results_directory=self.directory)
+
+
+class DrawerOpenTests(unittest.IsolatedAsyncioTestCase):
+  async def test_a_read_with_the_drawer_out_is_refused_before_the_run(self):
+    io = FakeFTDI()
+    io.replies = [STATUS_DRAWER_OPEN]
+    with self.assertRaisesRegex(RuntimeError, "the drawer is open"):
+      await make_absorbance(io, ground_truth_96_well_plate()).measure(wavelengths=[600])
+    self.assertEqual(io.written, [STATUS_QUERY_FRAME])
+
+  async def test_the_drawer_is_read_from_the_idle_status_the_run_waits_for(self):
+    io = FakeFTDI()
+    io.replies = [STATUS_BUSY, STATUS_DRAWER_OPEN]
+    absorbance = make_absorbance(io, ground_truth_96_well_plate())
+    absorbance._driver.default_poll_interval = 0
+    with self.assertRaisesRegex(RuntimeError, "the drawer is open"):
+      await absorbance.measure(wavelengths=[600])
+    self.assertEqual(io.written, [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME])
 
 
 if __name__ == "__main__":

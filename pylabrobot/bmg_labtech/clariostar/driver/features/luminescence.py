@@ -370,8 +370,8 @@ class Luminescence(Measurement):
       were read with.
 
     Raises:
-      RuntimeError: if no plate is in the plate holder, the run ends without its data, or the last
-        write to the results directory failed.
+      RuntimeError: if no plate is in the plate holder, the drawer is open, the run ends without its
+        data, or the last write to the results directory failed.
       ValueError: if an argument is out of range (`_check_arguments`), the settings cannot read
         the wells of the plate, the reply is not this read's (`_decode_data_reply`), or the results
         directory cannot be created or written.

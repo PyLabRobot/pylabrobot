@@ -201,6 +201,22 @@ class SimulatorTests(unittest.IsolatedAsyncioTestCase):
     (outside,) = await absorbance.measure(wavelengths=[600])
     self.assertIsNone(outside.current_cycle["cycle"])
 
+  async def test_a_simulated_read_with_the_drawer_out_is_refused(self):
+    await self.reader.drawer.open()
+    self.reader.plate_holder.assign_child_resource(make_plate("plate"))
+    absorbance, luminescence = self.reader.absorbance, self.reader.luminescence
+    assert absorbance is not None and luminescence is not None
+    reads = {
+      "absorbance": lambda: absorbance.measure(wavelengths=[600]),
+      "spectrum": lambda: absorbance.measure_spectrum(
+        start_wavelength=300, end_wavelength=310, step_size=1
+      ),
+      "luminescence": lambda: luminescence.measure(),
+    }
+    for name, read in reads.items():
+      with self.subTest(name), self.assertRaisesRegex(RuntimeError, "the drawer is open"):
+        await read()
+
   async def test_nothing_reaches_a_wire(self):
     driver = self.reader.driver
     with self.assertRaises(NotImplementedError):
