@@ -335,6 +335,7 @@ class Luminescence(Measurement):
     measurement_interval: float = 0.8,
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
+    simulated_data: Optional[LuminescenceResult] = None,
     timeout: Optional[float] = None,
     results_directory: Optional[str] = None,
   ) -> CLARIOstarLuminescenceResult:
@@ -360,6 +361,8 @@ class Luminescence(Measurement):
       measurement_settings: how to read: a point read without a pause; its flashes do not apply.
         None reads with the defaults but no settling time.
       shake_settings: shake the plate before the read; None does not shake.
+      simulated_data: what each measured well reads on the simulated reader (`simulator`); a
+        real reader measures the plate and ignores it, so one call serves both.
       timeout: seconds the run may take; `default_read_timeout` when None. The defaults read a
         96-well plate in about 105 s.
       results_directory: the directory the read's rows are appended to once it is complete
