@@ -175,9 +175,9 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
     report: Report = "optical_density",
+    simulated_data: Optional[List[AbsorbanceResult]] = None,
     timeout: Optional[float] = None,
     results_directory: Optional[str] = None,
-    simulated_data: Optional[List[AbsorbanceResult]] = None,
   ) -> List[AbsorbanceResult]:
     """Check and encode the measurement; every measured well reads a random optical density.
 
@@ -286,9 +286,9 @@ class CLARIOstarSimulationAbsorbance(Absorbance):
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
     report: Report = "optical_density",
+    simulated_data: Optional[AbsorbanceSpectrumResult] = None,
     timeout: Optional[float] = None,
     results_directory: Optional[str] = None,
-    simulated_data: Optional[AbsorbanceSpectrumResult] = None,
   ) -> AbsorbanceSpectrumResult:
     """Check and encode the spectrum; every measured well reads a random optical density at
     every wavelength.
@@ -454,9 +454,9 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
     enhanced_dynamic_range: bool = ...,
     measurement_settings: Optional[MeasurementSettings] = ...,
     shake_settings: Optional[ShakeSettings] = ...,
+    simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
     timeout: Optional[float] = ...,
     results_directory: Optional[str] = ...,
-    simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
   ) -> CLARIOstarFluorescenceResult: ...
 
   @overload
@@ -472,9 +472,9 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
     enhanced_dynamic_range: bool = ...,
     measurement_settings: Optional[MeasurementSettings] = ...,
     shake_settings: Optional[ShakeSettings] = ...,
+    simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
     timeout: Optional[float] = ...,
     results_directory: Optional[str] = ...,
-    simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
   ) -> List[CLARIOstarFluorescenceResult]: ...
 
   async def measure(
@@ -489,9 +489,9 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
     enhanced_dynamic_range: bool = False,
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
+    simulated_data: Optional[Sequence[FluorescenceResult]] = None,
     timeout: Optional[float] = None,
     results_directory: Optional[str] = None,
-    simulated_data: Optional[Sequence[FluorescenceResult]] = None,
   ) -> Union[CLARIOstarFluorescenceResult, List[CLARIOstarFluorescenceResult]]:
     """Check and encode the read; every measured well reads random counts.
 
@@ -599,9 +599,9 @@ class CLARIOstarSimulationLuminescence(Luminescence):
     measurement_interval: float = 0.8,
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
+    simulated_data: Optional[LuminescenceResult] = None,
     timeout: Optional[float] = None,
     results_directory: Optional[str] = None,
-    simulated_data: Optional[LuminescenceResult] = None,
   ) -> CLARIOstarLuminescenceResult:
     """Check and encode the read; every measured well reads random counts.
 

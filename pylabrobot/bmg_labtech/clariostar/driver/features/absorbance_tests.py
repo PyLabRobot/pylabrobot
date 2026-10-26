@@ -689,6 +689,25 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual((result.wavelength, result.temperature), (600, None))
     self.assertEqual(list(result.data), COLUMN_1)
 
+  async def test_a_real_reader_ignores_simulated_data(self):
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, COLUMN_1_DATA_REPLY]
+    plate = ground_truth_96_well_plate()
+    column_1 = plate.get_items("A1:H1")
+    given = AbsorbanceResult(
+      data={identifier: 9.0 for identifier in COLUMN_1},
+      wavelength=600,
+      temperature=None,
+      start_timestamp=datetime.now(),
+      end_timestamp=datetime.now(),
+    )
+    (result,) = await measure_with(
+      make_absorbance(io, plate), [600], wells=column_1, simulated_data=[given]
+    )
+    self.assertEqual(io.written[2:], [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME, DATA_FRAME])
+    self.assertEqual(list(result.data), COLUMN_1)
+    self.assertNotIn(9.0, result.data.values())  # the plate's densities, not the given ones
+
   async def test_the_first_poll_waits_after_the_run(self):
     # As the reader answered: a poll sent right after the RUN's reply went unanswered.
     io = FakeFTDI()

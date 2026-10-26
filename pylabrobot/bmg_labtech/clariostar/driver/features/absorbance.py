@@ -363,6 +363,7 @@ class Absorbance(Measurement):
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
     report: Report = "optical_density",
+    simulated_data: Optional[List[AbsorbanceResult]] = None,
     timeout: Optional[float] = None,
     results_directory: Optional[str] = None,
   ) -> List[AbsorbanceResult]:
@@ -378,6 +379,8 @@ class Absorbance(Measurement):
       shake_settings: shake the plate before the read; None does not shake.
       report: what the results hold: optical density, or the raw sample counts with the reference
         counts and calibration pairs that compute it (`CLARIOstarAbsorbanceResult`).
+      simulated_data: what each measured well reads on the simulated reader (`simulator`); a
+        real reader measures the plate and ignores it, so one call serves both.
       timeout: seconds the run may take; `default_read_timeout` when None.
       results_directory: the directory the read's rows are appended to once it is complete
         (`pylabrobot.lib.results.directory`); None writes none.
@@ -548,6 +551,7 @@ class Absorbance(Measurement):
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
     report: Report = "optical_density",
+    simulated_data: Optional[AbsorbanceSpectrumResult] = None,
     timeout: Optional[float] = None,
     results_directory: Optional[str] = None,
   ) -> AbsorbanceSpectrumResult:
@@ -569,6 +573,8 @@ class Absorbance(Measurement):
       shake_settings: shake the plate before the read; None does not shake.
       report: optical density, or the raw sample counts with the reference counts and calibration
         pairs that compute it (`CLARIOstarAbsorbanceSpectrumResult`).
+      simulated_data: what each measured well reads on the simulated reader (`simulator`); a
+        real reader measures the plate and ignores it, so one call serves both.
       timeout: seconds the run may take; `default_read_timeout` when None.
       results_directory: the directory the read's rows are appended to once it is complete
         (`pylabrobot.lib.results.directory`); None writes none.
