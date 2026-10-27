@@ -59,6 +59,7 @@ class USB(IOBase):
     max_workers: int = 1,
     read_endpoint_address: Optional[int] = None,
     write_endpoint_address: Optional[int] = None,
+    zero_length_packets: bool = True,
   ):
     """Initialize an io.USB object.
 
@@ -77,6 +78,9 @@ class USB(IOBase):
       configuration_callback: A callback that takes the device object as an argument and performs
         any necessary configuration. If `None`, `dev.set_configuration()` is called.
       max_workers: The maximum number of worker threads for USB I/O operations.
+      zero_length_packets: End a write whose length is a multiple of the write endpoint's packet
+        size with a zero-length packet. Some devices, such as BMG's VANTAstar, reject the extra
+        packet.
     """
 
     super().__init__()
@@ -100,6 +104,7 @@ class USB(IOBase):
     self.write_endpoint_address = write_endpoint_address
     self.configuration_callback = configuration_callback
     self.max_workers = max_workers
+    self.zero_length_packets = zero_length_packets
 
     self.dev: Optional[usb.core.Device] = None  # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
@@ -148,7 +153,7 @@ class USB(IOBase):
         write_endpoint, data, timeout=int(timeout * 1000)
       ),  # PyUSB expects timeout in milliseconds
     )
-    if len(data) % write_endpoint.wMaxPacketSize == 0:
+    if self.zero_length_packets and len(data) % write_endpoint.wMaxPacketSize == 0:
       # send a zero-length packet to indicate the end of the transfer
       await loop.run_in_executor(
         self._write_executor,
@@ -577,6 +582,8 @@ class USB(IOBase):
       d["read_endpoint_address"] = self.read_endpoint_address
     if self.write_endpoint_address is not None:
       d["write_endpoint_address"] = self.write_endpoint_address
+    if not self.zero_length_packets:
+      d["zero_length_packets"] = False
     return d
 
 
@@ -596,6 +603,7 @@ class USBValidator(USB):
     write_endpoint_address: Optional[int] = None,
     configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
     max_workers: int = 1,
+    zero_length_packets: bool = True,
   ):
     super().__init__(
       human_readable_device_name=human_readable_device_name,
@@ -610,6 +618,7 @@ class USBValidator(USB):
       write_endpoint_address=write_endpoint_address,
       configuration_callback=configuration_callback,
       max_workers=max_workers,
+      zero_length_packets=zero_length_packets,
     )
     self.cr = cr
 

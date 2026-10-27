@@ -105,6 +105,52 @@ class USBReadTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([call.args[1] for call in self.device.read.call_args_list], [128, 128])
 
 
+class USBWriteTests(unittest.IsolatedAsyncioTestCase):
+  """A packet-aligned write ends with a zero-length packet unless the device rejects them."""
+
+  async def asyncSetUp(self) -> None:
+    """Attach a mock device and a write executor without device discovery."""
+    backend = SimpleNamespace(
+      util=SimpleNamespace(find_descriptor=Mock()), core=SimpleNamespace(USBError=OSError)
+    )
+    patcher = patch.object(usb_module, "usb", backend, create=True)
+    patcher.start()
+    self.addCleanup(patcher.stop)
+    self.device = Mock()
+
+  def make_io(self, **kwargs) -> USB:
+    """A USB on the mock device with 64-byte endpoints, built with ``kwargs``."""
+    io = USB(1, 2, "mock USB", **kwargs)
+    io.dev = self.device
+    io.read_endpoint = Mock(wMaxPacketSize=64, bEndpointAddress=0x81)
+    io.write_endpoint = Mock(wMaxPacketSize=64, bEndpointAddress=0x01)
+    io._write_executor = ThreadPoolExecutor(max_workers=1)
+    self.addCleanup(io._shutdown_executors)
+    return io
+
+  async def test_packet_aligned_write_ends_with_a_zero_length_packet(self) -> None:
+    """The default: a 64-byte write on a 64-byte endpoint is followed by an empty write."""
+    await self.make_io().write(b"a" * 64)
+    self.assertEqual([call.args[1] for call in self.device.write.call_args_list], [b"a" * 64, b""])
+
+  async def test_short_write_has_no_zero_length_packet(self) -> None:
+    """A write shorter than a packet ends the transfer by itself."""
+    await self.make_io().write(b"a" * 27)
+    self.assertEqual([call.args[1] for call in self.device.write.call_args_list], [b"a" * 27])
+
+  async def test_zero_length_packets_off(self) -> None:
+    """With zero_length_packets=False a packet-aligned write is sent alone."""
+    await self.make_io(zero_length_packets=False).write(b"a" * 64)
+    self.assertEqual([call.args[1] for call in self.device.write.call_args_list], [b"a" * 64])
+
+  def test_serialization_keeps_the_setting(self) -> None:
+    """Only a device that turns them off records it, so a validator is built the same way."""
+    self.assertNotIn("zero_length_packets", self.make_io().serialize())
+    serialized = self.make_io(zero_length_packets=False).serialize()
+    self.assertIs(serialized["zero_length_packets"], False)
+    self.assertFalse(USBValidator(cr=Mock(), **serialized).zero_length_packets)
+
+
 class USBControlTransferTests(unittest.TestCase):
   """A control transfer reads data, or writes it."""
 
