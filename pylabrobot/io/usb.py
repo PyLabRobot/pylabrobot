@@ -3,7 +3,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
 from pylabrobot.events import emit_event
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
@@ -373,7 +373,7 @@ class USB(IOBase):
     bRequest: int,
     wValue: int,
     wIndex: int,
-    data_or_wLength: int,
+    data_or_wLength: Union[int, bytes],
   ) -> str:
     return " ".join(map(str, [bmRequestType, bRequest, wValue, wIndex, data_or_wLength]))
 
@@ -383,9 +383,14 @@ class USB(IOBase):
     bRequest: int,
     wValue: int,
     wIndex: int,
-    data_or_wLength: int,
+    data_or_wLength: Union[int, bytes],
     timeout: Optional[int] = None,
   ) -> bytearray:
+    """Send a control transfer: a read of ``data_or_wLength`` bytes, or a write of the bytes given.
+
+    Returns:
+      The bytes read; empty for a write.
+    """
     if self.dev is None:
       raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
 
@@ -400,6 +405,8 @@ class USB(IOBase):
       data_or_wLength=data_or_wLength,
       timeout=timeout * 1000,  # timeout in ms
     )
+    # pyusb returns the data of a read, and the number of bytes sent for a write.
+    response = bytearray() if isinstance(res, int) else bytearray(res)
 
     logger.log(
       LOG_LEVEL_IO,
@@ -423,11 +430,11 @@ class USB(IOBase):
       USBCommand(
         device_id=self._unique_id,
         action="ctrl_transfer_response",
-        data=" ".join(map(str, res)),
+        data=" ".join(map(str, response)),
       )
     )
 
-    return bytearray(res)
+    return response
 
   def _setup_sync(self, empty_buffer: bool) -> None:
     """Open the device, resolve the endpoints and drain stale packets. Runs off the event loop."""
@@ -655,7 +662,7 @@ class USBValidator(USB):
     bRequest: int,
     wValue: int,
     wIndex: int,
-    data_or_wLength: int,
+    data_or_wLength: Union[int, bytes],
     timeout: Optional[int] = None,
   ) -> bytearray:
     next_command = USBCommand(**self.cr.next_command())
@@ -684,4 +691,4 @@ class USBValidator(USB):
       and next_command.action == "ctrl_transfer_response"
     ):
       raise ValidationError("next command is not ctrl_transfer_response")
-    return bytearray(map(int, next_command.data.split(" ")))
+    return bytearray(map(int, next_command.data.split()))

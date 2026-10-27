@@ -1,12 +1,13 @@
 """USB transfer boundaries tested without opening a hardware connection."""
 
 import unittest
+from array import array
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from pylabrobot.io import usb as usb_module
-from pylabrobot.io.usb import USB
+from pylabrobot.io.usb import USB, USBValidator
 
 
 class USBReadTests(unittest.IsolatedAsyncioTestCase):
@@ -102,3 +103,43 @@ class USBReadTests(unittest.IsolatedAsyncioTestCase):
     self.device.read.side_effect = [b"stale reply", OSError("timeout")]
     await self.io.drain(size=128)
     self.assertEqual([call.args[1] for call in self.device.read.call_args_list], [128, 128])
+
+
+class USBControlTransferTests(unittest.TestCase):
+  """A control transfer reads data, or writes it."""
+
+  def setUp(self) -> None:
+    """Attach a mock device without device discovery."""
+    backend = SimpleNamespace(
+      util=SimpleNamespace(find_descriptor=Mock()), core=SimpleNamespace(USBError=OSError)
+    )
+    patcher = patch.object(usb_module, "usb", backend, create=True)
+    patcher.start()
+    self.addCleanup(patcher.stop)
+    self.io = USB(1, 2, "mock USB")
+    self.device = Mock()
+    self.io.dev = self.device
+
+  def test_read_returns_the_data(self) -> None:
+    """pyusb returns the bytes a control read got."""
+    self.device.ctrl_transfer.return_value = array("B", [1, 2])
+    self.assertEqual(self.io.ctrl_transfer(0xC0, 1, 0, 0, 2), bytearray([1, 2]))
+
+  def test_write_returns_no_data(self) -> None:
+    """pyusb returns the number of bytes a control write sent; the transfer returns no data."""
+    self.device.ctrl_transfer.return_value = 1
+    self.assertEqual(self.io.ctrl_transfer(0x40, 1, 0, 0, b"\x01"), bytearray())
+    self.device.ctrl_transfer.assert_called_once_with(
+      bmRequestType=0x40, bRequest=1, wValue=0, wIndex=0, data_or_wLength=b"\x01", timeout=30000
+    )
+
+  def test_validator_replays_a_write(self) -> None:
+    """A recorded control write replays with no data."""
+    request = self.io._serialize_ctrl_transfer_request(0x40, 1, 0, 0, b"\x01")
+    capture = Mock()
+    capture.next_command.side_effect = [
+      {"module": "usb", "device_id": self.io._unique_id, "action": action, "data": data}
+      for action, data in (("ctrl_transfer_request", request), ("ctrl_transfer_response", ""))
+    ]
+    validator = USBValidator(capture, "mock USB", 1, 2)
+    self.assertEqual(validator.ctrl_transfer(0x40, 1, 0, 0, b"\x01"), bytearray())
