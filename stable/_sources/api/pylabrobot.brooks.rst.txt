@@ -21,7 +21,7 @@ PreciseFlex
     PreciseFlexCartesianPose
     WorkEnvelope
     MotionProfile
-    Axis
+    PreciseFlexAxis
     Wrist
     ElbowOrientation
     PreciseFlexError

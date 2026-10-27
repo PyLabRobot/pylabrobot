@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexAxis.imag
+====================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexAxis.imag
