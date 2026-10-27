@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexAxis.WRIST
+=====================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexAxis.WRIST

@@ -1,0 +1,44 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexAxis
+===============================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexAxis
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexAxis.real
+      ~PreciseFlexAxis.imag
+      ~PreciseFlexAxis.numerator
+      ~PreciseFlexAxis.denominator
+      ~PreciseFlexAxis.BASE
+      ~PreciseFlexAxis.SHOULDER
+      ~PreciseFlexAxis.ELBOW
+      ~PreciseFlexAxis.WRIST
+      ~PreciseFlexAxis.GRIPPER
+      ~PreciseFlexAxis.RAIL
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexAxis.conjugate
+      ~PreciseFlexAxis.bit_length
+      ~PreciseFlexAxis.bit_count
+      ~PreciseFlexAxis.as_integer_ratio
+      ~PreciseFlexAxis.__init__
+   
+   

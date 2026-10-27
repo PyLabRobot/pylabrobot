@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexAxis.RAIL
+====================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexAxis.RAIL
