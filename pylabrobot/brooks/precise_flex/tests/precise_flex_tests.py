@@ -4,9 +4,9 @@ from typing import Dict, Optional, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.brooks.precise_flex import (
-  Axis,
   OutOfRangeOfMotionError,
   PreciseFlexArm,
+  PreciseFlexAxis,
   PreciseFlexCartesianPose,
   PreciseFlexDriver,
 )
@@ -112,7 +112,7 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
   async def test_gripper_event_uses_default_length_unit_field(self):
     arm = _make_arm()
     # The jaws stand closed, so the move opens them.
-    arm.arm.request_joint_state = AsyncMock(return_value={Axis.GRIPPER: 0.0})  # type: ignore[method-assign]
+    arm.arm.request_joint_state = AsyncMock(return_value={PreciseFlexAxis.GRIPPER: 0.0})  # type: ignore[method-assign]
     events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
@@ -133,7 +133,7 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
     arm.io.write = AsyncMock()  # type: ignore[method-assign]
     arm.io.readline = AsyncMock(return_value=b"0\n")  # type: ignore[method-assign]
     arm.gripper.configuration = MagicMock(soft_limit_range=(0.0, 10_000.0))
-    arm.arm.request_joint_state = AsyncMock(return_value={Axis.GRIPPER: 0.0})  # type: ignore[method-assign]
+    arm.arm.request_joint_state = AsyncMock(return_value={PreciseFlexAxis.GRIPPER: 0.0})  # type: ignore[method-assign]
     events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
@@ -169,7 +169,9 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
 
 
 def _stub_soft_limits(
-  driver: PreciseFlexDriver, soft_limits: Dict[Axis, tuple], z_range: Optional[tuple] = None
+  driver: PreciseFlexDriver,
+  soft_limits: Dict[PreciseFlexAxis, tuple],
+  z_range: Optional[tuple] = None,
 ) -> None:
   """Give the arm stub configuration carrying only its soft limits; the gripper is unconstrained."""
   driver.arm.configuration = MagicMock(soft_limits=soft_limits, z_range=z_range)
@@ -184,9 +186,9 @@ class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):
     _stub_soft_limits(
       self.arm,
       {
-        Axis.SHOULDER: (-93.0, 93.0),
-        Axis.ELBOW: (12.0, 348.0),
-        Axis.WRIST: (-960.0, 960.0),
+        PreciseFlexAxis.SHOULDER: (-93.0, 93.0),
+        PreciseFlexAxis.ELBOW: (12.0, 348.0),
+        PreciseFlexAxis.WRIST: (-960.0, 960.0),
       },
     )
 
@@ -219,7 +221,9 @@ class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):
     # wherej (no rail): base shoulder elbow wrist gripper - shoulder/elbow/wrist out of range.
     self._stub_transport("0 93.5 9.0 962.0 0")
     recovered = await self.arm.arm.recover_axes_within_limits()
-    self.assertEqual(recovered, {Axis.SHOULDER: 92.0, Axis.ELBOW: 13.0})  # wrist excluded
+    self.assertEqual(
+      recovered, {PreciseFlexAxis.SHOULDER: 92.0, PreciseFlexAxis.ELBOW: 13.0}
+    )  # wrist excluded
     self.assertEqual(
       self._move_one_axis_cmds(), ["MoveOneAxis 2 92.0 1", "MoveOneAxis 3 13.0 1"]
     )  # shoulder (2) before elbow (3)
@@ -242,10 +246,10 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
     _stub_soft_limits(
       self.arm,
       {
-        Axis.BASE: (0.0, 400.0),
-        Axis.SHOULDER: (-93.0, 93.0),
-        Axis.ELBOW: (12.0, 348.0),
-        Axis.WRIST: (-960.0, 960.0),
+        PreciseFlexAxis.BASE: (0.0, 400.0),
+        PreciseFlexAxis.SHOULDER: (-93.0, 93.0),
+        PreciseFlexAxis.ELBOW: (12.0, 348.0),
+        PreciseFlexAxis.WRIST: (-960.0, 960.0),
       },
       z_range=(0.0, 400.0),
     )
@@ -258,36 +262,36 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
     ]
 
   def test_named_constants_are_orientation_only_planar_folds(self):
-    """The three parking orientations are planar folds (ELBOW 180) that never pin Z (Axis.BASE), so
+    """The three parking orientations are planar folds (ELBOW 180) that never pin Z (PreciseFlexAxis.BASE), so
     one orientation works on any reach; they differ only in which way the gripper faces."""
     for pose in (
       PreciseFlexArm.PARKING_POSITION_BACK,
       PreciseFlexArm.PARKING_POSITION_RIGHT,
       PreciseFlexArm.PARKING_POSITION_FRONT,
     ):
-      self.assertNotIn(Axis.BASE, pose)
-      self.assertEqual(pose[Axis.ELBOW], 180.0)
-    self.assertEqual(PreciseFlexArm.PARKING_POSITION_BACK[Axis.SHOULDER], 90.0)
-    self.assertEqual(PreciseFlexArm.PARKING_POSITION_FRONT[Axis.SHOULDER], -90.0)
+      self.assertNotIn(PreciseFlexAxis.BASE, pose)
+      self.assertEqual(pose[PreciseFlexAxis.ELBOW], 180.0)
+    self.assertEqual(PreciseFlexArm.PARKING_POSITION_BACK[PreciseFlexAxis.SHOULDER], 90.0)
+    self.assertEqual(PreciseFlexArm.PARKING_POSITION_FRONT[PreciseFlexAxis.SHOULDER], -90.0)
 
   def test_assignment_rejects_non_axis_keys(self):
-    """The validating setter refuses a pose keyed by anything but Axis members."""
+    """The validating setter refuses a pose keyed by anything but PreciseFlexAxis members."""
     bad_pose: dict = {"base": 100.0}
     with self.assertRaises(ValueError):
       self.arm.arm.parking_position = bad_pose
 
   def test_assignment_rejects_out_of_limit_value_once_configured(self):
     """Once the soft limits are known, a value outside them is rejected at assignment."""
-    _stub_soft_limits(self.arm, {Axis.SHOULDER: (-93.0, 93.0)})
+    _stub_soft_limits(self.arm, {PreciseFlexAxis.SHOULDER: (-93.0, 93.0)})
     with self.assertRaises(ValueError):
-      self.arm.arm.parking_position = {Axis.SHOULDER: 200.0}
+      self.arm.arm.parking_position = {PreciseFlexAxis.SHOULDER: 200.0}
 
   def test_assignment_accepts_named_constant(self):
     """A named constant assigns cleanly and round-trips through the getter."""
     self.arm.arm.parking_position = PreciseFlexArm.PARKING_POSITION_FRONT
     pose = self.arm.arm.parking_position
     assert pose is not None
-    self.assertEqual(pose[Axis.SHOULDER], -90.0)
+    self.assertEqual(pose[PreciseFlexAxis.SHOULDER], -90.0)
 
   async def test_park_fills_z_at_three_quarters_travel_and_keeps_orientation(self):
     """park() fills the omitted Z column at 3/4 of the discovered travel and keeps the orientation."""
@@ -301,12 +305,12 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self._movej_cmds(), ["moveJ 1 300.0 0.0 180.0 180.0 0.0"])
 
   async def test_park_respects_an_explicit_base(self):
-    """A pose that already sets Axis.BASE is parked as-is (no Z fill)."""
+    """A pose that already sets PreciseFlexAxis.BASE is parked as-is (no Z fill)."""
     self._full_soft_limits()
     # base 50 in the current pose so the explicit 123 (neither the 300 fill nor the live 50) proves
     # the supplied base is honored and not Z-filled; elbow/wrist carry from current.
     self.arm.send_command = AsyncMock(return_value="50 10 200 90 0")  # type: ignore[method-assign]
-    self.arm.arm.parking_position = {Axis.BASE: 123.0, Axis.SHOULDER: 0.0}
+    self.arm.arm.parking_position = {PreciseFlexAxis.BASE: 123.0, PreciseFlexAxis.SHOULDER: 0.0}
     await self.arm.arm.park()
     self.assertEqual(self._movej_cmds(), ["moveJ 1 123.0 0.0 200.0 90.0 0.0"])
 
@@ -325,11 +329,11 @@ class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
     self.arm = _make_arm()
     self.arm.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
     self.current_joints = {
-      Axis.BASE: 100.0,
-      Axis.SHOULDER: 0.0,
-      Axis.ELBOW: 180.0,
-      Axis.WRIST: 180.0,
-      Axis.GRIPPER: 70.0,
+      PreciseFlexAxis.BASE: 100.0,
+      PreciseFlexAxis.SHOULDER: 0.0,
+      PreciseFlexAxis.ELBOW: 180.0,
+      PreciseFlexAxis.WRIST: 180.0,
+      PreciseFlexAxis.GRIPPER: 70.0,
     }
     self.current_pose = PreciseFlexCartesianPose(
       location=Coordinate(10.0, 20.0, 100.0),
@@ -470,9 +474,9 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
     _stub_soft_limits(
       self.arm,
       {
-        Axis.SHOULDER: (-93.0, 93.0),
-        Axis.ELBOW: (12.0, 348.0),
-        Axis.WRIST: (-960.0, 960.0),
+        PreciseFlexAxis.SHOULDER: (-93.0, 93.0),
+        PreciseFlexAxis.ELBOW: (12.0, 348.0),
+        PreciseFlexAxis.WRIST: (-960.0, 960.0),
       },
     )
 
@@ -503,8 +507,8 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
     self.arm._recover_out_of_range = False
     self._stub("0 93.5 90.0 0.0 0")  # base shoulder elbow wrist gripper; shoulder 93.5 > 93
     with self.assertRaises(OutOfRangeOfMotionError) as ctx:
-      await self.arm.arm.move_to_joint_state({Axis.SHOULDER: 0.0})
-    self.assertIn(Axis.SHOULDER, ctx.exception.axes)
+      await self.arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 0.0})
+    self.assertIn(PreciseFlexAxis.SHOULDER, ctx.exception.axes)
     self.assertEqual(self._cmds("MoveOneAxis"), [])
     self.assertEqual(self._cmds("moveJ"), [])
 
@@ -513,7 +517,7 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
     self.arm._recover_out_of_range = True
     self._stub("0 93.5 90.0 0.0 0", recovered="0 92.0 90.0 0.0 0")
     with self.assertLogs(_LOGGER, level="INFO") as cm:
-      await self.arm.arm.move_to_joint_state({Axis.SHOULDER: 0.0})
+      await self.arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 0.0})
     self.assertEqual(self._cmds("MoveOneAxis"), ["MoveOneAxis 2 92.0 1"])  # shoulder back in range
     self.assertEqual(len(self._cmds("moveJ")), 1)  # move retried and sent
     log = "\n".join(cm.output)
@@ -526,7 +530,7 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
     self._stub("0 120.0 90.0 0.0 0")  # shoulder 27 past the limit, beyond the recovery cap
     with self.assertLogs(_LOGGER, level="ERROR") as cm:
       with self.assertRaises(OutOfRangeOfMotionError):
-        await self.arm.arm.move_to_joint_state({Axis.SHOULDER: 0.0})
+        await self.arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 0.0})
     self.assertEqual(self._cmds("moveJ"), [])  # never moved
     self.assertIn("auto-recovery did not clear", "\n".join(cm.output))  # ERROR before re-raise
 
@@ -534,7 +538,7 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
     """Happy path: the out-of-range check reuses the merge read, so a move issues a single wherej
     before moveJ (no redundant position read)."""
     self._stub("0 0.0 90.0 0.0 0")  # all axes in range
-    await self.arm.arm.move_to_joint_state({Axis.SHOULDER: 10.0})
+    await self.arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 10.0})
     sent = self._cmds("")
     (move,) = self._cmds("moveJ")
     self.assertEqual(sent[: sent.index(move)], ["wherej"])  # exactly one position read before it
@@ -546,16 +550,16 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
     self.arm._recover_out_of_range = False
     self._stub("0 93.5 90.0 0.0 0")  # current shoulder 93.5 > 93, out of range
     in_range = {
-      Axis.BASE: 0.0,
-      Axis.SHOULDER: 0.0,
-      Axis.ELBOW: 90.0,
-      Axis.WRIST: 0.0,
-      Axis.GRIPPER: 0.0,
+      PreciseFlexAxis.BASE: 0.0,
+      PreciseFlexAxis.SHOULDER: 0.0,
+      PreciseFlexAxis.ELBOW: 90.0,
+      PreciseFlexAxis.WRIST: 0.0,
+      PreciseFlexAxis.GRIPPER: 0.0,
     }
     with patch.object(self.arm.arm, "_cart_to_joints", AsyncMock(return_value=in_range)):
       with self.assertRaises(OutOfRangeOfMotionError) as ctx:
         await self.arm.arm.move_to_location(Coordinate(400.0, 0.0, 200.0), 0.0)
-    self.assertIn(Axis.SHOULDER, ctx.exception.axes)
+    self.assertIn(PreciseFlexAxis.SHOULDER, ctx.exception.axes)
     self.assertEqual(self._cmds("moveJ"), [])
 
 
