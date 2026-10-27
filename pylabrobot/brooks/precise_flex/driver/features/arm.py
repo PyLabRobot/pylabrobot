@@ -31,9 +31,9 @@ from ... import kinematics
 from ...data_ids import DataID, _parse_per_axis, _parse_scalar, _zip_axis_ranges
 from ...interrupt import halt_and_resync, halt_on_interrupt
 from ...kinematics import (
-  Axis,
   ElbowOrientation,
   JointState,
+  PreciseFlexAxis,
   PreciseFlexCartesianPose,
   WorkEnvelope,
   Wrist,
@@ -58,19 +58,19 @@ def _snap_to_current(
   gratuitous full-turn moves when multiple IK solutions are equivalent.
   """
   out = dict(ik_joints)
-  for axis in (Axis.SHOULDER, Axis.ELBOW, Axis.WRIST):
+  for axis in (PreciseFlexAxis.SHOULDER, PreciseFlexAxis.ELBOW, PreciseFlexAxis.WRIST):
     out[axis] += 360 * round((current[axis] - out[axis]) / 360)
-  if wrist == "ccw" and out[Axis.WRIST] < 0:
-    out[Axis.WRIST] += 360
-  elif wrist == "cw" and out[Axis.WRIST] > 0:
-    out[Axis.WRIST] -= 360
+  if wrist == "ccw" and out[PreciseFlexAxis.WRIST] < 0:
+    out[PreciseFlexAxis.WRIST] += 360
+  elif wrist == "cw" and out[PreciseFlexAxis.WRIST] > 0:
+    out[PreciseFlexAxis.WRIST] -= 360
   return out
 
 
 def _joint_state_reference(position: JointState) -> dict[str, float]:
   """Convert a joint state into a JSON-friendly target description."""
   return {
-    (axis.name.lower() if isinstance(axis, Axis) else str(axis)): float(value)
+    (axis.name.lower() if isinstance(axis, PreciseFlexAxis) else str(axis)): float(value)
     for axis, value in position.items()
   }
 
@@ -98,12 +98,12 @@ class PreciseFlexArmConfiguration:
   """The arm's facts, read at setup: limits and maxima of Z, shoulder, elbow and wrist, and its
   kinematics."""
 
-  soft_limits: Dict[Axis, tuple]
-  hard_limits: Dict[Axis, tuple]
+  soft_limits: Dict[PreciseFlexAxis, tuple]
+  hard_limits: Dict[PreciseFlexAxis, tuple]
   # Effective per-joint maxima (reference x the global percent cap, already applied).
-  max_joint_speed: Dict[Axis, float]
-  max_joint_acceleration: Dict[Axis, float]
-  max_joint_deceleration: Dict[Axis, float]
+  max_joint_speed: Dict[PreciseFlexAxis, float]
+  max_joint_acceleration: Dict[PreciseFlexAxis, float]
+  max_joint_deceleration: Dict[PreciseFlexAxis, float]
   max_cartesian_speed: float
   max_cartesian_acceleration: float
   kinematics: "kinematics.PF400Params" = dataclasses.field(default_factory=kinematics.PF400Params)
@@ -116,7 +116,7 @@ class PreciseFlexArmConfiguration:
 
   @property
   def z_range(self) -> tuple:
-    return self.soft_limits[Axis.BASE]
+    return self.soft_limits[PreciseFlexAxis.BASE]
 
   @property
   def work_envelope(self) -> WorkEnvelope:
@@ -130,8 +130,8 @@ class PreciseFlexArmConfiguration:
     """
     wrist_only = dataclasses.replace(self.kinematics, gripper_length=0.0)
     tool = self.kinematics.gripper_length
-    sh_lo, sh_hi = self.soft_limits[Axis.SHOULDER]
-    el_lo, el_hi = self.soft_limits[Axis.ELBOW]
+    sh_lo, sh_hi = self.soft_limits[PreciseFlexAxis.SHOULDER]
+    el_lo, el_hi = self.soft_limits[PreciseFlexAxis.ELBOW]
     steps = 60
     outer, inner = 0.0, float("inf")
     for i in range(steps + 1):
@@ -139,12 +139,12 @@ class PreciseFlexArmConfiguration:
       for j in range(steps + 1):
         elbow = el_lo + (el_hi - el_lo) * j / steps
         joints: JointState = {
-          Axis.BASE: 0.0,
-          Axis.SHOULDER: shoulder,
-          Axis.ELBOW: elbow,
-          Axis.WRIST: 0.0,
-          Axis.GRIPPER: 0.0,
-          Axis.RAIL: 0.0,
+          PreciseFlexAxis.BASE: 0.0,
+          PreciseFlexAxis.SHOULDER: shoulder,
+          PreciseFlexAxis.ELBOW: elbow,
+          PreciseFlexAxis.WRIST: 0.0,
+          PreciseFlexAxis.GRIPPER: 0.0,
+          PreciseFlexAxis.RAIL: 0.0,
         }
         wrist = kinematics.fk(joints, wrist_only).location
         radius = (wrist.x * wrist.x + wrist.y * wrist.y) ** 0.5
@@ -182,19 +182,19 @@ class PreciseFlexArm:
   # Parked orientations: planar folds, named for the way the gripper points. Z, gripper and rail are
   # left out: ``park()`` fills Z from the travel, and a held plate or a rail is not disturbed.
   PARKING_POSITION_BACK: ClassVar[JointState] = {
-    Axis.SHOULDER: 90.0,
-    Axis.ELBOW: 180.0,
-    Axis.WRIST: 90.0,
+    PreciseFlexAxis.SHOULDER: 90.0,
+    PreciseFlexAxis.ELBOW: 180.0,
+    PreciseFlexAxis.WRIST: 90.0,
   }
   PARKING_POSITION_RIGHT: ClassVar[JointState] = {
-    Axis.SHOULDER: 0.0,
-    Axis.ELBOW: 180.0,
-    Axis.WRIST: 180.0,
+    PreciseFlexAxis.SHOULDER: 0.0,
+    PreciseFlexAxis.ELBOW: 180.0,
+    PreciseFlexAxis.WRIST: 180.0,
   }
   PARKING_POSITION_FRONT: ClassVar[JointState] = {
-    Axis.SHOULDER: -90.0,
-    Axis.ELBOW: 180.0,
-    Axis.WRIST: 270.0,
+    PreciseFlexAxis.SHOULDER: -90.0,
+    PreciseFlexAxis.ELBOW: 180.0,
+    PreciseFlexAxis.WRIST: 270.0,
   }
 
   def __init__(self, driver: "PreciseFlexDriver") -> None:
@@ -212,7 +212,13 @@ class PreciseFlexArm:
   # -- joint state ---------------------------------------------------------------------------------
 
   # The order joint values go over the wire in. An arm with a rail adds the rail's.
-  _WIRE_ORDER = (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST, Axis.GRIPPER)
+  _WIRE_ORDER = (
+    PreciseFlexAxis.BASE,
+    PreciseFlexAxis.SHOULDER,
+    PreciseFlexAxis.ELBOW,
+    PreciseFlexAxis.WRIST,
+    PreciseFlexAxis.GRIPPER,
+  )
 
   def _parse_angles_response(self, parts: List[str]) -> JointState:
     """Parse the joint values of a reply, in `_WIRE_ORDER`, then the rail's on an arm with one.
@@ -221,8 +227,10 @@ class PreciseFlexArm:
     """
     if len(parts) < 3:
       raise PreciseFlexError(-1, "Unexpected response format for angles.")
-    wire_order = [*self._WIRE_ORDER, Axis.RAIL] if self._driver._has_rail else self._WIRE_ORDER
-    joints = dict.fromkeys([Axis.RAIL, *self._WIRE_ORDER], 0.0)
+    wire_order = (
+      [*self._WIRE_ORDER, PreciseFlexAxis.RAIL] if self._driver._has_rail else self._WIRE_ORDER
+    )
+    joints = dict.fromkeys([PreciseFlexAxis.RAIL, *self._WIRE_ORDER], 0.0)
     joints.update(zip(wire_order, map(float, parts)))
     return joints
 
@@ -317,10 +325,10 @@ class PreciseFlexArm:
     angles_str = " ".join(str(joint_coords[axis]) for axis in self._WIRE_ORDER)
     if self._driver._has_rail:
       # The rail's value goes last, and the line has always ended with a space after it.
-      angles_str += f" {joint_coords[Axis.RAIL]} "
+      angles_str += f" {joint_coords[PreciseFlexAxis.RAIL]} "
     await self._driver.send_command(f"moveJ {profile_index} {angles_str}")
 
-  async def _unchecked_fw_move_one_axis(self, axis: Axis, position: float) -> None:
+  async def _unchecked_fw_move_one_axis(self, axis: PreciseFlexAxis, position: float) -> None:
     """Move a single axis to an absolute position (firmware ``MoveOneAxis``).
 
     Used for recovery: the controller blocks a normal move while an axis is out of
@@ -338,7 +346,7 @@ class PreciseFlexArm:
     angles_str = " ".join(str(joint_position[axis]) for axis in self._WIRE_ORDER)
     if self._driver._has_rail:
       # Here the rail's value goes first.
-      angles_str = f"{joint_position[Axis.RAIL]} {angles_str}"
+      angles_str = f"{joint_position[PreciseFlexAxis.RAIL]} {angles_str}"
     await self._driver.send_command(f"locAngles {station_index} {angles_str}")
 
   def _plan_cartesian_pose(
@@ -367,10 +375,15 @@ class PreciseFlexArm:
       kinematics.ik(cart, p=self._driver._kinematics_params), prev_joints, cart.wrist
     )
     target = dict(prev_joints)
-    for axis in (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST):
+    for axis in (
+      PreciseFlexAxis.BASE,
+      PreciseFlexAxis.SHOULDER,
+      PreciseFlexAxis.ELBOW,
+      PreciseFlexAxis.WRIST,
+    ):
       target[axis] = ik_joints[axis]
     if self._driver._has_rail and cart.rail_position is not None:
-      target[Axis.RAIL] = cart.rail_position
+      target[PreciseFlexAxis.RAIL] = cart.rail_position
     return target, cart
 
   async def _cart_to_joints(self, cart: PreciseFlexCartesianPose) -> JointState:
@@ -838,9 +851,14 @@ class PreciseFlexArm:
     """
     if free_axes is None:
       # The positioning axes that exist: freemode on an absent rail returns -2800.
-      free_axes = [Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST]
+      free_axes = [
+        PreciseFlexAxis.BASE,
+        PreciseFlexAxis.SHOULDER,
+        PreciseFlexAxis.ELBOW,
+        PreciseFlexAxis.WRIST,
+      ]
       if self._driver.rail is not None:
-        free_axes.append(Axis.RAIL)
+        free_axes.append(PreciseFlexAxis.RAIL)
     for axis in free_axes:
       await self._driver.send_command(f"freemode {axis}")
 
@@ -862,8 +880,10 @@ class PreciseFlexArm:
 
   # -- limits and kinematics -----------------------------------------------------------------------
 
-  async def request_joint_limits(self, hard: bool = False) -> Dict[Axis, tuple[float, float]]:
-    """Per-axis travel limits as {Axis: (min, max)}.
+  async def request_joint_limits(
+    self, hard: bool = False
+  ) -> Dict[PreciseFlexAxis, tuple[float, float]]:
+    """Per-axis travel limits as {PreciseFlexAxis: (min, max)}.
 
     Returns the soft limits by default; pass ``hard=True`` for the hard limits.
     """
@@ -874,18 +894,18 @@ class PreciseFlexArm:
       _parse_per_axis(await self._driver.request_parameter(max_id)),
     )
 
-  async def request_reference_speed(self) -> Dict[Axis, float]:
+  async def request_reference_speed(self) -> Dict[PreciseFlexAxis, float]:
     """Per-axis rated speed at 100%; J1/J5 in mm/s, J2-J4 in deg/s."""
     return _parse_per_axis(await self._driver.request_parameter(DataID.REFERENCE_SPEED))
 
-  async def request_reference_acceleration(self) -> Dict[Axis, float]:
+  async def request_reference_acceleration(self) -> Dict[PreciseFlexAxis, float]:
     """Per-axis rated acceleration at 100%."""
     return _parse_per_axis(await self._driver.request_parameter(DataID.REFERENCE_ACCEL))
 
   async def request_link_lengths(self) -> tuple[float, float]:
     """(l1, l2) SCARA link lengths in mm: shoulder->elbow, elbow->wrist."""
     per_axis = _parse_per_axis(await self._driver.request_parameter(DataID.LINK_LENGTHS))
-    return per_axis[Axis.SHOULDER], per_axis[Axis.ELBOW]
+    return per_axis[PreciseFlexAxis.SHOULDER], per_axis[PreciseFlexAxis.ELBOW]
 
   async def request_tool_length(self) -> float:
     """Wrist->TCP distance in mm (z of the tool-offset transform)."""
@@ -996,28 +1016,36 @@ class PreciseFlexArm:
 
   # -- range checks and recovery -------------------------------------------------------------------
 
-  def _get_soft_limits(self) -> Dict[Axis, tuple]:
+  def _get_soft_limits(self) -> Dict[PreciseFlexAxis, tuple]:
     """Every axis's soft limits - the arm's joints, the gripper and the rail; empty before setup."""
     gripper, rail = self._driver.gripper.configuration, self._driver.rail
     if self.configuration is None or gripper is None:
       return {}
-    soft_limits = {**self.configuration.soft_limits, Axis.GRIPPER: gripper.soft_limit_range}
+    soft_limits = {
+      **self.configuration.soft_limits,
+      PreciseFlexAxis.GRIPPER: gripper.soft_limit_range,
+    }
     if rail is not None and rail.configuration is not None:
-      soft_limits[Axis.RAIL] = rail.configuration.soft_limit_range
+      soft_limits[PreciseFlexAxis.RAIL] = rail.configuration.soft_limit_range
     return soft_limits
 
   # Axes recovered when out of range, safest first: the jaws, the Z column, the shoulder, the elbow.
   # Not the wrist, which can turn the gripper into the arm, nor the rail: setup raises on those.
-  _RECOVERY_ORDER = (Axis.GRIPPER, Axis.BASE, Axis.SHOULDER, Axis.ELBOW)
+  _RECOVERY_ORDER = (
+    PreciseFlexAxis.GRIPPER,
+    PreciseFlexAxis.BASE,
+    PreciseFlexAxis.SHOULDER,
+    PreciseFlexAxis.ELBOW,
+  )
 
-  def _axes_outside_soft_limits(self, joints: JointState) -> Dict[Axis, tuple]:
+  def _axes_outside_soft_limits(self, joints: JointState) -> Dict[PreciseFlexAxis, tuple]:
     """Axes whose value lies outside their soft limit, as ``axis -> (value, (lo, hi))``.
 
-    Iterates the soft-limit set (keyed by :class:`Axis`) and looks each axis up in
-    ``joints`` so the comparison stays Axis-typed. Empty until the configuration has
+    Iterates the soft-limit set (keyed by :class:`PreciseFlexAxis`) and looks each axis up in
+    ``joints`` so the comparison stays PreciseFlexAxis-typed. Empty until the configuration has
     been discovered.
     """
-    outside: Dict[Axis, tuple] = {}
+    outside: Dict[PreciseFlexAxis, tuple] = {}
     for axis, (lo, hi) in self._get_soft_limits().items():
       value = joints.get(axis)
       if value is not None and not (lo <= value <= hi):
@@ -1025,7 +1053,7 @@ class PreciseFlexArm:
     return outside
 
   @staticmethod
-  def _fmt_axes(axes: Dict[Axis, tuple]) -> str:
+  def _fmt_axes(axes: Dict[PreciseFlexAxis, tuple]) -> str:
     """Format ``{axis: (value, (lo, hi))}`` for logs/errors, e.g.
     ``BASE at 0.959 (soft limit (1.5, 401.5))``."""
     return "; ".join(
@@ -1036,7 +1064,7 @@ class PreciseFlexArm:
     self,
     speed_percent: Optional[float] = None,
     max_distance: Optional[float] = 5.0,
-  ) -> Dict[Axis, float]:
+  ) -> Dict[PreciseFlexAxis, float]:
     """Bring out-of-range axes back inside their soft limits, one axis at a time.
 
     While an axis is outside its soft limit the controller rejects every commanded
@@ -1066,7 +1094,7 @@ class PreciseFlexArm:
       return {}
     prior_speed = await self._request_speed()
     await self._set_speed(speed_percent)
-    recovered: Dict[Axis, float] = {}
+    recovered: Dict[PreciseFlexAxis, float] = {}
     try:
       for axis in self._RECOVERY_ORDER:
         if axis not in outside:
@@ -1439,7 +1467,7 @@ class PreciseFlexArm:
       1 = Return target joint location of the previous or current move
 
     Returns:
-      A dict mapping Axis to float values.
+      A dict mapping PreciseFlexAxis to float values.
       If mode = 1 or robot is moving, returns the target joint positions.
       If mode = 0 and robot is not moving, returns the current joint positions.
     """
@@ -1772,8 +1800,8 @@ class PreciseFlexArm:
     if not isinstance(position, dict) or not position:
       raise ValueError(f"parking_position must be a non-empty JointState, got {position!r}")
     for axis, value in position.items():
-      if not isinstance(axis, Axis):
-        raise ValueError(f"parking_position keys must be Axis members, got {axis!r}")
+      if not isinstance(axis, PreciseFlexAxis):
+        raise ValueError(f"parking_position keys must be PreciseFlexAxis members, got {axis!r}")
       if not isinstance(value, (int, float)):
         raise ValueError(f"parking_position[{axis.name}] must be a number, got {value!r}")
       soft_limits = self._get_soft_limits()
@@ -1785,18 +1813,18 @@ class PreciseFlexArm:
           )
 
   def _parking_pose_with_default_z(self, position: JointState) -> JointState:
-    """Fill the Z column (``Axis.BASE``) at 3/4 of the discovered travel when the pose omits it."""
-    if Axis.BASE in position or self.configuration is None:
+    """Fill the Z column (``PreciseFlexAxis.BASE``) at 3/4 of the discovered travel when the pose omits it."""
+    if PreciseFlexAxis.BASE in position or self.configuration is None:
       return position
     _, z_max = self.configuration.z_range
-    return {Axis.BASE: 0.75 * z_max, **position}
+    return {PreciseFlexAxis.BASE: 0.75 * z_max, **position}
 
   @property
   def parking_position(self) -> Optional[JointState]:
     """The pose ``park()`` moves to. Assign one of the ``PARKING_POSITION_BACK/RIGHT/FRONT`` class
-    constants or any JointState; the assignment is validated (keys must be ``Axis`` members, values
+    constants or any JointState; the assignment is validated (keys must be ``PreciseFlexAxis`` members, values
     must be within the soft limits once the configuration is known). None until setup, where it
-    defaults to ``PARKING_POSITION_RIGHT``. A pose that omits ``Axis.BASE`` has its Z filled at park
+    defaults to ``PARKING_POSITION_RIGHT``. A pose that omits ``PreciseFlexAxis.BASE`` has its Z filled at park
     time."""
     return self._parking_position
 

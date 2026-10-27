@@ -6,7 +6,7 @@ import unittest
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.driver.configuration import (
-  Axis,
+  PreciseFlexAxis,
   PreciseFlexConfiguration,
   read_configuration,
   to_jsonable,
@@ -31,7 +31,15 @@ RECORDING_PF400 = os.path.join(
 
 
 def configuration(rail=None) -> PreciseFlexConfiguration:
-  per_axis = {axis: float(axis) for axis in (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST)}
+  per_axis = {
+    axis: float(axis)
+    for axis in (
+      PreciseFlexAxis.BASE,
+      PreciseFlexAxis.SHOULDER,
+      PreciseFlexAxis.ELBOW,
+      PreciseFlexAxis.WRIST,
+    )
+  }
   return PreciseFlexConfiguration(
     manufacturer="Precise Automation",
     controller_model="G1400",
@@ -47,12 +55,12 @@ def configuration(rail=None) -> PreciseFlexConfiguration:
     axis_mask=47,
     arm=PreciseFlexArmConfiguration(
       soft_limits={
-        Axis.BASE: (1.5, 401.5),
-        Axis.SHOULDER: (-93.0, 93.0),
-        Axis.ELBOW: (12.0, 348.0),
-        Axis.WRIST: (-970.0, 970.0),
+        PreciseFlexAxis.BASE: (1.5, 401.5),
+        PreciseFlexAxis.SHOULDER: (-93.0, 93.0),
+        PreciseFlexAxis.ELBOW: (12.0, 348.0),
+        PreciseFlexAxis.WRIST: (-970.0, 970.0),
       },
-      hard_limits={Axis.BASE: (0.0, 403.0)},
+      hard_limits={PreciseFlexAxis.BASE: (0.0, 403.0)},
       max_joint_speed=per_axis,
       max_joint_acceleration=per_axis,
       max_joint_deceleration=per_axis,
@@ -107,7 +115,7 @@ class TestSavedConfiguration(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       list(self.saved["arm"]["soft_limits"]), list("BASE SHOULDER ELBOW WRIST".split())
     )
-    self.assertEqual(read.arm.soft_limits[Axis.SHOULDER], (-93.0, 93.0))
+    self.assertEqual(read.arm.soft_limits[PreciseFlexAxis.SHOULDER], (-93.0, 93.0))
     self.assertIsInstance(read.arm.kinematics, kinematics.PF400Params)
 
   def test_a_rail_is_read_back_with_what_it_did_not_report_left_out(self):
@@ -162,7 +170,7 @@ class TestTheRecordedPF400(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.recorded.robot_name, "PreciseFlex 400SX")
     self.assertEqual(self.recorded.arm.reach_class, "extended")
     self.assertEqual(self.recorded.arm.z_range, (1.5, 401.5))
-    self.assertEqual(self.recorded.arm.soft_limits[Axis.WRIST], (-960.0, 960.0))
+    self.assertEqual(self.recorded.arm.soft_limits[PreciseFlexAxis.WRIST], (-960.0, 960.0))
     self.assertEqual(self.recorded.arm.kinematics.gripper_length, 162.0)
     self.assertEqual(self.recorded.gripper.soft_limit_range, (69.0, 134.0))
     self.assertEqual(self.recorded.camera_count, 2)
@@ -212,7 +220,8 @@ class TestADeclaredConfigurationIsCrossChecked(unittest.IsolatedAsyncioTestCase)
     tool = dataclasses.replace(self.recorded.arm.kinematics, gripper_length=170.0)
     longer_tool = dataclasses.replace(self.recorded.arm, kinematics=tool)
     narrowed = dataclasses.replace(
-      self.recorded.arm, soft_limits={**self.recorded.arm.soft_limits, Axis.SHOULDER: (-90.0, 90.0)}
+      self.recorded.arm,
+      soft_limits={**self.recorded.arm.soft_limits, PreciseFlexAxis.SHOULDER: (-90.0, 90.0)},
     )
     for answered, named in (
       (dataclasses.replace(self.recorded, arm=standard), r"arm.kinematics: declared .*l1=302.0"),

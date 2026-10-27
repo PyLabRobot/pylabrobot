@@ -15,7 +15,7 @@ from typing import (
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.driver.configuration import (
   DEVICE_FEATURE_CONFIGURATIONS,
-  Axis,
+  PreciseFlexAxis,
   PreciseFlexConfiguration,
   read_configuration,
   to_jsonable,
@@ -553,7 +553,7 @@ class PreciseFlexDriver:
   async def set_axis_parameter(
     self,
     data_id: int,
-    axis: Axis,
+    axis: PreciseFlexAxis,
     value,
     robot_number: int = 1,
   ) -> None:
@@ -786,15 +786,20 @@ class PreciseFlexDriver:
     )
     power_state = await self.request_system_state()
 
-    arm_axes = (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST)
+    arm_axes = (
+      PreciseFlexAxis.BASE,
+      PreciseFlexAxis.SHOULDER,
+      PreciseFlexAxis.ELBOW,
+      PreciseFlexAxis.WRIST,
+    )
     rail = None
-    if Axis.RAIL in soft_limits:
+    if PreciseFlexAxis.RAIL in soft_limits:
       rail = PreciseFlexRailConfiguration(
-        soft_limit_range=soft_limits[Axis.RAIL],
-        hard_limit_range=hard_limits.get(Axis.RAIL),
-        max_speed=max_joint_speed.get(Axis.RAIL),
-        max_acceleration=max_joint_acceleration.get(Axis.RAIL),
-        max_deceleration=max_joint_deceleration.get(Axis.RAIL),
+        soft_limit_range=soft_limits[PreciseFlexAxis.RAIL],
+        hard_limit_range=hard_limits.get(PreciseFlexAxis.RAIL),
+        max_speed=max_joint_speed.get(PreciseFlexAxis.RAIL),
+        max_acceleration=max_joint_acceleration.get(PreciseFlexAxis.RAIL),
+        max_deceleration=max_joint_deceleration.get(PreciseFlexAxis.RAIL),
       )
     return PreciseFlexConfiguration(
       manufacturer=manufacturer,
@@ -821,11 +826,11 @@ class PreciseFlexDriver:
         kinematics_source=kinematics_source,
       ),
       gripper=PreciseFlexGripperConfiguration(
-        soft_limit_range=soft_limits[Axis.GRIPPER],
-        hard_limit_range=hard_limits[Axis.GRIPPER],
-        max_speed=max_joint_speed[Axis.GRIPPER],
-        max_acceleration=max_joint_acceleration[Axis.GRIPPER],
-        max_deceleration=max_joint_deceleration[Axis.GRIPPER],
+        soft_limit_range=soft_limits[PreciseFlexAxis.GRIPPER],
+        hard_limit_range=hard_limits[PreciseFlexAxis.GRIPPER],
+        max_speed=max_joint_speed[PreciseFlexAxis.GRIPPER],
+        max_acceleration=max_joint_acceleration[PreciseFlexAxis.GRIPPER],
+        max_deceleration=max_joint_deceleration[PreciseFlexAxis.GRIPPER],
         is_dual_gripper=bool(axis_mask & 0x80),
       ),
       rail=rail,

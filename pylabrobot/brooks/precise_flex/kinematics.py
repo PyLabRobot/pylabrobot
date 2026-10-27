@@ -1,7 +1,7 @@
 """
 PF400 kinematics: FK and IK for a 4-DOF SCARA + prismatic Z + optional rail.
 
-Joint dict keys match the firmware and `Axis` enum:
+Joint dict keys match the firmware and `PreciseFlexAxis` enum:
   1: J1 (Z lift) [mm]
   2: J2 (shoulder) [deg]
   3: J3 (elbow) [deg]
@@ -28,7 +28,7 @@ from pylabrobot.resources import Coordinate, Rotation
 # ---------------------------------------------------------------------------
 
 
-class Axis(IntEnum):
+class PreciseFlexAxis(IntEnum):
   """The arm's axes, numbered as the firmware numbers them."""
 
   BASE = 1
@@ -39,7 +39,7 @@ class Axis(IntEnum):
   RAIL = 6
 
 
-JointState = Dict[Axis, float]
+JointState = Dict[PreciseFlexAxis, float]
 """Where every axis is, in its own units: the base, gripper and rail in mm, the shoulder, elbow and
 wrist in degrees."""
 
@@ -134,18 +134,18 @@ def fk(joints: JointState, p: PF400Params) -> PreciseFlexCartesianPose:
     orientation/wrist derived from the joint configuration (J3 sign and
     wrapped J4 sign, respectively).
   """
-  j1 = joints[Axis.BASE]
-  j2 = radians(joints[Axis.SHOULDER])
-  j3 = radians(joints[Axis.ELBOW])
-  j4 = radians(joints[Axis.WRIST])
-  rail_position = joints.get(Axis.RAIL, 0.0)
+  j1 = joints[PreciseFlexAxis.BASE]
+  j2 = radians(joints[PreciseFlexAxis.SHOULDER])
+  j3 = radians(joints[PreciseFlexAxis.ELBOW])
+  j4 = radians(joints[PreciseFlexAxis.WRIST])
+  rail_position = joints.get(PreciseFlexAxis.RAIL, 0.0)
   yaw = j2 + j3 + j4
   x = rail_position + p.l1 * cos(j2) + p.l2 * cos(j2 + j3) + p.gripper_length * cos(yaw)
   y = p.l1 * sin(j2) + p.l2 * sin(j2 + j3) + p.gripper_length * sin(yaw)
   z = j1 + p.gripper_z_offset
-  j3_wrapped = (joints[Axis.ELBOW] + 180) % 360 - 180
+  j3_wrapped = (joints[PreciseFlexAxis.ELBOW] + 180) % 360 - 180
   orientation: ElbowOrientation = "right" if j3_wrapped >= 0 else "left"
-  wrist: Wrist = "ccw" if joints[Axis.WRIST] >= 0 else "cw"
+  wrist: Wrist = "ccw" if joints[PreciseFlexAxis.WRIST] >= 0 else "cw"
   return PreciseFlexCartesianPose(
     location=Coordinate(x, y, z),
     rotation=Rotation(-180, 90, z=degrees(yaw)),
@@ -220,17 +220,20 @@ def ik(pose: PreciseFlexCartesianPose, p: PF400Params) -> JointState:
     j4 += 2 * pi
 
   return {
-    Axis.BASE: pose.location.z - p.gripper_z_offset,
-    Axis.SHOULDER: degrees(j2),
-    Axis.ELBOW: degrees(j3),
-    Axis.WRIST: degrees(j4),
-    Axis.RAIL: pose.rail_position,
+    PreciseFlexAxis.BASE: pose.location.z - p.gripper_z_offset,
+    PreciseFlexAxis.SHOULDER: degrees(j2),
+    PreciseFlexAxis.ELBOW: degrees(j3),
+    PreciseFlexAxis.WRIST: degrees(j4),
+    PreciseFlexAxis.RAIL: pose.rail_position,
   }
 
 
 def __getattr__(name: str) -> object:
-  """``JointPose``, deprecated: it is ``JointState``."""
+  """``JointPose`` and ``Axis``, deprecated: they are ``JointState`` and ``PreciseFlexAxis``."""
   if name == "JointPose":
     warnings.warn("`JointPose` is deprecated, use `JointState`.", DeprecationWarning, stacklevel=2)
     return JointState
+  if name == "Axis":
+    warnings.warn("`Axis` is deprecated, use `PreciseFlexAxis`.", DeprecationWarning, stacklevel=2)
+    return PreciseFlexAxis
   raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

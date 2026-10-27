@@ -1,6 +1,6 @@
 """The PreciseFlex gripper: the end-effector at the arm's wrist, driven through the controller.
 
-Reached as `driver.gripper`. The jaws are the controller's gripper axis (`Axis.GRIPPER`), commanded
+Reached as `driver.gripper`. The jaws are the controller's gripper axis (`PreciseFlexAxis.GRIPPER`), commanded
 through their open and close positions; a force-controlled grasp for `pickplate` is set up here.
 """
 

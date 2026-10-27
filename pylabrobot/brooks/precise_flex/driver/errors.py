@@ -1995,7 +1995,7 @@ class OutOfRangeOfMotionError(Exception):
 
   Its own type so the recover-and-retry path can catch this recoverable arm *state* without also
   catching a bad commanded *target* (which stays a ``ValueError``). ``axes`` maps each offending
-  ``Axis`` to ``(value, (lo, hi))``.
+  ``PreciseFlexAxis`` to ``(value, (lo, hi))``.
   """
 
   def __init__(self, message: str, axes: dict):

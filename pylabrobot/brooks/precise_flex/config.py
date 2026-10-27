@@ -10,6 +10,8 @@ warnings.warn(
 )
 
 from pylabrobot.brooks.precise_flex.driver.configuration import (  # noqa: E402, F401
-  Axis,
+  PreciseFlexAxis,
   PreciseFlexConfiguration,
 )
+
+Axis = PreciseFlexAxis  # its old name; importing this module already warns
