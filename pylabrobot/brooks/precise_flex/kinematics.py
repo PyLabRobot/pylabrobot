@@ -64,6 +64,26 @@ class PreciseFlexCartesianPose(CartesianPose):
 
 
 @dataclass(frozen=True)
+class PreciseFlexPose:
+  """Where every joint of the arm is, and where its gripper is, in the arm's base frame.
+
+  One answer for the whole arm rather than for its end: whether the arm clears something depends
+  on its elbow and wrist as much as on the gripper.
+  """
+
+  shoulder_joint_location: Coordinate
+  """The shoulder axis: on the rail, at the Z drive's height."""
+  elbow_joint_location: Coordinate
+  """Link 1's far end, the joint link 2 turns about."""
+  wrist_joint_location: Coordinate
+  """Link 2's far end, the joint the gripper turns about."""
+  gripper_pose: PreciseFlexCartesianPose
+  """Where the gripper is and which way it faces, as ``fk`` returns it."""
+  joints: JointState
+  """What each drive reported, as ``request_joint_state`` returns it."""
+
+
+@dataclass(frozen=True)
 class WorkEnvelope:
   """Reachable tool-tip envelope: an annulus about the shoulder, over a Z range (mm)."""
 
@@ -123,6 +143,26 @@ def _classify_pf400_reach(links: Tuple[float, float]) -> Literal["standard", "ex
 # -- forward kinematics ----------------------------------------------------
 
 
+def compute_elbow_and_wrist(
+  p: PF400Params, shoulder: float, elbow: float
+) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+  """Where the elbow joint and the wrist joint stand, from the shoulder axis, seen from above.
+
+  Args:
+    p: kinematic parameters.
+    shoulder: the shoulder's angle, in radians.
+    elbow: the elbow's angle from link 1, in radians.
+
+  Returns:
+    The elbow joint (x, y) and the wrist joint (x, y), in mm.
+  """
+  elbow_x, elbow_y = p.l1 * cos(shoulder), p.l1 * sin(shoulder)
+  return (
+    (elbow_x, elbow_y),
+    (elbow_x + p.l2 * cos(shoulder + elbow), elbow_y + p.l2 * sin(shoulder + elbow)),
+  )
+
+
 def fk(joints: JointState, p: PF400Params) -> PreciseFlexCartesianPose:
   """Forward kinematics.
 
@@ -140,8 +180,9 @@ def fk(joints: JointState, p: PF400Params) -> PreciseFlexCartesianPose:
   j4 = radians(joints[PreciseFlexAxis.WRIST])
   rail_position = joints.get(PreciseFlexAxis.RAIL, 0.0)
   yaw = j2 + j3 + j4
-  x = rail_position + p.l1 * cos(j2) + p.l2 * cos(j2 + j3) + p.gripper_length * cos(yaw)
-  y = p.l1 * sin(j2) + p.l2 * sin(j2 + j3) + p.gripper_length * sin(yaw)
+  _, (wrist_x, wrist_y) = compute_elbow_and_wrist(p, j2, j3)
+  x = rail_position + wrist_x + p.gripper_length * cos(yaw)
+  y = wrist_y + p.gripper_length * sin(yaw)
   z = j1 + p.gripper_z_offset
   j3_wrapped = (joints[PreciseFlexAxis.ELBOW] + 180) % 360 - 180
   orientation: ElbowOrientation = "right" if j3_wrapped >= 0 else "left"

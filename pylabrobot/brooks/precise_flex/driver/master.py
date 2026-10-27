@@ -1,6 +1,8 @@
-"""PreciseFlex driver: the controller link, its lifecycle, and the configuration."""
+"""PreciseFlex driver: the controller link, its lifecycle, the configuration, and the resource model
+it builds from one."""
 
 import asyncio
+import dataclasses
 import json
 import logging
 import warnings
@@ -10,6 +12,7 @@ from typing import (
   Dict,
   Literal,
   Optional,
+  cast,
 )
 
 from pylabrobot.brooks.precise_flex import kinematics
@@ -23,6 +26,8 @@ from pylabrobot.brooks.precise_flex.driver.configuration import (
 from pylabrobot.brooks.precise_flex.kinematics import JointState
 from pylabrobot.events import emit_event, evented_operation
 from pylabrobot.io.socket import Socket
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource import Resource
 
 from ..confirmed_firmware_versions import (
   SUPPORTED_ROBOT_TYPES,
@@ -31,6 +36,18 @@ from ..confirmed_firmware_versions import (
   suggest_entry,
 )
 from ..data_ids import DataID, PowerState, _parse_scalar
+from ..resource_model.pf400_end_effector import GRIPPER_TOOL_CENTER_POINT_Z, gripper
+from ..resource_model.pf400_manipulator import (
+  LINK_1_ABOVE_FLANGE_PLANE,
+  Z_CARRIAGE_REFERENCE_POINT,
+  Z_COLUMN_LOCATION,
+  link_1,
+  link_2,
+  z_carriage,
+  z_carriage_location,
+  z_column,
+  z_column_height,
+)
 from ..tcs_modules import missing_required_modules
 from .errors import PreciseFlexError
 from .features.arm import PreciseFlexArm, PreciseFlexArmConfiguration
@@ -63,6 +80,7 @@ class PreciseFlexDriver:
     read_kinematics_from_device: bool = True,
     recover_out_of_range: bool = True,
     parking_position: Optional[JointState] = None,
+    base_plate: Optional[Resource] = None,
     declared_configuration_json: Optional[str] = None,
   ) -> None:
     """
@@ -71,8 +89,9 @@ class PreciseFlexDriver:
         override; when ``read_kinematics_from_device`` is True (the default) the
         link lengths and tool length are read from the controller at setup and
         this value is only used if that read fails.
-      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
-        Depends on the mounted gripper. Always taken from here (not on the controller).
+      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip. A fallback, as
+        ``gripper_length`` is: with ``read_kinematics_from_device`` it is where the fitted
+        gripper's fingers grip, below the flange plane.
       read_kinematics_from_device: when True, read l1/l2 and the tool length from
         the controller at setup and use them for kinematics; the constructor's
         ``gripper_length`` then acts only as a fallback. Set False to force the
@@ -94,11 +113,14 @@ class PreciseFlexDriver:
         ``park()`` moves to. Leave None (the default) and setup fills the generic default RIGHT pose
         (planar fold, Z column at 3/4 of the discovered travel); reassign it any time to park
         elsewhere. While unset (no configuration), ``park()`` falls back to ``movetosafe``.
+      base_plate: the base plate to build the arm on. Optional: without one the driver still
+        drives the arm, and models nothing.
       declared_configuration_json: path to a JSON file holding a declared configuration, as
         `save_configuration` writes one. The only way a configuration is read from a file.
         Discovery cross-checks it against what the device answers.
     """
     super().__init__()
+    self.base_plate = base_plate
     # What was declared this device is, read once here: the one place a configuration comes off a
     # file. Empty when nothing was declared.
     self.declared_configuration_json = declared_configuration_json
@@ -222,16 +244,17 @@ class PreciseFlexDriver:
   async def setup(self, skip_home: bool = False):
     """Bring the arm fully up: ``connect``, ``initialize``, then ``home`` unless skipped.
 
-    ``initialize`` reads the configuration, and setup raises if that fails. Axes outside their
-    limits are then dealt with.
+    ``initialize`` reads the configuration, and setup raises if that fails. The arm is then
+    modelled, and axes outside their limits are dealt with.
 
     Args:
       skip_home: If True, skip the homing step during setup.
     """
     await self.connect()
-    await self.initialize()
+    configuration = await self.initialize()
     if not skip_home:
       await self.home()
+    self._create_feature_resources(configuration)
     await self.arm._handle_out_of_range_axes()
 
   async def connect(self) -> None:
@@ -244,8 +267,9 @@ class PreciseFlexDriver:
     """Raise if what was declared cannot stand for what the device answered.
 
     Only what decides whether the two are the same kind of arm, set up the same way: what is
-    fitted, its link and tool lengths, and its soft limits. Identity is left out: a declaration
-    taken off one arm describes another of the same build.
+    fitted, the gripper among it, its link and tool lengths, and its soft limits. The model is built
+    from the declared ones and kept. Identity is left out: a declaration taken off one arm describes
+    another of the same build.
 
     Args:
       discovered: what the device answered.
@@ -257,11 +281,17 @@ class PreciseFlexDriver:
     if declared is None:
       return
     arm, gripper = declared.arm, declared.gripper
+
+    def lengths(arm: PreciseFlexArmConfiguration) -> tuple:
+      return (arm.kinematics.l1, arm.kinematics.l2, arm.kinematics.gripper_length)
+
     must_match = (
       ("robot_type", declared.robot_type, discovered.robot_type),
       ("has_rail", declared.has_rail, discovered.has_rail),
       ("gripper.is_dual_gripper", gripper.is_dual_gripper, discovered.gripper.is_dual_gripper),
-      ("arm.kinematics", arm.kinematics, discovered.arm.kinematics),
+      # The gripper decides where the tool point stands below the flange plane.
+      ("has_vision_gripper", declared.has_vision_gripper, discovered.has_vision_gripper),
+      ("arm.kinematics (l1, l2, gripper_length)", lengths(arm), lengths(discovered.arm)),
       ("arm.soft_limits", arm.soft_limits, discovered.arm.soft_limits),
       ("gripper.soft_limit_range", gripper.soft_limit_range, discovered.gripper.soft_limit_range),
     )
@@ -285,6 +315,16 @@ class PreciseFlexDriver:
       The configuration, also kept as ``configuration``.
     """
     configuration = await self._request_configuration()
+    if configuration.arm.kinematics_source == "device":
+      # The tool point is where the fitted gripper's fingers grip, below the flange plane.
+      tool_point_z = GRIPPER_TOOL_CENTER_POINT_Z[
+        "v23" if configuration.has_vision_gripper else "s23"
+      ]
+      arm = configuration.arm
+      kinematics_params = dataclasses.replace(arm.kinematics, gripper_z_offset=tool_point_z)
+      configuration = dataclasses.replace(
+        configuration, arm=dataclasses.replace(arm, kinematics=kinematics_params)
+      )
     self._check_declared_against(configuration)
     self._configuration = configuration
     self._adopt_configuration(self._configuration)
@@ -307,6 +347,59 @@ class PreciseFlexDriver:
     await self.attach(1)
     await self.arm.stop_freedrive_mode()
     return await self.discover()
+
+  def _create_feature_resources(self, configuration: "PreciseFlexConfiguration") -> None:
+    """Build the arm on its base plate, from a configuration. No motion.
+
+    The column is stood on the base plate, the carriage hung on it, the links on that and the
+    gripper on link 2, each placed by where its joint has to land. They stand at Z 0 with every
+    joint at 0 until a joint state is read. Does nothing for a driver given no base plate. An arm
+    already built keeps its parts.
+
+    Args:
+      configuration: what the arm reported: the declared one, or the one read at setup.
+    """
+    base_plate = self.base_plate
+    if base_plate is None:
+      return
+    device = base_plate.parent
+    if device is None:
+      logger.warning("the base plate belongs to no device, so the arm is not modelled")
+      return
+    if self.arm.resource is not None:
+      return
+    c = configuration.arm
+    column = z_column(name=f"{device.name}_z_column", height=z_column_height(c.z_range[1]))
+    base_plate.assign_child_resource(column, location=Z_COLUMN_LOCATION)
+    carriage = z_carriage(name=f"{device.name}_z_carriage")
+    column.assign_child_resource(carriage, location=z_carriage_location(0.0))
+    first = link_1(name=f"{device.name}_link_1", length=c.kinematics.l1)
+    # The reference point is the shoulder axis at the flange plane, which link 1 stands above.
+    above = Coordinate(0.0, 0.0, LINK_1_ABOVE_FLANGE_PLANE)
+    carriage.assign_child_resource(
+      first, location=Z_CARRIAGE_REFERENCE_POINT - first.proximal_joint + above
+    )
+    second = link_2(name=f"{device.name}_link_2", length=c.kinematics.l2)
+    # Link 2's underside lies in the flange plane, that far below link 1's.
+    below = Coordinate(0.0, 0.0, -LINK_1_ABOVE_FLANGE_PLANE)
+    first.assign_child_resource(
+      second, location=cast(Coordinate, first.distal_joint) - second.proximal_joint + below
+    )
+    hand = gripper(
+      name=f"{device.name}_gripper",
+      tool_length=c.kinematics.gripper_length,
+      # The axis's soft limits, in mm, as the gripper takes them when it adopts a configuration.
+      jaw_range=(
+        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[0]),
+        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[1]),
+      ),
+      intelliguide="v23" if configuration.has_vision_gripper else "s23",
+    )
+    second.assign_child_resource(
+      hand, location=cast(Coordinate, second.distal_joint) - hand.proximal_joint
+    )
+    self.arm.resource, self.arm.link_1, self.arm.link_2 = carriage, first, second
+    self.gripper.resource = hand
 
   async def disconnect(self) -> None:
     """Hand the arm back and close the links. Moves nothing.

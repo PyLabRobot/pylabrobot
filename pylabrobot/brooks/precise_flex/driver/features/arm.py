@@ -8,10 +8,13 @@ import asyncio
 import contextlib
 import dataclasses
 import logging
+import math
+import sys
 import time
 from typing import (
   TYPE_CHECKING,
   AsyncIterator,
+  Awaitable,
   Callable,
   ClassVar,
   Dict,
@@ -25,6 +28,8 @@ from typing import (
 
 from pylabrobot.events import coordinate_reference, evented_operation
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.manipulator import LinkBody
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
 
 from ... import kinematics
@@ -35,10 +40,12 @@ from ...kinematics import (
   JointState,
   PreciseFlexAxis,
   PreciseFlexCartesianPose,
+  PreciseFlexPose,
   WorkEnvelope,
   Wrist,
 )
-from ..errors import OutOfRangeOfMotionError, PreciseFlexError
+from ...resource_model.pf400_manipulator import z_carriage_location
+from ..errors import OperationInterrupted, OutOfRangeOfMotionError, PreciseFlexError
 from .rail import PreciseFlexRail
 
 if TYPE_CHECKING:
@@ -171,8 +178,8 @@ class MotionProfile(NamedTuple):
 class PreciseFlexArm:
   """The arm of a PreciseFlex: its joints, read and moved through the controller.
 
-  Reached as `driver.arm`. Sends through the driver's `send_command`; every commanded joint move
-  goes through `_guarded_move_j`.
+  Reached as `driver.arm`. Sends through the driver's `send_command`; every move whose target joint
+  states are known before it is sent goes through `_guarded_move`.
   """
 
   # What the driver sends when a caller leaves the value out. Tune one arm by assigning on the
@@ -204,6 +211,11 @@ class PreciseFlexArm:
     """
     self._driver = driver
     self.configuration: Optional[PreciseFlexArmConfiguration] = None
+    # What models the arm: the carriage on the column and the two links. None until setup hangs
+    # them, which it does only for a driver given a base plate.
+    self.resource: Optional[Resource] = None
+    self.link_1: Optional[LinkBody] = None
+    self.link_2: Optional[LinkBody] = None
     self.profile_index: int = 1
     self.station_index: int = 1
     self.horizontal_compliance: bool = False
@@ -272,6 +284,28 @@ class PreciseFlexArm:
           raise TimeoutError(f"motion did not settle within {timeout:.0f}s (current={current})")
         previous = current
 
+  def update_joint_state(self, joints: JointState) -> None:
+    """Stand the resources that model the arm where every joint is.
+
+    The carriage is stood where the Z drive is, and each member is turned about the joint it turns
+    on to the angle that joint reports. Does nothing until the arm is modelled.
+
+    Args:
+      joints: the joint state, as ``request_joint_state`` returns it.
+    """
+    if self.resource is None or self.link_1 is None or self.link_2 is None:
+      return
+    self.resource.location = z_carriage_location(joints[PreciseFlexAxis.BASE])
+    self.link_1.rotate_to(
+      z=joints[PreciseFlexAxis.SHOULDER], pivot_coordinate=self.link_1.proximal_joint
+    )
+    self.link_2.rotate_to(
+      z=joints[PreciseFlexAxis.ELBOW], pivot_coordinate=self.link_2.proximal_joint
+    )
+    gripper = self._driver.gripper.resource
+    if gripper is not None:
+      gripper.rotate_to(z=joints[PreciseFlexAxis.WRIST], pivot_coordinate=gripper.proximal_joint)
+
   async def request_joint_state(self) -> JointState:
     """Get the current joint position of the arm."""
     await self._wait_for_eom()
@@ -283,7 +317,34 @@ class PreciseFlexArm:
         break
     else:
       raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
-    return self._parse_angles_response(parts)
+    joints = self._parse_angles_response(parts)
+    self.update_joint_state(joints)
+    self._driver.gripper.update_width(
+      self._driver.gripper._firmware_units_to_mm(joints[PreciseFlexAxis.GRIPPER])
+    )
+    return joints
+
+  async def _request_joint_state_after_move(self) -> None:
+    """Wait for the arm to stop and read where it did, on a move's success and its failure alike.
+
+    Called from a move's ``finally``. After an accepted move a failure of the read is raised: the
+    controller answers a fault during the motion (a collision, a stall) on the next command. After
+    a failed move it is logged and swallowed, so it does not replace the move's own error. An
+    interrupt is passed on.
+    """
+    # The move's own error, while this runs in its `finally`.
+    move_failed = sys.exc_info()[1] is not None
+    try:
+      await self.request_joint_state()
+    except OperationInterrupted:
+      raise
+    except Exception:
+      if not move_failed:
+        raise
+      logger.warning(
+        "[PreciseFlex %s] could not read where the arm stopped; its model is stale",
+        self._driver.io._host,
+      )
 
   async def request_state(self) -> str:
     """Return state of motion.
@@ -321,7 +382,7 @@ class PreciseFlexArm:
 
   async def _unchecked_fw_move_j(self, profile_index: int, joint_coords: JointState) -> None:
     """Move the robot using joint coordinates, handling rail configuration. Raw moveJ - the
-    out-of-range guard lives in the caller (``_guarded_move_j``), not in this primitive."""
+    out-of-range guard lives in the caller (``_guarded_move``), not in this primitive."""
     angles_str = " ".join(str(joint_coords[axis]) for axis in self._WIRE_ORDER)
     if self._driver._has_rail:
       # The rail's value goes last, and the line has always ended with a space after it.
@@ -386,15 +447,15 @@ class PreciseFlexArm:
       target[PreciseFlexAxis.RAIL] = cart.rail_position
     return target, cart
 
-  async def _cart_to_joints(self, cart: PreciseFlexCartesianPose) -> JointState:
-    """Convert a Cartesian location into a full joint dict using our IK.
+  def _cart_to_joints(self, cart: PreciseFlexCartesianPose, joints: JointState) -> JointState:
+    """Convert a Cartesian location into a full joint dict using our IK, from the joints read.
 
     Any of cart.orientation, cart.wrist, and cart.rail_position left as None
     default to the current pose - picks the configuration closest to where the
-    arm is now. Fetches current joint state for the gripper and rail axes so
-    callers get a complete joint dict, ready for `_guarded_move_j`.
+    arm is now. The gripper and rail axes come from `joints`, so callers get a
+    complete joint dict, ready for `_guarded_move`.
     """
-    joints, current = await self._request_state()
+    current = kinematics.fk(joints, self._driver._kinematics_params)
     return self._plan_cartesian_pose(cart, joints, current)[0]
 
   # -- speed and motion profiles -------------------------------------------------------------------
@@ -1117,8 +1178,13 @@ class PreciseFlexArm:
           hi,
           target,
         )
-        await self._unchecked_fw_move_one_axis(axis, target)
-        await self._wait_for_eom()
+        # Out of range is what is being recovered, so neither the limits nor -1012 are acted on.
+        await self._guarded_move(
+          lambda current: [{**current, axis: target}],
+          lambda _targets: self._unchecked_fw_move_one_axis(axis, target),
+          check_soft_limits=False,
+          retry_out_of_range=False,
+        )
         recovered[axis] = target
     finally:
       await self._set_speed(prior_speed)  # don't leave the profile at the slow recovery speed
@@ -1186,27 +1252,68 @@ class PreciseFlexArm:
         f"would reject the move (-1012). Re-teach this pose within the envelope."
       )
 
-  async def _guarded_move_j(self, build_target: Callable[[JointState], JointState]) -> None:
-    """The one path to ``_unchecked_fw_move_j``: read, check, send.
-
-    Reads the live pose once the arm has stopped, checks it and the target against the soft limits,
-    and sends the move. On -1012 with ``recover_out_of_range`` set it recovers the axes once and
-    tries again.
+  def _forward_kinematics(self, joints: JointState) -> PreciseFlexPose:
+    """Where a joint state puts every joint of the arm and its gripper. Nothing is read.
 
     Args:
-      build_target: maps the pose just read to the full target; run again for the second attempt.
+      joints: the joint state, as ``request_joint_state`` returns it.
+    """
+    p = self._driver._kinematics_params
+    elbow, wrist = kinematics.compute_elbow_and_wrist(
+      p, math.radians(joints[PreciseFlexAxis.SHOULDER]), math.radians(joints[PreciseFlexAxis.ELBOW])
+    )
+    # The shoulder axis rides the rail and the Z drive, and the two joints stand from it.
+    shoulder = Coordinate(
+      x=joints.get(PreciseFlexAxis.RAIL, 0.0), y=0.0, z=joints[PreciseFlexAxis.BASE]
+    )
+    return PreciseFlexPose(
+      shoulder_joint_location=shoulder,
+      elbow_joint_location=shoulder + Coordinate(x=elbow[0], y=elbow[1], z=0.0),
+      wrist_joint_location=shoulder + Coordinate(x=wrist[0], y=wrist[1], z=0.0),
+      gripper_pose=kinematics.fk(joints, p),
+      joints=dict(joints),
+    )
+
+  async def _guarded_move(
+    self,
+    build_targets: Callable[[JointState], Sequence[JointState]],
+    unchecked_fw_move: Callable[[Sequence[JointState]], Awaitable[None]],
+    *,
+    check_soft_limits: bool = True,
+    retry_out_of_range: bool = True,
+  ) -> None:
+    """The one path for every move whose target joint states are known before it is sent.
+
+    Reads the live pose once the arm has stopped, builds the targets from it, checks each target
+    against the soft limits, sends, and reads where the arm stopped, on success and failure alike.
+    On -1012 with ``recover_out_of_range`` set it recovers the axes once and tries again.
+
+    Args:
+      build_targets: maps the pose just read to the joint states the move passes through, in
+        order; run again for the second attempt.
+      unchecked_fw_move: sends the move to those targets.
+      check_soft_limits: whether each target is checked against the soft limits.
+      retry_out_of_range: whether -1012 recovers the axes and tries once more.
     """
 
     async def attempt() -> None:
       current = await self.request_joint_state()
-      target = build_target(current)
-      self._assert_within_soft_limits(current, target)
-      await self._unchecked_fw_move_j(profile_index=self.profile_index, joint_coords=target)
+      targets = build_targets(current)
+      if check_soft_limits:
+        start = current
+        for target in targets:
+          self._assert_within_soft_limits(start, target)
+          start = target
+      try:
+        await unchecked_fw_move(targets)
+      finally:
+        # A move returns once accepted: this waits for the arm to stop, then reads where it did.
+        await self._request_joint_state_after_move()
 
     try:
       await attempt()
     except OutOfRangeOfMotionError as exc:
-      if not self._driver._recover_out_of_range:
+      if not (retry_out_of_range and self._driver._recover_out_of_range):
         raise
       host = self._driver.io._host
       logger.warning(
@@ -1242,7 +1349,7 @@ class PreciseFlexArm:
     speed_percent: Optional[float] = None,
   ) -> None:
     """Move the arm to the specified joint state. A partial spec is merged over the live pose;
-    the move is guarded against out-of-range axes (see ``_guarded_move_j``).
+    the move is guarded against out-of-range axes (see ``_guarded_move``).
 
     Args:
       joint_state: Target joint state. Omitted axes keep their live values.
@@ -1251,12 +1358,19 @@ class PreciseFlexArm:
     """
     if speed_percent is not None:
       await self._set_speed(speed_percent)
-    await self._guarded_move_j(lambda current: {**current, **joint_state})
+    await self._guarded_move(
+      lambda current: [{**current, **joint_state}],
+      lambda targets: self._unchecked_fw_move_j(self.profile_index, targets[0]),
+    )
 
   async def request_gripper_pose(self) -> PreciseFlexCartesianPose:
     """Get the current pose using our kinematics model (no firmware `wherec`)."""
     _, pose = await self._request_state()
     return pose
+
+  async def request_pose(self) -> PreciseFlexPose:
+    """Where every joint of the arm is, worked out from the joint state; nothing else is asked."""
+    return self._forward_kinematics(await self.request_joint_state())
 
   # -- cartesian motion ----------------------------------------------------------------------------
 
@@ -1294,7 +1408,7 @@ class PreciseFlexArm:
     rail_position: Optional[float] = None,
   ) -> None:
     """Move the arm to the specified Cartesian location. The IK target is guarded against
-    out-of-range axes (see ``_guarded_move_j``).
+    out-of-range axes (see ``_guarded_move``).
 
     Args:
       location: Target Cartesian location.
@@ -1322,24 +1436,24 @@ class PreciseFlexArm:
       orientation=orientation,
       wrist=wrist,
     )
-    joints = await self._cart_to_joints(coords)
-    await self._guarded_move_j(lambda _current: joints)
+    await self._guarded_move(
+      lambda current: [self._cart_to_joints(coords, current)],
+      lambda targets: self._unchecked_fw_move_j(self.profile_index, targets[0]),
+    )
 
-  async def _plan_cartesian_pose_route(
-    self, poses: Sequence[PreciseFlexCartesianPose]
+  def _plan_cartesian_pose_route(
+    self, poses: Sequence[PreciseFlexCartesianPose], current: JointState
   ) -> List[JointState]:
-    """Plan a Cartesian pose route into joint targets, snapshotting state once.
+    """Plan a Cartesian pose route into joint targets, from the joint state already read.
 
     Unlike :meth:`_cart_to_joints`, this does not query the controller for every waypoint: it
-    reads the current state once and resolves each waypoint's IK from the previous waypoint's
-    result. Omitted pose fields inherit from the previous pose so IK branch selection remains
-    continuous across the route.
+    resolves each waypoint's IK from the previous waypoint's result. Omitted pose fields inherit
+    from the previous pose so IK branch selection remains continuous across the route.
     """
-    prev_joints, prev_pose = await self._request_state()
+    prev_joints, prev_pose = current, kinematics.fk(current, self._driver._kinematics_params)
     targets: List[JointState] = []
     for pose in poses:
       target, cart = self._plan_cartesian_pose(pose, prev_joints, prev_pose)
-      self._assert_within_soft_limits(prev_joints, target)
       targets.append(target)
       prev_joints = target
       prev_pose = cart
@@ -1406,28 +1520,27 @@ class PreciseFlexArm:
     if speed_percent is not None:
       await self._set_speed(speed_percent)
 
-    targets = await self._plan_cartesian_pose_route(poses)
-
     profile_index = self.profile_index
-    original_profile = None
-    should_restore_profile = False
-    if blend:
-      original_profile = await self.request_motion_profile_values(profile_index)
-      should_restore_profile = original_profile.in_range != BLEND_IN_RANGE
-      if should_restore_profile:
-        await self.set_motion_profile_values(*original_profile._replace(in_range=BLEND_IN_RANGE))
+    blended: List[MotionProfile] = []
 
-    try:
+    async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
+      if blend:
+        original_profile = await self.request_motion_profile_values(profile_index)
+        if original_profile.in_range != BLEND_IN_RANGE:
+          await self.set_motion_profile_values(*original_profile._replace(in_range=BLEND_IN_RANGE))
+          blended.append(original_profile)
       for target in targets:
         await self._unchecked_fw_move_j(profile_index=profile_index, joint_coords=target)
+
+    try:
+      await self._guarded_move(
+        lambda current: self._plan_cartesian_pose_route(poses, current), unchecked_fw_move
+      )
     finally:
-      # Let queued motion settle before returning or restoring the profile - restoring InRange
+      # Restored once the read after the route has let queued motion settle: restoring InRange
       # mid-move would change the in-flight blend.
-      try:
-        await self._wait_for_eom()
-      finally:
-        if should_restore_profile and original_profile is not None:
-          await self.set_motion_profile_values(*original_profile)
+      for original_profile in blended:
+        await self.set_motion_profile_values(*original_profile)
 
   async def _unchecked_fw_request_cartesian_destination(
     self, mode: int = 0
@@ -1571,6 +1684,28 @@ class PreciseFlexArm:
       f"{self.horizontal_compliance_torque}"
     )
 
+  async def _guarded_plate_j(
+    self,
+    build_station: Callable[[JointState], JointState],
+    unchecked_fw_plate: Callable[[], Awaitable[None]],
+  ) -> None:
+    """Write the station and run the controller's pick or place at it, guarded.
+
+    The station is the target. The controller's own approach, depart and any detour through its
+    park pose are its own and not seen.
+
+    Args:
+      build_station: maps the pose just read to the station's full joint state.
+      unchecked_fw_plate: `_unchecked_fw_pick_plate` or `_unchecked_fw_place_plate`.
+    """
+
+    async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
+      await self._unchecked_fw_set_joint_angles(self.station_index, targets[0])
+      await self._unchecked_fw_set_grip_detail()
+      await unchecked_fw_plate()
+
+    await self._guarded_move(lambda current: [build_station(current)], unchecked_fw_move)
+
   @evented_operation(
     "precise_flex.pick_up_at_joint_position",
     lambda self, joint_state, resource_width, finger_speed_percent=None, grasp_force=None: {
@@ -1618,9 +1753,9 @@ class PreciseFlexArm:
       finger_speed_percent=finger_speed_percent,
       grasp_force=grasp_force,
     )
-    await self._unchecked_fw_set_joint_angles(self.station_index, joint_state)
-    await self._unchecked_fw_set_grip_detail()
-    await self._unchecked_fw_pick_plate()
+    await self._guarded_plate_j(
+      lambda current: {**current, **joint_state}, self._unchecked_fw_pick_plate
+    )
 
   @evented_operation(
     "precise_flex.drop_at_joint_position",
@@ -1647,9 +1782,9 @@ class PreciseFlexArm:
       joint_state,
       resource_width,
     )
-    await self._unchecked_fw_set_joint_angles(self.station_index, joint_state)
-    await self._unchecked_fw_set_grip_detail()
-    await self._unchecked_fw_place_plate()
+    await self._guarded_plate_j(
+      lambda current: {**current, **joint_state}, self._unchecked_fw_place_plate
+    )
 
   @evented_operation(
     "precise_flex.pick_up_at_location",
@@ -1728,10 +1863,9 @@ class PreciseFlexArm:
       finger_speed_percent=finger_speed_percent,
       grasp_force=grasp_force,
     )
-    joint_state = await self._cart_to_joints(coords)
-    await self._unchecked_fw_set_joint_angles(self.station_index, joint_state)
-    await self._unchecked_fw_set_grip_detail()
-    await self._unchecked_fw_pick_plate()
+    await self._guarded_plate_j(
+      lambda current: self._cart_to_joints(coords, current), self._unchecked_fw_pick_plate
+    )
 
   @evented_operation(
     "precise_flex.drop_at_location",
@@ -1788,10 +1922,9 @@ class PreciseFlexArm:
       orientation=orientation,
       wrist=wrist,
     )
-    joint_state = await self._cart_to_joints(coords)
-    await self._unchecked_fw_set_joint_angles(self.station_index, joint_state)
-    await self._unchecked_fw_set_grip_detail()
-    await self._unchecked_fw_place_plate()
+    await self._guarded_plate_j(
+      lambda current: self._cart_to_joints(coords, current), self._unchecked_fw_place_plate
+    )
 
   # -- parking -------------------------------------------------------------------------------------
 
@@ -1851,7 +1984,11 @@ class PreciseFlexArm:
     it is unset. No collision checks against 3rd-party obstacles.
     """
     if self.parking_position is None:
-      await self._unchecked_fw_park()
+      # Where the controller's own safe position is, the driver does not know: only read it after.
+      try:
+        await self._unchecked_fw_park()
+      finally:
+        await self._request_joint_state_after_move()
       return
     pose = self._parking_pose_with_default_z(self.parking_position)
     await self.move_to_joint_state(joint_state=pose)
