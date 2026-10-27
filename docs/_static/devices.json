@@ -266,6 +266,25 @@
     "oem": "https://www.bmglabtech.com/en/clariostar-plus/"
   },
   {
+    "id": "bmg-vantastar",
+    "needs_hardware_testing": true,
+    "vendor": "BMG Labtech",
+    "name": "VANTAstar",
+    "kind": "plate reader",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence",
+      "heating",
+      "shaking"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.bmg_labtech.VANTAstar",
+    "api_version": "v1",
+    "code_slug": "bmg_labtech/vantastar",
+    "doc_slug": "bmg_labtech/vantastar/hello-world"
+  },
+  {
     "id": "brooks-preciseflex",
     "vendor": "Brooks",
     "name": "PreciseFlex",
