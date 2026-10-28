@@ -224,9 +224,6 @@ class VantageDriver:
     Repeatable. A repeated setup goes over the link the first one opened, and initialization
     does nothing on a machine that is already up. A setup that fails part way closes the link.
     """
-    logger.warning(
-      "The Vantage driver is untested on hardware: check each motion before relying on it."
-    )
     await self.connect()
     try:
       tip_presence = await self.discover()
