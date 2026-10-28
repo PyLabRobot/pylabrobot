@@ -31,6 +31,7 @@ from typing import (
 if TYPE_CHECKING:
   from pylabrobot.resources.coordinate import Coordinate
   from pylabrobot.resources.resource import Resource
+  from pylabrobot.resources.server.handles import Resource as Handle
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +253,51 @@ def resource_reference(resource: Optional["Resource"]) -> Optional[ResourceRefer
       ancestor["model"] = current.model
     ancestors.append(ancestor)
     current = current.parent
+  if ancestors:
+    result["ancestors"] = ancestors
+  return result
+
+
+async def handle_reference(handle: Optional["Handle"]) -> Optional[ResourceReference]:
+  """`resource_reference` for a resource on a resource server, read in one call.
+
+  Its type is its handle's class, which its kind decides.
+  """
+  if handle is None:
+    return None
+  # Imported here: the store's package imports PLR's resources, which emit events.
+  from pylabrobot.resources.server.handles import HANDLE_TYPES
+  from pylabrobot.resources.server.v1 import server_pb2 as spb
+
+  response = await handle.server.commands.get_resources(
+    spb.GetResourcesRequest(resources=[handle.ref], ancestors=True)
+  )
+  by_id = {node.id: node for node in response.nodes}
+  node = by_id[handle.id]
+  attributes = node.attributes
+  result: ResourceReference = {
+    "name": attributes.name,
+    "type": type(handle).__name__,
+  }
+  if attributes.model:
+    result["model"] = attributes.model
+  result["rotation"] = {
+    "x": attributes.rotation.x,
+    "y": attributes.rotation.y,
+    "z": attributes.rotation.z,
+  }
+  ancestors: List[ResourceAncestorReference] = []
+  parent_id = node.parent_id
+  while parent_id:
+    parent = by_id[parent_id].attributes
+    ancestor: ResourceAncestorReference = {
+      "name": parent.name,
+      "type": HANDLE_TYPES[parent.kind].__name__,
+    }
+    if parent.model:
+      ancestor["model"] = parent.model
+    ancestors.append(ancestor)
+    parent_id = by_id[parent_id].parent_id
   if ancestors:
     result["ancestors"] = ancestors
   return result

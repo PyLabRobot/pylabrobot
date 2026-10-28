@@ -60,6 +60,10 @@ generate-rpc:
 		pylabrobot/rpc/v1/device.proto pylabrobot/rpc/v1/jobs.proto \
 		pylabrobot/rpc/v1/images.proto pylabrobot/revvity/celigo/grpc/v1/service.proto \
 		pylabrobot/revvity/celigo/grpc/v1/storage.proto
+	$(BIN)python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. \
+		--connectrpc_out=. --connectrpc_opt=protobuf=google \
+		pylabrobot/resources/server/v1/types.proto pylabrobot/resources/server/v1/server.proto \
+		pylabrobot/resources/server/v1/primitives.proto
 
 clear-pyc:
 	find . -name "*.pyc" | xargs rm

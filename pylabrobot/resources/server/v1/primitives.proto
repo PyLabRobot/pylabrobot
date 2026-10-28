@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+// The server's low-level changes, for building new uses of resources: a device or a process the
+// command API does not have a call for yet. PLR's drivers do not use this service, and the
+// server's conformance tests are written against the command API, not against this.
+package pylabrobot.resources.server.v1;
+
+import "pylabrobot/resources/server/v1/types.proto";
+
+// Set where a resource is, relative to its parent and along its axes.
+message SetLocation {
+  ResourceRef resource = 1;
+  PartialVec3 location = 2;
+}
+
+message AddLiquid {
+  ResourceRef resource = 1;
+  double volume = 2;
+}
+
+message RemoveLiquid {
+  ResourceRef resource = 1;
+  double volume = 2;
+}
+
+message SetJawWidth {
+  ResourceRef gripper = 1;
+  double jaw_width = 2;
+}
+
+message Change {
+  oneof change {
+    AssignChild assign_child = 1;
+    UnassignChild unassign_child = 2;
+    SetLocation set_location = 3;
+    RotationChange rotation = 4;
+    SetVolume set_volume = 5;
+    AddLiquid add_liquid = 6;
+    RemoveLiquid remove_liquid = 7;
+    SetTracking set_tracking = 8;
+    SetTipPresence set_tip_presence = 9;
+    SetMetadata set_metadata = 10;
+    SetBarcode set_barcode = 11;
+    SetJawWidth set_jaw_width = 12;
+  }
+}
+
+// Changes resolved together: one item of a staged operation.
+message ChangeGroup {
+  repeated Change changes = 1;
+}
+
+message ApplyChangesRequest {
+  repeated bytes lock_tokens = 1;
+  // In order, all or none.
+  repeated ChangeGroup groups = 2;
+  // Stage them as an operation, one item per group, for `ResolveOperation`.
+  bool staged = 3;
+  OnTrackingProblem on_tracking_problem = 4;
+}
+
+message ApplyChangesResponse {
+  // Set when staged.
+  optional Operation operation = 1;
+  // Every node the changes touched, as it is now.
+  repeated ResourceNode nodes = 2;
+  repeated Issue issues = 3;
+  uint64 revision = 4;
+}
+
+service ResourcePrimitivesService {
+  rpc ApplyChanges(ApplyChangesRequest) returns (ApplyChangesResponse);
+}
