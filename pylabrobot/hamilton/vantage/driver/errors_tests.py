@@ -139,6 +139,24 @@ class TestErrorConversion(unittest.TestCase):
       vantage_response_string_to_error("A1AMQWid2er5").errors, {"Arm": "Unknown error"}
     )
 
+  def test_an_error_reply_with_no_text_is_explained_when_the_code_is_one_all_modules_share(self):
+    errors = vantage_response_string_to_error("A1RMDIid6er16").errors
+    self.assertEqual(list(errors), ["IPG"])
+    self.assertIn("MI", errors["IPG"])
+    self.assertIn("main initialization", errors["IPG"])
+    self.assertIn("sequence", vantage_response_string_to_error("A1RMDGid2er19").errors["IPG"])
+
+  def test_a_code_nobody_documents_stays_unknown_whichever_module_says_it(self):
+    for command in ("A1RMDIid1er5", "A1PMDIid1er5", "A1AMMIid1er5"):
+      self.assertEqual(
+        list(vantage_response_string_to_error(command).errors.values()), ["Unknown error"]
+      )
+
+  def test_the_text_a_machine_gives_wins_over_the_table(self):
+    self.assertEqual(
+      vantage_response_string_to_error('A1RMDIid6er16et"Not ready"').errors, {"IPG": "Not ready"}
+    )
+
   def test_a_reply_from_a_module_nobody_knows_is_reported_as_unknown(self):
     self.assertEqual(
       vantage_response_string_to_error('Z9ZZQWid2er5et"Broken"').errors,

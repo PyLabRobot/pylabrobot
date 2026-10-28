@@ -67,6 +67,22 @@ core96_errors = {
   96: "Limit curve already stored",
 }
 
+general_errors = {
+  10: "No communication to a slave",
+  11: "Slave command time out",
+  12: "Parameter combination error",
+  13: "Unknown node id",
+  14: "Unexpected response from a slave",
+  15: "Not executed: a previous error or a break stopped the sequence",
+  16: "Initialization not possible: the arm's main initialization (MI) has not been executed",
+  17: "Position not reachable",
+  18: "Object lost during the move",
+  19: "Not allowed command sequence",
+  36: "Command interrupted",
+}
+"""What a module means by the error codes they all share, which a reply without text gives."""
+
+
 pip_errors = {
   22: "Drive controller message error",
   23: "EC drive controller setup not executed",
@@ -297,6 +313,19 @@ _MODULES = {
 }
 
 
+def _error_code(resp: str) -> Optional[int]:
+  """The error code a reply reports, or None if it has no error field.
+
+  The field is looked for right after the module, command and id, which is where a machine writes
+  it, and failing that anywhere outside the quotes.
+  """
+  outside_quotes = _strip_quoted(resp)
+  found = re.match(r"\w{6}(?:id\d+)?er(\d+)", outside_quotes) or re.search(
+    r"er(\d+)", outside_quotes
+  )
+  return int(found.group(1)) if found else None
+
+
 def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
   """Convert a Vantage firmware response string to a VantageFirmwareError. Assumes that the
   response is an error response.
@@ -313,7 +342,7 @@ def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
     try:
       errors[module] = parse_vantage_fw_string(string, {"et": "str"})["et"]
     except ValueError:
-      errors[module] = "Unknown error"
+      errors[module] = general_errors.get(_error_code(string) or 0, "Unknown error")
     return VantageFirmwareError(errors, string)
 
   for error in re.findall(r"[A-Z0-9]{2}[0-9]{2}", error_string):
@@ -328,19 +357,6 @@ def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
       errors["Cover"] = "Unknown error"
 
   return VantageFirmwareError(errors, string)
-
-
-def _error_code(resp: str) -> Optional[int]:
-  """The error code a reply reports, or None if it has no error field.
-
-  The field is looked for right after the module, command and id, which is where a machine writes
-  it, and failing that anywhere outside the quotes.
-  """
-  outside_quotes = _strip_quoted(resp)
-  found = re.match(r"\w{6}(?:id\d+)?er(\d+)", outside_quotes) or re.search(
-    r"er(\d+)", outside_quotes
-  )
-  return int(found.group(1)) if found else None
 
 
 def check_fw_string_error(resp: str) -> None:
