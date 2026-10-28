@@ -402,9 +402,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     io = ScriptedIO(machine())
     driver = self.driver_on(io)
     try:
-      with self.assertLogs("pylabrobot.hamilton.vantage.driver.master", "WARNING") as logs:
-        await driver.setup()
-      self.assertIn("untested on hardware", logs.output[0])
+      await driver.setup()
       self.assertTrue(driver.connected)
       self.assertEqual(io.setups, 1)
       self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1AMQW", "A1PMQW"])
