@@ -15,7 +15,7 @@ from pylabrobot.hamilton.transport.text_tcp import (
   HamiltonTextTCP,
   resolve_host,
 )
-from pylabrobot.hamilton.vantage.driver.configuration import DeviceConfiguration
+from pylabrobot.hamilton.vantage.driver.configuration import DeviceConfiguration, ipg_is_fitted
 from pylabrobot.hamilton.vantage.driver.errors import (
   VantageFirmwareError,
   check_fw_string_error,
@@ -23,6 +23,7 @@ from pylabrobot.hamilton.vantage.driver.errors import (
   is_spontaneous_message,
   parse_vantage_fw_string,
 )
+from pylabrobot.hamilton.vantage.driver.features.ipg import Ipg
 from pylabrobot.hamilton.vantage.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.vantage.driver.lock import _FirmwareLock
 from pylabrobot.io.io import IOBase
@@ -132,6 +133,9 @@ class VantageDriver:
     # Built by `discover`, for the channels the machine turns out to have.
     self.pipettes: Optional[Pipettes] = None
 
+    # Built by `discover`, and only if the machine has an internal plate gripper.
+    self.ipg: Optional[Ipg] = None
+
   # ----------------------------------------
   # Connection and lifecycle
   # ----------------------------------------
@@ -172,9 +176,9 @@ class VantageDriver:
   async def setup(self):
     """Connect to the machine, find out what it has, and bring it up.
 
-    This moves the machine: the arm is pre-initialized if it reports itself down, and the channels
-    are initialized if they report themselves down or carry a tip. `discover` is the read-only
-    part.
+    This moves the machine: the arm is pre-initialized if it reports itself down, then the IPG, if
+    fitted, is initialized and parked, and the channels are initialized if they report themselves
+    down or carry a tip. `discover` is the read-only part.
 
     Repeatable. A repeated setup goes over the link the first one opened, and initialization
     does nothing on a machine that is already up. A setup that fails part way closes the link.
@@ -203,13 +207,18 @@ class VantageDriver:
     self._connected = True
 
   async def discover(self) -> List[bool]:
-    """Read how many channels the machine has. Read-only: nothing moves.
+    """Read what the machine has: its channels, its arm and whether an IPG is fitted. Read-only:
+    nothing moves.
+
+    The IPG is fitted if the arm type names one or the stored node names include one. Either is
+    enough, because an IPG that is fitted and not noticed can be driven into.
 
     Returns:
       Which channels carry a tip, from the first.
 
     Raises:
-      RuntimeError: If the channels do not answer as `A1PM`, or answer with no channel.
+      RuntimeError: If the channels do not answer as `A1PM`, answer with no channel, or the arm
+        answers neither question that tells whether an IPG is fitted.
     """
     pipettes = self.pipettes or Pipettes(self)
     try:
@@ -222,26 +231,63 @@ class VantageDriver:
       ) from e
     if not tip_presence:
       raise RuntimeError("the machine reports no pipetting channel")
-    self.configuration = DeviceConfiguration(num_channels=len(tip_presence))
+
+    arm_type: Optional[int] = None
+    node_names: Optional[List[str]] = None
+    try:
+      arm_type = await self.request_arm_type()
+    except VantageFirmwareError as e:
+      logger.warning("the arm did not report its type: %s", e.errors)
+    try:
+      node_names = await self.request_node_names()
+    except VantageFirmwareError as e:
+      logger.warning("the arm did not report its node names: %s", e.errors)
+    if arm_type is None and node_names is None:
+      raise RuntimeError(
+        "the arm answered neither `A1AM QU` nor `A1AM QN`, so whether an internal plate gripper "
+        "is fitted is not known, and the machine is not set up: an IPG that is not accounted for "
+        "can be driven into"
+      )
+
+    ipg_installed = ipg_is_fitted(arm_type or 0, node_names or [])
+    self.configuration = DeviceConfiguration(
+      num_channels=len(tip_presence), arm_type=arm_type or 0, ipg_installed=ipg_installed
+    )
     self.pipettes = pipettes
+    self.ipg = (self.ipg or Ipg(self)) if ipg_installed else None
     return tip_presence
 
   async def initialize(self, tip_presence: Optional[List[bool]] = None) -> None:
-    """Bring the arm and the channels up, doing nothing for what already is. Moves the machine.
+    """Bring the arm, the IPG and the channels up, doing nothing for what already is. Moves the
+    machine.
 
-    The arm is pre-initialized if it reports itself down, then the channels are initialized if
-    they report themselves down or carry a tip, which they discard.
+    The arm comes first, because the IPG and the channels refuse to initialize before the arm has
+    (the machine answers error 16). If an IPG is fitted, setup refuses before anything moves if it
+    holds a plate. After the arm, the IPG is initialized if it reports itself down and parked if
+    it is not parked, and only then do the channels move: they are initialized if they report
+    themselves down or carry a tip, which they discard.
 
     Args:
       tip_presence: which channels carry a tip, as `discover` read it. If None, it is read again.
 
     Raises:
-      RuntimeError: If the machine has not been discovered.
+      RuntimeError: If the machine has not been discovered, or the IPG holds a plate. Nothing
+        has moved then.
     """
     if self.pipettes is None:
       raise RuntimeError("the channels are found by `discover`, which has not run")
+    if self.ipg is not None and await self.ipg.request_plate_presence():
+      raise RuntimeError(
+        "the IPG holds a plate, so the machine is not set up: bringing it up would move the "
+        "plate. Take the plate out of the gripper first"
+      )
     if not await self.request_arm_initialization_status():
       await self.pre_initialize_arm()
+    if self.ipg is not None:
+      if not await self.ipg.request_initialization_status():
+        await self.ipg.initialize()
+      if not await self.ipg.request_parking_status():
+        await self.ipg.park()
     if tip_presence is None:
       tip_presence = await self.pipettes.request_tip_presence()
     if not await self.pipettes.request_initialization_status() or any(tip_presence):
@@ -509,6 +555,16 @@ class VantageDriver:
     """
     resp = await self.send_command(module="A1AM", command="QW", fmt={"qw": "int"})
     return bool(resp["qw"] == 1)
+
+  async def request_arm_type(self) -> int:
+    """Which arm the machine has: the arm type, as the arm module reports it."""
+    resp = await self.send_command(module="A1AM", command="QU", fmt={"kt": "int"})
+    return int(resp["kt"])
+
+  async def request_node_names(self) -> List[str]:
+    """The names of the modules the arm has stored, in installation order. The IPG is `R0`."""
+    resp = await self.send_command(module="A1AM", command="QN", fmt={"xn": "str"})
+    return str(resp["xn"]).split()
 
   async def pre_initialize_arm(self) -> None:
     """Initialize the arm module. Moves the arm."""

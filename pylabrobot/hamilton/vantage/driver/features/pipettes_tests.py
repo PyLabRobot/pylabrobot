@@ -89,7 +89,7 @@ class TestQueries(PipettesTestCase):
     tips = await self.pipettes.request_tip_presence()
     self.assertEqual(tips, [True, False, False, True, False, False, False, False])
     self.assertTrue(all(isinstance(tip, bool) for tip in tips))
-    self.assertEqual(self.io.written, ["A1PMQAid0002"])
+    self.assertEqual([without_id(command) for command in self.io.written], ["A1PMQA"])
 
   async def test_the_initialization_status_is_true_only_for_1(self):
     self.io.answers = machine(channels_initialized=True)
