@@ -58,7 +58,8 @@ class StartupSerial:
 
   async def stop(self) -> None:
     """Record which session was closed."""
-    self.events.append(("close", self.baudrate))
+    if self.is_open:
+      self.events.append(("close", self.baudrate))
     self.is_open = False
 
   async def write(self, data: bytes) -> None:
@@ -248,7 +249,127 @@ class TestFilterMaxStartup(unittest.IsolatedAsyncioTestCase):
     await driver.setup()
     with self.assertRaises(FilterMaxTimeoutError):
       await driver._command("ABS 0 1 450 1 8 1 1 0 0 0 0 0 4 1 1 0 O e INFO")
-    self.assertEqual(io.events, [("open", 38400)])
+    self.assertEqual(io.events, [("open", 38400), ("close", 38400)])
     self.assertEqual(io.writes[-1], (38400, bytes((ENQ,))))
     self.assertEqual(sum(data == bytes((ENQ,)) for _, data in io.writes), 2)
     await driver.stop()
+
+  async def test_transport_fault_invalidates_connection_and_blocks_followup(self) -> None:
+    """Incomplete transactions must close and block writes, including leftover EOT."""
+    corrupt = bytearray(build_frame("+ 25"))
+    corrupt[-4:-2] = b"00"
+    cases = (
+      ("checksum", bytes((ACK, ACK, ENQ)) + corrupt + bytes((EOT,)), FilterMaxChecksumError),
+      (
+        "frame number",
+        bytes((ACK, ACK, ENQ)) + build_frame("+ 25", 2) + bytes((EOT,)),
+        FilterMaxProtocolError,
+      ),
+      ("early EOT", bytes((ACK, ACK, ENQ, EOT)), FilterMaxProtocolError),
+      ("missing EOT", bytes((ACK, ACK, ENQ)) + build_frame("+ 25"), FilterMaxTimeoutError),
+      ("partial frame", bytes((ACK, ACK, ENQ, 2, 49)), FilterMaxTimeoutError),
+      ("handshake byte", b"\x15", FilterMaxProtocolError),
+      ("read error", OSError("Disconnected"), OSError),
+    )
+    for label, reply, error_type in cases:
+      with self.subTest(case=label):
+        driver, io = self.make_driver({38400: exchange_response(IDENTITY)})
+        await driver.setup()
+        if isinstance(reply, BaseException):
+          io.failure = reply
+        else:
+          io.incoming = bytearray(reply)
+        with self.assertRaises(error_type):
+          await driver.get_temperature()
+        self.assertFalse(driver._setup_complete)
+        self.assertIsNone(driver._instrument_info)
+        self.assertFalse(io.is_open)
+        if label == "checksum":
+          self.assertEqual(io.incoming, bytes((EOT,)))
+        writes = list(io.writes)
+        with self.assertRaisesRegex(FilterMaxProtocolError, "setup"):
+          await driver.get_temperature()
+        self.assertEqual(io.writes, writes)
+        self.assertFalse(driver._operation_lock.locked())
+
+  async def test_explicit_setup_reconnects_after_fault(self) -> None:
+    """Only explicit setup opens a fresh stream and verifies identity after failure."""
+    driver, io = self.make_driver({38400: exchange_response(IDENTITY)})
+    await driver.setup()
+    io.incoming = bytearray((ACK, ACK, ENQ, EOT))
+    with self.assertRaises(FilterMaxProtocolError):
+      await driver.get_temperature()
+    io.responses = {38400: exchange_response(IDENTITY) + exchange_response("+ 26")}
+    await driver.setup()
+    self.assertTrue(driver._setup_complete)
+    self.assertEqual(await driver.get_temperature(), 26)
+    self.assertEqual(io.events, [("open", 38400), ("close", 38400), ("open", 38400)])
+
+  async def test_failed_reconnect_after_fault_does_not_restore_connection(self) -> None:
+    """A bad identity on reopening cannot make stale state usable."""
+    driver, io = self.make_driver({38400: exchange_response(IDENTITY)})
+    await driver.setup()
+    io.incoming = bytearray((ACK, ACK, ENQ, EOT))
+    with self.assertRaises(FilterMaxProtocolError):
+      await driver.get_temperature()
+    io.responses = {38400: exchange_response("+ invalid")}
+    with self.assertRaises(FilterMaxProtocolError):
+      await driver.setup()
+    self.assertFalse(driver._setup_complete)
+    self.assertIsNone(driver._instrument_info)
+    self.assertFalse(io.is_open)
+    writes = list(io.writes)
+    with self.assertRaisesRegex(FilterMaxProtocolError, "setup"):
+      await driver.get_temperature()
+    self.assertEqual(io.writes, writes)
+
+  async def test_close_failure_preserves_original_protocol_error(self) -> None:
+    """Failure to close cannot replace the cause or permit further transmissions."""
+    driver, io = self.make_driver({38400: exchange_response(IDENTITY)})
+    await driver.setup()
+    io.incoming = bytearray((ACK, ACK, ENQ, EOT))
+    with patch.object(io, "stop", AsyncMock(side_effect=OSError("Close failed"))):
+      with self.assertRaisesRegex(FilterMaxProtocolError, "before a final ETX"):
+        await driver.get_temperature()
+    self.assertFalse(driver._setup_complete)
+    writes = list(io.writes)
+    with self.assertRaisesRegex(FilterMaxProtocolError, "setup"):
+      await driver.get_temperature()
+    self.assertEqual(io.writes, writes)
+
+    io.responses = {38400: exchange_response(IDENTITY)}
+    await driver.setup()
+    self.assertTrue(driver._setup_complete)
+    self.assertTrue(io.is_open)
+
+  async def test_write_error_after_setup_invalidates_connection(self) -> None:
+    """An interrupted write cannot leave the established session usable."""
+    driver, io = self.make_driver({38400: exchange_response(IDENTITY)})
+    await driver.setup()
+    with patch.object(io, "write", AsyncMock(side_effect=OSError("Write failed"))):
+      with self.assertRaisesRegex(OSError, "Write failed"):
+        await driver.get_temperature()
+    self.assertFalse(driver._setup_complete)
+    self.assertFalse(io.is_open)
+
+  async def test_fully_received_errors_keep_connection_usable(self) -> None:
+    """Firmware errors and malformed values do not imply lost frame boundaries."""
+    for reply, error_type in (
+      ("- E62: fault", FilterMaxDeviceError),
+      ("- E140: ", FilterMaxDeviceError),
+      ("+ invalid", FilterMaxProtocolError),
+    ):
+      with self.subTest(reply=reply):
+        driver, io = self.make_driver(
+          {
+            38400: exchange_response(IDENTITY)
+            + exchange_response(reply)
+            + exchange_response("+ 26")
+          }
+        )
+        await driver.setup()
+        with self.assertRaises(error_type):
+          await driver.get_temperature()
+        self.assertTrue(driver._setup_complete)
+        self.assertTrue(io.is_open)
+        self.assertEqual(await driver.get_temperature(), 26)

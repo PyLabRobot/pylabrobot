@@ -281,8 +281,8 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(results[0], FilterMaxReadCancelled)
     self.assertEqual(host_payloads(io), ["SHAKE X 0 3 40 30", "STOP"])
 
-  async def test_recovery_errors_preserve_original_failure_and_release_waiters(self) -> None:
-    """STOP and tray faults are logged without replacing the malformed-response error."""
+  async def test_framing_failure_skips_recovery_and_releases_waiters(self) -> None:
+    """A malformed exchange cannot be followed by STOP, tray recovery, or queued queries."""
     from pylabrobot.molecular_devices.filtermax import FilterMaxProtocolError
 
     malformed = bytes((ACK, ACK, ENQ, EOT))
@@ -300,19 +300,77 @@ class TestFilterMaxOperations(unittest.IsolatedAsyncioTestCase):
     )
     await asyncio.wait_for(io.paused.wait(), 1)
     cancel = asyncio.create_task(reader.cancel_read())
+    query = asyncio.create_task(reader.get_temperature())
     await asyncio.sleep(0)
-    with self.assertLogs(
-      "pylabrobot.molecular_devices.filtermax.filtermax_f5", level="WARNING"
-    ) as log:
+    with self.assertLogs("pylabrobot.molecular_devices.filtermax.protocol", level="WARNING") as log:
       io.resume.set()
-      results = await asyncio.wait_for(asyncio.gather(read, cancel, return_exceptions=True), 2)
+      results = await asyncio.wait_for(
+        asyncio.gather(read, cancel, query, return_exceptions=True), 2
+      )
     self.assertIsInstance(results[0], FilterMaxProtocolError)
     self.assertIn("before a final ETX", str(results[0]))
     self.assertIsNone(results[1])
-    self.assertIn("STOP recovery failed", "\n".join(log.output))
-    self.assertIn("tray recovery failed", "\n".join(log.output))
-    self.assertEqual(host_payloads(io).count("STOP"), 1)
-    self.assertEqual(await reader.get_temperature(), 26)
+    self.assertIsInstance(results[2], FilterMaxProtocolError)
+    self.assertIn("setup", str(results[2]))
+    self.assertIn("reconnection", "\n".join(log.output))
+    self.assertNotIn("STOP", host_payloads(io))
+    self.assertNotIn("E P", host_payloads(io))
+    self.assertNotIn("TG", host_payloads(io))
+    self.assertTrue(io.stop_called)
+    self.assertFalse(reader._operation_lock.locked())
+    self.assertFalse(reader._pending_read)
+
+  async def test_checksum_failure_in_reads_and_shaking_invalidates_session(self) -> None:
+    """Streamed reads and standalone shakes use the same fault boundary as queries."""
+    from pylabrobot.molecular_devices.filtermax import FilterMaxChecksumError
+    from pylabrobot.molecular_devices.filtermax.tests.setup_tests import IDENTITY
+
+    corrupt = bytearray(build_frame(ROW))
+    corrupt[-4:-2] = b"00"
+    for mode in ("absorbance", "luminescence", "shake"):
+      with self.subTest(mode=mode):
+        prefix = b"" if mode == "shake" else PREPARATION
+        io = PausingSerial(
+          exchange_response(IDENTITY) + prefix + bytes((ACK, ACK, ENQ)) + corrupt + bytes((EOT,))
+        )
+        reader = self.make_driver(io)
+        await reader.setup()
+        with self.assertRaises(FilterMaxChecksumError):
+          if mode == "absorbance":
+            await reader.read_absorbance(self.plate, 450, read_height=10.27)
+          elif mode == "luminescence":
+            await reader.read_luminescence(self.plate)
+          else:
+            await reader.start_shaking("linear", "medium", 5)
+        self.assertTrue(io.stop_called)
+        self.assertFalse(reader._setup_complete)
+        self.assertIsNone(reader._instrument_info)
+        self.assertFalse(reader._pending_read)
+        self.assertFalse(reader._pending_shake)
+        self.assertNotIn("STOP", host_payloads(io))
+        self.assertNotIn("E P", host_payloads(io))
+        self.assertEqual(io.incoming, bytes((EOT,)))
+
+  async def test_fault_during_cancellation_stop_prevents_tray_recovery(self) -> None:
+    """Even a suppressed STOP failure invalidates the connection before read cleanup."""
+    prefix = PREPARATION + bytes((ACK, ACK))
+    io = PausingSerial(
+      prefix + bytes((ACK, ACK, ENQ, EOT)), pause_at=len(prefix), empty_on_resume=True
+    )
+    reader = self.make_driver(io)
+    read = asyncio.create_task(reader.read_luminescence(self.plate))
+    await asyncio.wait_for(io.paused.wait(), 1)
+    cancel = asyncio.create_task(reader.cancel_read())
+    await asyncio.sleep(0)
+    io.resume.set()
+    results = await asyncio.wait_for(asyncio.gather(read, cancel, return_exceptions=True), 2)
+    self.assertIsInstance(results[0], FilterMaxReadCancelled)
+    self.assertIsNone(results[1])
+    self.assertEqual(host_payloads(io)[-1], "STOP")
+    self.assertNotIn("E P", host_payloads(io))
+    self.assertTrue(io.stop_called)
+    self.assertFalse(reader._setup_complete)
+    self.assertFalse(reader._pending_read)
 
   async def test_idle_cancellation_does_not_transmit(self) -> None:
     """Repeated cancellation is idempotent when no operation is active."""

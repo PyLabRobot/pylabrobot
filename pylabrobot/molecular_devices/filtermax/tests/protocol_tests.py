@@ -22,6 +22,11 @@ class FakeSerial:
   def __init__(self, incoming: bytes):
     self.incoming = bytearray(incoming)
     self.writes: list[bytes] = []
+    self.closed = False
+
+  async def stop(self) -> None:
+    """Record transport closure without touching a physical serial port."""
+    self.closed = True
 
   async def write(self, data: bytes) -> None:
     self.writes.append(data)
@@ -112,9 +117,21 @@ class TestFilterMaxProtocol(unittest.IsolatedAsyncioTestCase):
     frame = bytearray(build_frame("+ READY"))
     frame[-4:-2] = b"00"
     incoming = bytes((ACK, ACK, ENQ)) + bytes(frame) + bytes((EOT,))
-    transport = FilterMaxTransport(FakeSerial(incoming))  # type: ignore[arg-type]
+    io = FakeSerial(incoming)
+    transport = FilterMaxTransport(io)  # type: ignore[arg-type]
     with self.assertRaises(FilterMaxChecksumError):
       await transport.exchange("STAT")
+    self.assertTrue(io.closed)
+    writes = list(io.writes)
+    for action in (
+      transport.exchange("TG"),
+      transport.send_request("STOP"),
+      transport.receive_message(),
+    ):
+      with self.assertRaisesRegex(FilterMaxProtocolError, "setup"):
+        await action
+    self.assertEqual(io.writes, writes)
+    self.assertEqual(io.incoming, bytes((EOT,)))
 
   async def test_bad_continuation_frame_number(self) -> None:
     incoming = (

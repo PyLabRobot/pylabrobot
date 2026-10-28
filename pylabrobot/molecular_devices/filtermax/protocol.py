@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import time
 from contextlib import asynccontextmanager
@@ -29,6 +30,7 @@ CR = 0x0D
 LF = 0x0A
 
 _ERROR_RE = re.compile(r"^- E(?P<code>\d+):\s*(?P<detail>.*)$", re.DOTALL)
+logger = logging.getLogger(__name__)
 
 
 class _CancelRequested(Exception):
@@ -69,11 +71,33 @@ class FilterMaxTransport:
     """Use one lock for each complete exchange or measurement stream."""
     self.io = io
     self._transaction_lock = asyncio.Lock()
+    self.faulted = False
+
+  def _require_usable(self) -> None:
+    """Reject reuse of a stream whose transaction boundaries have been lost."""
+    if self.faulted:
+      raise FilterMaxProtocolError("FilterMax connection is unusable; call setup() to reconnect")
+
+  @asynccontextmanager
+  async def _wire_step(self) -> AsyncIterator[None]:
+    """Close a failed stream without masking the original transport exception."""
+    self._require_usable()
+    try:
+      yield
+    except (FilterMaxProtocolError, OSError, asyncio.CancelledError):
+      self.faulted = True
+      logger.warning("FilterMax transport lost synchronization; reconnection is required")
+      try:
+        await self.io.stop()
+      except Exception:
+        logger.warning("Failed to close the faulted FilterMax connection", exc_info=True)
+      raise
 
   @asynccontextmanager
   async def _transaction(self) -> AsyncIterator[None]:
     """Own the wire until all replies, including a possible STOP reply, are consumed."""
     async with self._transaction_lock:
+      self._require_usable()
       yield
 
   async def _read_byte(
@@ -104,15 +128,17 @@ class FilterMaxTransport:
   async def send_request(self, payload: str, timeout: float = 5.0) -> None:
     """Send a request while the caller holds transaction ownership."""
 
-    deadline = time.monotonic() + timeout
-    await self.io.write(bytes((ENQ,)))
-    try:
+    frame = build_frame(payload)
+    async with self._wire_step():
+      deadline = time.monotonic() + timeout
+      await self.io.write(bytes((ENQ,)))
+      try:
+        await self._expect(ACK, deadline)
+      except FilterMaxTimeoutError as exc:
+        raise _HandshakeTimeout("Timed out waiting for ACK to the initial FilterMax ENQ") from exc
+      await self.io.write(frame)
       await self._expect(ACK, deadline)
-    except FilterMaxTimeoutError as exc:
-      raise _HandshakeTimeout("Timed out waiting for ACK to the initial FilterMax ENQ") from exc
-    await self.io.write(build_frame(payload))
-    await self._expect(ACK, deadline)
-    await self.io.write(bytes((EOT,)))
+      await self.io.write(bytes((EOT,)))
 
   async def _read_frame_after_stx(self, deadline: float) -> bytes:
     """Read a whole frame and validate its terminator and checksum."""
@@ -137,7 +163,7 @@ class FilterMaxTransport:
       )
     return bytes(frame)
 
-  async def receive_message(
+  async def _receive_message(
     self,
     timeout: float = 60.0,
     *,
@@ -177,7 +203,10 @@ class FilterMaxTransport:
         await self._expect(EOT, deadline)
         break
 
-    payload = b"".join(payload_parts).decode("ascii")
+    try:
+      payload = b"".join(payload_parts).decode("ascii")
+    except UnicodeDecodeError as exc:
+      raise FilterMaxProtocolError("FilterMax message contains non-ASCII data") from exc
     match = _ERROR_RE.match(payload)
     if match is not None:
       code = int(match.group("code"))
@@ -186,6 +215,17 @@ class FilterMaxTransport:
         raise FilterMaxReadCancelled(code, detail, command)
       raise FilterMaxDeviceError(code, detail, command)
     return FilterMaxMessage(payload=payload, frame_count=len(payload_parts))
+
+  async def receive_message(
+    self,
+    timeout: float = 60.0,
+    *,
+    command: str = "",
+    cancel_event: Optional[asyncio.Event] = None,
+  ) -> FilterMaxMessage:
+    """Receive under transaction ownership, invalidating incomplete exchanges."""
+    async with self._wire_step():
+      return await self._receive_message(timeout, command=command, cancel_event=cancel_event)
 
   async def exchange(
     self,

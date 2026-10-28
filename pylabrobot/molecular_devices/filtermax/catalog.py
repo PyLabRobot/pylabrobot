@@ -117,7 +117,9 @@ class FilterSlideCatalog:
     """Resolve a wavelength in nm to one compatible slide and one-based slot.
 
     Ambiguous matches require a slide ID or position; absent matches raise
-    FilterMaxFilterNotFoundError. Resolution does not query installed hardware.
+    FilterMaxFilterNotFoundError. Resolution does not query installed hardware or
+    establish that a measurement command can address the selected slot. The driver
+    rejects same-wavelength slots that the captured wire format cannot distinguish.
     """
     matches = [
       item

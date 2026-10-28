@@ -25,6 +25,18 @@ An unexpected byte, invalid identity, checksum error, device error, or timeout a
 ACK ends setup without another attempt. Failed setup releases the port; errors after connection
 do not trigger baud detection or command retries.
 
+A checksum, framing, transport timeout, or serial I/O failure invalidates the connection and
+closes the port. The original exception is preserved, including if closure fails. Subsequent
+and queued commands fail locally until an explicit `setup()` opens a fresh connection and
+verifies the instrument identity. A failed reconnect leaves the session unusable. No failed
+measurement is retried automatically, and reconnection does not establish that the instrument
+has stopped its previous physical operation.
+
+On a faulted connection, cleanup sends neither `STOP` nor tray-ejection commands. Pending-work
+flags are cleared as session bookkeeping only; they are not evidence of physical completion.
+Fully received firmware errors such as E62/E140, and malformed measurement values received
+in complete messages, do not by themselves imply lost synchronization.
+
 The SoftMax startup capture includes a silent probe at 38,400 baud, a successful identity exchange
 at 9,600 baud, and an acknowledged `BAUD 2` command before later communication at 38,400 baud.
 PLR supports both observed rates and does not send `BAUD` or change the reader's baud setting.
@@ -45,6 +57,8 @@ Only pending firmware work receives STOP; cancellation and recovery share that a
 STOP is not sent twice. Cancelling the Python task also waits for its owner's cleanup before
 propagating `asyncio.CancelledError`. Recovery errors are logged without replacing the original
 failure, and a successful read whose tray ejection fails reports that failure.
+These recovery actions require a synchronized connection; transport faults take precedence
+over cleanup and prevent any further transmission.
 
 The instrument does not emit a separate busy token in the captured operations. A command owns the
 half-duplex transaction until its response arrives. Long reads return one or more framed result
@@ -81,6 +95,22 @@ containing definitions for excitation slides 1 and 2 and emission slide 1. The
 the catalog to `FilterMaxF5(filter_slide_catalog=...)`. For absorbance, excitation slide 2 has
 260 nm at position 1 and 450 nm at position 4. Use a catalog that matches the physical filters
 installed in the reader; the example is not a universal FilterMax configuration.
+
+Catalog resolution is a local lookup, not a command to select a physical slot. The captured
+`ABS` and `LUM` commands identify filters by wavelength. Each requested wavelength must occur
+exactly once on the selected slide, regardless of bandwidth or technique flags. Supplying
+`filter_position` or `reference_filter_position` does not enable selection between duplicate
+wavelengths; those requests raise `FilterMaxUnsupportedOperationError` before any serial write.
+This includes multiple zero-wavelength entries for luminescence. Unique wavelengths on a
+selected slide remain supported even when another slide contains the same wavelength.
+
+The captured `SF` format encodes slots through consecutive wavelength/bandwidth/technique
+triples. A slide can be transmitted only if its positions are exactly `1..N`; gaps, duplicate
+positions, or nonpositive positions raise `FilterMaxCatalogError`. Measurement preflight checks
+this before querying the reader, configuring the plate, shaking, or moving the tray. No gaps
+are filled and no positions are renumbered. XML import preserves sparse definitions for local
+inspection: the example's excitation slide 1 has positions `1,2,3,5`, while the contiguous
+excitation slide 2 and emission slide 1 remain usable for the supported measurements.
 
 The live-optimized Costar 96-well clear landscape geometry was sent as:
 

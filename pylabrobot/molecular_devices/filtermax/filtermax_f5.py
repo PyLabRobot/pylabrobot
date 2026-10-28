@@ -7,7 +7,20 @@ import logging
 import math
 import re
 import time
-from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional, Sequence, Tuple, TypeVar
+from contextlib import asynccontextmanager
+from typing import (
+  Any,
+  AsyncIterator,
+  Callable,
+  Coroutine,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+  TypeVar,
+)
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, Well
@@ -27,6 +40,7 @@ from .models import (
   AbsorbanceResult,
   FilterKind,
   FilterMaxStatus,
+  FilterSelection,
   FluorescencePolarizationResult,
   FluorescenceResult,
   InstalledFilterSlides,
@@ -108,10 +122,25 @@ class FilterMaxF5:
     self._instrument_info: Optional[InstrumentInfo] = None
     self._errors: List[FilterMaxDeviceError] = []
 
+  @asynccontextmanager
+  async def _transaction(self) -> AsyncIterator[None]:
+    """Own the transport and invalidate driver state before releasing a faulted session."""
+    try:
+      async with self._transport._transaction():
+        yield
+    finally:
+      if self._transport.faulted:
+        self._setup_complete = False
+        self._instrument_info = None
+        self._pending_read = False
+        self._pending_shake = False
+
   async def _command(self, payload: str, timeout: float = 60.0) -> str:
     """Exchange one command and record firmware errors for this session."""
     try:
-      return (await self._transport.exchange(payload, timeout)).payload
+      async with self._transaction():
+        await self._transport.send_request(payload)
+        return (await self._transport.receive_message(timeout, command=payload)).payload
     except FilterMaxDeviceError as error:
       self._errors.append(error)
       logger.error("[%s] FilterMax command failed: %s", self.name, error)
@@ -164,9 +193,14 @@ class FilterMaxF5:
       return
     self._instrument_info = None
     for baudrate in _STARTUP_BAUDRATES:
+      if self._transport.faulted:
+        # A prior close may have failed; confirm closure before opening a fresh stream.
+        await self.io.stop()
+      self._transport.faulted = True
       self.io.baudrate = baudrate
       logger.info("[%s] connecting to %s at %d baud", self.name, self.port, baudrate)
       await self.io.setup()
+      self._transport = FilterMaxTransport(self.io)
       try:
         self._check_cancelled()
         info = await self._get_instrument_info()
@@ -177,7 +211,6 @@ class FilterMaxF5:
             f"{info.model!r} / {info.device_code}"
           )
       except _HandshakeTimeout as exc:
-        await self.io.stop()
         logger.info("[%s] no initial handshake response at %d baud", self.name, baudrate)
         if baudrate == _STARTUP_BAUDRATES[-1]:
           attempted = ", ".join(str(rate) for rate in _STARTUP_BAUDRATES)
@@ -187,7 +220,12 @@ class FilterMaxF5:
           ) from exc
         continue
       except BaseException:
-        await self.io.stop()
+        if not self._transport.faulted:
+          self._transport.faulted = True
+          try:
+            await self.io.stop()
+          except Exception:
+            logger.warning("[%s] failed to close after setup failure", self.name, exc_info=True)
         raise
       self._instrument_info = info
       self._setup_complete = True
@@ -202,8 +240,12 @@ class FilterMaxF5:
 
   async def _stop(self) -> None:
     """Close the serial connection while holding operation ownership."""
-    await self.io.stop()
-    self._setup_complete = False
+    try:
+      await self.io.stop()
+    finally:
+      self._setup_complete = False
+      self._instrument_info = None
+      self._transport.faulted = True
     logger.info("[%s] disconnected", self.name)
 
   async def _get_status(self) -> FilterMaxStatus:
@@ -295,7 +337,7 @@ class FilterMaxF5:
 
   async def _recover_failed_read(self) -> None:
     """Stop pending firmware work without competing with another transaction."""
-    async with self._transport._transaction():
+    async with self._transaction():
       await self._stop_pending_unlocked()
 
   async def _receive_measurement_messages(
@@ -309,7 +351,7 @@ class FilterMaxF5:
   ) -> List[FilterMaxMessage]:
     """Own a result stream and service cancellation between complete device messages."""
     self._check_cancelled()
-    async with self._transport._transaction():
+    async with self._transaction():
       if shaking:
         self._pending_shake = True
       else:
@@ -468,17 +510,34 @@ class FilterMaxF5:
     )
     return "PLATE Temp " + " ".join(str(value) for value in values)
 
-  async def _send_filter_catalog(self, kind: FilterKind, slide_id: int) -> None:
-    """Send the installed slide definitions under operation ownership."""
+  def _filter_catalog_command(self, kind: FilterKind, slide_id: int) -> str:
+    """Serialize a slide only when consecutive triples preserve its physical slots."""
     catalog = self._require_catalog()
     filters = catalog.filters_for_slide(kind, slide_id)
     if not filters:
       raise FilterMaxCatalogError(f"Catalog has no {kind} slide ID {slide_id}")
+    positions = tuple(item.position for item in filters)
+    if positions != tuple(range(1, len(filters) + 1)):
+      raise FilterMaxCatalogError(
+        f"{kind.title()} slide {slide_id} has positions {positions}; "
+        "SF requires consecutive positions starting at 1. Sparse-slot encoding is unsupported."
+      )
     code = "A" if kind == "excitation" else "B"
     fields = [f"SF {code}", str(slide_id)]
     for item in filters:
       fields.extend((str(item.wavelength), str(item.bandwidth), str(item.apply_to)))
-    await self._command(" ".join(fields), timeout=10)
+    return " ".join(fields)
+
+  def _validate_filter_selection(self, selection: FilterSelection) -> None:
+    """Reject slot choices that the wavelength-only measurement payload cannot encode."""
+    filters = self._require_catalog().filters_for_slide(selection.kind, selection.slide_id)
+    matches = [item.position for item in filters if item.wavelength == selection.wavelength]
+    if len(matches) > 1:
+      raise FilterMaxUnsupportedOperationError(
+        f"{selection.kind.title()} slide {selection.slide_id}: {selection.wavelength} nm "
+        f"occurs at slots {matches}. Slot-specific selection is unsupported by the captured "
+        "measurement commands, even with filter_position."
+      )
 
   @staticmethod
   def _row_name(index: int) -> str:
@@ -520,11 +579,15 @@ class FilterMaxF5:
 
   async def _finish_read(self, *, failed: bool) -> None:
     """Recover and eject, preserving an original read failure if cleanup also fails."""
+    if self._transport.faulted:
+      return
     if failed:
       try:
         await self._recover_failed_read()
       except Exception:
         logger.warning("[%s] FilterMax STOP recovery failed", self.name, exc_info=True)
+    if self._transport.faulted:
+      return
     try:
       await self._move_plate_tray_out()
     except Exception:
@@ -547,6 +610,7 @@ class FilterMaxF5:
   async def _prepare_measurement(
     self,
     plate_command: str,
+    filter_command: str,
     *,
     kind: FilterKind,
     slide_id: int,
@@ -576,7 +640,7 @@ class FilterMaxF5:
     if orientation == "portrait":
       await self._command("SHIFT", timeout=10)
       self._check_cancelled()
-    await self._send_filter_catalog(kind, slide_id)
+    await self._command(filter_command, timeout=10)
     self._check_cancelled()
     await self._move_plate_tray_in()
     self._check_cancelled()
@@ -637,6 +701,10 @@ class FilterMaxF5:
       )
     else:
       reference = None
+    filter_command = self._filter_catalog_command("excitation", primary.slide_id)
+    self._validate_filter_selection(primary)
+    if reference is not None:
+      self._validate_filter_selection(reference)
     selected_wells, first_row, last_row = self._normalize_wells(wells, plate)
     selected = set(selected_wells)
     row_count = last_row - first_row + 1
@@ -651,6 +719,7 @@ class FilterMaxF5:
     try:
       await self._prepare_measurement(
         plate_command,
+        filter_command,
         kind="excitation",
         slide_id=primary.slide_id,
         orientation=orientation,
@@ -779,6 +848,8 @@ class FilterMaxF5:
       slide_id=slide_id,
       position=filter_position,
     )
+    filter_command = self._filter_catalog_command("emission", lum_filter.slide_id)
+    self._validate_filter_selection(lum_filter)
     selected_wells, first_row, last_row = self._normalize_wells(wells, plate)
     selected = set(selected_wells)
     row_count = last_row - first_row + 1
@@ -790,6 +861,7 @@ class FilterMaxF5:
     try:
       await self._prepare_measurement(
         plate_command,
+        filter_command,
         kind="emission",
         slide_id=lum_filter.slide_id,
         orientation=orientation,
@@ -1020,7 +1092,8 @@ class FilterMaxF5:
     """Connect and verify the F5 identity, queuing behind any active operation.
 
     Try 38,400 baud, then 9,600 only if the initial handshake is silent.
-    Repeated setup keeps the current connection; failed setup releases the port."""
+    Repeated setup keeps a healthy connection. After a transport failure, setup
+    opens a fresh connection and verifies identity; it never retries a failed read."""
     return await self._run_operation(self._setup)
 
   async def get_instrument_info(self) -> InstrumentInfo:
@@ -1105,8 +1178,12 @@ class FilterMaxF5:
     Each result contains row-major optical densities, with unselected wells set to None.
     Hardware reads complete rows; wells only masks the returned data. A reference
     wavelength requests firmware subtraction. Scan values retain integer grid indices.
+    The selected slide must have consecutive one-based slots. Primary and reference
+    wavelengths must each occur once on that slide, even when a filter position is supplied.
     Kinetic elapsed_time follows the nominal schedule even when cycles overrun.
-    Cancellation raises FilterMaxReadCancelled after STOP and tray recovery are attempted."""
+    Cancellation raises FilterMaxReadCancelled after STOP and tray recovery are attempted.
+    Transport failures close the connection and skip further recovery commands; call setup()
+    explicitly to reconnect before further operations."""
     return await self._run_operation(
       lambda: self._read_absorbance(
         plate,
@@ -1146,8 +1223,12 @@ class FilterMaxF5:
     integration and kinetic intervals are seconds; read_height is in mm. Results
     contain row-major raw RLU and one-based channels, ordered by cycle then channel.
     Hardware reads complete rows; unselected wells are None in the returned data.
+    The selected slide must have consecutive one-based slots and a unique zero-wavelength
+    entry. filter_position validates that entry; it cannot distinguish multiple open slots.
     Kinetic elapsed_time follows the nominal schedule even when cycles overrun.
-    Cancellation raises FilterMaxReadCancelled after STOP and tray recovery are attempted."""
+    Cancellation raises FilterMaxReadCancelled after STOP and tray recovery are attempted.
+    Transport failures close the connection and skip further recovery commands; call setup()
+    explicitly to reconnect before further operations."""
     return await self._run_operation(
       lambda: self._read_luminescence(
         plate,

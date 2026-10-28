@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -110,6 +111,128 @@ class TestFilterMaxF5(unittest.IsolatedAsyncioTestCase):
     driver.io = io  # type: ignore[assignment]
     driver._transport = FilterMaxTransport(io)  # type: ignore[arg-type]
     return driver, io
+
+  async def test_duplicate_wavelength_slots_are_rejected_before_io(self) -> None:
+    """A slot lookup cannot distinguish same-wavelength filters in a read command."""
+    for position in (3, 4):
+      for reference in (False, True):
+        with self.subTest(position=position, reference=reference):
+          reader, io = self.make_driver(b"")
+          reader.filter_slide_catalog = FilterSlideCatalog(
+            tuple(
+              replace(item, wavelength=450, bandwidth=20)
+              if item.kind == "excitation" and item.slide_id == 2 and item.position == 3
+              else item
+              for item in self.catalog.filters
+            )
+          )
+          with self.assertRaisesRegex(FilterMaxUnsupportedOperationError, "450.*3.*4"):
+            await reader.read_absorbance(
+              self.plate,
+              260 if reference else 450,
+              read_height=10.27,
+              filter_position=None if reference else position,
+              reference_wavelength=450 if reference else None,
+              reference_filter_position=position if reference else None,
+            )
+          self.assertEqual(io.writes, [])
+
+  async def test_duplicate_luminescence_open_positions_are_rejected_before_io(self) -> None:
+    """Two open positions cannot be selected independently with LUM's zero wavelength."""
+    reader, io = self.make_driver(b"")
+    open_filter = self.catalog.filters_for_slide("emission", 1)[-1]
+    reader.filter_slide_catalog = FilterSlideCatalog(
+      self.catalog.filters + (replace(open_filter, position=7),)
+    )
+    with self.assertRaises(FilterMaxUnsupportedOperationError):
+      await reader.read_luminescence(self.plate, filter_position=6)
+    self.assertEqual(io.writes, [])
+
+  async def test_same_wavelength_with_other_technique_is_not_assumed_selectable(self) -> None:
+    """The wire selection must not depend on unverified firmware technique filtering."""
+    reader, io = self.make_driver(b"")
+    reader.filter_slide_catalog = FilterSlideCatalog(
+      tuple(
+        replace(item, wavelength=450, apply_to=2, techniques=frozenset(("fluorescence",)))
+        if item.kind == "excitation" and item.slide_id == 2 and item.position == 3
+        else item
+        for item in self.catalog.filters
+      )
+    )
+    with self.assertRaises(FilterMaxUnsupportedOperationError):
+      await reader.read_absorbance(self.plate, 450, filter_position=4, read_height=10.27)
+    self.assertEqual(io.writes, [])
+
+  async def test_invalid_slide_positions_are_rejected_before_io(self) -> None:
+    """Neither XML gaps nor invalid hand-built slots may reach preparation or cleanup."""
+    from pylabrobot.molecular_devices.filtermax import ShakingSettings
+
+    for kind, slide in (("excitation", 2), ("emission", 1)):
+      for positions in ((1, 2, 3, 5), (2, 3), (0, 1), (-1, 1), (1, 1)):
+        with self.subTest(kind=kind, positions=positions):
+          reader, io = self.make_driver(b"")
+          source = self.catalog.filters_for_slide(kind, slide)[0]  # type: ignore[arg-type]
+          filters = tuple(
+            replace(
+              source,
+              position=position,
+              wavelength=(450 if kind == "excitation" else 0) if i == 0 else 300 + i,
+            )
+            for i, position in enumerate(positions)
+          )
+          if kind == "emission":
+            filters = tuple(
+              replace(item, apply_to=16, techniques=frozenset(("luminescence",)))
+              for item in filters
+            )
+          reader.filter_slide_catalog = FilterSlideCatalog(filters)
+          with self.assertRaises(FilterMaxCatalogError):
+            if kind == "excitation":
+              await reader.read_absorbance(
+                self.plate,
+                450,
+                read_height=10.27,
+                shaking=ShakingSettings("linear", "medium", 5),
+              )
+            else:
+              await reader.read_luminescence(self.plate)
+          self.assertEqual(io.writes, [])
+
+  def test_example_sparse_slide_cannot_be_serialized(self) -> None:
+    """Loading the real catalog preserves gaps; serializing that slide rejects them."""
+    reader, io = self.make_driver(b"")
+    self.assertEqual(
+      [item.position for item in self.catalog.filters_for_slide("excitation", 1)], [1, 2, 3, 5]
+    )
+    with self.assertRaises(FilterMaxCatalogError):
+      reader._filter_catalog_command("excitation", 1)
+    self.assertEqual(io.writes, [])
+
+  async def test_unique_position_and_unrelated_slides_keep_captured_commands(self) -> None:
+    """A selected slide is validated independently, including explicit unique positions."""
+    row = "+ " + " ".join("100" for _ in range(12))
+    incoming = (
+      b"".join(exchange_response(reply) for reply in ("+ 2 1", "+", "+", "+ -67"))
+      + measurement_response(row, "+ INFO")
+      + exchange_response("+ 25")
+      + exchange_response("+ 6512")
+    )
+    reader, io = self.make_driver(incoming)
+    reader.filter_slide_catalog = FilterSlideCatalog(
+      self.catalog.filters
+      + (replace(self.catalog.filters_for_slide("excitation", 2)[3], slide_id=3),)
+    )
+    result = await reader.read_absorbance(
+      self.plate,
+      450,
+      slide_id=2,
+      filter_position=4,
+      wells=[self.plate.get_well("A1")],
+      read_height=10.27,
+    )
+    self.assertEqual(result[0].data[0][0], 0.1)
+    self.assertIn("SF A 2 260 12 1 340 10 1 405 10 1 450 8 1 595 8 1 620 8 1", host_payloads(io))
+    self.assertIn("ABS 0 1 450 1 1 1 1 0 0 0 0 0 3 1 1 0 O e INFO", host_payloads(io))
 
   def test_library_plate_geometry_is_local_to_plate(self) -> None:
     """Use library well centers and depth, unaffected by deck placement."""
