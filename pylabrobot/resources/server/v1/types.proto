@@ -480,10 +480,9 @@ enum Problem {
   PROBLEM_NOT_IN_FRAME = 4;
   PROBLEM_WRONG_KIND = 5;
   PROBLEM_CANNOT_DROP_HERE = 6;
-  PROBLEM_LOCKED = 7;
-  PROBLEM_NO_HEIGHT_VOLUME_DATA = 8;
-  PROBLEM_OUTSIDE_HEIGHT_VOLUME_DATA = 9;
-  PROBLEM_OUT_OF_RANGE = 10;
+  PROBLEM_NO_HEIGHT_VOLUME_DATA = 7;
+  PROBLEM_OUTSIDE_HEIGHT_VOLUME_DATA = 8;
+  PROBLEM_OUT_OF_RANGE = 9;
   // Tracking: the model disagrees with what is asked or what was sensed.
   PROBLEM_NO_TIP = 20;
   PROBLEM_HAS_TIP = 21;
@@ -535,7 +534,6 @@ message Operation {
   string kind = 3;
   repeated OperationItem items = 4;
   google.protobuf.Timestamp created_at = 5;
-  string holder = 6;
 }
 
 // ============================================================================================

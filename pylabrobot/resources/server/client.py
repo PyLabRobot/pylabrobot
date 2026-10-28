@@ -7,10 +7,8 @@ anywhere else. A store's refusal arrives as the `ServerError` it raised, with it
 
 from __future__ import annotations
 
-import contextlib
-import datetime
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Dict, List, Optional, Sequence, TypeVar, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, TypeVar, Union
 
 from connectrpc.errors import ConnectError
 from connectrpc.request import RequestContext
@@ -71,6 +69,34 @@ class _Refusals:
       raise server_error(error) from error
 
 
+class _Headers:
+  """Sends the same headers with every call a client makes: its credentials."""
+
+  def __init__(self, headers: Mapping[str, str]):
+    self.headers = dict(headers)
+
+  async def intercept_unary(
+    self,
+    call_next: Callable[[REQ, RequestContext], Awaitable[RES]],
+    request: REQ,
+    ctx: RequestContext,
+    /,
+  ) -> RES:
+    ctx.request_headers.update(self.headers)
+    return await call_next(request, ctx)
+
+  async def intercept_server_stream(
+    self,
+    call_next: Callable[[REQ, RequestContext], AsyncIterator[RES]],
+    request: REQ,
+    ctx: RequestContext,
+    /,
+  ) -> AsyncIterator[RES]:
+    ctx.request_headers.update(self.headers)
+    async for response in call_next(request, ctx):
+      yield response
+
+
 class ResourceServer:
   """A resource store, in this process or served elsewhere: its command API, and its primitives.
 
@@ -80,19 +106,25 @@ class ResourceServer:
     commands: the `ResourceService`, everything PLR uses.
     primitives: the `ResourcePrimitivesService`, low-level changes.
     memory: the store itself, when it is served in this process.
-    lock_tokens: the locks this client holds, sent with every change it makes.
     client_events: whether handles emit `resource.assigned` and `resource.unassigned` for the
       changes they make; off while an `EventBridge` publishes them from the store's `Watch`.
   """
 
-  def __init__(self, address: str, http: Client, memory: Optional[MemoryStore] = None):
-    interceptors = [_Refusals()]
+  def __init__(
+    self,
+    address: str,
+    http: Client,
+    memory: Optional[MemoryStore] = None,
+    headers: Optional[Mapping[str, str]] = None,
+  ):
+    interceptors: List[Any] = [_Refusals()]
+    if headers:
+      interceptors.append(_Headers(headers))
     self.commands = ResourceServiceClient(address, http_client=http, interceptors=interceptors)
     self.primitives = ResourcePrimitivesServiceClient(
       address, http_client=http, interceptors=interceptors
     )
     self.memory = memory
-    self.lock_tokens: List[bytes] = []
     self.client_events = True
 
   @classmethod
@@ -103,9 +135,15 @@ class ResourceServer:
     return cls(_IN_PROCESS, http, memory)
 
   @classmethod
-  def connect(cls, url: str) -> ResourceServer:
-    """A store served at `url`, "http://127.0.0.1:8080" say."""
-    return cls(url, Client())
+  def connect(cls, url: str, headers: Optional[Mapping[str, str]] = None) -> ResourceServer:
+    """A store served at `url`, "http://127.0.0.1:8080" say.
+
+    Args:
+      headers: Sent with every call: the credentials the backend asks for,
+        `{"authorization": "Bearer ..."}` say. What a connection may see or change is the
+        backend's to decide.
+    """
+    return cls(url, Client(), headers=headers)
 
   async def close(self) -> None:
     await self.commands.close()
@@ -234,7 +272,7 @@ class ResourceServer:
     elif location is not None or track is not None or index is not None:
       raise ValueError("a location needs a parent")
     before = await handles.read_for_events(self, [parent.ref]) if parent is not None else None
-    create = spb.CreateResourcesRequest(lock_tokens=self.lock_tokens, resources=[request])
+    create = spb.CreateResourcesRequest(resources=[request])
     try:
       response = await self.commands.create_resources(create)
     except ServerError as refused:
@@ -332,34 +370,3 @@ class ResourceServer:
       spb.FindResourcesRequest(scope=parent.ref, filter=spb.ResourceFilter(names=[name]))
     )
     return next((node for node in found.nodes if node.parent_id == parent.id), None)
-
-  @contextlib.asynccontextmanager
-  async def lock(
-    self, resource: handles.Resource, holder: str, wait: Optional[float] = None
-  ) -> AsyncIterator[pb.ResourceRef]:
-    """Hold a lock on a resource and everything under it while the block runs; only this client
-    may change any of it meanwhile. Two machines in one lab can each be locked by their own
-    holder.
-
-    Args:
-      resource: What to lock: a machine, a deck, a lab.
-      holder: Who holds it, for people reading the lock: "star-01 protocol 42".
-      wait: How long to wait for overlapping locks to be released, in seconds; unset fails at
-        once.
-
-    Raises:
-      ServerError: Another holder has a lock on it, on what it is in, or on something under it,
-        and did not release it in time.
-    """
-    request = spb.AcquireLockRequest(resource=resource.ref, holder=holder)
-    if wait is not None:
-      request.wait.FromTimedelta(datetime.timedelta(seconds=wait))
-    lock = await self.commands.acquire_lock(request)
-    self.lock_tokens.append(lock.token)
-    try:
-      yield resource.ref
-    finally:
-      self.lock_tokens.remove(lock.token)
-      await self.commands.release_lock(
-        spb.ReleaseLockRequest(resource=resource.ref, token=lock.token)
-      )

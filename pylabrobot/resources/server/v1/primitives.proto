@@ -51,12 +51,11 @@ message ChangeGroup {
 }
 
 message ApplyChangesRequest {
-  repeated bytes lock_tokens = 1;
   // In order, all or none.
-  repeated ChangeGroup groups = 2;
+  repeated ChangeGroup groups = 1;
   // Stage them as an operation, one item per group, for `ResolveOperation`.
-  bool staged = 3;
-  OnTrackingProblem on_tracking_problem = 4;
+  bool staged = 2;
+  OnTrackingProblem on_tracking_problem = 3;
 }
 
 message ApplyChangesResponse {

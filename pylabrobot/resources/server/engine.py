@@ -1,6 +1,6 @@
 """What a store does, over a tree held in memory: every command the protocol names.
 
-`Engine` holds the tree, the models, the operations and the locks, and carries out each request
+`Engine` holds the tree, the models and the operations, and carries out each request
 all or none: a request that fails part way is undone before its error is raised. Every change it
 makes is recorded as an undo step, so a staged item rolls back by the same steps, and the store's
 committed view is the tree with every unresolved item's steps undone.
@@ -141,19 +141,14 @@ class _Operation:
   id: bytes
   root: Node
   kind: str
-  holder: str
   created_at: Timestamp
   items: List[Item]
-  # What its lock check covered when staged, checked again when it is resolved.
-  changed: List[Node] = field(default_factory=list)
-  moved: List[Node] = field(default_factory=list)
 
   def message(self) -> pb.Operation:
     return pb.Operation(
       id=self.id,
       root_id=self.root.id,
       kind=self.kind,
-      holder=self.holder,
       created_at=self.created_at,
       items=[
         pb.OperationItem(item=i, state=item.state, resolved_at=item.resolved_at)
@@ -248,7 +243,6 @@ class Engine:
     # The library's models are put in when first asked for.
     self.models: Dict[str, pb.ResourceModel] = {}
     self.parts: Dict[str, Part] = {}
-    self.locks: Dict[bytes, spb.Lock] = {}
     self.operations: Dict[bytes, _Operation] = {}
     self.revisions: Dict[bytes, int] = {}
     # Where each tool was taken from onto a shaft, to put it back.
@@ -557,103 +551,6 @@ class Engine:
       revision=self.revision,
     )
 
-  # -- locks -------------------------------------------------------------------------------------
-  #
-  # A lock is on a resource and everything under it. Two holders' locks never overlap, so the
-  # machines of one lab can be locked apart, and a move between two of them carries both tokens.
-
-  def _held(self) -> List[Tuple[Node, spb.Lock]]:
-    """Every lock, with the resource it is on; a lock on a resource since deleted is dropped."""
-    for gone in [i for i in self.locks if i not in self.nodes]:
-      del self.locks[gone]
-    return [(self.nodes[i], lock) for i, lock in self.locks.items()]
-
-  def lock_holder(self, node: Node) -> Optional[spb.Lock]:
-    """The lock on `node` or on what it is in; None when there is none."""
-    self._held()
-    current: Optional[Node] = node
-    while current is not None:
-      lock = self.locks.get(current.id)
-      if lock is not None:
-        return lock
-      current = current.parent
-    return None
-
-  def overlapping_lock(self, node: Node) -> Optional[Tuple[Node, spb.Lock]]:
-    """A lock a new one on `node` would overlap, with the resource it is on: one on `node`, on
-    what it is in, or on anything under it. None when there is none."""
-    for locked, lock in self._held():
-      if g.is_in_subtree_of(node, locked) or g.is_in_subtree_of(locked, node):
-        return locked, lock
-    return None
-
-  def acquire_lock(self, node: Node, holder: str) -> Optional[spb.Lock]:
-    """A lock on `node` and everything under it for `holder`, or None when it would overlap a lock
-    already held (see `overlapping_lock`)."""
-    if self.overlapping_lock(node) is not None:
-      return None
-    lock = spb.Lock(
-      token=uuid.uuid4().bytes, resource_id=node.id, holder=holder, acquired_at=_now()
-    )
-    self.locks[node.id] = lock
-    return lock
-
-  def release_lock(self, node: Node, token: bytes, force: bool) -> None:
-    """Release the lock on `node`; one with another token only when forced.
-
-    Raises:
-      ServerError: The lock on it has another token, and the release is not forced.
-    """
-    lock = self.locks.get(node.id)
-    if lock is None:
-      return
-    if lock.token != token and not force:
-      raise ServerError(
-        pb.PROBLEM_LOCKED, f"'{node.name}' is locked by {lock.holder}, not this token", node.name
-      )
-    del self.locks[node.id]
-
-  def check_locks(
-    self, nodes: Iterable[Node], tokens: Sequence[bytes], moved: Iterable[Node] = ()
-  ) -> None:
-    """Refuse a change inside a subtree another holder has locked.
-
-    Args:
-      nodes: What the change changes in place: a parent given a child, a container's volume.
-      tokens: The locks the caller holds.
-      moved: What the change moves or deletes, with everything under it: also refused when it
-        holds a subtree another holder has locked.
-
-    Raises:
-      ServerError: One of them is in another holder's locked subtree, or a moved one holds one.
-    """
-    held = [(locked, lock) for locked, lock in self._held() if lock.token not in tokens]
-    if not held:
-      return
-    moved = list(moved)
-    for node in [*nodes, *moved]:
-      for locked, lock in held:
-        if g.is_in_subtree_of(node, locked):
-          where = "is" if node is locked else f"is in '{locked.name}', which is"
-          raise ServerError(
-            pb.PROBLEM_LOCKED, f"'{node.name}' {where} locked by {lock.holder}", node.name
-          )
-    for node in moved:
-      for locked, lock in held:
-        if g.is_in_subtree_of(locked, node):
-          raise ServerError(
-            pb.PROBLEM_LOCKED,
-            f"'{node.name}' holds '{locked.name}', which is locked by {lock.holder}",
-            node.name,
-          )
-
-  def holder_of(self, tokens: Sequence[bytes]) -> str:
-    """Who holds the first of `tokens` that is a lock; empty when none is."""
-    for lock in self.locks.values():
-      if lock.token in tokens:
-        return lock.holder
-    return ""
-
   # -- models ------------------------------------------------------------------------------------
 
   def put_model(self, model: pb.ResourceModel) -> pb.ResourceModel:
@@ -754,7 +651,7 @@ class Engine:
 
   # -- building the tree -------------------------------------------------------------------------
 
-  def create(self, request: spb.CreateResource, tokens: Sequence[bytes]) -> Node:
+  def create(self, request: spb.CreateResource) -> Node:
     """Create a resource from a model or a definition, its grids' items made, and assign it where
     asked. A resource made from a model refers to the model's parts; one made from a definition
     has parts of its own.
@@ -787,17 +684,15 @@ class Engine:
       assign = pb.AssignChild()
       assign.CopyFrom(request.assign)
       assign.child.id = node.id
-      self.assign(assign, tokens, steps)
+      self.assign(assign, steps)
     return node
 
-  def delete(self, node: Node, tokens: Sequence[bytes]) -> None:
+  def delete(self, node: Node) -> None:
     """Take a resource and everything under it out of the store.
 
     Raises:
-      ServerError: It is locked by another holder, or holds what is, or it is in a stack growing in
-        z, under the top item.
+      ServerError: It is in a stack growing in z, under the top item.
     """
-    self.check_locks([], tokens, moved=[node])
     check_stack_top(node, "be deleted")
     self.remove(node, [])
 
@@ -1008,7 +903,7 @@ class Engine:
           child.name,
         )
 
-  def assign(self, request: pb.AssignChild, tokens: Sequence[bytes], steps: List[Step]) -> Node:
+  def assign(self, request: pb.AssignChild, steps: List[Step]) -> Node:
     """Put a resource into a parent: where asked, at a track, with no location, or where the
     parent seats it.
 
@@ -1017,7 +912,6 @@ class Engine:
         children and no location is given.
     """
     child, parent = self.resolve(request.child), self.resolve(request.parent)
-    self.check_locks([parent], tokens, moved=[child])
     self.check_assignment(child, parent)
     self.check_names_fit(child, parent)
     where = request.WhichOneof("where")
@@ -1061,7 +955,7 @@ class Engine:
     location = g.holder_child_location(holder, stack.children[0])
     self.set_attributes(stack, steps, lambda: stack.own.location.CopyFrom(to_vec3(location)))
 
-  def unassign(self, node: Node, tokens: Sequence[bytes], steps: List[Step]) -> None:
+  def unassign(self, node: Node, steps: List[Step]) -> None:
     """Take a resource out of its parent, to be a root with no location.
 
     Raises:
@@ -1070,7 +964,6 @@ class Engine:
     parent = node.parent
     if parent is None:
       return
-    self.check_locks([], tokens, moved=[node])
     check_stack_top(node, "be taken out")
     self.check_names_fit(node, None)
     self.move(node, None, None, None, steps)
@@ -1252,29 +1145,6 @@ class Engine:
       self.clear_trash(trash, steps)
       return [trash]
     raise ServerError(pb.PROBLEM_UNSPECIFIED, "an empty update")
-
-  def touched_by(self, update: spb.ResourceUpdate) -> List[Node]:
-    """The resources an update changes, for the lock check before it runs."""
-    which = update.WhichOneof("update")
-    if which == "rotation":
-      return [self.resolve(update.rotation.resource)]
-    if which == "metadata":
-      return [self.resolve(update.metadata.resource)]
-    if which == "barcode":
-      return [self.resolve(update.barcode.resource)]
-    if which == "tracking":
-      return [self.resolve(update.tracking.scope)]
-    if which == "volume":
-      return [self.resolve(update.volume.resource)]
-    if which == "tip_presence":
-      return [self.resolve(ref) for ref in update.tip_presence.spots]
-    if which == "preferred_pickup_location":
-      return [self.resolve(update.preferred_pickup_location.resource)]
-    if which == "display_model":
-      return [self.resolve(update.display_model.resource)]
-    if which == "clear_trash":
-      return [self.resolve(update.clear_trash.trash)]
-    return []
 
   # -- reading -----------------------------------------------------------------------------------
 
@@ -1484,38 +1354,16 @@ class Engine:
 
   # -- operations --------------------------------------------------------------------------------
 
-  def stage(
-    self,
-    root: Node,
-    kind: str,
-    holder: str,
-    items: List[Item],
-    changed: Sequence[Node] = (),
-    moved: Sequence[Node] = (),
-  ) -> _Operation:
-    """Keep staged items as one operation, under `root`, the root of the frame it was asked in.
-
-    Args:
-      changed: What it changes in place, and `moved`, what it moves; resolving it is checked
-        against the locks on them, as staging was.
-    """
-    op = _Operation(
-      id=uuid.uuid4().bytes,
-      root=root,
-      kind=kind,
-      holder=holder,
-      created_at=_now(),
-      items=items,
-      changed=list(changed),
-      moved=list(moved),
-    )
+  def stage(self, root: Node, kind: str, items: List[Item]) -> _Operation:
+    """Keep staged items as one operation, under `root`, the root of the frame it was asked in."""
+    op = _Operation(id=uuid.uuid4().bytes, root=root, kind=kind, created_at=_now(), items=items)
     self.operations[op.id] = op
     self._touched_operations[op.id] = op
     self._pending_index = None
     return op
 
   def resolve_operation(
-    self, operation_id: bytes, outcomes: Sequence[spb.ItemOutcome], tokens: Sequence[bytes]
+    self, operation_id: bytes, outcomes: Sequence[spb.ItemOutcome]
   ) -> _Operation:
     """Commit or roll back items of a staged operation.
 
@@ -1525,11 +1373,6 @@ class Engine:
     op = self.operations.get(operation_id)
     if op is None:
       raise ServerError(pb.PROBLEM_NOT_FOUND, f"no operation {operation_id.hex()}")
-    self.check_locks(
-      [n for n in op.changed if n.id in self.nodes],
-      tokens,
-      moved=[n for n in op.moved if n.id in self.nodes],
-    )
     for outcome in outcomes:
       if not 0 <= outcome.item < len(op.items):
         raise ServerError(pb.PROBLEM_OUT_OF_RANGE, f"operation has no item {outcome.item}")

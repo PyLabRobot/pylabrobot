@@ -74,16 +74,14 @@ class ChangeGroup(_message.Message):
     def __init__(self, changes: _Optional[_Iterable[_Union[Change, _Mapping]]] = ...) -> None: ...
 
 class ApplyChangesRequest(_message.Message):
-    __slots__ = ("lock_tokens", "groups", "staged", "on_tracking_problem")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("groups", "staged", "on_tracking_problem")
     GROUPS_FIELD_NUMBER: _ClassVar[int]
     STAGED_FIELD_NUMBER: _ClassVar[int]
     ON_TRACKING_PROBLEM_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     groups: _containers.RepeatedCompositeFieldContainer[ChangeGroup]
     staged: bool
     on_tracking_problem: _types_pb2.OnTrackingProblem
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., groups: _Optional[_Iterable[_Union[ChangeGroup, _Mapping]]] = ..., staged: _Optional[bool] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
+    def __init__(self, groups: _Optional[_Iterable[_Union[ChangeGroup, _Mapping]]] = ..., staged: _Optional[bool] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
 
 class ApplyChangesResponse(_message.Message):
     __slots__ = ("operation", "nodes", "issues", "revision")

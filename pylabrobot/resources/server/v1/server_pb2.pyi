@@ -1,6 +1,5 @@
 import datetime
 
-from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from pylabrobot.resources.server.v1 import types_pb2 as _types_pb2
 from google.protobuf.internal import containers as _containers
@@ -52,54 +51,6 @@ class ServerInfo(_message.Message):
     revision: int
     def __init__(self, api_version: _Optional[str] = ..., implementation: _Optional[str] = ..., implementation_version: _Optional[str] = ..., instance_id: _Optional[str] = ..., revision: _Optional[int] = ...) -> None: ...
 
-class Lock(_message.Message):
-    __slots__ = ("token", "resource_id", "holder", "acquired_at")
-    TOKEN_FIELD_NUMBER: _ClassVar[int]
-    RESOURCE_ID_FIELD_NUMBER: _ClassVar[int]
-    HOLDER_FIELD_NUMBER: _ClassVar[int]
-    ACQUIRED_AT_FIELD_NUMBER: _ClassVar[int]
-    token: bytes
-    resource_id: bytes
-    holder: str
-    acquired_at: _timestamp_pb2.Timestamp
-    def __init__(self, token: _Optional[bytes] = ..., resource_id: _Optional[bytes] = ..., holder: _Optional[str] = ..., acquired_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
-
-class AcquireLockRequest(_message.Message):
-    __slots__ = ("resource", "holder", "wait")
-    RESOURCE_FIELD_NUMBER: _ClassVar[int]
-    HOLDER_FIELD_NUMBER: _ClassVar[int]
-    WAIT_FIELD_NUMBER: _ClassVar[int]
-    resource: _types_pb2.ResourceRef
-    holder: str
-    wait: _duration_pb2.Duration
-    def __init__(self, resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., holder: _Optional[str] = ..., wait: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ...) -> None: ...
-
-class ReleaseLockRequest(_message.Message):
-    __slots__ = ("resource", "token", "force")
-    RESOURCE_FIELD_NUMBER: _ClassVar[int]
-    TOKEN_FIELD_NUMBER: _ClassVar[int]
-    FORCE_FIELD_NUMBER: _ClassVar[int]
-    resource: _types_pb2.ResourceRef
-    token: bytes
-    force: bool
-    def __init__(self, resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., token: _Optional[bytes] = ..., force: _Optional[bool] = ...) -> None: ...
-
-class ReleaseLockResponse(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
-
-class GetLockRequest(_message.Message):
-    __slots__ = ("resource",)
-    RESOURCE_FIELD_NUMBER: _ClassVar[int]
-    resource: _types_pb2.ResourceRef
-    def __init__(self, resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ...) -> None: ...
-
-class GetLockResponse(_message.Message):
-    __slots__ = ("lock",)
-    LOCK_FIELD_NUMBER: _ClassVar[int]
-    lock: Lock
-    def __init__(self, lock: _Optional[_Union[Lock, _Mapping]] = ...) -> None: ...
-
 class PutModelRequest(_message.Message):
     __slots__ = ("model",)
     MODEL_FIELD_NUMBER: _ClassVar[int]
@@ -143,12 +94,10 @@ class CreateResource(_message.Message):
     def __init__(self, model: _Optional[str] = ..., definition: _Optional[_Union[_types_pb2.ResourceDefinition, _Mapping]] = ..., name: _Optional[str] = ..., assign: _Optional[_Union[_types_pb2.AssignChild, _Mapping]] = ...) -> None: ...
 
 class CreateResourcesRequest(_message.Message):
-    __slots__ = ("lock_tokens", "resources")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("resources",)
     RESOURCES_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     resources: _containers.RepeatedCompositeFieldContainer[CreateResource]
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., resources: _Optional[_Iterable[_Union[CreateResource, _Mapping]]] = ...) -> None: ...
+    def __init__(self, resources: _Optional[_Iterable[_Union[CreateResource, _Mapping]]] = ...) -> None: ...
 
 class CreateResourcesResponse(_message.Message):
     __slots__ = ("nodes", "revision")
@@ -159,12 +108,10 @@ class CreateResourcesResponse(_message.Message):
     def __init__(self, nodes: _Optional[_Iterable[_Union[_types_pb2.ResourceNode, _Mapping]]] = ..., revision: _Optional[int] = ...) -> None: ...
 
 class DeleteResourcesRequest(_message.Message):
-    __slots__ = ("lock_tokens", "resources")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("resources",)
     RESOURCES_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     resources: _containers.RepeatedCompositeFieldContainer[_types_pb2.ResourceRef]
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., resources: _Optional[_Iterable[_Union[_types_pb2.ResourceRef, _Mapping]]] = ...) -> None: ...
+    def __init__(self, resources: _Optional[_Iterable[_Union[_types_pb2.ResourceRef, _Mapping]]] = ...) -> None: ...
 
 class DeleteResourcesResponse(_message.Message):
     __slots__ = ("revision",)
@@ -173,12 +120,10 @@ class DeleteResourcesResponse(_message.Message):
     def __init__(self, revision: _Optional[int] = ...) -> None: ...
 
 class AssignResourcesRequest(_message.Message):
-    __slots__ = ("lock_tokens", "assignments")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("assignments",)
     ASSIGNMENTS_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     assignments: _containers.RepeatedCompositeFieldContainer[_types_pb2.AssignChild]
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., assignments: _Optional[_Iterable[_Union[_types_pb2.AssignChild, _Mapping]]] = ...) -> None: ...
+    def __init__(self, assignments: _Optional[_Iterable[_Union[_types_pb2.AssignChild, _Mapping]]] = ...) -> None: ...
 
 class AssignResourcesResponse(_message.Message):
     __slots__ = ("nodes", "revision")
@@ -189,12 +134,10 @@ class AssignResourcesResponse(_message.Message):
     def __init__(self, nodes: _Optional[_Iterable[_Union[_types_pb2.ResourceNode, _Mapping]]] = ..., revision: _Optional[int] = ...) -> None: ...
 
 class UnassignResourcesRequest(_message.Message):
-    __slots__ = ("lock_tokens", "resources")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("resources",)
     RESOURCES_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     resources: _containers.RepeatedCompositeFieldContainer[_types_pb2.ResourceRef]
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., resources: _Optional[_Iterable[_Union[_types_pb2.ResourceRef, _Mapping]]] = ...) -> None: ...
+    def __init__(self, resources: _Optional[_Iterable[_Union[_types_pb2.ResourceRef, _Mapping]]] = ...) -> None: ...
 
 class UnassignResourcesResponse(_message.Message):
     __slots__ = ("nodes", "revision")
@@ -227,14 +170,12 @@ class ResourceUpdate(_message.Message):
     def __init__(self, rotation: _Optional[_Union[_types_pb2.RotationChange, _Mapping]] = ..., metadata: _Optional[_Union[_types_pb2.SetMetadata, _Mapping]] = ..., barcode: _Optional[_Union[_types_pb2.SetBarcode, _Mapping]] = ..., tracking: _Optional[_Union[_types_pb2.SetTracking, _Mapping]] = ..., volume: _Optional[_Union[_types_pb2.SetVolume, _Mapping]] = ..., tip_presence: _Optional[_Union[_types_pb2.SetTipPresence, _Mapping]] = ..., preferred_pickup_location: _Optional[_Union[_types_pb2.SetPreferredPickupLocation, _Mapping]] = ..., display_model: _Optional[_Union[_types_pb2.SetDisplayModel, _Mapping]] = ..., clear_trash: _Optional[_Union[_types_pb2.ClearTrash, _Mapping]] = ...) -> None: ...
 
 class UpdateResourcesRequest(_message.Message):
-    __slots__ = ("lock_tokens", "updates", "on_tracking_problem")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("updates", "on_tracking_problem")
     UPDATES_FIELD_NUMBER: _ClassVar[int]
     ON_TRACKING_PROBLEM_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     updates: _containers.RepeatedCompositeFieldContainer[ResourceUpdate]
     on_tracking_problem: _types_pb2.OnTrackingProblem
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., updates: _Optional[_Iterable[_Union[ResourceUpdate, _Mapping]]] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
+    def __init__(self, updates: _Optional[_Iterable[_Union[ResourceUpdate, _Mapping]]] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
 
 class UpdateResourcesResponse(_message.Message):
     __slots__ = ("nodes", "revision", "issues")
@@ -448,12 +389,10 @@ class DevicePosition(_message.Message):
     def __init__(self, resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., location: _Optional[_Union[_types_pb2.PartialVec3, _Mapping]] = ..., reference_point: _Optional[_Union[_types_pb2.Vec3, _Mapping]] = ..., rotation: _Optional[_Union[_types_pb2.RotationChange, _Mapping]] = ..., jaw_width: _Optional[float] = ..., drive_angles: _Optional[_Mapping[str, float]] = ...) -> None: ...
 
 class RecordDevicePositionsRequest(_message.Message):
-    __slots__ = ("lock_tokens", "positions")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("positions",)
     POSITIONS_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     positions: _containers.RepeatedCompositeFieldContainer[DevicePosition]
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., positions: _Optional[_Iterable[_Union[DevicePosition, _Mapping]]] = ...) -> None: ...
+    def __init__(self, positions: _Optional[_Iterable[_Union[DevicePosition, _Mapping]]] = ...) -> None: ...
 
 class RecordDevicePositionsResponse(_message.Message):
     __slots__ = ("nodes", "revision")
@@ -488,12 +427,10 @@ class MeasurementResult(_message.Message):
     def __init__(self, previous_volume: _Optional[float] = ..., volume: _Optional[float] = ..., issue: _Optional[_Union[_types_pb2.Issue, _Mapping]] = ...) -> None: ...
 
 class RecordMeasurementsRequest(_message.Message):
-    __slots__ = ("lock_tokens", "measurements")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("measurements",)
     MEASUREMENTS_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     measurements: _containers.RepeatedCompositeFieldContainer[Measurement]
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., measurements: _Optional[_Iterable[_Union[Measurement, _Mapping]]] = ...) -> None: ...
+    def __init__(self, measurements: _Optional[_Iterable[_Union[Measurement, _Mapping]]] = ...) -> None: ...
 
 class RecordMeasurementsResponse(_message.Message):
     __slots__ = ("results", "revision")
@@ -534,18 +471,16 @@ class ToolPickupItem(_message.Message):
     def __init__(self, source: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., shaft: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ...) -> None: ...
 
 class BeginToolPickupRequest(_message.Message):
-    __slots__ = ("lock_tokens", "frame", "items", "context_shafts", "on_tracking_problem")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("frame", "items", "context_shafts", "on_tracking_problem")
     FRAME_FIELD_NUMBER: _ClassVar[int]
     ITEMS_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_SHAFTS_FIELD_NUMBER: _ClassVar[int]
     ON_TRACKING_PROBLEM_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     frame: _types_pb2.ResourceRef
     items: _containers.RepeatedCompositeFieldContainer[ToolPickupItem]
     context_shafts: _containers.RepeatedCompositeFieldContainer[_types_pb2.ResourceRef]
     on_tracking_problem: _types_pb2.OnTrackingProblem
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., items: _Optional[_Iterable[_Union[ToolPickupItem, _Mapping]]] = ..., context_shafts: _Optional[_Iterable[_Union[_types_pb2.ResourceRef, _Mapping]]] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
+    def __init__(self, frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., items: _Optional[_Iterable[_Union[ToolPickupItem, _Mapping]]] = ..., context_shafts: _Optional[_Iterable[_Union[_types_pb2.ResourceRef, _Mapping]]] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
 
 class ToolPickupPlan(_message.Message):
     __slots__ = ("item", "tool", "source")
@@ -590,18 +525,16 @@ class ToolDropItem(_message.Message):
     def __init__(self, shaft: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., target: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., origin: _Optional[bool] = ...) -> None: ...
 
 class BeginToolDropRequest(_message.Message):
-    __slots__ = ("lock_tokens", "frame", "items", "context_shafts", "on_tracking_problem")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("frame", "items", "context_shafts", "on_tracking_problem")
     FRAME_FIELD_NUMBER: _ClassVar[int]
     ITEMS_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_SHAFTS_FIELD_NUMBER: _ClassVar[int]
     ON_TRACKING_PROBLEM_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     frame: _types_pb2.ResourceRef
     items: _containers.RepeatedCompositeFieldContainer[ToolDropItem]
     context_shafts: _containers.RepeatedCompositeFieldContainer[_types_pb2.ResourceRef]
     on_tracking_problem: _types_pb2.OnTrackingProblem
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., items: _Optional[_Iterable[_Union[ToolDropItem, _Mapping]]] = ..., context_shafts: _Optional[_Iterable[_Union[_types_pb2.ResourceRef, _Mapping]]] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
+    def __init__(self, frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., items: _Optional[_Iterable[_Union[ToolDropItem, _Mapping]]] = ..., context_shafts: _Optional[_Iterable[_Union[_types_pb2.ResourceRef, _Mapping]]] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
 
 class ToolDropPlan(_message.Message):
     __slots__ = ("item", "tool", "destination")
@@ -638,18 +571,16 @@ class TransferItem(_message.Message):
     def __init__(self, container: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., shaft: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., volume: _Optional[float] = ...) -> None: ...
 
 class BeginLiquidTransferRequest(_message.Message):
-    __slots__ = ("lock_tokens", "frame", "direction", "items", "on_tracking_problem")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("frame", "direction", "items", "on_tracking_problem")
     FRAME_FIELD_NUMBER: _ClassVar[int]
     DIRECTION_FIELD_NUMBER: _ClassVar[int]
     ITEMS_FIELD_NUMBER: _ClassVar[int]
     ON_TRACKING_PROBLEM_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     frame: _types_pb2.ResourceRef
     direction: TransferDirection
     items: _containers.RepeatedCompositeFieldContainer[TransferItem]
     on_tracking_problem: _types_pb2.OnTrackingProblem
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., direction: _Optional[_Union[TransferDirection, str]] = ..., items: _Optional[_Iterable[_Union[TransferItem, _Mapping]]] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
+    def __init__(self, frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., direction: _Optional[_Union[TransferDirection, str]] = ..., items: _Optional[_Iterable[_Union[TransferItem, _Mapping]]] = ..., on_tracking_problem: _Optional[_Union[_types_pb2.OnTrackingProblem, str]] = ...) -> None: ...
 
 class TransferPlan(_message.Message):
     __slots__ = ("item", "container", "tip")
@@ -682,18 +613,16 @@ class Grip(_message.Message):
     def __init__(self, distance_from_top: _Optional[float] = ..., distance_from_bottom: _Optional[float] = ...) -> None: ...
 
 class BeginResourcePickupRequest(_message.Message):
-    __slots__ = ("lock_tokens", "frame", "resource", "carrier", "grip")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("frame", "resource", "carrier", "grip")
     FRAME_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_FIELD_NUMBER: _ClassVar[int]
     CARRIER_FIELD_NUMBER: _ClassVar[int]
     GRIP_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     frame: _types_pb2.ResourceRef
     resource: _types_pb2.ResourceRef
     carrier: _types_pb2.ResourceRef
     grip: Grip
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., carrier: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., grip: _Optional[_Union[Grip, _Mapping]] = ...) -> None: ...
+    def __init__(self, frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., carrier: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., grip: _Optional[_Union[Grip, _Mapping]] = ...) -> None: ...
 
 class BeginResourcePickupResponse(_message.Message):
     __slots__ = ("operation", "resource", "pick_location", "grip_location", "grip_height", "absolute_size", "rotation_in_frame", "issues", "revision")
@@ -718,22 +647,20 @@ class BeginResourcePickupResponse(_message.Message):
     def __init__(self, operation: _Optional[_Union[_types_pb2.Operation, _Mapping]] = ..., resource: _Optional[_Union[_types_pb2.ResourceNode, _Mapping]] = ..., pick_location: _Optional[_Union[_types_pb2.Vec3, _Mapping]] = ..., grip_location: _Optional[_Union[_types_pb2.Vec3, _Mapping]] = ..., grip_height: _Optional[float] = ..., absolute_size: _Optional[_Union[_types_pb2.Vec3, _Mapping]] = ..., rotation_in_frame: _Optional[_Union[_types_pb2.Rotation, _Mapping]] = ..., issues: _Optional[_Iterable[_Union[_types_pb2.Issue, _Mapping]]] = ..., revision: _Optional[int] = ...) -> None: ...
 
 class BeginResourcePlaceRequest(_message.Message):
-    __slots__ = ("lock_tokens", "frame", "resource", "destination_resource", "destination_location", "rotation_applied_by_move", "grip")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("frame", "resource", "destination_resource", "destination_location", "rotation_applied_by_move", "grip")
     FRAME_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_FIELD_NUMBER: _ClassVar[int]
     DESTINATION_RESOURCE_FIELD_NUMBER: _ClassVar[int]
     DESTINATION_LOCATION_FIELD_NUMBER: _ClassVar[int]
     ROTATION_APPLIED_BY_MOVE_FIELD_NUMBER: _ClassVar[int]
     GRIP_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     frame: _types_pb2.ResourceRef
     resource: _types_pb2.ResourceRef
     destination_resource: _types_pb2.ResourceRef
     destination_location: _types_pb2.Vec3
     rotation_applied_by_move: float
     grip: Grip
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., destination_resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., destination_location: _Optional[_Union[_types_pb2.Vec3, _Mapping]] = ..., rotation_applied_by_move: _Optional[float] = ..., grip: _Optional[_Union[Grip, _Mapping]] = ...) -> None: ...
+    def __init__(self, frame: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., destination_resource: _Optional[_Union[_types_pb2.ResourceRef, _Mapping]] = ..., destination_location: _Optional[_Union[_types_pb2.Vec3, _Mapping]] = ..., rotation_applied_by_move: _Optional[float] = ..., grip: _Optional[_Union[Grip, _Mapping]] = ...) -> None: ...
 
 class BeginResourcePlaceResponse(_message.Message):
     __slots__ = ("operation", "destination", "place_location", "grip_location", "grip_height", "rotation_in_destination", "issues", "revision")
@@ -766,14 +693,12 @@ class ItemOutcome(_message.Message):
     def __init__(self, item: _Optional[int] = ..., succeeded: _Optional[bool] = ..., volume: _Optional[float] = ...) -> None: ...
 
 class ResolveOperationRequest(_message.Message):
-    __slots__ = ("lock_tokens", "operation_id", "outcomes")
-    LOCK_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("operation_id", "outcomes")
     OPERATION_ID_FIELD_NUMBER: _ClassVar[int]
     OUTCOMES_FIELD_NUMBER: _ClassVar[int]
-    lock_tokens: _containers.RepeatedScalarFieldContainer[bytes]
     operation_id: bytes
     outcomes: _containers.RepeatedCompositeFieldContainer[ItemOutcome]
-    def __init__(self, lock_tokens: _Optional[_Iterable[bytes]] = ..., operation_id: _Optional[bytes] = ..., outcomes: _Optional[_Iterable[_Union[ItemOutcome, _Mapping]]] = ...) -> None: ...
+    def __init__(self, operation_id: _Optional[bytes] = ..., outcomes: _Optional[_Iterable[_Union[ItemOutcome, _Mapping]]] = ...) -> None: ...
 
 class ResolveOperationResponse(_message.Message):
     __slots__ = ("operation", "nodes", "revision")

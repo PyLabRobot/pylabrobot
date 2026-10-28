@@ -22,7 +22,6 @@ from pylabrobot.resources.plate import Plate as PLRPlate
 from pylabrobot.resources.resource import Resource as PLRResource
 from pylabrobot.resources.server import build
 from pylabrobot.resources.server import handles as h
-from pylabrobot.resources.server.client import ResourceServer
 from pylabrobot.resources.server.definitions import kind_of
 from pylabrobot.resources.server.errors import ServerError
 from pylabrobot.resources.server.tests.server_tests import ROOT, ServerTestCase, build_deck
@@ -359,18 +358,6 @@ class ChangingTests(HandleTestCase):
     self.assertEqual(await plate.get_preferred_pickup_location(), Coordinate(63.88, 42.74, 5))
     await plate.set_preferred_pickup_location(None)
     self.assertIsNone(await plate.get_preferred_pickup_location())
-
-  async def test_a_locked_deck_refuses_other_clients(self):
-    other = ResourceServer.local(self.server.memory)
-    plate = await self.server.get("plate", root=self.deck)
-    theirs = await other.get("plate", root=ROOT)
-    async with self.server.lock(self.deck, holder="test"):
-      await plate.set_metadata({"mine": True})
-      with self.assertRaises(ServerError) as caught:
-        await theirs.set_metadata({"theirs": True})
-      self.assertEqual(caught.exception.problem, pb.PROBLEM_LOCKED)
-    await theirs.set_metadata({"theirs": True})
-    await other.close()
 
   async def test_a_device_builds_its_parts_from_definitions(self):
     body = build.resource(

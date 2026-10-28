@@ -316,7 +316,7 @@ class Resource:
       assignment.index = index
     before = await read_for_events(self.server, [child.ref, self.ref])
     response = await self.server.commands.assign_resources(
-      spb.AssignResourcesRequest(lock_tokens=self.server.lock_tokens, assignments=[assignment])
+      spb.AssignResourcesRequest(assignments=[assignment])
     )
     if before is not None:
       emit_unassigned(before, child.id)
@@ -338,22 +338,19 @@ class Resource:
     """Take it out of its parent; it becomes a root with no location."""
     before = await read_for_events(self.server, [self.ref])
     await self.server.commands.unassign_resources(
-      spb.UnassignResourcesRequest(lock_tokens=self.server.lock_tokens, resources=[self.ref])
+      spb.UnassignResourcesRequest(resources=[self.ref])
     )
     if before is not None:
       emit_unassigned(before, self.id)
 
   async def _update(self, *updates: spb.ResourceUpdate) -> None:
-    await self.server.commands.update_resources(
-      spb.UpdateResourcesRequest(lock_tokens=self.server.lock_tokens, updates=updates)
-    )
+    await self.server.commands.update_resources(spb.UpdateResourcesRequest(updates=updates))
 
   async def _set_volume(
     self, volume: float, on_tracking_problem: "pb.OnTrackingProblem"
   ) -> List[pb.Issue]:
     response = await self.server.commands.update_resources(
       spb.UpdateResourcesRequest(
-        lock_tokens=self.server.lock_tokens,
         updates=[spb.ResourceUpdate(volume=pb.SetVolume(resource=self.ref, volume=volume))],
         on_tracking_problem=on_tracking_problem,
       )
@@ -441,9 +438,7 @@ class Resource:
     """Remove it and everything under it from the store; leaving a parent, it emits
     `resource.unassigned`."""
     before = await read_for_events(self.server, [self.ref])
-    await self.server.commands.delete_resources(
-      spb.DeleteResourcesRequest(lock_tokens=self.server.lock_tokens, resources=[self.ref])
-    )
+    await self.server.commands.delete_resources(spb.DeleteResourcesRequest(resources=[self.ref]))
     if before is not None:
       emit_unassigned(before, self.id)
 

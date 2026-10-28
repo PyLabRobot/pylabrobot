@@ -13,7 +13,9 @@ import unittest
 import warnings
 from typing import List, Optional
 
-from google.protobuf.duration_pb2 import Duration
+
+from connectrpc.request import RequestContext
+from pyqwest import Client
 
 from pylabrobot.resources import Coordinate, ResourceStack
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
@@ -31,6 +33,8 @@ from pylabrobot.resources.server import build, handles, library
 from pylabrobot.resources.server.client import ResourceServer
 from pylabrobot.resources.server.definitions import definition_from_resource
 from pylabrobot.resources.server.errors import ServerError
+from pylabrobot.resources.server.asgi_transport import ASGITransport
+from pylabrobot.resources.server.memory import MemoryStore, asgi_app
 from pylabrobot.resources.server.tests.scenes import stacking_plate
 from pylabrobot.resources.server.tree import to_coordinate
 from pylabrobot.resources.server.v1 import primitives_pb2 as ppb
@@ -819,178 +823,6 @@ class DeviceTests(ServerTestCase):
     self.assertEqual(measured.results[0].issue.problem, pb.PROBLEM_NO_TIP)
 
 
-class LockTests(ServerTestCase):
-  async def test_a_locked_deck_refuses_other_holders(self):
-    lock = await self.commands.acquire_lock(
-      spb.AcquireLockRequest(resource=ref(ROOT, ""), holder="run 1")
-    )
-    held = await self.commands.get_lock(spb.GetLockRequest(resource=ref(ROOT, "")))
-    self.assertEqual(held.lock.holder, "run 1")
-    with self.assertRaises(ServerError) as refused:
-      await self.pick_up(["A1"], [0])
-    self.assertEqual(refused.exception.problem, pb.PROBLEM_LOCKED)
-    response = await self.commands.begin_tool_pickup(
-      spb.BeginToolPickupRequest(
-        lock_tokens=[lock.token],
-        frame=ref(ROOT, ""),
-        items=[spb.ToolPickupItem(source=item("tips", "A1"), shaft=ref("shaft_0"))],
-      )
-    )
-    self.assertEqual(response.operation.holder, "run 1")
-    with self.assertRaises(ServerError):
-      await self.commands.acquire_lock(
-        spb.AcquireLockRequest(resource=ref(ROOT, ""), holder="run 2")
-      )
-    await self.commands.release_lock(
-      spb.ReleaseLockRequest(resource=ref(ROOT, ""), token=lock.token)
-    )
-    again = await self.commands.acquire_lock(
-      spb.AcquireLockRequest(resource=ref(ROOT, ""), holder="run 2")
-    )
-    self.assertNotEqual(again.token, lock.token)
-
-  async def test_a_waiting_lock_is_granted_when_released(self):
-    lock = await self.commands.acquire_lock(
-      spb.AcquireLockRequest(resource=ref(ROOT, ""), holder="first")
-    )
-
-    async def release_soon() -> None:
-      await asyncio.sleep(0.05)
-      await self.commands.release_lock(
-        spb.ReleaseLockRequest(resource=ref(ROOT, ""), token=lock.token)
-      )
-
-    releasing = asyncio.create_task(release_soon())
-    waited = await self.commands.acquire_lock(
-      spb.AcquireLockRequest(resource=ref(ROOT, ""), holder="second", wait=Duration(seconds=5))
-    )
-    await releasing
-    self.assertEqual(waited.holder, "second")
-
-
-class SubtreeLockTests(ServerTestCase):
-  """Locks on a resource and everything under it: the test deck's carriers stand in for the
-  machines of one lab, each locked by its own holder."""
-
-  async def lock(self, name: str, holder: str, root: str = ROOT) -> spb.Lock:
-    return await self.commands.acquire_lock(
-      spb.AcquireLockRequest(resource=ref(name, root), holder=holder)
-    )
-
-  async def second_carrier(self) -> None:
-    deck = await self.server.get(ROOT)
-    with warnings.catch_warnings():
-      warnings.simplefilter("ignore")
-      carrier = hamilton_plate_carrier_L5_ac(name="carrier_b")
-    await self.server.create(
-      definition_from_resource(carrier), name="carrier_b", parent=deck, track=22
-    )
-
-  async def test_two_machines_in_one_tree_are_locked_apart(self):
-    await self.lock("plate_carrier", "a")
-    b = await self.lock("tip_carrier", "b")
-    # Neither what holds them nor anything in them can be locked by a third holder.
-    for name, root in (("deck", ""), ("plate", ROOT), ("tips", ROOT)):
-      with self.subTest(name=name), self.assertRaises(ServerError) as refused:
-        await self.lock(name, "c", root)
-    self.assertIn("'tips' overlaps 'tip_carrier', locked by b", str(refused.exception))
-    held = await self.commands.get_lock(spb.GetLockRequest(resource=ref("plate")))
-    self.assertEqual(held.lock.holder, "a")
-    free = await self.commands.get_lock(spb.GetLockRequest(resource=ref("trough")))
-    self.assertFalse(free.HasField("lock"))
-
-    # b works in its own machine while a holds the other, but not in a's.
-    response = await self.commands.begin_tool_pickup(
-      spb.BeginToolPickupRequest(
-        lock_tokens=[b.token],
-        frame=ref(ROOT, ""),
-        items=[spb.ToolPickupItem(source=item("tips", "A1"), shaft=ref("shaft_0"))],
-      )
-    )
-    self.assertEqual(response.operation.holder, "b")
-    with self.assertRaises(ServerError) as refused:
-      await self.commands.update_resources(
-        spb.UpdateResourcesRequest(
-          lock_tokens=[b.token],
-          updates=[
-            spb.ResourceUpdate(volume=pb.SetVolume(resource=item("plate", "A1"), volume=10))
-          ],
-        )
-      )
-    self.assertEqual(refused.exception.problem, pb.PROBLEM_LOCKED)
-    self.assertIn("is in 'plate_carrier', which is locked by a", str(refused.exception))
-
-  async def test_a_child_can_join_what_holds_a_locked_machine(self):
-    await self.lock("plate_carrier", "a")
-    await self.second_carrier()
-    deck = await self.node(ref(ROOT, ""))
-    self.assertEqual((await self.node(ref("carrier_b"))).parent_id, deck.id)
-
-  async def test_what_holds_a_locked_subtree_is_not_moved_or_deleted(self):
-    await self.lock("plate", "a")
-    turn = pb.RotationChange(resource=ref("plate_carrier"), by=pb.Rotation(z=90))
-    refusals = [
-      self.commands.unassign_resources(
-        spb.UnassignResourcesRequest(resources=[ref("plate_carrier")])
-      ),
-      self.commands.delete_resources(spb.DeleteResourcesRequest(resources=[ref("plate_carrier")])),
-      self.commands.update_resources(
-        spb.UpdateResourcesRequest(updates=[spb.ResourceUpdate(rotation=turn)])
-      ),
-    ]
-    for refusal in refusals:
-      with self.assertRaises(ServerError) as refused:
-        await refusal
-      self.assertEqual(refused.exception.problem, pb.PROBLEM_LOCKED)
-      self.assertIn("'plate_carrier' holds 'plate', which is locked by a", str(refused.exception))
-
-  async def test_a_move_between_two_locked_machines_takes_both_tokens(self):
-    await self.second_carrier()
-    a = await self.lock("plate_carrier", "a")
-    b = await self.lock("carrier_b", "b")
-    move = pb.AssignChild(child=ref("plate"), parent=ref("carrier_b-0"))
-    for tokens in ([a.token], [b.token]):
-      with self.assertRaises(ServerError) as refused:
-        await self.commands.assign_resources(
-          spb.AssignResourcesRequest(lock_tokens=tokens, assignments=[move])
-        )
-      self.assertEqual(refused.exception.problem, pb.PROBLEM_LOCKED)
-    await self.commands.assign_resources(
-      spb.AssignResourcesRequest(lock_tokens=[a.token, b.token], assignments=[move])
-    )
-    site = await self.node(ref("carrier_b-0"))
-    self.assertEqual((await self.node(ref("plate"))).parent_id, site.id)
-
-  async def test_resolving_an_operation_is_checked_as_staging_was(self):
-    a = await self.lock("tip_carrier", "a")
-    response = await self.commands.begin_tool_pickup(
-      spb.BeginToolPickupRequest(
-        lock_tokens=[a.token],
-        frame=ref(ROOT, ""),
-        items=[spb.ToolPickupItem(source=item("tips", "A1"), shaft=ref("shaft_0"))],
-      )
-    )
-    outcome = spb.ItemOutcome(item=0, succeeded=True)
-    with self.assertRaises(ServerError) as refused:
-      await self.commands.resolve_operation(
-        spb.ResolveOperationRequest(operation_id=response.operation.id, outcomes=[outcome])
-      )
-    self.assertEqual(refused.exception.problem, pb.PROBLEM_LOCKED)
-    await self.commands.resolve_operation(
-      spb.ResolveOperationRequest(
-        lock_tokens=[a.token], operation_id=response.operation.id, outcomes=[outcome]
-      )
-    )
-
-  async def test_a_lock_on_a_deleted_resource_goes_with_it(self):
-    a = await self.lock("plate", "a")
-    await self.commands.delete_resources(
-      spb.DeleteResourcesRequest(lock_tokens=[a.token], resources=[ref("plate")])
-    )
-    b = await self.lock("plate_carrier", "b")
-    self.assertEqual(b.holder, "b")
-
-
 class OperationTests(ServerTestCase):
   async def test_unresolved_operations_are_listed_until_resolved(self):
     response = await self.pick_up(["A1", "B1"], [0, 1])
@@ -1181,3 +1013,23 @@ class LibraryTests(ServerTestCase):
 
 if __name__ == "__main__":
   unittest.main()
+
+
+class ConnectionTests(unittest.IsolatedAsyncioTestCase):
+  async def test_a_connection_sends_its_headers_with_every_call(self):
+    seen: List[Optional[str]] = []
+
+    class Recording(MemoryStore):
+      async def get_server_info(
+        self, request: spb.GetServerInfoRequest, ctx: RequestContext
+      ) -> spb.ServerInfo:
+        seen.append(ctx.request_headers.get("authorization"))
+        return await super().get_server_info(request, ctx)
+
+    store = Recording()
+    http = Client(transport=ASGITransport(asgi_app(store)))
+    server = ResourceServer("http://in-process", http, store, {"authorization": "Bearer t"})
+    await server.commands.get_server_info(spb.GetServerInfoRequest())
+    await server.commands.get_server_info(spb.GetServerInfoRequest())
+    self.assertEqual(seen, ["Bearer t", "Bearer t"])
+    await server.close()

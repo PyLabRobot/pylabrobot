@@ -113,7 +113,6 @@ class Problem(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PROBLEM_NOT_IN_FRAME: _ClassVar[Problem]
     PROBLEM_WRONG_KIND: _ClassVar[Problem]
     PROBLEM_CANNOT_DROP_HERE: _ClassVar[Problem]
-    PROBLEM_LOCKED: _ClassVar[Problem]
     PROBLEM_NO_HEIGHT_VOLUME_DATA: _ClassVar[Problem]
     PROBLEM_OUTSIDE_HEIGHT_VOLUME_DATA: _ClassVar[Problem]
     PROBLEM_OUT_OF_RANGE: _ClassVar[Problem]
@@ -206,7 +205,6 @@ PROBLEM_NO_LOCATION: Problem
 PROBLEM_NOT_IN_FRAME: Problem
 PROBLEM_WRONG_KIND: Problem
 PROBLEM_CANNOT_DROP_HERE: Problem
-PROBLEM_LOCKED: Problem
 PROBLEM_NO_HEIGHT_VOLUME_DATA: Problem
 PROBLEM_OUTSIDE_HEIGHT_VOLUME_DATA: Problem
 PROBLEM_OUT_OF_RANGE: Problem
@@ -700,20 +698,18 @@ class OperationItem(_message.Message):
     def __init__(self, item: _Optional[int] = ..., state: _Optional[_Union[ItemState, str]] = ..., resolved_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Operation(_message.Message):
-    __slots__ = ("id", "root_id", "kind", "items", "created_at", "holder")
+    __slots__ = ("id", "root_id", "kind", "items", "created_at")
     ID_FIELD_NUMBER: _ClassVar[int]
     ROOT_ID_FIELD_NUMBER: _ClassVar[int]
     KIND_FIELD_NUMBER: _ClassVar[int]
     ITEMS_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
-    HOLDER_FIELD_NUMBER: _ClassVar[int]
     id: bytes
     root_id: bytes
     kind: str
     items: _containers.RepeatedCompositeFieldContainer[OperationItem]
     created_at: _timestamp_pb2.Timestamp
-    holder: str
-    def __init__(self, id: _Optional[bytes] = ..., root_id: _Optional[bytes] = ..., kind: _Optional[str] = ..., items: _Optional[_Iterable[_Union[OperationItem, _Mapping]]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., holder: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[bytes] = ..., root_id: _Optional[bytes] = ..., kind: _Optional[str] = ..., items: _Optional[_Iterable[_Union[OperationItem, _Mapping]]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class AssignChild(_message.Message):
     __slots__ = ("child", "parent", "location", "track", "no_location", "index")

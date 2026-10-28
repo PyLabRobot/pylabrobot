@@ -11,9 +11,13 @@ syntax = "proto3";
 // along whose axes, how big it is once turned, what a height holds, where a child seats - and
 // keeps its state. A driver plans motion (batches, channel spacing, traverse heights) from what
 // the server answers, and tells the server what the device did.
+//
+// Access is the backend's: a client gives its credentials when it connects, in its requests'
+// headers, and the API says nothing of them. A backend may limit what a connection sees or
+// changes - one machine's driver to that machine, say. What it hides is NOT_FOUND, and a change it
+// refuses is PERMISSION_DENIED.
 package pylabrobot.resources.server.v1;
 
-import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "pylabrobot/resources/server/v1/types.proto";
 
@@ -30,50 +34,6 @@ message ServerInfo {
   // Changes on restart; revisions are ordered only within one instance.
   string instance_id = 4;
   uint64 revision = 5;
-}
-
-// ============================================================================================
-// Locks: on a resource and everything under it, so that two machines in one lab are locked apart.
-// Two holders' locks never overlap: a lock is refused while another holder has one on the same
-// resource, on what it is in, or on anything under it. A call changing anything inside another
-// holder's locked subtree is refused, and so is one moving or deleting a resource that holds such
-// a subtree; putting a child into a resource only changes the resource. A call that changes two
-// holders' subtrees, a plate moved from one machine into another, sends both tokens. Whatever
-// nobody has locked is changed atomically for that one call.
-// ============================================================================================
-
-message Lock {
-  bytes token = 1;
-  // The resource locked, with everything under it.
-  bytes resource_id = 2;
-  string holder = 3;
-  google.protobuf.Timestamp acquired_at = 4;
-}
-
-message AcquireLockRequest {
-  ResourceRef resource = 1;
-  // Who holds it, for people reading `GetLock`: "star-01 protocol 42".
-  string holder = 2;
-  // How long to wait for it; unset fails at once when it is held.
-  google.protobuf.Duration wait = 3;
-}
-
-message ReleaseLockRequest {
-  ResourceRef resource = 1;
-  bytes token = 2;
-  // Release a lock another holder has: a person, after checking the device.
-  bool force = 3;
-}
-
-message ReleaseLockResponse {}
-
-message GetLockRequest {
-  ResourceRef resource = 1;
-}
-
-message GetLockResponse {
-  // The lock on the resource or on what it is in; unset when there is none.
-  optional Lock lock = 1;
 }
 
 // ============================================================================================
@@ -124,8 +84,7 @@ message CreateResource {
 }
 
 message CreateResourcesRequest {
-  repeated bytes lock_tokens = 1;
-  repeated CreateResource resources = 2;
+  repeated CreateResource resources = 1;
 }
 
 message CreateResourcesResponse {
@@ -135,9 +94,8 @@ message CreateResourcesResponse {
 }
 
 message DeleteResourcesRequest {
-  repeated bytes lock_tokens = 1;
   // Each with everything under it. Its history is kept.
-  repeated ResourceRef resources = 2;
+  repeated ResourceRef resources = 1;
 }
 
 message DeleteResourcesResponse {
@@ -145,9 +103,8 @@ message DeleteResourcesResponse {
 }
 
 message AssignResourcesRequest {
-  repeated bytes lock_tokens = 1;
   // In order, all or none: setting up a deck, or a person moving a plate by hand.
-  repeated AssignChild assignments = 2;
+  repeated AssignChild assignments = 1;
 }
 
 message AssignResourcesResponse {
@@ -157,8 +114,7 @@ message AssignResourcesResponse {
 }
 
 message UnassignResourcesRequest {
-  repeated bytes lock_tokens = 1;
-  repeated ResourceRef resources = 2;
+  repeated ResourceRef resources = 1;
 }
 
 message UnassignResourcesResponse {
@@ -183,11 +139,10 @@ message ResourceUpdate {
 }
 
 message UpdateResourcesRequest {
-  repeated bytes lock_tokens = 1;
   // In order, all or none.
-  repeated ResourceUpdate updates = 2;
+  repeated ResourceUpdate updates = 1;
   // A volume set above what a container or tip holds at most, or below nothing.
-  OnTrackingProblem on_tracking_problem = 3;
+  OnTrackingProblem on_tracking_problem = 2;
 }
 
 message UpdateResourcesResponse {
@@ -356,9 +311,8 @@ message DevicePosition {
 }
 
 message RecordDevicePositionsRequest {
-  repeated bytes lock_tokens = 1;
   // All of them at once: what one move left the device as.
-  repeated DevicePosition positions = 2;
+  repeated DevicePosition positions = 1;
 }
 
 message RecordDevicePositionsResponse {
@@ -391,8 +345,7 @@ message MeasurementResult {
 // A measurement is of what is there now: before any unresolved item that moves liquid in or out
 // of it has moved it.
 message RecordMeasurementsRequest {
-  repeated bytes lock_tokens = 1;
-  repeated Measurement measurements = 2;
+  repeated Measurement measurements = 1;
 }
 
 message RecordMeasurementsResponse {
@@ -430,14 +383,13 @@ message ToolPickupItem {
 }
 
 message BeginToolPickupRequest {
-  repeated bytes lock_tokens = 1;
   // Where locations are answered: the deck.
-  ResourceRef frame = 2;
-  repeated ToolPickupItem items = 3;
+  ResourceRef frame = 1;
+  repeated ToolPickupItem items = 2;
   // Also answer what these shafts carry: every shaft whose tool decides how high the head
   // travels.
-  repeated ResourceRef context_shafts = 4;
-  OnTrackingProblem on_tracking_problem = 5;
+  repeated ResourceRef context_shafts = 3;
+  OnTrackingProblem on_tracking_problem = 4;
 }
 
 message ToolPickupPlan {
@@ -473,11 +425,10 @@ message ToolDropItem {
 }
 
 message BeginToolDropRequest {
-  repeated bytes lock_tokens = 1;
-  ResourceRef frame = 2;
-  repeated ToolDropItem items = 3;
-  repeated ResourceRef context_shafts = 4;
-  OnTrackingProblem on_tracking_problem = 5;
+  ResourceRef frame = 1;
+  repeated ToolDropItem items = 2;
+  repeated ResourceRef context_shafts = 3;
+  OnTrackingProblem on_tracking_problem = 4;
 }
 
 message ToolDropPlan {
@@ -512,11 +463,10 @@ message TransferItem {
 }
 
 message BeginLiquidTransferRequest {
-  repeated bytes lock_tokens = 1;
-  ResourceRef frame = 2;
-  TransferDirection direction = 3;
-  repeated TransferItem items = 4;
-  OnTrackingProblem on_tracking_problem = 5;
+  ResourceRef frame = 1;
+  TransferDirection direction = 2;
+  repeated TransferItem items = 3;
+  OnTrackingProblem on_tracking_problem = 4;
 }
 
 message TransferPlan {
@@ -541,12 +491,11 @@ message Grip {
 }
 
 message BeginResourcePickupRequest {
-  repeated bytes lock_tokens = 1;
-  ResourceRef frame = 2;
-  ResourceRef resource = 3;
+  ResourceRef frame = 1;
+  ResourceRef resource = 2;
   // What carries it once picked up, a gripper tool; it is assigned there where it is held.
-  ResourceRef carrier = 4;
-  Grip grip = 5;
+  ResourceRef carrier = 3;
+  Grip grip = 4;
 }
 
 // Staged as one item: the resource moves to its carrier.
@@ -565,18 +514,17 @@ message BeginResourcePickupResponse {
 }
 
 message BeginResourcePlaceRequest {
-  repeated bytes lock_tokens = 1;
-  ResourceRef frame = 2;
-  ResourceRef resource = 3;
+  ResourceRef frame = 1;
+  ResourceRef resource = 2;
   oneof destination {
-    ResourceRef destination_resource = 4;
+    ResourceRef destination_resource = 3;
     // Its origin's location in the frame. The server finds what is there; an empty place puts it
     // on the frame itself.
-    Vec3 destination_location = 5;
+    Vec3 destination_location = 4;
   }
   // How far the move turns it about z, in degrees.
-  double rotation_applied_by_move = 6;
-  Grip grip = 7;
+  double rotation_applied_by_move = 5;
+  Grip grip = 6;
 }
 
 // Staged as one item: the resource turns and moves into its destination.
@@ -607,10 +555,9 @@ message ItemOutcome {
 }
 
 message ResolveOperationRequest {
-  repeated bytes lock_tokens = 1;
-  bytes operation_id = 2;
+  bytes operation_id = 1;
   // Any of the unresolved items; the rest stay pending.
-  repeated ItemOutcome outcomes = 3;
+  repeated ItemOutcome outcomes = 2;
 }
 
 message ResolveOperationResponse {
@@ -676,10 +623,6 @@ message ResourceEvent {
 service ResourceService {
   rpc GetServerInfo(GetServerInfoRequest) returns (ServerInfo);
 
-  // Locks.
-  rpc AcquireLock(AcquireLockRequest) returns (Lock);
-  rpc ReleaseLock(ReleaseLockRequest) returns (ReleaseLockResponse);
-  rpc GetLock(GetLockRequest) returns (GetLockResponse);
 
   // Models.
   rpc PutModel(PutModelRequest) returns (ResourceModel);

@@ -19,7 +19,7 @@ from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DE
 from pylabrobot.resources.server.v1.types_pb2 import Operation, ResourceModel
 from pyqwest import Client, SyncClient
 
-from .server_pb2 import AcquireLockRequest, AssignResourcesRequest, AssignResourcesResponse, BeginLiquidTransferRequest, BeginLiquidTransferResponse, BeginResourcePickupRequest, BeginResourcePickupResponse, BeginResourcePlaceRequest, BeginResourcePlaceResponse, BeginToolDropRequest, BeginToolDropResponse, BeginToolPickupRequest, BeginToolPickupResponse, ConvertHeightVolumeRequest, ConvertHeightVolumeResponse, CreateResourcesRequest, CreateResourcesResponse, DeleteResourcesRequest, DeleteResourcesResponse, FindResourcesAtRequest, FindResourcesAtResponse, FindResourcesRequest, FindResourcesResponse, GetLockRequest, GetLockResponse, GetModelRequest, GetOperationRequest, GetResourcesRequest, GetResourcesResponse, GetServerInfoRequest, ListModelsRequest, ListModelsResponse, ListOperationsRequest, ListOperationsResponse, ListRootsRequest, ListRootsResponse, Lock, PutModelRequest, RecordDevicePositionsRequest, RecordDevicePositionsResponse, RecordMeasurementsRequest, RecordMeasurementsResponse, ReleaseLockRequest, ReleaseLockResponse, ResolveGeometryRequest, ResolveGeometryResponse, ResolveOperationRequest, ResolveOperationResponse, ResourceEvent, ServerInfo, UnassignResourcesRequest, UnassignResourcesResponse, UpdateResourcesRequest, UpdateResourcesResponse, WatchRequest
+from .server_pb2 import AssignResourcesRequest, AssignResourcesResponse, BeginLiquidTransferRequest, BeginLiquidTransferResponse, BeginResourcePickupRequest, BeginResourcePickupResponse, BeginResourcePlaceRequest, BeginResourcePlaceResponse, BeginToolDropRequest, BeginToolDropResponse, BeginToolPickupRequest, BeginToolPickupResponse, ConvertHeightVolumeRequest, ConvertHeightVolumeResponse, CreateResourcesRequest, CreateResourcesResponse, DeleteResourcesRequest, DeleteResourcesResponse, FindResourcesAtRequest, FindResourcesAtResponse, FindResourcesRequest, FindResourcesResponse, GetModelRequest, GetOperationRequest, GetResourcesRequest, GetResourcesResponse, GetServerInfoRequest, ListModelsRequest, ListModelsResponse, ListOperationsRequest, ListOperationsResponse, ListRootsRequest, ListRootsResponse, PutModelRequest, RecordDevicePositionsRequest, RecordDevicePositionsResponse, RecordMeasurementsRequest, RecordMeasurementsResponse, ResolveGeometryRequest, ResolveGeometryResponse, ResolveOperationRequest, ResolveOperationResponse, ResourceEvent, ServerInfo, UnassignResourcesRequest, UnassignResourcesResponse, UpdateResourcesRequest, UpdateResourcesResponse, WatchRequest
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, AsyncIterator, Iterable, Iterator, Mapping
@@ -37,18 +37,6 @@ _GZIP_COMPRESSION = GzipCompression()
 
 class ResourceService(Protocol):
     async def get_server_info(self, request: GetServerInfoRequest, ctx: RequestContext[GetServerInfoRequest, ServerInfo], /) -> ServerInfo:
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
-    async def acquire_lock(self, request: AcquireLockRequest, ctx: RequestContext[AcquireLockRequest, Lock], /) -> Lock:
-        """
-        Locks.
-        """
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
-    async def release_lock(self, request: ReleaseLockRequest, ctx: RequestContext[ReleaseLockRequest, ReleaseLockResponse], /) -> ReleaseLockResponse:
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
-    async def get_lock(self, request: GetLockRequest, ctx: RequestContext[GetLockRequest, GetLockResponse], /) -> GetLockResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
     async def put_model(self, request: PutModelRequest, ctx: RequestContext[PutModelRequest, ResourceModel], /) -> ResourceModel:
@@ -170,36 +158,6 @@ class ResourceServiceASGIApplication(ConnectASGIApplication[ResourceService]):
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=svc.get_server_info,
-                ),
-                "/pylabrobot.resources.server.v1.ResourceService/AcquireLock": Endpoint.unary(
-                    method=MethodInfo(
-                        name="AcquireLock",
-                        service_name="pylabrobot.resources.server.v1.ResourceService",
-                        input=AcquireLockRequest,
-                        output=Lock,
-                        idempotency_level=IdempotencyLevel.UNKNOWN,
-                    ),
-                    function=svc.acquire_lock,
-                ),
-                "/pylabrobot.resources.server.v1.ResourceService/ReleaseLock": Endpoint.unary(
-                    method=MethodInfo(
-                        name="ReleaseLock",
-                        service_name="pylabrobot.resources.server.v1.ResourceService",
-                        input=ReleaseLockRequest,
-                        output=ReleaseLockResponse,
-                        idempotency_level=IdempotencyLevel.UNKNOWN,
-                    ),
-                    function=svc.release_lock,
-                ),
-                "/pylabrobot.resources.server.v1.ResourceService/GetLock": Endpoint.unary(
-                    method=MethodInfo(
-                        name="GetLock",
-                        service_name="pylabrobot.resources.server.v1.ResourceService",
-                        input=GetLockRequest,
-                        output=GetLockResponse,
-                        idempotency_level=IdempotencyLevel.UNKNOWN,
-                    ),
-                    function=svc.get_lock,
                 ),
                 "/pylabrobot.resources.server.v1.ResourceService/PutModel": Endpoint.unary(
                     method=MethodInfo(
@@ -503,69 +461,6 @@ class ResourceServiceClient(ConnectClient):
                 service_name="pylabrobot.resources.server.v1.ResourceService",
                 input=GetServerInfoRequest,
                 output=ServerInfo,
-                idempotency_level=IdempotencyLevel.UNKNOWN,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-        )
-
-    async def acquire_lock(
-        self,
-        request: AcquireLockRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-    ) -> Lock:
-        """
-        Locks.
-        """
-        return await self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="AcquireLock",
-                service_name="pylabrobot.resources.server.v1.ResourceService",
-                input=AcquireLockRequest,
-                output=Lock,
-                idempotency_level=IdempotencyLevel.UNKNOWN,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-        )
-
-    async def release_lock(
-        self,
-        request: ReleaseLockRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-    ) -> ReleaseLockResponse:
-        return await self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="ReleaseLock",
-                service_name="pylabrobot.resources.server.v1.ResourceService",
-                input=ReleaseLockRequest,
-                output=ReleaseLockResponse,
-                idempotency_level=IdempotencyLevel.UNKNOWN,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-        )
-
-    async def get_lock(
-        self,
-        request: GetLockRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-    ) -> GetLockResponse:
-        return await self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="GetLock",
-                service_name="pylabrobot.resources.server.v1.ResourceService",
-                input=GetLockRequest,
-                output=GetLockResponse,
                 idempotency_level=IdempotencyLevel.UNKNOWN,
             ),
             headers=headers,
@@ -1097,18 +992,6 @@ class ResourceServiceSync(Protocol):
     def get_server_info(self, request: GetServerInfoRequest, ctx: RequestContext[GetServerInfoRequest, ServerInfo], /) -> ServerInfo:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
-    def acquire_lock(self, request: AcquireLockRequest, ctx: RequestContext[AcquireLockRequest, Lock], /) -> Lock:
-        """
-        Locks.
-        """
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
-    def release_lock(self, request: ReleaseLockRequest, ctx: RequestContext[ReleaseLockRequest, ReleaseLockResponse], /) -> ReleaseLockResponse:
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
-    def get_lock(self, request: GetLockRequest, ctx: RequestContext[GetLockRequest, GetLockResponse], /) -> GetLockResponse:
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
     def put_model(self, request: PutModelRequest, ctx: RequestContext[PutModelRequest, ResourceModel], /) -> ResourceModel:
         """
         Models.
@@ -1226,36 +1109,6 @@ class ResourceServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=service.get_server_info,
-                ),
-                "/pylabrobot.resources.server.v1.ResourceService/AcquireLock": EndpointSync.unary(
-                    method=MethodInfo(
-                        name="AcquireLock",
-                        service_name="pylabrobot.resources.server.v1.ResourceService",
-                        input=AcquireLockRequest,
-                        output=Lock,
-                        idempotency_level=IdempotencyLevel.UNKNOWN,
-                    ),
-                    function=service.acquire_lock,
-                ),
-                "/pylabrobot.resources.server.v1.ResourceService/ReleaseLock": EndpointSync.unary(
-                    method=MethodInfo(
-                        name="ReleaseLock",
-                        service_name="pylabrobot.resources.server.v1.ResourceService",
-                        input=ReleaseLockRequest,
-                        output=ReleaseLockResponse,
-                        idempotency_level=IdempotencyLevel.UNKNOWN,
-                    ),
-                    function=service.release_lock,
-                ),
-                "/pylabrobot.resources.server.v1.ResourceService/GetLock": EndpointSync.unary(
-                    method=MethodInfo(
-                        name="GetLock",
-                        service_name="pylabrobot.resources.server.v1.ResourceService",
-                        input=GetLockRequest,
-                        output=GetLockResponse,
-                        idempotency_level=IdempotencyLevel.UNKNOWN,
-                    ),
-                    function=service.get_lock,
                 ),
                 "/pylabrobot.resources.server.v1.ResourceService/PutModel": EndpointSync.unary(
                     method=MethodInfo(
@@ -1559,66 +1412,6 @@ class ResourceServiceClientSync(ConnectClientSync):
                 service_name="pylabrobot.resources.server.v1.ResourceService",
                 input=GetServerInfoRequest,
                 output=ServerInfo,
-                idempotency_level=IdempotencyLevel.UNKNOWN,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-        )
-    def acquire_lock(
-        self,
-        request: AcquireLockRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-    ) -> Lock:
-        """
-        Locks.
-        """
-        return self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="AcquireLock",
-                service_name="pylabrobot.resources.server.v1.ResourceService",
-                input=AcquireLockRequest,
-                output=Lock,
-                idempotency_level=IdempotencyLevel.UNKNOWN,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-        )
-    def release_lock(
-        self,
-        request: ReleaseLockRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-    ) -> ReleaseLockResponse:
-        return self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="ReleaseLock",
-                service_name="pylabrobot.resources.server.v1.ResourceService",
-                input=ReleaseLockRequest,
-                output=ReleaseLockResponse,
-                idempotency_level=IdempotencyLevel.UNKNOWN,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-        )
-    def get_lock(
-        self,
-        request: GetLockRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-    ) -> GetLockResponse:
-        return self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="GetLock",
-                service_name="pylabrobot.resources.server.v1.ResourceService",
-                input=GetLockRequest,
-                output=GetLockResponse,
                 idempotency_level=IdempotencyLevel.UNKNOWN,
             ),
             headers=headers,
