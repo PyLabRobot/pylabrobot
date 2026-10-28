@@ -2,7 +2,7 @@ import asyncio
 import queue
 import re
 import unittest
-from typing import Awaitable, Callable, Dict, List, Optional, TypeVar
+from typing import Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
 from pylabrobot.events import EventBus, PLREvent
 from pylabrobot.events.bus import use_event_bus
@@ -231,6 +231,23 @@ class TestSendCommand(unittest.IsolatedAsyncioTestCase):
   async def test_a_list_before_the_channels_are_counted_is_refused(self):
     with self.assertRaises(RuntimeError):
       await self.driver.send_command("A1AM", "QW", xp=[1, 2])
+    self.assertEqual(self.io.written, [])
+
+  async def test_every_command_leaves_through_the_one_place_a_simulator_answers_at(self):
+    seen: List[Tuple[str, Optional[int], bool]] = []
+
+    async def transmit(cmd, id_, write_timeout, read_timeout, wait=True):
+      seen.append((cmd, id_, wait))
+      return "A1AMQWid1er0qw1" if wait else None
+
+    self.driver._transmit = transmit  # type: ignore[method-assign]
+    await self.driver.send_command("A1AM", "QW")
+    await self.driver.send_raw_command("A1AMQWid0042")
+    await self.driver.send_raw_command("A1AMQW", wait=False)
+    self.assertEqual(
+      seen,
+      [("A1AMQWid0001", 1, True), ("A1AMQWid0042", 42, True), ("A1AMQW", None, False)],
+    )
     self.assertEqual(self.io.written, [])
 
   async def test_timeouts_are_passed_on(self):
