@@ -1746,6 +1746,25 @@ class TestEachTipsWaterClass(unittest.IsolatedAsyncioTestCase):
         ):
           self.assertEqual(self._field(sent[2], name), [round(value * 10)] * 2, name)
 
+  async def test_the_cut_off_speed_is_the_class_s_unless_given(self):
+    from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
+    from pylabrobot.resources.hamilton import hamilton_96_tiprack_1000uL
+    from pylabrobot.resources.liquid import Liquid
+
+    driver, plate, sent = await self._channels_carrying(hamilton_96_tiprack_1000uL)
+    pipettes = driver.pipettes
+    assert pipettes is not None
+    jet = get_star_liquid_class(1000.0, False, True, False, Liquid.WATER, True, True)
+    assert jet is not None and jet.dispense_stop_flow_rate != 5.0
+    wells = [plate.get_well("A1"), plate.get_well("B1")]
+    await pipettes.aspirate(wells, piston_volumes=[300.0, 300.0], liquid_heights=[3.0, 3.0])
+    await pipettes.dispense(wells, [50.0, 50.0], jet=[True, True], blow_out=[True, True])
+    self.assertEqual(self._field(sent[1], "ss"), [round(jet.dispense_stop_flow_rate * 10)] * 2)
+    await pipettes.dispense(
+      wells, [50.0, 50.0], jet=[True, True], blow_out=[True, True], cut_off_speeds=[4.5, 4.5]
+    )
+    self.assertEqual(self._field(sent[2], "ss"), [45, 45])
+
   async def test_a_50_uL_tip_has_no_class_without_blow_out(self):
     from pylabrobot.resources.hamilton import hamilton_96_tiprack_50uL
 
@@ -2297,6 +2316,36 @@ def _answer_pick_ups_as_the_device(pipettes: Pipettes, rack: Any, empty: List[st
     return await answer(module, command, **kwargs)
 
   driver._answer = answered
+
+
+class TestTipCommandsRefuseARackNoHeadCanReach(unittest.IsolatedAsyncioTestCase):
+  """A rack under a lid is not picked up from, nor dropped into, and nothing is sent."""
+
+  def setUp(self):
+    from pylabrobot.resources import set_tip_tracking
+
+    set_tip_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+
+  async def test_a_pickup_from_a_covered_rack_is_refused(self):
+    from pylabrobot.resources.lid import Lid
+
+    pipettes, rack, sent = await channels_over_a_rack()
+    rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    with self.assertRaisesRegex(ValueError, "pick up tips from 'rack': it is not available"):
+      await pipettes.pick_up_tips(rack["A1:H1"])
+    self.assertEqual(sent, [])
+
+  async def test_a_drop_into_a_covered_rack_is_refused(self):
+    from pylabrobot.resources.lid import Lid
+
+    pipettes, rack, sent = await channels_over_a_rack()
+    await pipettes.pick_up_tips(rack["A1:H1"])
+    rack.lid = Lid("lid", size_x=127.0, size_y=86.0, size_z=10.0, nesting_z_height=2.0)
+    sent.clear()
+    with self.assertRaisesRegex(ValueError, "drop tips into 'rack': it is not available"):
+      await pipettes.drop_tips(rack["A1:H1"])
+    self.assertEqual(sent, [])
 
 
 class TestProbeTipPresenceViaPickup(unittest.IsolatedAsyncioTestCase):

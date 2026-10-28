@@ -1,0 +1,103 @@
+{
+  "device": {
+    "manufacturer": "Brooks Automation",
+    "controller_model": "G5400B.2",
+    "hardware_version": "CPU 10-105.2-25, FPGA 6.1 01-23-2024, JMP 0, PWR -1, RMII",
+    "gpl_version": "GPL 5.1D4, Apr 25 2025, Release, ECM",
+    "controller_serial": "",
+    "robot_name": "PreciseFlex 400SX",
+    "robot_type": 12,
+    "tcs_version": "TCP Command Server 3.0D4 10-25-2024",
+    "modules": [
+      "Load-Save Module 3.0B2 12-04-2020",
+      "PARobot Module 3.0D4 10-25-2024",
+      "SSGrip Module 3.0D4 10-25-2024",
+      "PARobot Auto Center Module 3.0D3 10-23-2024",
+      "IntelliGuide 1.0 05-22-2024"
+    ],
+    "num_axes": 5,
+    "extra_axes": 0,
+    "axis_mask": 47,
+    "camera_count": 2
+  },
+  "arm": {
+    "soft_limits": {
+      "BASE": [
+        1.5,
+        401.5
+      ],
+      "SHOULDER": [
+        -93.0,
+        93.0
+      ],
+      "ELBOW": [
+        12.0,
+        348.0
+      ],
+      "WRIST": [
+        -960.0,
+        960.0
+      ]
+    },
+    "hard_limits": {
+      "BASE": [
+        0.0,
+        402.0
+      ],
+      "SHOULDER": [
+        -95.0,
+        95.0
+      ],
+      "ELBOW": [
+        10.0,
+        350.0
+      ],
+      "WRIST": [
+        -962.0,
+        962.0
+      ]
+    },
+    "max_joint_speed": {
+      "BASE": 750.0,
+      "SHOULDER": 540.0,
+      "ELBOW": 1080.0,
+      "WRIST": 1080.0
+    },
+    "max_joint_acceleration": {
+      "BASE": 10500.0,
+      "SHOULDER": 1800.0,
+      "ELBOW": 2760.0,
+      "WRIST": 12000.0
+    },
+    "max_joint_deceleration": {
+      "BASE": 10500.0,
+      "SHOULDER": 1800.0,
+      "ELBOW": 2760.0,
+      "WRIST": 12000.0
+    },
+    "max_cartesian_speed": 750.0,
+    "max_cartesian_acceleration": 3000.0,
+    "kinematics": {
+      "l1": 302.0,
+      "l2": 289.0,
+      "gripper_length": 162.0,
+      "gripper_z_offset": 0.0,
+      "eps": 1e-06
+    },
+    "kinematics_source": "device"
+  },
+  "gripper": {
+    "soft_limit_range": [
+      69.0,
+      134.0
+    ],
+    "hard_limit_range": [
+      69.0,
+      135.0
+    ],
+    "max_speed": 600.0,
+    "max_acceleration": 30000.0,
+    "max_deceleration": 30000.0,
+    "is_dual_gripper": false
+  }
+}

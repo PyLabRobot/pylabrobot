@@ -63,6 +63,7 @@ class HamiltonTip(Tip, HamiltonTool):
     category: str = "tip",
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
+    is_conductive: Optional[bool] = None,
   ):
     """Initialize a Hamilton tip with its name and firmware tip characteristics."""
     if isinstance(tip_size, str):
@@ -97,6 +98,7 @@ class HamiltonTip(Tip, HamiltonTool):
       category=category,
       model=model,
       pick_up_location=pick_up_location,
+      is_conductive=is_conductive,
     )
 
     self.pickup_method = pickup_method
@@ -585,6 +587,7 @@ def hamilton_teaching_needle_300uL(name: str) -> HamiltonTip:
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
     collar_height=8.0,
+    is_conductive=True,
   )
 
 
@@ -605,4 +608,5 @@ def hamilton_teaching_needle_5000uL(name: str) -> HamiltonTip:
     maximal_volume=0,
     tip_size=TipSize.XL,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    is_conductive=True,
   )

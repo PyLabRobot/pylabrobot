@@ -1772,6 +1772,45 @@ class Container extends Resource {
   }
 }
 
+// Draws a container seen from above as its cross section: a circle or a rectangle.
+function drawCrossSection(container) {
+  const mainShape = new Konva.Group({});
+  let liquid;
+  if (container.cross_section_type === "circle") {
+    mainShape.add(new Konva.Circle({  // background
+      radius: container.size_x / 2,
+      fill: RESOURCE_COLORS["ContainerBackground"],
+      offsetX: -container.size_x / 2,
+      offsetY: -container.size_y / 2,
+    }));
+    liquid = new Konva.Circle({ // liquid
+      radius: container.size_x / 2,
+      fill: Container.colorForVolume(container.getVolume(), container.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+      offsetX: -container.size_x / 2,
+      offsetY: -container.size_y / 2,
+    });
+    mainShape.add(liquid);
+  } else {
+    mainShape.add(new Konva.Rect({  // background
+      width: container.size_x,
+      height: container.size_y,
+      fill: RESOURCE_COLORS["ContainerBackground"],
+    }));
+    liquid = new Konva.Rect({ // liquid
+      width: container.size_x,
+      height: container.size_y,
+      fill: Container.colorForVolume(container.getVolume(), container.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+    });
+    mainShape.add(liquid);
+  }
+  container._liquidShape = liquid;
+  return mainShape;
+}
+
 class Well extends Container {
   get draggable() { return false; }
   get canDelete() { return false; }
@@ -1792,41 +1831,30 @@ class Well extends Container {
   }
 
   drawMainShape() {
-    const mainShape = new Konva.Group({});
-    let liquid;
-    if (this.cross_section_type === "circle") {
-      mainShape.add(new Konva.Circle({  // background
-        radius: this.size_x / 2,
-        fill: RESOURCE_COLORS["ContainerBackground"],
-        offsetX: -this.size_x / 2,
-        offsetY: -this.size_y / 2,
-      }));
-      liquid = new Konva.Circle({ // liquid
-        radius: this.size_x / 2,
-        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
-        stroke: "black",
-        strokeWidth: 1,
-        offsetX: -this.size_x / 2,
-        offsetY: -this.size_y / 2,
-      });
-      mainShape.add(liquid);
-    } else {
-      mainShape.add(new Konva.Rect({  // background
-        width: this.size_x,
-        height: this.size_y,
-        fill: RESOURCE_COLORS["ContainerBackground"],
-      }));
-      liquid = new Konva.Rect({ // liquid
-        width: this.size_x,
-        height: this.size_y,
-        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
-        stroke: "black",
-        strokeWidth: 1,
-      });
-      mainShape.add(liquid);
-    }
-    this._liquidShape = liquid;
-    return mainShape;
+    return drawCrossSection(this);
+  }
+}
+
+// A petri dish is serialized as its diameter and height, and is always round.
+class PetriDish extends Container {
+  constructor(resourceData, parent) {
+    const { diameter, height } = resourceData;
+    super({ ...resourceData, size_x: diameter, size_y: diameter, size_z: height }, parent);
+    this.diameter = diameter;
+    this.height = height;
+    this.cross_section_type = "circle";
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      diameter: this.diameter,
+      height: this.height,
+    };
+  }
+
+  drawMainShape() {
+    return drawCrossSection(this);
   }
 }
 
@@ -3112,6 +3140,8 @@ function classForResourceType(type, category) {
       return Plate;
     case "Well":
       return Well;
+    case "PetriDish":
+      return PetriDish;
     case "TipRack":
       return TipRack;
     case "TipSpot":

@@ -14,7 +14,6 @@ from pylabrobot.hamilton.prep.driver.simulator import (
   FIRMWARE_TREE_V3_0_20,
   RECORDING_PREP,
   RECORDING_PREP_HEAD8,
-  RECORDING_PREP_HEATER_SHAKER,
 )
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.resources import Coordinate, Resource
@@ -140,7 +139,7 @@ def test_setup_places_the_teaching_needle_and_waste_positions_where_the_device_r
     waste.location = Coordinate(0.0, 0.0, 0.0)
     p = PrepSimulationDriver(deck=deck)
     await p.setup()
-    recorded = read_configuration(RECORDING_PREP_HEATER_SHAKER)["device"]
+    recorded = read_configuration(RECORDING_PREP_HEAD8)["device"]
     site = next(s for s in recorded.deck_sites if (s.length, s.width) == (6.0, 6.0))
     placed = needle.get_location_wrt(deck)
     assert (placed.x, placed.y, needle.location.z) == pytest.approx(

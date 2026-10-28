@@ -61,15 +61,20 @@ PLATFORM_FLAGS = (
   else ["--use-angle=swiftshader", "--no-sandbox", "--disable-dev-shm-usage"]
 )
 FS_PORT, WS_PORT = free_ports(2)
+# Seconds a browser has to come up: a test's, and the module's first, which on a fresh runner also
+# loads Chrome, its fonts and its software renderer from cold (up to tens of seconds).
+ATTACH_TIMEOUT = 30.0
+FIRST_ATTACH_TIMEOUT = 120.0
 
 
 class Browser:
   """Headless Chrome, driven over the devtools protocol. Enough of it to load a page and ask it
   questions. Each one has a devtools port of its own: the last may still be letting go of its."""
 
-  def __init__(self) -> None:
-    self._cdp_port = free_ports(1)[0]
+  def __init__(self, attach_timeout: float = ATTACH_TIMEOUT) -> None:
+    self._attach_timeout = attach_timeout
     self._profile = tempfile.mkdtemp()
+    self._stderr = tempfile.TemporaryFile(mode="w+b")
     self._chrome: Optional[subprocess.Popen] = None
     self._socket: Any = None
     self._id = 0
@@ -79,7 +84,7 @@ class Browser:
       [
         CHROME,
         "--headless=new",
-        f"--remote-debugging-port={self._cdp_port}",
+        "--remote-debugging-port=0",
         f"--user-data-dir={self._profile}",
         "--enable-unsafe-webgpu",
         *PLATFORM_FLAGS,
@@ -88,20 +93,28 @@ class Browser:
         "about:blank",
       ],
       stdout=subprocess.DEVNULL,
-      stderr=subprocess.DEVNULL,
+      stderr=self._stderr,
     )
     # A browser nobody attached to would outlive the test, so a failed attach lets go of it.
     try:
-      deadline = time.monotonic() + 30
+      deadline = time.monotonic() + self._attach_timeout
       while True:
         try:
-          tabs = json.load(urllib.request.urlopen(f"http://127.0.0.1:{self._cdp_port}/json"))
+          with open(os.path.join(self._profile, "DevToolsActivePort")) as active_port:
+            port = int(active_port.readline())
+          with urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=1) as response:
+            tabs = json.load(response)
           url = next(t["webSocketDebuggerUrl"] for t in tabs if t["type"] == "page")
-          self._socket = await websockets.connect(url, max_size=None)
+          self._socket = await websockets.connect(url, max_size=None, open_timeout=1)
           return self
-        except Exception:
-          if time.monotonic() >= deadline:
-            raise RuntimeError("could not attach to a headless browser") from None
+        except Exception as error:
+          if self._chrome.poll() is not None or time.monotonic() >= deadline:
+            self._stderr.seek(0)
+            diagnostics = self._stderr.read().decode(errors="replace")
+            raise RuntimeError(
+              f"could not attach to a headless browser (exit code {self._chrome.poll()}):\n"
+              f"{diagnostics}"
+            ) from error
           await asyncio.sleep(0.1)
     except BaseException:
       await self.__aexit__()
@@ -116,6 +129,7 @@ class Browser:
       self._chrome.wait(timeout=5)  # reaped, or every test leaves a zombie behind
       self._chrome = None
     shutil.rmtree(self._profile, ignore_errors=True)
+    self._stderr.close()
 
   async def _call(self, method: str, params: Optional[dict] = None, timeout: float = 20.0) -> Any:
     """Send one command and wait for its reply, stepping over the notifications in between.
@@ -184,6 +198,11 @@ class Browser:
         raise AssertionError(f"the page never answered within {seconds:.0f}s: {expression}")
       await asyncio.sleep(0.1)
 
+  async def reload(self) -> None:
+    """Wait for the old document to be replaced before inspecting the reloaded page."""
+    await self.evaluate("window.__plrReloading = true; location.reload()")
+    await self.settle("window.__plrReloading === undefined && document.readyState === 'complete'")
+
   async def frames(self, count: int = 2) -> None:
     """Wait for `count` animation frames: what the page drew before them is on screen by then."""
     step = "(n) => (n ? requestAnimationFrame(() => step(n - 1)) : done())"
@@ -194,6 +213,17 @@ class Browser:
         "awaitPromise": True,
       },
     )
+
+
+async def _warm_up() -> None:
+  async with Browser(attach_timeout=FIRST_ATTACH_TIMEOUT):
+    pass
+
+
+def setUpModule() -> None:
+  """Start and close one browser before any test, so a cold start is not one test's to pay."""
+  if CHROME:
+    asyncio.run(_warm_up())
 
 
 def _png_luminance(png: bytes) -> List[List[int]]:
@@ -484,7 +514,9 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
     async with Browser() as browser:
       await self.page(browser, "carrier")
       self.assertEqual(await browser.evaluate("location.href"), f"{self.viewer.url.split('#')[0]}")
-      await browser.evaluate("location.reload()")
+      loaded_at = await browser.evaluate("performance.timeOrigin")
+      await browser.reload()
+      self.assertNotEqual(await browser.evaluate("performance.timeOrigin"), loaded_at)
       await browser.settle("window.plrViewer && window.plrViewer.resources().length", 30)
       self.assertIn(self.viewer.token, await browser.evaluate("window.WS_URL"))
 
@@ -700,6 +732,32 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(self.viewer.rebuilds, 1, "the arrival did not cost the scene it must")
       self.assertGreater(len(seen), 0, "nothing was sampled while the scene was rebuilt")
       self.assertEqual(min(seen), drawn, f"the models went away and came back: {seen}")
+
+  async def test_a_facility_framed_from_far_off_is_drawn(self):
+    """Both cameras had fixed clip planes - 20 m deep - and only the perspective one was refitted
+    when a view was framed. A lab framed whole stands further off than that, so its plan view, the
+    home button and the projection toggle drew nothing at all."""
+    lab = Facility(name="lab", size_x=14_000, size_y=22_000, size_z=3_000)
+    for i in range(4):
+      bench = Resource(name=f"bench_{i}", size_x=8_000, size_y=1_600, size_z=900, category="bench")
+      lab.assign_child_resource(bench, location=Coordinate(3_000, 2_500 + i * 5_000, 0))
+    fs_port, ws_port = free_ports(2)
+    viewer = Viewer3D(lab, open_browser=False, fs_port=fs_port, ws_port=ws_port)
+    await viewer.start()
+    try:
+      async with Browser() as browser:
+        await browser.open(viewer.url)
+        await browser.settle("window.plrViewer && window.plrViewer.resources().includes('bench_3')")
+        await browser.frames()
+        self.assertGreater(await browser.drawn_fraction("#viewport"), 0.02, "the opening plan view")
+        await browser.evaluate("document.getElementById('view-projection').click()")
+        await browser.frames()
+        self.assertGreater(await browser.drawn_fraction("#viewport"), 0.02, "after the toggle")
+        await browser.evaluate("document.getElementById('home-button').click()")
+        await browser.frames()
+        self.assertGreater(await browser.drawn_fraction("#viewport"), 0.02, "after home")
+    finally:
+      await viewer.stop()
 
 
 @unittest.skipUnless(CHROME, "no headless browser to drive")
