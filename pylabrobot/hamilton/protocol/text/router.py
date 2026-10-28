@@ -94,9 +94,13 @@ class ReplyRouter:
       )
 
   def next_id(self) -> int:
-    """continuously generate unique ids 0 <= x < 10000."""
-    self.id_ += 1
-    return self.id_ % 10000
+    """Continuously generate ids 1 <= x <= 9999.
+
+    Id 0 is never produced: a machine sends the messages it was not asked for with id 0, so a
+    command that carried it could be confused with one.
+    """
+    self.id_ = self.id_ % 9999 + 1
+    return self.id_
 
   async def send(
     self,

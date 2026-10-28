@@ -104,5 +104,23 @@ class TestReplyRouter(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(r._waiting_tasks, [])
 
 
+class TestNextId(unittest.TestCase):
+  """Command ids run from 1 to 9999 and never take the id a machine's own messages carry."""
+
+  def test_the_first_id_is_1(self):
+    self.assertEqual(router(FakeTransport()).next_id(), 1)
+
+  def test_ids_wrap_from_9999_to_1_and_skip_0(self):
+    r = router(FakeTransport())
+    r.id_ = 9998
+    self.assertEqual([r.next_id() for _ in range(3)], [9999, 1, 2])
+
+  def test_a_full_cycle_never_yields_0(self):
+    r = router(FakeTransport())
+    ids = [r.next_id() for _ in range(20000)]
+    self.assertNotIn(0, ids)
+    self.assertEqual(set(ids), set(range(1, 10000)))
+
+
 if __name__ == "__main__":
   unittest.main()
