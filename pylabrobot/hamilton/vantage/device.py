@@ -27,7 +27,7 @@ class VantageDevice(Resource):
     self,
     deck: VantageDeck,
     driver: VantageDriver,
-    name: str = "vantage",
+    name: str = "Vantage",
     model: Optional[str] = None,
   ):
     """
@@ -59,11 +59,11 @@ class VantageDevice(Resource):
     """Open the link to the machine, which moves nothing."""
     await self.driver.connect()
 
-  async def discover(self) -> List[bool]:
+  async def discover(self) -> List[int]:
     """Read what the machine has, which moves nothing.
 
     Returns:
-      Which channels carry a tip, from the first.
+      One value per channel, 1 where a tip is mounted, 0-indexed from the back.
     """
     return await self.driver.discover()
 
@@ -102,7 +102,7 @@ def Vantage(
   host: Optional[str] = None,
   port: int = DEFAULT_PORT,
   driver: Optional[VantageDriver] = None,
-  name: str = "vantage",
+  name: str = "Vantage",
 ) -> VantageDevice:
   """A Vantage with a 1.3 m deck.
 

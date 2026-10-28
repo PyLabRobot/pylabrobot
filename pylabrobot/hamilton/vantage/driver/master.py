@@ -244,7 +244,7 @@ class VantageDriver:
     await self._open()
     self._connected = True
 
-  async def discover(self) -> List[bool]:
+  async def discover(self) -> List[int]:
     """Read what the machine has: its channels, its arm and whether an IPG is fitted. Read-only:
     nothing moves.
 
@@ -252,7 +252,7 @@ class VantageDriver:
     enough, because an IPG that is fitted and not noticed can be driven into.
 
     Returns:
-      Which channels carry a tip, from the first.
+      One value per channel, 1 where a tip is mounted, 0-indexed from the back.
 
     Raises:
       RuntimeError: If the channels do not answer as `A1PM`, answer with no channel, or the arm
@@ -260,7 +260,7 @@ class VantageDriver:
     """
     pipettes = self.pipettes or Pipettes(self)
     try:
-      tip_presence = await pipettes.request_tip_presence()
+      tip_presence = await pipettes.sense_tip_presence()
     except VantageFirmwareError as e:
       raise RuntimeError(
         "the channels did not answer `A1PM QA`, so the machine cannot be set up. This driver "
@@ -320,7 +320,7 @@ class VantageDriver:
       return PipettesConfiguration().minimum_y_spacing
     return (int(settings["kf"]) + int(settings["kg"])) / 10
 
-  async def initialize(self, tip_presence: Optional[List[bool]] = None) -> None:
+  async def initialize(self, tip_presence: Optional[List[int]] = None) -> None:
     """Bring the arm, the IPG and the channels up, doing nothing for what already is. Moves the
     machine.
 
@@ -352,7 +352,7 @@ class VantageDriver:
       if not await self.ipg.request_parking_status():
         await self.ipg.park()
     if tip_presence is None:
-      tip_presence = await self.pipettes.request_tip_presence()
+      tip_presence = await self.pipettes.sense_tip_presence()
     if not await self.pipettes.request_initialization_status() or any(tip_presence):
       await self.pipettes.initialize()
 

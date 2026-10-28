@@ -17,9 +17,9 @@ class TestFactory(unittest.TestCase):
     vantage = Vantage(simulation=True)
     self.assertIsInstance(vantage, VantageDevice)
     self.assertIsInstance(vantage.driver, VantageSimulationDriver)
-    self.assertEqual(vantage.name, "vantage")
+    self.assertEqual(vantage.name, "Vantage")
     self.assertEqual(vantage.model, "Vantage")
-    self.assertEqual(vantage.deck.name, "vantage_deck")
+    self.assertEqual(vantage.deck.name, "Vantage_deck")
     self.assertEqual(vantage.deck.size, 1.3)  # type: ignore[attr-defined]
 
   def test_the_default_deck_takes_its_name_from_the_device(self):
@@ -94,7 +94,7 @@ class TestDevice(unittest.TestCase):
 
   def test_it_names_itself_with_its_driver_and_deck(self):
     self.assertEqual(
-      str(Vantage(simulation=True)), "vantage(VantageSimulationDriver, 54-track deck)"
+      str(Vantage(simulation=True)), "Vantage(VantageSimulationDriver, 54-track deck)"
     )
 
 
@@ -116,8 +116,8 @@ class TestSession(unittest.IsolatedAsyncioTestCase):
   async def test_connect_and_discover_move_nothing(self):
     vantage = Vantage(simulation=True)
     await vantage.connect()
-    tips: List[bool] = await vantage.discover()
-    self.assertEqual(tips, [False] * 8)
+    tips: List[int] = await vantage.discover()
+    self.assertEqual(tips, [0] * 8)
     driver = vantage.driver
     assert isinstance(driver, VantageSimulationDriver)
     self.assertFalse(driver.arm_up or driver.ipg_up or driver.channels_up)
@@ -142,8 +142,8 @@ class TestSession(unittest.IsolatedAsyncioTestCase):
 class TestSerialization(unittest.TestCase):
   def test_the_device_serializes_with_its_deck(self):
     data = Vantage(simulation=True).serialize()
-    self.assertEqual(data["name"], "vantage")
-    self.assertEqual([child["name"] for child in data["children"]], ["vantage_deck"])
+    self.assertEqual(data["name"], "Vantage")
+    self.assertEqual([child["name"] for child in data["children"]], ["Vantage_deck"])
 
 
 if __name__ == "__main__":

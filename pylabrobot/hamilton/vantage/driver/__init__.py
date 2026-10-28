@@ -1,3 +1,5 @@
+"""The Vantage driver."""
+
 from .errors import (
   VantageFirmwareError,
   check_fw_string_error,
