@@ -13,7 +13,6 @@ import unittest
 import warnings
 from typing import List, Optional
 
-
 from connectrpc.request import RequestContext
 from pyqwest import Client
 
@@ -30,10 +29,10 @@ from pylabrobot.resources.hamilton.troughs import hamilton_1_trough_200mL_Vb
 from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.server import build, handles, library
+from pylabrobot.resources.server.asgi_transport import ASGITransport
 from pylabrobot.resources.server.client import ResourceServer
 from pylabrobot.resources.server.definitions import definition_from_resource
 from pylabrobot.resources.server.errors import ServerError
-from pylabrobot.resources.server.asgi_transport import ASGITransport
 from pylabrobot.resources.server.memory import MemoryStore, asgi_app
 from pylabrobot.resources.server.tests.scenes import stacking_plate
 from pylabrobot.resources.server.tree import to_coordinate
