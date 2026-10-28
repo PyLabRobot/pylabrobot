@@ -197,3 +197,40 @@ class TestEvents(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
   unittest.main()
+
+
+class TestTips(unittest.IsolatedAsyncioTestCase):
+  """Tip commands against the simulated machine."""
+
+  async def asyncSetUp(self):
+    from pylabrobot.hamilton.vantage.driver.features.pipettes_tests import deck_with_tips
+
+    self.deck, self.rack = deck_with_tips()
+    self.driver = VantageSimulationDriver(deck=self.deck)
+    await self.driver.setup()
+    self.spots = self.rack.get_items("A1:H1")
+
+  async def asyncTearDown(self):
+    await self.driver.stop()
+
+  async def test_the_tip_type_is_written_into_the_table_and_answered(self):
+    await self.driver.send_command("A1AM", "TT")
+    self.assertEqual([command[:6] for command in self.driver.commands].count("A1AMTT"), 1)
+
+  async def test_tips_come_up_and_go_back(self):
+    pipettes = self.driver.pipettes
+    assert pipettes is not None
+    await pipettes.pick_up_tips(self.spots)
+    self.assertEqual(self.driver.tips, [True] * 8)
+    await pipettes.drop_tips(self.spots)
+    self.assertEqual(self.driver.tips, [False] * 8)
+
+  async def test_only_the_channels_the_pattern_names_take_a_tip(self):
+    await self.driver.send_raw_command("A1PMTPid0001tm1 0 0 0 0 0 0 0")
+    self.assertEqual(self.driver.tips, [True] + [False] * 7)
+    await self.driver.send_raw_command("A1PMTRid0002tm0 1 0 0 0 0 0 0")
+    self.assertEqual(self.driver.tips, [True] + [False] * 7)
+
+  async def test_a_pattern_that_repeats_the_last_value_reaches_every_channel(self):
+    await self.driver.send_raw_command("A1PMTPid0001tm1&")
+    self.assertEqual(self.driver.tips, [True] * 8)
