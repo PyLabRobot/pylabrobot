@@ -18,11 +18,13 @@ from pylabrobot.hamilton.transport.text_tcp import (
 )
 from pylabrobot.hamilton.vantage.driver.configuration import DeviceConfiguration
 from pylabrobot.hamilton.vantage.driver.errors import (
+  VantageFirmwareError,
   check_fw_string_error,
   get_id_from_fw_response,
   is_spontaneous_message,
   parse_vantage_fw_string,
 )
+from pylabrobot.hamilton.vantage.driver.features.pipettes import Pipettes
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.usb import USB
 from pylabrobot.resources.hamilton.vantage_decks import VantageDeck
@@ -127,6 +129,9 @@ class VantageDriver:
 
     self.configuration: Optional[DeviceConfiguration] = None
 
+    # Built by `discover`, for the channels the machine turns out to have.
+    self.pipettes: Optional[Pipettes] = None
+
   # ----------------------------------------
   # Connection and lifecycle
   # ----------------------------------------
@@ -165,9 +170,11 @@ class VantageDriver:
     return self._replies
 
   async def setup(self):
-    """Connect to the machine and bring its arm up.
+    """Connect to the machine, find out what it has, and bring it up.
 
-    This moves the machine: the arm is pre-initialized if it reports itself down.
+    This moves the machine: the arm is pre-initialized if it reports itself down, and the channels
+    are initialized if they report themselves down or carry a tip. `discover` is the read-only
+    part.
 
     Repeatable. A repeated setup goes over the link the first one opened, and initialization
     does nothing on a machine that is already up. A setup that fails part way closes the link.
@@ -181,11 +188,56 @@ class VantageDriver:
       self._connected = True
 
     try:
-      if not await self.request_arm_initialization_status():
-        await self.pre_initialize_arm()
+      tip_presence = await self.discover()
+      await self.initialize(tip_presence)
     except BaseException:
       await self.stop()
       raise
+
+  async def discover(self) -> List[bool]:
+    """Read how many channels the machine has. Read-only: nothing moves.
+
+    Returns:
+      Which channels carry a tip, from the first.
+
+    Raises:
+      RuntimeError: If the channels do not answer as `A1PM`, or answer with no channel.
+    """
+    pipettes = self.pipettes or Pipettes(self)
+    try:
+      tip_presence = await pipettes.request_tip_presence()
+    except VantageFirmwareError as e:
+      raise RuntimeError(
+        "the channels did not answer `A1PM QA`, so the machine cannot be set up. This driver "
+        "supports machines whose pipetting channels are addressed as `A1PM`; one whose channels "
+        f"are addressed otherwise is not supported. The machine said: {e.errors}"
+      ) from e
+    if not tip_presence:
+      raise RuntimeError("the machine reports no pipetting channel")
+    self.configuration = DeviceConfiguration(num_channels=len(tip_presence))
+    self.pipettes = pipettes
+    return tip_presence
+
+  async def initialize(self, tip_presence: Optional[List[bool]] = None) -> None:
+    """Bring the arm and the channels up, doing nothing for what already is. Moves the machine.
+
+    The arm is pre-initialized if it reports itself down, then the channels are initialized if
+    they report themselves down or carry a tip, which they discard.
+
+    Args:
+      tip_presence: which channels carry a tip, as `discover` read it. If None, it is read again.
+
+    Raises:
+      RuntimeError: If the machine has not been discovered.
+    """
+    if self.pipettes is None:
+      raise RuntimeError("the channels are found by `discover`, which has not run")
+    if not await self.request_arm_initialization_status():
+      await self.pre_initialize_arm()
+    if tip_presence is None:
+      tip_presence = await self.pipettes.request_tip_presence()
+    if not await self.pipettes.request_initialization_status() or any(tip_presence):
+      await self.pipettes.initialize()
 
   async def _open(self):
     """Open the link, resolving the host first when there is one, and start reading replies."""
