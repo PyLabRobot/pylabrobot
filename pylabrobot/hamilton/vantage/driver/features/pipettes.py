@@ -1,10 +1,18 @@
 """The Vantage's pipetting channels, which the arm addresses all together as `A1PM`."""
 
+import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
+
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.errors import HasTipError
+from pylabrobot.resources.hamilton.tip_creators import HamiltonTip
+from pylabrobot.resources.tip_rack import TipSpot
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.vantage.driver.master import VantageDriver
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,6 +37,13 @@ class PipettesConfiguration:
   tip_type_range: Tuple[int, int] = (0, 199)
   """The indexes of the machine's tip type table."""
 
+  default_minimal_traverse_height: float = 245.0
+  """How high a tip command travels with the channels when nothing else is asked, in mm."""
+
+  minimal_traverse_height: float = 245.0
+  """The lowest a tip command may travel at, in mm. Up to this height a resource is under a
+  traversing channel whatever tip it carries, so travelling lower may drag a tip through the deck."""
+
   initialize_read_timeout: int = 300
   """How long to wait for the channels to initialize, in seconds. They go to the waste, discard
   what they carry and initialize their drives, and the arm itself waits that long for them."""
@@ -36,6 +51,19 @@ class PipettesConfiguration:
   def to_increments(self, mm: float) -> int:
     """A value in mm as the wire carries it."""
     return round(mm * self.increments_per_mm)
+
+
+def _check_traverse_height(height: float, config: "PipettesConfiguration") -> None:
+  """Raise unless a tip command may travel at this height.
+
+  Raises:
+    ValueError: If the height is below what clears the deck, or above what the channels reach.
+  """
+  if height < config.minimal_traverse_height:
+    raise ValueError(
+      f"a tip command travels no lower than {config.minimal_traverse_height} mm, not {height}"
+    )
+  _check_range("minimum_traverse_height_start", [height], config.z_range)
 
 
 def _check_range(name: str, values: List[float], limits: Tuple[float, float]) -> None:
@@ -83,6 +111,10 @@ class Pipettes:
     self._driver = driver
     self.configuration = PipettesConfiguration()
 
+    # The tip each channel carries, by channel. What the model says, not what the machine senses:
+    # `request_tip_presence` asks the machine.
+    self._mounted_tips: Dict[int, HamiltonTip] = {}
+
   @property
   def num_channels(self) -> int:
     """How many channels the machine has. Read from it by `VantageDriver.discover`."""
@@ -128,6 +160,116 @@ class Pipettes:
       tt=tip_type,
       ts=x_shift,
     )
+
+  def get_mounted_tip(self, channel: int) -> Optional[HamiltonTip]:
+    """The tip the model has on a channel, or None if it carries none.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+    """
+    return self._mounted_tips.get(channel)
+
+  def _channels_and_offsets(
+    self,
+    spots: Sequence[TipSpot],
+    use_channels: Optional[List[int]],
+    offsets: Optional[List[Coordinate]],
+  ) -> Tuple[List[int], List[Coordinate]]:
+    """Which channels take which spot, and how far from each spot's centre they go, checked.
+
+    Args:
+      spots: one spot per channel, in ascending channel order.
+      use_channels: which channels, 0-indexed from the back. The first `len(spots)` when None.
+      offsets: added to each spot's centre, in mm.
+
+    Returns:
+      The channels and their offsets.
+
+    Raises:
+      ValueError: If the channels are not ascending, a channel is repeated or not fitted, or the
+        spots and channels do not come in pairs.
+    """
+    channels = list(range(len(spots))) if use_channels is None else list(use_channels)
+    if len(channels) != len(spots):
+      raise ValueError(
+        f"one channel for each spot is needed, but {len(spots)} spots and "
+        f"{len(channels)} channels are given"
+      )
+    if channels != sorted(channels):
+      raise ValueError(f"the channels must be ascending, are {channels}")
+    if len(set(channels)) != len(channels):
+      raise ValueError(f"a channel can take only one tip, but {channels} lists one twice")
+    if any(channel < 0 or channel >= self.num_channels for channel in channels):
+      raise ValueError(f"the machine has channels 0 to {self.num_channels - 1}, not {channels}")
+    return channels, [Coordinate.zero()] * len(spots) if offsets is None else list(offsets)
+
+  def _spot_positions(
+    self,
+    spots: Sequence[TipSpot],
+    channels: List[int],
+    offsets: List[Coordinate],
+  ) -> Tuple[List[int], List[int]]:
+    """Where each channel goes, in tenths of a mm, checked against what the channels can reach.
+
+    Args:
+      spots: one spot per channel, in the order of `channels`.
+      channels: which channels, ascending.
+      offsets: added to each spot's centre, in mm.
+
+    Returns:
+      X and Y, one for each channel given.
+
+    Raises:
+      RuntimeError: If the driver has no deck.
+      ValueError: If a position is out of reach.
+    """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("tips are picked up at places on the deck; this driver was given none")
+    config = self.configuration
+    xs: List[int] = []
+    ys: List[int] = []
+    for spot, offset in zip(spots, offsets):
+      location = spot.get_location_wrt(deck, x="c", y="c", z="b") + offset
+      _check_range("x", [location.x], config.x_range)
+      _check_range("y", [location.y], config.y_range)
+      xs.append(config.to_increments(location.x))
+      ys.append(config.to_increments(location.y))
+    return xs, ys
+
+  def _tips_to_collect(self, spots: Sequence[TipSpot]) -> List[HamiltonTip]:
+    """What each spot gives up, checked to be one model of Hamilton tip.
+
+    Raises:
+      TypeError: If a spot holds something other than a Hamilton tip.
+      ValueError: If the tips are not all of one model.
+      NoTipError: If a spot holds no tip while tip tracking is on.
+    """
+    tips: List[HamiltonTip] = []
+    for spot in spots:
+      tip = spot.tip_for_pickup()
+      if not isinstance(tip, HamiltonTip):
+        raise TypeError("the Vantage picks up Hamilton tips")
+      tips.append(tip)
+    if len({tip.model for tip in tips}) > 1:
+      raise ValueError("the tips picked up in one command must all have the same model")
+    return tips
+
+  def _tip_pattern(self, channels: List[int]) -> List[bool]:
+    """Which channels of the machine take part, one entry for each of them."""
+    return [channel in channels for channel in range(self.num_channels)]
+
+  def _full_width(self, channels: List[int], values: List) -> List:
+    """One value for each channel of the machine, with 0 for the channels not given.
+
+    A list shorter than the machine's channels would not leave the rest at 0: the machine takes a
+    `&` after it as "the last value again for every channel that is left", so the channels that
+    take no part would be given the last one's value. Every value is written out instead.
+    """
+    full: List = [0] * self.num_channels
+    for channel, value in zip(channels, values):
+      full[channel] = value
+    return full
 
   def _per_channel(self, name: str, values: Optional[List], default) -> List:
     """What was given for each channel, or the default for every channel.
@@ -234,4 +376,289 @@ class Pipettes:
       tip_pattern=[bool(value) for value in pattern],
       tip_type=[int(value) for value in types],
       x_shift=config.to_increments(shift),
+    )
+
+  # -- tips ----------------------------------------------------------------
+
+  async def _unchecked_fw_pick_up_tips(
+    self,
+    x_positions: List[int],
+    y_positions: List[int],
+    tip_pattern: List[bool],
+    tip_types: List[int],
+    begin_z: List[int],
+    end_z: List[int],
+    traverse_height: List[int],
+    height_at_end: List[int],
+    pickup_method: List[int],
+  ) -> None:
+    """Send a tip pickup as it goes on the wire, with every length in tenths of a mm.
+
+    `begin_z` and `end_z` are where the stop disc is: the tip's collar, and `collar_height` below
+    it. `traverse_height` and `height_at_end` are in the same frame.
+    """
+    await self._driver.send_command(
+      module="A1PM",
+      command="TP",
+      xp=x_positions,
+      yp=y_positions,
+      tm=tip_pattern,
+      tt=tip_types,
+      tp=begin_z,
+      tz=end_z,
+      th=traverse_height,
+      te=height_at_end,
+      ba=[0] * len(x_positions),
+      td=pickup_method,
+    )
+
+  async def _unchecked_fw_drop_tips(
+    self,
+    x_positions: List[int],
+    y_positions: List[int],
+    tip_pattern: List[bool],
+    begin_z: List[int],
+    end_z: List[int],
+    traverse_height: List[int],
+    height_at_end: List[int],
+    dispose_method: List[int],
+  ) -> None:
+    """Send a tip drop as it goes on the wire, with every length in tenths of a mm.
+
+    `begin_z` and `end_z` are where the tip's end is, as the machine takes them for a drop.
+    """
+    await self._driver.send_command(
+      module="A1PM",
+      command="TR",
+      xp=x_positions,
+      yp=y_positions,
+      tp=begin_z,
+      tz=end_z,
+      th=traverse_height,
+      te=height_at_end,
+      tm=tip_pattern,
+      ts=0,
+      td=dispose_method,
+    )
+
+  async def pick_up_tips(
+    self,
+    tip_spots: Sequence[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    offsets: Optional[List[Coordinate]] = None,
+    begin_tip_pick_up_process: Optional[float] = None,
+    end_tip_pick_up_process: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+  ) -> None:
+    """Pick up a tip from each spot, one channel per spot. Moves the channels.
+
+    The spots go in one command, so their tips must all be of the same model. Each tip is written
+    into the machine's tip type table if it is not there yet, and taken out of its spot in the
+    model once it is on its channel.
+
+    Heights as legacy: the process begins a collar's height above the highest spot, and ends at the
+    spot. If the machine reports an error, the channels are asked which of them carry a tip, and
+    the model takes that answer.
+
+    Args:
+      tip_spots: where to pick up, one per channel, in ascending channel order.
+      use_channels: which channels, 0-indexed from the back. The first `len(tip_spots)` when None.
+      offsets: added to each spot's centre, in mm. None for none.
+      begin_tip_pick_up_process: where the pick-up begins, in mm. The spot plus the collar height
+        when None.
+      end_tip_pick_up_process: where it ends, in mm. The highest spot when None.
+      minimum_traverse_height_start: how high the channels travel first, in mm. 245.0 when None.
+
+    Raises:
+      RuntimeError: If the driver has no deck.
+      ValueError: If the spots and channels do not match, a position is out of reach, or the tips
+        are not all of one model.
+      NoTipError: If a spot holds no tip while tip tracking is on.
+      HasTipError: If a channel already carries a tip.
+    """
+    if not tip_spots:
+      return
+    channels, offsets_used = self._channels_and_offsets(tip_spots, use_channels, offsets)
+    for channel in channels:
+      if channel in self._mounted_tips:
+        raise HasTipError(f"channel {channel} already carries {self._mounted_tips[channel].name}")
+
+    tips = self._tips_to_collect(tip_spots)
+    xs, ys = self._spot_positions(tip_spots, channels, offsets_used)
+    config = self.configuration
+    tip_types = [await self._driver.get_or_assign_tip_type_index(tip) for tip in tips]
+
+    deck = self._driver.deck
+    assert deck is not None  # checked by `_spot_positions`
+    zs = [
+      spot.get_location_wrt(deck, z="b").z + offset.z
+      for spot, offset in zip(tip_spots, offsets_used)
+    ]
+    collar = tips[0].collar_height
+    end = [config.to_increments(z) for z in zs]
+    begin = (
+      [config.to_increments(z + collar) for z in zs]
+      if begin_tip_pick_up_process is None
+      else [config.to_increments(begin_tip_pick_up_process)] * len(zs)
+    )
+    if end_tip_pick_up_process is not None:
+      end = [config.to_increments(end_tip_pick_up_process)] * len(zs)
+    _check_range(
+      "end_tip_pick_up_process", [z / config.increments_per_mm for z in end], config.z_range
+    )
+    _check_range(
+      "begin_tip_pick_up_process", [z / config.increments_per_mm for z in begin], config.z_range
+    )
+
+    travel = (
+      self.configuration.default_minimal_traverse_height
+      if minimum_traverse_height_start is None
+      else minimum_traverse_height_start
+    )
+    _check_traverse_height(travel, config)
+    travel_increments = config.to_increments(travel)
+    try:
+      await self._unchecked_fw_pick_up_tips(
+        x_positions=self._full_width(channels, xs),
+        y_positions=self._full_width(channels, ys),
+        tip_pattern=self._tip_pattern(channels),
+        tip_types=self._full_width(channels, tip_types),
+        begin_z=self._full_width(channels, begin),
+        end_z=self._full_width(channels, end),
+        traverse_height=self._full_width(channels, [travel_increments] * len(xs)),
+        height_at_end=self._full_width(channels, [travel_increments] * len(xs)),
+        pickup_method=self._full_width(channels, [tip.pickup_method.value + 1 for tip in tips]),
+      )
+    except BaseException:
+      # A command can stop part way. The channels themselves say which of them came away with a
+      # tip, which is worth more than the plan.
+      await self._record_after_failed_tip_command(channels, tip_spots, tips)
+      raise
+
+    for channel, spot, tip in zip(channels, tip_spots, tips):
+      if spot.tip is not None:
+        spot.unassign_tip()
+      self._mounted_tips[channel] = tip
+
+  async def drop_tips(
+    self,
+    tip_spots: Sequence[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    offsets: Optional[List[Coordinate]] = None,
+    begin_tip_deposit_process: Optional[float] = None,
+    end_tip_deposit_process: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+  ) -> None:
+    """Put the tip each channel carries back into a spot. Moves the channels.
+
+    The spots go in one command. As legacy, the process ends where the tip's end sits in the spot,
+    which is the spot less the length of the tip that hangs below its collar, and begins 10 mm
+    above that. If the machine reports an error, the channels are asked which of them carry a tip,
+    and the model takes that answer.
+
+    Args:
+      tip_spots: where to put the tips, one per channel, in ascending channel order.
+      use_channels: which channels, 0-indexed from the back. The first `len(tip_spots)` when None.
+      offsets: added to each spot's centre, in mm. None for none.
+      begin_tip_deposit_process: where the drop begins, in mm. The end plus 10 mm when None.
+      end_tip_deposit_process: where it ends, in mm. Where the tip's end sits when None.
+      minimum_traverse_height_start: how high the channels travel first, in mm. 245.0 when None.
+
+    Raises:
+      RuntimeError: If the driver has no deck.
+      ValueError: If the spots and channels do not match, or a position is out of reach.
+      HasTipError: If a spot already holds a tip while tip tracking is on.
+    """
+    if not tip_spots:
+      return
+    channels, offsets_used = self._channels_and_offsets(tip_spots, use_channels, offsets)
+    for channel in channels:
+      if channel not in self._mounted_tips:
+        raise ValueError(f"channel {channel} carries no tip to put down")
+    for spot in tip_spots:
+      if spot.tip is not None:
+        raise HasTipError(f"{spot.name} already holds a tip")
+
+    xs, ys = self._spot_positions(tip_spots, channels, offsets_used)
+    config = self.configuration
+    deck = self._driver.deck
+    assert deck is not None  # checked by `_spot_positions`
+    ends = []
+    for spot, channel, offset in zip(tip_spots, channels, offsets_used):
+      tip = self._mounted_tips[channel]
+      seat = spot.get_location_wrt(deck, z="b").z + offset.z
+      ends.append(seat - (tip.get_size_z() - tip.collar_height))
+    end = (
+      [config.to_increments(z) for z in ends]
+      if end_tip_deposit_process is None
+      else [config.to_increments(end_tip_deposit_process)] * len(ends)
+    )
+    begin = (
+      [z + config.to_increments(10.0) for z in end]
+      if begin_tip_deposit_process is None
+      else [config.to_increments(begin_tip_deposit_process)] * len(ends)
+    )
+    _check_range(
+      "end_tip_deposit_process", [z / config.increments_per_mm for z in end], config.z_range
+    )
+    _check_range(
+      "begin_tip_deposit_process", [z / config.increments_per_mm for z in begin], config.z_range
+    )
+
+    travel = (
+      self.configuration.default_minimal_traverse_height
+      if minimum_traverse_height_start is None
+      else minimum_traverse_height_start
+    )
+    _check_traverse_height(travel, config)
+    travel_increments = config.to_increments(travel)
+
+    try:
+      await self._unchecked_fw_drop_tips(
+        x_positions=self._full_width(channels, xs),
+        y_positions=self._full_width(channels, ys),
+        tip_pattern=self._tip_pattern(channels),
+        begin_z=self._full_width(channels, begin),
+        end_z=self._full_width(channels, end),
+        traverse_height=self._full_width(channels, [travel_increments] * len(xs)),
+        height_at_end=self._full_width(channels, [travel_increments] * len(xs)),
+        dispose_method=self._full_width(channels, [0] * len(xs)),
+      )
+    except BaseException:
+      self._warn_after_failed_drop(channels)
+      raise
+
+    for channel, spot in zip(channels, tip_spots):
+      tip = self._mounted_tips.pop(channel)
+      spot.assign_tip(tip)
+
+  async def _record_after_failed_tip_command(
+    self,
+    channels: List[int],
+    tip_spots: Sequence[TipSpot],
+    tips: Sequence[HamiltonTip],
+  ) -> None:
+    """Take the machine's word for which tips came up, after a pickup failed.
+
+    A pickup can stop part way. A channel that carries a tip now took it out of its spot, and that
+    is recorded; a channel that does not was left as it was, with its tip still in the spot.
+
+    Args:
+      channels: the channels the failed command was about.
+      tip_spots: their spots, in the same order.
+      tips: what each was to collect, in the same order.
+    """
+    presence = await self.request_tip_presence()
+    for channel, spot, tip in zip(channels, tip_spots, tips):
+      if presence[channel] and channel not in self._mounted_tips:
+        if spot.tip is not None:
+          spot.unassign_tip()
+        self._mounted_tips[channel] = tip
+
+  def _warn_after_failed_drop(self, channels: List[int]) -> None:
+    """Say that a failed drop leaves the model guessing which tips went back into their spots."""
+    logger.warning(
+      "a drop that failed leaves the model unsure where the tips on channels %s are: they are "
+      "not recorded as back in their spots",
+      channels,
     )

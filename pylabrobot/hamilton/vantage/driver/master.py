@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import Any, Dict, List, Optional, cast, overload
+from typing import Any, Dict, List, Optional, Tuple, cast, overload
 
 from pylabrobot.events import emit_event
 from pylabrobot.hamilton.protocol.text.framing import assemble_channel_command, read_id
@@ -28,6 +28,7 @@ from pylabrobot.hamilton.vantage.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.vantage.driver.lock import _FirmwareLock
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.usb import USB
+from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.hamilton.vantage_decks import VantageDeck
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,38 @@ MODULE_ID_LENGTH = 4
 
 # How long to wait for the reply to the arm's pre-initialization, in seconds.
 ARM_PRE_INITIALIZE_READ_TIMEOUT = 300
+
+# The entry of the tip type table the CoRe gripper's tool is defined in by the firmware. A tip
+# written there would overwrite it, so it is never given out.
+CORE_GRIPPER_TIP_TYPE_INDEX = 14
+
+# The tip types the machine defines itself, by the entry it holds them in. They are there after
+# every power on, and are used rather than written over: the machine detects a tip against them.
+# Each is (has a filter, what it holds in 0.1 uL, its collar).
+DEFAULT_TIP_TYPES: Dict[int, Tuple[bool, int, TipSize]] = {
+  0: (False, 4000, TipSize.STANDARD_VOLUME),  # 300 uL standard
+  1: (True, 3600, TipSize.STANDARD_VOLUME),  # 300 uL standard, filtered
+  2: (False, 150, TipSize.LOW_VOLUME),  # 10 uL low volume
+  3: (True, 100, TipSize.LOW_VOLUME),  # 10 uL low volume, filtered
+  4: (False, 12500, TipSize.HIGH_VOLUME),  # 1000 uL high volume
+  5: (True, 10650, TipSize.HIGH_VOLUME),  # 1000 uL high volume, filtered
+  6: (False, 700, TipSize.STANDARD_VOLUME),  # 70 uL low volume needle
+  7: (False, 3500, TipSize.STANDARD_VOLUME),  # 300 uL standard volume needle
+  8: (False, 12500, TipSize.HIGH_VOLUME),  # 1000 uL high volume needle
+  9: (False, 4000, TipSize.UNDEFINED),  # 300 uL standard, collar not identified
+  10: (False, 4000, TipSize.STANDARD_VOLUME),  # teach-in steel needle
+  11: (False, 150, TipSize.STANDARD_VOLUME),  # 10 uL needle
+  12: (False, 3500, TipSize.STANDARD_VOLUME),  # 300 uL needle
+  13: (False, 12500, TipSize.HIGH_VOLUME),  # 1000 uL needle
+  14: (False, 10, TipSize.UNDEFINED),  # the CoRe gripper's tool, never given out for a tip
+  15: (False, 440, TipSize.CORE_384_HEAD_TIP),  # 384 tip
+  16: (False, 54200, TipSize.XL),  # XL tip
+  17: (False, 10, TipSize.XL),  # XL CoRe grip tool
+}
+"""What the machine defines by itself, so that a matching tip needs no entry written for it."""
+
+FIRST_FREE_TIP_TYPE_INDEX = 18
+"""The first entry the machine leaves for tips of its own, above the ones it defines."""
 
 
 class VantageDriver:
@@ -132,6 +165,9 @@ class VantageDriver:
 
     # Built by `discover`, for the channels the machine turns out to have.
     self.pipettes: Optional[Pipettes] = None
+
+    # Which entry of the tip type table each tip model was written to, by model name.
+    self._tip_type_indices: Dict[str, int] = {}
 
     # Built by `discover`, and only if the machine has an internal plate gripper.
     self.ipg: Optional[Ipg] = None
@@ -322,6 +358,9 @@ class VantageDriver:
       logger.debug("the link is already closed")
       return
     self._connected = False
+    # The machine's tip type table is volatile, so what this session wrote to it does not last:
+    # the next session writes it again.
+    self._tip_type_indices.clear()
     await self._close()
 
   @property
@@ -571,3 +610,109 @@ class VantageDriver:
     await self.send_command(
       module="A1AM", command="MI", read_timeout=ARM_PRE_INITIALIZE_READ_TIMEOUT
     )
+
+  # ----------------------------------------
+  # Tip types
+  # ----------------------------------------
+
+  async def define_tip_needle(
+    self,
+    tip_type_table_index: int,
+    has_filter: bool,
+    tip_length: float,
+    maximum_tip_volume: float,
+    tip_size: TipSize,
+    pickup_method: TipPickupMethod,
+  ) -> None:
+    """Write one entry of the machine's tip type table. Moves nothing.
+
+    The table is volatile: it is written from scratch after every power on, and what a run defines
+    lasts only while the machine stays up.
+
+    Args:
+      tip_type_table_index: which entry to write, 0 to 99.
+      has_filter: whether the tip has a filter.
+      tip_length: how far the tip stands below the channel, in mm: its length less its fitting
+        depth.
+      maximum_tip_volume: what the tip holds, in uL. The machine caps it at the channel's capacity.
+      tip_size: which collar the tip has, which is how the machine identifies it.
+      pickup_method: whether it is collected from a rack or out of wash liquid.
+
+    Raises:
+      ValueError: If an argument is outside what the command accepts. Nothing is sent then.
+    """
+    length_increments = round(tip_length * 10)
+    volume_increments = round(maximum_tip_volume * 10)
+    if not 0 <= tip_type_table_index <= 99:
+      raise ValueError(f"tip_type_table_index must be from 0 to 99, but is {tip_type_table_index}")
+    if not 1 <= length_increments <= 1999:
+      raise ValueError(f"tip_length must be from 0.1 to 199.9 mm, but is {tip_length}")
+    if not 1 <= volume_increments <= 56000:
+      raise ValueError(
+        f"maximum_tip_volume must be from 0.1 to 5600.0 uL, but is {maximum_tip_volume}"
+      )
+    await self.send_command(
+      module="A1AM",
+      command="TT",
+      ti=f"{tip_type_table_index:02}",
+      tf=has_filter,
+      tl=f"{length_increments:04}",
+      tv=f"{volume_increments:05}",
+      tg=tip_size.value,
+      tu=pickup_method.value,
+    )
+
+  async def get_or_assign_tip_type_index(self, tip: HamiltonTip) -> int:
+    """The table entry this tip is named by, defining one if it is new to this session.
+
+    Every command that mounts tips names one of these entries, not the tip itself. A tip the
+    machine already has an entry for - the 300 uL one, for instance - uses that entry and nothing
+    is written: the machine detects tips against its own entries, so overwriting one makes it
+    refuse a tip that should fit. A tip that matches none of them is written into a free entry
+    above the machine's own.
+
+    Args:
+      tip: the tip to look up.
+
+    Returns:
+      Its entry in the machine's tip type table.
+
+    Raises:
+      ValueError: If the tip has no model, or the table is full.
+    """
+    model = tip.model
+    if model is None:
+      raise ValueError("a tip needs a model to be given a tip type index")
+    if model not in self._tip_type_indices:
+      for entry, (has_filter, volume, collar) in DEFAULT_TIP_TYPES.items():
+        if (
+          has_filter == tip.has_filter
+          and volume == round(tip.maximal_volume * 10)
+          and collar == tip.tip_size
+          and entry != CORE_GRIPPER_TIP_TYPE_INDEX
+        ):
+          self._tip_type_indices[model] = entry
+          return entry
+      taken = set(self._tip_type_indices.values())
+      index = next(
+        (
+          candidate for candidate in range(FIRST_FREE_TIP_TYPE_INDEX, 100) if candidate not in taken
+        ),
+        None,
+      )
+      if index is None:
+        raise ValueError(
+          f"the tip type table is full: {len(self._tip_type_indices)} tip types are defined"
+        )
+      await self.define_tip_needle(
+        tip_type_table_index=index,
+        has_filter=tip.has_filter,
+        tip_length=tip.get_size_z() - tip.fitting_depth,
+        # Floored at 0.1 uL so a teaching or probe needle with no capacity registers at all. It
+        # does not affect pickup, which goes by length and collar.
+        maximum_tip_volume=max(tip.maximal_volume, 0.1),
+        tip_size=tip.tip_size,
+        pickup_method=tip.pickup_method,
+      )
+      self._tip_type_indices[model] = index
+    return self._tip_type_indices[model]

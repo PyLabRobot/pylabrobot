@@ -12,6 +12,7 @@ from pylabrobot.hamilton.vantage.driver.errors import VantageFirmwareError
 from pylabrobot.hamilton.vantage.driver.master import VantageDriver
 from pylabrobot.hamilton.vantage.driver.simulator import NODES_WITH_IPG, NODES_WITHOUT_IPG
 from pylabrobot.io.io import IOBase
+from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMethod, TipSize
 
 SPONTANEOUS = 'A1AM__id0sm"Spontan Message"'
 ROUTER_LOGGER = "pylabrobot.hamilton.protocol.text.router"
@@ -122,6 +123,8 @@ def machine(
       return [echo(command, f"rt{int(ipg_plate)}")]
     if module_and_command == "A1AMMI":
       arm_up[0] = True
+      return [echo(command)]
+    if module_and_command in ("A1AMTT", "A1PMTP", "A1PMTR"):
       return [echo(command)]
     if module_and_command in ("A1PMDI", "A1RMDI", "A1RMGP"):
       return [echo(command, error=0 if arm_up[0] else 16)]
@@ -933,3 +936,99 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
   unittest.main()
+
+
+class TestTipTypes(unittest.IsolatedAsyncioTestCase):
+  """The tip type table."""
+
+  async def asyncSetUp(self):
+    self.io = ScriptedIO(machine())
+    self.driver = VantageDriver(self.io, read_timeout=5)
+    self.driver._connected = True
+    self.driver._router.start()
+
+  async def asyncTearDown(self):
+    self.driver._router.stop()
+
+  def tip(
+    self,
+    model: str = "a",
+    has_filter: bool = False,
+    maximal_volume: float = 400.0,
+    tip_size: TipSize = TipSize.STANDARD_VOLUME,
+  ) -> HamiltonTip:
+    return HamiltonTip(
+      model=None if model == "unset" else model,
+      name="tip",
+      has_filter=has_filter,
+      size_z=59.9,
+      nominal_volume=300,
+      maximal_volume=maximal_volume,
+      tip_size=tip_size,
+      pickup_method=TipPickupMethod.OUT_OF_RACK,
+      collar_height=8.0,
+      diameter=8.0,
+    )
+
+  def definitions(self) -> List[str]:
+    """The tip type entries the driver wrote."""
+    return [command for command in self.io.written if command.startswith("A1AMTT")]
+
+  async def test_a_plain_300_ul_tip_uses_the_entry_the_machine_already_has(self):
+    self.assertEqual(await self.driver.get_or_assign_tip_type_index(self.tip()), 0)
+    self.assertEqual(self.definitions(), [])
+
+  async def test_the_filtered_one_has_its_own_entry(self):
+    self.assertEqual(
+      await self.driver.get_or_assign_tip_type_index(self.tip("filtered", True, 360.0)), 1
+    )
+    self.assertEqual(self.definitions(), [])
+
+  async def test_a_1000_ul_tip_uses_the_entry_the_machine_already_has(self):
+    self.assertEqual(
+      await self.driver.get_or_assign_tip_type_index(
+        self.tip("big", False, 1250.0, TipSize.HIGH_VOLUME)
+      ),
+      4,
+    )
+    self.assertEqual(self.definitions(), [])
+
+  async def test_the_same_entry_comes_back_again(self):
+    first = await self.driver.get_or_assign_tip_type_index(self.tip())
+    second = await self.driver.get_or_assign_tip_type_index(self.tip())
+    self.assertEqual((first, second), (0, 0))
+
+  async def test_a_tip_the_machine_does_not_have_is_written_above_its_own_entries(self):
+    index = await self.driver.get_or_assign_tip_type_index(
+      self.tip("odd", False, 250.0, TipSize.STANDARD_VOLUME)
+    )
+    self.assertEqual(index, 18)
+    self.assertEqual(len(self.definitions()), 1)
+    self.assertIn("ti18", self.definitions()[0])
+
+  async def test_each_tip_the_machine_does_not_have_gets_the_next_entry(self):
+    first = await self.driver.get_or_assign_tip_type_index(self.tip("odd", False, 250.0))
+    second = await self.driver.get_or_assign_tip_type_index(self.tip("odder", False, 260.0))
+    self.assertEqual((first, second), (18, 19))
+
+  async def test_the_machines_own_entries_are_never_given_to_a_tip_it_does_not_have(self):
+    for index in range(18, 100):
+      self.driver._tip_type_indices[f"taken{index}"] = index
+    with self.assertRaises(ValueError) as caught:
+      await self.driver.get_or_assign_tip_type_index(self.tip("odd", False, 250.0))
+    self.assertIn("full", str(caught.exception))
+
+  async def test_the_grippers_entry_is_not_used_for_a_tip_that_looks_like_it(self):
+    index = await self.driver.get_or_assign_tip_type_index(
+      self.tip("probe", False, 1.0, TipSize.UNDEFINED)
+    )
+    self.assertEqual(index, 18)
+
+  async def test_a_tip_without_a_model_is_refused(self):
+    with self.assertRaises(ValueError):
+      await self.driver.get_or_assign_tip_type_index(self.tip("unset"))
+
+  async def test_the_table_is_written_off_when_the_link_closes(self):
+    await self.driver.get_or_assign_tip_type_index(self.tip())
+    await self.driver.stop()
+    self.assertEqual(self.driver._tip_type_indices, {})

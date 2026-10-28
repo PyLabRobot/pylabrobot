@@ -16,6 +16,27 @@ ARM_TYPE_WITH_IPG = 6
 ARM_TYPE_WITHOUT_IPG = 13
 
 _COMMAND = re.compile(r"^(\w{4})(\w{2})(?:id(\d+))?")
+_PARAMETER = re.compile(r"([a-z]{2})([^a-z]*)")
+
+
+def parameters(command: str) -> Dict[str, str]:
+  """The parameters a command carries, by their two-letter key, as they were written."""
+  found = _COMMAND.match(command)
+  assert found is not None, command
+  return dict(_PARAMETER.findall(command[found.end() :]))
+
+
+def channel_pattern(value: str, num_channels: int) -> List[bool]:
+  """A tip pattern as the command writes it, one entry per channel of the machine.
+
+  A `&` after the last value means "that value again for every channel that is left", so it is
+  expanded rather than dropped.
+  """
+  repeated = value.rstrip().endswith("&")
+  digits = value.replace("&", " ").split()
+  if repeated and digits:
+    digits += [digits[-1]] * (num_channels - len(digits))
+  return [digit == "1" for digit in digits[:num_channels]]
 
 
 class _UnusedTransport(IOBase):
@@ -122,68 +143,91 @@ class VantageSimulationDriver(VantageDriver):
     if handler is None:
       reply = f'{address}{code}id{reply_id}er30et"Command: Unknown command"'
     else:
-      error, parameters = handler()
-      reply = f"{address}{code}id{reply_id}er{error}{parameters}"
+      error, written = handler(cmd)
+      reply = f"{address}{code}id{reply_id}er{error}{written}"
     check_fw_string_error(reply)
     return reply if wait else None
 
-  def _handlers(self) -> Dict[str, Callable[[], Tuple[int, str]]]:
+  def _handlers(self) -> Dict[str, Callable[[str], Tuple[int, str]]]:
     """The commands the machine answers, by module and command, each giving the error code and the
     parameters of its reply.
 
     A machine without an IPG answers no `A1RM` command, as an unknown one. That is an assumption:
     what a real machine without an IPG answers has not been observed.
     """
-    handlers: Dict[str, Callable[[], Tuple[int, str]]] = {
-      "A1AMRF": lambda: (0, 'rf"simulated"'),
-      "A1AMQW": lambda: (0, f"qw{int(self.arm_up)}"),
+    handlers: Dict[str, Callable[[str], Tuple[int, str]]] = {
+      "A1AMRF": lambda command: (0, 'rf"simulated"'),
+      "A1AMQW": lambda command: (0, f"qw{int(self.arm_up)}"),
       "A1AMQU": self._arm_type,
       "A1AMQN": self._node_names,
       "A1AMMI": self._initialize_arm,
-      "A1PMQA": lambda: (0, "rt" + " ".join(str(int(tip)) for tip in self.tips)),
-      "A1PMQW": lambda: (0, f"qw{int(self.channels_up)}"),
+      "A1AMTT": lambda command: (0, ""),
+      "A1PMQA": lambda command: (
+        0,
+        "rt" + " ".join(str(int(tip)) for tip in self.tips),
+      ),
+      "A1PMQW": lambda command: (0, f"qw{int(self.channels_up)}"),
       "A1PMDI": self._initialize_channels,
+      "A1PMTP": self._pick_up_tips,
+      "A1PMTR": self._drop_tips,
     }
     if self.has_ipg:
       handlers.update(
         {
-          "A1RMQW": lambda: (0, f"qw{int(self.ipg_up)}"),
-          "A1RMRG": lambda: (0, f"rg{int(self.ipg_parked)}"),
-          "A1RMQA": lambda: (0, f"rt{int(self.ipg_plate)}"),
-          "A1RMRR": lambda: (0, "rr0 272" if self.ipg_parked else "rr45 271"),
-          "A1RMRS": lambda: (0, "rs6300 2800 700rr0 272"),
+          "A1RMQW": lambda command: (0, f"qw{int(self.ipg_up)}"),
+          "A1RMRG": lambda command: (0, f"rg{int(self.ipg_parked)}"),
+          "A1RMQA": lambda command: (0, f"rt{int(self.ipg_plate)}"),
+          "A1RMRR": lambda command: (
+            0,
+            "rr0 272" if self.ipg_parked else "rr45 271",
+          ),
+          "A1RMRS": lambda command: (0, "rs6300 2800 700rr0 272"),
           "A1RMDI": self._initialize_ipg,
           "A1RMGP": self._park_ipg,
         }
       )
     return handlers
 
-  def _arm_type(self) -> Tuple[int, str]:
+  def _arm_type(self, command: str) -> Tuple[int, str]:
     kind = ARM_TYPE_WITH_IPG if self.has_ipg else ARM_TYPE_WITHOUT_IPG
     return 0, f"kt{kind}ka1300kd1300ke0kh0"
 
-  def _node_names(self) -> Tuple[int, str]:
+  def _node_names(self, command: str) -> Tuple[int, str]:
     nodes = NODES_WITH_IPG if self.has_ipg else NODES_WITHOUT_IPG
     return 0, f'xn"{nodes}"'
 
-  def _initialize_arm(self) -> Tuple[int, str]:
+  def _initialize_arm(self, command: str) -> Tuple[int, str]:
     self.arm_up = True
     return 0, ""
 
-  def _initialize_channels(self) -> Tuple[int, str]:
+  def _initialize_channels(self, command: str) -> Tuple[int, str]:
     if not self.arm_up:
       return 16, ""
     self.channels_up = True
     self.tips = [False] * len(self.tips)
     return 0, ""
 
-  def _initialize_ipg(self) -> Tuple[int, str]:
+  def _pick_up_tips(self, command: str) -> Tuple[int, str]:
+    pattern = channel_pattern(parameters(command)["tm"], len(self.tips))
+    for channel, takes in enumerate(pattern):
+      if takes:
+        self.tips[channel] = True
+    return 0, ""
+
+  def _drop_tips(self, command: str) -> Tuple[int, str]:
+    pattern = channel_pattern(parameters(command)["tm"], len(self.tips))
+    for channel, drops in enumerate(pattern):
+      if drops:
+        self.tips[channel] = False
+    return 0, ""
+
+  def _initialize_ipg(self, command: str) -> Tuple[int, str]:
     if not self.arm_up:
       return 16, ""
     self.ipg_up = True
     return 0, ""
 
-  def _park_ipg(self) -> Tuple[int, str]:
+  def _park_ipg(self, command: str) -> Tuple[int, str]:
     if not self.arm_up:
       return 16, ""
     self.ipg_parked = True
