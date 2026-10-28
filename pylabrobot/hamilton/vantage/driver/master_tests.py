@@ -74,26 +74,60 @@ def arm_status(initialized: bool) -> Callable[[str], Optional[List[str]]]:
   return answers
 
 
+NODES_WITHOUT_IPG = "AM 01 02 03 04 05 06 PX PX PX PX PX PX PX PX 16 17"
+NODES_WITH_IPG = "AM 01 02 03 04 05 06 R0 PX PX PX PX PX PX PX PX 16 17"
+
+
 def machine(
   arm_initialized: bool = True,
   channels_initialized: bool = True,
   tips: Optional[List[bool]] = None,
   num_channels: int = 8,
+  arm_type: Optional[int] = None,
+  node_names: Optional[str] = None,
+  ipg: bool = False,
+  ipg_initialized: bool = True,
+  ipg_parked: bool = True,
+  ipg_plate: bool = False,
 ) -> Callable[[str], Optional[List[str]]]:
   """A machine with `num_channels` channels, of which `tips` carry a tip, that answers what setup
-  sends."""
+  sends.
+
+  It has an IPG if `ipg` is set, which then is as `ipg_initialized`, `ipg_parked` and `ipg_plate`
+  say. Otherwise it is an arm type without one (13). `arm_type` and `node_names` override what the
+  arm says of itself.
+
+  Like the machine, it refuses to initialize or park the IPG, or to initialize the channels, until
+  the arm has been initialized: it answers error 16.
+  """
   carrying = tips if tips is not None else [False] * num_channels
+  kind = arm_type if arm_type is not None else (6 if ipg else 13)
+  nodes = node_names if node_names is not None else (NODES_WITH_IPG if ipg else NODES_WITHOUT_IPG)
+  arm_up = [arm_initialized]
 
   def answers(command: str) -> Optional[List[str]]:
     module_and_command = command[:6]
     if module_and_command == "A1AMQW":
-      return [echo(command, f"qw{int(arm_initialized)}")]
+      return [echo(command, f"qw{int(arm_up[0])}")]
+    if module_and_command == "A1AMQU":
+      return [echo(command, f"kt{kind}ka1300kd1300ke0kh0")]
+    if module_and_command == "A1AMQN":
+      return [echo(command, f'xn"{nodes}"')]
     if module_and_command == "A1PMQW":
       return [echo(command, f"qw{int(channels_initialized)}")]
     if module_and_command == "A1PMQA":
       return [echo(command, "rt" + " ".join(str(int(tip)) for tip in carrying))]
-    if module_and_command in ("A1AMMI", "A1PMDI"):
+    if module_and_command == "A1RMQW":
+      return [echo(command, f"qw{int(ipg_initialized)}")]
+    if module_and_command == "A1RMRG":
+      return [echo(command, f"rg{int(ipg_parked)}")]
+    if module_and_command == "A1RMQA":
+      return [echo(command, f"rt{int(ipg_plate)}")]
+    if module_and_command == "A1AMMI":
+      arm_up[0] = True
       return [echo(command)]
+    if module_and_command in ("A1PMDI", "A1RMDI", "A1RMGP"):
+      return [echo(command, error=0 if arm_up[0] else 16)]
     return None
 
   return answers
@@ -350,7 +384,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       self.assertIn("untested on hardware", logs.output[0])
       self.assertTrue(driver.connected)
       self.assertEqual(io.setups, 1)
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW"])
       self.assertEqual(driver.num_channels, 8)
     finally:
       await driver.stop()
@@ -360,7 +394,9 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     driver = self.driver_on(io)
     try:
       await driver.setup()
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1AMMI", "A1PMQW", "A1PMDI"])
+      self.assertEqual(
+        self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1AMMI", "A1PMQW", "A1PMDI"]
+      )
     finally:
       await driver.stop()
 
@@ -369,7 +405,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     driver = self.driver_on(io)
     try:
       await driver.setup()
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW", "A1PMDI"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW", "A1PMDI"])
     finally:
       await driver.stop()
 
@@ -378,7 +414,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     driver = self.driver_on(io)
     try:
       await driver.setup()
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW", "A1PMDI"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW", "A1PMDI"])
     finally:
       await driver.stop()
 
@@ -397,7 +433,10 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     try:
       await driver.setup()
       self.assertEqual(driver.num_channels, 4)
-      self.assertEqual(driver.configuration, DeviceConfiguration(num_channels=4))
+      self.assertEqual(
+        driver.configuration,
+        DeviceConfiguration(num_channels=4, arm_type=13, ipg_installed=False),
+      )
     finally:
       await driver.stop()
 
@@ -419,7 +458,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       await driver.connect()
       tips = await driver.discover()
       self.assertEqual(tips, [False] * 8)
-      self.assertEqual(self.sent(io), ["A1PMQA"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN"])
     finally:
       await driver.stop()
 
@@ -430,7 +469,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       await driver.connect()
       await driver.setup()
       self.assertEqual(io.setups, 1)
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW"])
     finally:
       await driver.stop()
 
@@ -441,7 +480,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       await driver.setup()
       await driver.setup()
       self.assertEqual(io.setups, 1)
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW"] * 2)
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW"] * 2)
     finally:
       await driver.stop()
 
@@ -545,6 +584,235 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       await driver.stop()
 
 
+class TestIpgDuringSetup(unittest.IsolatedAsyncioTestCase):
+  """An IPG that is fitted is looked for before anything moves, and brought to a safe state
+  before the arm and the channels move."""
+
+  def driver_on(self, io: ScriptedIO) -> VantageDriver:
+    return VantageDriver(io, read_timeout=5)
+
+  def sent(self, io: ScriptedIO) -> List[str]:
+    return [command[:6] for command in io.written]
+
+  def rejecting(
+    self, base: Callable[[str], Optional[List[str]]], *rejected: str
+  ) -> Callable[[str], Optional[List[str]]]:
+    """A machine that answers as `base`, except that it rejects the commands named."""
+
+    def answers(command: str) -> Optional[List[str]]:
+      if command[:6] in rejected:
+        return [echo(command, 'et"Command: Unknown command"', error=30)]
+      return base(command)
+
+    return answers
+
+  async def test_discover_finds_an_ipg_and_moves_nothing(self):
+    io = ScriptedIO(machine(ipg=True, ipg_initialized=False, ipg_parked=False))
+    driver = self.driver_on(io)
+    try:
+      await driver.connect()
+      await driver.discover()
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN"])
+      self.assertTrue(driver.configuration.ipg_installed)  # type: ignore[union-attr]
+      self.assertEqual(driver.configuration.arm_type, 6)  # type: ignore[union-attr]
+      self.assertIsNotNone(driver.ipg)
+    finally:
+      await driver.stop()
+
+  async def test_a_machine_without_an_ipg_is_never_asked_about_one(self):
+    io = ScriptedIO(machine())
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertFalse(driver.configuration.ipg_installed)  # type: ignore[union-attr]
+      self.assertIsNone(driver.ipg)
+      self.assertFalse([command for command in self.sent(io) if command.startswith("A1RM")])
+    finally:
+      await driver.stop()
+
+  async def test_an_ipg_that_is_up_and_parked_is_read_and_left_alone(self):
+    io = ScriptedIO(machine(ipg=True))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertEqual(
+        self.sent(io),
+        ["A1PMQA", "A1AMQU", "A1AMQN", "A1RMQA", "A1AMQW", "A1RMQW", "A1RMRG", "A1PMQW"],
+      )
+    finally:
+      await driver.stop()
+
+  async def test_an_ipg_that_is_down_is_initialized_and_parked_after_the_arm_and_before_the_channels(
+    self,
+  ):
+    io = ScriptedIO(
+      machine(
+        ipg=True,
+        ipg_initialized=False,
+        ipg_parked=False,
+        arm_initialized=False,
+        channels_initialized=False,
+      )
+    )
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertEqual(
+        self.sent(io),
+        [
+          "A1PMQA",
+          "A1AMQU",
+          "A1AMQN",
+          "A1RMQA",
+          "A1AMQW",
+          "A1AMMI",
+          "A1RMQW",
+          "A1RMDI",
+          "A1RMRG",
+          "A1RMGP",
+          "A1PMQW",
+          "A1PMDI",
+        ],
+      )
+    finally:
+      await driver.stop()
+
+  async def test_an_ipg_that_is_up_but_not_parked_is_only_parked(self):
+    io = ScriptedIO(machine(ipg=True, ipg_parked=False))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      sent = self.sent(io)
+      self.assertIn("A1RMGP", sent)
+      self.assertNotIn("A1RMDI", sent)
+    finally:
+      await driver.stop()
+
+  async def test_an_ipg_that_is_down_but_parked_is_only_initialized(self):
+    io = ScriptedIO(machine(ipg=True, ipg_initialized=False))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      sent = self.sent(io)
+      self.assertIn("A1RMDI", sent)
+      self.assertNotIn("A1RMGP", sent)
+    finally:
+      await driver.stop()
+
+  async def test_an_ipg_that_holds_a_plate_stops_the_setup_before_anything_moves(self):
+    io = ScriptedIO(
+      machine(
+        ipg=True,
+        ipg_plate=True,
+        ipg_initialized=False,
+        ipg_parked=False,
+        arm_initialized=False,
+        channels_initialized=False,
+      )
+    )
+    driver = self.driver_on(io)
+    with self.assertRaises(RuntimeError) as caught:
+      await driver.setup()
+    self.assertIn("holds a plate", str(caught.exception))
+    self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1RMQA"])
+    self.assertFalse(driver.connected)
+
+  async def test_the_ipg_is_given_time_to_initialize_and_park(self):
+    io = ScriptedIO(machine(ipg=True, ipg_initialized=False, ipg_parked=False))
+    driver = self.driver_on(io)
+    seen: Dict[str, Optional[int]] = {}
+    send = driver._router.send
+
+    async def spying(cmd, id_, write_timeout=None, read_timeout=None, wait=True):
+      seen[cmd[:6]] = read_timeout
+      return await send(cmd, id_, write_timeout, read_timeout, wait)
+
+    driver._router.send = spying  # type: ignore[method-assign]
+    try:
+      await driver.setup()
+      self.assertEqual((seen["A1RMDI"], seen["A1RMGP"]), (300, 300))
+      self.assertIsNone(seen["A1RMQW"])
+    finally:
+      await driver.stop()
+
+  async def test_the_arm_type_alone_says_an_ipg_is_fitted(self):
+    io = ScriptedIO(machine(arm_type=6, node_names=NODES_WITHOUT_IPG))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertIn("A1RMQW", self.sent(io))
+    finally:
+      await driver.stop()
+
+  async def test_a_node_name_alone_says_an_ipg_is_fitted(self):
+    io = ScriptedIO(machine(arm_type=13, node_names=NODES_WITH_IPG))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertIn("A1RMQW", self.sent(io))
+    finally:
+      await driver.stop()
+
+  async def test_an_arm_type_that_has_none_and_nodes_that_have_none_say_there_is_none(self):
+    io = ScriptedIO(machine(arm_type=9, node_names=NODES_WITHOUT_IPG))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertIsNone(driver.ipg)
+    finally:
+      await driver.stop()
+
+  async def test_an_arm_that_does_not_report_its_type_is_judged_by_its_nodes(self):
+    base = machine(ipg=True)
+    io = ScriptedIO(self.rejecting(base, "A1AMQU"))
+    driver = self.driver_on(io)
+    try:
+      with self.assertLogs("pylabrobot.hamilton.vantage.driver.master", "WARNING"):
+        await driver.setup()
+      self.assertIn("A1RMQW", self.sent(io))
+      self.assertEqual(driver.configuration.arm_type, 0)  # type: ignore[union-attr]
+    finally:
+      await driver.stop()
+
+  async def test_an_arm_that_does_not_report_its_nodes_is_judged_by_its_type(self):
+    io = ScriptedIO(self.rejecting(machine(ipg=True), "A1AMQN"))
+    driver = self.driver_on(io)
+    try:
+      with self.assertLogs("pylabrobot.hamilton.vantage.driver.master", "WARNING"):
+        await driver.setup()
+      self.assertIn("A1RMQW", self.sent(io))
+    finally:
+      await driver.stop()
+
+  async def test_an_arm_that_answers_neither_question_is_refused_before_anything_moves(self):
+    io = ScriptedIO(
+      self.rejecting(
+        machine(ipg=True, arm_initialized=False, channels_initialized=False),
+        "A1AMQU",
+        "A1AMQN",
+      )
+    )
+    driver = self.driver_on(io)
+    with self.assertLogs("pylabrobot.hamilton.vantage.driver.master", "WARNING"):
+      with self.assertRaises(RuntimeError) as caught:
+        await driver.setup()
+    self.assertIn("internal plate gripper", str(caught.exception))
+    self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN"])
+    self.assertFalse(driver.connected)
+
+  async def test_the_ipg_is_found_again_when_setup_is_repeated(self):
+    io = ScriptedIO(machine(ipg=True))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      first = driver.ipg
+      await driver.setup()
+      self.assertIs(driver.ipg, first)
+      self.assertEqual(self.sent(io).count("A1RMQA"), 2)
+    finally:
+      await driver.stop()
+
+
 class TestOverTCP(unittest.IsolatedAsyncioTestCase):
   """The same driver against a TCP server on this machine, lines ending in CRLF."""
 
@@ -573,6 +841,10 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
         writer.write(SPONTANEOUS.encode() + b"\r\n")
         if line.startswith("A1AMQW"):
           writer.write(echo(line, f"qw{int(self.arm_initialized)}").encode() + b"\r\n")
+        elif line.startswith("A1AMQU"):
+          writer.write(echo(line, "kt13ka497kd1257ke0kh106").encode() + b"\r\n")
+        elif line.startswith("A1AMQN"):
+          writer.write(echo(line, f'xn"{NODES_WITHOUT_IPG}"').encode() + b"\r\n")
         elif line.startswith("A1PMQA"):
           writer.write(echo(line, "rt" + " ".join(["0"] * 8)).encode() + b"\r\n")
         elif line.startswith("A1PMQW"):
@@ -592,10 +864,17 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
         await within(driver.setup())
         self.assertIsInstance(driver.io, HamiltonTextTCP)
         reply = await within(driver.send_command("A1AM", "QW", fmt={"qw": "int"}))
-      self.assertEqual(reply, {"qw": 1, "id": 4})
+      self.assertEqual(reply, {"qw": 1, "id": 6})
       self.assertEqual(
         self.received,
-        ["A1PMQAid0001", "A1AMQWid0002", "A1PMQWid0003", "A1AMQWid0004"],
+        [
+          "A1PMQAid0001",
+          "A1AMQUid0002",
+          "A1AMQNid0003",
+          "A1AMQWid0004",
+          "A1PMQWid0005",
+          "A1AMQWid0006",
+        ],
       )
     finally:
       await driver.stop()
@@ -607,7 +886,8 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
     try:
       await within(driver.setup())
       self.assertEqual(
-        [line[:6] for line in self.received], ["A1PMQA", "A1AMQW", "A1AMMI", "A1PMQW"]
+        [line[:6] for line in self.received],
+        ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1AMMI", "A1PMQW"],
       )
     finally:
       await driver.stop()
@@ -630,7 +910,9 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
     await driver.stop()
     try:
       await within(driver.setup())
-      self.assertEqual([line[:6] for line in self.received], ["A1PMQA", "A1AMQW", "A1PMQW"] * 2)
+      self.assertEqual(
+        [line[:6] for line in self.received], ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW"] * 2
+      )
     finally:
       await driver.stop()
 
