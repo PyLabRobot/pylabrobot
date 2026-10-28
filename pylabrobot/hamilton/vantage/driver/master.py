@@ -8,7 +8,7 @@ import logging
 from typing import Any, Dict, List, Optional, cast, overload
 
 from pylabrobot.events import emit_event
-from pylabrobot.hamilton.protocol.text.framing import assemble_channel_command
+from pylabrobot.hamilton.protocol.text.framing import assemble_channel_command, read_id
 from pylabrobot.hamilton.protocol.text.router import ReplyRouter
 from pylabrobot.hamilton.transport.text_tcp import (
   DEFAULT_PORT,
@@ -475,7 +475,7 @@ class VantageDriver:
     }
     emit_event("firmware.command.started", **event_data)
     try:
-      resp = await self._transmit(cmd, id_, write_timeout, read_timeout)
+      resp = cast(str, await self._transmit(cmd, id_, write_timeout, read_timeout))
       result = parse_vantage_fw_string(resp, fmt) if fmt is not None else resp
     except BaseException as error:
       emit_event(
@@ -494,19 +494,24 @@ class VantageDriver:
     id_: Optional[int],
     write_timeout: Optional[int],
     read_timeout: Optional[int],
-  ) -> str:
+    wait: bool = True,
+  ) -> Optional[str]:
     """Put an assembled command on the link and return the reply that answers it.
 
     The one place a command leaves the driver, so a simulated machine can answer here.
 
+    Args:
+      cmd: the command, as it is written.
+      id_: the id the command carries, which its reply is recognised by.
+      write_timeout: seconds to wait for the command to be written.
+      read_timeout: seconds to wait for the reply.
+      wait: whether to wait for the reply. If not, None is returned once the command is written.
+
     Raises:
       VantageFirmwareError: If the machine reports an error.
     """
-    return cast(
-      str,
-      await self._router.send(
-        cmd=cmd, id_=id_, write_timeout=write_timeout, read_timeout=read_timeout
-      ),
+    return await self._router.send(
+      cmd=cmd, id_=id_, write_timeout=write_timeout, read_timeout=read_timeout, wait=wait
     )
 
   async def send_raw_command(
@@ -531,12 +536,7 @@ class VantageDriver:
       RuntimeError: If the link is not open.
     """
     self._require_connection()
-    return await self._router.send_raw(
-      command=command,
-      write_timeout=write_timeout,
-      read_timeout=read_timeout,
-      wait=wait,
-    )
+    return await self._transmit(command, read_id(command), write_timeout, read_timeout, wait)
 
   def _require_connection(self) -> None:
     """Raise unless the link is open. A command may not be sent into a closed link."""
