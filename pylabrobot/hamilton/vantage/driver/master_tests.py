@@ -483,7 +483,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     try:
       await driver.connect()
       tips = await driver.discover()
-      self.assertEqual(tips, [False] * 8)
+      self.assertEqual(tips, [0] * 8)
       self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC"])
     finally:
       await driver.stop()

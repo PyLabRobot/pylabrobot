@@ -83,7 +83,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
   async def test_discover_moves_nothing(self):
     driver = VantageSimulationDriver(tips_mounted=[False, True] + [False] * 6)
     await driver.connect()
-    self.assertEqual(await driver.discover(), [False, True] + [False] * 6)
+    self.assertEqual(await driver.discover(), [0, 1] + [0] * 6)
     self.assertEqual((driver.arm_up, driver.ipg_up, driver.channels_up), (False,) * 3)
     await driver.stop()
 

@@ -94,11 +94,11 @@ class TestConfiguration(unittest.TestCase):
 class TestQueries(PipettesTestCase):
   """What the channels are asked."""
 
-  async def test_the_tips_come_back_as_booleans_one_for_each_channel(self):
+  async def test_the_tips_come_back_one_for_each_channel_as_the_machine_reports_them(self):
     self.io.answers = machine(tips=[True, False, False, True, False, False, False, False])
-    tips = await self.pipettes.request_tip_presence()
-    self.assertEqual(tips, [True, False, False, True, False, False, False, False])
-    self.assertTrue(all(isinstance(tip, bool) for tip in tips))
+    tips = await self.pipettes.sense_tip_presence()
+    self.assertEqual(tips, [1, 0, 0, 1, 0, 0, 0, 0])
+    self.assertTrue(all(type(tip) is int for tip in tips))
     self.assertEqual([without_id(command) for command in self.io.written], ["A1PMQA"])
 
   async def test_the_initialization_status_is_true_only_for_1(self):
@@ -580,7 +580,7 @@ class TestDropTips(TipsTestCase):
 
   async def test_a_channel_without_a_tip_is_refused(self):
     await self.pipettes.drop_tips(self.spots[:1], use_channels=[0])
-    with self.assertRaises(ValueError):
+    with self.assertRaises(NoTipError):
       await self.pipettes.drop_tips(self.spots[:1], use_channels=[0])
 
   async def test_a_spot_that_holds_a_tip_already_is_refused(self):

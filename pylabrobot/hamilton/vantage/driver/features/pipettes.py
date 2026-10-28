@@ -2,10 +2,10 @@
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.errors import HasTipError
+from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip
 from pylabrobot.resources.tip_rack import TipSpot
 
@@ -116,7 +116,7 @@ class Pipettes:
     self.configuration = PipettesConfiguration()
 
     # The tip each channel carries, by channel. What the model says, not what the machine senses:
-    # `request_tip_presence` asks the machine.
+    # `sense_tip_presence` asks the machine.
     self._mounted_tips: Dict[int, HamiltonTip] = {}
 
   @property
@@ -124,14 +124,18 @@ class Pipettes:
     """How many channels the machine has. Read from it by `VantageDriver.discover`."""
     return self._driver.num_channels
 
-  async def request_tip_presence(self) -> List[bool]:
-    """Which channels carry a tip, from the first.
+  async def sense_tip_presence(self) -> List[int]:
+    """Sense tip presence on every channel, from the machine's own sensors.
+
+    Answered as the machine answers it, 1 where a tip is and 0 where none is, rather than narrowed
+    to True and False: the two carry the same meaning, and a value that is neither would be lost by
+    the narrowing rather than read back as it stands.
 
     Returns:
-      One entry for each channel the machine has.
+      One value per channel, 1 where a tip is mounted, 0-indexed from the back.
     """
     resp = await self._driver.send_command(module="A1PM", command="QA", fmt={"rt": "[int]"})
-    return [bool(present) for present in resp["rt"]]
+    return cast(List[int], resp["rt"])
 
   async def request_initialization_status(self) -> bool:
     """Whether the channels are initialized."""
@@ -560,7 +564,7 @@ class Pipettes:
 
   async def drop_tips(
     self,
-    tip_spots: Sequence[TipSpot],
+    destinations: Sequence[TipSpot],
     use_channels: Optional[List[int]] = None,
     offsets: Optional[List[Coordinate]] = None,
     begin_tip_deposit_process: Optional[float] = None,
@@ -575,7 +579,7 @@ class Pipettes:
     and the model takes that answer.
 
     Args:
-      tip_spots: where to put the tips, one per channel, in ascending channel order.
+      destinations: where to put the tips, one per channel, in ascending channel order.
       use_channels: which channels, 0-indexed from the back. The first `len(tip_spots)` when None.
       offsets: added to each spot's centre, in mm. None for none.
       begin_tip_deposit_process: where the drop begins, in mm. The end plus 10 mm when None.
@@ -585,24 +589,25 @@ class Pipettes:
     Raises:
       RuntimeError: If the driver has no deck.
       ValueError: If the spots and channels do not match, or a position is out of reach.
+      NoTipError: If a channel carries no tip in the model.
       HasTipError: If a spot already holds a tip while tip tracking is on.
     """
-    if not tip_spots:
+    if not destinations:
       return
-    channels, offsets_used = self._channels_and_offsets(tip_spots, use_channels, offsets)
+    channels, offsets_used = self._channels_and_offsets(destinations, use_channels, offsets)
     for channel in channels:
       if channel not in self._mounted_tips:
-        raise ValueError(f"channel {channel} carries no tip to put down")
-    for spot in tip_spots:
+        raise NoTipError(f"channel {channel} carries no tip")
+    for spot in destinations:
       if spot.tip is not None:
         raise HasTipError(f"{spot.name} already holds a tip")
 
-    xs, ys = self._spot_positions(tip_spots, channels, offsets_used)
+    xs, ys = self._spot_positions(destinations, channels, offsets_used)
     config = self.configuration
     deck = self._driver.deck
     assert deck is not None  # checked by `_spot_positions`
     ends = []
-    for spot, channel, offset in zip(tip_spots, channels, offsets_used):
+    for spot, channel, offset in zip(destinations, channels, offsets_used):
       tip = self._mounted_tips[channel]
       seat = spot.get_location_wrt(deck, z="b").z + offset.z
       ends.append(seat - (tip.get_size_z() - tip.collar_height))
@@ -646,7 +651,7 @@ class Pipettes:
       self._warn_after_failed_drop(channels)
       raise
 
-    for channel, spot in zip(channels, tip_spots):
+    for channel, spot in zip(channels, destinations):
       tip = self._mounted_tips.pop(channel)
       spot.assign_tip(tip)
 
@@ -666,7 +671,7 @@ class Pipettes:
       tip_spots: their spots, in the same order.
       tips: what each was to collect, in the same order.
     """
-    presence = await self.request_tip_presence()
+    presence = await self.sense_tip_presence()
     for channel, spot, tip in zip(channels, tip_spots, tips):
       if presence[channel] and channel not in self._mounted_tips:
         if spot.tip is not None:
