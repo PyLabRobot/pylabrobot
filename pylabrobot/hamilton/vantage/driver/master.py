@@ -182,17 +182,25 @@ class VantageDriver:
     logger.warning(
       "The Vantage driver is untested on hardware: check each motion before relying on it."
     )
-    logger.debug("Setting up Vantage on %s ...", self._describe_link())
-    if not self._connected:
-      await self._open()
-      self._connected = True
-
+    await self.connect()
     try:
       tip_presence = await self.discover()
       await self.initialize(tip_presence)
     except BaseException:
       await self.stop()
       raise
+
+  async def connect(self) -> None:
+    """Open the link to the machine, which moves nothing, and start reading its replies.
+
+    `setup` does this first. Call it alone to read a machine with `discover` without bringing
+    it up. Repeatable: a link already open is left as it is.
+    """
+    if self._connected:
+      return
+    logger.debug("Connecting to Vantage on %s ...", self._describe_link())
+    await self._open()
+    self._connected = True
 
   async def discover(self) -> List[bool]:
     """Read how many channels the machine has. Read-only: nothing moves.
@@ -399,8 +407,7 @@ class VantageDriver:
   ):
     """Assemble, send and parse, without coordinating against anything else in flight."""
     self._require_connection()
-    router = self._router
-    id_ = router.next_id() if auto_id else None
+    id_ = self._router.next_id() if auto_id else None
     # The count is only read when there is a list to terminate, so a command that carries none
     # can be sent before the machine has been discovered.
     carries_a_list = any(isinstance(value, list) for value in kwargs.values())
@@ -422,15 +429,7 @@ class VantageDriver:
     }
     emit_event("firmware.command.started", **event_data)
     try:
-      resp = cast(
-        str,
-        await router.send(
-          cmd=cmd,
-          id_=id_,
-          write_timeout=write_timeout,
-          read_timeout=read_timeout,
-        ),
-      )
+      resp = await self._transmit(cmd, id_, write_timeout, read_timeout)
       result = parse_vantage_fw_string(resp, fmt) if fmt is not None else resp
     except BaseException as error:
       emit_event(
@@ -442,6 +441,27 @@ class VantageDriver:
       raise
     emit_event("firmware.command.completed", **event_data, response=resp)
     return result
+
+  async def _transmit(
+    self,
+    cmd: str,
+    id_: Optional[int],
+    write_timeout: Optional[int],
+    read_timeout: Optional[int],
+  ) -> str:
+    """Put an assembled command on the link and return the reply that answers it.
+
+    The one place a command leaves the driver, so a simulated machine can answer here.
+
+    Raises:
+      VantageFirmwareError: If the machine reports an error.
+    """
+    return cast(
+      str,
+      await self._router.send(
+        cmd=cmd, id_=id_, write_timeout=write_timeout, read_timeout=read_timeout
+      ),
+    )
 
   async def send_raw_command(
     self,
