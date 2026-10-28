@@ -74,6 +74,31 @@ def arm_status(initialized: bool) -> Callable[[str], Optional[List[str]]]:
   return answers
 
 
+def machine(
+  arm_initialized: bool = True,
+  channels_initialized: bool = True,
+  tips: Optional[List[bool]] = None,
+  num_channels: int = 8,
+) -> Callable[[str], Optional[List[str]]]:
+  """A machine with `num_channels` channels, of which `tips` carry a tip, that answers what setup
+  sends."""
+  carrying = tips if tips is not None else [False] * num_channels
+
+  def answers(command: str) -> Optional[List[str]]:
+    module_and_command = command[:6]
+    if module_and_command == "A1AMQW":
+      return [echo(command, f"qw{int(arm_initialized)}")]
+    if module_and_command == "A1PMQW":
+      return [echo(command, f"qw{int(channels_initialized)}")]
+    if module_and_command == "A1PMQA":
+      return [echo(command, "rt" + " ".join(str(int(tip)) for tip in carrying))]
+    if module_and_command in ("A1AMMI", "A1PMDI"):
+      return [echo(command)]
+    return None
+
+  return answers
+
+
 async def until(condition: Callable[[], bool], timeout: float = 2.0) -> None:
   """Wait for a condition, failing the test when it does not come true."""
   waited = 0.0
@@ -308,13 +333,16 @@ class TestOneCommandPerModule(unittest.IsolatedAsyncioTestCase):
 
 
 class TestSetup(unittest.IsolatedAsyncioTestCase):
-  """Connecting, and bringing the arm up."""
+  """Connecting, finding out what the machine has, and bringing it up."""
 
   def driver_on(self, io: ScriptedIO) -> VantageDriver:
     return VantageDriver(io, read_timeout=5)
 
-  async def test_setup_opens_the_link_and_leaves_an_initialized_arm_alone(self):
-    io = ScriptedIO(arm_status(True))
+  def sent(self, io: ScriptedIO) -> List[str]:
+    return [command[:6] for command in io.written]
+
+  async def test_a_machine_that_is_up_is_read_and_left_alone(self):
+    io = ScriptedIO(machine())
     driver = self.driver_on(io)
     try:
       with self.assertLogs("pylabrobot.hamilton.vantage.driver.master", "WARNING") as logs:
@@ -322,37 +350,116 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       self.assertIn("untested on hardware", logs.output[0])
       self.assertTrue(driver.connected)
       self.assertEqual(io.setups, 1)
-      self.assertEqual([command[:6] for command in io.written], ["A1AMQW"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW"])
+      self.assertEqual(driver.num_channels, 8)
     finally:
       await driver.stop()
 
-  async def test_an_arm_that_reports_itself_down_is_pre_initialized(self):
-    io = ScriptedIO(arm_status(False))
+  async def test_an_arm_that_reports_itself_down_is_pre_initialized_before_the_channels(self):
+    io = ScriptedIO(machine(arm_initialized=False, channels_initialized=False))
     driver = self.driver_on(io)
     try:
       await driver.setup()
-      self.assertEqual([command[:6] for command in io.written], ["A1AMQW", "A1AMMI"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1AMMI", "A1PMQW", "A1PMDI"])
+    finally:
+      await driver.stop()
+
+  async def test_channels_that_report_themselves_down_are_initialized(self):
+    io = ScriptedIO(machine(channels_initialized=False))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW", "A1PMDI"])
+    finally:
+      await driver.stop()
+
+  async def test_channels_that_are_up_but_carry_a_tip_are_initialized_to_discard_it(self):
+    io = ScriptedIO(machine(tips=[False, True] + [False] * 6))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW", "A1PMDI"])
+    finally:
+      await driver.stop()
+
+  async def test_the_tips_are_read_once_and_not_again_after_the_arm_initialized(self):
+    io = ScriptedIO(machine(arm_initialized=False, tips=[True] * 8))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertEqual(self.sent(io).count("A1PMQA"), 1)
+    finally:
+      await driver.stop()
+
+  async def test_the_number_of_channels_is_what_the_machine_reports(self):
+    io = ScriptedIO(machine(num_channels=4))
+    driver = self.driver_on(io)
+    try:
+      await driver.setup()
+      self.assertEqual(driver.num_channels, 4)
+      self.assertEqual(driver.configuration, DeviceConfiguration(num_channels=4))
     finally:
       await driver.stop()
 
   async def test_setup_is_repeatable_over_the_link_it_opened(self):
-    io = ScriptedIO(arm_status(True))
+    io = ScriptedIO(machine())
     driver = self.driver_on(io)
     try:
       await driver.setup()
       await driver.setup()
       self.assertEqual(io.setups, 1)
-      self.assertEqual([command[:6] for command in io.written], ["A1AMQW", "A1AMQW"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW"] * 2)
     finally:
       await driver.stop()
 
   async def test_a_setup_that_fails_closes_the_link_and_raises_what_failed(self):
     io = ScriptedIO(lambda command: [echo(command, 'et"Broken"', error=5)])
     driver = self.driver_on(io)
+    with self.assertRaises(RuntimeError):
+      await driver.setup()
+    self.assertFalse(driver.connected)
+    self.assertEqual(io.stops, 1)
+
+  async def test_a_failure_while_initializing_closes_the_link_too(self):
+    base = machine(channels_initialized=False)
+
+    def answers(command: str) -> Optional[List[str]]:
+      if command.startswith("A1PMDI"):
+        return [echo(command, 'et"Broken"', error=5)]
+      return base(command)
+
+    io = ScriptedIO(answers)
+    driver = self.driver_on(io)
     with self.assertRaises(VantageFirmwareError):
       await driver.setup()
     self.assertFalse(driver.connected)
     self.assertEqual(io.stops, 1)
+
+  async def test_channels_that_the_machine_does_not_know_are_refused_with_a_clear_message(self):
+    def answers(command: str) -> Optional[List[str]]:
+      if command.startswith("A1PM"):
+        return [echo(command, 'et"Command: Unknown command"', error=30)]
+      return machine()(command)
+
+    io = ScriptedIO(answers)
+    driver = self.driver_on(io)
+    with self.assertRaises(RuntimeError) as caught:
+      await driver.setup()
+    self.assertIn("A1PM", str(caught.exception))
+    self.assertIn("not supported", str(caught.exception))
+    self.assertIsInstance(caught.exception.__cause__, VantageFirmwareError)
+    self.assertEqual(self.sent(io), ["A1PMQA"])
+    self.assertFalse(driver.connected)
+
+  async def test_a_machine_that_reports_no_channel_is_refused(self):
+    io = ScriptedIO(
+      lambda command: [echo(command, "rt ")] if command.startswith("A1PMQA") else None
+    )
+    driver = self.driver_on(io)
+    with self.assertRaises(RuntimeError) as caught:
+      await driver.setup()
+    self.assertIn("no pipetting channel", str(caught.exception))
+    self.assertFalse(driver.connected)
 
   async def test_a_link_that_does_not_open_leaves_the_driver_disconnected(self):
     io = ScriptedIO()
@@ -367,7 +474,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(driver.connected)
 
   async def test_stop_closes_the_link_and_is_repeatable(self):
-    io = ScriptedIO(arm_status(True))
+    io = ScriptedIO(machine())
     driver = self.driver_on(io)
     await driver.setup()
     await driver.stop()
@@ -380,8 +487,13 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     await self.driver_on(io).stop()
     self.assertEqual(io.stops, 0)
 
-  async def test_the_arm_is_given_time_to_pre_initialize(self):
-    io = ScriptedIO(arm_status(False))
+  async def test_initialize_needs_a_machine_that_was_discovered(self):
+    driver = self.driver_on(ScriptedIO(machine()))
+    with self.assertRaises(RuntimeError):
+      await driver.initialize()
+
+  async def test_the_arm_and_the_channels_are_given_time_to_initialize(self):
+    io = ScriptedIO(machine(arm_initialized=False, channels_initialized=False))
     driver = self.driver_on(io)
     seen: Dict[str, Optional[int]] = {}
     send = driver._router.send
@@ -394,6 +506,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     try:
       await driver.setup()
       self.assertEqual(seen["A1AMMI"], 300)
+      self.assertEqual(seen["A1PMDI"], 300)
       self.assertIsNone(seen["A1AMQW"])
     finally:
       await driver.stop()
@@ -427,6 +540,10 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
         writer.write(SPONTANEOUS.encode() + b"\r\n")
         if line.startswith("A1AMQW"):
           writer.write(echo(line, f"qw{int(self.arm_initialized)}").encode() + b"\r\n")
+        elif line.startswith("A1PMQA"):
+          writer.write(echo(line, "rt" + " ".join(["0"] * 8)).encode() + b"\r\n")
+        elif line.startswith("A1PMQW"):
+          writer.write(echo(line, "qw1").encode() + b"\r\n")
         else:
           writer.write(echo(line).encode() + b"\r\n")
         await writer.drain()
@@ -442,8 +559,11 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
         await within(driver.setup())
         self.assertIsInstance(driver.io, HamiltonTextTCP)
         reply = await within(driver.send_command("A1AM", "QW", fmt={"qw": "int"}))
-      self.assertEqual(reply, {"qw": 1, "id": 2})
-      self.assertEqual(self.received, ["A1AMQWid0001", "A1AMQWid0002"])
+      self.assertEqual(reply, {"qw": 1, "id": 4})
+      self.assertEqual(
+        self.received,
+        ["A1PMQAid0001", "A1AMQWid0002", "A1PMQWid0003", "A1AMQWid0004"],
+      )
     finally:
       await driver.stop()
     self.assertFalse(driver.connected)
@@ -453,7 +573,9 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
     driver = VantageDriver(host="127.0.0.1", port=self.port, read_timeout=2)
     try:
       await within(driver.setup())
-      self.assertEqual([line[:6] for line in self.received], ["A1AMQW", "A1AMMI"])
+      self.assertEqual(
+        [line[:6] for line in self.received], ["A1PMQA", "A1AMQW", "A1AMMI", "A1PMQW"]
+      )
     finally:
       await driver.stop()
 
@@ -475,7 +597,7 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
     await driver.stop()
     try:
       await within(driver.setup())
-      self.assertEqual([line[:6] for line in self.received], ["A1AMQW", "A1AMQW"])
+      self.assertEqual([line[:6] for line in self.received], ["A1PMQA", "A1AMQW", "A1PMQW"] * 2)
     finally:
       await driver.stop()
 
