@@ -401,6 +401,39 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     finally:
       await driver.stop()
 
+  async def test_connect_opens_the_link_and_sends_nothing(self):
+    io = ScriptedIO(machine())
+    driver = self.driver_on(io)
+    try:
+      await driver.connect()
+      await driver.connect()
+      self.assertTrue(driver.connected)
+      self.assertEqual((io.setups, io.written), (1, []))
+    finally:
+      await driver.stop()
+
+  async def test_a_connected_machine_can_be_read_without_being_brought_up(self):
+    io = ScriptedIO(machine(arm_initialized=False, channels_initialized=False))
+    driver = self.driver_on(io)
+    try:
+      await driver.connect()
+      tips = await driver.discover()
+      self.assertEqual(tips, [False] * 8)
+      self.assertEqual(self.sent(io), ["A1PMQA"])
+    finally:
+      await driver.stop()
+
+  async def test_setup_goes_on_over_a_link_that_connect_opened(self):
+    io = ScriptedIO(machine())
+    driver = self.driver_on(io)
+    try:
+      await driver.connect()
+      await driver.setup()
+      self.assertEqual(io.setups, 1)
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQW", "A1PMQW"])
+    finally:
+      await driver.stop()
+
   async def test_setup_is_repeatable_over_the_link_it_opened(self):
     io = ScriptedIO(machine())
     driver = self.driver_on(io)
