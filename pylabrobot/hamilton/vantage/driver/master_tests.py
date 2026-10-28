@@ -10,6 +10,7 @@ from pylabrobot.hamilton.transport.text_tcp import HamiltonTextTCP
 from pylabrobot.hamilton.vantage.driver.configuration import DeviceConfiguration
 from pylabrobot.hamilton.vantage.driver.errors import VantageFirmwareError
 from pylabrobot.hamilton.vantage.driver.master import VantageDriver
+from pylabrobot.hamilton.vantage.driver.simulator import NODES_WITH_IPG, NODES_WITHOUT_IPG
 from pylabrobot.io.io import IOBase
 
 SPONTANEOUS = 'A1AM__id0sm"Spontan Message"'
@@ -72,10 +73,6 @@ def arm_status(initialized: bool) -> Callable[[str], Optional[List[str]]]:
     return None
 
   return answers
-
-
-NODES_WITHOUT_IPG = "AM 01 02 03 04 05 06 PX PX PX PX PX PX PX PX 16 17"
-NODES_WITH_IPG = "AM 01 02 03 04 05 06 R0 PX PX PX PX PX PX PX PX 16 17"
 
 
 def machine(
