@@ -44,6 +44,10 @@ class PipettesConfiguration:
   """The lowest a tip command may travel at, in mm. Up to this height a resource is under a
   traversing channel whatever tip it carries, so travelling lower may drag a tip through the deck."""
 
+  minimum_y_spacing: float = 9.0
+  """How close together two channels may stand, in mm. A 96-well rack's columns are exactly this,
+  so tips from one column can be taken together; anything tighter the head cannot reach."""
+
   initialize_read_timeout: int = 300
   """How long to wait for the channels to initialize, in seconds. They go to the waste, discard
   what they carry and initialize their drives, and the arm itself waits that long for them."""
@@ -235,6 +239,20 @@ class Pipettes:
       _check_range("y", [location.y], config.y_range)
       xs.append(config.to_increments(location.x))
       ys.append(config.to_increments(location.y))
+
+    # Channels stand no closer than the machine lets them. Two places in one column closer than
+    # that cannot be taken together, and the machine works through them one at a time instead, so
+    # the run takes longer than asked. Worth saying, but the tips still come up.
+    least = config.to_increments(config.minimum_y_spacing)
+    for first in range(len(xs)):
+      for second in range(first + 1, len(xs)):
+        if xs[first] == xs[second] and abs(ys[first] - ys[second]) < least:
+          logger.warning(
+            "two places in one column are %.1f mm apart, closer than the %.1f mm this machine lets "
+            "the channels stand: it takes them one at a time, so this takes longer",
+            abs(ys[first] - ys[second]) / config.increments_per_mm,
+            config.minimum_y_spacing,
+          )
     return xs, ys
 
   def _tips_to_collect(self, spots: Sequence[TipSpot]) -> List[HamiltonTip]:

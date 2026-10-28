@@ -24,6 +24,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
         "A1PMQA",
         "A1AMQU",
         "A1AMQN",
+        "A1AMQC",
         "A1RMQA",
         "A1AMQW",
         "A1AMMI",
@@ -46,7 +47,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     await driver.setup()
     self.assertEqual(
       kinds(driver),
-      ["A1PMQA", "A1AMQU", "A1AMQN", "A1RMQA", "A1AMQW", "A1RMQW", "A1RMRG", "A1PMQW"],
+      ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1RMQA", "A1AMQW", "A1RMQW", "A1RMRG", "A1PMQW"],
     )
 
   async def test_setup_twice_does_not_move_it_again(self):
@@ -75,7 +76,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     driver = VantageSimulationDriver(ipg_plate=True)
     with self.assertRaises(RuntimeError):
       await driver.setup()
-    self.assertEqual(kinds(driver), ["A1PMQA", "A1AMQU", "A1AMQN", "A1RMQA"])
+    self.assertEqual(kinds(driver), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1RMQA"])
     self.assertFalse(driver.arm_up)
     self.assertFalse(driver.connected)
 

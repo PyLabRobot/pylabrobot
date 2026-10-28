@@ -16,6 +16,8 @@ from pylabrobot.resources.hamilton.vantage_decks import VantageDeck
 from pylabrobot.resources.tip_rack import TipRack
 from pylabrobot.resources.tip_tracking import set_tip_tracking
 
+PIPETTES_LOGGER = "pylabrobot.hamilton.vantage.driver.features.pipettes"
+
 
 def without_id(command: str) -> str:
   """A command without the id it was sent with."""
@@ -466,6 +468,34 @@ class TestPickUpTips(TipsTestCase):
   async def test_channels_that_are_not_ascending_are_refused(self):
     with self.assertRaises(ValueError):
       await self.pipettes.pick_up_tips(self.spots[:2], use_channels=[1, 0])
+
+  async def test_two_tips_closer_than_the_channels_stand_are_taken_but_warned_about(self):
+    with self.assertLogs(PIPETTES_LOGGER, "WARNING") as logs:
+      await self.pipettes.pick_up_tips(
+        self.spots[:2], use_channels=[0, 1], offsets=[Coordinate(0, 0, 0), Coordinate(0, 0.5, 0)]
+      )
+    self.assertIn("8.5 mm", logs.output[0])
+    self.assertIn("9.0 mm", logs.output[0])
+    self.assertIsNotNone(self.pipettes.get_mounted_tip(1))
+
+  async def test_a_tenth_below_the_minimum_is_already_too_close(self):
+    with self.assertLogs(PIPETTES_LOGGER, "WARNING") as logs:
+      await self.pipettes.pick_up_tips(
+        self.spots[:2], use_channels=[0, 1], offsets=[Coordinate(0, 0, 0), Coordinate(0, 0.1, 0)]
+      )
+    self.assertIn("8.9 mm", logs.output[0])
+
+  async def test_tips_at_the_minimum_spacing_are_taken_without_a_word(self):
+    with self.assertNoLogs(PIPETTES_LOGGER, "WARNING"):
+      await self.pipettes.pick_up_tips(self.spots[:2], use_channels=[0, 1])
+    self.assertIsNotNone(self.pipettes.get_mounted_tip(1))
+
+  async def test_tips_a_column_apart_may_be_any_distance_in_y_without_a_word(self):
+    with self.assertNoLogs(PIPETTES_LOGGER, "WARNING"):
+      await self.pipettes.pick_up_tips(
+        self.spots[:2], use_channels=[0, 1], offsets=[Coordinate(0, 0, 0), Coordinate(9.0, 1.0, 0)]
+      )
+    self.assertIsNotNone(self.pipettes.get_mounted_tip(1))
 
   async def test_a_position_the_channels_cannot_reach_is_refused(self):
     with self.assertRaises(ValueError):

@@ -24,7 +24,7 @@ from pylabrobot.hamilton.vantage.driver.errors import (
   parse_vantage_fw_string,
 )
 from pylabrobot.hamilton.vantage.driver.features.ipg import Ipg
-from pylabrobot.hamilton.vantage.driver.features.pipettes import Pipettes
+from pylabrobot.hamilton.vantage.driver.features.pipettes import Pipettes, PipettesConfiguration
 from pylabrobot.hamilton.vantage.driver.lock import _FirmwareLock
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.usb import USB
@@ -43,6 +43,11 @@ MODULE_ID_LENGTH = 4
 
 # How long to wait for the reply to the arm's pre-initialization, in seconds.
 ARM_PRE_INITIALIZE_READ_TIMEOUT = 300
+
+# How long to wait for the arm to report how closely it lets the channels stand, in seconds. It is
+# a single line of configuration, and a machine that does not answer is taken at the 9.0 mm a
+# 96-well rack needs.
+CHANNEL_SPACING_READ_TIMEOUT = 10
 
 # The entry of the tip type table the CoRe gripper's tool is defined in by the firmware. A tip
 # written there would overwrite it, so it is never given out.
@@ -290,8 +295,33 @@ class VantageDriver:
       num_channels=len(tip_presence), arm_type=arm_type or 0, ipg_installed=ipg_installed
     )
     self.pipettes = pipettes
+    pipettes.configuration.minimum_y_spacing = await self._channel_spacing()
     self.ipg = (self.ipg or Ipg(self)) if ipg_installed else None
     return tip_presence
+
+  async def _channel_spacing(self) -> float:
+    """How close the machine lets two channels stand, in mm, from its own component configuration.
+
+    It keeps a back and a front spacing around each channel, and two neighbours may come no closer
+    than one's front spacing and the other's back spacing together. A machine configured wider than
+    the 9.0 mm a 96-well rack needs picks the tips of a column one channel at a time instead of
+    together, so the distance a tip command may ask for follows what the machine says.
+
+    Returns:
+      The distance, in mm. 9.0 when the machine does not answer.
+    """
+    try:
+      settings = await self.send_command(
+        module="A1AM",
+        command="QC",
+        cd='"P"',
+        fmt={"kf": "int", "kg": "int"},
+        read_timeout=CHANNEL_SPACING_READ_TIMEOUT,
+      )
+    except (VantageFirmwareError, TimeoutError) as e:
+      logger.warning("the arm did not report the channels' spacing, so 9.0 mm is taken: %s", e)
+      return PipettesConfiguration().minimum_y_spacing
+    return (int(settings["kf"]) + int(settings["kg"])) / 10
 
   async def initialize(self, tip_presence: Optional[List[bool]] = None) -> None:
     """Bring the arm, the IPG and the channels up, doing nothing for what already is. Moves the

@@ -162,6 +162,7 @@ class VantageSimulationDriver(VantageDriver):
       "A1AMQN": self._node_names,
       "A1AMMI": self._initialize_arm,
       "A1AMTT": lambda command: (0, ""),
+      "A1AMQC": lambda command: (0, "kf45kg45kx0"),
       "A1PMQA": lambda command: (
         0,
         "rt" + " ".join(str(int(tip)) for tip in self.tips),

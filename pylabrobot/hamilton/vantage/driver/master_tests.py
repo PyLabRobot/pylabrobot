@@ -83,6 +83,7 @@ def machine(
   num_channels: int = 8,
   arm_type: Optional[int] = None,
   node_names: Optional[str] = None,
+  channel_spacing: Optional[Tuple[int, int]] = (45, 45),
   ipg: bool = False,
   ipg_initialized: bool = True,
   ipg_parked: bool = True,
@@ -93,7 +94,8 @@ def machine(
 
   It has an IPG if `ipg` is set, which then is as `ipg_initialized`, `ipg_parked` and `ipg_plate`
   say. Otherwise it is an arm type without one (13). `arm_type` and `node_names` override what the
-  arm says of itself.
+  arm says of itself. `channel_spacing` is the back and front spacing the arm reports for the
+  channels, in 0.1 mm; None makes it refuse the question.
 
   Like the machine, it refuses to initialize or park the IPG, or to initialize the channels, until
   the arm has been initialized: it answers error 16.
@@ -109,6 +111,10 @@ def machine(
       return [echo(command, f"qw{int(arm_up[0])}")]
     if module_and_command == "A1AMQU":
       return [echo(command, f"kt{kind}ka1300kd1300ke0kh0")]
+    if module_and_command == "A1AMQC":
+      if channel_spacing is None:
+        return [echo(command, 'et"Command: Unknown command"', error=30)]
+      return [echo(command, f"kf{channel_spacing[0]}kg{channel_spacing[1]}kx0")]
     if module_and_command == "A1AMQN":
       return [echo(command, f'xn"{nodes}"')]
     if module_and_command == "A1PMQW":
@@ -401,7 +407,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       self.assertIn("untested on hardware", logs.output[0])
       self.assertTrue(driver.connected)
       self.assertEqual(io.setups, 1)
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1AMQW", "A1PMQW"])
       self.assertEqual(driver.num_channels, 8)
     finally:
       await driver.stop()
@@ -412,7 +418,8 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     try:
       await driver.setup()
       self.assertEqual(
-        self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1AMMI", "A1PMQW", "A1PMDI"]
+        self.sent(io),
+        ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1AMQW", "A1AMMI", "A1PMQW", "A1PMDI"],
       )
     finally:
       await driver.stop()
@@ -422,7 +429,9 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     driver = self.driver_on(io)
     try:
       await driver.setup()
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW", "A1PMDI"])
+      self.assertEqual(
+        self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1AMQW", "A1PMQW", "A1PMDI"]
+      )
     finally:
       await driver.stop()
 
@@ -431,7 +440,9 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     driver = self.driver_on(io)
     try:
       await driver.setup()
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW", "A1PMDI"])
+      self.assertEqual(
+        self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1AMQW", "A1PMQW", "A1PMDI"]
+      )
     finally:
       await driver.stop()
 
@@ -475,7 +486,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       await driver.connect()
       tips = await driver.discover()
       self.assertEqual(tips, [False] * 8)
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC"])
     finally:
       await driver.stop()
 
@@ -486,7 +497,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       await driver.connect()
       await driver.setup()
       self.assertEqual(io.setups, 1)
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1AMQW", "A1PMQW"])
     finally:
       await driver.stop()
 
@@ -497,7 +508,9 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       await driver.setup()
       await driver.setup()
       self.assertEqual(io.setups, 1)
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW"] * 2)
+      self.assertEqual(
+        self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1AMQW", "A1PMQW"] * 2
+      )
     finally:
       await driver.stop()
 
@@ -629,7 +642,7 @@ class TestIpgDuringSetup(unittest.IsolatedAsyncioTestCase):
     try:
       await driver.connect()
       await driver.discover()
-      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN"])
+      self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC"])
       self.assertTrue(driver.configuration.ipg_installed)  # type: ignore[union-attr]
       self.assertEqual(driver.configuration.arm_type, 6)  # type: ignore[union-attr]
       self.assertIsNotNone(driver.ipg)
@@ -654,7 +667,7 @@ class TestIpgDuringSetup(unittest.IsolatedAsyncioTestCase):
       await driver.setup()
       self.assertEqual(
         self.sent(io),
-        ["A1PMQA", "A1AMQU", "A1AMQN", "A1RMQA", "A1AMQW", "A1RMQW", "A1RMRG", "A1PMQW"],
+        ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1RMQA", "A1AMQW", "A1RMQW", "A1RMRG", "A1PMQW"],
       )
     finally:
       await driver.stop()
@@ -680,6 +693,7 @@ class TestIpgDuringSetup(unittest.IsolatedAsyncioTestCase):
           "A1PMQA",
           "A1AMQU",
           "A1AMQN",
+          "A1AMQC",
           "A1RMQA",
           "A1AMQW",
           "A1AMMI",
@@ -731,7 +745,7 @@ class TestIpgDuringSetup(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(RuntimeError) as caught:
       await driver.setup()
     self.assertIn("holds a plate", str(caught.exception))
-    self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1RMQA"])
+    self.assertEqual(self.sent(io), ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1RMQA"])
     self.assertFalse(driver.connected)
 
   async def test_the_ipg_is_given_time_to_initialize_and_park(self):
@@ -862,6 +876,8 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
           writer.write(echo(line, "kt13ka497kd1257ke0kh106").encode() + b"\r\n")
         elif line.startswith("A1AMQN"):
           writer.write(echo(line, f'xn"{NODES_WITHOUT_IPG}"').encode() + b"\r\n")
+        elif line.startswith("A1AMQC"):
+          writer.write(echo(line, "kf45kg45kx0").encode() + b"\r\n")
         elif line.startswith("A1PMQA"):
           writer.write(echo(line, "rt" + " ".join(["0"] * 8)).encode() + b"\r\n")
         elif line.startswith("A1PMQW"):
@@ -881,16 +897,17 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
         await within(driver.setup())
         self.assertIsInstance(driver.io, HamiltonTextTCP)
         reply = await within(driver.send_command("A1AM", "QW", fmt={"qw": "int"}))
-      self.assertEqual(reply, {"qw": 1, "id": 6})
+      self.assertEqual(reply, {"qw": 1, "id": 7})
       self.assertEqual(
         self.received,
         [
           "A1PMQAid0001",
           "A1AMQUid0002",
           "A1AMQNid0003",
-          "A1AMQWid0004",
-          "A1PMQWid0005",
-          "A1AMQWid0006",
+          'A1AMQCid0004cd"P"',
+          "A1AMQWid0005",
+          "A1PMQWid0006",
+          "A1AMQWid0007",
         ],
       )
     finally:
@@ -904,7 +921,7 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
       await within(driver.setup())
       self.assertEqual(
         [line[:6] for line in self.received],
-        ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1AMMI", "A1PMQW"],
+        ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1AMQW", "A1AMMI", "A1PMQW"],
       )
     finally:
       await driver.stop()
@@ -928,7 +945,8 @@ class TestOverTCP(unittest.IsolatedAsyncioTestCase):
     try:
       await within(driver.setup())
       self.assertEqual(
-        [line[:6] for line in self.received], ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQW", "A1PMQW"] * 2
+        [line[:6] for line in self.received],
+        ["A1PMQA", "A1AMQU", "A1AMQN", "A1AMQC", "A1AMQW", "A1PMQW"] * 2,
       )
     finally:
       await driver.stop()
