@@ -1,10 +1,13 @@
 import asyncio
+import logging
 import queue
 import unittest
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from pylabrobot.hamilton.protocol.text.framing import read_id
 from pylabrobot.hamilton.protocol.text.router import ReplyRouter
+
+ROUTER_LOGGER = "pylabrobot.hamilton.protocol.text.router"
 
 
 class FakeTransport:
@@ -27,7 +30,15 @@ class FakeTransport:
       raise TimeoutError from None
 
 
-def router(transport: FakeTransport, read_timeout: int = 5) -> ReplyRouter:
+def is_spontaneous(line: str) -> bool:
+  return line[2:4] == "__"
+
+
+def router(
+  transport: FakeTransport,
+  read_timeout: int = 5,
+  spontaneous: Optional[Callable[[str], bool]] = None,
+) -> ReplyRouter:
   def raise_for_error(reply: str) -> None:
     if "er99" in reply:
       raise RuntimeError(reply)
@@ -38,6 +49,7 @@ def router(transport: FakeTransport, read_timeout: int = 5) -> ReplyRouter:
     parse_id=read_id,
     raise_for_error=raise_for_error,
     read_timeout=read_timeout,
+    is_spontaneous=spontaneous,
   )
 
 
@@ -102,6 +114,64 @@ class TestReplyRouter(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(RuntimeError):
       await asyncio.wait_for(sent, 2)
     self.assertEqual(r._waiting_tasks, [])
+
+
+class TestSpontaneousMessages(unittest.IsolatedAsyncioTestCase):
+  """A line the machine sent unasked is discarded, and never answers a command."""
+
+  SPONTANEOUS = b'C0__id0sm"Spontan Message"'
+
+  async def test_a_spontaneous_line_does_not_answer_the_waiting_command(self):
+    transport = FakeTransport()
+    r = router(transport, spontaneous=is_spontaneous)
+    r.start()
+    try:
+      with self.assertNoLogs(ROUTER_LOGGER, level=logging.WARNING):
+        sent = asyncio.ensure_future(r.send("C0QWid0007", id_=7))
+        await asyncio.sleep(0.05)
+        transport.replies.put(self.SPONTANEOUS)
+        await asyncio.sleep(0.1)
+        self.assertFalse(sent.done())
+        self.assertEqual(len(r._waiting_tasks), 1)
+
+        transport.replies.put(b"C0QWid0007er00/00qw1")
+        self.assertEqual(await asyncio.wait_for(sent, 2), "C0QWid0007er00/00qw1")
+    finally:
+      r.stop()
+
+  async def test_a_spontaneous_line_is_discarded_before_its_id_is_read(self):
+    transport = FakeTransport()
+    r = router(transport, spontaneous=is_spontaneous)
+    r.start()
+    try:
+      # `id0s` is not an id `read_id` can read, which would be logged if it were tried.
+      with self.assertLogs(ROUTER_LOGGER, level=logging.DEBUG) as logs:
+        sent = asyncio.ensure_future(r.send("C0QWid0008", id_=8))
+        await asyncio.sleep(0.05)
+        transport.replies.put(self.SPONTANEOUS)
+        await asyncio.sleep(0.1)
+        transport.replies.put(b"C0QWid0008er00/00qw1")
+        await asyncio.wait_for(sent, 2)
+      self.assertEqual([record.levelno for record in logs.records], [logging.DEBUG])
+      self.assertIn("discarded spontaneous message", logs.output[0])
+    finally:
+      r.stop()
+
+  async def test_without_a_filter_such_a_line_is_not_treated_specially(self):
+    transport = FakeTransport()
+    r = router(transport)
+    r.start()
+    try:
+      with self.assertLogs(ROUTER_LOGGER, level=logging.WARNING) as logs:
+        sent = asyncio.ensure_future(r.send("C0QWid0009", id_=9))
+        await asyncio.sleep(0.05)
+        transport.replies.put(self.SPONTANEOUS)
+        await asyncio.sleep(0.1)
+        transport.replies.put(b"C0QWid0009er00/00qw1")
+        await asyncio.wait_for(sent, 2)
+      self.assertIn("Could not parse response", logs.output[0])
+    finally:
+      r.stop()
 
 
 class TestNextId(unittest.TestCase):
