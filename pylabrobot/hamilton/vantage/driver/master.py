@@ -4,7 +4,6 @@
 - orchestrating higher level tasks.
 """
 
-import asyncio
 import logging
 from typing import Any, Dict, List, Optional, cast, overload
 
@@ -25,6 +24,7 @@ from pylabrobot.hamilton.vantage.driver.errors import (
   parse_vantage_fw_string,
 )
 from pylabrobot.hamilton.vantage.driver.features.pipettes import Pipettes
+from pylabrobot.hamilton.vantage.driver.lock import _FirmwareLock
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.usb import USB
 from pylabrobot.resources.hamilton.vantage_decks import VantageDeck
@@ -120,7 +120,7 @@ class VantageDriver:
       )
 
     # One command at a time per module. Read-only requests are exempt, see `send_command`.
-    self._module_locks: Dict[str, asyncio.Lock] = {}
+    self._lock = _FirmwareLock()
 
     self._connected = False
 
@@ -383,8 +383,7 @@ class VantageDriver:
     )
     if command[0] in ("R", "Q"):
       return await self._send(module, command, **arguments)
-    lock = self._module_locks.setdefault(module, asyncio.Lock())
-    async with lock:
+    async with self._lock.module(module):
       return await self._send(module, command, **arguments)
 
   async def _send(
